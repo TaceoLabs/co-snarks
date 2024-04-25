@@ -1,4 +1,5 @@
 pub mod witness;
+pub mod z_key;
 
 pub(crate) mod reader_utils {
     use std::{io, str::Utf8Error};
