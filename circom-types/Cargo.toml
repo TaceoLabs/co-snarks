@@ -1,0 +1,18 @@
+[package]
+name = "circom-types"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ark-bn254 = { workspace = true }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+ark-std = { workspace = true }
+byteorder = "1.5.0"
+ark-serialize = { workspace = true }
+ark-bls12-381 = { workspace = true }
+
+[dev-dependencies]
+hex-literal = { workspace = true }

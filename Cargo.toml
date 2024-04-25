@@ -1,0 +1,13 @@
+[workspace]
+members = ["circom-types"]
+resolver = "2"
+
+[workspace.dependencies]
+ark-bn254 = "0.4.0"
+ark-ec = "0.4.2"
+ark-ff = "0.4.2"
+ark-std = "0.4.0"
+ark-serialize = { version = "0.4", features = ["derive"] }
+ark-bls12-381 = "0.4.0"
+hex-literal = "0.4.1"
+thiserror = "1.0.59"
