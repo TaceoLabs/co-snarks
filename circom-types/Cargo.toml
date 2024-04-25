@@ -13,6 +13,7 @@ ark-std = { workspace = true }
 byteorder = "1.5.0"
 ark-serialize = { workspace = true }
 ark-bls12-381 = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 hex-literal = { workspace = true }
