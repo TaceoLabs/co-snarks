@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::traits::CircomArkworksPrimeFieldBridge;
 use ark_ff::BigInteger;
 
-use super::reader_utils::{self, InvalidHeaderError};
+use crate::reader_utils::{self, InvalidHeaderError};
 
 type Result<T> = std::result::Result<T, WitnessParserError>;
 const WITNESS_HEADER: &str = "wtns";

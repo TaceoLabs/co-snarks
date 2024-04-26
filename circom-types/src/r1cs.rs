@@ -24,7 +24,7 @@
 //IN CONNECTION WITH THE SOFTWARE O THE USE OR OTHER
 //DEALINGS IN THE SOFTWARE.R
 
-//!Inspired by https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/circom/r1cs_reader.rs
+//!Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/circom/r1cs_reader.rs>
 use ark_ff::PrimeField;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{Error, ErrorKind};
@@ -37,7 +37,7 @@ use ark_std::io::{Read, Seek, SeekFrom};
 use std::collections::HashMap;
 
 use crate::{
-    groth16::reader_utils::{self, InvalidHeaderError},
+    reader_utils::{self, InvalidHeaderError},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
 

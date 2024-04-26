@@ -24,7 +24,7 @@
 //IN CONNECTION WITH THE SOFTWARE O THE USE OR OTHER
 //DEALINGS IN THE SOFTWARE.R
 
-//!Inspired by https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/zkey.rs
+//!Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/zkey.rs>
 //! ZKey Parsing
 //!
 //! Each ZKey file is broken into sections:
@@ -70,7 +70,7 @@ use ark_groth16::{ProvingKey, VerifyingKey};
 
 use crate::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 
-use super::reader_utils;
+use crate::reader_utils;
 type Result<T> = std::result::Result<T, ZKeyParserError>;
 
 #[derive(Debug, Error)]
