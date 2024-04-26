@@ -38,7 +38,7 @@ pub(crate) mod reader_utils {
 
 #[cfg(test)]
 pub(crate) mod test_utils {
-    macro_rules! to_g1_bls381 {
+    macro_rules! to_g1_bls12_381 {
         ($x: expr, $y: expr) => {
             <ark_bls12_381::Bls12_381 as Pairing>::G1Affine::new(
                 ark_bls12_381::Fq::from_str($x).unwrap(),
@@ -46,7 +46,7 @@ pub(crate) mod test_utils {
             )
         };
     }
-    macro_rules! to_g2_bls381 {
+    macro_rules! to_g2_bls12_381 {
         ({$x1: expr, $x2: expr}, {$y1: expr, $y2: expr}) => {
             <ark_bls12_381::Bls12_381 as Pairing>::G2Affine::new(
                 ark_bls12_381::Fq2::new(
@@ -83,8 +83,8 @@ pub(crate) mod test_utils {
             )
         };
     }
-    pub(crate) use to_g1_bls381;
+    pub(crate) use to_g1_bls12_381;
     pub(crate) use to_g1_bn254;
-    pub(crate) use to_g2_bls381;
+    pub(crate) use to_g2_bls12_381;
     pub(crate) use to_g2_bn254;
 }

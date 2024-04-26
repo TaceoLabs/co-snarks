@@ -160,7 +160,7 @@ mod bls12_381 {
         fn from_reader(mut reader: impl Read) -> IoResult<Self> {
             let mut buf = [0u8; Self::SERIALIZED_BYTE_SIZE];
             reader.read_exact(&mut buf[..])?;
-            Ok(Self::from_be_bytes_mod_order(&buf))
+            Ok(Self::from_le_bytes_mod_order(&buf))
         }
 
         fn from_reader_unchecked(mut reader: impl Read) -> IoResult<Self> {
@@ -177,7 +177,7 @@ mod bls12_381 {
         fn from_reader(mut reader: impl Read) -> Result<Self, SerializationError> {
             let mut buf = [0u8; Self::SERIALIZED_BYTE_SIZE];
             reader.read_exact(&mut buf[..])?;
-            Ok(Self::from_be_bytes_mod_order(&buf))
+            Ok(Self::from_le_bytes_mod_order(&buf))
         }
 
         fn from_reader_unchecked(mut reader: impl Read) -> Result<Self, SerializationError> {
@@ -197,114 +197,65 @@ mod bls12_381 {
         const GT_SERIALIZED_BYTE_SIZE_COMPRESSED: usize = 0;
         const GT_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize = 0;
 
+        //Circom deserializes its field elements in montgomery form
+        //therefore we use Fq::from_reader_unchecked
         fn g1_from_reader(mut reader: impl Read) -> Result<Self::G1Affine, SerializationError> {
-            todo!()
-            //let mut buf = [0u8; Self::G1_SERIALIZED_BYTE_SIZE_UNCOMPRESSED];
-            //reader.read_exact(&mut buf)?;
-            //let flag = buf[0] & FLAG_MASK;
-            //if invalid_mask(flag) {
-            //    return Err(std::io::Error::new(
-            //        std::io::ErrorKind::InvalidData,
-            //        "invalid mask encoding",
-            //    ));
-            //}
-            //if flag != FLAG_UNCOMPRESSED && flag != FLAG_UNCOMPRESSED_INFINITY {
-            //    // TODO: handle point compression
-            //    return Err(std::io::Error::new(
-            //        std::io::ErrorKind::InvalidData,
-            //        "invalid flag, expected uncompressed points",
-            //    ));
-            //}
-            //if flag == FLAG_UNCOMPRESSED_INFINITY {
-            //    buf[0] = buf[0] & !FLAG_MASK;
-            //    if buf.iter().all(|&b| b == 0) {
-            //        return Ok(Self::G1Affine::zero());
-            //    } else {
-            //        return Err(std::io::Error::new(
-            //            std::io::ErrorKind::InvalidData,
-            //            "invalid uncompressed infinity point",
-            //        ));
-            //    }
-            //}
+            let mut buf = [0u8; Self::G1_SERIALIZED_BYTE_SIZE_UNCOMPRESSED];
+            reader.read_exact(&mut buf)?;
+            //already in montgomery form
+            let x = Fq::from_reader_unchecked(&buf[..Fq::SERIALIZED_BYTE_SIZE])?;
+            let y = Fq::from_reader_unchecked(&buf[Fq::SERIALIZED_BYTE_SIZE..])?;
 
-            //// uncompressed point
-            //let x = Fq::from_reader(&buf[..Fq::SERIALIZED_BYTE_SIZE])?;
-            //let y = Fq::from_reader(&buf[Fq::SERIALIZED_BYTE_SIZE..])?;
+            if x.is_zero() && y.is_zero() {
+                return Ok(Self::G1Affine::zero());
+            }
+            let p = Self::G1Affine::new_unchecked(x, y);
 
-            //let p = Self::G1Affine::new_unchecked(x, y);
+            if !p.is_on_curve() {
+                println!("Not on curve g1 Sadge");
+                return Err(SerializationError::InvalidData);
+            }
 
-            //if !p.is_on_curve() {
-            //    return Err(std::io::Error::new(
-            //        std::io::ErrorKind::InvalidData,
-            //        "point is not on curve",
-            //    ));
-            //}
-
-            //if !p.is_in_correct_subgroup_assuming_on_curve() {
-            //    return Err(std::io::Error::new(
-            //        std::io::ErrorKind::InvalidData,
-            //        "point is not in correct subgroup",
-            //    ));
-            //}
-            //Ok(p)
+            if !p.is_in_correct_subgroup_assuming_on_curve() {
+                println!("Not on correct g1 subgroup Sadge");
+                return Err(SerializationError::InvalidData);
+            }
+            Ok(p)
         }
 
-        fn g2_from_reader(mut _reader: impl Read) -> Result<Self::G2Affine, SerializationError> {
-            todo!()
-            //let mut buf = [0u8; Self::G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED];
-            //reader.read_exact(&mut buf)?;
+        fn g2_from_reader(mut reader: impl Read) -> Result<Self::G2Affine, SerializationError> {
+            let mut buf = [0u8; Self::G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED];
+            reader.read_exact(&mut buf)?;
 
-            //let flag = buf[0] & FLAG_MASK;
-            //if invalid_mask(flag) {
-            //    return Err(std::io::Error::new(
-            //        std::io::ErrorKind::InvalidData,
-            //        "invalid mask encoding",
-            //    ));
-            //}
-            //if flag != FLAG_UNCOMPRESSED && flag != FLAG_UNCOMPRESSED_INFINITY {
-            //    // TODO: handle point compression
-            //    return Err(std::io::Error::new(
-            //        std::io::ErrorKind::InvalidData,
-            //        "invalid flag, expected uncompressed points",
-            //    ));
-            //}
-            //if flag == FLAG_UNCOMPRESSED_INFINITY {
-            //    buf[0] = buf[0] & !FLAG_MASK;
-            //    if buf.iter().all(|&b| b == 0) {
-            //        return Ok(Self::G2Affine::zero());
-            //    } else {
-            //        return Err(std::io::Error::new(
-            //            std::io::ErrorKind::InvalidData,
-            //            "invalid uncompressed infinity point",
-            //        ));
-            //    }
-            //}
+            //already in montgomery form
+            let x0 = Fq::from_reader_unchecked(&buf[..Fq::SERIALIZED_BYTE_SIZE])?;
+            let x1 = Fq::from_reader_unchecked(
+                &buf[Fq::SERIALIZED_BYTE_SIZE..Fq::SERIALIZED_BYTE_SIZE * 2],
+            )?;
+            let y0 = Fq::from_reader_unchecked(
+                &buf[Fq::SERIALIZED_BYTE_SIZE * 2..Fq::SERIALIZED_BYTE_SIZE * 3],
+            )?;
+            let y1 = Fq::from_reader_unchecked(
+                &buf[Fq::SERIALIZED_BYTE_SIZE * 3..Fq::SERIALIZED_BYTE_SIZE * 4],
+            )?;
 
-            //let x1 = Fq::from_reader(&buf[..Fq::SERIALIZED_BYTE_SIZE])?;
-            //let x0 = Fq::from_reader(&buf[Fq::SERIALIZED_BYTE_SIZE..Fq::SERIALIZED_BYTE_SIZE * 2])?;
-            //let y1 =
-            //    Fq::from_reader(&buf[Fq::SERIALIZED_BYTE_SIZE * 2..Fq::SERIALIZED_BYTE_SIZE * 3])?;
-            //let y0 =
-            //    Fq::from_reader(&buf[Fq::SERIALIZED_BYTE_SIZE * 3..Fq::SERIALIZED_BYTE_SIZE * 4])?;
+            let x = Fq2::new(x0, x1);
+            let y = Fq2::new(y0, y1);
+            if x.is_zero() && y.is_zero() {
+                return Ok(Self::G2Affine::zero());
+            }
 
-            //let x = Fq2::new(x0, x1);
-            //let y = Fq2::new(y0, y1);
+            let p = Self::G2Affine::new_unchecked(x, y);
 
-            //let p = Self::G2Affine::new_unchecked(x, y);
-
-            //if !p.is_on_curve() {
-            //    return Err(std::io::Error::new(
-            //        std::io::ErrorKind::InvalidData,
-            //        "point is not on curve",
-            //    ));
-            //}
-            //if !p.is_in_correct_subgroup_assuming_on_curve() {
-            //    return Err(std::io::Error::new(
-            //        std::io::ErrorKind::InvalidData,
-            //        "point is not in correct subgroup",
-            //    ));
-            //}
-            //Ok(p)
+            if !p.is_on_curve() {
+                println!("Not on correct g2 curve Sadge");
+                return Err(SerializationError::InvalidData);
+            }
+            if !p.is_in_correct_subgroup_assuming_on_curve() {
+                println!("Not on correct g2 subgroup Sadge");
+                return Err(SerializationError::InvalidData);
+            }
+            Ok(p)
         }
 
         fn gt_from_reader(_reader: impl Read) -> Result<Self::G2Affine, SerializationError> {
