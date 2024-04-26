@@ -1,18 +1,18 @@
 [workspace]
-members = ["circom-types"]
+members = ["circom-types", "collaborative-groth16"]
 resolver = "2"
 
 [workspace.dependencies]
+ark-bls12-381 = "0.4.0"
 ark-bn254 = "0.4.0"
 ark-ec = "0.4.2"
 ark-ff = "0.4.2"
-ark-std = "0.4.0"
-ark-serialize = { version = "0.4", features = ["derive"] }
-ark-relations = { version = "0.4.0", default-features = false }
 ark-groth16 = { version = "=0.4.0", default-features = false, features = [
     "parallel",
 ] }
-ark-bls12-381 = "0.4.0"
+ark-relations = { version = "0.4.0", default-features = false }
+ark-serialize = { version = "0.4", features = ["derive"] }
+ark-std = "0.4.0"
 hex-literal = "0.4.1"
 num-traits = { version = "0.2.18", default-features = false }
 thiserror = "1.0.59"
