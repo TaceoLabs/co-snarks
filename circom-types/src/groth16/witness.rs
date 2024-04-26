@@ -1,4 +1,4 @@
-use std::{io, str::Utf8Error};
+use std::io;
 
 use ark_serialize::{Read, SerializationError};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -6,6 +6,8 @@ use thiserror::Error;
 
 use crate::traits::CircomArkworksPrimeFieldBridge;
 use ark_ff::BigInteger;
+
+use super::reader_utils::{self, InvalidHeaderError};
 
 type Result<T> = std::result::Result<T, WitnessParserError>;
 const WITNESS_HEADER: &str = "wtns";
@@ -25,9 +27,7 @@ pub enum WitnessParserError {
     #[error("ScalarField from curve does not match in witness file")]
     WrongScalarField,
     #[error(transparent)]
-    Utf8Error(#[from] Utf8Error),
-    #[error("Wrong header. Expected {0} but got {1}")]
-    WrongHeader(String, String),
+    WrongHeader(#[from] InvalidHeaderError),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -36,21 +36,8 @@ pub struct Witness<F: CircomArkworksPrimeFieldBridge> {
 }
 
 impl<F: CircomArkworksPrimeFieldBridge> Witness<F> {
-    fn read_header<R: Read>(mut reader: R, should_header: &str) -> Result<()> {
-        let mut buf = [0_u8; 4];
-        reader.read_exact(&mut buf)?;
-        let is_header = std::str::from_utf8(&buf[..])?;
-        if is_header == should_header {
-            Ok(())
-        } else {
-            Err(WitnessParserError::WrongHeader(
-                should_header.to_owned(),
-                is_header.to_owned(),
-            ))
-        }
-    }
     pub fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
-        Self::read_header(&mut reader, WITNESS_HEADER)?;
+        reader_utils::read_header(&mut reader, WITNESS_HEADER)?;
         let version = reader.read_u32::<LittleEndian>()?;
         if version > MAX_VERSION {
             return Err(WitnessParserError::VersionNotSupported(

@@ -24,7 +24,7 @@
 //IN CONNECTION WITH THE SOFTWARE O THE USE OR OTHER
 //DEALINGS IN THE SOFTWARE.R
 
-//!Inspired by https://github.com/arkworks-rs/circom-compat/blob/master/src/zkey.rs
+//!Inspired by https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/zkey.rs
 //! ZKey Parsing
 //!
 //! Each ZKey file is broken into sections:

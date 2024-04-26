@@ -30,8 +30,6 @@ pub trait CircomArkworksPrimeFieldBridge: PrimeField {
     fn from_reader_unchecked(reader: impl Read) -> IoResult<Self>;
 }
 
-pub mod reader_utils {}
-
 /// Module containing the implementation of the Bridge between circom-crypto and arkwors for BN254
 mod bn254 {
     use ark_bn254::{Bn254, Fq, Fq2, Fr};
