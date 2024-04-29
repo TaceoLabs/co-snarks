@@ -9,7 +9,6 @@ use serde::de::{self};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound = "P: Pairing")]
 pub struct JsonProof<P: Pairing + CircomArkworksPairingBridge>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
