@@ -6,19 +6,22 @@ use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_groth16::Proof;
 use serde::de::{self};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(bound = "P: Pairing")]
 pub struct JsonProof<P: Pairing + CircomArkworksPairingBridge>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "deserialize_g1_element::<_,P>")]
     pub pi_a: P::G1Affine,
+    #[serde(serialize_with = "P::serialize_g2::<_>")]
     #[serde(deserialize_with = "deserialize_g2_element::<_,P>")]
     pub pi_b: P::G2Affine,
+    #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "deserialize_g1_element::<_,P>")]
     pub pi_c: P::G1Affine,
     pub protocol: String,
@@ -248,6 +251,10 @@ mod tests {
         assert_eq!(pi_c, proof.pi_c);
         assert_eq!("groth16", proof.protocol);
         assert_eq!("bn128", proof.curve);
+        //serialize and deserialize and check for equality
+        let ser_proof = serde_json::to_string(&proof).unwrap();
+        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
+        assert_eq!(der_proof, proof);
     }
 
     #[test]
@@ -273,5 +280,9 @@ mod tests {
         assert_eq!(pi_c, proof.pi_c);
         assert_eq!("groth16", proof.protocol);
         assert_eq!("bls12381", proof.curve);
+        //serialize and deserialize and check for equality
+        let ser_proof = serde_json::to_string(&proof).unwrap();
+        let der_proof = serde_json::from_str::<JsonProof<Bls12_381>>(&ser_proof).unwrap();
+        assert_eq!(der_proof, proof);
     }
 }

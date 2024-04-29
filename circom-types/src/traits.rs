@@ -3,6 +3,8 @@ use std::io::Read;
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::{PrimeField, Zero};
 use ark_serialize::SerializationError;
+use serde::ser::SerializeSeq;
+use serde::Serializer;
 use std::str::FromStr;
 
 type IoResult<T> = Result<T, SerializationError>;
@@ -29,6 +31,15 @@ where
         z0: &str,
         z1: &str,
     ) -> IoResult<Self::G2Affine>;
+    fn serialize_g1<S: Serializer>(p: &Self::G1Affine, ser: S) -> Result<S::Ok, S::Error> {
+        let (x, y) = p.xy().unwrap();
+        let mut seq = ser.serialize_seq(Some(3)).unwrap();
+        seq.serialize_element(&x.to_string())?;
+        seq.serialize_element(&y.to_string())?;
+        seq.serialize_element("1")?;
+        seq.end()
+    }
+    fn serialize_g2<S: Serializer>(p: &Self::G2Affine, ser: S) -> Result<S::Ok, S::Error>;
 }
 
 pub trait CircomArkworksPrimeFieldBridge: PrimeField {
@@ -202,6 +213,15 @@ mod bn254 {
             }
             Ok(p)
         }
+
+        fn serialize_g2<S: Serializer>(p: &Self::G2Affine, ser: S) -> Result<S::Ok, S::Error> {
+            let (x, y) = p.xy().unwrap();
+            let mut x_seq = ser.serialize_seq(Some(3))?;
+            x_seq.serialize_element(&vec![x.c0.to_string(), x.c1.to_string()])?;
+            x_seq.serialize_element(&vec![y.c0.to_string(), y.c1.to_string()])?;
+            x_seq.serialize_element(&vec!["1", "0"])?;
+            x_seq.end()
+        }
     }
 }
 
@@ -364,6 +384,14 @@ mod bls12_381 {
                 return Err(SerializationError::InvalidData);
             }
             Ok(p)
+        }
+        fn serialize_g2<S: Serializer>(p: &Self::G2Affine, ser: S) -> Result<S::Ok, S::Error> {
+            let (x, y) = p.xy().unwrap();
+            let mut x_seq = ser.serialize_seq(Some(3))?;
+            x_seq.serialize_element(&vec![x.c0.to_string(), x.c1.to_string()])?;
+            x_seq.serialize_element(&vec![y.c0.to_string(), y.c1.to_string()])?;
+            x_seq.serialize_element(&vec!["1", "0"])?;
+            x_seq.end()
         }
     }
 }
