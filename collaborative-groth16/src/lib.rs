@@ -7,7 +7,7 @@ mod tests {
     use ark_ff::UniformRand;
     use ark_groth16::{prepare_verifying_key, Groth16};
     use circom_types::{
-        groth16::{witness::Witness, z_key::ZKey},
+        groth16::{witness::Witness, zkey::ZKey},
         r1cs::R1CS,
     };
     use hex_literal::hex;

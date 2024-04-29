@@ -3,6 +3,7 @@ use std::io::Read;
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::{PrimeField, Zero};
 use ark_serialize::SerializationError;
+use std::str::FromStr;
 
 type IoResult<T> = Result<T, SerializationError>;
 pub trait CircomArkworksPairingBridge: Pairing
@@ -19,6 +20,15 @@ where
     fn g1_from_reader(reader: impl Read) -> IoResult<Self::G1Affine>;
     fn g2_from_reader(reader: impl Read) -> IoResult<Self::G2Affine>;
     fn gt_from_reader(reader: impl Read) -> IoResult<Self::G2Affine>;
+    fn g1_from_strings_projective(x: &str, y: &str, z: &str) -> IoResult<Self::G1Affine>;
+    fn g2_from_strings_projective(
+        x0: &str,
+        x1: &str,
+        y0: &str,
+        y1: &str,
+        z0: &str,
+        z1: &str,
+    ) -> IoResult<Self::G2Affine>;
 }
 
 pub trait CircomArkworksPrimeFieldBridge: PrimeField {
@@ -38,6 +48,14 @@ mod bn254 {
 
     use super::*;
 
+    macro_rules! parse_bn254_field {
+        ($str: expr) => {{
+            match ark_bn254::Fq::from_str($str) {
+                Ok(x) => x,
+                Err(_) => return Err(SerializationError::InvalidData),
+            }
+        }};
+    }
     impl CircomArkworksPrimeFieldBridge for Fr {
         const SERIALIZED_BYTE_SIZE: usize = 32;
         #[inline]
@@ -142,6 +160,48 @@ mod bn254 {
         fn gt_from_reader(_reader: impl Read) -> IoResult<Self::G2Affine> {
             todo!()
         }
+
+        fn g1_from_strings_projective(x: &str, y: &str, z: &str) -> IoResult<Self::G1Affine> {
+            let x = parse_bn254_field!(x);
+            let y = parse_bn254_field!(y);
+            let z = parse_bn254_field!(z);
+            let p = ark_bn254::G1Affine::from(ark_bn254::G1Projective::new(x, y, z));
+            if !p.is_on_curve() {
+                return Err(SerializationError::InvalidData);
+            }
+            if !p.is_in_correct_subgroup_assuming_on_curve() {
+                return Err(SerializationError::InvalidData);
+            }
+            Ok(p)
+        }
+
+        fn g2_from_strings_projective(
+            x0: &str,
+            x1: &str,
+            y0: &str,
+            y1: &str,
+            z0: &str,
+            z1: &str,
+        ) -> IoResult<Self::G2Affine> {
+            let x0 = parse_bn254_field!(x0);
+            let x1 = parse_bn254_field!(x1);
+            let y0 = parse_bn254_field!(y0);
+            let y1 = parse_bn254_field!(y1);
+            let z0 = parse_bn254_field!(z0);
+            let z1 = parse_bn254_field!(z1);
+
+            let x = ark_bn254::Fq2::new(x0, x1);
+            let y = ark_bn254::Fq2::new(y0, y1);
+            let z = ark_bn254::Fq2::new(z0, z1);
+            let p = ark_bn254::G2Affine::from(ark_bn254::G2Projective::new(x, y, z));
+            if !p.is_on_curve() {
+                return Err(SerializationError::InvalidData);
+            }
+            if !p.is_in_correct_subgroup_assuming_on_curve() {
+                return Err(SerializationError::InvalidData);
+            }
+            Ok(p)
+        }
     }
 }
 
@@ -152,6 +212,14 @@ mod bls12_381 {
 
     use super::*;
 
+    macro_rules! parse_bls12_381_field {
+        ($str: expr) => {{
+            match ark_bls12_381::Fq::from_str($str) {
+                Ok(x) => x,
+                Err(_) => return Err(SerializationError::InvalidData),
+            }
+        }};
+    }
     impl CircomArkworksPrimeFieldBridge for Fr {
         const SERIALIZED_BYTE_SIZE: usize = 32;
         #[inline]
@@ -210,12 +278,10 @@ mod bls12_381 {
             let p = Self::G1Affine::new_unchecked(x, y);
 
             if !p.is_on_curve() {
-                println!("Not on curve g1 Sadge");
                 return Err(SerializationError::InvalidData);
             }
 
             if !p.is_in_correct_subgroup_assuming_on_curve() {
-                println!("Not on correct g1 subgroup Sadge");
                 return Err(SerializationError::InvalidData);
             }
             Ok(p)
@@ -246,11 +312,9 @@ mod bls12_381 {
             let p = Self::G2Affine::new_unchecked(x, y);
 
             if !p.is_on_curve() {
-                println!("Not on correct g2 curve Sadge");
                 return Err(SerializationError::InvalidData);
             }
             if !p.is_in_correct_subgroup_assuming_on_curve() {
-                println!("Not on correct g2 subgroup Sadge");
                 return Err(SerializationError::InvalidData);
             }
             Ok(p)
@@ -258,6 +322,48 @@ mod bls12_381 {
 
         fn gt_from_reader(_reader: impl Read) -> Result<Self::G2Affine, SerializationError> {
             todo!()
+        }
+
+        fn g1_from_strings_projective(x: &str, y: &str, z: &str) -> IoResult<Self::G1Affine> {
+            let x = parse_bls12_381_field!(x);
+            let y = parse_bls12_381_field!(y);
+            let z = parse_bls12_381_field!(z);
+            let p = ark_bls12_381::G1Affine::from(ark_bls12_381::G1Projective::new(x, y, z));
+            if !p.is_on_curve() {
+                return Err(SerializationError::InvalidData);
+            }
+            if !p.is_in_correct_subgroup_assuming_on_curve() {
+                return Err(SerializationError::InvalidData);
+            }
+            Ok(p)
+        }
+
+        fn g2_from_strings_projective(
+            x0: &str,
+            x1: &str,
+            y0: &str,
+            y1: &str,
+            z0: &str,
+            z1: &str,
+        ) -> IoResult<Self::G2Affine> {
+            let x0 = parse_bls12_381_field!(x0);
+            let x1 = parse_bls12_381_field!(x1);
+            let y0 = parse_bls12_381_field!(y0);
+            let y1 = parse_bls12_381_field!(y1);
+            let z0 = parse_bls12_381_field!(z0);
+            let z1 = parse_bls12_381_field!(z1);
+
+            let x = ark_bls12_381::Fq2::new(x0, x1);
+            let y = ark_bls12_381::Fq2::new(y0, y1);
+            let z = ark_bls12_381::Fq2::new(z0, z1);
+            let p = ark_bls12_381::G2Affine::from(ark_bls12_381::G2Projective::new(x, y, z));
+            if !p.is_on_curve() {
+                return Err(SerializationError::InvalidData);
+            }
+            if !p.is_in_correct_subgroup_assuming_on_curve() {
+                return Err(SerializationError::InvalidData);
+            }
+            Ok(p)
         }
     }
 }
