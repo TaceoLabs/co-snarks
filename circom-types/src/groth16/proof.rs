@@ -178,7 +178,7 @@ where
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter
-            .write_str("a sequence of 3 seqeunces, representing a projective point on G2. The 3 sequences each consist of two strings")
+            .write_str("a sequence of 3 sequences, representing a projective point on G2. The 3 sequences each consist of two strings")
     }
 
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
