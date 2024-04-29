@@ -1,5 +1,6 @@
+pub mod proof;
 pub mod witness;
-pub mod z_key;
+pub mod zkey;
 
 #[cfg(test)]
 pub(crate) mod test_utils {
