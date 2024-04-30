@@ -5,7 +5,7 @@ pub mod circuit;
 mod tests {
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
-    use ark_ec::{bn::Bn, pairing::Pairing};
+    use ark_ec::pairing::Pairing;
     use ark_ff::UniformRand;
     use ark_groth16::{prepare_verifying_key, Groth16};
     use circom_types::{
