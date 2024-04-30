@@ -71,7 +71,7 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn can_serialize_public_input_bn254() {
+    fn can_serde_public_input_bn254() {
         let is_public_input_str = "[\"1\",\"2\",\"3\"]";
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bn254::Fr>>(is_public_input_str).unwrap();
@@ -88,7 +88,7 @@ mod tests {
     }
 
     #[test]
-    fn can_serialize_public_input_bls12_381() {
+    fn can_serde_public_input_bls12_381() {
         let is_public_input_str = "[\"1\",\"2\",\"3\"]";
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bls12_381::Fr>>(is_public_input_str)
@@ -99,10 +99,10 @@ mod tests {
             ark_bls12_381::Fr::from_str("3").unwrap(),
         ];
         assert_eq!(public_input.values, should_values);
-        let ser_proof = serde_json::to_string(&public_input).unwrap();
-        assert_eq!(ser_proof, is_public_input_str);
-        let der_proof =
-            serde_json::from_str::<JsonPublicInput<ark_bls12_381::Fr>>(&ser_proof).unwrap();
-        assert_eq!(der_proof, public_input);
+        let ser_public_input = serde_json::to_string(&public_input).unwrap();
+        assert_eq!(ser_public_input, is_public_input_str);
+        let der_public_input =
+            serde_json::from_str::<JsonPublicInput<ark_bls12_381::Fr>>(&ser_public_input).unwrap();
+        assert_eq!(der_public_input, public_input);
     }
 }
