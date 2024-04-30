@@ -1,6 +1,9 @@
 use std::marker::PhantomData;
 
 use ark_ec::pairing::Pairing;
+use ark_ec::AffineRepr;
+use ark_ec::CurveGroup;
+use ark_groth16::{PreparedVerifyingKey, VerifyingKey};
 use serde::ser::SerializeSeq;
 use serde::{
     de::{self},
@@ -8,6 +11,7 @@ use serde::{
 };
 
 use crate::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
+use core::ops::Neg;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JsonVerificationKey<P: Pairing + CircomArkworksPairingBridge>
@@ -15,34 +19,33 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    pub protocol: String,
     #[serde(rename = "nPublic")]
     pub n_public: usize,
     #[serde(rename = "vk_alpha_1")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
-    pub alpha_1: P::G1Affine,
+    alpha_1: P::G1Affine,
     #[serde(rename = "vk_beta_2")]
     #[serde(serialize_with = "P::serialize_g2::<_>")]
     #[serde(deserialize_with = "P::deserialize_g2_element::<_>")]
-    pub beta_2: P::G2Affine,
+    beta_2: P::G2Affine,
     #[serde(rename = "vk_gamma_2")]
     #[serde(serialize_with = "P::serialize_g2::<_>")]
     #[serde(deserialize_with = "P::deserialize_g2_element::<_>")]
-    pub gamma_2: P::G2Affine,
+    gamma_2: P::G2Affine,
     #[serde(rename = "vk_delta_2")]
     #[serde(serialize_with = "P::serialize_g2::<_>")]
     #[serde(deserialize_with = "P::deserialize_g2_element::<_>")]
-    pub delta_2: P::G2Affine,
+    delta_2: P::G2Affine,
     #[serde(rename = "vk_alphabeta_12")]
     #[serde(serialize_with = "P::serialize_gt::<_>")]
     #[serde(deserialize_with = "P::deserialize_gt_element::<_>")]
-    pub alpha_beta_gt: P::TargetField,
+    alpha_beta_gt: P::TargetField,
     #[serde(rename = "IC")]
     #[serde(serialize_with = "serialize_g1_sequence::<_,P>")]
     #[serde(deserialize_with = "deserialize_g1_sequence::<_,P>")]
-    pub ic: Vec<P::G1Affine>,
-    pub protocol: String,
-    pub curve: String,
+    ic: Vec<P::G1Affine>,
 }
 
 fn serialize_g1_sequence<S: Serializer, P: Pairing + CircomArkworksPairingBridge>(
@@ -132,6 +135,59 @@ where
     }
 }
 
+impl<P: Pairing + CircomArkworksPairingBridge> From<PreparedVerifyingKey<P>>
+    for JsonVerificationKey<P>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    fn from(value: PreparedVerifyingKey<P>) -> Self {
+        let vk = value.vk;
+        Self {
+            n_public: 1, //how to learn this???
+            alpha_1: vk.alpha_g1,
+            beta_2: vk.beta_g2,
+            gamma_2: vk.gamma_g2,
+            delta_2: vk.delta_g2,
+            alpha_beta_gt: value.alpha_g1_beta_g2,
+            ic: vk.gamma_abc_g1,
+            protocol: "groth16".to_owned(),
+        }
+    }
+}
+
+impl<P: Pairing + CircomArkworksPairingBridge> From<JsonVerificationKey<P>>
+    for PreparedVerifyingKey<P>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    fn from(json_key: JsonVerificationKey<P>) -> Self {
+        Self {
+            vk: VerifyingKey::<P> {
+                alpha_g1: json_key.alpha_1,
+                beta_g2: json_key.beta_2,
+                gamma_g2: json_key.gamma_2,
+                delta_g2: json_key.delta_2,
+                gamma_abc_g1: json_key.ic,
+            },
+            alpha_g1_beta_g2: json_key.alpha_beta_gt,
+            gamma_g2_neg_pc: json_key.gamma_2.into_group().neg().into_affine().into(),
+            delta_g2_neg_pc: json_key.delta_2.into_group().neg().into_affine().into(),
+        }
+    }
+}
+
+impl<P: Pairing + CircomArkworksPairingBridge> JsonVerificationKey<P>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    pub fn prepare_verifying_key(self) -> PreparedVerifyingKey<P> {
+        PreparedVerifyingKey::<P>::from(self)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use ark_bls12_381::Bls12_381;
@@ -205,7 +261,6 @@ mod test {
         )));
 
         assert_eq!(vk.protocol, "groth16");
-        assert_eq!(vk.curve, "bn128");
         assert_eq!(vk.n_public, 1);
         assert_eq!(vk.alpha_1, alpha_1);
         assert_eq!(vk.beta_2, beta_2);
@@ -275,7 +330,6 @@ mod test {
         )));
 
         assert_eq!(vk.protocol, "groth16");
-        assert_eq!(vk.curve, "bls12381");
         assert_eq!(vk.n_public, 1);
         assert_eq!(vk.alpha_1, alpha_1);
         assert_eq!(vk.beta_2, beta_2);
