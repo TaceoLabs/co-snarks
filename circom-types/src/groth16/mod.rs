@@ -1,4 +1,5 @@
 pub mod proof;
+pub mod public_input;
 pub mod witness;
 pub mod zkey;
 

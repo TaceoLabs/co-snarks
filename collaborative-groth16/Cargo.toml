@@ -6,6 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ark-poly = "0.4.2"
+
+
 ark-bls12-381 = { workspace = true }
 ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
@@ -22,3 +25,4 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 hex-literal = { workspace = true }
+serde_json = { workspace = true }
