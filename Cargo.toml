@@ -1,6 +1,16 @@
 [workspace]
-members = ["circom-types", "collaborative-groth16"]
+members = ["circom-types", "collaborative-groth16", "mpc-core", "mpc-net"]
 resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.75"
+authors = ["TACEO GmbH <hello@taceo.io>"]
+homepage = "https://www.taceo.io"
+repository = "https:://github.com/TaceoLabs/collaborative-circom"
+license = "MIT OR Apache-2.0"
+publish = false
+readme = "./README.md"
 
 [workspace.dependencies]
 ark-bls12-381 = "0.4.0"
@@ -11,10 +21,36 @@ ark-groth16 = { version = "=0.4.0", default-features = false, features = [
     "parallel",
 ] }
 ark-relations = { version = "0.4.0", default-features = false }
-ark-serialize = { version = "0.4", features = ["derive"] }
-ark-std = "0.4.0"
+ark-serialize = { version = "0.4", features = ["derive", "std"] }
+ark-std = { version = "0.4.0", features = ["std"] }
+bincode = "1.3.3"
+bytemuck = { version = "1.15", features = ["derive"] }
+bytes = "1.5.0"
+color-eyre = "0.6.2"
+clap = { version = "4.4.8", features = ["derive"] }
+criterion = { version = "0.5", features = ["async_tokio"] }
+eyre = "0.6"
+futures = "0.3.30"
 hex-literal = "0.4.1"
+mpc-net = { path = "mpc-net" }
 num-traits = { version = "0.2.18", default-features = false }
-rand = "0.8.5"
+rand_chacha = "0.3"
+rcgen = "0.12"
+sha2 = "0.10"
+serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.9.27"
+rand = "0.8.5"
+rayon = "1.8.1"
 thiserror = "1.0.59"
+tracing = { version = "0.1.40", features = ["release_max_level_warn"] }
+tracing-subscriber = "0.3"
+tokio = { version = "1.34.0", features = [
+    "rt",
+    "rt-multi-thread",
+    "net",
+    "sync",
+    "time",
+    "io-util",
+    "macros",
+] }
