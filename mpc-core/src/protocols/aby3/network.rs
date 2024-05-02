@@ -23,10 +23,10 @@ pub trait Aby3Network<F: PrimeField> {
     fn recv(&mut self, from: PartyID) -> std::io::Result<F> {
         let res = self.recv_many(from)?;
         if res.len() != 1 {
-            return Err(std::io::Error::new(
+            Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Expected 1 element, got more",
-            ));
+            ))
         } else {
             Ok(res[0])
         }
@@ -67,7 +67,7 @@ impl Aby3MpcNet {
             let chan_prev = channels
                 .remove(&id.prev_id().into())
                 .ok_or(eyre!("no prev channel found"))?;
-            if channels.len() != 0 {
+            if !channels.is_empty() {
                 bail!("unexpected channels found")
             }
 
