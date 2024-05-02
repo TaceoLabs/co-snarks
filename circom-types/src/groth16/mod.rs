@@ -1,4 +1,6 @@
 pub mod proof;
+pub mod public_input;
+pub mod verification_key;
 pub mod witness;
 pub mod zkey;
 

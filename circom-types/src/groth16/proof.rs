@@ -1,11 +1,8 @@
-use std::marker::PhantomData;
-
 use crate::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_groth16::Proof;
-use serde::de::{self};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,13 +12,13 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     #[serde(serialize_with = "P::serialize_g1::<_>")]
-    #[serde(deserialize_with = "deserialize_g1_element::<_,P>")]
+    #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub pi_a: P::G1Affine,
     #[serde(serialize_with = "P::serialize_g2::<_>")]
-    #[serde(deserialize_with = "deserialize_g2_element::<_,P>")]
+    #[serde(deserialize_with = "P::deserialize_g2_element::<_>")]
     pub pi_b: P::G2Affine,
     #[serde(serialize_with = "P::serialize_g1::<_>")]
-    #[serde(deserialize_with = "deserialize_g1_element::<_,P>")]
+    #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub pi_c: P::G1Affine,
     pub protocol: String,
     pub curve: String,
@@ -68,151 +65,6 @@ impl From<JsonProof<Bls12_381>> for Proof<Bls12_381> {
             a: proof.pi_a,
             b: proof.pi_b,
             c: proof.pi_c,
-        }
-    }
-}
-
-fn deserialize_g1_element<'de, D, P: Pairing + CircomArkworksPairingBridge>(
-    deserializer: D,
-) -> Result<P::G1Affine, D::Error>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    D: de::Deserializer<'de>,
-{
-    deserializer.deserialize_seq(G1Visitor::<P>::new())
-}
-
-fn deserialize_g2_element<'de, D, P: Pairing + CircomArkworksPairingBridge>(
-    deserializer: D,
-) -> Result<P::G2Affine, D::Error>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    D: de::Deserializer<'de>,
-{
-    deserializer.deserialize_seq(G2Visitor::<P>::new())
-}
-
-struct G1Visitor<P: Pairing + CircomArkworksPairingBridge>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    phantom_data: PhantomData<P>,
-}
-
-impl<P: Pairing + CircomArkworksPairingBridge> G1Visitor<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    fn new() -> Self {
-        Self {
-            phantom_data: PhantomData,
-        }
-    }
-}
-
-impl<'de, P: Pairing + CircomArkworksPairingBridge> de::Visitor<'de> for G1Visitor<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    type Value = P::G1Affine;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("a sequence of 3 strings, representing a projective point on G1")
-    }
-
-    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-    where
-        A: de::SeqAccess<'de>,
-    {
-        let x = seq.next_element::<String>()?.ok_or(de::Error::custom(
-            "expected G1 projective coordinates but x coordinate missing.".to_owned(),
-        ))?;
-        let y = seq.next_element::<String>()?.ok_or(de::Error::custom(
-            "expected G1 projective coordinates but y coordinate missing.".to_owned(),
-        ))?;
-        let z = seq.next_element::<String>()?.ok_or(de::Error::custom(
-            "expected G1 projective coordinates but z coordinate missing.".to_owned(),
-        ))?;
-        //check if there are no more elements
-        if seq.next_element::<String>()?.is_some() {
-            Err(de::Error::invalid_length(4, &self))
-        } else {
-            P::g1_from_strings_projective(&x, &y, &z)
-                .map_err(|_| de::Error::custom("Invalid projective point on G1.".to_owned()))
-        }
-    }
-}
-
-struct G2Visitor<P: Pairing + CircomArkworksPairingBridge>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    phantom_data: PhantomData<P>,
-}
-
-impl<P: Pairing + CircomArkworksPairingBridge> G2Visitor<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    fn new() -> Self {
-        Self {
-            phantom_data: PhantomData,
-        }
-    }
-}
-
-impl<'de, P: Pairing + CircomArkworksPairingBridge> de::Visitor<'de> for G2Visitor<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    type Value = P::G2Affine;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter
-            .write_str("a sequence of 3 sequences, representing a projective point on G2. The 3 sequences each consist of two strings")
-    }
-
-    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-    where
-        A: de::SeqAccess<'de>,
-    {
-        let x = seq.next_element::<Vec<String>>()?.ok_or(de::Error::custom(
-            "expected G1 projective coordinates but x coordinate missing.".to_owned(),
-        ))?;
-        let y = seq.next_element::<Vec<String>>()?.ok_or(de::Error::custom(
-            "expected G2 projective coordinates but y coordinate missing.".to_owned(),
-        ))?;
-        let z = seq.next_element::<Vec<String>>()?.ok_or(de::Error::custom(
-            "expected G2 projective coordinates but z coordinate missing.".to_owned(),
-        ))?;
-        //check if there are no more elements
-        if seq.next_element::<String>()?.is_some() {
-            Err(de::Error::invalid_length(4, &self))
-        } else if x.len() != 2 {
-            Err(de::Error::custom(format!(
-                "x coordinates need two field elements for G2, but got {}",
-                x.len()
-            )))
-        } else if y.len() != 2 {
-            Err(de::Error::custom(format!(
-                "y coordinates need two field elements for G2, but got {}",
-                y.len()
-            )))
-        } else if z.len() != 2 {
-            Err(de::Error::custom(format!(
-                "z coordinates need two field elements for G2, but got {}",
-                z.len()
-            )))
-        } else {
-            Ok(P::g2_from_strings_projective(&x[0], &x[1], &y[0], &y[1], &z[0], &z[1]).unwrap())
         }
     }
 }
