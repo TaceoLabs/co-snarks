@@ -1,4 +1,4 @@
-use ark_ff::PrimeField;
+use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
@@ -6,8 +6,9 @@ use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
 
 use super::id::PartyID;
 
-pub trait Aby3Network<F: PrimeField> {
+pub trait Aby3Network<F: Field> {
     fn get_id(&self) -> PartyID;
+    fn send_and_receive_seed(&mut self, seed: Bytes) -> std::io::Result<BytesMut>;
 
     fn send(&mut self, target: PartyID, data: F) -> std::io::Result<()> {
         self.send_many(target, &[data])
@@ -99,10 +100,10 @@ impl Aby3MpcNet {
     }
     pub fn send_bytes(&mut self, target: PartyID, data: Bytes) -> std::io::Result<()> {
         if target == self.id.next_id() {
-            let _ = self.chan_next.blocking_send(data);
+            std::mem::drop(self.chan_next.blocking_send(data));
             Ok(())
         } else if target == self.id.prev_id() {
-            let _ = self.chan_prev.blocking_send(data);
+            std::mem::drop(self.chan_prev.blocking_send(data));
             Ok(())
         } else {
             return Err(std::io::Error::new(
@@ -128,7 +129,7 @@ impl Aby3MpcNet {
         })??;
         Ok(data)
     }
-    pub(crate) fn id(&self) -> PartyID {
+    pub(crate) fn _id(&self) -> PartyID {
         self.id
     }
 }
@@ -138,16 +139,21 @@ impl<F: PrimeField> Aby3Network<F> for Aby3MpcNet {
         self.id
     }
 
+    fn send_and_receive_seed(&mut self, seed: Bytes) -> std::io::Result<BytesMut> {
+        self.send_bytes(self.id.next_id(), seed)?;
+        self.recv_bytes(self.id.prev_id())
+    }
+
     fn send_many(&mut self, target: PartyID, data: &[F]) -> std::io::Result<()> {
         let size = data.serialized_size(ark_serialize::Compress::No);
         let mut ser_data = vec![0u8; size];
         data.serialize_uncompressed(&mut ser_data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         if target == self.id.next_id() {
-            let _ = self.chan_next.blocking_send(Bytes::from(ser_data));
+            std::mem::drop(self.chan_next.blocking_send(Bytes::from(ser_data)));
             Ok(())
         } else if target == self.id.prev_id() {
-            let _ = self.chan_prev.blocking_send(Bytes::from(ser_data));
+            std::mem::drop(self.chan_prev.blocking_send(Bytes::from(ser_data)));
             Ok(())
         } else {
             return Err(std::io::Error::new(

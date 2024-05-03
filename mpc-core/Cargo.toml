@@ -21,3 +21,7 @@ eyre = { workspace = true }
 tokio = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+
+[dev-dependencies]
+ark-bn254 = { workspace = true }
+ark-std = { workspace = true }

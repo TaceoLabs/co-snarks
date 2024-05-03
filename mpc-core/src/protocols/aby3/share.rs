@@ -1,10 +1,19 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Aby3PrimeFieldShare<F: PrimeField> {
     pub(crate) a: F,
     pub(crate) b: F,
+}
+impl<F: PrimeField> Aby3PrimeFieldShare<F> {
+    pub fn new(a: F, b: F) -> Self {
+        Self { a, b }
+    }
+
+    pub fn ab(self) -> (F, F) {
+        (self.a, self.b)
+    }
 }
 
 impl<F: PrimeField> std::ops::Add for Aby3PrimeFieldShare<F> {
@@ -143,6 +152,15 @@ impl<F: PrimeField> std::ops::Add for Aby3PrimeFieldShareVec<F> {
 pub struct Aby3PointShare<C: CurveGroup> {
     pub(crate) a: C,
     pub(crate) b: C,
+}
+impl<C: CurveGroup> Aby3PointShare<C> {
+    pub fn new(a: C, b: C) -> Self {
+        Self { a, b }
+    }
+
+    pub fn ab(self) -> (C, C) {
+        (self.a, self.b)
+    }
 }
 
 impl<C: CurveGroup> std::ops::Add for Aby3PointShare<C> {

@@ -8,7 +8,11 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     type FieldShareSlice;
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
-    fn mul(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
+    fn mul(
+        &mut self,
+        a: &Self::FieldShare,
+        b: &Self::FieldShare,
+    ) -> std::io::Result<Self::FieldShare>;
     fn inv(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
     fn rand(&mut self) -> Self::FieldShare;

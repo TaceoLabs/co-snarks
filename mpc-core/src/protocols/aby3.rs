@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use eyre::{bail, Report};
-use mpc_net::config::NetworkConfig;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
@@ -16,18 +15,68 @@ pub mod id;
 pub mod network;
 pub mod share;
 
-pub struct Aby3Protocol<F> {
+type IoResult<T> = std::io::Result<T>;
+
+pub mod utils {
+    use ark_ec::CurveGroup;
+    use ark_ff::PrimeField;
+    use rand::{CryptoRng, Rng};
+
+    use super::{share::Aby3PointShare, Aby3PrimeFieldShare};
+
+    pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
+        val: F,
+        rng: &mut R,
+    ) -> [Aby3PrimeFieldShare<F>; 3] {
+        let a = F::rand(rng);
+        let b = F::rand(rng);
+        let c = val - a - b;
+        let share1 = Aby3PrimeFieldShare::new(a, b);
+        let share2 = Aby3PrimeFieldShare::new(b, c);
+        let share3 = Aby3PrimeFieldShare::new(c, a);
+        [share1, share2, share3]
+    }
+
+    pub fn combine_field_element<F: PrimeField>(
+        share1: Aby3PrimeFieldShare<F>,
+        share2: Aby3PrimeFieldShare<F>,
+        share3: Aby3PrimeFieldShare<F>,
+    ) -> F {
+        share1.a + share2.a + share3.a
+    }
+
+    pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
+        val: C,
+        rng: &mut R,
+    ) -> [Aby3PointShare<C>; 3] {
+        let a = C::rand(rng);
+        let b = C::rand(rng);
+        let c = val - a - b;
+        let share1 = Aby3PointShare::new(a, b);
+        let share2 = Aby3PointShare::new(b, c);
+        let share3 = Aby3PointShare::new(c, a);
+        [share1, share2, share3]
+    }
+
+    pub fn combine_curve_point<C: CurveGroup>(
+        share1: Aby3PointShare<C>,
+        share2: Aby3PointShare<C>,
+        share3: Aby3PointShare<C>,
+    ) -> C {
+        share1.a + share2.a + share3.a
+    }
+}
+
+pub struct Aby3Protocol<F: PrimeField, N: Aby3Network<F>> {
     rngs: Aby3CorrelatedRng,
-    network: network::Aby3MpcNet,
+    network: N,
     field: PhantomData<F>,
 }
 
-impl<F: PrimeField> Aby3Protocol<F> {
-    pub fn new(config: NetworkConfig) -> Result<Self, Report> {
-        let mut network = network::Aby3MpcNet::new(config)?;
+impl<F: PrimeField, N: Aby3Network<F>> Aby3Protocol<F, N> {
+    pub fn new(mut network: N) -> Result<Self, Report> {
         let seed1: [u8; 32] = rand::thread_rng().gen();
-        network.send_bytes(network.id().next_id(), seed1.to_vec().into())?;
-        let seed2_bytes = network.recv_bytes(network.id().prev_id())?;
+        let seed2_bytes = network.send_and_receive_seed(seed1.to_vec().into())?;
         if seed2_bytes.len() != 32 {
             bail!("Received seed is not 32 bytes long");
         }
@@ -44,7 +93,7 @@ impl<F: PrimeField> Aby3Protocol<F> {
     }
 }
 
-impl<F: PrimeField> PrimeFieldMpcProtocol<F> for Aby3Protocol<F> {
+impl<F: PrimeField, N: Aby3Network<F>> PrimeFieldMpcProtocol<F> for Aby3Protocol<F, N> {
     type FieldShare = Aby3PrimeFieldShare<F>;
     type FieldShareSlice = ();
     type FieldShareVec = ();
@@ -57,14 +106,14 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for Aby3Protocol<F> {
         a - b
     }
 
-    fn mul(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
+    fn mul(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> IoResult<Self::FieldShare> {
         let local_a = a * b + self.rngs.masking_field_element::<F>();
-        self.network.send_next(local_a).unwrap();
-        let local_b = self.network.recv_prev().unwrap();
-        Self::FieldShare {
+        self.network.send_next(local_a)?;
+        let local_b = self.network.recv_prev()?;
+        Ok(Self::FieldShare {
             a: local_a,
             b: local_b,
-        }
+        })
     }
 
     fn inv(&mut self, _a: &Self::FieldShare) -> Self::FieldShare {
@@ -81,7 +130,9 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for Aby3Protocol<F> {
     }
 }
 
-impl<C: CurveGroup> EcMpcProtocol<C> for Aby3Protocol<C::ScalarField> {
+impl<C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<C>
+    for Aby3Protocol<C::ScalarField, N>
+{
     type PointShare = Aby3PointShare<C>;
 
     fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
@@ -110,17 +161,17 @@ impl<C: CurveGroup> EcMpcProtocol<C> for Aby3Protocol<C::ScalarField> {
         }
     }
 
-    fn scalar_mul(&mut self, a: &Self::PointShare, b: &Self::FieldShare) -> Self::PointShare {
+    fn scalar_mul(&mut self, _a: &Self::PointShare, _b: &Self::FieldShare) -> Self::PointShare {
         todo!("Full MPC protocol to compute secret point times secret scalar")
     }
 }
 
-impl<F: PrimeField> FFTProvider<F> for Aby3Protocol<F> {
-    fn fft(&mut self, data: &[Self::FieldShare]) -> Vec<Self::FieldShare> {
+impl<F: PrimeField, N: Aby3Network<F>> FFTProvider<F> for Aby3Protocol<F, N> {
+    fn fft(&mut self, _data: &[Self::FieldShare]) -> Vec<Self::FieldShare> {
         todo!()
     }
 
-    fn ifft(&mut self, data: &[Self::FieldShare]) -> Vec<Self::FieldShare> {
+    fn ifft(&mut self, _data: &[Self::FieldShare]) -> Vec<Self::FieldShare> {
         todo!()
     }
 }
