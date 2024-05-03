@@ -1,5 +1,6 @@
 mod circom_reduction;
 pub mod circuit;
+pub mod groth16;
 
 #[cfg(test)]
 mod tests {

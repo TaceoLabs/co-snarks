@@ -1,0 +1,12 @@
+- id: 0
+  dns_name: "party0"
+  socket_addr: "127.0.0.1:10000"
+  cert_path: "data/cert0.der"
+- id: 1
+  dns_name: "party1"
+  socket_addr: "127.0.0.1:10001"
+  cert_path: "data/cert1.der"
+- id: 2
+  dns_name: "party2"
+  socket_addr: "127.0.0.1:10002"
+  cert_path: "data/cert2.der"
