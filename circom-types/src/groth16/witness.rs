@@ -79,14 +79,14 @@ impl<F: CircomArkworksPrimeFieldBridge> Witness<F> {
 
 #[cfg(test)]
 mod tests {
-    use hex_literal::hex;
+    use std::fs::File;
 
     use super::Witness;
 
     #[test]
     fn can_deser_witness_bn254() {
-        let witness_bytes = hex!("77746e73020000000200000001000000280000000000000020000000010000f093f5e1439170b97948e833285d588181b64550b829a031e1724e6430040000000200000080000000000000000100000000000000000000000000000000000000000000000000000000000000210000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000000b00000000000000000000000000000000000000000000000000000000000000");
-        let is_witness = Witness::<ark_bn254::Fr>::from_reader(witness_bytes.as_slice()).unwrap();
+        let witness = File::open("../test_vectors/bn254/witness.wtns").unwrap();
+        let is_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
         assert_eq!(
             is_witness,
             Witness {
@@ -102,9 +102,8 @@ mod tests {
 
     #[test]
     fn can_deser_witness_bls12381() {
-        let witness_bytes = hex!("77746e7302000000020000000100000028000000000000002000000001000000fffffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73040000000200000080000000000000000100000000000000000000000000000000000000000000000000000000000000210000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000000b00000000000000000000000000000000000000000000000000000000000000");
-        let is_witness =
-            Witness::<ark_bls12_381::Fr>::from_reader(witness_bytes.as_slice()).unwrap();
+        let witness = File::open("../test_vectors/bls12_381/witness.wtns").unwrap();
+        let is_witness = Witness::<ark_bls12_381::Fr>::from_reader(witness).unwrap();
         assert_eq!(
             is_witness,
             Witness {

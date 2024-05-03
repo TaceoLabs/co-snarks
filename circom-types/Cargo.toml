@@ -17,11 +17,10 @@ ark-std = { workspace = true }
 byteorder = "1.5.0"
 num-traits = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
-thiserror = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
-hex-literal = { workspace = true }
 num-bigint = { version = "0.4.4", default-features = false, features = [
     "rand",
 ] }
