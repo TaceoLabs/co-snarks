@@ -130,6 +130,23 @@ pub struct Aby3PrimeFieldShareVec<F: PrimeField> {
     b: Vec<F>,
 }
 
+impl<F: PrimeField> Aby3PrimeFieldShareVec<F> {
+    pub fn new(a: Vec<F>, b: Vec<F>) -> Self {
+        Self { a, b }
+    }
+
+    pub fn get_ab(self) -> (Vec<F>, Vec<F>) {
+        (self.a, self.b)
+    }
+
+    pub fn to_ref(&self) -> Aby3PrimeFieldShareSlice<F> {
+        Aby3PrimeFieldShareSlice {
+            a: &self.a,
+            b: &self.b,
+        }
+    }
+}
+
 impl<F: PrimeField> From<Vec<Aby3PrimeFieldShare<F>>> for Aby3PrimeFieldShareVec<F> {
     fn from(v: Vec<Aby3PrimeFieldShare<F>>) -> Self {
         let (a, b): (Vec<F>, Vec<F>) = v.into_iter().map(|share| (share.a, share.b)).unzip();
@@ -146,6 +163,12 @@ impl<F: PrimeField> std::ops::Add for Aby3PrimeFieldShareVec<F> {
             b: self.b.iter().zip(rhs.b).map(|(a, b)| *a + b).collect(),
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Aby3PrimeFieldShareSlice<'a, F: PrimeField> {
+    a: &'a [F],
+    b: &'a [F],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

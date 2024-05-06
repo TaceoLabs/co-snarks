@@ -9,7 +9,10 @@ use rand_chacha::ChaCha12Rng;
 use crate::traits::{EcMpcProtocol, FFTProvider, PrimeFieldMpcProtocol};
 pub use share::Aby3PrimeFieldShare;
 
-use self::{network::Aby3Network, share::Aby3PointShare};
+use self::{
+    network::Aby3Network,
+    share::{Aby3PointShare, Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareVec},
+};
 
 pub mod id;
 pub mod network;
@@ -93,10 +96,10 @@ impl<F: PrimeField, N: Aby3Network<F>> Aby3Protocol<F, N> {
     }
 }
 
-impl<F: PrimeField, N: Aby3Network<F>> PrimeFieldMpcProtocol<F> for Aby3Protocol<F, N> {
+impl<'a, F: PrimeField, N: Aby3Network<F>> PrimeFieldMpcProtocol<'a, F> for Aby3Protocol<F, N> {
     type FieldShare = Aby3PrimeFieldShare<F>;
-    type FieldShareSlice = ();
-    type FieldShareVec = ();
+    type FieldShareSlice = Aby3PrimeFieldShareSlice<'a, F>;
+    type FieldShareVec = Aby3PrimeFieldShareVec<F>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
         a + b
@@ -130,7 +133,7 @@ impl<F: PrimeField, N: Aby3Network<F>> PrimeFieldMpcProtocol<F> for Aby3Protocol
     }
 }
 
-impl<C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<C>
+impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<'a, C>
     for Aby3Protocol<C::ScalarField, N>
 {
     type PointShare = Aby3PointShare<C>;
@@ -166,12 +169,12 @@ impl<C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<C>
     }
 }
 
-impl<F: PrimeField, N: Aby3Network<F>> FFTProvider<F> for Aby3Protocol<F, N> {
-    fn fft(&mut self, _data: &[Self::FieldShare]) -> Vec<Self::FieldShare> {
+impl<'a, F: PrimeField, N: Aby3Network<F>> FFTProvider<'a, F> for Aby3Protocol<F, N> {
+    fn fft(&mut self, _data: &Self::FieldShareSlice) -> Vec<Self::FieldShare> {
         todo!()
     }
 
-    fn ifft(&mut self, _data: &[Self::FieldShare]) -> Vec<Self::FieldShare> {
+    fn ifft(&mut self, _data: &Self::FieldShareSlice) -> Vec<Self::FieldShare> {
         todo!()
     }
 }

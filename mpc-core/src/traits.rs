@@ -2,7 +2,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
-pub trait PrimeFieldMpcProtocol<F: PrimeField> {
+pub trait PrimeFieldMpcProtocol<'a, F: PrimeField> {
     type FieldShare;
     type FieldShareVec;
     type FieldShareSlice;
@@ -18,7 +18,7 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn rand(&mut self) -> Self::FieldShare;
 }
 
-pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
+pub trait EcMpcProtocol<'a, C: CurveGroup>: PrimeFieldMpcProtocol<'a, C::ScalarField> {
     type PointShare;
     fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
     fn sub_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
@@ -31,11 +31,11 @@ pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
     fn scalar_mul(&mut self, a: &Self::PointShare, b: &Self::FieldShare) -> Self::PointShare;
 }
 
-pub trait FFTProvider<F: PrimeField>: PrimeFieldMpcProtocol<F> {
-    fn fft(&mut self, data: &[Self::FieldShare]) -> Vec<Self::FieldShare>;
-    fn ifft(&mut self, data: &[Self::FieldShare]) -> Vec<Self::FieldShare>;
+pub trait FFTProvider<'a, F: PrimeField>: PrimeFieldMpcProtocol<'a, F> {
+    fn fft(&mut self, data: &Self::FieldShareSlice) -> Vec<Self::FieldShare>;
+    fn ifft(&mut self, data: &Self::FieldShareSlice) -> Vec<Self::FieldShare>;
 }
 
-pub trait MSMProvider<C: CurveGroup>: EcMpcProtocol<C> {
+pub trait MSMProvider<'a, C: CurveGroup>: EcMpcProtocol<'a, C> {
     fn msm_public_points(&mut self, points: &[C], scalars: &[Self::FieldShare]) -> C;
 }
