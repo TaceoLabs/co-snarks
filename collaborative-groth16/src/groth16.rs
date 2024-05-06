@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use ark_ec::pairing::Pairing;
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
+use ark_poly::EvaluationDomain;
 use ark_relations::r1cs::Result as R1CSResult;
 use color_eyre::eyre::Result;
 use mpc_core::{

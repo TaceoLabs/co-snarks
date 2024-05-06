@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
+use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
@@ -170,11 +171,19 @@ impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<'a, C>
 }
 
 impl<'a, F: PrimeField, N: Aby3Network<F>> FFTProvider<'a, F> for Aby3Protocol<F, N> {
-    fn fft(&mut self, _data: &Self::FieldShareSlice) -> Vec<Self::FieldShare> {
+    fn fft<D: EvaluationDomain<F>>(
+        &mut self,
+        _data: &Self::FieldShareSlice,
+        _domain: &D,
+    ) -> Vec<Self::FieldShare> {
         todo!()
     }
 
-    fn ifft(&mut self, _data: &Self::FieldShareSlice) -> Vec<Self::FieldShare> {
+    fn ifft<D: EvaluationDomain<F>>(
+        &mut self,
+        _data: &Self::FieldShareSlice,
+        _domain: &D,
+    ) -> Vec<Self::FieldShare> {
         todo!()
     }
 }

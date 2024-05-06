@@ -14,6 +14,7 @@ rust-version.workspace = true
 [dependencies]
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
+ark-poly = { workspace = true }
 ark-serialize = { workspace = true }
 bytes = { workspace = true }
 eyre = { workspace = true }

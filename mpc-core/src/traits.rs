@@ -1,5 +1,6 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
+use ark_poly::EvaluationDomain;
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<'a, F: PrimeField> {
@@ -32,8 +33,16 @@ pub trait EcMpcProtocol<'a, C: CurveGroup>: PrimeFieldMpcProtocol<'a, C::ScalarF
 }
 
 pub trait FFTProvider<'a, F: PrimeField>: PrimeFieldMpcProtocol<'a, F> {
-    fn fft(&mut self, data: &Self::FieldShareSlice) -> Vec<Self::FieldShare>;
-    fn ifft(&mut self, data: &Self::FieldShareSlice) -> Vec<Self::FieldShare>;
+    fn fft<D: EvaluationDomain<F>>(
+        &mut self,
+        data: &Self::FieldShareSlice,
+        domain: &D,
+    ) -> Vec<Self::FieldShare>;
+    fn ifft<D: EvaluationDomain<F>>(
+        &mut self,
+        data: &Self::FieldShareSlice,
+        domain: &D,
+    ) -> Vec<Self::FieldShare>;
 }
 
 pub trait MSMProvider<'a, C: CurveGroup>: EcMpcProtocol<'a, C> {
