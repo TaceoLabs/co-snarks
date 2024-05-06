@@ -14,9 +14,9 @@ ark-groth16 = { workspace = true }
 ark-relations = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
-byteorder = "1.5.0"
+byteorder = { workspace = true }
 num-traits = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
+serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 

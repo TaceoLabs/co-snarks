@@ -15,7 +15,7 @@ ark-poly = "0.4.2"
 ark-relations = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
-byteorder = "1.5.0"
+byteorder = { workspace = true }
 circom-types = { version = "0.1.0", path = "../circom-types" }
 color-eyre = { workspace = true }
 mpc-core = { version = "0.1.0", path = "../mpc-core" }
