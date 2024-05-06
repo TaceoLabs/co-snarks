@@ -30,26 +30,14 @@ use ark_ec::pairing::Pairing;
 use ark_relations::r1cs::{
     ConstraintSynthesizer, ConstraintSystemRef, LinearCombination, SynthesisError, Variable,
 };
-use circom_types::{
-    groth16::witness::Witness,
-    r1cs::R1CS,
-    traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
-};
+use circom_types::{groth16::witness::Witness, r1cs::R1CS};
 
 //TODO change my name
-pub struct Circuit<P: Pairing + CircomArkworksPairingBridge>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+pub struct Circuit<P: Pairing> {
     r1cs: R1CS<P>,
     witness: Witness<P::ScalarField>,
 }
-impl<P: Pairing + CircomArkworksPairingBridge> Circuit<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+impl<P: Pairing> Circuit<P> {
     pub fn new(r1cs: R1CS<P>, witness: Witness<P::ScalarField>) -> Self {
         Self { r1cs, witness }
     }
@@ -62,11 +50,7 @@ where
     }
 }
 
-impl<P: Pairing + CircomArkworksPairingBridge> ConstraintSynthesizer<P::ScalarField> for Circuit<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+impl<P: Pairing> ConstraintSynthesizer<P::ScalarField> for Circuit<P> {
     fn generate_constraints(
         self,
         cs: ConstraintSystemRef<P::ScalarField>,

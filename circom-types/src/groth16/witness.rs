@@ -31,7 +31,7 @@ pub enum WitnessParserError {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Witness<F: CircomArkworksPrimeFieldBridge> {
+pub struct Witness<F> {
     pub values: Vec<F>,
 }
 

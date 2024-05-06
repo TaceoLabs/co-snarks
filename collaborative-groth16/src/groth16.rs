@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 use ark_ec::pairing::Pairing;
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
 use ark_relations::r1cs::Result as R1CSResult;
-use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use color_eyre::eyre::Result;
 use mpc_core::{
     protocols::aby3::{network::Aby3MpcNet, Aby3Protocol},
@@ -17,7 +16,10 @@ pub type Aby3CollaborativeGroth16<P> =
 
 pub struct CollaborativeGroth16<T, P: Pairing>
 where
-    T: PrimeFieldMpcProtocol<P::ScalarField> + EcMpcProtocol<P::G1> + FFTProvider<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>
+        + EcMpcProtocol<P::G1>
+        + EcMpcProtocol<P::G2>
+        + FFTProvider<P::ScalarField>,
 {
     _driver: T,
     phantom_data: PhantomData<P>,
@@ -29,9 +31,6 @@ where
         + EcMpcProtocol<P::G1>
         + EcMpcProtocol<P::G2>
         + FFTProvider<P::ScalarField>,
-    P: CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     pub fn new(driver: T) -> Self {
         Self {
@@ -53,11 +52,7 @@ where
     }
 }
 
-impl<P: Pairing + CircomArkworksPairingBridge> Aby3CollaborativeGroth16<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+impl<P: Pairing> Aby3CollaborativeGroth16<P> {
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
         let mpc_net = Aby3MpcNet::new(config)?;
         let driver = Aby3Protocol::<P::ScalarField, Aby3MpcNet>::new(mpc_net)?;

@@ -64,11 +64,7 @@ pub enum R1CSParserError {
 }
 
 #[derive(Clone, Debug)]
-pub struct R1CS<P: Pairing + CircomArkworksPairingBridge>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+pub struct R1CS<P: Pairing> {
     pub num_inputs: usize,
     pub num_aux: usize,
     pub num_variables: usize,
@@ -218,21 +214,21 @@ where
     Ok(vec)
 }
 
-fn read_constraints<R: Read, E: Pairing + CircomArkworksPairingBridge>(
+fn read_constraints<R: Read, P: Pairing + CircomArkworksPairingBridge>(
     mut reader: R,
     n_constraints: usize,
-) -> Result<Vec<Constraints<E>>>
+) -> Result<Vec<Constraints<P>>>
 where
-    E::BaseField: CircomArkworksPrimeFieldBridge,
-    E::ScalarField: CircomArkworksPrimeFieldBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     // todo check section size
     let mut vec = Vec::with_capacity(n_constraints);
     for _ in 0..n_constraints {
         vec.push((
-            read_constraint_vec::<&mut R, E>(&mut reader)?,
-            read_constraint_vec::<&mut R, E>(&mut reader)?,
-            read_constraint_vec::<&mut R, E>(&mut reader)?,
+            read_constraint_vec::<&mut R, P>(&mut reader)?,
+            read_constraint_vec::<&mut R, P>(&mut reader)?,
+            read_constraint_vec::<&mut R, P>(&mut reader)?,
         ));
     }
     Ok(vec)

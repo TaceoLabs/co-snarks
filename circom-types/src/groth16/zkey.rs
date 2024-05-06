@@ -90,11 +90,7 @@ struct Section {
     size: usize,
 }
 
-pub struct ZKey<P: Pairing + CircomArkworksPairingBridge>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+pub struct ZKey<P: Pairing> {
     pk: ProvingKey<P>,
     matrices: ConstraintMatrices<P::ScalarField>,
 }
