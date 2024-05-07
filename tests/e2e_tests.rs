@@ -236,7 +236,7 @@ mod tests {
         {
             thread::spawn(move || {
                 let aby3 = Aby3Protocol::<ark_bn254::Fr, PartyTestNetwork>::new(net).unwrap();
-                let prover = CollaborativeGroth16::<
+                let mut prover = CollaborativeGroth16::<
                     Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
                 >::new(aby3);
