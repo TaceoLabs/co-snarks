@@ -1,5 +1,6 @@
 mod circom_reduction;
 pub mod circuit;
+mod collab_reduction;
 pub mod groth16;
 pub mod groth16_proof_with_assignment;
 
