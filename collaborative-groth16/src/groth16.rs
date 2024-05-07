@@ -188,7 +188,7 @@ where
     ) -> Result<()> {
         let mut pow = c;
         for i in 0..coeff_len {
-            let result = self.driver.mul_with_public(&pow, &coeffs[i])?;
+            let result = self.driver.mul_with_public(&pow, &coeffs[i]);
             coeffs[i] = result;
             pow *= g;
         }
@@ -206,10 +206,10 @@ where
             if index < &public_inputs.len() {
                 let val = public_inputs[*index];
                 let mul_result = val * coeff;
-                acc = self.driver.add_with_public(&mul_result, &acc)?;
+                acc = self.driver.add_with_public(&mul_result, &acc);
             } else {
                 let val = &private_witness[*index];
-                let mul_result = self.driver.mul_with_public(coeff, val)?;
+                let mul_result = self.driver.mul_with_public(coeff, val);
                 acc = self.driver.add(&mul_result, &acc);
             }
         }
