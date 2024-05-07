@@ -12,14 +12,13 @@ pub use share::Aby3PrimeFieldShare;
 
 use self::{
     network::Aby3Network,
-    share::{
-        Aby3PointShare, Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareSliceMut,
-        Aby3PrimeFieldShareVec,
-    },
+    pointshare::Aby3PointShare,
+    share::{Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareSliceMut, Aby3PrimeFieldShareVec},
 };
 
 pub mod id;
 pub mod network;
+pub mod pointshare;
 pub mod share;
 
 type IoResult<T> = std::io::Result<T>;
@@ -29,7 +28,7 @@ pub mod utils {
     use ark_ff::PrimeField;
     use rand::{CryptoRng, Rng};
 
-    use super::{share::Aby3PointShare, Aby3PrimeFieldShare};
+    use super::{pointshare::Aby3PointShare, Aby3PrimeFieldShare};
 
     pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
         val: F,
@@ -255,11 +254,22 @@ impl Aby3CorrelatedRng {
 impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> MSMProvider<'a, C>
     for Aby3Protocol<C::ScalarField, N>
 {
-    fn msm_public_points(&mut self, points: &[C], scalars: Self::FieldShareSlice) -> C {
+    fn msm_public_points(
+        &mut self,
+        points: &[C],
+        scalars: Self::FieldShareSlice,
+    ) -> Self::PointShare {
         debug_assert_eq!(points.len(), scalars.len());
-        points
+        let res_a = points
             .iter()
             .zip(scalars.a.iter())
-            .fold(C::zero(), |acc, (p, s)| acc + p.mul(s))
+            .fold(C::zero(), |acc, (p, s)| acc + p.mul(s));
+
+        let res_b = points
+            .iter()
+            .zip(scalars.b.iter())
+            .fold(C::zero(), |acc, (p, s)| acc + p.mul(s));
+
+        Self::PointShare::new(res_a, res_b)
     }
 }
