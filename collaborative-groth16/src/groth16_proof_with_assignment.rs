@@ -10,8 +10,9 @@ use mpc_core::traits::{
 };
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
-type FieldShareSlice<'a, T, P> =
-    <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareSlice<'a>;
+type FieldShareSlice<'a, T, C> = <T as PrimeFieldMpcProtocol<
+    <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
+>>::FieldShareSlice<'a>;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
 impl<T, P: Pairing> CollaborativeGroth16<T, P>
@@ -19,18 +20,36 @@ where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
-        + MSMProvider<P::G1>,
+        + MSMProvider<P::G1>
+        + MSMProvider<P::G2>,
 {
     fn calculate_coeff<C: CurveGroup>(
+        &mut self,
         initial: PointShare<T, C>,
         query: &[C::Affine],
         vk_param: C::Affine,
-        input_assignment: &[P::ScalarField],
-        aux_assignment: FieldShareSlice<'_, T, P>,
+        input_assignment: &[C::ScalarField],
+        aux_assignment: FieldShareSlice<'_, T, C>,
     ) -> PointShare<T, C>
     where
         T: EcMpcProtocol<C>,
+        T: MSMProvider<C>,
     {
+        let pub_len = input_assignment.len();
+
+        let pub_acc = C::msm_unchecked(&query[1..=pub_len], input_assignment);
+        let priv_acc = MSMProvider::<C>::msm_public_points(
+            &mut self.driver,
+            &query[1 + pub_len..],
+            aux_assignment,
+        );
+
+        let mut res = initial;
+        EcMpcProtocol::<C>::add_assign_points_public_affine(&mut self.driver, &mut res, &query[0]);
+        EcMpcProtocol::<C>::add_assign_points_public_affine(&mut self.driver, &mut res, &vk_param);
+        EcMpcProtocol::<C>::add_assign_points_public(&mut self.driver, &mut res, &pub_acc);
+        EcMpcProtocol::<C>::add_assign_points(&mut self.driver, &mut res, &priv_acc);
+
         todo!()
     }
 
@@ -39,15 +58,16 @@ where
         pk: &ProvingKey<P>,
         r: FieldShare<T, P>,
         s: FieldShare<T, P>,
-        h: FieldShareSlice<'_, T, P>,
+        h: FieldShareSlice<'_, T, P::G1>,
         input_assignment: &[P::ScalarField],
-        aux_assignment: FieldShareSlice<'_, T, P>,
+        aux_assignment: FieldShareSlice<'_, T, P::G1>,
     ) -> Result<Proof<P>> {
         let c_acc_time = start_timer!(|| "Compute C");
-        let h_acc = self.driver.msm_public_points(&pk.h_query, h);
+        let h_acc = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &pk.h_query, h);
 
         // Compute C
-        let l_aux_acc = self.driver.msm_public_points(&pk.l_query, aux_assignment);
+        let l_aux_acc =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &pk.l_query, aux_assignment);
 
         let delta_g1 = pk.delta_g1.into_group();
         let rs = self.driver.mul(&r, &s)?;
@@ -59,7 +79,7 @@ where
         let a_acc_time = start_timer!(|| "Compute A");
         let r_g1 = self.driver.scalar_mul_public_point(&delta_g1, &r);
 
-        let g_a = Self::calculate_coeff::<P::G1>(
+        let g_a = self.calculate_coeff::<P::G1>(
             r_g1,
             &pk.a_query,
             pk.vk.alpha_g1,
@@ -76,7 +96,7 @@ where
         // In original implementation this is skipped if r==0, however r is shared in our case
         let b_g1_acc_time = start_timer!(|| "Compute B in G1");
         let s_g1 = self.driver.scalar_mul_public_point(&delta_g1, &s);
-        let g1_b = Self::calculate_coeff::<P::G1>(
+        let g1_b = self.calculate_coeff::<P::G1>(
             s_g1,
             &pk.b_g1_query,
             pk.beta_g1,
@@ -90,7 +110,7 @@ where
         let delta_g2 = pk.vk.delta_g2.into_group();
         let b_g2_acc_time = start_timer!(|| "Compute B in G2");
         let s_g2 = self.driver.scalar_mul_public_point(&delta_g2, &s);
-        let g2_b = Self::calculate_coeff::<P::G2>(
+        let g2_b = self.calculate_coeff::<P::G2>(
             s_g2,
             &pk.b_g2_query,
             pk.vk.beta_g2,

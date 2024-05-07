@@ -26,6 +26,10 @@ pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
     fn sub_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
     fn add_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare);
     fn sub_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare);
+    fn add_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C);
+    fn sub_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C);
+    fn add_assign_points_public_affine(&mut self, a: &mut Self::PointShare, b: &C::Affine);
+    fn sub_assign_points_public_affine(&mut self, a: &mut Self::PointShare, b: &C::Affine);
     fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare;
     fn scalar_mul_public_scalar(
         &mut self,

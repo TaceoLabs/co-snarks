@@ -158,6 +158,38 @@ impl<C: CurveGroup, N: Aby3Network> EcMpcProtocol<C> for Aby3Protocol<C::ScalarF
         *a -= b;
     }
 
+    fn add_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
+        match self.network.get_id() {
+            id::PartyID::ID0 => a.a += b,
+            id::PartyID::ID1 => a.b += b,
+            id::PartyID::ID2 => {}
+        }
+    }
+
+    fn sub_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
+        match self.network.get_id() {
+            id::PartyID::ID0 => a.a -= b,
+            id::PartyID::ID1 => a.b -= b,
+            id::PartyID::ID2 => {}
+        }
+    }
+
+    fn add_assign_points_public_affine(&mut self, a: &mut Self::PointShare, b: &C::Affine) {
+        match self.network.get_id() {
+            id::PartyID::ID0 => a.a += b,
+            id::PartyID::ID1 => a.b += b,
+            id::PartyID::ID2 => {}
+        }
+    }
+
+    fn sub_assign_points_public_affine(&mut self, a: &mut Self::PointShare, b: &C::Affine) {
+        match self.network.get_id() {
+            id::PartyID::ID0 => a.a -= b,
+            id::PartyID::ID1 => a.b -= b,
+            id::PartyID::ID2 => {}
+        }
+    }
+
     fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare {
         b * a
     }
@@ -188,6 +220,22 @@ impl<C: CurveGroup, N: Aby3Network> EcMpcProtocol<C> for Aby3Protocol<C::ScalarF
         self.network.send_next(a.b)?;
         let c = self.network.recv_prev::<C>()?;
         Ok(a.a + a.b + c)
+    }
+}
+
+impl<P: Pairing, N: Aby3Network> PairingEcMpcProtocol<P> for Aby3Protocol<P::ScalarField, N> {
+    fn open_two_points(
+        &mut self,
+        a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
+        b: &<Self as EcMpcProtocol<P::G2>>::PointShare,
+    ) -> std::io::Result<(P::G1, P::G2)> {
+        let s1 = a.b;
+        let s2 = b.b;
+        self.network.send_next((s1, s2))?;
+        let (mut r1, mut r2) = self.network.recv_prev::<(P::G1, P::G2)>()?;
+        r1 += a.a + a.b;
+        r2 += b.a + b.b;
+        Ok((r1, r2))
     }
 }
 
@@ -276,21 +324,5 @@ impl<C: CurveGroup, N: Aby3Network> MSMProvider<C> for Aby3Protocol<C::ScalarFie
         let res_a = C::msm_unchecked(points, scalars.a);
         let res_b = C::msm_unchecked(points, scalars.b);
         Self::PointShare { a: res_a, b: res_b }
-    }
-}
-
-impl<P: Pairing, N: Aby3Network> PairingEcMpcProtocol<P> for Aby3Protocol<P::ScalarField, N> {
-    fn open_two_points(
-        &mut self,
-        a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
-        b: &<Self as EcMpcProtocol<P::G2>>::PointShare,
-    ) -> std::io::Result<(P::G1, P::G2)> {
-        let s1 = a.b;
-        let s2 = b.b;
-        self.network.send_next((s1, s2))?;
-        let (mut r1, mut r2) = self.network.recv_prev::<(P::G1, P::G2)>()?;
-        r1 += a.a + a.b;
-        r2 += b.a + b.b;
-        Ok((r1, r2))
     }
 }
