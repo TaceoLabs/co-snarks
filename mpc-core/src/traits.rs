@@ -6,7 +6,7 @@ use ark_poly::EvaluationDomain;
 pub trait PrimeFieldMpcProtocol<'a, F: PrimeField> {
     type FieldShare;
     type FieldShareVec;
-    type FieldShareSlice;
+    type FieldShareSlice: Copy;
     type FieldShareSliceMut;
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
@@ -35,6 +35,7 @@ pub trait EcMpcProtocol<'a, C: CurveGroup>: PrimeFieldMpcProtocol<'a, C::ScalarF
         a: &Self::PointShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::PointShare>;
+    fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C>;
 }
 
 pub trait FFTProvider<'a, F: PrimeField>: PrimeFieldMpcProtocol<'a, F> {

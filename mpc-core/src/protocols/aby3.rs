@@ -173,6 +173,12 @@ impl<'a, C: CurveGroup, N: Aby3Network> EcMpcProtocol<'a, C> for Aby3Protocol<C:
             b: local_b,
         })
     }
+
+    fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
+        self.network.send_next(a.b)?;
+        let c = self.network.recv_prev::<C>()?;
+        Ok(a.a + a.b + c)
+    }
 }
 
 impl<'a, F: PrimeField, N: Aby3Network> FFTProvider<'a, F> for Aby3Protocol<F, N> {
