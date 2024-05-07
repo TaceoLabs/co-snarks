@@ -55,7 +55,7 @@ pub trait FFTProvider<'a, F: PrimeField>: PrimeFieldMpcProtocol<'a, F> {
 pub trait MSMProvider<'a, C: CurveGroup>: EcMpcProtocol<'a, C> {
     fn msm_public_points(
         &mut self,
-        points: &[C],
+        points: &[C::Affine],
         scalars: Self::FieldShareSlice,
     ) -> Self::PointShare;
 }

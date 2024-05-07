@@ -249,20 +249,12 @@ impl Aby3CorrelatedRng {
 impl<'a, C: CurveGroup, N: Aby3Network> MSMProvider<'a, C> for Aby3Protocol<C::ScalarField, N> {
     fn msm_public_points(
         &mut self,
-        points: &[C],
+        points: &[C::Affine],
         scalars: Self::FieldShareSlice,
     ) -> Self::PointShare {
         debug_assert_eq!(points.len(), scalars.len());
-        let res_a = points
-            .iter()
-            .zip(scalars.a.iter())
-            .fold(C::zero(), |acc, (p, s)| acc + p.mul(s));
-
-        let res_b = points
-            .iter()
-            .zip(scalars.b.iter())
-            .fold(C::zero(), |acc, (p, s)| acc + p.mul(s));
-
-        Self::PointShare::new(res_a, res_b)
+        let res_a = C::msm_unchecked(points, scalars.a);
+        let res_b = C::msm_unchecked(points, scalars.b);
+        Self::PointShare { a: res_a, b: res_b }
     }
 }
