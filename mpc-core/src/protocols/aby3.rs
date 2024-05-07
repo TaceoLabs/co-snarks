@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::Index};
 
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
@@ -136,6 +136,43 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
     fn rand(&mut self) -> Self::FieldShare {
         let (a, b) = self.rngs.random_fes();
         Self::FieldShare { a, b }
+    }
+
+    fn get_zero_share(&mut self) -> Self::FieldShare {
+        todo!()
+    }
+
+    fn add_with_public(
+        &mut self,
+        a: &F,
+        b: &Self::FieldShare,
+    ) -> std::io::Result<Self::FieldShare> {
+        todo!()
+    }
+
+    fn mul_with_public(
+        &mut self,
+        a: &F,
+        b: &Self::FieldShare,
+    ) -> std::io::Result<Self::FieldShare> {
+        todo!()
+    }
+}
+
+impl<F: PrimeField> Index<usize> for Aby3PrimeFieldShareVec<F> {
+    type Output = Aby3PrimeFieldShare<F>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        todo!()
+    }
+}
+
+impl<F: PrimeField> Default for Aby3PrimeFieldShare<F> {
+    fn default() -> Self {
+        Self {
+            a: F::zero(),
+            b: F::zero(),
+        }
     }
 }
 

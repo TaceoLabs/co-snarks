@@ -1,11 +1,13 @@
-use std::marker::PhantomData;
+use std::{borrow::Borrow, marker::PhantomData};
 
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, PrimeField};
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
+use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::Result as R1CSResult;
 use ark_relations::r1cs::{
-    ConstraintSystem, ConstraintSystemRef, LinearCombination, OptimizationGoal, Variable,
+    ConstraintMatrices, ConstraintSystem, ConstraintSystemRef, LinearCombination, OptimizationGoal,
+    SynthesisError, Variable,
 };
 use circom_types::groth16::witness::Witness;
 use circom_types::r1cs::R1CS;
@@ -16,6 +18,7 @@ use mpc_core::{
 };
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
+use num_traits::identities::Zero;
 use rand::{CryptoRng, Rng};
 
 use crate::circuit::Circuit;
@@ -53,24 +56,74 @@ where
         }
     }
     pub fn prove(
-        &self,
-        _pk: &ProvingKey<P>,
-        r1cs: R1CS<P>,
-        public_inputs: Vec<P::ScalarField>,
+        &mut self,
+        pk: &ProvingKey<P>,
+        r1cs: &R1CS<P>,
+        public_inputs: &[P::ScalarField],
         private_witness: <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
     ) -> Result<Proof<P>> {
         let cs = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
-        Self::generate_constraints(&public_inputs, r1cs, cs.clone())?;
+        Self::generate_constraints(public_inputs, r1cs, cs.clone())?;
         let matrices = cs.to_matrices().unwrap();
         let num_inputs = cs.num_instance_variables();
         let num_constraints = cs.num_constraints();
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        self.witness_map_from_matrices(
+            &matrices,
+            num_constraints,
+            public_inputs,
+            private_witness,
+            domain,
+        );
         todo!()
+    }
+
+    fn witness_map_from_matrices(
+        &mut self,
+        matrices: &ConstraintMatrices<P::ScalarField>,
+        num_constraints: usize,
+        public_inputs: &[P::ScalarField],
+        private_witness: <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
+        domain: GeneralEvaluationDomain<P::ScalarField>,
+    ) -> Result<()> {
+        let domain_size = domain.size();
+        let mut a = Vec::with_capacity(domain_size);
+        let mut b = Vec::with_capacity(domain_size);
+        for (at_i, bt_i) in itertools::multizip((&matrices.a, &matrices.b)) {
+            a.push(self.evaluate_constraint(at_i, public_inputs, &private_witness)?);
+            b.push(self.evaluate_constraint(bt_i, public_inputs, &private_witness)?);
+        }
+        Ok(())
+    }
+
+    fn evaluate_constraint(
+        &mut self,
+        lhs: &[(P::ScalarField, usize)],
+        public_inputs: &[P::ScalarField],
+        private_witness: &<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
+    ) -> Result<<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShare> {
+        let mut acc = self.driver.get_zero_share();
+        for (coeff, index) in lhs {
+            if index < &public_inputs.len() {
+                let val = public_inputs[*index];
+                let mul_result = val * coeff;
+                acc = self.driver.add_with_public(&mul_result, &acc)?;
+            } else {
+                let val = &private_witness[*index];
+                let mul_result = self.driver.mul_with_public(coeff, val)?;
+                acc = self.driver.add(&mul_result, &acc);
+                //let mul_result = val * coeff;
+                //acc = self.driver.add_with_public(&mul_result, &acc)?;
+            }
+        }
+        Ok(acc)
     }
 
     fn generate_constraints(
         public_inputs: &[P::ScalarField],
-        r1cs: R1CS<P>,
+        r1cs: &R1CS<P>,
         cs: ConstraintSystemRef<P::ScalarField>,
     ) -> Result<()> {
         for f in public_inputs.iter().skip(1) {

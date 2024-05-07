@@ -1,23 +1,30 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
+use std::ops::Index;
+
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
-    type FieldShare;
-    type FieldShareVec;
+    type FieldShare: Default;
+    type FieldShareVec: Index<usize, Output = Self::FieldShare>;
     type FieldShareSlice<'a>: Copy;
     type FieldShareSliceMut<'a>;
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
+    fn add_with_public(&mut self, a: &F, b: &Self::FieldShare)
+        -> std::io::Result<Self::FieldShare>;
     fn mul(
         &mut self,
         a: &Self::FieldShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::FieldShare>;
+    fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare)
+        -> std::io::Result<Self::FieldShare>;
     fn inv(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
     fn rand(&mut self) -> Self::FieldShare;
+    fn get_zero_share(&mut self) -> Self::FieldShare;
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {

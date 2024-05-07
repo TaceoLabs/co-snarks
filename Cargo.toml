@@ -40,6 +40,7 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 eyre = "0.6"
 futures = "0.3.30"
 hex-literal = "0.4.1"
+itertools = "0.12.1"
 mpc-net = { path = "mpc-net" }
 num-traits = { version = "0.2.18", default-features = false }
 rand_chacha = "0.3"

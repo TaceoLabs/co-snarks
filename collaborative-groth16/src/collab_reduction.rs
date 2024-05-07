@@ -4,7 +4,7 @@ use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_relations::r1cs::{ConstraintMatrices, SynthesisError};
 use mpc_core::traits::{FFTProvider, PrimeFieldMpcProtocol};
-
+/*
 pub struct CollaborativeCircomReduction<F: PrimeField, FFT: FFTProvider<F>> {
     fft_provider: FFT,
     phantom_data: PhantomData<F>,
@@ -26,3 +26,4 @@ impl<F: PrimeField, FFT: FFTProvider<F>> CollaborativeCircomReduction<F, FFT> {
         todo!()
     }
 }
+*/
