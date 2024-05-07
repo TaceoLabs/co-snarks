@@ -106,17 +106,6 @@ impl<C: CurveGroup> std::ops::Mul<&C::ScalarField> for &'_ Aby3PointShare<C> {
     }
 }
 
-impl<C: CurveGroup> std::ops::Mul<&C> for &Aby3PrimeFieldShare<C::ScalarField> {
-    type Output = Aby3PointShare<C>;
-
-    fn mul(self, point: &C) -> Self::Output {
-        Self::Output {
-            a: point.mul(self.a),
-            b: point.mul(self.b),
-        }
-    }
-}
-
 impl<C: CurveGroup> std::ops::Mul<&Aby3PointShare<C>> for &'_ Aby3PrimeFieldShare<C::ScalarField> {
     type Output = C;
 

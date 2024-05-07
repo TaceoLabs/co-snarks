@@ -17,18 +17,17 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
-    fn add_with_public(&mut self, a: &F, b: &Self::FieldShare)
-        -> std::io::Result<Self::FieldShare>;
+    fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
     fn mul(
         &mut self,
         a: &Self::FieldShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::FieldShare>;
-    fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare)
-        -> std::io::Result<Self::FieldShare>;
-    fn inv(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
+    fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
+    fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare>;
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
     fn rand(&mut self) -> Self::FieldShare;
+    fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F>;
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {

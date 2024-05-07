@@ -128,8 +128,18 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         })
     }
 
-    fn inv(&mut self, _a: &Self::FieldShare) -> Self::FieldShare {
-        todo!()
+    fn inv(&mut self, a: &Self::FieldShare) -> IoResult<Self::FieldShare> {
+        let r = self.rand();
+        let tmp = self.mul(a, &r)?;
+        let y = self.open(&tmp)?;
+        if y.is_zero() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Cannot invert zero",
+            ));
+        }
+        let y_inv = y.inverse().unwrap();
+        Ok(r * y_inv)
     }
 
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
@@ -141,20 +151,24 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         Self::FieldShare { a, b }
     }
 
-    fn add_with_public(
-        &mut self,
-        a: &F,
-        b: &Self::FieldShare,
-    ) -> std::io::Result<Self::FieldShare> {
-        todo!()
+    fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
+        let mut res = b.to_owned();
+        match self.network.get_id() {
+            id::PartyID::ID0 => res.a += a,
+            id::PartyID::ID1 => res.b += a,
+            id::PartyID::ID2 => {}
+        }
+        res
     }
 
-    fn mul_with_public(
-        &mut self,
-        a: &F,
-        b: &Self::FieldShare,
-    ) -> std::io::Result<Self::FieldShare> {
-        todo!()
+    fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
+        b * a
+    }
+
+    fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F> {
+        self.network.send_next(a.b)?;
+        let c = self.network.recv_prev::<F>()?;
+        Ok(a.a + a.b + c)
     }
 }
 
@@ -247,7 +261,10 @@ impl<C: CurveGroup, N: Aby3Network> EcMpcProtocol<C> for Aby3Protocol<C::ScalarF
     }
 
     fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare {
-        b * a
+        Self::PointShare {
+            a: a.mul(b.a),
+            b: a.mul(b.b),
+        }
     }
 
     fn scalar_mul_public_scalar(

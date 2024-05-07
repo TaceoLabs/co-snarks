@@ -102,6 +102,28 @@ impl<F: PrimeField> std::ops::Mul<&Aby3PrimeFieldShare<F>> for &'_ Aby3PrimeFiel
     }
 }
 
+impl<F: PrimeField> std::ops::Mul<&F> for &'_ Aby3PrimeFieldShare<F> {
+    type Output = Aby3PrimeFieldShare<F>;
+
+    fn mul(self, rhs: &F) -> Self::Output {
+        Self::Output {
+            a: self.a * rhs,
+            b: self.b * rhs,
+        }
+    }
+}
+
+impl<F: PrimeField> std::ops::Mul<F> for Aby3PrimeFieldShare<F> {
+    type Output = Aby3PrimeFieldShare<F>;
+
+    fn mul(self, rhs: F) -> Self::Output {
+        Self::Output {
+            a: self.a * rhs,
+            b: self.b * rhs,
+        }
+    }
+}
+
 impl<F: PrimeField> std::ops::Neg for Aby3PrimeFieldShare<F> {
     type Output = Self;
 
