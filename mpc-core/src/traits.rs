@@ -1,4 +1,4 @@
-use ark_ec::CurveGroup;
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 
@@ -38,7 +38,14 @@ pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::PointShare>;
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C>;
-    fn open_points(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<C>>;
+}
+
+pub trait PairingEcMpcProtocol<P: Pairing>: EcMpcProtocol<P::G1> + EcMpcProtocol<P::G2> {
+    fn open_two_points(
+        &mut self,
+        a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
+        b: &<Self as EcMpcProtocol<P::G2>>::PointShare,
+    ) -> std::io::Result<(P::G1, P::G2)>;
 }
 
 pub trait FFTProvider<F: PrimeField>: PrimeFieldMpcProtocol<F> {

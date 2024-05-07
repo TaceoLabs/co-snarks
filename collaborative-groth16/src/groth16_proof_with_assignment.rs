@@ -3,9 +3,11 @@
 use crate::groth16::CollaborativeGroth16;
 use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_groth16::{Proof, ProvingKey};
-use ark_relations::r1cs::Result as R1CSResult;
 use ark_std::{end_timer, start_timer};
-use mpc_core::traits::{EcMpcProtocol, FFTProvider, MSMProvider, PrimeFieldMpcProtocol};
+use color_eyre::eyre::Result;
+use mpc_core::traits::{
+    EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+};
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareSlice<'a, T, P> =
@@ -15,8 +17,7 @@ type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 impl<T, P: Pairing> CollaborativeGroth16<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
-        + EcMpcProtocol<P::G1>
-        + EcMpcProtocol<P::G2>
+        + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>,
 {
@@ -41,23 +42,21 @@ where
         h: FieldShareSlice<'_, T, P>,
         input_assignment: &[P::ScalarField],
         aux_assignment: FieldShareSlice<'_, T, P>,
-    ) -> R1CSResult<Proof<P>> {
+    ) -> Result<Proof<P>> {
         let c_acc_time = start_timer!(|| "Compute C");
         let h_acc = self.driver.msm_public_points(&pk.h_query, h);
 
         // Compute C
         let l_aux_acc = self.driver.msm_public_points(&pk.l_query, aux_assignment);
 
-        // TODO define an error code
         let delta_g1 = pk.delta_g1.into_group();
-        let rs = self.driver.mul(&r, &s).unwrap();
+        let rs = self.driver.mul(&r, &s)?;
         let r_s_delta_g1 = self.driver.scalar_mul_public_point(&delta_g1, &rs);
 
         end_timer!(c_acc_time);
 
         // Compute A
         let a_acc_time = start_timer!(|| "Compute A");
-        // TODO second time pk.delta_g1 transformed into group
         let r_g1 = self.driver.scalar_mul_public_point(&delta_g1, &r);
 
         let g_a = Self::calculate_coeff::<P::G1>(
@@ -69,9 +68,9 @@ where
         );
 
         // Open here since g_a is part of proof
-        // TODO define an error code
-        let g_a_opened = EcMpcProtocol::<P::G1>::open_point(&mut self.driver, &g_a).unwrap();
+        let g_a_opened = EcMpcProtocol::<P::G1>::open_point(&mut self.driver, &g_a)?;
         let s_g_a = self.driver.scalar_mul_public_point(&g_a_opened, &s);
+        end_timer!(a_acc_time);
 
         // Compute B in G1
         // In original implementation this is skipped if r==0, however r is shared in our case
@@ -84,8 +83,7 @@ where
             input_assignment,
             aux_assignment,
         );
-        // TODO define an error code
-        let r_g1_b = EcMpcProtocol::<P::G1>::scalar_mul(&mut self.driver, &g1_b, &r).unwrap();
+        let r_g1_b = EcMpcProtocol::<P::G1>::scalar_mul(&mut self.driver, &g1_b, &r)?;
         end_timer!(b_g1_acc_time);
 
         // Compute B in G2
@@ -109,6 +107,13 @@ where
         EcMpcProtocol::<P::G1>::add_assign_points(&mut self.driver, &mut g_c, &h_acc);
         end_timer!(c_time);
 
-        todo!()
+        let (g_c_opened, g2_b_opened) =
+            PairingEcMpcProtocol::<P>::open_two_points(&mut self.driver, &g_c, &g2_b)?;
+
+        Ok(Proof {
+            a: g_a_opened.into_affine(),
+            b: g2_b_opened.into_affine(),
+            c: g_c_opened.into_affine(),
+        })
     }
 }

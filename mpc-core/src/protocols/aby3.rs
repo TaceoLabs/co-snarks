@@ -1,13 +1,15 @@
 use std::marker::PhantomData;
 
-use ark_ec::CurveGroup;
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
-use crate::traits::{EcMpcProtocol, FFTProvider, MSMProvider, PrimeFieldMpcProtocol};
+use crate::traits::{
+    EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+};
 pub use fieldshare::Aby3PrimeFieldShare;
 
 use self::{
@@ -187,13 +189,6 @@ impl<C: CurveGroup, N: Aby3Network> EcMpcProtocol<C> for Aby3Protocol<C::ScalarF
         let c = self.network.recv_prev::<C>()?;
         Ok(a.a + a.b + c)
     }
-
-    fn open_points(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<C>> {
-        let bs = a.iter().map(|p| p.b).collect::<Vec<_>>();
-        self.network.send_next_many(&bs)?;
-        let c = self.network.recv_prev_many::<C>()?;
-        Ok(a.iter().zip(c).map(|(p, c)| p.a + p.b + c).collect())
-    }
 }
 
 impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
@@ -281,5 +276,21 @@ impl<C: CurveGroup, N: Aby3Network> MSMProvider<C> for Aby3Protocol<C::ScalarFie
         let res_a = C::msm_unchecked(points, scalars.a);
         let res_b = C::msm_unchecked(points, scalars.b);
         Self::PointShare { a: res_a, b: res_b }
+    }
+}
+
+impl<P: Pairing, N: Aby3Network> PairingEcMpcProtocol<P> for Aby3Protocol<P::ScalarField, N> {
+    fn open_two_points(
+        &mut self,
+        a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
+        b: &<Self as EcMpcProtocol<P::G2>>::PointShare,
+    ) -> std::io::Result<(P::G1, P::G2)> {
+        let s1 = a.b;
+        let s2 = b.b;
+        self.network.send_next((s1, s2))?;
+        let (mut r1, mut r2) = self.network.recv_prev::<(P::G1, P::G2)>()?;
+        r1 += a.a + a.b;
+        r2 += b.a + b.b;
+        Ok((r1, r2))
     }
 }

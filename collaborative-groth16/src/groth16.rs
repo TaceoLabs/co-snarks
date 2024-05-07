@@ -3,13 +3,12 @@ use std::marker::PhantomData;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
-use ark_poly::EvaluationDomain;
 use ark_relations::r1cs::Result as R1CSResult;
 use circom_types::groth16::witness::Witness;
 use color_eyre::eyre::Result;
 use mpc_core::{
     protocols::aby3::{network::Aby3MpcNet, Aby3Protocol},
-    traits::{EcMpcProtocol, FFTProvider, PrimeFieldMpcProtocol},
+    traits::{FFTProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol},
 };
 use mpc_net::config::NetworkConfig;
 use rand::{CryptoRng, Rng};
@@ -29,8 +28,7 @@ where
 pub struct CollaborativeGroth16<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
-        + EcMpcProtocol<P::G1>
-        + EcMpcProtocol<P::G2>
+        + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>,
 {
     pub(crate) driver: T,
@@ -40,8 +38,7 @@ where
 impl<T, P: Pairing> CollaborativeGroth16<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
-        + EcMpcProtocol<P::G1>
-        + EcMpcProtocol<P::G2>
+        + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>,
 {
     pub fn new(driver: T) -> Self {
