@@ -8,18 +8,18 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
 use crate::traits::{EcMpcProtocol, FFTProvider, MSMProvider, PrimeFieldMpcProtocol};
-pub use share::Aby3PrimeFieldShare;
+pub use fieldshare::Aby3PrimeFieldShare;
 
 use self::{
+    fieldshare::{Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareSliceMut, Aby3PrimeFieldShareVec},
     network::Aby3Network,
     pointshare::Aby3PointShare,
-    share::{Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareSliceMut, Aby3PrimeFieldShareVec},
 };
 
+pub mod fieldshare;
 pub mod id;
 pub mod network;
 pub mod pointshare;
-pub mod share;
 
 type IoResult<T> = std::io::Result<T>;
 
