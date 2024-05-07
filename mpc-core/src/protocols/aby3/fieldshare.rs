@@ -234,3 +234,29 @@ impl<'a, F: PrimeField> Aby3PrimeFieldShareSliceMut<'a, F> {
         self.a.len()
     }
 }
+
+impl<'a, F: PrimeField> From<&'a Aby3PrimeFieldShareVec<F>> for Aby3PrimeFieldShareSlice<'a, F> {
+    fn from(value: &'a Aby3PrimeFieldShareVec<F>) -> Self {
+        value.to_ref()
+    }
+}
+
+impl<'a, F: PrimeField> From<&'a mut Aby3PrimeFieldShareVec<F>>
+    for Aby3PrimeFieldShareSliceMut<'a, F>
+{
+    fn from(value: &'a mut Aby3PrimeFieldShareVec<F>) -> Self {
+        value.to_mut()
+    }
+}
+
+impl<F: PrimeField> From<Aby3PrimeFieldShareSlice<'_, F>> for Aby3PrimeFieldShareVec<F> {
+    fn from(value: Aby3PrimeFieldShareSlice<F>) -> Self {
+        value.to_vec()
+    }
+}
+
+impl<F: PrimeField> From<Aby3PrimeFieldShareSliceMut<'_, F>> for Aby3PrimeFieldShareVec<F> {
+    fn from(value: Aby3PrimeFieldShareSliceMut<F>) -> Self {
+        value.to_vec()
+    }
+}

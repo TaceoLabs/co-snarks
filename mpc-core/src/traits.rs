@@ -7,9 +7,9 @@ use ark_poly::EvaluationDomain;
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     type FieldShare: Default;
-    type FieldShareVec: Index<usize, Output = Self::FieldShare>;
-    type FieldShareSlice<'a>: Copy;
-    type FieldShareSliceMut<'a>;
+    type FieldShareVec: Index<usize, Output = Self::FieldShare> + 'static;
+    type FieldShareSlice<'a>: Copy + From<&'a Self::FieldShareVec>;
+    type FieldShareSliceMut<'a>: From<&'a mut Self::FieldShareVec>;
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn add_with_public(&mut self, a: &F, b: &Self::FieldShare)
