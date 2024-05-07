@@ -1,5 +1,5 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
@@ -7,9 +7,14 @@ use ark_poly::EvaluationDomain;
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     type FieldShare: Default;
-    type FieldShareVec: Index<usize, Output = Self::FieldShare> + 'static;
+    type FieldShareVec: Index<usize, Output = Self::FieldShare>
+        + 'static
+        + for<'a> From<Self::FieldShareSliceMut<'a>>
+        + From<Vec<Self::FieldShare>>;
     type FieldShareSlice<'a>: Copy + From<&'a Self::FieldShareVec>;
-    type FieldShareSliceMut<'a>: From<&'a mut Self::FieldShareVec>;
+    type FieldShareSliceMut<'a>: From<&'a mut Self::FieldShareVec>
+        + IndexMut<usize, Output = Self::FieldShare>;
+
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn add_with_public(&mut self, a: &F, b: &Self::FieldShare)
@@ -66,17 +71,17 @@ pub trait FFTProvider<F: PrimeField>: PrimeFieldMpcProtocol<F> {
     ) -> Self::FieldShareVec;
     fn fft_in_place<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSliceMut<'_>,
+        data: &mut Self::FieldShareSliceMut<'_>,
         domain: &D,
     );
     fn ifft<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSlice<'_>,
+        data: &Self::FieldShareSlice<'_>,
         domain: &D,
     ) -> Self::FieldShareVec;
     fn ifft_in_place<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSliceMut<'_>,
+        data: &mut Self::FieldShareSliceMut<'_>,
         domain: &D,
     );
 }

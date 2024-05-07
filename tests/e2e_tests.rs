@@ -192,7 +192,6 @@ mod tests {
         }
     }
 
-    #[tokio::test]
     async fn bn254() {
         let zkey_file = File::open("../test_vectors/bn254/multiplier2.zkey").unwrap();
         let witness_file = File::open("../test_vectors/bn254/witness.wtns").unwrap();

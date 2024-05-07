@@ -1,4 +1,7 @@
-use std::{marker::PhantomData, ops::Index};
+use std::{
+    marker::PhantomData,
+    ops::{Index, IndexMut},
+};
 
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
@@ -163,12 +166,32 @@ impl<F: PrimeField> Index<usize> for Aby3PrimeFieldShareVec<F> {
     }
 }
 
+impl<'a, F: PrimeField> Index<usize> for Aby3PrimeFieldShareSliceMut<'a, F> {
+    type Output = Aby3PrimeFieldShare<F>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        todo!()
+    }
+}
+
+impl<'a, F: PrimeField> IndexMut<usize> for Aby3PrimeFieldShareSliceMut<'a, F> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        todo!()
+    }
+}
+
 impl<F: PrimeField> Default for Aby3PrimeFieldShare<F> {
     fn default() -> Self {
         Self {
             a: F::zero(),
             b: F::zero(),
         }
+    }
+}
+
+impl<'a, F: PrimeField> From<Aby3PrimeFieldShareVec<F>> for Aby3PrimeFieldShareSliceMut<'a, F> {
+    fn from(value: Aby3PrimeFieldShareVec<F>) -> Self {
+        todo!()
     }
 }
 
@@ -285,7 +308,7 @@ impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
 
     fn fft_in_place<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSliceMut<'_>,
+        data: &mut Self::FieldShareSliceMut<'_>,
         domain: &D,
     ) {
         domain.fft_in_place(data.a);
@@ -294,7 +317,7 @@ impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
 
     fn ifft<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSlice<'_>,
+        data: &Self::FieldShareSlice<'_>,
         domain: &D,
     ) -> Self::FieldShareVec {
         let a = domain.ifft(data.a);
@@ -304,7 +327,7 @@ impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
 
     fn ifft_in_place<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSliceMut<'_>,
+        data: &mut Self::FieldShareSliceMut<'_>,
         domain: &D,
     ) {
         domain.ifft_in_place(data.a);

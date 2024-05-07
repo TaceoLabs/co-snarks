@@ -1,6 +1,7 @@
 use std::{borrow::Borrow, marker::PhantomData};
 
 use ark_ec::pairing::Pairing;
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{Field, PrimeField};
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
@@ -12,6 +13,7 @@ use ark_relations::r1cs::{
 use circom_types::groth16::witness::Witness;
 use circom_types::r1cs::R1CS;
 use color_eyre::eyre::Result;
+use mpc_core::traits::EcMpcProtocol;
 use mpc_core::{
     protocols::aby3::{network::Aby3MpcNet, Aby3Protocol},
     traits::{FFTProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol},
@@ -25,6 +27,13 @@ use crate::circuit::Circuit;
 pub type Aby3CollaborativeGroth16<P> =
     CollaborativeGroth16<Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet>, P>;
 
+type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
+type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
+type FieldShareSlice<'a, T, P> =
+    <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareSlice<'a>;
+type FieldShareSliceMut<'a, T, P> =
+    <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareSliceMut<'a>;
+type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 pub struct SharedWitness<T, F: PrimeField>
 where
     T: PrimeFieldMpcProtocol<F>,
@@ -60,7 +69,7 @@ where
         pk: &ProvingKey<P>,
         r1cs: &R1CS<P>,
         public_inputs: &[P::ScalarField],
-        private_witness: <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
+        private_witness: FieldShareVec<T, P>,
     ) -> Result<Proof<P>> {
         let cs = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
@@ -85,15 +94,103 @@ where
         matrices: &ConstraintMatrices<P::ScalarField>,
         num_constraints: usize,
         public_inputs: &[P::ScalarField],
-        private_witness: <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
+        private_witness: FieldShareVec<T, P>,
         domain: GeneralEvaluationDomain<P::ScalarField>,
-    ) -> Result<()> {
+    ) -> Result<FieldShareVec<T, P>> {
         let domain_size = domain.size();
         let mut a = Vec::with_capacity(domain_size);
         let mut b = Vec::with_capacity(domain_size);
         for (at_i, bt_i) in itertools::multizip((&matrices.a, &matrices.b)) {
             a.push(self.evaluate_constraint(at_i, public_inputs, &private_witness)?);
             b.push(self.evaluate_constraint(bt_i, public_inputs, &private_witness)?);
+        }
+        //here i should push all public inputs to a
+        //who do we do that? We need a function that promotes the
+        //public point to a share
+        //Maybe just trivial share here?
+        //{
+        //    let start = num_constraints;
+        //    let end = start + num_inputs;
+        //    a[start..end].clone_from_slice(&full_assignment[..num_inputs]);
+        //}
+        let mut c = Vec::with_capacity(domain_size);
+        for i in 0..num_constraints {
+            c.push(self.driver.mul(&a[i], &b[i])?)
+        }
+        let a_len = a.len();
+        let mut a = FieldShareVec::<T, P>::from(a);
+        let mut b = FieldShareVec::<T, P>::from(b);
+        let mut c = FieldShareVec::<T, P>::from(c);
+        let mut a = FieldShareSliceMut::<T, P>::from(&mut a);
+        let mut b = FieldShareSliceMut::<T, P>::from(&mut b);
+        self.driver.ifft_in_place(&mut a, &domain);
+        self.driver.ifft_in_place(&mut b, &domain);
+        let root_of_unity = {
+            let domain_size_double = 2 * domain_size;
+            let domain_double = GeneralEvaluationDomain::new(domain_size_double)
+                .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+            domain_double.element(1)
+        };
+        self.distribute_powers_and_mul_by_const(
+            &mut a,
+            a_len,
+            root_of_unity,
+            P::ScalarField::one(),
+        )?;
+        self.distribute_powers_and_mul_by_const(
+            &mut b,
+            a_len,
+            root_of_unity,
+            P::ScalarField::one(),
+        )?;
+
+        self.driver.fft_in_place(&mut a, &domain);
+        self.driver.fft_in_place(&mut b, &domain);
+        let a = FieldShareVec::<T, P>::from(a);
+        let b = FieldShareVec::<T, P>::from(b);
+        let mut ab = self.mul_polynomials_in_evaluation_domain(a, b, a_len)?;
+
+        let mut c = FieldShareSliceMut::<T, P>::from(&mut c);
+        self.driver.ifft_in_place(&mut c, &domain);
+        self.distribute_powers_and_mul_by_const(
+            &mut c,
+            a_len,
+            root_of_unity,
+            P::ScalarField::one(),
+        )?;
+        self.driver.fft_in_place(&mut c, &domain);
+        for i in 0..a_len {
+            let result = self.driver.sub(&ab[i], &c[i]);
+            //ab[i] = result;
+        }
+        Ok(ab)
+    }
+
+    fn mul_polynomials_in_evaluation_domain(
+        &mut self,
+        self_evals: FieldShareVec<T, P>,
+        other_evals: FieldShareVec<T, P>,
+        len: usize,
+    ) -> Result<FieldShareVec<T, P>> {
+        let mut result = Vec::with_capacity(len);
+        for i in 0..len {
+            result.push(self.driver.mul(&self_evals[i], &other_evals[i])?);
+        }
+        Ok(FieldShareVec::<T, P>::from(result))
+    }
+
+    fn distribute_powers_and_mul_by_const(
+        &mut self,
+        mut coeffs: &mut FieldShareSliceMut<T, P>,
+        coeff_len: usize,
+        g: P::ScalarField,
+        c: P::ScalarField,
+    ) -> Result<()> {
+        let mut pow = c;
+        for i in 0..coeff_len {
+            let result = self.driver.mul_with_public(&pow, &coeffs[i])?;
+            coeffs[i] = result;
+            pow *= g;
         }
         Ok(())
     }
@@ -102,9 +199,9 @@ where
         &mut self,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
-        private_witness: &<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
-    ) -> Result<<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShare> {
-        let mut acc = self.driver.get_zero_share();
+        private_witness: &FieldShareVec<T, P>,
+    ) -> Result<FieldShare<T, P>> {
+        let mut acc = FieldShare::<T, P>::default();
         for (coeff, index) in lhs {
             if index < &public_inputs.len() {
                 let val = public_inputs[*index];
@@ -114,8 +211,6 @@ where
                 let val = &private_witness[*index];
                 let mul_result = self.driver.mul_with_public(coeff, val)?;
                 acc = self.driver.add(&mul_result, &acc);
-                //let mul_result = val * coeff;
-                //acc = self.driver.add_with_public(&mul_result, &acc)?;
             }
         }
         Ok(acc)
