@@ -151,10 +151,7 @@ impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<'a, C>
     }
 
     fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare {
-        Self::PointShare {
-            a: a.mul(b.a),
-            b: a.mul(b.b),
-        }
+        b * a
     }
 
     fn scalar_mul_public_scalar(
@@ -162,14 +159,11 @@ impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<'a, C>
         a: &Self::PointShare,
         b: &<C>::ScalarField,
     ) -> Self::PointShare {
-        Self::PointShare {
-            a: a.a * b,
-            b: a.b * b,
-        }
+        a * b
     }
 
     fn scalar_mul(&mut self, a: &Self::PointShare, b: &Self::FieldShare) -> Self::PointShare {
-        let local_a = a.a * b.a + a.b * b.a + a.a * b.b + self.rngs.masking_ec_element::<C>();
+        let local_a = b * a + self.rngs.masking_ec_element::<C>();
         // self.network.send_next(local_a)?;
         // let local_b = self.network.recv_prev()?;
         // Ok(Self::PointShare {

@@ -1,3 +1,4 @@
+use super::Aby3PrimeFieldShare;
 use ark_ec::CurveGroup;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,5 +77,36 @@ impl<C: CurveGroup> std::ops::Sub<&Aby3PointShare<C>> for &'_ Aby3PointShare<C> 
             a: self.a - rhs.a,
             b: self.b - rhs.b,
         }
+    }
+}
+
+impl<C: CurveGroup> std::ops::Mul<&C::ScalarField> for &'_ Aby3PointShare<C> {
+    type Output = Aby3PointShare<C>;
+
+    fn mul(self, scalar: &C::ScalarField) -> Self::Output {
+        Self::Output {
+            a: self.a * scalar,
+            b: self.b * scalar,
+        }
+    }
+}
+
+impl<C: CurveGroup> std::ops::Mul<&C> for &Aby3PrimeFieldShare<C::ScalarField> {
+    type Output = Aby3PointShare<C>;
+
+    fn mul(self, point: &C) -> Self::Output {
+        Self::Output {
+            a: point.mul(self.a),
+            b: point.mul(self.b),
+        }
+    }
+}
+
+impl<C: CurveGroup> std::ops::Mul<&Aby3PointShare<C>> for &'_ Aby3PrimeFieldShare<C::ScalarField> {
+    type Output = C;
+
+    // Local part of mul only
+    fn mul(self, rhs: &Aby3PointShare<C>) -> Self::Output {
+        rhs.a * self.a + rhs.b * self.a + rhs.a * self.b
     }
 }
