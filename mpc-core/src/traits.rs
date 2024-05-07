@@ -30,7 +30,11 @@ pub trait EcMpcProtocol<'a, C: CurveGroup>: PrimeFieldMpcProtocol<'a, C::ScalarF
         a: &Self::PointShare,
         b: &C::ScalarField,
     ) -> Self::PointShare;
-    fn scalar_mul(&mut self, a: &Self::PointShare, b: &Self::FieldShare) -> Self::PointShare;
+    fn scalar_mul(
+        &mut self,
+        a: &Self::PointShare,
+        b: &Self::FieldShare,
+    ) -> std::io::Result<Self::PointShare>;
 }
 
 pub trait FFTProvider<'a, F: PrimeField>: PrimeFieldMpcProtocol<'a, F> {

@@ -73,13 +73,13 @@ pub mod utils {
     }
 }
 
-pub struct Aby3Protocol<F: PrimeField, N: Aby3Network<F>> {
+pub struct Aby3Protocol<F: PrimeField, N: Aby3Network> {
     rngs: Aby3CorrelatedRng,
     network: N,
     field: PhantomData<F>,
 }
 
-impl<F: PrimeField, N: Aby3Network<F>> Aby3Protocol<F, N> {
+impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     pub fn new(mut network: N) -> Result<Self, Report> {
         let seed1: [u8; 32] = rand::thread_rng().gen();
         let seed2_bytes = network.send_and_receive_seed(seed1.to_vec().into())?;
@@ -99,7 +99,7 @@ impl<F: PrimeField, N: Aby3Network<F>> Aby3Protocol<F, N> {
     }
 }
 
-impl<'a, F: PrimeField, N: Aby3Network<F>> PrimeFieldMpcProtocol<'a, F> for Aby3Protocol<F, N> {
+impl<'a, F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<'a, F> for Aby3Protocol<F, N> {
     type FieldShare = Aby3PrimeFieldShare<F>;
     type FieldShareSlice = Aby3PrimeFieldShareSlice<'a, F>;
     type FieldShareSliceMut = Aby3PrimeFieldShareSliceMut<'a, F>;
@@ -137,9 +137,7 @@ impl<'a, F: PrimeField, N: Aby3Network<F>> PrimeFieldMpcProtocol<'a, F> for Aby3
     }
 }
 
-impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<'a, C>
-    for Aby3Protocol<C::ScalarField, N>
-{
+impl<'a, C: CurveGroup, N: Aby3Network> EcMpcProtocol<'a, C> for Aby3Protocol<C::ScalarField, N> {
     type PointShare = Aby3PointShare<C>;
 
     fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
@@ -162,19 +160,22 @@ impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<'a, C>
         a * b
     }
 
-    fn scalar_mul(&mut self, a: &Self::PointShare, b: &Self::FieldShare) -> Self::PointShare {
+    fn scalar_mul(
+        &mut self,
+        a: &Self::PointShare,
+        b: &Self::FieldShare,
+    ) -> IoResult<Self::PointShare> {
         let local_a = b * a + self.rngs.masking_ec_element::<C>();
-        // self.network.send_next(local_a)?;
-        // let local_b = self.network.recv_prev()?;
-        // Ok(Self::PointShare {
-        //     a: local_a,
-        //     b: local_b,
-        // })
-        todo!("TODO ask daniel")
+        self.network.send_next(local_a)?;
+        let local_b = self.network.recv_prev()?;
+        Ok(Self::PointShare {
+            a: local_a,
+            b: local_b,
+        })
     }
 }
 
-impl<'a, F: PrimeField, N: Aby3Network<F>> FFTProvider<'a, F> for Aby3Protocol<F, N> {
+impl<'a, F: PrimeField, N: Aby3Network> FFTProvider<'a, F> for Aby3Protocol<F, N> {
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
         data: Self::FieldShareSlice,
@@ -245,9 +246,7 @@ impl Aby3CorrelatedRng {
     }
 }
 
-impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> MSMProvider<'a, C>
-    for Aby3Protocol<C::ScalarField, N>
-{
+impl<'a, C: CurveGroup, N: Aby3Network> MSMProvider<'a, C> for Aby3Protocol<C::ScalarField, N> {
     fn msm_public_points(
         &mut self,
         points: &[C],
