@@ -7,19 +7,18 @@ use ark_relations::r1cs::Result as R1CSResult;
 use ark_std::{end_timer, start_timer};
 use mpc_core::traits::{EcMpcProtocol, FFTProvider, MSMProvider, PrimeFieldMpcProtocol};
 
-type FieldShare<T, P> =
-    <T as PrimeFieldMpcProtocol<'static, <P as Pairing>::ScalarField>>::FieldShare;
+type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareSlice<'a, T, P> =
-    <T as PrimeFieldMpcProtocol<'a, <P as Pairing>::ScalarField>>::FieldShareSlice;
-type PointShare<T, C> = <T as EcMpcProtocol<'static, C>>::PointShare;
+    <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareSlice<'a>;
+type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
 impl<T, P: Pairing> CollaborativeGroth16<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<'a, P::ScalarField>
-        + EcMpcProtocol<'a, P::G1>
-        + EcMpcProtocol<'a, P::G2>
-        + FFTProvider<'a, P::ScalarField>
-        + MSMProvider<'a, P::G1>,
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+        + EcMpcProtocol<P::G1>
+        + EcMpcProtocol<P::G2>
+        + FFTProvider<P::ScalarField>
+        + MSMProvider<P::G1>,
 {
     fn calculate_coeff<C: CurveGroup>(
         initial: PointShare<T, C>,
@@ -29,7 +28,7 @@ where
         aux_assignment: FieldShareSlice<'_, T, P>,
     ) -> PointShare<T, C>
     where
-        T: EcMpcProtocol<'static, C>,
+        T: EcMpcProtocol<C>,
     {
         todo!()
     }
@@ -88,6 +87,27 @@ where
         // TODO define an error code
         let r_g1_b = EcMpcProtocol::<P::G1>::scalar_mul(&mut self.driver, &g1_b, &r).unwrap();
         end_timer!(b_g1_acc_time);
+
+        // Compute B in G2
+        let delta_g2 = pk.vk.delta_g2.into_group();
+        let b_g2_acc_time = start_timer!(|| "Compute B in G2");
+        let s_g2 = self.driver.scalar_mul_public_point(&delta_g2, &s);
+        let g2_b = Self::calculate_coeff::<P::G2>(
+            s_g2,
+            &pk.b_g2_query,
+            pk.vk.beta_g2,
+            input_assignment,
+            aux_assignment,
+        );
+        end_timer!(b_g2_acc_time);
+
+        let c_time = start_timer!(|| "Finish C");
+        let mut g_c = s_g_a;
+        EcMpcProtocol::<P::G1>::add_assign_points(&mut self.driver, &mut g_c, &r_g1_b);
+        EcMpcProtocol::<P::G1>::sub_assign_points(&mut self.driver, &mut g_c, &r_s_delta_g1);
+        EcMpcProtocol::<P::G1>::add_assign_points(&mut self.driver, &mut g_c, &l_aux_acc);
+        EcMpcProtocol::<P::G1>::add_assign_points(&mut self.driver, &mut g_c, &h_acc);
+        end_timer!(c_time);
 
         todo!()
     }
