@@ -92,12 +92,16 @@ pub struct PartyTestNetwork {
     _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
 }
 
-impl Aby3Network<ark_bn254::Fr> for PartyTestNetwork {
+impl Aby3Network for PartyTestNetwork {
     fn get_id(&self) -> PartyID {
         self.id
     }
 
-    fn send_many(&mut self, target: PartyID, data: &[ark_bn254::Fr]) -> std::io::Result<()> {
+    fn send_many<F: CanonicalSerialize>(
+        &mut self,
+        target: PartyID,
+        data: &[F],
+    ) -> std::io::Result<()> {
         let mut to_send = Vec::with_capacity(data.len() * 32);
         data.serialize_uncompressed(&mut to_send).unwrap();
         if self.id.next_id() == target {
@@ -114,13 +118,13 @@ impl Aby3Network<ark_bn254::Fr> for PartyTestNetwork {
         Ok(())
     }
 
-    fn recv_many(&mut self, from: PartyID) -> std::io::Result<Vec<ark_bn254::Fr>> {
+    fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
         if self.id.next_id() == from {
             let data = Vec::from(self.recv_next.blocking_recv().unwrap());
-            Ok(Vec::<ark_bn254::Fr>::deserialize_uncompressed(data.as_slice()).unwrap())
+            Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         } else if self.id.prev_id() == from {
             let data = Vec::from(self.recv_prev.blocking_recv().unwrap());
-            Ok(Vec::<ark_bn254::Fr>::deserialize_uncompressed(data.as_slice()).unwrap())
+            Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         } else {
             panic!("You want to read from yourself?")
         }
@@ -274,7 +278,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
+                let mut aby3 = Aby3Protocol::<ark_bn254::Fr, _>::new(net).unwrap();
                 tx.send((0..10).map(|_| aby3.rand()).collect::<Vec<_>>())
             });
         }

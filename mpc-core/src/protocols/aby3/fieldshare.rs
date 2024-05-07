@@ -1,4 +1,3 @@
-use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -126,8 +125,42 @@ impl<F: PrimeField> std::ops::Neg for &Aby3PrimeFieldShare<F> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Aby3PrimeFieldShareVec<F: PrimeField> {
-    a: Vec<F>,
-    b: Vec<F>,
+    pub(crate) a: Vec<F>,
+    pub(crate) b: Vec<F>,
+}
+
+impl<F: PrimeField> Aby3PrimeFieldShareVec<F> {
+    pub fn new(a: Vec<F>, b: Vec<F>) -> Self {
+        Self { a, b }
+    }
+
+    pub fn get_ab(self) -> (Vec<F>, Vec<F>) {
+        (self.a, self.b)
+    }
+
+    pub fn to_ref(&self) -> Aby3PrimeFieldShareSlice<F> {
+        Aby3PrimeFieldShareSlice {
+            a: &self.a,
+            b: &self.b,
+        }
+    }
+
+    pub fn to_mut(&mut self) -> Aby3PrimeFieldShareSliceMut<F> {
+        Aby3PrimeFieldShareSliceMut {
+            a: &mut self.a,
+            b: &mut self.b,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        debug_assert_eq!(self.a.is_empty(), self.b.is_empty());
+        self.a.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        debug_assert_eq!(self.a.len(), self.b.len());
+        self.a.len()
+    }
 }
 
 impl<F: PrimeField> From<Vec<Aby3PrimeFieldShare<F>>> for Aby3PrimeFieldShareVec<F> {
@@ -148,81 +181,54 @@ impl<F: PrimeField> std::ops::Add for Aby3PrimeFieldShareVec<F> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Aby3PointShare<C: CurveGroup> {
-    pub(crate) a: C,
-    pub(crate) b: C,
-}
-impl<C: CurveGroup> Aby3PointShare<C> {
-    pub fn new(a: C, b: C) -> Self {
-        Self { a, b }
-    }
-
-    pub fn ab(self) -> (C, C) {
-        (self.a, self.b)
-    }
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Aby3PrimeFieldShareSlice<'a, F: PrimeField> {
+    // Deliberately a &Vec<F> instead of a &[F] since fft_in_place requires it
+    pub(crate) a: &'a Vec<F>,
+    pub(crate) b: &'a Vec<F>,
 }
 
-impl<C: CurveGroup> std::ops::Add for Aby3PointShare<C> {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self {
-            a: self.a + rhs.a,
-            b: self.b + rhs.b,
+impl<'a, F: PrimeField> Aby3PrimeFieldShareSlice<'a, F> {
+    fn to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
+        Aby3PrimeFieldShareVec {
+            a: self.a.to_vec(),
+            b: self.b.to_vec(),
         }
     }
-}
 
-impl<C: CurveGroup> std::ops::Add<&Aby3PointShare<C>> for Aby3PointShare<C> {
-    type Output = Self;
-
-    fn add(self, rhs: &Self) -> Self::Output {
-        Self {
-            a: self.a + rhs.a,
-            b: self.b + rhs.b,
-        }
+    pub fn is_empty(&self) -> bool {
+        debug_assert_eq!(self.a.is_empty(), self.b.is_empty());
+        self.a.is_empty()
     }
-}
-impl<C: CurveGroup> std::ops::Add<&Aby3PointShare<C>> for &'_ Aby3PointShare<C> {
-    type Output = Aby3PointShare<C>;
 
-    fn add(self, rhs: &Aby3PointShare<C>) -> Self::Output {
-        Aby3PointShare::<C> {
-            a: self.a + rhs.a,
-            b: self.b + rhs.b,
-        }
+    pub fn len(&self) -> usize {
+        debug_assert_eq!(self.a.len(), self.b.len());
+        self.a.len()
     }
 }
 
-impl<C: CurveGroup> std::ops::Sub for Aby3PointShare<C> {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self {
-            a: self.a - rhs.a,
-            b: self.b - rhs.b,
-        }
-    }
+#[derive(Debug, PartialEq, Eq)]
+pub struct Aby3PrimeFieldShareSliceMut<'a, F: PrimeField> {
+    // Deliberately a &Vec<F> instead of a &[F] since fft_in_place requires it
+    pub(crate) a: &'a mut Vec<F>,
+    pub(crate) b: &'a mut Vec<F>,
 }
 
-impl<C: CurveGroup> std::ops::Sub<&Aby3PointShare<C>> for Aby3PointShare<C> {
-    type Output = Self;
-
-    fn sub(self, rhs: &Self) -> Self::Output {
-        Self {
-            a: self.a - rhs.a,
-            b: self.b - rhs.b,
+impl<'a, F: PrimeField> Aby3PrimeFieldShareSliceMut<'a, F> {
+    fn to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
+        Aby3PrimeFieldShareVec {
+            a: self.a.to_vec(),
+            b: self.b.to_vec(),
         }
     }
-}
-impl<C: CurveGroup> std::ops::Sub<&Aby3PointShare<C>> for &'_ Aby3PointShare<C> {
-    type Output = Aby3PointShare<C>;
 
-    fn sub(self, rhs: &Aby3PointShare<C>) -> Self::Output {
-        Aby3PointShare::<C> {
-            a: self.a - rhs.a,
-            b: self.b - rhs.b,
-        }
+    pub fn is_empty(&self) -> bool {
+        debug_assert_eq!(self.a.is_empty(), self.b.is_empty());
+        self.a.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        debug_assert_eq!(self.a.len(), self.b.len());
+        self.a.len()
     }
 }

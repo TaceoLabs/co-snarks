@@ -1,4 +1,3 @@
-use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
@@ -6,37 +5,41 @@ use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
 
 use super::id::PartyID;
 
-pub trait Aby3Network<F: Field> {
+pub trait Aby3Network {
     fn get_id(&self) -> PartyID;
     fn send_and_receive_seed(&mut self, seed: Bytes) -> std::io::Result<BytesMut>;
 
-    fn send(&mut self, target: PartyID, data: F) -> std::io::Result<()> {
+    fn send<F: CanonicalSerialize>(&mut self, target: PartyID, data: F) -> std::io::Result<()> {
         self.send_many(target, &[data])
     }
-    fn send_many(&mut self, target: PartyID, data: &[F]) -> std::io::Result<()>;
-    fn send_next(&mut self, data: F) -> std::io::Result<()> {
+    fn send_many<F: CanonicalSerialize>(
+        &mut self,
+        target: PartyID,
+        data: &[F],
+    ) -> std::io::Result<()>;
+    fn send_next<F: CanonicalSerialize>(&mut self, data: F) -> std::io::Result<()> {
         self.send(self.get_id().next_id(), data)
     }
-    fn send_next_many(&mut self, data: &[F]) -> std::io::Result<()> {
+    fn send_next_many<F: CanonicalSerialize>(&mut self, data: &[F]) -> std::io::Result<()> {
         self.send_many(self.get_id().next_id(), data)
     }
 
-    fn recv(&mut self, from: PartyID) -> std::io::Result<F> {
-        let res = self.recv_many(from)?;
+    fn recv<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<F> {
+        let mut res = self.recv_many(from)?;
         if res.len() != 1 {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Expected 1 element, got more",
             ))
         } else {
-            Ok(res[0])
+            Ok(res.pop().unwrap())
         }
     }
-    fn recv_many(&mut self, from: PartyID) -> std::io::Result<Vec<F>>;
-    fn recv_prev(&mut self) -> std::io::Result<F> {
+    fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>>;
+    fn recv_prev<F: CanonicalDeserialize>(&mut self) -> std::io::Result<F> {
         self.recv(self.get_id().prev_id())
     }
-    fn recv_prev_many(&mut self) -> std::io::Result<Vec<F>> {
+    fn recv_prev_many<F: CanonicalDeserialize>(&mut self) -> std::io::Result<Vec<F>> {
         self.recv_many(self.get_id().prev_id())
     }
 }
@@ -134,7 +137,7 @@ impl Aby3MpcNet {
     }
 }
 
-impl<F: PrimeField> Aby3Network<F> for Aby3MpcNet {
+impl Aby3Network for Aby3MpcNet {
     fn get_id(&self) -> PartyID {
         self.id
     }
@@ -144,7 +147,11 @@ impl<F: PrimeField> Aby3Network<F> for Aby3MpcNet {
         self.recv_bytes(self.id.prev_id())
     }
 
-    fn send_many(&mut self, target: PartyID, data: &[F]) -> std::io::Result<()> {
+    fn send_many<F: CanonicalSerialize>(
+        &mut self,
+        target: PartyID,
+        data: &[F],
+    ) -> std::io::Result<()> {
         let size = data.serialized_size(ark_serialize::Compress::No);
         let mut ser_data = vec![0u8; size];
         data.serialize_uncompressed(&mut ser_data)
@@ -163,7 +170,7 @@ impl<F: PrimeField> Aby3Network<F> for Aby3MpcNet {
         }
     }
 
-    fn recv_many(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
+    fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
         let data = if from == self.id.prev_id() {
             self.chan_prev.blocking_recv().blocking_recv()
         } else if from == self.id.next_id() {

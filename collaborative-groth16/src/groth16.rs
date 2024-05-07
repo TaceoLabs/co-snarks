@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
+use ark_poly::EvaluationDomain;
 use ark_relations::r1cs::Result as R1CSResult;
 use circom_types::groth16::witness::Witness;
 use color_eyre::eyre::Result;
@@ -27,10 +28,10 @@ where
 
 pub struct CollaborativeGroth16<T, P: Pairing>
 where
-    T: PrimeFieldMpcProtocol<P::ScalarField>
-        + EcMpcProtocol<P::G1>
-        + EcMpcProtocol<P::G2>
-        + FFTProvider<P::ScalarField>,
+    for<'a> T: PrimeFieldMpcProtocol<'a, P::ScalarField>
+        + EcMpcProtocol<'a, P::G1>
+        + EcMpcProtocol<'a, P::G2>
+        + FFTProvider<'a, P::ScalarField>,
 {
     _driver: T,
     phantom_data: PhantomData<P>,
@@ -39,10 +40,10 @@ where
 
 impl<T, P: Pairing> CollaborativeGroth16<T, P>
 where
-    T: PrimeFieldMpcProtocol<P::ScalarField>
-        + EcMpcProtocol<P::G1>
-        + EcMpcProtocol<P::G2>
-        + FFTProvider<P::ScalarField>,
+    for<'a> T: PrimeFieldMpcProtocol<'a, P::ScalarField>
+        + EcMpcProtocol<'a, P::G1>
+        + EcMpcProtocol<'a, P::G2>
+        + FFTProvider<'a, P::ScalarField>,
 {
     pub fn new(driver: T) -> Self {
         Self {
