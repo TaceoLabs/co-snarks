@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use ark_ff::PrimeField;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

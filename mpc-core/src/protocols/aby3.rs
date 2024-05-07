@@ -138,10 +138,6 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         Self::FieldShare { a, b }
     }
 
-    fn get_zero_share(&mut self) -> Self::FieldShare {
-        todo!()
-    }
-
     fn add_with_public(
         &mut self,
         a: &F,

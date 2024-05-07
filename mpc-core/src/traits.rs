@@ -24,7 +24,6 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn inv(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
     fn rand(&mut self) -> Self::FieldShare;
-    fn get_zero_share(&mut self) -> Self::FieldShare;
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
