@@ -33,7 +33,7 @@ where
         + EcMpcProtocol<'a, P::G2>
         + FFTProvider<'a, P::ScalarField>,
 {
-    _driver: T,
+    pub(crate) driver: T,
     phantom_data: PhantomData<P>,
 }
 //Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet
@@ -47,7 +47,7 @@ where
 {
     pub fn new(driver: T) -> Self {
         Self {
-            _driver: driver,
+            driver,
             phantom_data: PhantomData,
         }
     }
