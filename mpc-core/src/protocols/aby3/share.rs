@@ -126,8 +126,8 @@ impl<F: PrimeField> std::ops::Neg for &Aby3PrimeFieldShare<F> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Aby3PrimeFieldShareVec<F: PrimeField> {
-    a: Vec<F>,
-    b: Vec<F>,
+    pub(crate) a: Vec<F>,
+    pub(crate) b: Vec<F>,
 }
 
 impl<F: PrimeField> Aby3PrimeFieldShareVec<F> {
@@ -143,6 +143,13 @@ impl<F: PrimeField> Aby3PrimeFieldShareVec<F> {
         Aby3PrimeFieldShareSlice {
             a: &self.a,
             b: &self.b,
+        }
+    }
+
+    pub fn to_mut(&mut self) -> Aby3PrimeFieldShareSliceMut<F> {
+        Aby3PrimeFieldShareSliceMut {
+            a: &mut self.a,
+            b: &mut self.b,
         }
     }
 }
@@ -165,10 +172,36 @@ impl<F: PrimeField> std::ops::Add for Aby3PrimeFieldShareVec<F> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Aby3PrimeFieldShareSlice<'a, F: PrimeField> {
-    a: &'a [F],
-    b: &'a [F],
+    // Deliberately a &Vec<F> instead of a &[F] since fft_in_place requires it
+    pub(crate) a: &'a Vec<F>,
+    pub(crate) b: &'a Vec<F>,
+}
+
+impl<'a, F: PrimeField> Aby3PrimeFieldShareSlice<'a, F> {
+    fn to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
+        Aby3PrimeFieldShareVec {
+            a: self.a.to_vec(),
+            b: self.b.to_vec(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Aby3PrimeFieldShareSliceMut<'a, F: PrimeField> {
+    // Deliberately a &Vec<F> instead of a &[F] since fft_in_place requires it
+    pub(crate) a: &'a mut Vec<F>,
+    pub(crate) b: &'a mut Vec<F>,
+}
+
+impl<'a, F: PrimeField> Aby3PrimeFieldShareSliceMut<'a, F> {
+    fn to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
+        Aby3PrimeFieldShareVec {
+            a: self.a.to_vec(),
+            b: self.b.to_vec(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

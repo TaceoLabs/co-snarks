@@ -7,6 +7,7 @@ pub trait PrimeFieldMpcProtocol<'a, F: PrimeField> {
     type FieldShare;
     type FieldShareVec;
     type FieldShareSlice;
+    type FieldShareSliceMut;
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn mul(
@@ -35,14 +36,16 @@ pub trait EcMpcProtocol<'a, C: CurveGroup>: PrimeFieldMpcProtocol<'a, C::ScalarF
 pub trait FFTProvider<'a, F: PrimeField>: PrimeFieldMpcProtocol<'a, F> {
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
-        data: &Self::FieldShareSlice,
+        data: Self::FieldShareSlice,
         domain: &D,
-    ) -> Vec<Self::FieldShare>;
+    ) -> Self::FieldShareVec;
+    fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: Self::FieldShareSliceMut, domain: &D);
     fn ifft<D: EvaluationDomain<F>>(
         &mut self,
-        data: &Self::FieldShareSlice,
+        data: Self::FieldShareSlice,
         domain: &D,
-    ) -> Vec<Self::FieldShare>;
+    ) -> Self::FieldShareVec;
+    fn ifft_in_place<D: EvaluationDomain<F>>(&mut self, data: Self::FieldShareSliceMut, domain: &D);
 }
 
 pub trait MSMProvider<'a, C: CurveGroup>: EcMpcProtocol<'a, C> {

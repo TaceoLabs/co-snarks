@@ -12,7 +12,10 @@ pub use share::Aby3PrimeFieldShare;
 
 use self::{
     network::Aby3Network,
-    share::{Aby3PointShare, Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareVec},
+    share::{
+        Aby3PointShare, Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareSliceMut,
+        Aby3PrimeFieldShareVec,
+    },
 };
 
 pub mod id;
@@ -100,6 +103,7 @@ impl<F: PrimeField, N: Aby3Network<F>> Aby3Protocol<F, N> {
 impl<'a, F: PrimeField, N: Aby3Network<F>> PrimeFieldMpcProtocol<'a, F> for Aby3Protocol<F, N> {
     type FieldShare = Aby3PrimeFieldShare<F>;
     type FieldShareSlice = Aby3PrimeFieldShareSlice<'a, F>;
+    type FieldShareSliceMut = Aby3PrimeFieldShareSliceMut<'a, F>;
     type FieldShareVec = Aby3PrimeFieldShareVec<F>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
@@ -173,18 +177,36 @@ impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<'a, C>
 impl<'a, F: PrimeField, N: Aby3Network<F>> FFTProvider<'a, F> for Aby3Protocol<F, N> {
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
-        _data: &Self::FieldShareSlice,
-        _domain: &D,
-    ) -> Vec<Self::FieldShare> {
-        todo!()
+        data: Self::FieldShareSlice,
+        domain: &D,
+    ) -> Self::FieldShareVec {
+        let a = domain.fft(data.a);
+        let b = domain.fft(data.b);
+        Self::FieldShareVec::new(a, b)
+    }
+
+    fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: Self::FieldShareSliceMut, domain: &D) {
+        domain.fft_in_place(data.a);
+        domain.fft_in_place(data.b);
     }
 
     fn ifft<D: EvaluationDomain<F>>(
         &mut self,
-        _data: &Self::FieldShareSlice,
-        _domain: &D,
-    ) -> Vec<Self::FieldShare> {
-        todo!()
+        data: Self::FieldShareSlice,
+        domain: &D,
+    ) -> Self::FieldShareVec {
+        let a = domain.ifft(data.a);
+        let b = domain.ifft(data.b);
+        Self::FieldShareVec::new(a, b)
+    }
+
+    fn ifft_in_place<D: EvaluationDomain<F>>(
+        &mut self,
+        data: Self::FieldShareSliceMut,
+        domain: &D,
+    ) {
+        domain.ifft_in_place(data.a);
+        domain.ifft_in_place(data.b);
     }
 }
 
