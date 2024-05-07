@@ -257,12 +257,9 @@ impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> MSMProvider<'a, C>
 {
     fn msm_public_points(&mut self, points: &[C], scalars: Self::FieldShareSlice) -> C {
         debug_assert_eq!(points.len(), scalars.len());
-        let mut res = C::zero();
-
-        for (p, s) in points.iter().zip(scalars.a.iter()) {
-            res += p.mul(s);
-        }
-
-        res
+        points
+            .iter()
+            .zip(scalars.a.iter())
+            .fold(C::zero(), |acc, (p, s)| acc + p.mul(s))
     }
 }
