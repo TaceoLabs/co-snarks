@@ -18,12 +18,12 @@ use crate::circuit::Circuit;
 pub type Aby3CollaborativeGroth16<P> =
     CollaborativeGroth16<Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet>, P>;
 
-pub struct SharedWitness<T, F: PrimeField>
+pub struct SharedWitness<'a, T, F: PrimeField>
 where
-    T: PrimeFieldMpcProtocol<F>,
+    T: PrimeFieldMpcProtocol<'a, F>,
 {
     //this will be a VecShareType
-    pub values: Vec<<T as PrimeFieldMpcProtocol<F>>::FieldShare>,
+    pub values: Vec<<T as PrimeFieldMpcProtocol<'a, F>>::FieldShare>,
 }
 
 pub struct CollaborativeGroth16<T, P: Pairing>
@@ -73,7 +73,7 @@ impl<P: Pairing> Aby3CollaborativeGroth16<P> {
     }
 }
 
-impl<F: PrimeField> SharedWitness<Aby3Protocol<F, Aby3MpcNet>, F> {
+impl<'a, F: PrimeField> SharedWitness<'a, Aby3Protocol<F, Aby3MpcNet>, F> {
     pub fn share_aby3<R: Rng + CryptoRng>(_witness: &Witness<F>, _rng: &mut R) -> [Self; 3] {
         todo!()
     }
