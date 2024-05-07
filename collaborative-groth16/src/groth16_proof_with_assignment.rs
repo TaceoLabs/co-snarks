@@ -50,7 +50,7 @@ where
         EcMpcProtocol::<C>::add_assign_points_public(&mut self.driver, &mut res, &pub_acc);
         EcMpcProtocol::<C>::add_assign_points(&mut self.driver, &mut res, &priv_acc);
 
-        todo!()
+        res
     }
 
     pub fn create_proof_with_assignment(
