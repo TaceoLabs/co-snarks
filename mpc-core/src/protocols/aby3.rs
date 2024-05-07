@@ -169,8 +169,15 @@ impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> EcMpcProtocol<'a, C>
         }
     }
 
-    fn scalar_mul(&mut self, _a: &Self::PointShare, _b: &Self::FieldShare) -> Self::PointShare {
-        todo!("Full MPC protocol to compute secret point times secret scalar")
+    fn scalar_mul(&mut self, a: &Self::PointShare, b: &Self::FieldShare) -> Self::PointShare {
+        let local_a = a.a * b.a + a.b * b.a + a.a * b.b + self.rngs.masking_ec_element::<C>();
+        // self.network.send_next(local_a)?;
+        // let local_b = self.network.recv_prev()?;
+        // Ok(Self::PointShare {
+        //     a: local_a,
+        //     b: local_b,
+        // })
+        todo!("TODO ask daniel")
     }
 }
 
@@ -226,9 +233,21 @@ impl Aby3CorrelatedRng {
         let (a, b) = self.random_fes::<F>();
         a - b
     }
+
     pub fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
         let a = F::rand(&mut self.rng1);
         let b = F::rand(&mut self.rng2);
+        (a, b)
+    }
+
+    pub fn masking_ec_element<C: CurveGroup>(&mut self) -> C {
+        let (a, b) = self.random_ecs::<C>();
+        a - b
+    }
+
+    pub fn random_ecs<C: CurveGroup>(&mut self) -> (C, C) {
+        let a = C::rand(&mut self.rng1);
+        let b = C::rand(&mut self.rng2);
         (a, b)
     }
 }
