@@ -3,13 +3,12 @@ use std::marker::PhantomData;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
-use ark_poly::EvaluationDomain;
 use ark_relations::r1cs::Result as R1CSResult;
 use circom_types::groth16::witness::Witness;
 use color_eyre::eyre::Result;
 use mpc_core::{
     protocols::aby3::{network::Aby3MpcNet, Aby3Protocol},
-    traits::{EcMpcProtocol, FFTProvider, PrimeFieldMpcProtocol},
+    traits::{FFTProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol},
 };
 use mpc_net::config::NetworkConfig;
 use rand::{CryptoRng, Rng};
@@ -18,36 +17,33 @@ use crate::circuit::Circuit;
 pub type Aby3CollaborativeGroth16<P> =
     CollaborativeGroth16<Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet>, P>;
 
-pub struct SharedWitness<'a, T, F: PrimeField>
+pub struct SharedWitness<T, F: PrimeField>
 where
-    T: PrimeFieldMpcProtocol<'a, F>,
+    T: PrimeFieldMpcProtocol<F>,
 {
     //this will be a VecShareType
-    pub values: Vec<<T as PrimeFieldMpcProtocol<'a, F>>::FieldShare>,
+    pub values: Vec<<T as PrimeFieldMpcProtocol<F>>::FieldShare>,
 }
 
 pub struct CollaborativeGroth16<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<'a, P::ScalarField>
-        + EcMpcProtocol<'a, P::G1>
-        + EcMpcProtocol<'a, P::G2>
-        + FFTProvider<'a, P::ScalarField>,
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+        + PairingEcMpcProtocol<P>
+        + FFTProvider<P::ScalarField>,
 {
-    _driver: T,
+    pub(crate) driver: T,
     phantom_data: PhantomData<P>,
 }
-//Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet
 
 impl<T, P: Pairing> CollaborativeGroth16<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<'a, P::ScalarField>
-        + EcMpcProtocol<'a, P::G1>
-        + EcMpcProtocol<'a, P::G2>
-        + FFTProvider<'a, P::ScalarField>,
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+        + PairingEcMpcProtocol<P>
+        + FFTProvider<P::ScalarField>,
 {
     pub fn new(driver: T) -> Self {
         Self {
-            _driver: driver,
+            driver,
             phantom_data: PhantomData,
         }
     }
@@ -73,7 +69,7 @@ impl<P: Pairing> Aby3CollaborativeGroth16<P> {
     }
 }
 
-impl<'a, F: PrimeField> SharedWitness<'a, Aby3Protocol<F, Aby3MpcNet>, F> {
+impl<F: PrimeField> SharedWitness<Aby3Protocol<F, Aby3MpcNet>, F> {
     pub fn share_aby3<R: Rng + CryptoRng>(_witness: &Witness<F>, _rng: &mut R) -> [Self; 3] {
         todo!()
     }

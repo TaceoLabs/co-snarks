@@ -37,6 +37,7 @@ impl<C: CurveGroup> std::ops::Add<&Aby3PointShare<C>> for Aby3PointShare<C> {
         }
     }
 }
+
 impl<C: CurveGroup> std::ops::Add<&Aby3PointShare<C>> for &'_ Aby3PointShare<C> {
     type Output = Aby3PointShare<C>;
 
@@ -45,6 +46,13 @@ impl<C: CurveGroup> std::ops::Add<&Aby3PointShare<C>> for &'_ Aby3PointShare<C> 
             a: self.a + rhs.a,
             b: self.b + rhs.b,
         }
+    }
+}
+
+impl<C: CurveGroup> std::ops::AddAssign<&Aby3PointShare<C>> for Aby3PointShare<C> {
+    fn add_assign(&mut self, rhs: &Self) {
+        self.a += rhs.a;
+        self.b += rhs.b;
     }
 }
 
@@ -77,6 +85,13 @@ impl<C: CurveGroup> std::ops::Sub<&Aby3PointShare<C>> for &'_ Aby3PointShare<C> 
             a: self.a - rhs.a,
             b: self.b - rhs.b,
         }
+    }
+}
+
+impl<C: CurveGroup> std::ops::SubAssign<&Aby3PointShare<C>> for Aby3PointShare<C> {
+    fn sub_assign(&mut self, rhs: &Self) {
+        self.a -= rhs.a;
+        self.b -= rhs.b;
     }
 }
 

@@ -1,13 +1,15 @@
 use std::marker::PhantomData;
 
-use ark_ec::CurveGroup;
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
-use crate::traits::{EcMpcProtocol, FFTProvider, MSMProvider, PrimeFieldMpcProtocol};
+use crate::traits::{
+    EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+};
 pub use fieldshare::Aby3PrimeFieldShare;
 
 use self::{
@@ -99,10 +101,10 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     }
 }
 
-impl<'a, F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<'a, F> for Aby3Protocol<F, N> {
+impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F, N> {
     type FieldShare = Aby3PrimeFieldShare<F>;
-    type FieldShareSlice = Aby3PrimeFieldShareSlice<'a, F>;
-    type FieldShareSliceMut = Aby3PrimeFieldShareSliceMut<'a, F>;
+    type FieldShareSlice<'a> = Aby3PrimeFieldShareSlice<'a, F>;
+    type FieldShareSliceMut<'a> = Aby3PrimeFieldShareSliceMut<'a, F>;
     type FieldShareVec = Aby3PrimeFieldShareVec<F>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
@@ -137,7 +139,7 @@ impl<'a, F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<'a, F> for Aby3Pro
     }
 }
 
-impl<'a, C: CurveGroup, N: Aby3Network> EcMpcProtocol<'a, C> for Aby3Protocol<C::ScalarField, N> {
+impl<C: CurveGroup, N: Aby3Network> EcMpcProtocol<C> for Aby3Protocol<C::ScalarField, N> {
     type PointShare = Aby3PointShare<C>;
 
     fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
@@ -146,6 +148,46 @@ impl<'a, C: CurveGroup, N: Aby3Network> EcMpcProtocol<'a, C> for Aby3Protocol<C:
 
     fn sub_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
         a - b
+    }
+
+    fn add_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare) {
+        *a += b;
+    }
+
+    fn sub_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare) {
+        *a -= b;
+    }
+
+    fn add_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
+        match self.network.get_id() {
+            id::PartyID::ID0 => a.a += b,
+            id::PartyID::ID1 => a.b += b,
+            id::PartyID::ID2 => {}
+        }
+    }
+
+    fn sub_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
+        match self.network.get_id() {
+            id::PartyID::ID0 => a.a -= b,
+            id::PartyID::ID1 => a.b -= b,
+            id::PartyID::ID2 => {}
+        }
+    }
+
+    fn add_assign_points_public_affine(&mut self, a: &mut Self::PointShare, b: &C::Affine) {
+        match self.network.get_id() {
+            id::PartyID::ID0 => a.a += b,
+            id::PartyID::ID1 => a.b += b,
+            id::PartyID::ID2 => {}
+        }
+    }
+
+    fn sub_assign_points_public_affine(&mut self, a: &mut Self::PointShare, b: &C::Affine) {
+        match self.network.get_id() {
+            id::PartyID::ID0 => a.a -= b,
+            id::PartyID::ID1 => a.b -= b,
+            id::PartyID::ID2 => {}
+        }
     }
 
     fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare {
@@ -173,12 +215,34 @@ impl<'a, C: CurveGroup, N: Aby3Network> EcMpcProtocol<'a, C> for Aby3Protocol<C:
             b: local_b,
         })
     }
+
+    fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
+        self.network.send_next(a.b)?;
+        let c = self.network.recv_prev::<C>()?;
+        Ok(a.a + a.b + c)
+    }
 }
 
-impl<'a, F: PrimeField, N: Aby3Network> FFTProvider<'a, F> for Aby3Protocol<F, N> {
+impl<P: Pairing, N: Aby3Network> PairingEcMpcProtocol<P> for Aby3Protocol<P::ScalarField, N> {
+    fn open_two_points(
+        &mut self,
+        a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
+        b: &<Self as EcMpcProtocol<P::G2>>::PointShare,
+    ) -> std::io::Result<(P::G1, P::G2)> {
+        let s1 = a.b;
+        let s2 = b.b;
+        self.network.send_next((s1, s2))?;
+        let (mut r1, mut r2) = self.network.recv_prev::<(P::G1, P::G2)>()?;
+        r1 += a.a + a.b;
+        r2 += b.a + b.b;
+        Ok((r1, r2))
+    }
+}
+
+impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSlice,
+        data: Self::FieldShareSlice<'_>,
         domain: &D,
     ) -> Self::FieldShareVec {
         let a = domain.fft(data.a);
@@ -186,14 +250,18 @@ impl<'a, F: PrimeField, N: Aby3Network> FFTProvider<'a, F> for Aby3Protocol<F, N
         Self::FieldShareVec::new(a, b)
     }
 
-    fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: Self::FieldShareSliceMut, domain: &D) {
+    fn fft_in_place<D: EvaluationDomain<F>>(
+        &mut self,
+        data: Self::FieldShareSliceMut<'_>,
+        domain: &D,
+    ) {
         domain.fft_in_place(data.a);
         domain.fft_in_place(data.b);
     }
 
     fn ifft<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSlice,
+        data: Self::FieldShareSlice<'_>,
         domain: &D,
     ) -> Self::FieldShareVec {
         let a = domain.ifft(data.a);
@@ -203,7 +271,7 @@ impl<'a, F: PrimeField, N: Aby3Network> FFTProvider<'a, F> for Aby3Protocol<F, N
 
     fn ifft_in_place<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSliceMut,
+        data: Self::FieldShareSliceMut<'_>,
         domain: &D,
     ) {
         domain.ifft_in_place(data.a);
@@ -246,11 +314,11 @@ impl Aby3CorrelatedRng {
     }
 }
 
-impl<'a, C: CurveGroup, N: Aby3Network> MSMProvider<'a, C> for Aby3Protocol<C::ScalarField, N> {
+impl<C: CurveGroup, N: Aby3Network> MSMProvider<C> for Aby3Protocol<C::ScalarField, N> {
     fn msm_public_points(
         &mut self,
         points: &[C::Affine],
-        scalars: Self::FieldShareSlice,
+        scalars: Self::FieldShareSlice<'_>,
     ) -> Self::PointShare {
         debug_assert_eq!(points.len(), scalars.len());
         let res_a = C::msm_unchecked(points, scalars.a);
