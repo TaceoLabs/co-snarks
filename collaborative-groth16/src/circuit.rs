@@ -31,8 +31,8 @@ use ark_relations::r1cs::{
     ConstraintSynthesizer, ConstraintSystemRef, LinearCombination, SynthesisError, Variable,
 };
 use circom_types::{groth16::witness::Witness, r1cs::R1CS};
+use num_traits::identities::One;
 
-//TODO change my name
 pub struct Circuit<P: Pairing> {
     r1cs: R1CS<P>,
     witness: Witness<P::ScalarField>,
@@ -47,6 +47,24 @@ impl<P: Pairing> Circuit<P> {
             .iter()
             .map(|i| self.witness.values[*i])
             .collect()
+    }
+
+    pub fn witnesses(&self) -> Vec<P::ScalarField> {
+        debug_assert_eq!(
+            self.r1cs.wire_mapping.len(),
+            self.r1cs.num_inputs + self.r1cs.num_aux
+        );
+        self.r1cs.wire_mapping[self.r1cs.num_inputs..]
+            .iter()
+            .map(|i| self.witness.values[*i])
+            .collect()
+    }
+
+    pub fn get_wire_mapping(&self) -> (Vec<P::ScalarField>, Vec<P::ScalarField>) {
+        let mut public_inputs = Vec::with_capacity(self.r1cs.num_inputs + 1);
+        public_inputs.push(P::ScalarField::one());
+        public_inputs.extend(self.public_inputs());
+        (public_inputs, self.witnesses())
     }
 }
 

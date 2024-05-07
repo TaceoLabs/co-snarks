@@ -1,5 +1,11 @@
 [workspace]
-members = ["circom-types", "collaborative-groth16", "mpc-core", "mpc-net"]
+members = [
+    "circom-types",
+    "collaborative-groth16",
+    "mpc-core",
+    "mpc-net",
+    "tests",
+]
 resolver = "2"
 
 [workspace.package]

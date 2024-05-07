@@ -12,17 +12,17 @@ pub struct CollaborativeCircomReduction<F: PrimeField, FFT: FFTProvider<F>> {
 
 impl<F: PrimeField, FFT: FFTProvider<F>> CollaborativeCircomReduction<F, FFT> {
     pub fn witness_map_from_matrices<D: EvaluationDomain<F>>(
-        matrices: &ConstraintMatrices<F>,
+        _matrices: &ConstraintMatrices<F>,
         num_inputs: usize,
         num_constraints: usize,
-        full_assignment: <FFT as PrimeFieldMpcProtocol<F>>::FieldShareSlice,
+        _full_assignment: <FFT as PrimeFieldMpcProtocol<F>>::FieldShareSlice,
     ) -> Result<Vec<F>, SynthesisError> {
         let zero = F::zero();
         let domain =
             D::new(num_constraints + num_inputs).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
         let domain_size = domain.size();
-        let mut a = vec![zero; domain_size];
-        let mut b = vec![zero; domain_size];
+        let mut _a = vec![zero; domain_size];
+        let mut _b = vec![zero; domain_size];
         todo!()
     }
 }

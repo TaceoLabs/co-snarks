@@ -54,6 +54,60 @@ impl R1CSToQAP for CircomReduction {
         num_constraints: usize,
         full_assignment: &[F],
     ) -> Result<Vec<F>, SynthesisError> {
+        ///// The number of variables that are "public instances" to the constraint
+        ///// system.
+        //pub num_instance_variables: usize,
+        ///// The number of variables that are "private witnesses" to the constraint
+        ///// system.
+        //pub num_witness_variables: usize,
+        ///// The number of constraints in the constraint system.
+        //pub num_constraints: usize,
+        ///// The number of non_zero entries in the A matrix.
+        //pub a_num_non_zero: usize,
+        ///// The number of non_zero entries in the B matrix.
+        //pub b_num_non_zero: usize,
+        ///// The number of non_zero entries in the C matrix.
+        //pub c_num_non_zero: usize,
+
+        ///// The A constraint matrix. This is empty when
+        ///// `self.mode == SynthesisMode::Prove { construct_matrices = false }`.
+        //pub a: Matrix<F>,
+        ///// The B constraint matrix. This is empty when
+        ///// `self.mode == SynthesisMode::Prove { construct_matrices = false }`.
+        //pub b: Matrix<F>,
+        ///// The C constraint matrix. This is empty when
+        ///// `self.mode == SynthesisMode::Prove { construct_matrices = false }`.
+        //pub c: Matrix<F>,
+        //  println!("{}", matrices.num_instance_variables);
+        //  println!("{}", matrices.num_witness_variables);
+        //  println!("{}", matrices.num_constraints);
+        //  println!("{}", matrices.a_num_non_zero);
+        //  println!("{}", matrices.b_num_non_zero);
+        //  println!("{}", matrices.c_num_non_zero);
+        //  for row in matrices.a.iter() {
+        //      print!("[");
+        //      for col in row.iter() {
+        //          print!("({}, {}", col.0, col.1);
+        //      }
+        //      println!("]");
+        //  }
+        //  println!();
+        //  for row in matrices.b.iter() {
+        //      print!("[");
+        //      for col in row.iter() {
+        //          print!("({}, {}", col.0, col.1);
+        //      }
+        //      println!("]");
+        //  }
+        //  println!();
+        //  for row in matrices.c.iter() {
+        //      print!("[");
+        //      for col in row.iter() {
+        //          print!("({}, {})", col.0, col.1);
+        //      }
+        //      println!("]");
+        //  }
+        //  panic!("hi i am here");
         let zero = F::zero();
         let domain =
             D::new(num_constraints + num_inputs).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
