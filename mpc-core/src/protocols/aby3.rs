@@ -203,12 +203,6 @@ impl<F: PrimeField> Default for Aby3PrimeFieldShare<F> {
     }
 }
 
-impl<'a, F: PrimeField> From<Aby3PrimeFieldShareVec<F>> for Aby3PrimeFieldShareSliceMut<'a, F> {
-    fn from(value: Aby3PrimeFieldShareVec<F>) -> Self {
-        todo!()
-    }
-}
-
 impl<C: CurveGroup, N: Aby3Network> EcMpcProtocol<C> for Aby3Protocol<C::ScalarField, N> {
     type PointShare = Aby3PointShare<C>;
 
