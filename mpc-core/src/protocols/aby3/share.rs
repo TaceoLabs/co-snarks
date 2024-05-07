@@ -152,6 +152,16 @@ impl<F: PrimeField> Aby3PrimeFieldShareVec<F> {
             b: &mut self.b,
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        debug_assert_eq!(self.a.is_empty(), self.b.is_empty());
+        self.a.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        debug_assert_eq!(self.a.len(), self.b.len());
+        self.a.len()
+    }
 }
 
 impl<F: PrimeField> From<Vec<Aby3PrimeFieldShare<F>>> for Aby3PrimeFieldShareVec<F> {
@@ -186,6 +196,16 @@ impl<'a, F: PrimeField> Aby3PrimeFieldShareSlice<'a, F> {
             b: self.b.to_vec(),
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        debug_assert_eq!(self.a.is_empty(), self.b.is_empty());
+        self.a.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        debug_assert_eq!(self.a.len(), self.b.len());
+        self.a.len()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -201,6 +221,16 @@ impl<'a, F: PrimeField> Aby3PrimeFieldShareSliceMut<'a, F> {
             a: self.a.to_vec(),
             b: self.b.to_vec(),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        debug_assert_eq!(self.a.is_empty(), self.b.is_empty());
+        self.a.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        debug_assert_eq!(self.a.len(), self.b.len());
+        self.a.len()
     }
 }
 

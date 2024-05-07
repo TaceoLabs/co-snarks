@@ -7,7 +7,7 @@ use eyre::{bail, Report};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
-use crate::traits::{EcMpcProtocol, FFTProvider, PrimeFieldMpcProtocol};
+use crate::traits::{EcMpcProtocol, FFTProvider, MSMProvider, PrimeFieldMpcProtocol};
 pub use share::Aby3PrimeFieldShare;
 
 use self::{
@@ -249,5 +249,20 @@ impl Aby3CorrelatedRng {
         let a = C::rand(&mut self.rng1);
         let b = C::rand(&mut self.rng2);
         (a, b)
+    }
+}
+
+impl<'a, C: CurveGroup, N: Aby3Network<C::ScalarField>> MSMProvider<'a, C>
+    for Aby3Protocol<C::ScalarField, N>
+{
+    fn msm_public_points(&mut self, points: &[C], scalars: Self::FieldShareSlice) -> C {
+        debug_assert_eq!(points.len(), scalars.len());
+        let mut res = C::zero();
+
+        for (p, s) in points.iter().zip(scalars.a.iter()) {
+            res += p.mul(s);
+        }
+
+        res
     }
 }
