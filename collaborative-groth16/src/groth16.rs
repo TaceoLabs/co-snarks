@@ -13,6 +13,7 @@ use ark_relations::r1cs::{
 use circom_types::groth16::witness::Witness;
 use circom_types::r1cs::R1CS;
 use color_eyre::eyre::Result;
+use itertools::izip;
 use mpc_core::traits::{EcMpcProtocol, MSMProvider};
 use mpc_core::{
     protocols::aby3::{network::Aby3MpcNet, Aby3Protocol},
@@ -119,9 +120,7 @@ where
         let domain_size = domain.size();
         let mut a = vec![FieldShare::<T, P>::default(); domain_size];
         let mut b = vec![FieldShare::<T, P>::default(); domain_size];
-        for (mut a, mut b, at_i, bt_i) in
-            itertools::multizip((a.iter_mut(), b.iter_mut(), &matrices.a, &matrices.b))
-        {
+        for (a, b, at_i, bt_i) in izip!(&mut a, &mut b, &matrices.a, &matrices.b) {
             *a = self
                 .driver
                 .evaluate_constraint(at_i, public_inputs, private_witness);
@@ -141,12 +140,14 @@ where
                 num_inputs,
             );
         }
+
         let mut b = FieldShareVec::<T, P>::from(b);
         let mut c = {
             let a_slice = ScalarFieldShareSlice::<T, P>::from(&a);
             let b_slice = ScalarFieldShareSlice::<T, P>::from(&b);
             self.driver.mul_vec(&a_slice, &b_slice)?
         };
+
         let mut a_mut = FieldShareSliceMut::<T, P>::from(&mut a);
         let mut b_mut = FieldShareSliceMut::<T, P>::from(&mut b);
         self.driver.ifft_in_place(&mut a_mut, &domain);
@@ -174,6 +175,7 @@ where
         let mut ab = {
             let a_slice = ScalarFieldShareSlice::<T, P>::from(&a);
             let b_slice = ScalarFieldShareSlice::<T, P>::from(&b);
+            //this can be in-place so that we do not have to allocate memory
             self.driver.mul_vec(&a_slice, &b_slice)?
         };
         std::mem::drop(a);
@@ -367,43 +369,4 @@ impl<F: PrimeField> SharedWitness<Aby3Protocol<F, Aby3MpcNet>, F> {
     pub fn share_aby3<R: Rng + CryptoRng>(_witness: &Witness<F>, _rng: &mut R) -> [Self; 3] {
         todo!()
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::fs::File;
-
-    use ark_bn254::Bn254;
-    use ark_poly::GeneralEvaluationDomain;
-    use ark_relations::r1cs::{ConstraintSystem, OptimizationGoal};
-    use circom_types::{groth16::witness::Witness, r1cs::R1CS};
-
-    use crate::circom_reduction::CircomReduction;
-
-    use super::Aby3CollaborativeGroth16;
-    use ark_groth16::r1cs_to_qap::R1CSToQAP;
-
-    /* #[test]
-    fn test() {
-        let witness_file = File::open("../test_vectors/bn254/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/bn254/multiplier2.r1cs").unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
-        let cs = ConstraintSystem::new_ref();
-        cs.set_optimization_goal(OptimizationGoal::Constraints);
-        //get public inputs
-        let mut pub_inputs = vec![];
-        #[allow(clippy::needless_range_loop)]
-        for i in 1..r1cs.num_inputs {
-            pub_inputs.push(witness.values[r1cs.wire_mapping[i]])
-        }
-
-        Aby3CollaborativeGroth16::generate_constraints(&pub_inputs, r1cs, cs.clone()).unwrap();
-        let test = CircomReduction::witness_map::<
-            ark_bn254::Fr,
-            GeneralEvaluationDomain<ark_bn254::Fr>,
-        >(cs.clone())
-        .unwrap();
-        println!("{test:?}");
-    }*/
 }

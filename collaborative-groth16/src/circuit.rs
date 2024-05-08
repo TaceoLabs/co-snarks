@@ -74,16 +74,16 @@ impl<P: Pairing> ConstraintSynthesizer<P::ScalarField> for Circuit<P> {
         cs: ConstraintSystemRef<P::ScalarField>,
     ) -> Result<(), SynthesisError> {
         let witness = &self.witness;
-        let wire_mapping = &self.r1cs.wire_mapping;
+        //let wire_mapping = &self.r1cs.wire_mapping;
 
         // Start from 1 because Arkworks implicitly allocates One for the first input
         #[allow(clippy::needless_range_loop)]
         for i in 1..self.r1cs.num_inputs {
-            cs.new_input_variable(|| Ok(witness.values[wire_mapping[i]]))?;
+            cs.new_input_variable(|| Ok(witness.values[i]))?;
         }
 
         for i in 0..self.r1cs.num_aux {
-            cs.new_witness_variable(|| Ok(witness.values[wire_mapping[i + self.r1cs.num_inputs]]))?;
+            cs.new_witness_variable(|| Ok(witness.values[i + self.r1cs.num_inputs]))?;
         }
 
         let make_index = |index| {

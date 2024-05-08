@@ -2,19 +2,14 @@
 mod tests {
 
     use ark_bn254::Bn254;
+    use ark_groth16::{prepare_verifying_key, Groth16};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use bytes::{Bytes, BytesMut};
     use circom_types::{
-        groth16::{
-            witness::{self, Witness},
-            zkey::ZKey,
-        },
+        groth16::{proof::JsonProof, witness::Witness, zkey::ZKey},
         r1cs::R1CS,
     };
-    use collaborative_groth16::{
-        circuit::Circuit,
-        groth16::{Aby3CollaborativeGroth16, CollaborativeGroth16},
-    };
+    use collaborative_groth16::{circuit::Circuit, groth16::CollaborativeGroth16};
     use mpc_core::protocols::aby3::{
         self, fieldshare::Aby3PrimeFieldShareVec, id::PartyID, network::Aby3Network, Aby3Protocol,
     };
@@ -192,9 +187,8 @@ mod tests {
         }
     }
 
-    #[ignore]
     #[tokio::test]
-    async fn bn254() {
+    async fn e2e_bn254() {
         let zkey_file = File::open("../test_vectors/bn254/multiplier2.zkey").unwrap();
         let witness_file = File::open("../test_vectors/bn254/witness.wtns").unwrap();
         let r1cs_file = File::open("../test_vectors/bn254/multiplier2.r1cs").unwrap();
@@ -209,6 +203,7 @@ mod tests {
         let (public_inputs1, witness) = circuit.get_wire_mapping();
         let public_inputs2 = public_inputs1.clone();
         let public_inputs3 = public_inputs1.clone();
+        let inputs = circuit.public_inputs();
         let mut rng = thread_rng();
         let mut witness_share1 = Vec::with_capacity(witness.len());
         let mut witness_share2 = Vec::with_capacity(witness.len());
@@ -241,14 +236,21 @@ mod tests {
                     Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
                 >::new(aby3);
-                let proof = prover.prove(&pk, &r1cs, &ins, x).unwrap();
-                println!("{proof:?}");
-                tx.send(())
+                tx.send(prover.prove(&pk, &r1cs, &ins, x).unwrap())
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        println!("uwu");
+        assert_eq!(result1, result2);
+        assert_eq!(result2, result3);
+        let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
+        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
+        let zkey_file = File::open("../test_vectors/bn254/multiplier2.zkey").unwrap();
+        let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
+        let pvk = prepare_verifying_key(&pk.vk);
+        let verified =
+            Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
+        assert!(verified);
     }
 }

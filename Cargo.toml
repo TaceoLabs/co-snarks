@@ -21,11 +21,12 @@ readme = "./README.md"
 [workspace.dependencies]
 ark-bls12-381 = "0.4.0"
 ark-bn254 = "0.4.0"
-ark-ec = "0.4.2"
+ark-ec = { version = "0.4.2", default-features = false }
 ark-ff = "0.4.2"
 ark-groth16 = { version = "=0.4.0", default-features = false, features = [
     "parallel",
 ] }
+#ark-groth16 = { version = "0.4.0", path = "/home/fnieddu/tmp/groth16" }
 ark-poly = "0.4.2"
 ark-relations = { version = "0.4.0", default-features = false }
 ark-serialize = { version = "0.4", features = ["derive", "std"] }

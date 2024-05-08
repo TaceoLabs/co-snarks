@@ -4,7 +4,7 @@ use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
 use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, thread, time::Duration};
 
 use crate::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
@@ -31,7 +31,9 @@ pub mod utils {
     use ark_ff::PrimeField;
     use rand::{CryptoRng, Rng};
 
-    use super::{pointshare::Aby3PointShare, Aby3PrimeFieldShare};
+    use super::{
+        fieldshare::Aby3PrimeFieldShareVec, pointshare::Aby3PointShare, Aby3PrimeFieldShare,
+    };
 
     pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
         val: F,
@@ -40,9 +42,9 @@ pub mod utils {
         let a = F::rand(rng);
         let b = F::rand(rng);
         let c = val - a - b;
-        let share1 = Aby3PrimeFieldShare::new(a, b);
-        let share2 = Aby3PrimeFieldShare::new(b, c);
-        let share3 = Aby3PrimeFieldShare::new(c, a);
+        let share1 = Aby3PrimeFieldShare::new(a, c);
+        let share2 = Aby3PrimeFieldShare::new(b, a);
+        let share3 = Aby3PrimeFieldShare::new(c, b);
         [share1, share2, share3]
     }
 
@@ -54,6 +56,35 @@ pub mod utils {
         share1.a + share2.a + share3.a
     }
 
+    pub fn combine_field_elements<F: PrimeField>(
+        share1: Aby3PrimeFieldShareVec<F>,
+        share2: Aby3PrimeFieldShareVec<F>,
+        share3: Aby3PrimeFieldShareVec<F>,
+    ) -> Vec<F> {
+        debug_assert_eq!(share1.len(), share2.len());
+        debug_assert_eq!(share2.len(), share3.len());
+
+        let (share1a, share1b) = share1.get_ab();
+        let (share2a, share2b) = share2.get_ab();
+        let (share3a, share3b) = share3.get_ab();
+        let a_result = itertools::multizip((
+            share1a.into_iter(),
+            share2a.into_iter(),
+            share3a.into_iter(),
+        ))
+        .map(|(x1, x2, x3)| x1 + x2 + x3)
+        .collect::<Vec<_>>();
+        let b_result = itertools::multizip((
+            share1b.into_iter(),
+            share2b.into_iter(),
+            share3b.into_iter(),
+        ))
+        .map(|(x1, x2, x3)| x1 + x2 + x3)
+        .collect::<Vec<_>>();
+        assert_eq!(a_result, b_result);
+        a_result
+    }
+
     pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
         val: C,
         rng: &mut R,
@@ -61,9 +92,9 @@ pub mod utils {
         let a = C::rand(rng);
         let b = C::rand(rng);
         let c = val - a - b;
-        let share1 = Aby3PointShare::new(a, b);
-        let share2 = Aby3PointShare::new(b, c);
-        let share3 = Aby3PointShare::new(c, a);
+        let share1 = Aby3PointShare::new(a, c);
+        let share2 = Aby3PointShare::new(b, a);
+        let share3 = Aby3PointShare::new(c, b);
         [share1, share2, share3]
     }
 
@@ -264,6 +295,39 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         assert!(len > 0);
         dst.a[dst_offset..dst_offset + len].clone_from_slice(&src.a[src_offset..src_offset + len]);
         dst.b[dst_offset..dst_offset + len].clone_from_slice(&src.b[src_offset..src_offset + len]);
+    }
+
+    fn print(&self, to_print: &Self::FieldShareVec) {
+        match self.network.get_id() {
+            PartyID::ID0 => thread::sleep(Duration::from_millis(10)),
+            PartyID::ID1 => thread::sleep(Duration::from_millis(100)),
+            PartyID::ID2 => thread::sleep(Duration::from_millis(300)),
+        }
+        print!("[");
+        for a in to_print.b.iter() {
+            print!("{a}, ")
+        }
+        println!("]");
+    }
+
+    fn print_slice(&self, to_print: &Self::FieldShareSlice<'_>) {
+        match self.network.get_id() {
+            PartyID::ID0 => {
+                println!("==================");
+                thread::sleep(Duration::from_millis(10));
+            }
+            PartyID::ID1 => thread::sleep(Duration::from_millis(100)),
+            PartyID::ID2 => thread::sleep(Duration::from_millis(300)),
+        }
+        print!("[");
+        for a in to_print.a.iter() {
+            print!("{a}, ")
+        }
+        println!("]");
+        let id = self.network.get_id();
+        if id == PartyID::ID2 {
+            println!("==================");
+        };
     }
 }
 

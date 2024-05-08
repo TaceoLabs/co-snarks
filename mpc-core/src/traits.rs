@@ -57,6 +57,9 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         src_offset: usize,
         len: usize,
     );
+
+    fn print(&self, to_print: &Self::FieldShareVec);
+    fn print_slice(&self, to_print: &Self::FieldShareSlice<'_>);
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
