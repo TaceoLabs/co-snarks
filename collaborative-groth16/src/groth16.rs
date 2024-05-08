@@ -97,7 +97,14 @@ where
         let h_slice = ScalarFieldShareSlice::<T, P>::from(&h);
         let r = self.driver.rand();
         let s = self.driver.rand();
-        self.create_proof_with_assignment(pk, r, s, h_slice, public_inputs, private_witness_slice)
+        self.create_proof_with_assignment(
+            pk,
+            r,
+            s,
+            h_slice,
+            &public_inputs[1..],
+            private_witness_slice,
+        )
     }
 
     fn witness_map_from_matrices(
@@ -238,12 +245,10 @@ where
         T: MSMProvider<C>,
     {
         let pub_len = input_assignment.len();
-        //TODO THIS IS MOST LIKELY WRONG. We have 1 at the beginning not sure about
-        //how this looks in plain but needs some investigation
-        let pub_acc = C::msm_unchecked(&query[1..pub_len], input_assignment);
+        let pub_acc = C::msm_unchecked(&query[1..=pub_len], input_assignment);
         let priv_acc = MSMProvider::<C>::msm_public_points(
             &mut self.driver,
-            &query[pub_len..],
+            &query[1 + pub_len..],
             aux_assignment,
         );
 
