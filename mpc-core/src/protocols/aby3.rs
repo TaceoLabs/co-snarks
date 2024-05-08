@@ -172,14 +172,14 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         Ok(a.a + a.b + c)
     }
 
-    fn promote_to_trivial_share(&self, public_values: Vec<F>) -> Self::FieldShareVec {
+    fn promote_to_trivial_share(&self, public_values: &[F]) -> Self::FieldShareVec {
         let mut vec = Vec::with_capacity(public_values.len());
         //additive share1 gets the value everyone else zero
         //therefore id1 and id2 needs the share
         for val in public_values {
             let share = match self.network.get_id() {
-                PartyID::ID0 => Aby3PrimeFieldShare::new(val, F::zero()),
-                PartyID::ID1 => Aby3PrimeFieldShare::new(F::zero(), val),
+                PartyID::ID0 => Aby3PrimeFieldShare::new(*val, F::zero()),
+                PartyID::ID1 => Aby3PrimeFieldShare::new(F::zero(), *val),
                 PartyID::ID2 => Aby3PrimeFieldShare::default(),
             };
             vec.push(share);
@@ -229,9 +229,41 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         }
     }
 
-    fn concat_vec(&self, a: &mut Self::FieldShareSliceMut<'_>, b: Self::FieldShareVec) {
-        a.a.extend(b.a);
-        a.b.extend(b.b);
+    fn evaluate_constraint(
+        &mut self,
+        lhs: &[(F, usize)],
+        public_inputs: &[F],
+        private_witness: &Self::FieldShareSlice<'_>,
+    ) -> Self::FieldShare {
+        let mut acc = Aby3PrimeFieldShare::default();
+        for (coeff, index) in lhs {
+            if index < &public_inputs.len() {
+                let val = public_inputs[*index];
+                let mul_result = val * coeff;
+                acc = self.add_with_public(&mul_result, &acc);
+            } else {
+                acc.a += *coeff * private_witness.a[*index - public_inputs.len()];
+                acc.b += *coeff * private_witness.b[*index - public_inputs.len()];
+            }
+        }
+        acc
+    }
+
+    fn clone_from_slice(
+        &self,
+        dst: &mut Self::FieldShareSliceMut<'_>,
+        src: &Self::FieldShareSlice<'_>,
+        dst_offset: usize,
+        src_offset: usize,
+        len: usize,
+    ) {
+        assert!(dst.a.len() >= dst_offset + len);
+        assert!(dst.b.len() >= dst_offset + len);
+        assert!(src.a.len() >= src_offset + len);
+        assert!(src.b.len() >= src_offset + len);
+        assert!(len > 0);
+        dst.a[dst_offset..dst_offset + len].clone_from_slice(&src.a[src_offset..src_offset + len]);
+        dst.b[dst_offset..dst_offset + len].clone_from_slice(&src.b[src_offset..src_offset + len]);
     }
 }
 

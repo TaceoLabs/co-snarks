@@ -121,7 +121,6 @@ impl R1CSToQAP for CircomReduction {
             .zip(cfg_iter!(&matrices.a))
             .zip(cfg_iter!(&matrices.b))
             .for_each(|(((a, b), at_i), bt_i)| {
-                println!("evaluating constraint");
                 *a = evaluate_constraint(at_i, full_assignment);
                 *b = evaluate_constraint(bt_i, full_assignment);
             });
@@ -129,7 +128,6 @@ impl R1CSToQAP for CircomReduction {
         {
             let start = num_constraints;
             let end = start + num_inputs;
-            println!("{start}-{end}");
             a[start..end].clone_from_slice(&full_assignment[..num_inputs]);
         }
 

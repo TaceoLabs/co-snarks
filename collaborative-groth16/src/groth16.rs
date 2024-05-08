@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use ark_ec::pairing::Pairing;
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
@@ -12,7 +13,7 @@ use ark_relations::r1cs::{
 use circom_types::groth16::witness::Witness;
 use circom_types::r1cs::R1CS;
 use color_eyre::eyre::Result;
-use mpc_core::traits::EcMpcProtocol;
+use mpc_core::traits::{EcMpcProtocol, MSMProvider};
 use mpc_core::{
     protocols::aby3::{network::Aby3MpcNet, Aby3Protocol},
     traits::{FFTProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol},
@@ -26,11 +27,14 @@ pub type Aby3CollaborativeGroth16<P> =
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
-type FieldShareSlice<'a, T, P> =
+type ScalarFieldShareSlice<'a, T, P> =
     <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareSlice<'a>;
 type FieldShareSliceMut<'a, T, P> =
     <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareSliceMut<'a>;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
+type CurveFieldShareSlice<'a, T, C> = <T as PrimeFieldMpcProtocol<
+    <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
+>>::FieldShareSlice<'a>;
 pub struct SharedWitness<T, F: PrimeField>
 where
     T: PrimeFieldMpcProtocol<F>,
@@ -43,7 +47,9 @@ pub struct CollaborativeGroth16<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>,
+        + FFTProvider<P::ScalarField>
+        + MSMProvider<P::G1>
+        + MSMProvider<P::G2>,
 {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
@@ -53,7 +59,9 @@ impl<T, P: Pairing> CollaborativeGroth16<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>,
+        + FFTProvider<P::ScalarField>
+        + MSMProvider<P::G1>
+        + MSMProvider<P::G2>,
 {
     pub fn new(driver: T) -> Self {
         Self {
@@ -65,32 +73,31 @@ where
         &mut self,
         pk: &ProvingKey<P>,
         r1cs: &R1CS<P>,
-        public_inputs: Vec<P::ScalarField>,
+        public_inputs: &[P::ScalarField],
         private_witness: FieldShareVec<T, P>,
     ) -> Result<Proof<P>> {
         let cs = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
-        Self::generate_constraints(&public_inputs, r1cs, cs.clone())?;
+        Self::generate_constraints(public_inputs, r1cs, cs.clone())?;
         let matrices = cs.to_matrices().unwrap();
         let num_inputs = cs.num_instance_variables();
         let num_constraints = cs.num_constraints();
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
             .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        let mut promoted_public = self.driver.promote_to_trivial_share(public_inputs.clone());
-        let mut full_assignment = FieldShareSliceMut::<T, P>::from(&mut promoted_public);
-        self.driver
-            .concat_vec(&mut full_assignment, private_witness.clone());
+        let private_witness_slice = ScalarFieldShareSlice::<T, P>::from(&private_witness);
 
-        let _ = self.witness_map_from_matrices(
+        let h = self.witness_map_from_matrices(
             &matrices,
             num_constraints,
             num_inputs,
-            &public_inputs,
-            private_witness,
-            full_assignment,
+            public_inputs,
+            &private_witness_slice,
             domain,
-        );
-        todo!()
+        )?;
+        let h_slice = ScalarFieldShareSlice::<T, P>::from(&h);
+        let r = self.driver.rand();
+        let s = self.driver.rand();
+        self.create_proof_with_assignment(pk, r, s, h_slice, public_inputs, private_witness_slice)
     }
 
     fn witness_map_from_matrices(
@@ -99,8 +106,7 @@ where
         num_constraints: usize,
         num_inputs: usize,
         public_inputs: &[P::ScalarField],
-        private_witness: FieldShareVec<T, P>,
-        full_assignment: FieldShareSliceMut<T, P>,
+        private_witness: &ScalarFieldShareSlice<T, P>,
         domain: GeneralEvaluationDomain<P::ScalarField>,
     ) -> Result<FieldShareVec<T, P>> {
         let domain_size = domain.size();
@@ -109,19 +115,29 @@ where
         for (mut a, mut b, at_i, bt_i) in
             itertools::multizip((a.iter_mut(), b.iter_mut(), &matrices.a, &matrices.b))
         {
-            *a = self.evaluate_constraint(at_i, public_inputs, &private_witness)?;
-            *b = self.evaluate_constraint(bt_i, public_inputs, &private_witness)?;
-        }
-        {
-            let start = num_constraints;
-            let end = start + num_inputs;
-            //a[start..end].clone_from_slice(&full_assignment[..num_inputs]);
+            *a = self
+                .driver
+                .evaluate_constraint(at_i, public_inputs, private_witness);
+            *b = self
+                .driver
+                .evaluate_constraint(bt_i, public_inputs, private_witness);
         }
         let mut a = FieldShareVec::<T, P>::from(a);
+        {
+            let mut a_mut = FieldShareSliceMut::<T, P>::from(&mut a);
+            let promoted_public = self.driver.promote_to_trivial_share(public_inputs);
+            self.driver.clone_from_slice(
+                &mut a_mut,
+                &ScalarFieldShareSlice::<T, P>::from(&promoted_public),
+                num_constraints,
+                0,
+                num_inputs,
+            );
+        }
         let mut b = FieldShareVec::<T, P>::from(b);
         let mut c = {
-            let a_slice = FieldShareSlice::<T, P>::from(&a);
-            let b_slice = FieldShareSlice::<T, P>::from(&b);
+            let a_slice = ScalarFieldShareSlice::<T, P>::from(&a);
+            let b_slice = ScalarFieldShareSlice::<T, P>::from(&b);
             self.driver.mul_vec(&a_slice, &b_slice)?
         };
         let mut a_mut = FieldShareSliceMut::<T, P>::from(&mut a);
@@ -144,14 +160,13 @@ where
             root_of_unity,
             P::ScalarField::one(),
         );
-
         self.driver.fft_in_place(&mut a_mut, &domain);
         self.driver.fft_in_place(&mut b_mut, &domain);
         std::mem::drop(a_mut);
         std::mem::drop(b_mut);
         let mut ab = {
-            let a_slice = FieldShareSlice::<T, P>::from(&a);
-            let b_slice = FieldShareSlice::<T, P>::from(&b);
+            let a_slice = ScalarFieldShareSlice::<T, P>::from(&a);
+            let b_slice = ScalarFieldShareSlice::<T, P>::from(&b);
             self.driver.mul_vec(&a_slice, &b_slice)?
         };
         std::mem::drop(a);
@@ -168,32 +183,10 @@ where
         std::mem::drop(c_mut);
 
         let mut ab_mut = FieldShareSliceMut::<T, P>::from(&mut ab);
-        let c_slice = FieldShareSlice::<T, P>::from(&c);
+        let c_slice = ScalarFieldShareSlice::<T, P>::from(&c);
         self.driver.sub_assign_vec(&mut ab_mut, &c_slice);
         std::mem::drop(ab_mut);
         Ok(ab)
-    }
-
-    fn evaluate_constraint(
-        &mut self,
-        lhs: &[(P::ScalarField, usize)],
-        public_inputs: &[P::ScalarField],
-        private_witness: &FieldShareVec<T, P>,
-    ) -> Result<FieldShare<T, P>> {
-        let mut acc = FieldShare::<T, P>::default();
-        for (coeff, index) in lhs {
-            if index < &public_inputs.len() {
-                let val = public_inputs[*index];
-                let mul_result = val * coeff;
-                acc = self.driver.add_with_public(&mul_result, &acc);
-            } else {
-                todo!()
-                //              let val = &private_witness[*index];
-                //let mul_result = self.driver.mul_with_public(coeff, val);
-                //acc = self.driver.add(&mul_result, &acc);
-            }
-        }
-        Ok(acc)
     }
 
     fn generate_constraints(
@@ -230,6 +223,121 @@ where
         }
         cs.finalize();
         Ok(())
+    }
+
+    fn calculate_coeff<C: CurveGroup>(
+        &mut self,
+        initial: PointShare<T, C>,
+        query: &[C::Affine],
+        vk_param: C::Affine,
+        input_assignment: &[C::ScalarField],
+        aux_assignment: CurveFieldShareSlice<'_, T, C>,
+    ) -> PointShare<T, C>
+    where
+        T: EcMpcProtocol<C>,
+        T: MSMProvider<C>,
+    {
+        let pub_len = input_assignment.len();
+        //TODO THIS IS MOST LIKELY WRONG. We have 1 at the beginning not sure about
+        //how this looks in plain but needs some investigation
+        let pub_acc = C::msm_unchecked(&query[1..pub_len], input_assignment);
+        let priv_acc = MSMProvider::<C>::msm_public_points(
+            &mut self.driver,
+            &query[pub_len..],
+            aux_assignment,
+        );
+
+        let mut res = initial;
+        EcMpcProtocol::<C>::add_assign_points_public_affine(&mut self.driver, &mut res, &query[0]);
+        EcMpcProtocol::<C>::add_assign_points_public_affine(&mut self.driver, &mut res, &vk_param);
+        EcMpcProtocol::<C>::add_assign_points_public(&mut self.driver, &mut res, &pub_acc);
+        EcMpcProtocol::<C>::add_assign_points(&mut self.driver, &mut res, &priv_acc);
+
+        res
+    }
+
+    pub fn create_proof_with_assignment(
+        &mut self,
+        pk: &ProvingKey<P>,
+        r: FieldShare<T, P>,
+        s: FieldShare<T, P>,
+        h: ScalarFieldShareSlice<'_, T, P>,
+        input_assignment: &[P::ScalarField],
+        aux_assignment: ScalarFieldShareSlice<'_, T, P>,
+    ) -> Result<Proof<P>> {
+        //let c_acc_time = start_timer!(|| "Compute C");
+        let h_acc = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &pk.h_query, h);
+
+        // Compute C
+        let l_aux_acc =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &pk.l_query, aux_assignment);
+
+        let delta_g1 = pk.delta_g1.into_group();
+        let rs = self.driver.mul(&r, &s)?;
+        let r_s_delta_g1 = self.driver.scalar_mul_public_point(&delta_g1, &rs);
+
+        //end_timer!(c_acc_time);
+
+        // Compute A
+        // let a_acc_time = start_timer!(|| "Compute A");
+        let r_g1 = self.driver.scalar_mul_public_point(&delta_g1, &r);
+
+        let g_a = self.calculate_coeff::<P::G1>(
+            r_g1,
+            &pk.a_query,
+            pk.vk.alpha_g1,
+            input_assignment,
+            aux_assignment,
+        );
+
+        // Open here since g_a is part of proof
+        let g_a_opened = EcMpcProtocol::<P::G1>::open_point(&mut self.driver, &g_a)?;
+        let s_g_a = self.driver.scalar_mul_public_point(&g_a_opened, &s);
+        // end_timer!(a_acc_time);
+
+        // Compute B in G1
+        // In original implementation this is skipped if r==0, however r is shared in our case
+        //  let b_g1_acc_time = start_timer!(|| "Compute B in G1");
+        let s_g1 = self.driver.scalar_mul_public_point(&delta_g1, &s);
+        let g1_b = self.calculate_coeff::<P::G1>(
+            s_g1,
+            &pk.b_g1_query,
+            pk.beta_g1,
+            input_assignment,
+            aux_assignment,
+        );
+        let r_g1_b = EcMpcProtocol::<P::G1>::scalar_mul(&mut self.driver, &g1_b, &r)?;
+        //  end_timer!(b_g1_acc_time);
+
+        // Compute B in G2
+        let delta_g2 = pk.vk.delta_g2.into_group();
+        //  let b_g2_acc_time = start_timer!(|| "Compute B in G2");
+        let s_g2 = self.driver.scalar_mul_public_point(&delta_g2, &s);
+        let g2_b = self.calculate_coeff::<P::G2>(
+            s_g2,
+            &pk.b_g2_query,
+            pk.vk.beta_g2,
+            input_assignment,
+            aux_assignment,
+        );
+        // end_timer!(b_g2_acc_time);
+
+        //  let c_time = start_timer!(|| "Finish C");
+        let mut g_c = s_g_a;
+        EcMpcProtocol::<P::G1>::add_assign_points(&mut self.driver, &mut g_c, &r_g1_b);
+        EcMpcProtocol::<P::G1>::sub_assign_points(&mut self.driver, &mut g_c, &r_s_delta_g1);
+        EcMpcProtocol::<P::G1>::add_assign_points(&mut self.driver, &mut g_c, &l_aux_acc);
+        EcMpcProtocol::<P::G1>::add_assign_points(&mut self.driver, &mut g_c, &h_acc);
+        //  end_timer!(c_time);
+
+        let (g_c_opened, g2_b_opened) =
+            PairingEcMpcProtocol::<P>::open_two_points(&mut self.driver, &g_c, &g2_b)?;
+
+        Ok(Proof {
+            a: g_a_opened.into_affine(),
+            b: g2_b_opened.into_affine(),
+            c: g_c_opened.into_affine(),
+        })
     }
 
     pub fn verify(

@@ -36,13 +36,26 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         a: &Self::FieldShareSlice<'_>,
         b: &Self::FieldShareSlice<'_>,
     ) -> std::io::Result<Self::FieldShareVec>;
-    fn promote_to_trivial_share(&self, public_values: Vec<F>) -> Self::FieldShareVec;
-    fn concat_vec(&self, a: &mut Self::FieldShareSliceMut<'_>, b: Self::FieldShareVec);
+    fn promote_to_trivial_share(&self, public_values: &[F]) -> Self::FieldShareVec;
     fn distribute_powers_and_mul_by_const(
         &mut self,
         coeffs: &mut Self::FieldShareSliceMut<'_>,
         g: F,
         c: F,
+    );
+    fn evaluate_constraint(
+        &mut self,
+        lhs: &[(F, usize)],
+        public_inputs: &[F],
+        private_witness: &Self::FieldShareSlice<'_>,
+    ) -> Self::FieldShare;
+    fn clone_from_slice(
+        &self,
+        dst: &mut Self::FieldShareSliceMut<'_>,
+        src: &Self::FieldShareSlice<'_>,
+        dst_offset: usize,
+        src_offset: usize,
+        len: usize,
     );
 }
 

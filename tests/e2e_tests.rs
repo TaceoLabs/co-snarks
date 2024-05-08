@@ -192,6 +192,8 @@ mod tests {
         }
     }
 
+    #[ignore]
+    #[tokio::test]
     async fn bn254() {
         let zkey_file = File::open("../test_vectors/bn254/multiplier2.zkey").unwrap();
         let witness_file = File::open("../test_vectors/bn254/witness.wtns").unwrap();
@@ -239,7 +241,8 @@ mod tests {
                     Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
                 >::new(aby3);
-                prover.prove(&pk, &r1cs, &ins, x).unwrap();
+                let proof = prover.prove(&pk, &r1cs, &ins, x).unwrap();
+                println!("{proof:?}");
                 tx.send(())
             });
         }
