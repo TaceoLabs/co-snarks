@@ -1,14 +1,11 @@
-use std::{
-    marker::PhantomData,
-    ops::{Index, IndexMut},
-};
-
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
+use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
+use std::marker::PhantomData;
 
 use crate::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
@@ -174,8 +171,8 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
 
     fn promote_to_trivial_share(&self, public_values: Vec<F>) -> Self::FieldShareVec {
         let mut vec = Vec::with_capacity(public_values.len());
-        //id gets the share everyone else zero
-        //therefore also id2 needs the b share
+        //additive share1 gets the value everyone else zero
+        //therefore id1 and id2 needs the share
         for val in public_values {
             let share = match self.network.get_id() {
                 PartyID::ID0 => Aby3PrimeFieldShare::new(val, F::zero()),
@@ -187,42 +184,37 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         Self::FieldShareVec::from(vec)
     }
 
-    fn mul_vec<'a>(
+    fn mul_vec(
         &mut self,
-        a: &Self::FieldShareSlice<'a>,
-        b: &Self::FieldShareSlice<'a>,
+        a: &Self::FieldShareSlice<'_>,
+        b: &Self::FieldShareSlice<'_>,
     ) -> std::io::Result<Self::FieldShareVec> {
-        todo!()
+        let local_a = izip!(a.a.iter(), a.b.iter(), b.a.iter(), b.b.iter())
+            .map(|(aa, ab, ba, bb)| {
+                *aa * ba + *aa * bb + *ab * ba + self.rngs.masking_field_element::<F>()
+            })
+            .collect_vec();
+        self.network.send_next_many(&local_a)?;
+        let local_b = self.network.recv_prev_many()?;
+        Ok(Self::FieldShareVec::new(local_a, local_b))
     }
 
-    fn sub_assign_vec<'a>(
+    fn sub_assign_vec(
         &mut self,
-        a: &mut Self::FieldShareSliceMut<'a>,
-        b: &Self::FieldShareSlice<'a>,
+        a: &mut Self::FieldShareSliceMut<'_>,
+        b: &Self::FieldShareSlice<'_>,
     ) {
-        todo!()
+        for (a, b) in izip!(a.a.iter_mut(), b.a) {
+            *a -= b;
+        }
+        for (a, b) in izip!(a.b.iter_mut(), b.b) {
+            *a -= b;
+        }
     }
-}
 
-impl<F: PrimeField> Index<usize> for Aby3PrimeFieldShareVec<F> {
-    type Output = Aby3PrimeFieldShare<F>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        todo!()
-    }
-}
-
-impl<'a, F: PrimeField> Index<usize> for Aby3PrimeFieldShareSliceMut<'a, F> {
-    type Output = Aby3PrimeFieldShare<F>;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        todo!()
-    }
-}
-
-impl<'a, F: PrimeField> IndexMut<usize> for Aby3PrimeFieldShareSliceMut<'a, F> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        todo!()
+    fn concat_vec(&self, a: &mut Self::FieldShareSliceMut<'_>, b: Self::FieldShareVec) {
+        a.a.extend(b.a);
+        a.b.extend(b.b);
     }
 }
 

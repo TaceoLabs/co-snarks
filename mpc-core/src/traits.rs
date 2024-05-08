@@ -1,5 +1,4 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
-use std::ops::{Index, IndexMut};
 
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
@@ -7,21 +6,19 @@ use ark_poly::EvaluationDomain;
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     type FieldShare: Default + Clone;
-    type FieldShareVec: Index<usize, Output = Self::FieldShare>
-        + 'static
+    type FieldShareVec: 'static
         + for<'a> From<Self::FieldShareSliceMut<'a>>
         + From<Vec<Self::FieldShare>>;
     type FieldShareSlice<'a>: Copy + From<&'a Self::FieldShareVec>;
-    type FieldShareSliceMut<'a>: From<&'a mut Self::FieldShareVec>
-        + IndexMut<usize, Output = Self::FieldShare>;
+    type FieldShareSliceMut<'a>: From<&'a mut Self::FieldShareVec>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
-    fn sub_assign_vec<'a>(
+    fn sub_assign_vec(
         &mut self,
-        a: &mut Self::FieldShareSliceMut<'a>,
-        b: &Self::FieldShareSlice<'a>,
+        a: &mut Self::FieldShareSliceMut<'_>,
+        b: &Self::FieldShareSlice<'_>,
     );
     fn mul(
         &mut self,
@@ -33,13 +30,13 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
     fn rand(&mut self) -> Self::FieldShare;
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F>;
-    fn mul_vec<'a>(
+    fn mul_vec(
         &mut self,
-        a: &Self::FieldShareSlice<'a>,
-        b: &Self::FieldShareSlice<'a>,
+        a: &Self::FieldShareSlice<'_>,
+        b: &Self::FieldShareSlice<'_>,
     ) -> std::io::Result<Self::FieldShareVec>;
     fn promote_to_trivial_share(&self, public_values: Vec<F>) -> Self::FieldShareVec;
-    fn concat_vec<'a>(&self, a: &mut Self::FieldShareSliceMut<'a>, b: Self::FieldShareVec);
+    fn concat_vec(&self, a: &mut Self::FieldShareSliceMut<'_>, b: Self::FieldShareVec);
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
