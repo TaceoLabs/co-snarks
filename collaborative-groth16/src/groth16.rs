@@ -76,12 +76,18 @@ where
         let num_constraints = cs.num_constraints();
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
             .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        let promoted_public = self.driver.promote_to_trivial_share(public_inputs);
+        let mut promoted_public = self.driver.promote_to_trivial_share(public_inputs.clone());
+        let mut full_assignment = FieldShareSliceMut::<T, P>::from(&mut promoted_public);
+        self.driver
+            .concat_vec(&mut full_assignment, private_witness.clone());
+
         let _ = self.witness_map_from_matrices(
             &matrices,
             num_constraints,
+            num_inputs,
             &public_inputs,
             private_witness,
+            full_assignment,
             domain,
         );
         todo!()
@@ -91,8 +97,10 @@ where
         &mut self,
         matrices: &ConstraintMatrices<P::ScalarField>,
         num_constraints: usize,
+        num_inputs: usize,
         public_inputs: &[P::ScalarField],
         private_witness: FieldShareVec<T, P>,
+        full_assignment: FieldShareSliceMut<T, P>,
         domain: GeneralEvaluationDomain<P::ScalarField>,
     ) -> Result<FieldShareVec<T, P>> {
         let domain_size = domain.size();
@@ -104,16 +112,11 @@ where
             *a = self.evaluate_constraint(at_i, public_inputs, &private_witness)?;
             *b = self.evaluate_constraint(bt_i, public_inputs, &private_witness)?;
         }
-        //here i should push all public inputs to a
-        //who do we do that? We need a function that promotes the
-        //public point to a share
-        //Maybe just trivial share here?
-        //{
-        //    let start = num_constraints;
-        //    let end = start + num_inputs;
-        //    a[start..end].clone_from_slice(&full_assignment[..num_inputs]);
-        //}
-        let a_len = a.len();
+        {
+            let start = num_constraints;
+            let end = start + num_inputs;
+            //a[start..end].clone_from_slice(&full_assignment[..num_inputs]);
+        }
         let mut a = FieldShareVec::<T, P>::from(a);
         let mut b = FieldShareVec::<T, P>::from(b);
         let mut c = {
@@ -131,18 +134,16 @@ where
                 .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
             domain_double.element(1)
         };
-        self.distribute_powers_and_mul_by_const(
+        self.driver.distribute_powers_and_mul_by_const(
             &mut a_mut,
-            a_len,
             root_of_unity,
             P::ScalarField::one(),
-        )?;
-        self.distribute_powers_and_mul_by_const(
+        );
+        self.driver.distribute_powers_and_mul_by_const(
             &mut b_mut,
-            a_len,
             root_of_unity,
             P::ScalarField::one(),
-        )?;
+        );
 
         self.driver.fft_in_place(&mut a_mut, &domain);
         self.driver.fft_in_place(&mut b_mut, &domain);
@@ -158,12 +159,11 @@ where
 
         let mut c_mut = FieldShareSliceMut::<T, P>::from(&mut c);
         self.driver.ifft_in_place(&mut c_mut, &domain);
-        self.distribute_powers_and_mul_by_const(
+        self.driver.distribute_powers_and_mul_by_const(
             &mut c_mut,
-            a_len,
             root_of_unity,
             P::ScalarField::one(),
-        )?;
+        );
         self.driver.fft_in_place(&mut c_mut, &domain);
         std::mem::drop(c_mut);
 
@@ -172,35 +172,6 @@ where
         self.driver.sub_assign_vec(&mut ab_mut, &c_slice);
         std::mem::drop(ab_mut);
         Ok(ab)
-    }
-
-    fn mul_polynomials_in_evaluation_domain(
-        &mut self,
-        self_evals: FieldShareVec<T, P>,
-        other_evals: FieldShareVec<T, P>,
-        len: usize,
-    ) -> Result<FieldShareVec<T, P>> {
-        let mut result = Vec::with_capacity(len);
-        for i in 0..len {
-            result.push(self.driver.mul(&self_evals[i], &other_evals[i])?);
-        }
-        Ok(FieldShareVec::<T, P>::from(result))
-    }
-
-    fn distribute_powers_and_mul_by_const(
-        &mut self,
-        mut coeffs: &mut FieldShareSliceMut<T, P>,
-        coeff_len: usize,
-        g: P::ScalarField,
-        c: P::ScalarField,
-    ) -> Result<()> {
-        let mut pow = c;
-        for i in 0..coeff_len {
-            let result = self.driver.mul_with_public(&pow, &coeffs[i]);
-            coeffs[i] = result;
-            pow *= g;
-        }
-        Ok(())
     }
 
     fn evaluate_constraint(
@@ -216,9 +187,10 @@ where
                 let mul_result = val * coeff;
                 acc = self.driver.add_with_public(&mul_result, &acc);
             } else {
-                let val = &private_witness[*index];
-                let mul_result = self.driver.mul_with_public(coeff, val);
-                acc = self.driver.add(&mul_result, &acc);
+                todo!()
+                //              let val = &private_witness[*index];
+                //let mul_result = self.driver.mul_with_public(coeff, val);
+                //acc = self.driver.add(&mul_result, &acc);
             }
         }
         Ok(acc)

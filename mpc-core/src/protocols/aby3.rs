@@ -212,6 +212,20 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         }
     }
 
+    fn distribute_powers_and_mul_by_const(
+        &mut self,
+        coeffs: &mut Self::FieldShareSliceMut<'_>,
+        g: F,
+        c: F,
+    ) {
+        let mut pow = c;
+        for (a, b) in coeffs.a.iter_mut().zip(coeffs.b.iter_mut()) {
+            *a *= pow;
+            *b *= pow;
+            pow *= g;
+        }
+    }
+
     fn concat_vec(&self, a: &mut Self::FieldShareSliceMut<'_>, b: Self::FieldShareVec) {
         a.a.extend(b.a);
         a.b.extend(b.b);

@@ -8,7 +8,8 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     type FieldShare: Default + Clone;
     type FieldShareVec: 'static
         + for<'a> From<Self::FieldShareSliceMut<'a>>
-        + From<Vec<Self::FieldShare>>;
+        + From<Vec<Self::FieldShare>>
+        + Clone;
     type FieldShareSlice<'a>: Copy + From<&'a Self::FieldShareVec>;
     type FieldShareSliceMut<'a>: From<&'a mut Self::FieldShareVec>;
 
@@ -37,6 +38,12 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     ) -> std::io::Result<Self::FieldShareVec>;
     fn promote_to_trivial_share(&self, public_values: Vec<F>) -> Self::FieldShareVec;
     fn concat_vec(&self, a: &mut Self::FieldShareSliceMut<'_>, b: Self::FieldShareVec);
+    fn distribute_powers_and_mul_by_const(
+        &mut self,
+        coeffs: &mut Self::FieldShareSliceMut<'_>,
+        g: F,
+        c: F,
+    );
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
