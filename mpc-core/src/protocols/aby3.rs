@@ -84,7 +84,7 @@ pub struct Aby3Protocol<F: PrimeField, N: Aby3Network> {
 
 impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     pub fn new(mut network: N) -> Result<Self, Report> {
-        let seed1: [u8; Aby3CorrelatedRng::SEED_SIZE] = rand::thread_rng().gen();
+        let seed1: [u8; Aby3CorrelatedRng::SEED_SIZE] = RngType::from_entropy().gen();
         let seed2_bytes = network.send_and_receive_seed(seed1.to_vec().into())?;
         if seed2_bytes.len() != Aby3CorrelatedRng::SEED_SIZE {
             bail!(
