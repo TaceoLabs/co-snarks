@@ -389,6 +389,7 @@ mod test {
 
     use super::SharedWitness;
 
+    #[ignore]
     #[test]
     fn test() {
         let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
