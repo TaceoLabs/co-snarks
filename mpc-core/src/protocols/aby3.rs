@@ -4,7 +4,6 @@ use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
 use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
-use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;
 
 use crate::traits::{
@@ -24,6 +23,7 @@ pub mod id;
 pub mod network;
 pub mod pointshare;
 
+type RngType = rand_chacha::ChaCha12Rng;
 type IoResult<T> = std::io::Result<T>;
 
 pub mod utils {
@@ -84,13 +84,16 @@ pub struct Aby3Protocol<F: PrimeField, N: Aby3Network> {
 
 impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     pub fn new(mut network: N) -> Result<Self, Report> {
-        let seed1: [u8; 32] = rand::thread_rng().gen();
+        let seed1: [u8; Aby3CorrelatedRng::SEED_SIZE] = rand::thread_rng().gen();
         let seed2_bytes = network.send_and_receive_seed(seed1.to_vec().into())?;
-        if seed2_bytes.len() != 32 {
-            bail!("Received seed is not 32 bytes long");
+        if seed2_bytes.len() != Aby3CorrelatedRng::SEED_SIZE {
+            bail!(
+                "Received seed is not {} bytes long",
+                Aby3CorrelatedRng::SEED_SIZE
+            );
         }
         let seed2 = {
-            let mut buf = [0u8; 32];
+            let mut buf = [0u8; Aby3CorrelatedRng::SEED_SIZE];
             buf[..].copy_from_slice(&seed2_bytes[..]);
             buf
         };
@@ -385,14 +388,16 @@ impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
 }
 
 struct Aby3CorrelatedRng {
-    rng1: ChaCha12Rng,
-    rng2: ChaCha12Rng,
+    rng1: RngType,
+    rng2: RngType,
 }
 
 impl Aby3CorrelatedRng {
-    pub fn new(seed1: [u8; 32], seed2: [u8; 32]) -> Self {
-        let rng1 = ChaCha12Rng::from_seed(seed1);
-        let rng2 = ChaCha12Rng::from_seed(seed2);
+    const SEED_SIZE: usize = std::mem::size_of::<<RngType as SeedableRng>::Seed>();
+
+    pub fn new(seed1: [u8; Self::SEED_SIZE], seed2: [u8; Self::SEED_SIZE]) -> Self {
+        let rng1 = RngType::from_seed(seed1);
+        let rng2 = RngType::from_seed(seed2);
         Self { rng1, rng2 }
     }
 
