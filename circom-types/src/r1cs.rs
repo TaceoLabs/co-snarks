@@ -289,7 +289,7 @@ mod tests {
     }
     #[test]
     fn test_bn254_mult2() {
-        let r1cs_file = File::open("../test_vectors/bn254/multiplier2.r1cs").unwrap();
+        let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
         let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
         assert_eq!(r1cs.num_inputs, 2);
         assert_eq!(r1cs.num_aux, 2);

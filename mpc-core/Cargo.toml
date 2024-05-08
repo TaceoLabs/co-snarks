@@ -18,10 +18,12 @@ ark-poly = { workspace = true }
 ark-serialize = { workspace = true }
 bytes = { workspace = true }
 eyre = { workspace = true }
+itertools = { workspace = true }
 mpc-net = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 tokio = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 ark-bn254 = { workspace = true }

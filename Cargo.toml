@@ -1,5 +1,11 @@
 [workspace]
-members = ["circom-types", "collaborative-groth16", "mpc-core", "mpc-net"]
+members = [
+    "circom-types",
+    "collaborative-groth16",
+    "mpc-core",
+    "mpc-net",
+    "tests",
+]
 resolver = "2"
 
 [workspace.package]
@@ -15,11 +21,12 @@ readme = "./README.md"
 [workspace.dependencies]
 ark-bls12-381 = "0.4.0"
 ark-bn254 = "0.4.0"
-ark-ec = "0.4.2"
+ark-ec = { version = "0.4.2", default-features = false }
 ark-ff = "0.4.2"
 ark-groth16 = { version = "=0.4.0", default-features = false, features = [
     "parallel",
 ] }
+#ark-groth16 = { version = "0.4.0", path = "/home/fnieddu/tmp/groth16" }
 ark-poly = "0.4.2"
 ark-relations = { version = "0.4.0", default-features = false }
 ark-serialize = { version = "0.4", features = ["derive", "std"] }
@@ -34,6 +41,7 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 eyre = "0.6"
 futures = "0.3.30"
 hex-literal = "0.4.1"
+itertools = "0.12.1"
 mpc-net = { path = "mpc-net" }
 num-traits = { version = "0.2.18", default-features = false }
 rand_chacha = "0.3"

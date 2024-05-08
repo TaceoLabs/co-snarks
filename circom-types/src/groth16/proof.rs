@@ -80,7 +80,8 @@ mod tests {
 
     #[test]
     pub fn deserialize_bn254_proof() {
-        let proof_string = fs::read_to_string("../test_vectors/bn254/proof.json").unwrap();
+        let proof_string =
+            fs::read_to_string("../test_vectors/bn254/multiplier2/proof.json").unwrap();
         let proof = serde_json::from_str::<JsonProof<Bn254>>(&proof_string).unwrap();
 
         let pi_a = test_utils::to_g1_bn254!(

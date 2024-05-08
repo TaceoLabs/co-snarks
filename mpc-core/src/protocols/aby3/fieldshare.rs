@@ -1,4 +1,6 @@
 use ark_ff::PrimeField;
+use serde::ser::SerializeSeq;
+use serde::{de, Deserialize, Serialize, Serializer};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Aby3PrimeFieldShare<F: PrimeField> {
@@ -102,6 +104,28 @@ impl<F: PrimeField> std::ops::Mul<&Aby3PrimeFieldShare<F>> for &'_ Aby3PrimeFiel
     }
 }
 
+impl<F: PrimeField> std::ops::Mul<&F> for &'_ Aby3PrimeFieldShare<F> {
+    type Output = Aby3PrimeFieldShare<F>;
+
+    fn mul(self, rhs: &F) -> Self::Output {
+        Self::Output {
+            a: self.a * rhs,
+            b: self.b * rhs,
+        }
+    }
+}
+
+impl<F: PrimeField> std::ops::Mul<F> for Aby3PrimeFieldShare<F> {
+    type Output = Aby3PrimeFieldShare<F>;
+
+    fn mul(self, rhs: F) -> Self::Output {
+        Self::Output {
+            a: self.a * rhs,
+            b: self.b * rhs,
+        }
+    }
+}
+
 impl<F: PrimeField> std::ops::Neg for Aby3PrimeFieldShare<F> {
     type Output = Self;
 
@@ -123,10 +147,28 @@ impl<F: PrimeField> std::ops::Neg for &Aby3PrimeFieldShare<F> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Aby3PrimeFieldShareVec<F: PrimeField> {
+    #[serde(serialize_with = "serialize_vec::<_, F>")]
+    #[serde(deserialize_with = "deserialize_vec::<_, F>")]
     pub(crate) a: Vec<F>,
+    #[serde(serialize_with = "serialize_vec::<_, F>")]
+    #[serde(deserialize_with = "deserialize_vec::<_, F>")]
     pub(crate) b: Vec<F>,
+}
+
+fn serialize_vec<S: Serializer, F: PrimeField>(p: &[F], ser: S) -> Result<S::Ok, S::Error> {
+    let mut seq = ser.serialize_seq(Some(2))?;
+    for ser in p.iter().map(|x| x.to_string()) {
+        seq.serialize_element(&ser)?;
+    }
+    seq.end()
+}
+fn deserialize_vec<'de, D, F: PrimeField>(_deserializer: D) -> Result<Vec<F>, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    todo!()
 }
 
 impl<F: PrimeField> Aby3PrimeFieldShareVec<F> {
@@ -189,7 +231,7 @@ pub struct Aby3PrimeFieldShareSlice<'a, F: PrimeField> {
 }
 
 impl<'a, F: PrimeField> Aby3PrimeFieldShareSlice<'a, F> {
-    fn to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
+    fn clone_to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
         Aby3PrimeFieldShareVec {
             a: self.a.to_vec(),
             b: self.b.to_vec(),
@@ -215,7 +257,7 @@ pub struct Aby3PrimeFieldShareSliceMut<'a, F: PrimeField> {
 }
 
 impl<'a, F: PrimeField> Aby3PrimeFieldShareSliceMut<'a, F> {
-    fn to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
+    fn clone_to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
         Aby3PrimeFieldShareVec {
             a: self.a.to_vec(),
             b: self.b.to_vec(),
@@ -230,5 +272,31 @@ impl<'a, F: PrimeField> Aby3PrimeFieldShareSliceMut<'a, F> {
     pub fn len(&self) -> usize {
         debug_assert_eq!(self.a.len(), self.b.len());
         self.a.len()
+    }
+}
+
+impl<'a, F: PrimeField> From<&'a Aby3PrimeFieldShareVec<F>> for Aby3PrimeFieldShareSlice<'a, F> {
+    fn from(value: &'a Aby3PrimeFieldShareVec<F>) -> Self {
+        value.to_ref()
+    }
+}
+
+impl<'a, F: PrimeField> From<&'a mut Aby3PrimeFieldShareVec<F>>
+    for Aby3PrimeFieldShareSliceMut<'a, F>
+{
+    fn from(value: &'a mut Aby3PrimeFieldShareVec<F>) -> Self {
+        value.to_mut()
+    }
+}
+
+impl<F: PrimeField> From<Aby3PrimeFieldShareSlice<'_, F>> for Aby3PrimeFieldShareVec<F> {
+    fn from(value: Aby3PrimeFieldShareSlice<F>) -> Self {
+        value.clone_to_vec()
+    }
+}
+
+impl<F: PrimeField> From<Aby3PrimeFieldShareSliceMut<'_, F>> for Aby3PrimeFieldShareVec<F> {
+    fn from(value: Aby3PrimeFieldShareSliceMut<F>) -> Self {
+        value.clone_to_vec()
     }
 }

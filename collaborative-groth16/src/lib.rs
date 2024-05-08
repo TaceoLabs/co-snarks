@@ -1,7 +1,6 @@
 mod circom_reduction;
 pub mod circuit;
 pub mod groth16;
-pub mod groth16_proof_with_assignment;
 
 #[cfg(test)]
 mod tests {
@@ -24,9 +23,9 @@ mod tests {
 
     #[test]
     fn create_proof_and_verify_bn254() {
-        let zkey_file = File::open("../test_vectors/bn254/multiplier2.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bn254/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/bn254/multiplier2.r1cs").unwrap();
+        let zkey_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
+        let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
         let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
@@ -48,9 +47,53 @@ mod tests {
 
     #[test]
     fn verify_circom_proof_bn254() {
-        let vk_string = fs::read_to_string("../test_vectors/bn254/verification_key.json").unwrap();
+        let vk_string =
+            fs::read_to_string("../test_vectors/bn254/multiplier2/verification_key.json").unwrap();
         let public_string = "[\"33\"]";
-        let proof_string = fs::read_to_string("../test_vectors/bn254/proof.json").unwrap();
+        let proof_string =
+            fs::read_to_string("../test_vectors/bn254/multiplier2/proof.json").unwrap();
+
+        let vk = serde_json::from_str::<JsonVerificationKey<Bn254>>(&vk_string).unwrap();
+        let public_input =
+            serde_json::from_str::<JsonPublicInput<ark_bn254::Fr>>(public_string).unwrap();
+        let proof = serde_json::from_str::<JsonProof<Bn254>>(&proof_string).unwrap();
+        let pvk = vk.prepare_verifying_key();
+        let verified = Groth16::<Bn254>::verify_proof(&pvk, &proof.into(), &public_input.values)
+            .expect("can verify");
+        assert!(verified)
+    }
+
+    #[test]
+    fn create_proof_and_verify_poseidon_hash_bn254() {
+        let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
+        let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
+        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
+        let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
+        let circuit = Circuit::new(r1cs, witness);
+        let public_inputs = circuit.public_inputs();
+        let mut rng = thread_rng();
+        let r = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
+        let s = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
+        let proof =
+            Groth16::<Bn254, CircomReduction>::create_proof_with_reduction(circuit, &pk, r, s)
+                .expect("proof generation works");
+        let pvk = prepare_verifying_key(&pk.vk);
+        let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(proof)).unwrap();
+        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
+        let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &public_inputs)
+            .expect("can verify");
+        assert!(verified);
+    }
+    #[test]
+    fn verify_circom_proof_poseidon_bn254() {
+        let vk_string =
+            fs::read_to_string("../test_vectors/bn254/poseidon/verification_key.json").unwrap();
+        let public_string = "[
+            \"17853941289740592551682164141790101668489478619664963356488634739728685875777\"
+           ]";
+        let proof_string = fs::read_to_string("../test_vectors/bn254/poseidon/proof.json").unwrap();
 
         let vk = serde_json::from_str::<JsonVerificationKey<Bn254>>(&vk_string).unwrap();
         let public_input =
@@ -112,9 +155,9 @@ mod tests {
 
     #[test]
     fn proof_circom_proof_bn254() {
-        let zkey_file = File::open("../test_vectors/bn254/multiplier2.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bn254/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/bn254/multiplier2.r1cs").unwrap();
+        let zkey_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
+        let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
         let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
