@@ -211,7 +211,7 @@ pub struct Aby3PrimeFieldShareSlice<'a, F: PrimeField> {
 }
 
 impl<'a, F: PrimeField> Aby3PrimeFieldShareSlice<'a, F> {
-    fn to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
+    fn clone_to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
         Aby3PrimeFieldShareVec {
             a: self.a.to_vec(),
             b: self.b.to_vec(),
@@ -237,7 +237,7 @@ pub struct Aby3PrimeFieldShareSliceMut<'a, F: PrimeField> {
 }
 
 impl<'a, F: PrimeField> Aby3PrimeFieldShareSliceMut<'a, F> {
-    fn to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
+    fn clone_to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
         Aby3PrimeFieldShareVec {
             a: self.a.to_vec(),
             b: self.b.to_vec(),
@@ -271,12 +271,12 @@ impl<'a, F: PrimeField> From<&'a mut Aby3PrimeFieldShareVec<F>>
 
 impl<F: PrimeField> From<Aby3PrimeFieldShareSlice<'_, F>> for Aby3PrimeFieldShareVec<F> {
     fn from(value: Aby3PrimeFieldShareSlice<F>) -> Self {
-        value.to_vec()
+        value.clone_to_vec()
     }
 }
 
 impl<F: PrimeField> From<Aby3PrimeFieldShareSliceMut<'_, F>> for Aby3PrimeFieldShareVec<F> {
     fn from(value: Aby3PrimeFieldShareSliceMut<F>) -> Self {
-        value.to_vec()
+        value.clone_to_vec()
     }
 }
