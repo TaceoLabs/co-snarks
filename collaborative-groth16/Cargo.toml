@@ -23,6 +23,7 @@ mpc-core = { version = "0.1.0", path = "../mpc-core" }
 mpc-net = { version = "0.1.0", path = "../mpc-net" }
 num-traits = { workspace = true }
 rand = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

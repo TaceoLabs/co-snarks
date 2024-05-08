@@ -2,6 +2,7 @@ use ark_ec::{pairing::Pairing, CurveGroup};
 
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
+use serde::{de::DeserializeOwned, Serialize};
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
@@ -9,7 +10,9 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     type FieldShareVec: 'static
         + for<'a> From<Self::FieldShareSliceMut<'a>>
         + From<Vec<Self::FieldShare>>
-        + Clone;
+        + Clone
+        + Serialize
+        + DeserializeOwned;
     type FieldShareSlice<'a>: Copy + From<&'a Self::FieldShareVec>;
     type FieldShareSliceMut<'a>: From<&'a mut Self::FieldShareVec>;
 

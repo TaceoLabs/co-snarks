@@ -1,4 +1,6 @@
 use ark_ff::PrimeField;
+use serde::ser::SerializeSeq;
+use serde::{de, Deserialize, Serialize, Serializer};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Aby3PrimeFieldShare<F: PrimeField> {
@@ -145,10 +147,28 @@ impl<F: PrimeField> std::ops::Neg for &Aby3PrimeFieldShare<F> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Aby3PrimeFieldShareVec<F: PrimeField> {
+    #[serde(serialize_with = "serialize_vec::<_, F>")]
+    #[serde(deserialize_with = "deserialize_vec::<_, F>")]
     pub(crate) a: Vec<F>,
+    #[serde(serialize_with = "serialize_vec::<_, F>")]
+    #[serde(deserialize_with = "deserialize_vec::<_, F>")]
     pub(crate) b: Vec<F>,
+}
+
+fn serialize_vec<S: Serializer, F: PrimeField>(p: &[F], ser: S) -> Result<S::Ok, S::Error> {
+    let mut seq = ser.serialize_seq(Some(2))?;
+    for ser in p.iter().map(|x| x.to_string()) {
+        seq.serialize_element(&ser)?;
+    }
+    seq.end()
+}
+fn deserialize_vec<'de, D, F: PrimeField>(_deserializer: D) -> Result<Vec<F>, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    todo!()
 }
 
 impl<F: PrimeField> Aby3PrimeFieldShareVec<F> {

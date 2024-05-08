@@ -9,10 +9,11 @@ mod tests {
         groth16::{proof::JsonProof, witness::Witness, zkey::ZKey},
         r1cs::R1CS,
     };
-    use collaborative_groth16::{circuit::Circuit, groth16::CollaborativeGroth16};
-    use mpc_core::protocols::aby3::{
-        self, fieldshare::Aby3PrimeFieldShareVec, id::PartyID, network::Aby3Network, Aby3Protocol,
+    use collaborative_groth16::{
+        circuit::Circuit,
+        groth16::{CollaborativeGroth16, SharedWitness},
     };
+    use mpc_core::protocols::aby3::{id::PartyID, network::Aby3Network, Aby3Protocol};
     use rand::thread_rng;
     use std::{fs::File, thread};
     use tokio::sync::{
@@ -190,8 +191,8 @@ mod tests {
     #[tokio::test]
     async fn e2e_poseidon_bn254() {
         let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
         let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
+        let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let (pk1, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
         let pk2 = pk1.clone();
@@ -206,18 +207,8 @@ mod tests {
         let public_inputs3 = public_inputs1.clone();
         let inputs = circuit.public_inputs();
         let mut rng = thread_rng();
-        let mut witness_share1 = Vec::with_capacity(witness.len());
-        let mut witness_share2 = Vec::with_capacity(witness.len());
-        let mut witness_share3 = Vec::with_capacity(witness.len());
-        for w in witness {
-            let [s1, s2, s3] = aby3::utils::share_field_element(w, &mut rng);
-            witness_share1.push(s1);
-            witness_share2.push(s2);
-            witness_share3.push(s3);
-        }
-        let witness_share1 = Aby3PrimeFieldShareVec::from(witness_share1);
-        let witness_share2 = Aby3PrimeFieldShareVec::from(witness_share2);
-        let witness_share3 = Aby3PrimeFieldShareVec::from(witness_share3);
+        let [witness_share1, witness_share2, witness_share3] =
+            SharedWitness::share_aby3(witness, &mut rng);
         let test_network = Aby3TestNetwork::default();
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();

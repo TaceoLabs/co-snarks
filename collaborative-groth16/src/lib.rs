@@ -65,13 +65,9 @@ mod tests {
 
     #[test]
     fn create_proof_and_verify_poseidon_hash_bn254() {
-        let zkey_file =
-            File::open("/home/fnieddu/research/circom/circuits/poseidon/circuit_0000.zkey")
-                .unwrap();
-        let witness_file =
-            File::open("/home/fnieddu/research/circom/circuits/poseidon/witness.wtns").unwrap();
-        let r1cs_file =
-            File::open("/home/fnieddu/research/circom/circuits/poseidon/poseidon.r1cs").unwrap();
+        let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
+        let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
         let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
@@ -92,16 +88,12 @@ mod tests {
     }
     #[test]
     fn verify_circom_proof_poseidon_bn254() {
-        let vk_string = fs::read_to_string(
-            "/home/fnieddu/research/circom/circuits/poseidon/verification_key.json",
-        )
-        .unwrap();
+        let vk_string =
+            fs::read_to_string("../test_vectors/bn254/poseidon/verification_key.json").unwrap();
         let public_string = "[
             \"17853941289740592551682164141790101668489478619664963356488634739728685875777\"
            ]";
-        let proof_string =
-            fs::read_to_string("/home/fnieddu/research/circom/circuits/poseidon/proof.json")
-                .unwrap();
+        let proof_string = fs::read_to_string("../test_vectors/bn254/poseidon/proof.json").unwrap();
 
         let vk = serde_json::from_str::<JsonVerificationKey<Bn254>>(&vk_string).unwrap();
         let public_input =

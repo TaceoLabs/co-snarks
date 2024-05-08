@@ -23,6 +23,7 @@ mpc-net = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 tokio = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 ark-bn254 = { workspace = true }

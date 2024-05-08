@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::PrimeField;
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::Result as R1CSResult;
@@ -10,10 +9,11 @@ use ark_relations::r1cs::{
     ConstraintMatrices, ConstraintSystem, ConstraintSystemRef, LinearCombination, OptimizationGoal,
     SynthesisError, Variable,
 };
-use circom_types::groth16::witness::Witness;
 use circom_types::r1cs::R1CS;
 use color_eyre::eyre::Result;
 use itertools::izip;
+use mpc_core::protocols::aby3;
+use mpc_core::protocols::aby3::network::Aby3Network;
 use mpc_core::traits::{EcMpcProtocol, MSMProvider};
 use mpc_core::{
     protocols::aby3::{network::Aby3MpcNet, Aby3Protocol},
@@ -22,6 +22,7 @@ use mpc_core::{
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use rand::{CryptoRng, Rng};
+use serde::{Deserialize, Serialize};
 
 pub type Aby3CollaborativeGroth16<P> =
     CollaborativeGroth16<Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet>, P>;
@@ -36,12 +37,14 @@ type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 type CurveFieldShareSlice<'a, T, C> = <T as PrimeFieldMpcProtocol<
     <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
 >>::FieldShareSlice<'a>;
-pub struct SharedWitness<T, F: PrimeField>
+
+//FIXME I want to use serde(transparent) but not working
+#[derive(Serialize, Deserialize)]
+pub struct SharedWitness<T, P: Pairing>
 where
-    T: PrimeFieldMpcProtocol<F>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    //this will be a VecShareType
-    pub values: Vec<<T as PrimeFieldMpcProtocol<F>>::FieldShare>,
+    pub values: FieldShareVec<T, P>,
 }
 
 pub struct CollaborativeGroth16<T, P: Pairing>
@@ -75,7 +78,7 @@ where
         pk: &ProvingKey<P>,
         r1cs: &R1CS<P>,
         public_inputs: &[P::ScalarField],
-        private_witness: FieldShareVec<T, P>,
+        private_witness: SharedWitness<T, P>,
     ) -> Result<Proof<P>> {
         let cs = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
@@ -83,29 +86,18 @@ where
         let matrices = cs.to_matrices().unwrap();
         let num_inputs = cs.num_instance_variables();
         let num_constraints = cs.num_constraints();
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        let private_witness_slice = ScalarFieldShareSlice::<T, P>::from(&private_witness);
-
+        let private_witness = private_witness.get_ref();
         let h = self.witness_map_from_matrices(
             &matrices,
             num_constraints,
             num_inputs,
             public_inputs,
-            &private_witness_slice,
-            domain,
+            private_witness,
         )?;
         let h_slice = ScalarFieldShareSlice::<T, P>::from(&h);
         let r = self.driver.rand();
         let s = self.driver.rand();
-        self.create_proof_with_assignment(
-            pk,
-            r,
-            s,
-            h_slice,
-            &public_inputs[1..],
-            private_witness_slice,
-        )
+        self.create_proof_with_assignment(pk, r, s, h_slice, &public_inputs[1..], private_witness)
     }
 
     fn witness_map_from_matrices(
@@ -114,19 +106,20 @@ where
         num_constraints: usize,
         num_inputs: usize,
         public_inputs: &[P::ScalarField],
-        private_witness: &ScalarFieldShareSlice<T, P>,
-        domain: GeneralEvaluationDomain<P::ScalarField>,
+        private_witness: ScalarFieldShareSlice<T, P>,
     ) -> Result<FieldShareVec<T, P>> {
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
         let domain_size = domain.size();
         let mut a = vec![FieldShare::<T, P>::default(); domain_size];
         let mut b = vec![FieldShare::<T, P>::default(); domain_size];
         for (a, b, at_i, bt_i) in izip!(&mut a, &mut b, &matrices.a, &matrices.b) {
             *a = self
                 .driver
-                .evaluate_constraint(at_i, public_inputs, private_witness);
+                .evaluate_constraint(at_i, public_inputs, &private_witness);
             *b = self
                 .driver
-                .evaluate_constraint(bt_i, public_inputs, private_witness);
+                .evaluate_constraint(bt_i, public_inputs, &private_witness);
         }
         let mut a = FieldShareVec::<T, P>::from(a);
         {
@@ -150,6 +143,7 @@ where
 
         let mut a_mut = FieldShareSliceMut::<T, P>::from(&mut a);
         let mut b_mut = FieldShareSliceMut::<T, P>::from(&mut b);
+
         self.driver.ifft_in_place(&mut a_mut, &domain);
         self.driver.ifft_in_place(&mut b_mut, &domain);
         let root_of_unity = {
@@ -365,8 +359,46 @@ impl<P: Pairing> Aby3CollaborativeGroth16<P> {
     }
 }
 
-impl<F: PrimeField> SharedWitness<Aby3Protocol<F, Aby3MpcNet>, F> {
-    pub fn share_aby3<R: Rng + CryptoRng>(_witness: &Witness<F>, _rng: &mut R) -> [Self; 3] {
-        todo!()
+impl<T, P: Pairing> SharedWitness<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn get_ref(&self) -> T::FieldShareSlice<'_> {
+        T::FieldShareSlice::from(&self.values)
+    }
+}
+
+impl<N: Aby3Network, P: Pairing> SharedWitness<Aby3Protocol<P::ScalarField, N>, P> {
+    pub fn share_aby3<R: Rng + CryptoRng>(witness: Vec<P::ScalarField>, rng: &mut R) -> [Self; 3] {
+        let [share1, share2, share3] = aby3::utils::share_field_elements(witness, rng);
+        let witness1 = Self { values: share1 };
+        let witness2 = Self { values: share2 };
+        let witness3 = Self { values: share3 };
+        [witness1, witness2, witness3]
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::fs::File;
+
+    use ark_bn254::Bn254;
+    use circom_types::groth16::witness::Witness;
+    use mpc_core::protocols::aby3::{network::Aby3MpcNet, Aby3Protocol};
+    use rand::thread_rng;
+
+    use super::SharedWitness;
+
+    #[test]
+    fn test() {
+        let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
+        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let mut rng = thread_rng();
+        let [s1, _, _] =
+            SharedWitness::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::share_aby3(
+                witness.values,
+                &mut rng,
+            );
+        println!("{}", serde_json::to_string(&s1.values).unwrap());
     }
 }
