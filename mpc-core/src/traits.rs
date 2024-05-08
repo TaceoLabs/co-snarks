@@ -39,6 +39,7 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         b: &Self::FieldShareSlice<'a>,
     ) -> std::io::Result<Self::FieldShareVec>;
     fn promote_to_trivial_share(&self, public_values: Vec<F>) -> Self::FieldShareVec;
+    fn concat_vec<'a>(&self, a: &mut Self::FieldShareSliceMut<'a>, b: Self::FieldShareVec);
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
