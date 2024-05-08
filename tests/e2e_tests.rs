@@ -188,14 +188,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn e2e_bn254() {
-        let zkey_file = File::open("../test_vectors/bn254/multiplier2.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bn254/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/bn254/multiplier2.r1cs").unwrap();
+    async fn e2e_poseidon_bn254() {
+        let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
+        let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let (pk1, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
         let pk2 = pk1.clone();
         let pk3 = pk1.clone();
+        let pvk = prepare_verifying_key(&pk1.vk);
         let r1cs1 = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
         let r1cs2 = r1cs1.clone();
         let r1cs3 = r1cs1.clone();
@@ -246,9 +247,6 @@ mod tests {
         assert_eq!(result2, result3);
         let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
         let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
-        let zkey_file = File::open("../test_vectors/bn254/multiplier2.zkey").unwrap();
-        let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
-        let pvk = prepare_verifying_key(&pk.vk);
         let verified =
             Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
         assert!(verified);

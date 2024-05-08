@@ -43,21 +43,19 @@ impl<P: Pairing> Circuit<P> {
     }
 
     pub fn public_inputs(&self) -> Vec<P::ScalarField> {
-        self.r1cs.wire_mapping[1..self.r1cs.num_inputs]
-            .iter()
-            .map(|i| self.witness.values[*i])
-            .collect()
+        //self.r1cs.wire_mapping[1..self.r1cs.num_inputs]
+        //    .iter()
+        //    .map(|i| self.witness.values[*i])
+        //    .collect()
+        self.witness.values[1..self.r1cs.num_inputs].to_vec()
     }
 
     pub fn witnesses(&self) -> Vec<P::ScalarField> {
-        debug_assert_eq!(
-            self.r1cs.wire_mapping.len(),
-            self.r1cs.num_inputs + self.r1cs.num_aux
-        );
-        self.r1cs.wire_mapping[self.r1cs.num_inputs..]
-            .iter()
-            .map(|i| self.witness.values[*i])
-            .collect()
+        //       self.r1cs.wire_mapping[self.r1cs.num_inputs..]
+        //           .iter()
+        //           .map(|i| self.witness.values[*i])
+        //           .collect()
+        self.witness.values[self.r1cs.num_inputs..].to_vec()
     }
 
     pub fn get_wire_mapping(&self) -> (Vec<P::ScalarField>, Vec<P::ScalarField>) {
@@ -73,17 +71,13 @@ impl<P: Pairing> ConstraintSynthesizer<P::ScalarField> for Circuit<P> {
         self,
         cs: ConstraintSystemRef<P::ScalarField>,
     ) -> Result<(), SynthesisError> {
-        let witness = &self.witness;
-        //let wire_mapping = &self.r1cs.wire_mapping;
-
         // Start from 1 because Arkworks implicitly allocates One for the first input
-        #[allow(clippy::needless_range_loop)]
-        for i in 1..self.r1cs.num_inputs {
-            cs.new_input_variable(|| Ok(witness.values[i]))?;
+        for i in self.public_inputs() {
+            cs.new_input_variable(|| Ok(i))?;
         }
 
-        for i in 0..self.r1cs.num_aux {
-            cs.new_witness_variable(|| Ok(witness.values[i + self.r1cs.num_inputs]))?;
+        for w in self.witnesses() {
+            cs.new_witness_variable(|| Ok(w))?;
         }
 
         let make_index = |index| {

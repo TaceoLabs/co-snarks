@@ -522,7 +522,7 @@ mod tests {
     #[test]
     fn test_can_deser_bn254_mult2_key() {
         //I AM BROKEN FIX MEEEEEEEEEEEE
-        let zkey = File::open("../test_vectors/bn254/multiplier2.zkey").unwrap();
+        let zkey = File::open("../test_vectors/bn254/multiplier2/multiplier2.zkey").unwrap();
         let (pk, matrices) = ZKey::<Bn254>::from_reader(zkey).unwrap().split();
         let beta_g1 = test_utils::to_g1_bn254!(
             "1436132865180440050058953936123839411531217265376140788508003974087015278078",
