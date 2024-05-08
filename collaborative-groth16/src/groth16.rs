@@ -1,8 +1,7 @@
-use std::{borrow::Borrow, marker::PhantomData};
+use std::marker::PhantomData;
 
 use ark_ec::pairing::Pairing;
-use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{Field, PrimeField};
+use ark_ff::PrimeField;
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::Result as R1CSResult;
@@ -20,10 +19,8 @@ use mpc_core::{
 };
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
-use num_traits::identities::Zero;
 use rand::{CryptoRng, Rng};
 
-use crate::circuit::Circuit;
 pub type Aby3CollaborativeGroth16<P> =
     CollaborativeGroth16<Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet>, P>;
 
@@ -68,21 +65,22 @@ where
         &mut self,
         pk: &ProvingKey<P>,
         r1cs: &R1CS<P>,
-        public_inputs: &[P::ScalarField],
+        public_inputs: Vec<P::ScalarField>,
         private_witness: FieldShareVec<T, P>,
     ) -> Result<Proof<P>> {
         let cs = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
-        Self::generate_constraints(public_inputs, r1cs, cs.clone())?;
+        Self::generate_constraints(&public_inputs, r1cs, cs.clone())?;
         let matrices = cs.to_matrices().unwrap();
         let num_inputs = cs.num_instance_variables();
         let num_constraints = cs.num_constraints();
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
             .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        self.witness_map_from_matrices(
+        let promoted_public = self.driver.promote_to_trivial_share(public_inputs);
+        let _ = self.witness_map_from_matrices(
             &matrices,
             num_constraints,
-            public_inputs,
+            &public_inputs,
             private_witness,
             domain,
         );
@@ -98,11 +96,13 @@ where
         domain: GeneralEvaluationDomain<P::ScalarField>,
     ) -> Result<FieldShareVec<T, P>> {
         let domain_size = domain.size();
-        let mut a = Vec::with_capacity(domain_size);
-        let mut b = Vec::with_capacity(domain_size);
-        for (at_i, bt_i) in itertools::multizip((&matrices.a, &matrices.b)) {
-            a.push(self.evaluate_constraint(at_i, public_inputs, &private_witness)?);
-            b.push(self.evaluate_constraint(bt_i, public_inputs, &private_witness)?);
+        let mut a = vec![FieldShare::<T, P>::default(); domain_size];
+        let mut b = vec![FieldShare::<T, P>::default(); domain_size];
+        for (mut a, mut b, at_i, bt_i) in
+            itertools::multizip((a.iter_mut(), b.iter_mut(), &matrices.a, &matrices.b))
+        {
+            *a = self.evaluate_constraint(at_i, public_inputs, &private_witness)?;
+            *b = self.evaluate_constraint(bt_i, public_inputs, &private_witness)?;
         }
         //here i should push all public inputs to a
         //who do we do that? We need a function that promotes the
@@ -113,18 +113,18 @@ where
         //    let end = start + num_inputs;
         //    a[start..end].clone_from_slice(&full_assignment[..num_inputs]);
         //}
-        let mut c = Vec::with_capacity(domain_size);
-        for i in 0..num_constraints {
-            c.push(self.driver.mul(&a[i], &b[i])?)
-        }
         let a_len = a.len();
         let mut a = FieldShareVec::<T, P>::from(a);
         let mut b = FieldShareVec::<T, P>::from(b);
-        let mut c = FieldShareVec::<T, P>::from(c);
-        let mut a = FieldShareSliceMut::<T, P>::from(&mut a);
-        let mut b = FieldShareSliceMut::<T, P>::from(&mut b);
-        self.driver.ifft_in_place(&mut a, &domain);
-        self.driver.ifft_in_place(&mut b, &domain);
+        let mut c = {
+            let a_slice = FieldShareSlice::<T, P>::from(&a);
+            let b_slice = FieldShareSlice::<T, P>::from(&b);
+            self.driver.mul_vec(&a_slice, &b_slice)?
+        };
+        let mut a_mut = FieldShareSliceMut::<T, P>::from(&mut a);
+        let mut b_mut = FieldShareSliceMut::<T, P>::from(&mut b);
+        self.driver.ifft_in_place(&mut a_mut, &domain);
+        self.driver.ifft_in_place(&mut b_mut, &domain);
         let root_of_unity = {
             let domain_size_double = 2 * domain_size;
             let domain_double = GeneralEvaluationDomain::new(domain_size_double)
@@ -132,37 +132,45 @@ where
             domain_double.element(1)
         };
         self.distribute_powers_and_mul_by_const(
-            &mut a,
+            &mut a_mut,
             a_len,
             root_of_unity,
             P::ScalarField::one(),
         )?;
         self.distribute_powers_and_mul_by_const(
-            &mut b,
+            &mut b_mut,
             a_len,
             root_of_unity,
             P::ScalarField::one(),
         )?;
 
-        self.driver.fft_in_place(&mut a, &domain);
-        self.driver.fft_in_place(&mut b, &domain);
-        let a = FieldShareVec::<T, P>::from(a);
-        let b = FieldShareVec::<T, P>::from(b);
-        let mut ab = self.mul_polynomials_in_evaluation_domain(a, b, a_len)?;
+        self.driver.fft_in_place(&mut a_mut, &domain);
+        self.driver.fft_in_place(&mut b_mut, &domain);
+        std::mem::drop(a_mut);
+        std::mem::drop(b_mut);
+        let mut ab = {
+            let a_slice = FieldShareSlice::<T, P>::from(&a);
+            let b_slice = FieldShareSlice::<T, P>::from(&b);
+            self.driver.mul_vec(&a_slice, &b_slice)?
+        };
+        std::mem::drop(a);
+        std::mem::drop(b);
 
-        let mut c = FieldShareSliceMut::<T, P>::from(&mut c);
-        self.driver.ifft_in_place(&mut c, &domain);
+        let mut c_mut = FieldShareSliceMut::<T, P>::from(&mut c);
+        self.driver.ifft_in_place(&mut c_mut, &domain);
         self.distribute_powers_and_mul_by_const(
-            &mut c,
+            &mut c_mut,
             a_len,
             root_of_unity,
             P::ScalarField::one(),
         )?;
-        self.driver.fft_in_place(&mut c, &domain);
-        for i in 0..a_len {
-            let result = self.driver.sub(&ab[i], &c[i]);
-            //ab[i] = result;
-        }
+        self.driver.fft_in_place(&mut c_mut, &domain);
+        std::mem::drop(c_mut);
+
+        let mut ab_mut = FieldShareSliceMut::<T, P>::from(&mut ab);
+        let c_slice = FieldShareSlice::<T, P>::from(&c);
+        self.driver.sub_assign_vec(&mut ab_mut, &c_slice);
+        std::mem::drop(ab_mut);
         Ok(ab)
     }
 

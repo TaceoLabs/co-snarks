@@ -6,7 +6,7 @@ use ark_poly::EvaluationDomain;
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
-    type FieldShare: Default;
+    type FieldShare: Default + Clone;
     type FieldShareVec: Index<usize, Output = Self::FieldShare>
         + 'static
         + for<'a> From<Self::FieldShareSliceMut<'a>>
@@ -18,6 +18,11 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
+    fn sub_assign_vec<'a>(
+        &mut self,
+        a: &mut Self::FieldShareSliceMut<'a>,
+        b: &Self::FieldShareSlice<'a>,
+    );
     fn mul(
         &mut self,
         a: &Self::FieldShare,
@@ -28,6 +33,12 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
     fn rand(&mut self) -> Self::FieldShare;
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F>;
+    fn mul_vec<'a>(
+        &mut self,
+        a: &Self::FieldShareSlice<'a>,
+        b: &Self::FieldShareSlice<'a>,
+    ) -> std::io::Result<Self::FieldShareVec>;
+    fn promote_to_trivial_share(&self, public_values: Vec<F>) -> Self::FieldShareVec;
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {

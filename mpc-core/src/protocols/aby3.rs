@@ -17,6 +17,7 @@ pub use fieldshare::Aby3PrimeFieldShare;
 
 use self::{
     fieldshare::{Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareSliceMut, Aby3PrimeFieldShareVec},
+    id::PartyID,
     network::Aby3Network,
     pointshare::Aby3PointShare,
 };
@@ -169,6 +170,37 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         self.network.send_next(a.b)?;
         let c = self.network.recv_prev::<F>()?;
         Ok(a.a + a.b + c)
+    }
+
+    fn promote_to_trivial_share(&self, public_values: Vec<F>) -> Self::FieldShareVec {
+        let mut vec = Vec::with_capacity(public_values.len());
+        //id gets the share everyone else zero
+        //therefore also id2 needs the b share
+        for val in public_values {
+            let share = match self.network.get_id() {
+                PartyID::ID0 => Aby3PrimeFieldShare::new(val, F::zero()),
+                PartyID::ID1 => Aby3PrimeFieldShare::new(F::zero(), val),
+                PartyID::ID2 => Aby3PrimeFieldShare::default(),
+            };
+            vec.push(share);
+        }
+        Self::FieldShareVec::from(vec)
+    }
+
+    fn mul_vec<'a>(
+        &mut self,
+        a: &Self::FieldShareSlice<'a>,
+        b: &Self::FieldShareSlice<'a>,
+    ) -> std::io::Result<Self::FieldShareVec> {
+        todo!()
+    }
+
+    fn sub_assign_vec<'a>(
+        &mut self,
+        a: &mut Self::FieldShareSliceMut<'a>,
+        b: &Self::FieldShareSlice<'a>,
+    ) {
+        todo!()
     }
 }
 
