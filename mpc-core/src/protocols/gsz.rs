@@ -10,7 +10,7 @@ use crate::traits::PrimeFieldMpcProtocol;
 use ark_ff::PrimeField;
 use eyre::{bail, Report};
 use itertools::izip;
-use std::marker::PhantomData;
+use std::{marker::PhantomData, thread, time::Duration};
 
 pub mod fieldshare;
 pub mod network;
@@ -345,10 +345,29 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
     }
 
     fn print(&self, to_print: &Self::FieldShareVec) {
-        todo!()
+        thread::sleep(Duration::from_millis(
+            200 * self.network.get_id() as u64 + 100,
+        ));
+        print!("[");
+        for a in to_print.a.iter() {
+            print!("{a}, ")
+        }
+        println!("]");
     }
 
     fn print_slice(&self, to_print: &Self::FieldShareSlice<'_>) {
-        todo!()
+        let my_id = self.network.get_id();
+        if my_id == 0 {
+            println!("==================");
+        }
+        thread::sleep(Duration::from_millis(200 * my_id as u64 + 100));
+        print!("[");
+        for a in to_print.a.iter() {
+            print!("{a}, ")
+        }
+        println!("]");
+        if my_id == self.network.get_num_parties() - 1 {
+            println!("==================");
+        };
     }
 }
