@@ -4,10 +4,15 @@ use self::{
         GSZPrimeFieldShareVec,
     },
     network::GSZNetwork,
+    pointshare::GSZPointShare,
     shamir::Shamir,
 };
-use crate::traits::PrimeFieldMpcProtocol;
+use crate::traits::{
+    EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+};
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
+use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
 use itertools::izip;
 use std::{marker::PhantomData, thread, time::Duration};
@@ -369,5 +374,144 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
         if my_id == self.network.get_num_parties() - 1 {
             println!("==================");
         };
+    }
+}
+
+impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarField, N> {
+    type PointShare = GSZPointShare<C>;
+
+    fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        a + b
+    }
+
+    fn sub_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        a - b
+    }
+
+    fn add_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare) {
+        *a += b;
+    }
+
+    fn sub_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare) {
+        *a -= b;
+    }
+
+    fn add_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
+        todo!()
+    }
+
+    fn sub_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
+        todo!()
+    }
+
+    fn add_assign_points_public_affine(
+        &mut self,
+        a: &mut Self::PointShare,
+        b: &<C as CurveGroup>::Affine,
+    ) {
+        todo!()
+    }
+
+    fn sub_assign_points_public_affine(
+        &mut self,
+        a: &mut Self::PointShare,
+        b: &<C as CurveGroup>::Affine,
+    ) {
+        todo!()
+    }
+
+    fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare {
+        Self::PointShare { a: a.mul(b.a) }
+    }
+
+    fn scalar_mul_public_scalar(
+        &mut self,
+        a: &Self::PointShare,
+        b: &<C>::ScalarField,
+    ) -> Self::PointShare {
+        todo!()
+    }
+
+    fn scalar_mul(
+        &mut self,
+        a: &Self::PointShare,
+        b: &Self::FieldShare,
+    ) -> std::io::Result<Self::PointShare> {
+        todo!()
+    }
+
+    fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
+        // TODO only receive enough?
+        let rcv = self.network.broadcast(a.a)?;
+        let res = Shamir::reconstruct_point(&rcv[..=self.threshold], &self.lagrange_t);
+        Ok(res)
+    }
+}
+
+impl<P: Pairing, N: GSZNetwork> PairingEcMpcProtocol<P> for GSZProtocol<P::ScalarField, N> {
+    fn open_two_points(
+        &mut self,
+        a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
+        b: &<Self as EcMpcProtocol<P::G2>>::PointShare,
+    ) -> std::io::Result<(P::G1, P::G2)> {
+        let s1 = a.a;
+        let s2 = b.a;
+
+        // TODO maybe better broadcast function
+        let rcv: Vec<(P::G1, P::G2)> = self.network.broadcast((s1, s2))?;
+        let (r1, r2): (Vec<P::G1>, Vec<P::G2>) = rcv.into_iter().unzip();
+
+        let r1 = Shamir::reconstruct_point(&r1[..=self.threshold], &self.lagrange_t);
+        let r2 = Shamir::reconstruct_point(&r2[..=self.threshold], &self.lagrange_t);
+
+        Ok((r1, r2))
+    }
+}
+
+impl<F: PrimeField, N: GSZNetwork> FFTProvider<F> for GSZProtocol<F, N> {
+    fn fft<D: EvaluationDomain<F>>(
+        &mut self,
+        data: Self::FieldShareSlice<'_>,
+        domain: &D,
+    ) -> Self::FieldShareVec {
+        let a = domain.fft(data.a);
+        Self::FieldShareVec::new(a)
+    }
+
+    fn fft_in_place<D: EvaluationDomain<F>>(
+        &mut self,
+        data: &mut Self::FieldShareSliceMut<'_>,
+        domain: &D,
+    ) {
+        domain.fft_in_place(data.a);
+    }
+
+    fn ifft<D: EvaluationDomain<F>>(
+        &mut self,
+        data: &Self::FieldShareSlice<'_>,
+        domain: &D,
+    ) -> Self::FieldShareVec {
+        let a = domain.ifft(data.a);
+        Self::FieldShareVec::new(a)
+    }
+
+    fn ifft_in_place<D: EvaluationDomain<F>>(
+        &mut self,
+        data: &mut Self::FieldShareSliceMut<'_>,
+        domain: &D,
+    ) {
+        domain.ifft_in_place(data.a);
+    }
+}
+
+impl<C: CurveGroup, N: GSZNetwork> MSMProvider<C> for GSZProtocol<C::ScalarField, N> {
+    fn msm_public_points(
+        &mut self,
+        points: &[C::Affine],
+        scalars: Self::FieldShareSlice<'_>,
+    ) -> Self::PointShare {
+        debug_assert_eq!(points.len(), scalars.len());
+        let res = C::msm_unchecked(points, scalars.a);
+        Self::PointShare { a: res }
     }
 }
