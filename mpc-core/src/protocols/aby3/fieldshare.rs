@@ -27,6 +27,7 @@ impl<F: PrimeField> std::ops::Add for Aby3PrimeFieldShare<F> {
         }
     }
 }
+
 impl<F: PrimeField> std::ops::Add<&Aby3PrimeFieldShare<F>> for Aby3PrimeFieldShare<F> {
     type Output = Self;
 
@@ -37,6 +38,7 @@ impl<F: PrimeField> std::ops::Add<&Aby3PrimeFieldShare<F>> for Aby3PrimeFieldSha
         }
     }
 }
+
 impl<F: PrimeField> std::ops::Add<&Aby3PrimeFieldShare<F>> for &'_ Aby3PrimeFieldShare<F> {
     type Output = Aby3PrimeFieldShare<F>;
 
@@ -58,6 +60,7 @@ impl<F: PrimeField> std::ops::Sub for Aby3PrimeFieldShare<F> {
         }
     }
 }
+
 impl<F: PrimeField> std::ops::Sub<&Aby3PrimeFieldShare<F>> for Aby3PrimeFieldShare<F> {
     type Output = Self;
 
@@ -68,6 +71,7 @@ impl<F: PrimeField> std::ops::Sub<&Aby3PrimeFieldShare<F>> for Aby3PrimeFieldSha
         }
     }
 }
+
 impl<F: PrimeField> std::ops::Sub<&Aby3PrimeFieldShare<F>> for &'_ Aby3PrimeFieldShare<F> {
     type Output = Aby3PrimeFieldShare<F>;
 
@@ -87,6 +91,7 @@ impl<F: PrimeField> std::ops::Mul for Aby3PrimeFieldShare<F> {
         self.a * rhs.a + self.a * rhs.b + self.b * rhs.a
     }
 }
+
 impl<F: PrimeField> std::ops::Mul<&Aby3PrimeFieldShare<F>> for Aby3PrimeFieldShare<F> {
     type Output = F;
 
@@ -95,6 +100,7 @@ impl<F: PrimeField> std::ops::Mul<&Aby3PrimeFieldShare<F>> for Aby3PrimeFieldSha
         self.a * rhs.a + self.a * rhs.b + self.b * rhs.a
     }
 }
+
 impl<F: PrimeField> std::ops::Mul<&Aby3PrimeFieldShare<F>> for &'_ Aby3PrimeFieldShare<F> {
     type Output = F;
 
@@ -164,6 +170,7 @@ fn serialize_vec<S: Serializer, F: PrimeField>(p: &[F], ser: S) -> Result<S::Ok,
     }
     seq.end()
 }
+
 fn deserialize_vec<'de, D, F: PrimeField>(_deserializer: D) -> Result<Vec<F>, D::Error>
 where
     D: de::Deserializer<'de>,
