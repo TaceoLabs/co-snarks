@@ -397,11 +397,11 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
     }
 
     fn add_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
-        todo!()
+        a.a += b
     }
 
     fn sub_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
-        todo!()
+        a.a -= b
     }
 
     fn add_assign_points_public_affine(
@@ -409,7 +409,7 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
         a: &mut Self::PointShare,
         b: &<C as CurveGroup>::Affine,
     ) {
-        todo!()
+        a.a += b
     }
 
     fn sub_assign_points_public_affine(
@@ -417,7 +417,7 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
         a: &mut Self::PointShare,
         b: &<C as CurveGroup>::Affine,
     ) {
-        todo!()
+        a.a -= b
     }
 
     fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare {
@@ -429,7 +429,7 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
         a: &Self::PointShare,
         b: &<C>::ScalarField,
     ) -> Self::PointShare {
-        todo!()
+        a * b
     }
 
     fn scalar_mul(
