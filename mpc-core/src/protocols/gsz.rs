@@ -10,7 +10,8 @@ pub(crate) mod shamir;
 
 pub mod utils {
     use self::{
-        fieldshare::{GSZPrimeFieldShareSlice, GSZPrimeFieldShareVec},
+        fieldshare::{GSZPrimeFieldShare, GSZPrimeFieldShareVec},
+        pointshare::GSZPointShare,
         shamir::Shamir,
     };
     use super::*;
@@ -25,14 +26,14 @@ pub mod utils {
         degree: usize,
         num_parties: usize,
         rng: &mut R,
-    ) -> GSZPrimeFieldShareVec<F> {
+    ) -> Vec<GSZPrimeFieldShare<F>> {
         let shares = Shamir::share(val, num_parties, degree, rng);
 
-        GSZPrimeFieldShareVec::new(shares)
+        GSZPrimeFieldShare::convert_vec_rev(shares)
     }
 
     pub fn combine_field_element<F: PrimeField>(
-        shares: GSZPrimeFieldShareSlice<F>,
+        shares: &[GSZPrimeFieldShare<F>],
         parties: &[usize],
         degree: usize,
     ) -> Result<F, Report> {
@@ -52,7 +53,8 @@ pub mod utils {
         }
 
         let lagrange = Shamir::lagrange_from_coeff(&parties[..=degree]);
-        let rec = Shamir::reconstruct(&shares.a[..=degree], &lagrange);
+        let shares = GSZPrimeFieldShare::convert_slice(shares);
+        let rec = Shamir::reconstruct(&shares[..=degree], &lagrange);
 
         Ok(rec)
     }
@@ -79,58 +81,88 @@ pub mod utils {
     }
 
     pub fn combine_field_elements<F: PrimeField>(
-        shares: Vec<GSZPrimeFieldShareSlice<F>>,
+        shares: &[GSZPrimeFieldShareVec<F>],
         parties: &[usize],
         degree: usize,
     ) -> Result<Vec<F>, Report> {
-        if parties.len() <= degree {
+        if shares.len() != parties.len() {
             bail!(
-                "Not enough parties to reconstruct the secret. Expected {}, got {}",
-                degree + 1,
+                "Number of shares ({}) does not match number of party indices ({})",
+                shares.len(),
                 parties.len()
             );
         }
+        if shares.len() <= degree {
+            bail!(
+                "Not enough shares to reconstruct the secret. Expected {}, got {}",
+                degree + 1,
+                shares.len()
+            );
+        }
+
+        let num_vals = shares[0].len();
+        for share in shares.iter().skip(1) {
+            if share.len() != num_vals {
+                bail!(
+                    "Number of shares ({}) does not match number of shares in first party ({})",
+                    share.len(),
+                    num_vals
+                );
+            }
+        }
+        let mut result = Vec::with_capacity(num_vals);
 
         let lagrange = Shamir::lagrange_from_coeff(&parties[..=degree]);
 
-        let num_vals = shares.len();
-        let mut result = Vec::with_capacity(num_vals);
-
-        for share in shares {
-            if share.len() != parties.len() {
-                bail!(
-                    "Number of shares ({}) does not match number of party indices ({})",
-                    share.len(),
-                    parties.len()
-                );
-            }
-
-            let rec = Shamir::reconstruct(&share.a[..=degree], &lagrange);
+        for i in 0..num_vals {
+            let s = shares
+                .iter()
+                .take(degree + 1)
+                .map(|s| s.a[i])
+                .collect::<Vec<_>>();
+            let rec = Shamir::reconstruct(&s, &lagrange);
             result.push(rec);
         }
         Ok(result)
     }
 
-    // pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
-    //     val: C,
-    //     rng: &mut R,
-    // ) -> [Aby3PointShare<C>; 3] {
-    //     let a = C::rand(rng);
-    //     let b = C::rand(rng);
-    //     let c = val - a - b;
-    //     let share1 = Aby3PointShare::new(a, c);
-    //     let share2 = Aby3PointShare::new(b, a);
-    //     let share3 = Aby3PointShare::new(c, b);
-    //     [share1, share2, share3]
-    // }
+    pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
+        val: C,
+        degree: usize,
+        num_parties: usize,
+        rng: &mut R,
+    ) -> Vec<GSZPointShare<C>> {
+        let shares = Shamir::share_point(val, num_parties, degree, rng);
 
-    // pub fn combine_curve_point<C: CurveGroup>(
-    //     share1: Aby3PointShare<C>,
-    //     share2: Aby3PointShare<C>,
-    //     share3: Aby3PointShare<C>,
-    // ) -> C {
-    //     share1.a + share2.a + share3.a
-    // }
+        GSZPointShare::convert_vec_rev(shares)
+    }
+
+    pub fn combine_curve_point<C: CurveGroup>(
+        shares: &[GSZPointShare<C>],
+        parties: &[usize],
+        degree: usize,
+    ) -> Result<C, Report> {
+        if shares.len() != parties.len() {
+            bail!(
+                "Number of shares ({}) does not match number of party indices ({})",
+                shares.len(),
+                parties.len()
+            );
+        }
+        if shares.len() <= degree {
+            bail!(
+                "Not enough shares to reconstruct the secret. Expected {}, got {}",
+                degree + 1,
+                shares.len()
+            );
+        }
+
+        let lagrange = Shamir::lagrange_from_coeff(&parties[..=degree]);
+        let shares = GSZPointShare::convert_slice(shares);
+        let rec = Shamir::reconstruct_point(&shares[..=degree], &lagrange);
+
+        Ok(rec)
+    }
 }
 
 pub struct GSZProtocol<F: PrimeField, N: GSZNetwork> {

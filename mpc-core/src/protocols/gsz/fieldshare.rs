@@ -1,6 +1,7 @@
 use ark_ff::PrimeField;
 use serde::ser::SerializeSeq;
 use serde::{de, Deserialize, Serialize, Serializer};
+use std::mem::ManuallyDrop;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
@@ -254,5 +255,96 @@ impl<F: PrimeField> From<GSZPrimeFieldShareSlice<'_, F>> for GSZPrimeFieldShareV
 impl<F: PrimeField> From<GSZPrimeFieldShareSliceMut<'_, F>> for GSZPrimeFieldShareVec<F> {
     fn from(value: GSZPrimeFieldShareSliceMut<F>) -> Self {
         value.clone_to_vec()
+    }
+}
+
+// Conversions
+impl<F: PrimeField> GSZPrimeFieldShare<F> {
+    /// Safe because GSZPrimeFieldShare has repr(transparent)
+    pub fn convert_slice(vec: &[Self]) -> &[F] {
+        // SAFETY: GSZPrimeFieldShare has repr(transparent)
+        unsafe { &*(vec as *const [Self] as *const [F]) }
+    }
+
+    /// Safe because GSZPrimeFieldShare has repr(transparent)
+    pub fn convert_vec(vec: Vec<Self>) -> Vec<F> {
+        let me = ManuallyDrop::new(vec);
+        // SAFETY: GSZPrimeFieldShare has repr(transparent)
+        unsafe { Vec::from_raw_parts(me.as_ptr() as *mut F, me.len(), me.capacity()) }
+    }
+
+    /// Safe because GSZPrimeFieldShare has repr(transparent)
+    pub fn convert_slice_rev(vec: &[F]) -> &[Self] {
+        // SAFETY: GSZPrimeFieldShare has repr(transparent)
+        unsafe { &*(vec as *const [F] as *const [Self]) }
+    }
+
+    /// Safe because GSZPrimeFieldShare has repr(transparent)
+    pub fn convert_vec_rev(vec: Vec<F>) -> Vec<Self> {
+        let me = ManuallyDrop::new(vec);
+        // SAFETY: GSZPrimeFieldShare has repr(transparent)
+        unsafe { Vec::from_raw_parts(me.as_ptr() as *mut Self, me.len(), me.capacity()) }
+    }
+
+    pub fn convert(self) -> F {
+        self.a
+    }
+}
+
+#[cfg(test)]
+mod unsafe_test {
+    use super::*;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha12Rng;
+
+    const ELEMENTS: usize = 100;
+
+    fn conversion_test<F: PrimeField>() {
+        let mut rng = ChaCha12Rng::from_entropy();
+        let t_vec: Vec<F> = (0..ELEMENTS).map(|_| F::rand(&mut rng)).collect();
+        let rt_vec: Vec<GSZPrimeFieldShare<F>> = (0..ELEMENTS)
+            .map(|_| GSZPrimeFieldShare::new(F::rand(&mut rng)))
+            .collect();
+
+        // Convert vec<F> to vec<G<F>>
+        let t_conv = GSZPrimeFieldShare::convert_vec_rev(t_vec.to_owned());
+        assert_eq!(t_conv.len(), t_vec.len());
+        for (a, b) in t_conv.iter().zip(t_vec.iter()) {
+            assert_eq!(a.a, *b)
+        }
+
+        // Convert slice vec<F> to vec<G<F>>
+        let t_conv = GSZPrimeFieldShare::convert_slice_rev(&t_vec);
+        assert_eq!(t_conv.len(), t_vec.len());
+        for (a, b) in t_conv.iter().zip(t_vec.iter()) {
+            assert_eq!(a.a, *b)
+        }
+
+        // Convert vec<G<F>> to vec<F>
+        let rt_conv = GSZPrimeFieldShare::convert_vec(rt_vec.to_owned());
+        assert_eq!(rt_conv.len(), rt_vec.len());
+        for (a, b) in rt_conv.iter().zip(rt_vec.iter()) {
+            assert_eq!(*a, b.a)
+        }
+
+        // Convert slice vec<G<F>> to vec<F>
+        let rt_conv = GSZPrimeFieldShare::convert_slice(&rt_vec);
+        assert_eq!(rt_conv.len(), rt_vec.len());
+        for (a, b) in rt_conv.iter().zip(rt_vec.iter()) {
+            assert_eq!(*a, b.a)
+        }
+    }
+
+    macro_rules! test_impl {
+        ($([$ty:ty,$fn:ident]),*) => ($(
+            #[test]
+            fn $fn() {
+                conversion_test::<$ty>();
+            }
+        )*)
+    }
+
+    test_impl! {
+        [ark_bn254::Fr, bn254_test]
     }
 }
