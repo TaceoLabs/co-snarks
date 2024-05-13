@@ -437,6 +437,7 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
         a: &Self::PointShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::PointShare> {
+        // Use the randomness and just mul it onto the generator if required
         todo!()
     }
 
