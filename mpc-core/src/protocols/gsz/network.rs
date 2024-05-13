@@ -29,6 +29,11 @@ pub trait GSZNetwork {
         }
     }
     fn recv_many<F: CanonicalDeserialize>(&mut self, from: usize) -> std::io::Result<Vec<F>>;
+
+    fn broadcast<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
+        &mut self,
+        data: F,
+    ) -> std::io::Result<Vec<F>>;
 }
 
 pub struct GSZMpcNet {
@@ -159,6 +164,39 @@ impl GSZNetwork for GSZMpcNet {
 
         let res = Vec::<F>::deserialize_uncompressed(&data[..])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        Ok(res)
+    }
+
+    fn broadcast<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
+        &mut self,
+        data: F,
+    ) -> std::io::Result<Vec<F>> {
+        // Serialize
+        let size = data.serialized_size(ark_serialize::Compress::No);
+        let mut ser_data = vec![0u8; size];
+        data.to_owned()
+            .serialize_uncompressed(&mut ser_data)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+        let send_data = Bytes::from(ser_data);
+
+        // Send
+        for other_id in 0..self.num_parties {
+            if other_id != self.id {
+                self.send_bytes(other_id, send_data.to_owned())?;
+            }
+        }
+
+        // Receive
+        let mut res = Vec::with_capacity(self.num_parties);
+        for other_id in 0..self.num_parties {
+            if other_id != self.id {
+                let data = self.recv(other_id)?;
+                res.push(data);
+            } else {
+                res.push(data.to_owned());
+            }
+        }
 
         Ok(res)
     }

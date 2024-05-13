@@ -4,6 +4,7 @@ use self::{
         GSZPrimeFieldShareVec,
     },
     network::GSZNetwork,
+    shamir::Shamir,
 };
 use crate::traits::PrimeFieldMpcProtocol;
 use ark_ff::PrimeField;
@@ -175,6 +176,8 @@ pub mod utils {
 
 pub struct GSZProtocol<F: PrimeField, N: GSZNetwork> {
     threshold: usize, // degree of the polynomial
+    lagrange_t: Vec<F>,
+    lagrange_2t: Vec<F>,
     network: N,
     field: PhantomData<F>,
 }
@@ -187,21 +190,29 @@ impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
             bail!("Threshold too large for number of parties")
         }
 
+        let lagrange_t = Shamir::lagrange_from_coeff(&(0..=threshold).collect::<Vec<_>>());
+        let lagrange_2t = Shamir::lagrange_from_coeff(&(0..=2 * threshold).collect::<Vec<_>>());
+
         Ok(Self {
             threshold,
+            lagrange_t,
+            lagrange_2t,
             network,
             field: PhantomData,
         })
     }
 
-    // multiply followed by a opening, thus no reshare required
+    // multiply followed by a opening, thus, no reshare required
     pub fn mul_open(
         &mut self,
         a: &<Self as PrimeFieldMpcProtocol<F>>::FieldShare,
         b: &<Self as PrimeFieldMpcProtocol<F>>::FieldShare,
     ) -> std::io::Result<F> {
+        // TODO only receive enough?
         let mul = a * b;
-        todo!()
+        let rcv = self.network.broadcast(mul.a)?;
+        let res = Shamir::reconstruct(&rcv[..=2 * self.threshold], &self.lagrange_2t);
+        Ok(res)
     }
 }
 
@@ -268,7 +279,10 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
     }
 
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F> {
-        todo!()
+        // TODO only receive enough?
+        let rcv = self.network.broadcast(a.a)?;
+        let res = Shamir::reconstruct(&rcv[..=self.threshold], &self.lagrange_t);
+        Ok(res)
     }
 
     fn mul_vec(
