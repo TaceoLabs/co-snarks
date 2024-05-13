@@ -3,7 +3,7 @@ use serde::ser::SerializeSeq;
 use serde::{de, Deserialize, Serialize, Serializer};
 use std::mem::ManuallyDrop;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct GSZPrimeFieldShare<F: PrimeField> {
     pub(crate) a: F,
@@ -40,6 +40,22 @@ impl<F: PrimeField> std::ops::Add<&GSZPrimeFieldShare<F>> for &'_ GSZPrimeFieldS
 
     fn add(self, rhs: &GSZPrimeFieldShare<F>) -> Self::Output {
         GSZPrimeFieldShare::<F> { a: self.a + rhs.a }
+    }
+}
+
+impl<F: PrimeField> std::ops::Add<&F> for &'_ GSZPrimeFieldShare<F> {
+    type Output = GSZPrimeFieldShare<F>;
+
+    fn add(self, rhs: &F) -> Self::Output {
+        Self::Output { a: self.a + rhs }
+    }
+}
+
+impl<F: PrimeField> std::ops::Add<F> for GSZPrimeFieldShare<F> {
+    type Output = GSZPrimeFieldShare<F>;
+
+    fn add(self, rhs: F) -> Self::Output {
+        Self::Output { a: self.a + rhs }
     }
 }
 
