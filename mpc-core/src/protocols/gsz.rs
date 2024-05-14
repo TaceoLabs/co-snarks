@@ -193,6 +193,8 @@ pub struct GSZProtocol<F: PrimeField, N: GSZNetwork> {
 }
 
 impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
+    const KING_ID: usize = 0;
+
     pub fn new(threshold: usize, network: N) -> Result<Self, Report> {
         let num_parties = network.get_num_parties();
 
@@ -262,8 +264,45 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
         a: &Self::FieldShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::FieldShare> {
-        let mul = a * b;
-        todo!()
+        let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network)?;
+
+        let mul = a * b + r_2t;
+
+        let my_share = if self.network.get_id() == Self::KING_ID {
+            // Accumulate the result
+            let mut acc = F::zero();
+            for (other_id, lagrange) in self.lagrange_2t.iter().enumerate() {
+                if other_id == Self::KING_ID {
+                    acc += mul.a * lagrange;
+                } else {
+                    let r = self.network.recv::<F>(other_id)?;
+                    acc += r * lagrange;
+                }
+            }
+
+            // Send fresh shares
+            let shares = Shamir::share(
+                acc,
+                self.network.get_num_parties(),
+                self.threshold,
+                &mut self.rng_buffer.rng,
+            );
+            let mut my_share = F::default();
+            for (other_id, share) in shares.into_iter().enumerate() {
+                if self.network.get_id() == other_id {
+                    my_share = share;
+                } else {
+                    self.network.send(other_id, share)?;
+                }
+            }
+            my_share - r_t
+        } else {
+            self.network.send(Self::KING_ID, mul.a)?;
+            let share = self.network.recv::<F>(Self::KING_ID)?;
+            share - r_t
+        };
+
+        Ok(Self::FieldShare::new(my_share))
     }
 
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
@@ -524,11 +563,11 @@ struct GSZRng<F> {
 }
 
 impl<F: PrimeField> GSZRng<F> {
-    const BUFFER_SIZE: usize = 1024;
+    const BATCH_SIZE: usize = 1024;
 
     pub fn new(seed: [u8; crate::SEED_SIZE], threshold: usize, num_parties: usize) -> Self {
-        let r_t = Vec::with_capacity(Self::BUFFER_SIZE);
-        let r_2t = Vec::with_capacity(Self::BUFFER_SIZE);
+        let r_t = Vec::with_capacity(Self::BATCH_SIZE * (threshold + 1));
+        let r_2t = Vec::with_capacity(Self::BATCH_SIZE * (threshold + 1));
         Self {
             rng: RngType::from_seed(seed),
             threshold,
@@ -574,7 +613,7 @@ impl<F: PrimeField> GSZRng<F> {
         &mut self,
         network: &mut N,
         amount: usize,
-    ) -> Result<(), Report> {
+    ) -> std::io::Result<()> {
         // TODO this is just a placeholder for something totally insecure
         self.r_t
             .extend(vec![F::zero(); amount * (self.threshold + 1)]);
@@ -585,12 +624,12 @@ impl<F: PrimeField> GSZRng<F> {
         Ok(())
     }
 
-    fn get_pair<N: GSZNetwork>(&mut self, network: &mut N) -> Result<(F, F), Report> {
+    fn get_pair<N: GSZNetwork>(&mut self, network: &mut N) -> std::io::Result<(F, F)> {
         if self.remaining == 0 {
-            self.buffer_triples(network, Self::BUFFER_SIZE)?;
-            debug_assert_eq!(self.remaining, Self::BUFFER_SIZE * (self.threshold + 1));
-            debug_assert_eq!(self.r_t.len(), Self::BUFFER_SIZE * (self.threshold + 1));
-            debug_assert_eq!(self.r_2t.len(), Self::BUFFER_SIZE * (self.threshold + 1));
+            self.buffer_triples(network, Self::BATCH_SIZE)?;
+            debug_assert_eq!(self.remaining, Self::BATCH_SIZE * (self.threshold + 1));
+            debug_assert_eq!(self.r_t.len(), Self::BATCH_SIZE * (self.threshold + 1));
+            debug_assert_eq!(self.r_2t.len(), Self::BATCH_SIZE * (self.threshold + 1));
         }
 
         let r1 = self.r_t.pop().unwrap();
