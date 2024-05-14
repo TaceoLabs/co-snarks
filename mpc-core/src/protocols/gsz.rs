@@ -285,6 +285,10 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
                     acc += r * lagrange;
                 }
             }
+            // Need to receive from others as well
+            for id in self.threshold * 2 + 1..self.network.get_num_parties() {
+                self.network.recv_many::<F>(id)?;
+            }
 
             // Send fresh shares
             let shares = Shamir::share(
@@ -380,6 +384,10 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
                         *acc += muls * lagrange;
                     }
                 }
+            }
+            // Need to receive from others as well
+            for id in self.threshold * 2 + 1..self.network.get_num_parties() {
+                self.network.recv_many::<F>(id)?;
             }
 
             // Send fresh shares
@@ -582,6 +590,10 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
                     let r = self.network.recv::<C>(other_id)?;
                     acc += r * lagrange;
                 }
+            }
+            // Need to receive from others as well
+            for id in self.threshold * 2 + 1..self.network.get_num_parties() {
+                self.network.recv_many::<C>(id)?;
             }
 
             // Send fresh shares
