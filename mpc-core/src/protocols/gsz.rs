@@ -17,7 +17,7 @@ use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
-use itertools::izip;
+use itertools::{izip, Itertools};
 use rand::{Rng as _, SeedableRng};
 use std::{marker::PhantomData, thread, time::Duration};
 
@@ -728,6 +728,55 @@ impl<F: PrimeField> GSZRng<F> {
         network: &mut N,
         amount: usize,
     ) -> std::io::Result<()> {
+        let rand = (0..amount)
+            .map(|_| F::rand(&mut self.rng))
+            .collect::<Vec<_>>();
+
+        let mut send = (0..self.num_parties)
+            .map(|_| Vec::with_capacity(amount * 2))
+            .collect::<Vec<_>>();
+
+        for r in rand {
+            let shares_t = Shamir::share(r, self.num_parties, self.threshold, &mut self.rng);
+            let shares_2t = Shamir::share(r, self.num_parties, 2 * self.threshold, &mut self.rng);
+
+            for (des, src1, src2) in izip!(&mut send, shares_t, shares_2t) {
+                des.push(src1);
+                des.push(src2);
+            }
+        }
+
+        let my_id = network.get_id();
+        let mut my_send = Vec::new();
+        // Send
+        for (other_id, shares) in send.into_iter().enumerate() {
+            if my_id == other_id {
+                my_send = shares;
+            } else {
+                network.send(other_id, shares)?;
+            }
+        }
+        // Receive
+        let mut rcv_rt = (0..amount)
+            .map(|_| Vec::with_capacity(self.num_parties))
+            .collect_vec();
+        let mut rcv_r2t = (0..amount)
+            .map(|_| Vec::with_capacity(self.num_parties))
+            .collect_vec();
+
+        for other_id in 0..self.num_parties {
+            if my_id == other_id {
+                for (des_r, des_r2, src) in
+                    izip!(&mut rcv_rt, &mut rcv_r2t, my_send.chunks_exact(2))
+                {
+                    des_r.push(src[0]);
+                    des_r2.push(src[1]);
+                }
+            } else {
+                todo!()
+            }
+        }
+
         // TODO this is just a placeholder and is totally insecure
         self.r_t
             .extend(vec![F::zero(); amount * (self.threshold + 1)]);
