@@ -7,14 +7,18 @@ use self::{
     pointshare::GSZPointShare,
     shamir::Shamir,
 };
-use crate::traits::{
-    EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+use crate::{
+    traits::{
+        EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    },
+    RngType,
 };
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
 use itertools::izip;
+use rand::{Rng as _, SeedableRng};
 use std::{marker::PhantomData, thread, time::Duration};
 
 pub mod fieldshare;
@@ -183,6 +187,7 @@ pub struct GSZProtocol<F: PrimeField, N: GSZNetwork> {
     threshold: usize, // degree of the polynomial
     lagrange_t: Vec<F>,
     lagrange_2t: Vec<F>,
+    rng_buffer: GSZRng<F>,
     network: N,
     field: PhantomData<F>,
 }
@@ -195,6 +200,8 @@ impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
             bail!("Threshold too large for number of parties")
         }
 
+        let seed: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
+
         let lagrange_t = Shamir::lagrange_from_coeff(&(0..=threshold).collect::<Vec<_>>());
         let lagrange_2t = Shamir::lagrange_from_coeff(&(0..=2 * threshold).collect::<Vec<_>>());
 
@@ -202,6 +209,7 @@ impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
             threshold,
             lagrange_t,
             lagrange_2t,
+            rng_buffer: GSZRng::new(seed, threshold, num_parties),
             network,
             field: PhantomData,
         })
@@ -437,6 +445,7 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
         a: &Self::PointShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::PointShare> {
+        let mul = b * a;
         // Use the randomness and just mul it onto the generator if required
         todo!()
     }
@@ -502,6 +511,92 @@ impl<F: PrimeField, N: GSZNetwork> FFTProvider<F> for GSZProtocol<F, N> {
         domain: &D,
     ) {
         domain.ifft_in_place(data.a);
+    }
+}
+
+struct GSZRng<F> {
+    rng: RngType,
+    threshold: usize,
+    num_parties: usize,
+    r_t: Vec<F>,
+    r_2t: Vec<F>,
+    remaining: usize,
+}
+
+impl<F: PrimeField> GSZRng<F> {
+    const BUFFER_SIZE: usize = 1024;
+
+    pub fn new(seed: [u8; crate::SEED_SIZE], threshold: usize, num_parties: usize) -> Self {
+        let r_t = Vec::with_capacity(Self::BUFFER_SIZE);
+        let r_2t = Vec::with_capacity(Self::BUFFER_SIZE);
+        Self {
+            rng: RngType::from_seed(seed),
+            threshold,
+            num_parties,
+            r_t,
+            r_2t,
+            remaining: 0,
+        }
+    }
+
+    // I use the following matrix:
+    // [1, 1  , 1  , 1  , ..., 1  ]
+    // [1, 2  , 3  , 4  , ..., n  ]
+    // [1, 2^2, 3^2, 4^2, ..., n^2]
+    // ...
+    // [1, 2^t, 3^t, 4^t, ..., n^t]
+    fn vandermonde_mul(&self, inputs: &[F]) -> Vec<F> {
+        debug_assert_eq!(inputs.len(), self.num_parties);
+        let mut res = Vec::with_capacity(self.threshold + 1);
+
+        let row = (1..=self.num_parties as u64)
+            .map(F::from)
+            .collect::<Vec<_>>();
+        let mut current_row = row.clone();
+
+        let r0 = inputs.iter().sum();
+        res.push(r0);
+
+        for _ in 1..=self.threshold {
+            let mut ri = F::zero();
+            for (c, r, i) in izip!(&mut current_row, &row, inputs) {
+                ri += *c * i;
+                *c *= r; // Update current_row
+            }
+            res.push(ri);
+        }
+
+        res
+    }
+
+    // Generates amount * (self.threshold + 1) random double shares
+    fn buffer_triples<N: GSZNetwork>(
+        &mut self,
+        network: &mut N,
+        amount: usize,
+    ) -> Result<(), Report> {
+        // TODO this is just a placeholder for something totally insecure
+        self.r_t
+            .extend(vec![F::zero(); amount * (self.threshold + 1)]);
+        self.r_2t
+            .extend(vec![F::zero(); amount * (self.threshold + 1)]);
+        self.remaining += amount;
+
+        Ok(())
+    }
+
+    fn get_pair<N: GSZNetwork>(&mut self, network: &mut N) -> Result<(F, F), Report> {
+        if self.remaining == 0 {
+            self.buffer_triples(network, Self::BUFFER_SIZE)?;
+            debug_assert_eq!(self.remaining, Self::BUFFER_SIZE * (self.threshold + 1));
+            debug_assert_eq!(self.r_t.len(), Self::BUFFER_SIZE * (self.threshold + 1));
+            debug_assert_eq!(self.r_2t.len(), Self::BUFFER_SIZE * (self.threshold + 1));
+        }
+
+        let r1 = self.r_t.pop().unwrap();
+        let r2 = self.r_2t.pop().unwrap();
+        self.remaining -= 1;
+        Ok((r1, r2))
     }
 }
 
