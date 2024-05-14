@@ -805,6 +805,7 @@ impl<F: PrimeField> GSZRng<F> {
             Self::vandermonde_mul(&r_t_src, r_t_des, self.num_parties, self.threshold);
             Self::vandermonde_mul(&r_2t_src, r_2t_des, self.num_parties, self.threshold);
         }
+        self.remaining += amount * (self.threshold + 1);
 
         Ok(())
     }
