@@ -508,3 +508,101 @@ mod field_share {
         gsz_neg_inner(10, 4).await;
     }
 }
+
+mod curve_share {
+    use std::thread;
+
+    use crate::protocols::gsz::GSZTestNetwork;
+    use ark_ff::UniformRand;
+    use itertools::{izip, Itertools};
+    use mpc_core::{
+        protocols::gsz::{self, GSZProtocol},
+        traits::EcMpcProtocol,
+    };
+    use rand::thread_rng;
+    use tokio::sync::oneshot;
+
+    async fn gsz_add_inner(num_parties: usize, threshold: usize) {
+        let test_network = GSZTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let x = ark_bn254::G1Projective::rand(&mut rng);
+        let y = ark_bn254::G1Projective::rand(&mut rng);
+        let x_shares = gsz::utils::share_curve_point(x, threshold, num_parties, &mut rng);
+        let y_shares = gsz::utils::share_curve_point(y, threshold, num_parties, &mut rng);
+        let should_result = x + y;
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = oneshot::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
+            thread::spawn(move || {
+                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
+                tx.send(gsz.add_points(&x, &y))
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.await.unwrap());
+        }
+
+        let is_result =
+            gsz::utils::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
+
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn gsz_add() {
+        gsz_add_inner(3, 1).await;
+        gsz_add_inner(10, 4).await;
+    }
+
+    async fn gsz_sub_inner(num_parties: usize, threshold: usize) {
+        let test_network = GSZTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let x = ark_bn254::G1Projective::rand(&mut rng);
+        let y = ark_bn254::G1Projective::rand(&mut rng);
+        let x_shares = gsz::utils::share_curve_point(x, threshold, num_parties, &mut rng);
+        let y_shares = gsz::utils::share_curve_point(y, threshold, num_parties, &mut rng);
+        let should_result = x - y;
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = oneshot::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
+            thread::spawn(move || {
+                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
+                tx.send(gsz.sub_points(&x, &y))
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.await.unwrap());
+        }
+
+        let is_result =
+            gsz::utils::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
+
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn gsz_sub() {
+        gsz_sub_inner(3, 1).await;
+        gsz_sub_inner(10, 4).await;
+    }
+}
