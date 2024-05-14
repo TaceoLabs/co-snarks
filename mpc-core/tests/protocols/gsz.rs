@@ -605,4 +605,46 @@ mod curve_share {
         gsz_sub_inner(3, 1).await;
         gsz_sub_inner(10, 4).await;
     }
+
+    async fn gsz_scalar_mul_public_point_inner(num_parties: usize, threshold: usize) {
+        let test_network = GSZTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let public_point = ark_bn254::G1Projective::rand(&mut rng);
+        let scalar = ark_bn254::Fr::rand(&mut rng);
+        let scalar_shares =
+            gsz::utils::share_field_element(scalar, threshold, num_parties, &mut rng);
+        let should_result = public_point * scalar;
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = oneshot::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, scalar) in izip!(test_network.get_party_networks(), tx, scalar_shares) {
+            thread::spawn(move || {
+                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
+                tx.send(gsz.scalar_mul_public_point(&public_point, &scalar))
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.await.unwrap());
+        }
+
+        let is_result =
+            gsz::utils::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
+
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn gsz_scalar_mul_public_point() {
+        gsz_scalar_mul_public_point_inner(3, 1).await;
+        gsz_scalar_mul_public_point_inner(10, 4).await;
+    }
 }
