@@ -167,7 +167,7 @@ mod field_share {
         traits::PrimeFieldMpcProtocol,
     };
     use rand::thread_rng;
-    use std::thread;
+    use std::{str::FromStr, thread};
     use tokio::sync::oneshot;
 
     async fn gsz_add_inner(num_parties: usize, threshold: usize) {
@@ -305,5 +305,105 @@ mod field_share {
     async fn gsz_mul2_then_add() {
         gsz_mul2_then_add_inner(3, 1).await;
         gsz_mul2_then_add_inner(10, 4).await;
+    }
+
+    async fn gsz_mul_vec_bn_inner(num_parties: usize, threshold: usize) {
+        let test_network = GSZTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let x = [
+            ark_bn254::Fr::from_str(
+                "13839525561076761625780930844889299788193703994911163378019280196128582690055",
+            )
+            .unwrap(),
+            ark_bn254::Fr::from_str(
+                "19302971480864839163158232064620707211435225928426123775531639309944891593977",
+            )
+            .unwrap(),
+            ark_bn254::Fr::from_str(
+                "8048717310762513532550620831072439583505607813129662608591015555880153427210",
+            )
+            .unwrap(),
+            ark_bn254::Fr::from_str(
+                "2585271390974436123003027749932103593962191064365118925254473311197989280023",
+            )
+            .unwrap(),
+        ];
+        let y = [
+            ark_bn254::Fr::from_str(
+                "2688648969035332064113669477511029957484512453056743431884706385750388613065",
+            )
+            .unwrap(),
+            ark_bn254::Fr::from_str(
+                "13632770404954969699480437686769008635735921498648460325387842712839596176806",
+            )
+            .unwrap(),
+            ark_bn254::Fr::from_str(
+                "19199593902803943133889170931116903997086625101975591190159463567024116566625",
+            )
+            .unwrap(),
+            ark_bn254::Fr::from_str(
+                "8255472466884305547009533395117607586789669747151273739964395707537515634749",
+            )
+            .unwrap(),
+        ];
+        let should_result = vec![
+            ark_bn254::Fr::from_str(
+                "14012338922664984944451142760937475581748095944353358534203030914664561190462",
+            )
+            .unwrap(),
+            ark_bn254::Fr::from_str(
+                "4297594441150501195973997511775989720904927516253689527653694984160382713321",
+            )
+            .unwrap(),
+            ark_bn254::Fr::from_str(
+                "7875903949174289914141782934879682497141865775307179984684659764891697566272",
+            )
+            .unwrap(),
+            ark_bn254::Fr::from_str(
+                "6646526994769136778802685410292764833027657364709823469005920616147071273574",
+            )
+            .unwrap(),
+        ];
+
+        let x_shares =
+            gsz::utils::share_field_elements(x.to_vec(), threshold, num_parties, &mut rng);
+        let y_shares =
+            gsz::utils::share_field_elements(y.to_vec(), threshold, num_parties, &mut rng);
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = oneshot::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
+            thread::spawn(move || {
+                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
+                let mul = gsz.mul_vec(&x.to_ref(), &y.to_ref()).unwrap();
+                tx.send(mul)
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.await.unwrap());
+        }
+
+        let is_result = gsz::utils::combine_field_elements(
+            &results,
+            &(1..=num_parties).collect_vec(),
+            threshold,
+        )
+        .unwrap();
+
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn gsz_mul_vec_bn() {
+        gsz_mul_vec_bn_inner(3, 1).await;
+        gsz_mul_vec_bn_inner(10, 4).await;
     }
 }

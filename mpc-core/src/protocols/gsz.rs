@@ -404,12 +404,12 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
                 if my_id == other_id {
                     my_share = share;
                 } else {
-                    self.network.send(other_id, share)?;
+                    self.network.send_many(other_id, &share)?;
                 }
             }
             my_share
         } else {
-            self.network.send(Self::KING_ID, muls)?;
+            self.network.send_many(Self::KING_ID, &muls)?;
             let r = self.network.recv_many::<F>(Self::KING_ID)?;
             if r.len() != len {
                 return Err(std::io::Error::new(
