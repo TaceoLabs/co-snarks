@@ -52,14 +52,14 @@ pub mod utils {
 
     pub fn combine_field_element<F: PrimeField>(
         shares: &[GSZPrimeFieldShare<F>],
-        parties: &[usize],
+        coeffs: &[usize],
         degree: usize,
     ) -> Result<F, Report> {
-        if shares.len() != parties.len() {
+        if shares.len() != coeffs.len() {
             bail!(
                 "Number of shares ({}) does not match number of party indices ({})",
                 shares.len(),
-                parties.len()
+                coeffs.len()
             );
         }
         if shares.len() <= degree {
@@ -70,7 +70,7 @@ pub mod utils {
             );
         }
 
-        let lagrange = Shamir::lagrange_from_coeff(&parties[..=degree]);
+        let lagrange = Shamir::lagrange_from_coeff(&coeffs[..=degree]);
         let shares = GSZPrimeFieldShare::convert_slice(shares);
         let rec = Shamir::reconstruct(&shares[..=degree], &lagrange);
 
@@ -100,14 +100,14 @@ pub mod utils {
 
     pub fn combine_field_elements<F: PrimeField>(
         shares: &[GSZPrimeFieldShareVec<F>],
-        parties: &[usize],
+        coeffs: &[usize],
         degree: usize,
     ) -> Result<Vec<F>, Report> {
-        if shares.len() != parties.len() {
+        if shares.len() != coeffs.len() {
             bail!(
                 "Number of shares ({}) does not match number of party indices ({})",
                 shares.len(),
-                parties.len()
+                coeffs.len()
             );
         }
         if shares.len() <= degree {
@@ -130,7 +130,7 @@ pub mod utils {
         }
         let mut result = Vec::with_capacity(num_vals);
 
-        let lagrange = Shamir::lagrange_from_coeff(&parties[..=degree]);
+        let lagrange = Shamir::lagrange_from_coeff(&coeffs[..=degree]);
 
         for i in 0..num_vals {
             let s = shares
@@ -157,14 +157,14 @@ pub mod utils {
 
     pub fn combine_curve_point<C: CurveGroup>(
         shares: &[GSZPointShare<C>],
-        parties: &[usize],
+        coeffs: &[usize],
         degree: usize,
     ) -> Result<C, Report> {
-        if shares.len() != parties.len() {
+        if shares.len() != coeffs.len() {
             bail!(
                 "Number of shares ({}) does not match number of party indices ({})",
                 shares.len(),
-                parties.len()
+                coeffs.len()
             );
         }
         if shares.len() <= degree {
@@ -175,7 +175,7 @@ pub mod utils {
             );
         }
 
-        let lagrange = Shamir::lagrange_from_coeff(&parties[..=degree]);
+        let lagrange = Shamir::lagrange_from_coeff(&coeffs[..=degree]);
         let shares = GSZPointShare::convert_slice(shares);
         let rec = Shamir::reconstruct_point(&shares[..=degree], &lagrange);
 
