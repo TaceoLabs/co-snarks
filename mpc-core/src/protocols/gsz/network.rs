@@ -153,7 +153,7 @@ impl GSZNetwork for GSZMpcNet {
         data: &[F],
     ) -> std::io::Result<()> {
         let size = data.serialized_size(ark_serialize::Compress::No);
-        let mut ser_data = vec![0u8; size];
+        let mut ser_data = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut ser_data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         self.send_bytes(target, Bytes::from(ser_data))
@@ -174,7 +174,7 @@ impl GSZNetwork for GSZMpcNet {
     ) -> std::io::Result<Vec<F>> {
         // Serialize
         let size = data.serialized_size(ark_serialize::Compress::No);
-        let mut ser_data = vec![0u8; size];
+        let mut ser_data = Vec::with_capacity(size);
         data.to_owned()
             .serialize_uncompressed(&mut ser_data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;

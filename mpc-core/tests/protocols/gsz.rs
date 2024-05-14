@@ -100,7 +100,8 @@ impl GSZNetwork for PartyTestNetwork {
             target -= 1;
         }
 
-        let mut to_send = Vec::with_capacity(data.len() * 32);
+        let size = data.serialized_size(ark_serialize::Compress::No);
+        let mut to_send = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut to_send).unwrap();
 
         self.send[target]
@@ -131,7 +132,7 @@ impl GSZNetwork for PartyTestNetwork {
     ) -> std::io::Result<Vec<F>> {
         // Serialize
         let size = data.serialized_size(ark_serialize::Compress::No);
-        let mut ser_data = vec![0u8; size];
+        let mut ser_data = Vec::with_capacity(size);
         data.to_owned()
             .serialize_uncompressed(&mut ser_data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
