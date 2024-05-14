@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod aby3_tests {
 
     use ark_bn254::Bn254;
     use ark_groth16::{prepare_verifying_key, Groth16};
