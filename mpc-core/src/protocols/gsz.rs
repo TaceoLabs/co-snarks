@@ -217,6 +217,11 @@ impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
         })
     }
 
+    // Generates amount * (self.threshold + 1) random double shares
+    pub fn preprocess(&mut self, amount: usize) -> std::io::Result<()> {
+        self.rng_buffer.buffer_triples(&mut self.network, amount)
+    }
+
     // multiply followed by a opening, thus, no reshare required
     pub fn mul_open(
         &mut self,
@@ -750,7 +755,7 @@ impl<F: PrimeField> GSZRng<F> {
             if my_id == other_id {
                 my_send = shares;
             } else {
-                network.send(other_id, shares)?;
+                network.send_many(other_id, &shares)?;
             }
         }
         // Receive

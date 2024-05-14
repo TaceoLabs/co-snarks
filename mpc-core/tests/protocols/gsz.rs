@@ -212,5 +212,98 @@ mod field_share {
     #[tokio::test]
     async fn gsz_add() {
         gsz_add_inner(3, 1).await;
+        gsz_add_inner(10, 4).await;
+    }
+
+    async fn gsz_sub_inner(num_parties: usize, threshold: usize) {
+        let test_network = GSZTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let y = ark_bn254::Fr::rand(&mut rng);
+        let x_shares = gsz::utils::share_field_element(x, threshold, num_parties, &mut rng);
+        let y_shares = gsz::utils::share_field_element(y, threshold, num_parties, &mut rng);
+        let should_result = x - y;
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = oneshot::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
+            thread::spawn(move || {
+                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
+                tx.send(gsz.sub(&x, &y))
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.await.unwrap());
+        }
+
+        let is_result = gsz::utils::combine_field_element(
+            &results,
+            &(1..=num_parties).collect_vec(),
+            threshold,
+        )
+        .unwrap();
+
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn gsz_sub() {
+        gsz_sub_inner(3, 1).await;
+        gsz_sub_inner(10, 4).await;
+    }
+
+    async fn gsz_mul2_then_add_inner(num_parties: usize, threshold: usize) {
+        let test_network = GSZTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let y = ark_bn254::Fr::rand(&mut rng);
+        let x_shares = gsz::utils::share_field_element(x, threshold, num_parties, &mut rng);
+        let y_shares = gsz::utils::share_field_element(y, threshold, num_parties, &mut rng);
+        let should_result = ((x * y) * y) + x;
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = oneshot::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
+            thread::spawn(move || {
+                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
+                let mul = gsz.mul(&x, &y).unwrap();
+                let mul = gsz.mul(&mul, &y).unwrap();
+                tx.send(gsz.add(&mul, &x))
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.await.unwrap());
+        }
+
+        let is_result = gsz::utils::combine_field_element(
+            &results,
+            &(1..=num_parties).collect_vec(),
+            threshold,
+        )
+        .unwrap();
+
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn gsz_mul2_then_add() {
+        gsz_mul2_then_add_inner(3, 1).await;
+        gsz_mul2_then_add_inner(10, 4).await;
     }
 }
