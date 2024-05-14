@@ -485,9 +485,47 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
         a: &Self::PointShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::PointShare> {
-        let mul = b * a;
-        // Use the randomness and just mul it onto the generator if required
-        todo!()
+        let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network)?;
+        let r_t = C::generator().mul(r_t);
+        let r_2t = C::generator().mul(r_2t);
+
+        let mul = (b * a).a + r_2t;
+        let my_id = self.network.get_id();
+
+        let my_share = if my_id == Self::KING_ID {
+            // Accumulate the result
+            let mut acc = C::zero();
+            for (other_id, lagrange) in self.lagrange_2t.iter().enumerate() {
+                if other_id == Self::KING_ID {
+                    acc += mul * lagrange;
+                } else {
+                    let r = self.network.recv::<C>(other_id)?;
+                    acc += r * lagrange;
+                }
+            }
+
+            // Send fresh shares
+            let shares = Shamir::share_point(
+                acc,
+                self.network.get_num_parties(),
+                self.threshold,
+                &mut self.rng_buffer.rng,
+            );
+            let mut my_share = C::default();
+            for (other_id, share) in shares.into_iter().enumerate() {
+                if my_id == other_id {
+                    my_share = share;
+                } else {
+                    self.network.send(other_id, share)?;
+                }
+            }
+            my_share
+        } else {
+            self.network.send(Self::KING_ID, mul)?;
+            self.network.recv(Self::KING_ID)?
+        };
+
+        Ok(Self::PointShare::new(my_share - r_t))
     }
 
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
@@ -615,7 +653,7 @@ impl<F: PrimeField> GSZRng<F> {
         network: &mut N,
         amount: usize,
     ) -> std::io::Result<()> {
-        // TODO this is just a placeholder for something totally insecure
+        // TODO this is just a placeholder and is totally insecure
         self.r_t
             .extend(vec![F::zero(); amount * (self.threshold + 1)]);
         self.r_2t
