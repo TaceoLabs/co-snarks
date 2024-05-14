@@ -24,15 +24,8 @@ impl GSZTestNetwork {
                 let (s, r) = mpsc::unbounded_channel();
                 sender.insert((sender_id, receiver_id), s);
                 receiver.insert((sender_id, receiver_id), r);
-
-                // party_sender.push(sender);
-                // party_receiver.push(receiver);
             }
-            // sender.push(party_sender);
-            // receiver.push(party_receiver);
         }
-
-        // Reorder receivers
 
         Self {
             num_parties,
