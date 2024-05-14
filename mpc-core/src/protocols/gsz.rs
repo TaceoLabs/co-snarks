@@ -204,8 +204,8 @@ impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
 
         let seed: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
 
-        let lagrange_t = Shamir::lagrange_from_coeff(&(0..=threshold).collect::<Vec<_>>());
-        let lagrange_2t = Shamir::lagrange_from_coeff(&(0..=2 * threshold).collect::<Vec<_>>());
+        let lagrange_t = Shamir::lagrange_from_coeff(&(1..=threshold + 1).collect::<Vec<_>>());
+        let lagrange_2t = Shamir::lagrange_from_coeff(&(1..=2 * threshold + 1).collect::<Vec<_>>());
 
         Ok(Self {
             threshold,
