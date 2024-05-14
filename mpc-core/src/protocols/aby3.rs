@@ -250,6 +250,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         a: &Self::FieldShareSlice<'_>,
         b: &Self::FieldShareSlice<'_>,
     ) -> std::io::Result<Self::FieldShareVec> {
+        debug_assert_eq!(a.len(), b.len());
         let local_a = izip!(a.a.iter(), a.b.iter(), b.a.iter(), b.b.iter())
             .map(|(aa, ab, ba, bb)| {
                 *aa * ba + *aa * bb + *ab * ba + self.rngs.masking_field_element::<F>()
@@ -257,6 +258,12 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
             .collect_vec();
         self.network.send_next_many(&local_a)?;
         let local_b = self.network.recv_prev_many()?;
+        if local_b.len() != local_a.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid number of elements received",
+            ));
+        }
         Ok(Self::FieldShareVec::new(local_a, local_b))
     }
 

@@ -266,7 +266,7 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
     ) -> std::io::Result<Self::FieldShare> {
         let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network)?;
 
-        let mul = a * b + r_2t;
+        let mul = a.a * b.a + r_2t;
 
         let my_id = self.network.get_id();
         let my_share = if my_id == Self::KING_ID {
@@ -274,7 +274,7 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
             let mut acc = F::zero();
             for (other_id, lagrange) in self.lagrange_2t.iter().enumerate() {
                 if other_id == Self::KING_ID {
-                    acc += mul.a * lagrange;
+                    acc += mul * lagrange;
                 } else {
                     let r = self.network.recv::<F>(other_id)?;
                     acc += r * lagrange;
@@ -298,7 +298,7 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
             }
             my_share
         } else {
-            self.network.send(Self::KING_ID, mul.a)?;
+            self.network.send(Self::KING_ID, mul)?;
             self.network.recv(Self::KING_ID)?
         };
 
@@ -343,7 +343,82 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
         a: &Self::FieldShareSlice<'_>,
         b: &Self::FieldShareSlice<'_>,
     ) -> std::io::Result<Self::FieldShareVec> {
-        todo!()
+        let len = a.len();
+        debug_assert_eq!(len, b.len());
+        let mut r_ts = Vec::with_capacity(len);
+        let mut muls = Vec::with_capacity(len);
+
+        for (a, b) in izip!(a.a.iter(), b.a.iter()) {
+            let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network)?;
+            let mul = *a * b + r_2t;
+            muls.push(mul);
+            r_ts.push(r_t);
+        }
+        let my_id = self.network.get_id();
+        let mut my_shares = if my_id == Self::KING_ID {
+            // Accumulate the result
+            let mut acc = vec![F::zero(); len];
+            for (other_id, lagrange) in self.lagrange_2t.iter().enumerate() {
+                if other_id == Self::KING_ID {
+                    for (acc, muls) in izip!(&mut acc, &muls) {
+                        *acc += *muls * lagrange;
+                    }
+                } else {
+                    let r = self.network.recv_many::<F>(other_id)?;
+                    if r.len() != len {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Invalid number of elements received",
+                        ));
+                    }
+                    for (acc, muls) in izip!(&mut acc, r) {
+                        *acc += muls * lagrange;
+                    }
+                }
+            }
+
+            // Send fresh shares
+            let mut shares = (0..self.network.get_num_parties())
+                .map(|_| Vec::with_capacity(len))
+                .collect::<Vec<_>>();
+
+            for acc in acc {
+                let s = Shamir::share(
+                    acc,
+                    self.network.get_num_parties(),
+                    self.threshold,
+                    &mut self.rng_buffer.rng,
+                );
+                for (des, src) in izip!(&mut shares, s) {
+                    des.push(src);
+                }
+            }
+
+            let mut my_share = Vec::new();
+            for (other_id, share) in shares.into_iter().enumerate() {
+                if my_id == other_id {
+                    my_share = share;
+                } else {
+                    self.network.send(other_id, share)?;
+                }
+            }
+            my_share
+        } else {
+            self.network.send(Self::KING_ID, muls)?;
+            let r = self.network.recv_many::<F>(Self::KING_ID)?;
+            if r.len() != len {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid number of elements received",
+                ));
+            }
+            r
+        };
+
+        for (share, r) in izip!(&mut my_shares, r_ts) {
+            *share -= r;
+        }
+        Ok(Self::FieldShareVec::new(my_shares))
     }
 
     fn promote_to_trivial_share(&self, public_values: &[F]) -> Self::FieldShareVec {
