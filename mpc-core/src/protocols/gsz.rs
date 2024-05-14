@@ -268,7 +268,8 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
 
         let mul = a * b + r_2t;
 
-        let my_share = if self.network.get_id() == Self::KING_ID {
+        let my_id = self.network.get_id();
+        let my_share = if my_id == Self::KING_ID {
             // Accumulate the result
             let mut acc = F::zero();
             for (other_id, lagrange) in self.lagrange_2t.iter().enumerate() {
@@ -289,20 +290,19 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
             );
             let mut my_share = F::default();
             for (other_id, share) in shares.into_iter().enumerate() {
-                if self.network.get_id() == other_id {
+                if my_id == other_id {
                     my_share = share;
                 } else {
                     self.network.send(other_id, share)?;
                 }
             }
-            my_share - r_t
+            my_share
         } else {
             self.network.send(Self::KING_ID, mul.a)?;
-            let share = self.network.recv::<F>(Self::KING_ID)?;
-            share - r_t
+            self.network.recv(Self::KING_ID)?
         };
 
-        Ok(Self::FieldShare::new(my_share))
+        Ok(Self::FieldShare::new(my_share - r_t))
     }
 
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
@@ -310,7 +310,7 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
     }
 
     fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare> {
-        let r = self.rand();
+        let r = self.rand()?;
         let y = self.mul_open(a, &r)?;
         if y.is_zero() {
             return Err(std::io::Error::new(
@@ -326,8 +326,9 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
         -a
     }
 
-    fn rand(&mut self) -> Self::FieldShare {
-        todo!()
+    fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
+        let (r, _) = self.rng_buffer.get_pair(&mut self.network)?;
+        Ok(Self::FieldShare::new(r))
     }
 
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F> {

@@ -188,7 +188,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
     }
 
     fn inv(&mut self, a: &Self::FieldShare) -> IoResult<Self::FieldShare> {
-        let r = self.rand();
+        let r = self.rand()?;
         let tmp = self.mul(a, &r)?;
         let y = self.open(&tmp)?;
         if y.is_zero() {
@@ -205,9 +205,9 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         -a
     }
 
-    fn rand(&mut self) -> Self::FieldShare {
+    fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
         let (a, b) = self.rngs.random_fes();
-        Self::FieldShare { a, b }
+        Ok(Self::FieldShare { a, b })
     }
 
     fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {

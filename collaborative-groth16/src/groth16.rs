@@ -95,8 +95,8 @@ where
             private_witness,
         )?;
         let h_slice = ScalarFieldShareSlice::<T, P>::from(&h);
-        let r = self.driver.rand();
-        let s = self.driver.rand();
+        let r = self.driver.rand()?;
+        let s = self.driver.rand()?;
         self.create_proof_with_assignment(pk, r, s, h_slice, &public_inputs[1..], private_witness)
     }
 

@@ -32,7 +32,7 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
     fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare>;
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
-    fn rand(&mut self) -> Self::FieldShare;
+    fn rand(&mut self) -> std::io::Result<Self::FieldShare>;
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F>;
     fn mul_vec(
         &mut self,

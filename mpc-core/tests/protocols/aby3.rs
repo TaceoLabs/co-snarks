@@ -465,7 +465,7 @@ mod field_share {
         {
             thread::spawn(move || {
                 let mut aby3 = Aby3Protocol::<ark_bn254::Fr, _>::new(net).unwrap();
-                tx.send((0..10).map(|_| aby3.rand()).collect::<Vec<_>>())
+                tx.send((0..10).map(|_| aby3.rand().unwrap()).collect::<Vec<_>>())
             });
         }
         let result1 = rx1.await.unwrap();
