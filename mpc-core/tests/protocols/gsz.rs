@@ -406,4 +406,62 @@ mod field_share {
         gsz_mul_vec_bn_inner(3, 1).await;
         gsz_mul_vec_bn_inner(10, 4).await;
     }
+
+    async fn gsz_mul_vec_inner(num_parties: usize, threshold: usize) {
+        let test_network = GSZTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let x = (0..1)
+            .map(|_| ark_bn254::Fr::from_str("2").unwrap())
+            .collect::<Vec<_>>();
+        let y = (0..x.len())
+            .map(|_| ark_bn254::Fr::from_str("3").unwrap())
+            .collect::<Vec<_>>();
+
+        let mut should_result = Vec::with_capacity(x.len());
+        for (x, y) in x.iter().zip(y.iter()) {
+            should_result.push((x * y) * y);
+        }
+
+        let x_shares =
+            gsz::utils::share_field_elements(x.to_vec(), threshold, num_parties, &mut rng);
+        let y_shares =
+            gsz::utils::share_field_elements(y.to_vec(), threshold, num_parties, &mut rng);
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = oneshot::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
+            thread::spawn(move || {
+                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
+                let mul = gsz.mul_vec(&x.to_ref(), &y.to_ref()).unwrap();
+                let mul = gsz.mul_vec(&mul.to_ref(), &y.to_ref()).unwrap();
+                tx.send(mul)
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.await.unwrap());
+        }
+
+        let is_result = gsz::utils::combine_field_elements(
+            &results,
+            &(1..=num_parties).collect_vec(),
+            threshold,
+        )
+        .unwrap();
+
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn gsz_mul_vec() {
+        gsz_mul_vec_inner(3, 1).await;
+        gsz_mul_vec_inner(10, 4).await;
+    }
 }
