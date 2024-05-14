@@ -698,28 +698,22 @@ impl<F: PrimeField> GSZRng<F> {
     // [1, 2^2, 3^2, 4^2, ..., n^2]
     // ...
     // [1, 2^t, 3^t, 4^t, ..., n^t]
-    fn vandermonde_mul(&self, inputs: &[F]) -> Vec<F> {
-        debug_assert_eq!(inputs.len(), self.num_parties);
-        let mut res = Vec::with_capacity(self.threshold + 1);
+    fn vandermonde_mul(inputs: &[F], res: &mut [F], num_parties: usize, threshold: usize) {
+        debug_assert_eq!(inputs.len(), num_parties);
+        debug_assert_eq!(res.len(), threshold + 1);
 
-        let row = (1..=self.num_parties as u64)
-            .map(F::from)
-            .collect::<Vec<_>>();
+        let row = (1..=num_parties as u64).map(F::from).collect::<Vec<_>>();
         let mut current_row = row.clone();
 
-        let r0 = inputs.iter().sum();
-        res.push(r0);
+        res[0] = inputs.iter().sum();
 
-        for _ in 1..=self.threshold {
-            let mut ri = F::zero();
+        for ri in res.iter_mut().skip(1) {
+            *ri = F::zero();
             for (c, r, i) in izip!(&mut current_row, &row, inputs) {
-                ri += *c * i;
+                *ri += *c * i;
                 *c *= r; // Update current_row
             }
-            res.push(ri);
         }
-
-        res
     }
 
     // Generates amount * (self.threshold + 1) random double shares
@@ -728,6 +722,9 @@ impl<F: PrimeField> GSZRng<F> {
         network: &mut N,
         amount: usize,
     ) -> std::io::Result<()> {
+        debug_assert_eq!(self.remaining, self.r_t.len());
+        debug_assert_eq!(self.remaining, self.r_2t.len());
+
         let rand = (0..amount)
             .map(|_| F::rand(&mut self.rng))
             .collect::<Vec<_>>();
@@ -773,16 +770,36 @@ impl<F: PrimeField> GSZRng<F> {
                     des_r2.push(src[1]);
                 }
             } else {
-                todo!()
+                let r = network.recv_many::<F>(other_id)?;
+                if r.len() != 2 * amount {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Invalid number of elements received",
+                    ));
+                }
+                for (des_r, des_r2, src) in izip!(&mut rcv_rt, &mut rcv_r2t, r.chunks_exact(2)) {
+                    des_r.push(src[0]);
+                    des_r2.push(src[1]);
+                }
             }
         }
 
-        // TODO this is just a placeholder and is totally insecure
+        // reserve buffer
         self.r_t
-            .extend(vec![F::zero(); amount * (self.threshold + 1)]);
+            .resize(self.remaining + amount * (self.threshold + 1), F::default());
         self.r_2t
-            .extend(vec![F::zero(); amount * (self.threshold + 1)]);
-        self.remaining += amount;
+            .resize(self.remaining + amount * (self.threshold + 1), F::default());
+
+        // Now make vandermonde multiplication
+        let r_t_chunks = self.r_t[self.remaining..].chunks_exact_mut(self.threshold + 1);
+        let r_2t_chunks = self.r_2t[self.remaining..].chunks_exact_mut(self.threshold + 1);
+
+        for (r_t_des, r_2t_des, r_t_src, r_2t_src) in
+            izip!(r_t_chunks, r_2t_chunks, rcv_rt, rcv_r2t)
+        {
+            Self::vandermonde_mul(&r_t_src, r_t_des, self.num_parties, self.threshold);
+            Self::vandermonde_mul(&r_2t_src, r_2t_des, self.num_parties, self.threshold);
+        }
 
         Ok(())
     }
