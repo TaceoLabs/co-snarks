@@ -118,7 +118,8 @@ mod gsz_tests {
                 target -= 1;
             }
 
-            let mut to_send = Vec::with_capacity(data.len() * 32);
+            let size = data.serialized_size(ark_serialize::Compress::No);
+            let mut to_send = Vec::with_capacity(size);
             data.serialize_uncompressed(&mut to_send).unwrap();
 
             self.send[target]
