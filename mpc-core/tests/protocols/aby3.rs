@@ -139,19 +139,18 @@ impl Aby3Network for PartyTestNetwork {
     }
 }
 mod field_share {
-    use ark_std::UniformRand;
-    use std::{collections::HashSet, thread};
-
+    use crate::protocols::aby3::Aby3TestNetwork;
+    use ark_ff::Field;
+    use ark_std::{UniformRand, Zero};
     use mpc_core::protocols::aby3::{
         self,
         fieldshare::{Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareVec},
         Aby3Protocol,
     };
-    use rand::thread_rng;
-    use tokio::sync::oneshot;
-
-    use crate::protocols::aby3::Aby3TestNetwork;
     use mpc_core::traits::PrimeFieldMpcProtocol;
+    use rand::thread_rng;
+    use std::{collections::HashSet, thread};
+    use tokio::sync::oneshot;
 
     #[tokio::test]
     async fn aby3_add() {
@@ -444,6 +443,37 @@ mod field_share {
             thread::spawn(move || {
                 let mut aby3 = Aby3Protocol::new(net).unwrap();
                 tx.send(aby3.neg(&x))
+            });
+        }
+        let result1 = rx1.await.unwrap();
+        let result2 = rx2.await.unwrap();
+        let result3 = rx3.await.unwrap();
+        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn aby3_inv() {
+        let test_network = Aby3TestNetwork::default();
+        let mut rng = thread_rng();
+        let mut x = ark_bn254::Fr::rand(&mut rng);
+        while x.is_zero() {
+            x = ark_bn254::Fr::rand(&mut rng);
+        }
+        let x_shares = aby3::utils::share_field_element(x, &mut rng);
+        let should_result = x.inverse().unwrap();
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+        let (tx3, rx3) = oneshot::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut aby3 = Aby3Protocol::new(net).unwrap();
+                tx.send(aby3.inv(&x).unwrap())
             });
         }
         let result1 = rx1.await.unwrap();

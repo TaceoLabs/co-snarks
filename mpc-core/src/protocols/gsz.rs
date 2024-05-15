@@ -204,8 +204,18 @@ impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
 
         let seed: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
 
-        let lagrange_t = Shamir::lagrange_from_coeff(&(1..=threshold + 1).collect::<Vec<_>>());
-        let lagrange_2t = Shamir::lagrange_from_coeff(&(1..=2 * threshold + 1).collect::<Vec<_>>());
+        // We send in circles, so we need to receive from the last parties
+        let id = network.get_id();
+        let lagrange_t = Shamir::lagrange_from_coeff(
+            &(1..=threshold + 1)
+                // .map(|i| (id + num_parties - i) % num_parties + 1)
+                .collect::<Vec<_>>(),
+        );
+        let lagrange_2t = Shamir::lagrange_from_coeff(
+            &(1..=2 * threshold + 1)
+                // .map(|i| (id + num_parties - i) % num_parties + 1)
+                .collect::<Vec<_>>(),
+        );
 
         Ok(Self {
             threshold,
@@ -230,7 +240,15 @@ impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
     ) -> std::io::Result<F> {
         // TODO only receive enough?
         let mul = a * b;
+        // let rcv = self.network.broadcast_next(mul.a, 2 * self.threshold + 1)?;
+        // let res = Shamir::reconstruct(&rcv, &self.lagrange_2t);
         let rcv = self.network.broadcast(mul.a)?;
+        println!(
+            "n={}, t={}, rcv={}",
+            self.network.get_num_parties(),
+            self.threshold,
+            rcv.len()
+        );
         let res = Shamir::reconstruct(&rcv[..=2 * self.threshold], &self.lagrange_2t);
         Ok(res)
     }

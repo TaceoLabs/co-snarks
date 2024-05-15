@@ -1,7 +1,7 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
 use mpc_core::protocols::gsz::network::GSZNetwork;
-use std::collections::HashMap;
+use std::{cmp::Ordering, collections::HashMap};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 pub struct GSZTestNetwork {
@@ -154,6 +154,55 @@ impl GSZNetwork for PartyTestNetwork {
             let data = Vec::from(recv.blocking_recv().unwrap());
             res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
         }
+        if self.id == self.num_parties - 1 {
+            // Put that at the end
+            res.push(data.to_owned());
+        }
+
+        Ok(res)
+    }
+
+    fn broadcast_next<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
+        &mut self,
+        data: F,
+        num: usize,
+    ) -> std::io::Result<Vec<F>> {
+        // Serialize
+        let size = data.serialized_size(ark_serialize::Compress::No);
+        let mut ser_data = Vec::with_capacity(size);
+        data.to_owned()
+            .serialize_uncompressed(&mut ser_data)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+        let send_data = Bytes::from(ser_data);
+
+        // Send
+        for s in 1..=num {
+            let mut other_id = (self.id + s) % self.num_parties;
+            match other_id.cmp(&self.id) {
+                Ordering::Greater => other_id -= 1,
+                Ordering::Less => {}
+                Ordering::Equal => continue,
+            }
+            self.send[other_id]
+                .send(send_data.to_owned())
+                .expect("can send");
+        }
+
+        // Receive
+        let mut res = Vec::with_capacity(num);
+        for r in 1..=num {
+            let mut other_id = (self.id + self.num_parties - r) % self.num_parties;
+            match other_id.cmp(&self.id) {
+                Ordering::Greater => other_id -= 1,
+                Ordering::Less => {}
+                Ordering::Equal => {
+                    res.push(data.to_owned());
+                    continue;
+                }
+            }
+            let data = Vec::from(self.recv[other_id].blocking_recv().unwrap());
+            res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
+        }
 
         Ok(res)
     }
@@ -161,7 +210,8 @@ impl GSZNetwork for PartyTestNetwork {
 
 mod field_share {
     use crate::protocols::gsz::GSZTestNetwork;
-    use ark_std::UniformRand;
+    use ark_ff::Field;
+    use ark_std::{UniformRand, Zero};
     use itertools::{izip, Itertools};
     use mpc_core::{
         protocols::gsz::{self, GSZProtocol},
@@ -507,6 +557,52 @@ mod field_share {
     async fn gsz_neg() {
         gsz_neg_inner(3, 1).await;
         gsz_neg_inner(10, 4).await;
+    }
+
+    async fn gsz_inv_inner(num_parties: usize, threshold: usize) {
+        let test_network = GSZTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let mut x = ark_bn254::Fr::rand(&mut rng);
+        while x.is_zero() {
+            x = ark_bn254::Fr::rand(&mut rng);
+        }
+        let x_shares = gsz::utils::share_field_element(x, threshold, num_parties, &mut rng);
+        let should_result = x.inverse().unwrap();
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = oneshot::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x) in izip!(test_network.get_party_networks(), tx, x_shares) {
+            thread::spawn(move || {
+                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
+                tx.send(gsz.inv(&x).unwrap())
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.await.unwrap());
+        }
+
+        let is_result = gsz::utils::combine_field_element(
+            &results,
+            &(1..=num_parties).collect_vec(),
+            threshold,
+        )
+        .unwrap();
+
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn gsz_inv() {
+        gsz_inv_inner(3, 1).await;
+        gsz_inv_inner(10, 4).await;
     }
 }
 

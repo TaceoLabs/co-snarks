@@ -15,7 +15,7 @@ mod gsz_tests {
     use itertools::izip;
     use mpc_core::protocols::gsz::{network::GSZNetwork, GSZProtocol};
     use rand::thread_rng;
-    use std::{collections::HashMap, fs::File, thread};
+    use std::{cmp::Ordering, collections::HashMap, fs::File, thread};
     use tokio::sync::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot,
@@ -173,6 +173,55 @@ mod gsz_tests {
                 }
 
                 let data = Vec::from(recv.blocking_recv().unwrap());
+                res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
+            }
+            if self.id == self.num_parties - 1 {
+                // Put that at the end
+                res.push(data.to_owned());
+            }
+
+            Ok(res)
+        }
+
+        fn broadcast_next<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
+            &mut self,
+            data: F,
+            num: usize,
+        ) -> std::io::Result<Vec<F>> {
+            // Serialize
+            let size = data.serialized_size(ark_serialize::Compress::No);
+            let mut ser_data = Vec::with_capacity(size);
+            data.to_owned()
+                .serialize_uncompressed(&mut ser_data)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+            let send_data = Bytes::from(ser_data);
+
+            // Send
+            for s in 1..=num {
+                let mut other_id = (self.id + s) % self.num_parties;
+                match other_id.cmp(&self.id) {
+                    Ordering::Greater => other_id -= 1,
+                    Ordering::Less => {}
+                    Ordering::Equal => continue,
+                }
+                self.send[other_id]
+                    .send(send_data.to_owned())
+                    .expect("can send");
+            }
+
+            // Receive
+            let mut res = Vec::with_capacity(num);
+            for r in 1..=num {
+                let mut other_id = (self.id + self.num_parties - r) % self.num_parties;
+                match other_id.cmp(&self.id) {
+                    Ordering::Greater => other_id -= 1,
+                    Ordering::Less => {}
+                    Ordering::Equal => {
+                        res.push(data.to_owned());
+                        continue;
+                    }
+                }
+                let data = Vec::from(self.recv[other_id].blocking_recv().unwrap());
                 res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
             }
 
