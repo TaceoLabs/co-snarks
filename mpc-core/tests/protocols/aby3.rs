@@ -102,7 +102,8 @@ impl Aby3Network for PartyTestNetwork {
         target: PartyID,
         data: &[F],
     ) -> std::io::Result<()> {
-        let mut to_send = Vec::with_capacity(data.len() * 32);
+        let size = data.serialized_size(ark_serialize::Compress::No);
+        let mut to_send = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut to_send).unwrap();
         if self.id.next_id() == target {
             self.send_next
@@ -138,19 +139,18 @@ impl Aby3Network for PartyTestNetwork {
     }
 }
 mod field_share {
-    use ark_std::UniformRand;
-    use std::{collections::HashSet, thread};
-
+    use crate::protocols::aby3::Aby3TestNetwork;
+    use ark_ff::Field;
+    use ark_std::{UniformRand, Zero};
     use mpc_core::protocols::aby3::{
         self,
         fieldshare::{Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareVec},
         Aby3Protocol,
     };
-    use rand::thread_rng;
-    use tokio::sync::oneshot;
-
-    use crate::protocols::aby3::Aby3TestNetwork;
     use mpc_core::traits::PrimeFieldMpcProtocol;
+    use rand::thread_rng;
+    use std::{collections::HashSet, thread};
+    use tokio::sync::oneshot;
 
     #[tokio::test]
     async fn aby3_add() {
@@ -453,6 +453,37 @@ mod field_share {
     }
 
     #[tokio::test]
+    async fn aby3_inv() {
+        let test_network = Aby3TestNetwork::default();
+        let mut rng = thread_rng();
+        let mut x = ark_bn254::Fr::rand(&mut rng);
+        while x.is_zero() {
+            x = ark_bn254::Fr::rand(&mut rng);
+        }
+        let x_shares = aby3::utils::share_field_element(x, &mut rng);
+        let should_result = x.inverse().unwrap();
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+        let (tx3, rx3) = oneshot::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut aby3 = Aby3Protocol::new(net).unwrap();
+                tx.send(aby3.inv(&x).unwrap())
+            });
+        }
+        let result1 = rx1.await.unwrap();
+        let result2 = rx2.await.unwrap();
+        let result3 = rx3.await.unwrap();
+        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
     async fn aby3_random() {
         let test_network = Aby3TestNetwork::default();
         let (tx1, rx1) = oneshot::channel();
@@ -465,7 +496,7 @@ mod field_share {
         {
             thread::spawn(move || {
                 let mut aby3 = Aby3Protocol::<ark_bn254::Fr, _>::new(net).unwrap();
-                tx.send((0..10).map(|_| aby3.rand()).collect::<Vec<_>>())
+                tx.send((0..10).map(|_| aby3.rand().unwrap()).collect::<Vec<_>>())
             });
         }
         let result1 = rx1.await.unwrap();

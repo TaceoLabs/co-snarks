@@ -153,38 +153,14 @@ impl Aby3Network for Aby3MpcNet {
         data: &[F],
     ) -> std::io::Result<()> {
         let size = data.serialized_size(ark_serialize::Compress::No);
-        let mut ser_data = vec![0u8; size];
+        let mut ser_data = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut ser_data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
-        if target == self.id.next_id() {
-            std::mem::drop(self.chan_next.blocking_send(Bytes::from(ser_data)));
-            Ok(())
-        } else if target == self.id.prev_id() {
-            std::mem::drop(self.chan_prev.blocking_send(Bytes::from(ser_data)));
-            Ok(())
-        } else {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Cannot send to self",
-            ));
-        }
+        self.send_bytes(target, Bytes::from(ser_data))
     }
 
     fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
-        let data = if from == self.id.prev_id() {
-            self.chan_prev.blocking_recv().blocking_recv()
-        } else if from == self.id.next_id() {
-            self.chan_next.blocking_recv().blocking_recv()
-        } else {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Cannot recv from self",
-            ));
-        };
-
-        let data = data.map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::BrokenPipe, "receive channel end died")
-        })??;
+        let data = self.recv_bytes(from)?;
 
         let res = Vec::<F>::deserialize_uncompressed(&data[..])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;

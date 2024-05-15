@@ -6,8 +6,11 @@ use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
 use std::{marker::PhantomData, thread, time::Duration};
 
-use crate::traits::{
-    EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+use crate::{
+    traits::{
+        EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    },
+    RngType,
 };
 pub use fieldshare::Aby3PrimeFieldShare;
 
@@ -23,7 +26,6 @@ pub mod id;
 pub mod network;
 pub mod pointshare;
 
-type RngType = rand_chacha::ChaCha12Rng;
 type IoResult<T> = std::io::Result<T>;
 
 pub mod utils {
@@ -143,16 +145,13 @@ pub struct Aby3Protocol<F: PrimeField, N: Aby3Network> {
 
 impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     pub fn new(mut network: N) -> Result<Self, Report> {
-        let seed1: [u8; Aby3CorrelatedRng::SEED_SIZE] = RngType::from_entropy().gen();
+        let seed1: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
         let seed2_bytes = network.send_and_receive_seed(seed1.to_vec().into())?;
-        if seed2_bytes.len() != Aby3CorrelatedRng::SEED_SIZE {
-            bail!(
-                "Received seed is not {} bytes long",
-                Aby3CorrelatedRng::SEED_SIZE
-            );
+        if seed2_bytes.len() != crate::SEED_SIZE {
+            bail!("Received seed is not {} bytes long", crate::SEED_SIZE);
         }
         let seed2 = {
-            let mut buf = [0u8; Aby3CorrelatedRng::SEED_SIZE];
+            let mut buf = [0u8; crate::SEED_SIZE];
             buf[..].copy_from_slice(&seed2_bytes[..]);
             buf
         };
@@ -189,7 +188,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
     }
 
     fn inv(&mut self, a: &Self::FieldShare) -> IoResult<Self::FieldShare> {
-        let r = self.rand();
+        let r = self.rand()?;
         let tmp = self.mul(a, &r)?;
         let y = self.open(&tmp)?;
         if y.is_zero() {
@@ -206,9 +205,9 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         -a
     }
 
-    fn rand(&mut self) -> Self::FieldShare {
+    fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
         let (a, b) = self.rngs.random_fes();
-        Self::FieldShare { a, b }
+        Ok(Self::FieldShare { a, b })
     }
 
     fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
@@ -251,6 +250,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         a: &Self::FieldShareSlice<'_>,
         b: &Self::FieldShareSlice<'_>,
     ) -> std::io::Result<Self::FieldShareVec> {
+        debug_assert_eq!(a.len(), b.len());
         let local_a = izip!(a.a.iter(), a.b.iter(), b.a.iter(), b.b.iter())
             .map(|(aa, ab, ba, bb)| {
                 *aa * ba + *aa * bb + *ab * ba + self.rngs.masking_field_element::<F>()
@@ -258,6 +258,12 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
             .collect_vec();
         self.network.send_next_many(&local_a)?;
         let local_b = self.network.recv_prev_many()?;
+        if local_b.len() != local_a.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid number of elements received",
+            ));
+        }
         Ok(Self::FieldShareVec::new(local_a, local_b))
     }
 
@@ -517,9 +523,7 @@ struct Aby3CorrelatedRng {
 }
 
 impl Aby3CorrelatedRng {
-    const SEED_SIZE: usize = std::mem::size_of::<<RngType as SeedableRng>::Seed>();
-
-    pub fn new(seed1: [u8; Self::SEED_SIZE], seed2: [u8; Self::SEED_SIZE]) -> Self {
+    pub fn new(seed1: [u8; crate::SEED_SIZE], seed2: [u8; crate::SEED_SIZE]) -> Self {
         let rng1 = RngType::from_seed(seed1);
         let rng2 = RngType::from_seed(seed2);
         Self { rng1, rng2 }

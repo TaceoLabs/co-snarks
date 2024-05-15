@@ -12,6 +12,7 @@ ark-serialize = { workspace = true }
 ark-ff = { workspace = true }
 collaborative-groth16 = { path = "../collaborative-groth16" }
 circom-types = { version = "0.1.0", path = "../circom-types" }
+itertools = { workspace = true }
 mpc-core = { version = "0.1.0", path = "../mpc-core" }
 tokio = { workspace = true }
 bytes = { workspace = true }
@@ -20,5 +21,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [[test]]
-name = "e2e_tests"
-path = "e2e_tests.rs"
+name = "e2e_aby3"
+path = "e2e_tests/aby3.rs"
+
+[[test]]
+name = "e2e_gsz"
+path = "e2e_tests/gsz.rs"
