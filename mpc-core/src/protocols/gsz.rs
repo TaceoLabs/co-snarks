@@ -185,8 +185,9 @@ pub mod utils {
 
 pub struct GSZProtocol<F: PrimeField, N: GSZNetwork> {
     threshold: usize, // degree of the polynomial
-    lagrange_t: Vec<F>,
-    lagrange_2t: Vec<F>,
+    open_lagrange_t: Vec<F>,
+    open_lagrange_2t: Vec<F>,
+    mul_lagrange_2t: Vec<F>,
     rng_buffer: GSZRng<F>,
     network: N,
     field: PhantomData<F>,
@@ -206,21 +207,25 @@ impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
 
         // We send in circles, so we need to receive from the last parties
         let id = network.get_id();
-        let lagrange_t = Shamir::lagrange_from_coeff(
+        let open_lagrange_t = Shamir::lagrange_from_coeff(
             &(1..=threshold + 1)
-                // .map(|i| (id + num_parties - i) % num_parties + 1)
+                .map(|i| (id + num_parties - i) % num_parties + 1)
                 .collect::<Vec<_>>(),
         );
-        let lagrange_2t = Shamir::lagrange_from_coeff(
+        let open_lagrange_2t = Shamir::lagrange_from_coeff(
             &(1..=2 * threshold + 1)
-                // .map(|i| (id + num_parties - i) % num_parties + 1)
+                .map(|i| (id + num_parties - i) % num_parties + 1)
                 .collect::<Vec<_>>(),
         );
 
+        let mul_lagrange_2t =
+            Shamir::lagrange_from_coeff(&(1..=2 * threshold + 1).collect::<Vec<_>>());
+
         Ok(Self {
             threshold,
-            lagrange_t,
-            lagrange_2t,
+            open_lagrange_t,
+            open_lagrange_2t,
+            mul_lagrange_2t,
             rng_buffer: GSZRng::new(seed, threshold, num_parties),
             network,
             field: PhantomData,
@@ -238,18 +243,9 @@ impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
         a: &<Self as PrimeFieldMpcProtocol<F>>::FieldShare,
         b: &<Self as PrimeFieldMpcProtocol<F>>::FieldShare,
     ) -> std::io::Result<F> {
-        // TODO only receive enough?
         let mul = a * b;
-        // let rcv = self.network.broadcast_next(mul.a, 2 * self.threshold + 1)?;
-        // let res = Shamir::reconstruct(&rcv, &self.lagrange_2t);
-        let rcv = self.network.broadcast(mul.a)?;
-        println!(
-            "n={}, t={}, rcv={}",
-            self.network.get_num_parties(),
-            self.threshold,
-            rcv.len()
-        );
-        let res = Shamir::reconstruct(&rcv[..=2 * self.threshold], &self.lagrange_2t);
+        let rcv = self.network.broadcast_next(mul.a, 2 * self.threshold + 1)?;
+        let res = Shamir::reconstruct(&rcv, &self.open_lagrange_2t);
         Ok(res)
     }
 }
@@ -295,7 +291,7 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
         let my_share = if my_id == Self::KING_ID {
             // Accumulate the result
             let mut acc = F::zero();
-            for (other_id, lagrange) in self.lagrange_2t.iter().enumerate() {
+            for (other_id, lagrange) in self.mul_lagrange_2t.iter().enumerate() {
                 if other_id == Self::KING_ID {
                     acc += mul * lagrange;
                 } else {
@@ -303,10 +299,7 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
                     acc += r * lagrange;
                 }
             }
-            // Need to receive from others as well
-            for id in self.threshold * 2 + 1..self.network.get_num_parties() {
-                self.network.recv_many::<F>(id)?;
-            }
+            // So far parties who do not require sending, do not send, so no receive here
 
             // Send fresh shares
             let shares = Shamir::share(
@@ -325,7 +318,10 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
             }
             my_share
         } else {
-            self.network.send(Self::KING_ID, mul)?;
+            if my_id <= self.threshold * 2 {
+                // Only send if my items are required
+                self.network.send(Self::KING_ID, mul)?;
+            }
             self.network.recv(Self::KING_ID)?
         };
 
@@ -359,9 +355,8 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
     }
 
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F> {
-        // TODO only receive enough?
-        let rcv = self.network.broadcast(a.a)?;
-        let res = Shamir::reconstruct(&rcv[..=self.threshold], &self.lagrange_t);
+        let rcv = self.network.broadcast_next(a.a, self.threshold + 1)?;
+        let res = Shamir::reconstruct(&rcv, &self.open_lagrange_t);
         Ok(res)
     }
 
@@ -385,7 +380,7 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
         let mut my_shares = if my_id == Self::KING_ID {
             // Accumulate the result
             let mut acc = vec![F::zero(); len];
-            for (other_id, lagrange) in self.lagrange_2t.iter().enumerate() {
+            for (other_id, lagrange) in self.mul_lagrange_2t.iter().enumerate() {
                 if other_id == Self::KING_ID {
                     for (acc, muls) in izip!(&mut acc, &muls) {
                         *acc += *muls * lagrange;
@@ -403,10 +398,7 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
                     }
                 }
             }
-            // Need to receive from others as well
-            for id in self.threshold * 2 + 1..self.network.get_num_parties() {
-                self.network.recv_many::<F>(id)?;
-            }
+            // So far parties who do not require sending, do not send, so no receive here
 
             // Send fresh shares
             let mut shares = (0..self.network.get_num_parties())
@@ -435,7 +427,10 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
             }
             my_share
         } else {
-            self.network.send_many(Self::KING_ID, &muls)?;
+            if my_id <= self.threshold * 2 {
+                // Only send if my items are required
+                self.network.send_many(Self::KING_ID, &muls)?;
+            }
             let r = self.network.recv_many::<F>(Self::KING_ID)?;
             if r.len() != len {
                 return Err(std::io::Error::new(
@@ -601,7 +596,7 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
         let my_share = if my_id == Self::KING_ID {
             // Accumulate the result
             let mut acc = C::zero();
-            for (other_id, lagrange) in self.lagrange_2t.iter().enumerate() {
+            for (other_id, lagrange) in self.mul_lagrange_2t.iter().enumerate() {
                 if other_id == Self::KING_ID {
                     acc += mul * lagrange;
                 } else {
@@ -609,10 +604,7 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
                     acc += r * lagrange;
                 }
             }
-            // Need to receive from others as well
-            for id in self.threshold * 2 + 1..self.network.get_num_parties() {
-                self.network.recv_many::<C>(id)?;
-            }
+            // So far parties who do not require sending, do not send, so no receive here
 
             // Send fresh shares
             let shares = Shamir::share_point(
@@ -631,7 +623,10 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
             }
             my_share
         } else {
-            self.network.send(Self::KING_ID, mul)?;
+            if my_id <= self.threshold * 2 {
+                // Only send if my items are required
+                self.network.send(Self::KING_ID, mul)?;
+            }
             self.network.recv(Self::KING_ID)?
         };
 
@@ -639,9 +634,8 @@ impl<C: CurveGroup, N: GSZNetwork> EcMpcProtocol<C> for GSZProtocol<C::ScalarFie
     }
 
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
-        // TODO only receive enough?
-        let rcv = self.network.broadcast(a.a)?;
-        let res = Shamir::reconstruct_point(&rcv[..=self.threshold], &self.lagrange_t);
+        let rcv = self.network.broadcast_next(a.a, self.threshold + 1)?;
+        let res = Shamir::reconstruct_point(&rcv, &self.open_lagrange_t);
         Ok(res)
     }
 }
@@ -655,12 +649,11 @@ impl<P: Pairing, N: GSZNetwork> PairingEcMpcProtocol<P> for GSZProtocol<P::Scala
         let s1 = a.a;
         let s2 = b.a;
 
-        // TODO maybe better broadcast function
-        let rcv: Vec<(P::G1, P::G2)> = self.network.broadcast((s1, s2))?;
+        let rcv: Vec<(P::G1, P::G2)> = self.network.broadcast_next((s1, s2), self.threshold + 1)?;
         let (r1, r2): (Vec<P::G1>, Vec<P::G2>) = rcv.into_iter().unzip();
 
-        let r1 = Shamir::reconstruct_point(&r1[..=self.threshold], &self.lagrange_t);
-        let r2 = Shamir::reconstruct_point(&r2[..=self.threshold], &self.lagrange_t);
+        let r1 = Shamir::reconstruct_point(&r1, &self.open_lagrange_t);
+        let r2 = Shamir::reconstruct_point(&r2, &self.open_lagrange_t);
 
         Ok((r1, r2))
     }
