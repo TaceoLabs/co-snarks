@@ -13,18 +13,20 @@ use circom_program_structure::{
     program_archive::{self, ProgramArchive},
 };
 use circom_type_analysis::check_types;
-use std::{collections::HashMap, fmt::format, marker::PhantomData, path::PathBuf};
+use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 const DEFAULT_VERSION: &str = "2.0.0";
 
-type CodeBlock = Vec<MpcOpCode>;
-enum MpcOpCode {
+pub type CodeBlock = Vec<MpcOpCode>;
+pub enum MpcOpCode {
     PushConstant(usize),
     PushIndex(usize),
     LoadSignal(usize),
     StoreSignal(usize),
     Add,
+    Sub,
     Mul,
+    Div,
 }
 
 impl ToString for MpcOpCode {
@@ -35,7 +37,9 @@ impl ToString for MpcOpCode {
             MpcOpCode::LoadSignal(template_id) => format!("LOAD_SIGNAL_OP {}", template_id),
             MpcOpCode::StoreSignal(template_id) => format!("STORE_SIGNAL_OP {}", template_id),
             MpcOpCode::Add => "ADD".to_owned(),
+            MpcOpCode::Sub => "SUB".to_owned(),
             MpcOpCode::Mul => "MUL".to_owned(),
+            MpcOpCode::Div => "DIV".to_owned(),
         }
     }
 }
@@ -62,8 +66,8 @@ impl<P: Pairing> CompilerBuilder<P> {
         self
     }
 
-    pub fn build(self) -> Builder<P> {
-        Builder {
+    pub fn build(self) -> CollaborativeCircomCompiler<P> {
+        CollaborativeCircomCompiler {
             file: self.file,
             version: self.version,
             constant_table: vec![],
@@ -72,7 +76,7 @@ impl<P: Pairing> CompilerBuilder<P> {
         }
     }
 }
-struct Builder<P: Pairing> {
+struct CollaborativeCircomCompiler<P: Pairing> {
     file: String,
     version: String,
     constant_table: Vec<P::ScalarField>,
@@ -80,7 +84,7 @@ struct Builder<P: Pairing> {
     phantom_data: PhantomData<P>,
 }
 
-impl<P: Pairing> Builder<P> {
+impl<P: Pairing> CollaborativeCircomCompiler<P> {
     fn get_program_archive(&self) -> Result<ProgramArchive, ()> {
         match circom_parser::run_parser(self.file.clone(), &self.version, vec![]) {
             Ok((mut program_archive, warnings)) => {
@@ -154,9 +158,6 @@ impl<P: Pairing> Builder<P> {
                 input_information,
             } => todo!(),
         }
-        println!("{}", store_bucket.to_string());
-        println!();
-        Self::debug_code_block(&self.current_code_block);
     }
 
     fn handle_compute_bucket(&mut self, compute_bucket: &ComputeBucket, circuit: &CircomCircuit) {
@@ -165,10 +166,10 @@ impl<P: Pairing> Builder<P> {
             self.eject_mpc_opcode(inst, circuit);
         });
         match compute_bucket.op {
-            OperatorType::Mul => self.current_code_block.push(MpcOpCode::Mul),
-            OperatorType::Div => todo!(),
             OperatorType::Add => self.current_code_block.push(MpcOpCode::Add),
             OperatorType::Sub => todo!(),
+            OperatorType::Mul => self.current_code_block.push(MpcOpCode::Mul),
+            OperatorType::Div => todo!(),
             OperatorType::Pow => todo!(),
             OperatorType::IntDiv => todo!(),
             OperatorType::Mod => todo!(),
@@ -319,7 +320,7 @@ mod tests {
     use super::*;
     #[test]
     fn test() {
-        let file = "/home/fnieddu/research/circom/circuits/multiplier2.circom";
+        let file = "/home/fnieddu/research/circom/circuits/multiplier16.circom";
         let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
         builder.parse().unwrap();
     }
