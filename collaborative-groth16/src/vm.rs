@@ -1,14 +1,12 @@
 use std::rc::Rc;
-use std::{collections::HashMap, marker::PhantomData, vec};
+use std::{collections::HashMap, vec};
 
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 
 use self::compiler::{CodeBlock, CollaborativeCircomCompiler, TemplateDecl};
-use num_traits::identities::One;
-use num_traits::identities::Zero;
 
-mod compiler;
+pub mod compiler;
 
 type StackFrame<F> = Vec<F>;
 

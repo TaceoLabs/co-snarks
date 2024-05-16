@@ -2,20 +2,14 @@ use ark_ec::pairing::Pairing;
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags},
     intermediate_representation::ir_interface::{
-        AddressType, ComputeBucket, CreateCmpBucket, InputInformation, Instruction, LoadBucket,
-        LocationRule, LoopBucket, OperatorType, StatusInput, StoreBucket, ValueBucket, ValueType,
+        AddressType, ComputeBucket, CreateCmpBucket, Instruction, LoadBucket, LocationRule,
+        LoopBucket, OperatorType, StoreBucket, ValueBucket, ValueType,
     },
 };
 use circom_constraint_generation::BuildConfig;
-use circom_program_structure::{
-    error_definition::{Report, ReportCollection},
-    file_definition::FileLibrary,
-    program_archive::{self, ProgramArchive},
-};
+use circom_program_structure::{error_definition::Report, program_archive::ProgramArchive};
 use circom_type_analysis::check_types;
-use mpc_core::traits::PrimeFieldMpcProtocol;
-use serde::de::value;
-use std::{collections::HashMap, fmt::format, marker::PhantomData, path::PathBuf, rc::Rc};
+use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
 
 use super::WitnessExtension;
 
@@ -325,8 +319,8 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 // );
             }
             LocationRule::Mapped {
-                signal_code,
-                indexes,
+                signal_code: _,
+                indexes: _,
             } => todo!(),
         }
         match &load_bucket.address_type {
@@ -338,9 +332,9 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 .push(MpcOpCode::LoadSignal(load_bucket.message_id)),
             AddressType::SubcmpSignal {
                 cmp_address,
-                uniform_parallel_value,
-                is_output,
-                input_information,
+                uniform_parallel_value: _,
+                is_output: _,
+                input_information: _,
             } => {
                 self.eject_mpc_opcode(cmp_address);
                 self.current_code_block.push(MpcOpCode::OutputSubComp);
@@ -402,7 +396,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             Instruction::Load(load_bucket) => self.handle_load_bucket(load_bucket),
             Instruction::Store(store_bucket) => self.handle_store_bucket(store_bucket),
             Instruction::Compute(compute_bucket) => self.handle_compute_bucket(compute_bucket),
-            Instruction::Call(call_bucket) => todo!(),
+            Instruction::Call(_call_bucket) => todo!(),
             Instruction::Branch(_) => todo!(),
             Instruction::Return(_) => todo!(),
             Instruction::Assert(_) => todo!(),
@@ -481,48 +475,5 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         //    //self.eject_mpc_opcode(inst, &circuit);
         //}
         Ok(WitnessExtension::new(self, circuit.c_producer.main_header))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use ark_bn254::Bn254;
-
-    use super::*;
-    use std::str::FromStr;
-    #[test]
-    fn test() {
-        let file = "/home/fnieddu/research/circom/circuits/multiplier2.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
-        builder.parse().unwrap().run(vec![
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-        ]);
-    }
-
-    #[test]
-    fn mul16() {
-        let file = "/home/fnieddu/research/circom/circuits/multiplier16.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
-        let result = builder.parse().unwrap().run(vec![
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-        ]);
-        let test = ark_bn254::Fr::from_str("11").unwrap();
-        assert_eq!(result, vec![ark_bn254::Fr::from_str("31594").unwrap()])
     }
 }
