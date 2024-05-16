@@ -30,6 +30,8 @@ pub enum MpcOpCode {
     StoreSignal(usize),
     LoadVar(usize),
     StoreVar(usize),
+    OutputSubComp,
+    InputSubComp,
     CreateCmp(String, Vec<usize>), //what else do we need?
     PushStackFrame,
     PopStackFrame,
@@ -44,14 +46,17 @@ pub enum MpcOpCode {
     Ge,
     Eq,
     Ne,
+    MulIndex,
+    AddIndex,
+    ToIndex,
     Jump(usize),
     JumpIfFalse(usize),
     Panic(String),
 }
 
-impl ToString for MpcOpCode {
-    fn to_string(&self) -> String {
-        match self {
+impl std::fmt::Display for MpcOpCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = match self {
             MpcOpCode::PushConstant(constant_index) => {
                 format!("PUSH_CONSTANT_OP {}", constant_index)
             }
@@ -73,11 +78,17 @@ impl ToString for MpcOpCode {
             MpcOpCode::Ge => "GREATER_EQ_OP".to_owned(),
             MpcOpCode::Eq => "IS_EQUAL_OP".to_owned(),
             MpcOpCode::Ne => "NOT_EQUAL_OP".to_owned(),
+            MpcOpCode::AddIndex => "ADD_INDEX_OP".to_owned(),
+            MpcOpCode::MulIndex => "MUL_INDEX_OP".to_owned(),
+            MpcOpCode::ToIndex => "TO_INDEX_OP".to_owned(),
             MpcOpCode::Jump(line) => format!("JUMP_OP {line}"),
             MpcOpCode::JumpIfFalse(line) => format!("JUMP_IF_FALSE_OP {line}"),
             MpcOpCode::Return => "RETURN_OP".to_owned(),
             MpcOpCode::Panic(message) => format!("PANIC_OP {message}"),
-        }
+            MpcOpCode::OutputSubComp => "OUTPUT_SUB_COMP_OP".to_owned(),
+            MpcOpCode::InputSubComp => "INPUT_SUB_COMP_OP".to_owned(),
+        };
+        f.write_str(&string)
     }
 }
 
@@ -229,22 +240,26 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 is_output,
                 input_information,
             } => {
-                self.current_code_block
-                    .push(MpcOpCode::Panic("TODO".to_owned()));
-                println!("{}", store_bucket.to_string());
-                println!("{}", cmp_address.to_string());
-                println!("{:?}", uniform_parallel_value);
-                println!("{}", is_output);
-                match input_information {
-                    InputInformation::NoInput => println!("no input"),
-                    InputInformation::Input { status } => match status {
-                        StatusInput::Last => println!("input last"),
-                        StatusInput::NoLast => println!("input no last"),
-                        StatusInput::Unknown => println!("unknown"),
-                    },
-                }
-                println!();
-                println!();
+                self.eject_mpc_opcode(cmp_address);
+                self.current_code_block.push(MpcOpCode::InputSubComp);
+
+                //               println!("{}", store_bucket.to_string());
+                //               println!();
+                //               println!();
+                //               println!("{}", cmp_address.to_string());
+                //               println!("{:?}", uniform_parallel_value);
+                //               println!("{}", is_output);
+                //               match input_information {
+                //                   InputInformation::NoInput => println!("no input"),
+                //                   InputInformation::Input { status } => match status {
+                //                       StatusInput::Last => println!("input last"),
+                //                       StatusInput::NoLast => println!("input no last"),
+                //                       StatusInput::Unknown => println!("unknown"),
+                //                   },
+                //               }
+                //               println!();
+                //               println!();
+                //               println!("==================");
             }
         }
     }
@@ -278,21 +293,21 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             OperatorType::PrefixSub => todo!(),
             OperatorType::BoolNot => todo!(),
             OperatorType::Complement => todo!(),
-            OperatorType::ToAddress => self
-                .current_code_block
-                .push(MpcOpCode::Panic("TODO".to_owned())),
-            OperatorType::MulAddress => self
-                .current_code_block
-                .push(MpcOpCode::Panic("TODO".to_owned())),
-            OperatorType::AddAddress => self
-                .current_code_block
-                .push(MpcOpCode::Panic("TODO".to_owned())),
+            OperatorType::ToAddress => {
+                self.current_code_block.push(MpcOpCode::ToIndex);
+            }
+            OperatorType::MulAddress => {
+                self.current_code_block.push(MpcOpCode::MulIndex);
+            }
+            OperatorType::AddAddress => {
+                self.current_code_block.push(MpcOpCode::AddIndex);
+            }
         }
     }
 
     fn debug_code_block(code_block: &CodeBlock) {
         for (idx, op) in code_block.iter().enumerate() {
-            println!("{idx}|    {}", op.to_string());
+            println!("{idx}|    {op}");
         }
     }
 
@@ -326,9 +341,10 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 uniform_parallel_value,
                 is_output,
                 input_information,
-            } => self
-                .current_code_block
-                .push(MpcOpCode::Panic("TODO".to_owned())),
+            } => {
+                self.eject_mpc_opcode(cmp_address);
+                self.current_code_block.push(MpcOpCode::OutputSubComp);
+            }
         }
     }
 
@@ -482,5 +498,31 @@ mod tests {
             ark_bn254::Fr::from_str("3").unwrap(),
             ark_bn254::Fr::from_str("11").unwrap(),
         ]);
+    }
+
+    #[test]
+    fn mul16() {
+        let file = "/home/fnieddu/research/circom/circuits/multiplier16.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
+        let result = builder.parse().unwrap().run(vec![
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("11").unwrap(),
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("11").unwrap(),
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("11").unwrap(),
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("11").unwrap(),
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("11").unwrap(),
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("11").unwrap(),
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("11").unwrap(),
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("11").unwrap(),
+        ]);
+        let test = ark_bn254::Fr::from_str("11").unwrap();
+        assert_eq!(result, vec![ark_bn254::Fr::from_str("31594").unwrap()])
     }
 }

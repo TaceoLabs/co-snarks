@@ -4,30 +4,18 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 
 use self::compiler::{CodeBlock, CollaborativeCircomCompiler, TemplateDecl};
+use num_traits::identities::One;
+use num_traits::identities::Zero;
 
 mod compiler;
 
-type StackFrame<F> = Vec<Value<F>>;
-
-#[derive(Clone)]
-enum Value<F: PrimeField> {
-    Index(usize),
-    Signal(F),
-}
-
-impl<F: PrimeField> std::fmt::Display for Value<F> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Value::Index(index) => f.write_str(&format!("Index({index})")),
-            Value::Signal(fr) => f.write_str(&format!("Signal({fr})")),
-        }
-    }
-}
+type StackFrame<F> = Vec<F>;
 
 #[derive(Default, Clone)]
 struct Component<F: PrimeField> {
     output_signals: usize,
     input_signals: usize,
+    has_output: bool,
     signals: Vec<F>,
     vars: Vec<F>,
     sub_components: Vec<Component<F>>,
@@ -36,9 +24,10 @@ struct Component<F: PrimeField> {
 impl<F: PrimeField> Component<F> {
     fn init(templ_decl: &TemplateDecl) -> Self {
         Self {
-            signals: vec![F::zero(); templ_decl.input_signals + templ_decl.output_signals],
             output_signals: templ_decl.output_signals,
             input_signals: templ_decl.input_signals,
+            has_output: false,
+            signals: vec![F::zero(); templ_decl.input_signals + templ_decl.output_signals],
             sub_components: vec![], //vec![Component::default(); templ_decl.sub_comps],
             vars: vec![F::zero(); templ_decl.vars],
         }
@@ -54,7 +43,8 @@ impl<F: PrimeField> Component<F> {
 }
 
 pub struct WitnessExtension<P: Pairing> {
-    stack: Vec<StackFrame<P::ScalarField>>,
+    field_stack: Vec<StackFrame<P::ScalarField>>,
+    index_stack: Vec<StackFrame<usize>>,
     constant_table: Vec<P::ScalarField>,
     fun_decls: HashMap<String, CodeBlock>,
     templ_decls: HashMap<String, TemplateDecl>,
@@ -65,7 +55,8 @@ pub struct WitnessExtension<P: Pairing> {
 impl<P: Pairing> WitnessExtension<P> {
     pub fn new(parser: CollaborativeCircomCompiler<P>, main: String) -> Self {
         Self {
-            stack: vec![StackFrame::default()],
+            field_stack: vec![StackFrame::default()],
+            index_stack: vec![StackFrame::default()],
             constant_table: parser.constant_table,
             fun_decls: parser.fun_decls,
             templ_decls: parser.templ_decls,
@@ -75,13 +66,22 @@ impl<P: Pairing> WitnessExtension<P> {
     }
 
     #[inline]
-    fn push_stack(&mut self, val: Value<P::ScalarField>) {
-        self.stack.last_mut().unwrap().push(val)
+    fn push_field(&mut self, val: P::ScalarField) {
+        self.field_stack.last_mut().unwrap().push(val)
     }
 
     #[inline]
-    fn pop_stack(&mut self) -> Value<P::ScalarField> {
-        self.stack.last_mut().unwrap().pop().unwrap()
+    fn pop_field(&mut self) -> P::ScalarField {
+        self.field_stack.last_mut().unwrap().pop().unwrap()
+    }
+    #[inline]
+    fn push_index(&mut self, val: usize) {
+        self.index_stack.last_mut().unwrap().push(val)
+    }
+
+    #[inline]
+    fn pop_index(&mut self) -> usize {
+        self.index_stack.last_mut().unwrap().pop().unwrap()
     }
 
     pub fn run(&mut self, input_signals: Vec<P::ScalarField>) -> Vec<P::ScalarField> {
@@ -91,102 +91,138 @@ impl<P: Pairing> WitnessExtension<P> {
         let mut ip = 0;
         loop {
             let inst = &main_templ.body[ip];
+            println!("DEBUG: {ip}    | Doing {inst}");
             match inst {
                 compiler::MpcOpCode::PushConstant(index) => {
-                    self.push_stack(Value::Signal(self.constant_table[*index]))
+                    self.push_field(self.constant_table[*index])
                 }
-                compiler::MpcOpCode::PushIndex(index) => self.push_stack(Value::Index(*index)),
+                compiler::MpcOpCode::PushIndex(index) => self.push_index(*index),
                 compiler::MpcOpCode::LoadSignal(_template_id) => {
-                    if let Value::Index(index) = self.pop_stack() {
-                        self.push_stack(Value::Signal(main_component.signals[index]))
-                    } else {
-                        panic!("todo")
-                    }
+                    let index = self.pop_index();
+                    self.push_field(main_component.signals[index]);
                 }
                 compiler::MpcOpCode::StoreSignal(_template_id) => {
                     //get index
-                    let index = self.pop_stack();
-                    let signal = self.pop_stack();
-                    match (index, signal) {
-                        (Value::Index(index), Value::Signal(signal)) => {
-                            main_component.signals[index] = signal;
-                        }
-                        _ => todo!(),
-                    }
+                    let index = self.pop_index();
+                    let signal = self.pop_field();
+                    main_component.signals[index] = signal;
                 }
                 compiler::MpcOpCode::LoadVar(_template_id) => {
-                    if let Value::Index(index) = self.pop_stack() {
-                        self.push_stack(Value::Signal(main_component.vars[index]))
-                    } else {
-                        panic!("todo")
-                    }
+                    let index = self.pop_index();
+                    self.push_field(main_component.vars[index]);
                 }
                 compiler::MpcOpCode::StoreVar(_template_id) => {
-                    let index = self.pop_stack();
-                    let signal = self.pop_stack();
-                    match (index, signal) {
-                        (Value::Index(index), Value::Signal(signal)) => {
-                            main_component.vars[index] = signal;
-                        }
-                        _ => todo!(),
-                    }
+                    let index = self.pop_index();
+                    let signal = self.pop_field();
+                    main_component.vars[index] = signal;
                 }
                 compiler::MpcOpCode::CreateCmp(symbol, dims) => {
                     //todo when we have multiple components we need to check where to put them with ids..
                     //for now we fill and see where it goes
                     let templ_decl = self.templ_decls.get(symbol).unwrap();
-                    let amount = dims.iter().fold(0, |a, b| a * b);
+                    let amount = dims.iter().product();
                     (0..amount).for_each(|_| {
                         main_component
                             .sub_components
                             .push(Component::init(templ_decl));
                     });
                 }
-                //do we need those
-                compiler::MpcOpCode::PushStackFrame => self.stack.push(StackFrame::default()),
+                compiler::MpcOpCode::OutputSubComp => {
+                    //we have to compute the output signals if we did not do that already
+                    let sub_comp_index = self.pop_index();
+                    let index = self.pop_index();
+                    let signal = main_component.sub_components[sub_comp_index].signals[index];
+                    // let signal = self.pop_field();
+                    println!("sub comp index: {sub_comp_index}");
+                    println!(" index: {index}");
+                    println!("signal:  {signal}");
+
+                    panic!();
+                }
+                compiler::MpcOpCode::InputSubComp => {
+                    let sub_comp_index = self.pop_index();
+                    let index = self.pop_index();
+                    let signal = self.pop_field();
+                    main_component.sub_components[sub_comp_index].signals[index] = signal;
+                }
+                //do we need those???
+                compiler::MpcOpCode::PushStackFrame => {
+                    self.field_stack.push(StackFrame::default());
+                    self.index_stack.push(StackFrame::default());
+                }
                 compiler::MpcOpCode::PopStackFrame => {
-                    self.stack.pop().unwrap();
+                    self.field_stack.pop().unwrap();
+                    self.index_stack.pop().unwrap();
                 }
                 compiler::MpcOpCode::Add => {
-                    let lhs = self.pop_stack();
-                    let rhs = self.pop_stack();
-                    let result = match (lhs, rhs) {
-                        (Value::Signal(lhs), Value::Signal(rhs)) => Value::Signal(lhs + rhs),
-                        (Value::Index(_), Value::Signal(_)) => todo!(),
-                        (Value::Signal(_), Value::Index(_)) => todo!(),
-                        (Value::Index(_), Value::Index(_)) => todo!(),
-                    };
-                    self.push_stack(result)
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(lhs + rhs);
                 }
-                compiler::MpcOpCode::Sub => todo!(),
+                compiler::MpcOpCode::Sub => {
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(lhs - rhs);
+                }
                 compiler::MpcOpCode::Mul => {
-                    let lhs = self.pop_stack();
-                    let rhs = self.pop_stack();
-                    let result = match (lhs, rhs) {
-                        (Value::Signal(lhs), Value::Signal(rhs)) => Value::Signal(lhs * rhs),
-                        (Value::Index(_), Value::Signal(_)) => todo!(),
-                        (Value::Signal(_), Value::Index(_)) => todo!(),
-                        (Value::Index(_), Value::Index(_)) => todo!(),
-                    };
-                    self.push_stack(result)
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(lhs * rhs);
                 }
-                compiler::MpcOpCode::Div => todo!(),
+                compiler::MpcOpCode::Div => {
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(lhs / rhs);
+                }
                 compiler::MpcOpCode::Lt => {
-                    let lhs = self.pop_stack();
-                    let rhs = self.pop_stack();
-                    // let test = lhs < rhs;
-                    // P::ScalarField::from(test)
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    println!("{lhs}<{rhs}");
+                    if lhs < rhs {
+                        self.push_field(P::ScalarField::one());
+                    } else {
+                        self.push_field(P::ScalarField::zero());
+                    }
                 }
                 compiler::MpcOpCode::Le => todo!(),
                 compiler::MpcOpCode::Gt => todo!(),
                 compiler::MpcOpCode::Ge => todo!(),
                 compiler::MpcOpCode::Eq => todo!(),
                 compiler::MpcOpCode::Ne => todo!(),
-                compiler::MpcOpCode::Jump(_) => todo!(),
-                compiler::MpcOpCode::JumpIfFalse(_) => todo!(),
+                compiler::MpcOpCode::AddIndex => {
+                    let rhs = self.pop_index();
+                    let lhs = self.pop_index();
+                    self.push_index(lhs + rhs);
+                }
+                compiler::MpcOpCode::MulIndex => {
+                    let rhs = self.pop_index();
+                    let lhs = self.pop_index();
+                    self.push_index(lhs * rhs);
+                }
+                compiler::MpcOpCode::ToIndex => {
+                    //TODO WE WANT SOMETHING BETTER THAN STRING PARSING
+                    let signal = self.pop_field();
+                    if signal.is_zero() {
+                        self.push_index(0);
+                    } else {
+                        self.push_index(signal.to_string().parse().unwrap());
+                    }
+                }
+
+                compiler::MpcOpCode::Jump(jump_to) => {
+                    ip = *jump_to;
+                    continue;
+                }
+                compiler::MpcOpCode::JumpIfFalse(jump_to) => {
+                    let cond = self.pop_field();
+                    if cond.is_zero() {
+                        ip = *jump_to;
+                        continue;
+                    }
+                }
                 compiler::MpcOpCode::Return => {
                     //for time being just return from main component
-                    return main_component.signals[..main_component.output_signals].to_vec();
+                    //return main_component.signals[..main_component.output_signals].to_vec();
                 }
                 compiler::MpcOpCode::Panic(message) => panic!("{message}"),
             }
@@ -219,22 +255,22 @@ mod tests {
         let file = "/home/fnieddu/research/circom/circuits/multiplier16.circom";
         let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
         let result = builder.parse().unwrap().run(vec![
+            ark_bn254::Fr::from_str("5").unwrap(),
+            ark_bn254::Fr::from_str("10").unwrap(),
+            ark_bn254::Fr::from_str("2").unwrap(),
             ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("4").unwrap(),
+            ark_bn254::Fr::from_str("5").unwrap(),
+            ark_bn254::Fr::from_str("6").unwrap(),
+            ark_bn254::Fr::from_str("7").unwrap(),
+            ark_bn254::Fr::from_str("8").unwrap(),
+            ark_bn254::Fr::from_str("9").unwrap(),
+            ark_bn254::Fr::from_str("10").unwrap(),
             ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
+            ark_bn254::Fr::from_str("12").unwrap(),
+            ark_bn254::Fr::from_str("13").unwrap(),
+            ark_bn254::Fr::from_str("14").unwrap(),
+            ark_bn254::Fr::from_str("15").unwrap(),
         ]);
         let test = ark_bn254::Fr::from_str("11").unwrap();
         assert_eq!(result, vec![ark_bn254::Fr::from_str("31594").unwrap()])
