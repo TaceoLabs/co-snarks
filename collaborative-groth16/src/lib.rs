@@ -2,7 +2,7 @@ mod circom_reduction;
 pub mod circuit;
 pub mod groth16;
 mod serde_compat;
-mod vm;
+pub mod vm;
 
 #[cfg(test)]
 mod tests {
@@ -129,9 +129,9 @@ mod tests {
     #[ignore]
     #[test]
     fn proof_circom_proof_bls12_381() {
-        let zkey_file = File::open("../test_vectors/bls12_381/multiplier2.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bls12_381/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/bls12_381/multiplier2.r1cs").unwrap();
+        let zkey_file = File::open("/home/fnieddu/tmp/multiplier2.zkey").unwrap();
+        let witness_file = File::open("/home/fnieddu/tmp/witness.wtns").unwrap();
+        let r1cs_file = File::open("/home/fnieddu/tmp/multiplier2.r1cs").unwrap();
         let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
         let (pk, _) = ZKey::<Bls12_381>::from_reader(zkey_file).unwrap().split();
         let r1cs = R1CS::<Bls12_381>::from_reader(r1cs_file).unwrap();
