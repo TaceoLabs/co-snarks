@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::{collections::HashMap, marker::PhantomData, vec};
 
 use ark_ec::pairing::Pairing;
@@ -13,12 +14,15 @@ type StackFrame<F> = Vec<F>;
 
 #[derive(Default, Clone)]
 struct Component<F: PrimeField> {
+    field_stack: StackFrame<F>,
+    index_stack: StackFrame<usize>,
     output_signals: usize,
     input_signals: usize,
     has_output: bool,
     signals: Vec<F>,
     vars: Vec<F>,
     sub_components: Vec<Component<F>>,
+    body: Rc<CodeBlock>,
 }
 
 impl<F: PrimeField> Component<F> {
@@ -30,6 +34,9 @@ impl<F: PrimeField> Component<F> {
             signals: vec![F::zero(); templ_decl.input_signals + templ_decl.output_signals],
             sub_components: vec![], //vec![Component::default(); templ_decl.sub_comps],
             vars: vec![F::zero(); templ_decl.vars],
+            field_stack: Default::default(),
+            index_stack: Default::default(),
+            body: Rc::clone(&templ_decl.body),
         }
     }
     fn set_input_signals(&mut self, input_signals: Vec<F>) {
@@ -40,119 +47,92 @@ impl<F: PrimeField> Component<F> {
         );
         self.signals[self.output_signals..].copy_from_slice(&input_signals);
     }
-}
 
-pub struct WitnessExtension<P: Pairing> {
-    field_stack: Vec<StackFrame<P::ScalarField>>,
-    index_stack: Vec<StackFrame<usize>>,
-    constant_table: Vec<P::ScalarField>,
-    fun_decls: HashMap<String, CodeBlock>,
-    templ_decls: HashMap<String, TemplateDecl>,
-    components: Vec<Component<P::ScalarField>>,
-    main: String,
-}
-
-impl<P: Pairing> WitnessExtension<P> {
-    pub fn new(parser: CollaborativeCircomCompiler<P>, main: String) -> Self {
-        Self {
-            field_stack: vec![StackFrame::default()],
-            index_stack: vec![StackFrame::default()],
-            constant_table: parser.constant_table,
-            fun_decls: parser.fun_decls,
-            templ_decls: parser.templ_decls,
-            components: vec![],
-            main,
-        }
+    #[inline]
+    fn push_field(&mut self, val: F) {
+        self.field_stack.push(val)
     }
 
     #[inline]
-    fn push_field(&mut self, val: P::ScalarField) {
-        self.field_stack.last_mut().unwrap().push(val)
-    }
-
-    #[inline]
-    fn pop_field(&mut self) -> P::ScalarField {
-        self.field_stack.last_mut().unwrap().pop().unwrap()
+    fn pop_field(&mut self) -> F {
+        self.field_stack.pop().unwrap()
     }
     #[inline]
     fn push_index(&mut self, val: usize) {
-        self.index_stack.last_mut().unwrap().push(val)
+        self.index_stack.push(val)
     }
 
     #[inline]
     fn pop_index(&mut self) -> usize {
-        self.index_stack.last_mut().unwrap().pop().unwrap()
+        self.index_stack.pop().unwrap()
     }
 
-    pub fn run(&mut self, input_signals: Vec<P::ScalarField>) -> Vec<P::ScalarField> {
-        let main_templ = self.templ_decls.get(&self.main).unwrap().clone();
-        let mut main_component = Component::<P::ScalarField>::init(&main_templ);
-        main_component.set_input_signals(input_signals);
+    pub fn run(&mut self, templ_decls: &HashMap<String, TemplateDecl>, constant_table: &[F]) {
         let mut ip = 0;
         loop {
-            let inst = &main_templ.body[ip];
+            let inst = &self.body[ip];
             println!("DEBUG: {ip}    | Doing {inst}");
             match inst {
-                compiler::MpcOpCode::PushConstant(index) => {
-                    self.push_field(self.constant_table[*index])
-                }
+                compiler::MpcOpCode::PushConstant(index) => self.push_field(constant_table[*index]),
                 compiler::MpcOpCode::PushIndex(index) => self.push_index(*index),
                 compiler::MpcOpCode::LoadSignal(_template_id) => {
                     let index = self.pop_index();
-                    self.push_field(main_component.signals[index]);
+                    self.push_field(self.signals[index]);
                 }
                 compiler::MpcOpCode::StoreSignal(_template_id) => {
                     //get index
                     let index = self.pop_index();
                     let signal = self.pop_field();
-                    main_component.signals[index] = signal;
+                    self.signals[index] = signal;
                 }
                 compiler::MpcOpCode::LoadVar(_template_id) => {
                     let index = self.pop_index();
-                    self.push_field(main_component.vars[index]);
+                    self.push_field(self.vars[index]);
                 }
                 compiler::MpcOpCode::StoreVar(_template_id) => {
                     let index = self.pop_index();
                     let signal = self.pop_field();
-                    main_component.vars[index] = signal;
+                    self.vars[index] = signal;
                 }
                 compiler::MpcOpCode::CreateCmp(symbol, dims) => {
                     //todo when we have multiple components we need to check where to put them with ids..
                     //for now we fill and see where it goes
-                    let templ_decl = self.templ_decls.get(symbol).unwrap();
+                    let templ_decl = templ_decls.get(symbol).unwrap();
                     let amount = dims.iter().product();
                     (0..amount).for_each(|_| {
-                        main_component
-                            .sub_components
-                            .push(Component::init(templ_decl));
+                        self.sub_components.push(Component::init(templ_decl));
                     });
                 }
                 compiler::MpcOpCode::OutputSubComp => {
                     //we have to compute the output signals if we did not do that already
                     let sub_comp_index = self.pop_index();
                     let index = self.pop_index();
-                    let signal = main_component.sub_components[sub_comp_index].signals[index];
-                    // let signal = self.pop_field();
-                    println!("sub comp index: {sub_comp_index}");
-                    println!(" index: {index}");
-                    println!("signal:  {signal}");
-
-                    panic!();
+                    //check whether we have to compute the output
+                    if !self.sub_components[sub_comp_index].has_output {
+                        println!("=========================");
+                        println!("JUMPING TO SUB COMPONENT!");
+                        println!();
+                        self.sub_components[sub_comp_index].run(templ_decls, constant_table);
+                        println!("RETURNING FROM SUB COMPONENT!");
+                        println!("=========================");
+                        println!();
+                    }
+                    self.push_field(self.sub_components[sub_comp_index].signals[index]);
                 }
                 compiler::MpcOpCode::InputSubComp => {
                     let sub_comp_index = self.pop_index();
                     let index = self.pop_index();
                     let signal = self.pop_field();
-                    main_component.sub_components[sub_comp_index].signals[index] = signal;
+                    self.sub_components[sub_comp_index].signals[index] = signal;
                 }
                 //do we need those???
                 compiler::MpcOpCode::PushStackFrame => {
-                    self.field_stack.push(StackFrame::default());
-                    self.index_stack.push(StackFrame::default());
+                    // self.field_stack.push(StackFrame::default());
+                    // self.index_stack.push(StackFrame::default());
                 }
                 compiler::MpcOpCode::PopStackFrame => {
-                    self.field_stack.pop().unwrap();
-                    self.index_stack.pop().unwrap();
+                    // self.field_stack.pop().unwrap();
+                    // self.index_stack.pop().unwrap();
                 }
                 compiler::MpcOpCode::Add => {
                     let rhs = self.pop_field();
@@ -179,9 +159,9 @@ impl<P: Pairing> WitnessExtension<P> {
                     let lhs = self.pop_field();
                     println!("{lhs}<{rhs}");
                     if lhs < rhs {
-                        self.push_field(P::ScalarField::one());
+                        self.push_field(F::one());
                     } else {
-                        self.push_field(P::ScalarField::zero());
+                        self.push_field(F::zero());
                     }
                 }
                 compiler::MpcOpCode::Le => todo!(),
@@ -214,20 +194,49 @@ impl<P: Pairing> WitnessExtension<P> {
                     continue;
                 }
                 compiler::MpcOpCode::JumpIfFalse(jump_to) => {
+                    let jump_to = *jump_to;
                     let cond = self.pop_field();
                     if cond.is_zero() {
-                        ip = *jump_to;
+                        ip = jump_to;
                         continue;
                     }
                 }
                 compiler::MpcOpCode::Return => {
-                    //for time being just return from main component
-                    //return main_component.signals[..main_component.output_signals].to_vec();
+                    //we are done
+                    //just return
+                    self.has_output = true;
+                    break;
                 }
                 compiler::MpcOpCode::Panic(message) => panic!("{message}"),
             }
             ip += 1;
         }
+    }
+}
+
+pub struct WitnessExtension<P: Pairing> {
+    constant_table: Vec<P::ScalarField>,
+    fun_decls: HashMap<String, CodeBlock>,
+    templ_decls: HashMap<String, TemplateDecl>,
+    main: String,
+}
+
+impl<P: Pairing> WitnessExtension<P> {
+    pub fn new(parser: CollaborativeCircomCompiler<P>, main: String) -> Self {
+        Self {
+            constant_table: parser.constant_table,
+            fun_decls: parser.fun_decls,
+            templ_decls: parser.templ_decls,
+            main,
+        }
+    }
+
+    pub fn run(&mut self, input_signals: Vec<P::ScalarField>) -> Vec<P::ScalarField> {
+        let main_templ = self.templ_decls.get(&self.main).unwrap().clone();
+        let mut main_component = Component::<P::ScalarField>::init(&main_templ);
+        main_component.set_input_signals(input_signals);
+        main_component.run(&self.templ_decls, &self.constant_table);
+        main_component.signals[..main_component.output_signals].to_vec()
     }
 }
 
@@ -272,7 +281,9 @@ mod tests {
             ark_bn254::Fr::from_str("14").unwrap(),
             ark_bn254::Fr::from_str("15").unwrap(),
         ]);
-        let test = ark_bn254::Fr::from_str("11").unwrap();
-        assert_eq!(result, vec![ark_bn254::Fr::from_str("31594").unwrap()])
+        assert_eq!(
+            result,
+            vec![ark_bn254::Fr::from_str("65383718400000").unwrap()]
+        )
     }
 }

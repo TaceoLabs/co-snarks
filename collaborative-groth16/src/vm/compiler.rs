@@ -15,7 +15,7 @@ use circom_program_structure::{
 use circom_type_analysis::check_types;
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use serde::de::value;
-use std::{collections::HashMap, fmt::format, marker::PhantomData, path::PathBuf};
+use std::{collections::HashMap, fmt::format, marker::PhantomData, path::PathBuf, rc::Rc};
 
 use super::WitnessExtension;
 
@@ -132,7 +132,7 @@ pub(crate) struct TemplateDecl {
     pub(crate) output_signals: usize,
     pub(crate) vars: usize,
     pub(crate) sub_comps: usize,
-    pub(crate) body: CodeBlock,
+    pub(crate) body: Rc<CodeBlock>,
 }
 
 impl TemplateDecl {
@@ -148,7 +148,7 @@ impl TemplateDecl {
             output_signals,
             vars,
             sub_comps,
-            body,
+            body: Rc::new(body),
         }
     }
 }
