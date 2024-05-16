@@ -2,13 +2,17 @@ use ark_ec::pairing::Pairing;
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags},
     intermediate_representation::ir_interface::{
-        AddressType, ComputeBucket, CreateCmpBucket, Instruction, LoadBucket, LocationRule,
-        LoopBucket, OperatorType, StoreBucket, ValueBucket, ValueType,
+        AddressType, BranchBucket, ComputeBucket, CreateCmpBucket, Instruction, LoadBucket,
+        LocationRule, LoopBucket, OperatorType, StoreBucket, ValueBucket, ValueType,
     },
 };
 use circom_constraint_generation::BuildConfig;
 use circom_program_structure::{error_definition::Report, program_archive::ProgramArchive};
 use circom_type_analysis::check_types;
+use color_eyre::{
+    eyre::{bail, eyre},
+    Result,
+};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
 
 use super::WitnessExtension;
@@ -108,10 +112,19 @@ impl<P: Pairing> CompilerBuilder<P> {
         self
     }
 
+    pub fn link_library<S>(mut self, link_library: S) -> Self
+    where
+        PathBuf: From<S>,
+    {
+        self.link_libraries.push(PathBuf::from(link_library));
+        self
+    }
+
     pub fn build(self) -> CollaborativeCircomCompiler<P> {
         CollaborativeCircomCompiler {
             file: self.file,
             version: self.version,
+            link_libraries: self.link_libraries,
             constant_table: vec![],
             current_code_block: vec![],
             fun_decls: HashMap::new(),
@@ -150,6 +163,7 @@ impl TemplateDecl {
 pub struct CollaborativeCircomCompiler<P: Pairing> {
     file: String,
     version: String,
+    link_libraries: Vec<PathBuf>,
     pub(crate) constant_table: Vec<P::ScalarField>,
     pub(crate) fun_decls: HashMap<String, CodeBlock>,
     pub(crate) templ_decls: HashMap<String, TemplateDecl>,
@@ -157,8 +171,12 @@ pub struct CollaborativeCircomCompiler<P: Pairing> {
 }
 
 impl<P: Pairing> CollaborativeCircomCompiler<P> {
-    fn get_program_archive(&self) -> Result<ProgramArchive, ()> {
-        match circom_parser::run_parser(self.file.clone(), &self.version, vec![]) {
+    fn get_program_archive(&self) -> Result<ProgramArchive> {
+        match circom_parser::run_parser(
+            self.file.clone(),
+            &self.version,
+            self.link_libraries.clone(),
+        ) {
             Ok((mut program_archive, warnings)) => {
                 Report::print_reports(&warnings, &program_archive.file_library);
                 match check_types::check_types(&mut program_archive) {
@@ -168,18 +186,18 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                     }
                     Err(errors) => {
                         Report::print_reports(&errors, &program_archive.file_library);
-                        Err(())
+                        bail!("Error during type checking");
                     }
                 }
             }
             Err((file_lib, errors)) => {
                 Report::print_reports(&errors, &file_lib);
-                Err(())
+                bail!("Error during compilation");
             }
         }
     }
 
-    fn build_circuit(&self, program_archive: ProgramArchive) -> Result<CircomCircuit, ()> {
+    fn build_circuit(&self, program_archive: ProgramArchive) -> Result<CircomCircuit> {
         let build_config = BuildConfig {
             no_rounds: usize::MAX, //simplification_style. Use default
             flag_json_sub: false,
@@ -192,7 +210,8 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             inspect_constraints: false,
             prime: "bn128".to_owned(),
         };
-        let (_, vcp) = circom_constraint_generation::build_circuit(program_archive, build_config)?;
+        let (_, vcp) = circom_constraint_generation::build_circuit(program_archive, build_config)
+            .map_err(|_| eyre!("cannot build vcp"))?;
         let flags = CompilationFlags {
             main_inputs_log: false,
             wat_flag: false,
@@ -382,6 +401,11 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         self.current_code_block.push(MpcOpCode::PopStackFrame);
     }
 
+    fn handle_branch_bucket(&mut self, branch_bucket: &BranchBucket) {
+        println!("{}", branch_bucket.line);
+        panic!()
+    }
+
     fn handle_value_bucket(&mut self, value_bucket: &ValueBucket) {
         let index = value_bucket.value;
         match value_bucket.parse_as {
@@ -397,7 +421,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             Instruction::Store(store_bucket) => self.handle_store_bucket(store_bucket),
             Instruction::Compute(compute_bucket) => self.handle_compute_bucket(compute_bucket),
             Instruction::Call(_call_bucket) => todo!(),
-            Instruction::Branch(_) => todo!(),
+            Instruction::Branch(branch_bucket) => self.handle_branch_bucket(branch_bucket),
             Instruction::Return(_) => todo!(),
             Instruction::Assert(_) => todo!(),
             Instruction::Log(_) => todo!(),
@@ -408,21 +432,17 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         }
     }
 
-    pub fn parse(mut self) -> Result<WitnessExtension<P>, ()> {
+    pub fn parse(mut self) -> Result<WitnessExtension<P>> {
         let program_archive = self.get_program_archive()?;
         let circuit = self.build_circuit(program_archive)?;
         self.constant_table = circuit
             .c_producer
             .get_field_constant_list()
             .iter()
-            .map(|s| s.parse::<P::ScalarField>().map_err(|_| ()))
-            .collect::<Result<Vec<_>, _>>()?;
-        println!("=====Constants=====");
-        for fr in self.constant_table.iter() {
-            println!("{fr}");
-        }
+            .map(|s| s.parse::<P::ScalarField>())
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| eyre!("cannot parse string in constant list"))?;
         //build functions
-        assert!(circuit.functions.is_empty(), "must be empty for now");
         for fun in circuit.functions.iter() {
             fun.body.iter().for_each(|inst| {
                 self.eject_mpc_opcode(inst);
@@ -461,19 +481,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 ),
             );
         }
-
-        //let main_template = circuit
-        //    .templates
-        //    .iter()
-        //    .find(|temp| temp.header == circuit.c_producer.main_header)
-        //    .unwrap();
-        //for inst in main_template.body.iter() {
-        //    println!("==============");
-        //    println!("{}", inst.to_string());
-        //    println!();
-        //    println!();
-        //    //self.eject_mpc_opcode(inst, &circuit);
-        //}
         Ok(WitnessExtension::new(self, circuit.c_producer.main_header))
     }
 }

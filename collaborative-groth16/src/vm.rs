@@ -155,7 +155,6 @@ impl<F: PrimeField> Component<F> {
                 compiler::MpcOpCode::Lt => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    println!("{lhs}<{rhs}");
                     if lhs < rhs {
                         self.push_field(F::one());
                     } else {
@@ -241,6 +240,7 @@ impl<P: Pairing> WitnessExtension<P> {
 #[cfg(test)]
 mod tests {
     use ark_bn254::Bn254;
+    use serde::de::IntoDeserializer;
 
     use self::compiler::CompilerBuilder;
 
@@ -248,18 +248,18 @@ mod tests {
     use std::str::FromStr;
     #[test]
     fn mul2() {
-        let file = "/home/fnieddu/research/circom/circuits/multiplier2.circom";
+        let file = "../test_vectors/circuits/multiplier2.circom";
         let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
         let result = builder.parse().unwrap().run(vec![
             ark_bn254::Fr::from_str("3").unwrap(),
             ark_bn254::Fr::from_str("11").unwrap(),
         ]);
-        assert_eq!(result, vec![ark_bn254::Fr::from_str("31594").unwrap()])
+        assert_eq!(result, vec![ark_bn254::Fr::from_str("33").unwrap()])
     }
 
     #[test]
     fn mul16() {
-        let file = "/home/fnieddu/research/circom/circuits/multiplier16.circom";
+        let file = "../test_vectors/circuits/multiplier16.circom";
         let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
         let result = builder.parse().unwrap().run(vec![
             ark_bn254::Fr::from_str("5").unwrap(),
@@ -282,6 +282,33 @@ mod tests {
         assert_eq!(
             result,
             vec![ark_bn254::Fr::from_str("65383718400000").unwrap()]
-        )
+        );
+
+        //       let witness = File::open("/home/fnieddu/tmp/multiplier16_js/witness.wtns").unwrap();
+        //       let witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        //       for ele in witness.values {
+        //           println!("{ele}");
+        //       }
+    }
+
+    #[test]
+    fn poseidon() {
+        let file = "../test_vectors/circuits/poseidon_hasher.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let result = builder.build().parse().unwrap().run(vec![
+            ark_bn254::Fr::from_str("5").unwrap(),
+            ark_bn254::Fr::from_str("5").unwrap(),
+        ]);
+        assert_eq!(
+            result,
+            vec![ark_bn254::Fr::from_str("65383718400000").unwrap()]
+        );
+
+        //       let witness = File::open("/home/fnieddu/tmp/multiplier16_js/witness.wtns").unwrap();
+        //       let witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        //       for ele in witness.values {
+        //           println!("{ele}");
+        //       }
     }
 }
