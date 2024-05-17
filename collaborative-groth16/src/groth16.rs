@@ -24,7 +24,6 @@ use mpc_core::{
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use rand::{CryptoRng, Rng};
-use serde::{Deserialize, Serialize};
 
 pub type Aby3CollaborativeGroth16<P> =
     CollaborativeGroth16<Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet>, P>;
@@ -40,8 +39,7 @@ type CurveFieldShareSlice<'a, T, C> = <T as PrimeFieldMpcProtocol<
     <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
 >>::FieldShareSlice<'a>;
 
-//FIXME I want to use serde(transparent) but not working
-#[derive(Serialize, Deserialize)]
+// TODO: Serialization of this struct? Probably not using serde, since we are working internally with arkworks types, just use ark-serialize?
 pub struct SharedWitness<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
