@@ -164,7 +164,7 @@ pub struct Aby3PrimeFieldShareVec<F: PrimeField> {
 }
 
 fn serialize_vec<S: Serializer, F: PrimeField>(p: &[F], ser: S) -> Result<S::Ok, S::Error> {
-    let mut seq = ser.serialize_seq(Some(2))?;
+    let mut seq = ser.serialize_seq(Some(2))?; // FIXME this 2 is hardcoded??
     for ser in p.iter().map(|x| x.to_string()) {
         seq.serialize_element(&ser)?;
     }

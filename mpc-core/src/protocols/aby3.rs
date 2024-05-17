@@ -517,7 +517,7 @@ impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
     }
 }
 
-struct Aby3CorrelatedRng {
+pub(crate) struct Aby3CorrelatedRng {
     rng1: RngType,
     rng2: RngType,
 }
