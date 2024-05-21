@@ -419,9 +419,15 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
 
     fn handle_loop_bucket(&mut self, loop_bucket: &LoopBucket) {
         let start_condition = self.current_line_offset + self.current_code_block.len();
+        self.handle_instruction(&loop_bucket.continue_condition);
+
+        //we need one extra offset because we will add a jump if false later
+        //we don't know at this point where to jump though
+        self.current_line_offset += 1;
         let mut body_code_block = self.handle_inner_body(&loop_bucket.body);
         body_code_block.push(MpcOpCode::Jump(start_condition));
-        self.handle_instruction(&loop_bucket.continue_condition);
+        self.current_line_offset -= 1;
+
         self.emit_opcode(MpcOpCode::JumpIfFalse(
             self.current_line_offset + body_code_block.len() + self.current_code_block.len() + 1,
         ));
@@ -471,7 +477,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             Instruction::Branch(branch_bucket) => self.handle_branch_bucket(branch_bucket),
             Instruction::Return(_) => todo!(),
             Instruction::Assert(assert_bucket) => self.handle_assert_bucket(assert_bucket),
-            Instruction::Log(_) => todo!(),
+            Instruction::Log(log_bucket) => todo!(),
             Instruction::Loop(loop_bucket) => self.handle_loop_bucket(loop_bucket),
             Instruction::CreateCmp(create_cmp_bucket) => {
                 self.handle_create_cmp_bucket(create_cmp_bucket)

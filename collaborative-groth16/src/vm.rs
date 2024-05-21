@@ -50,7 +50,7 @@ impl<F: PrimeField> Component<F> {
             input_signals.len(),
             "You have to provide the input signals"
         );
-        self.signals[self.output_signals + self.intermediate_signals..]
+        self.signals[self.output_signals..self.output_signals + self.input_signals]
             .copy_from_slice(&input_signals);
     }
 
@@ -77,7 +77,7 @@ impl<F: PrimeField> Component<F> {
         let mut ip = 0;
         loop {
             let inst = &self.body[ip];
-            println!("DEBUG: {ip}    | Doing {inst}");
+            // println!("DEBUG: {ip}    | Doing {inst}");
             match inst {
                 compiler::MpcOpCode::PushConstant(index) => self.push_field(constant_table[*index]),
                 compiler::MpcOpCode::PushIndex(index) => self.push_index(*index),
@@ -292,7 +292,6 @@ mod tests {
 
     #[test]
     fn control_flow() {
-        println!("test");
         let file = "../test_vectors/circuits/control_flow.circom";
         let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
             .link_library("../test_vectors/circuits/libs/");
