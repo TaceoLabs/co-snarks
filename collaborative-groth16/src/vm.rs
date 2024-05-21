@@ -16,6 +16,7 @@ struct Component<F: PrimeField> {
     index_stack: StackFrame<usize>,
     output_signals: usize,
     input_signals: usize,
+    intermediate_signals: usize,
     has_output: bool,
     signals: Vec<F>,
     vars: Vec<F>,
@@ -28,8 +29,14 @@ impl<F: PrimeField> Component<F> {
         Self {
             output_signals: templ_decl.output_signals,
             input_signals: templ_decl.input_signals,
+            intermediate_signals: templ_decl.intermediate_signals,
             has_output: false,
-            signals: vec![F::zero(); templ_decl.input_signals + templ_decl.output_signals],
+            signals: vec![
+                F::zero();
+                templ_decl.input_signals
+                    + templ_decl.output_signals
+                    + templ_decl.intermediate_signals
+            ],
             sub_components: vec![], //vec![Component::default(); templ_decl.sub_comps],
             vars: vec![F::zero(); templ_decl.vars],
             field_stack: Default::default(),
@@ -43,7 +50,8 @@ impl<F: PrimeField> Component<F> {
             input_signals.len(),
             "You have to provide the input signals"
         );
-        self.signals[self.output_signals..].copy_from_slice(&input_signals);
+        self.signals[self.output_signals + self.intermediate_signals..]
+            .copy_from_slice(&input_signals);
     }
 
     #[inline]
@@ -107,13 +115,7 @@ impl<F: PrimeField> Component<F> {
                     let index = self.pop_index();
                     //check whether we have to compute the output
                     if !self.sub_components[sub_comp_index].has_output {
-                        println!("=========================");
-                        println!("JUMPING TO SUB COMPONENT!");
-                        println!();
                         self.sub_components[sub_comp_index].run(templ_decls, constant_table);
-                        println!("RETURNING FROM SUB COMPONENT!");
-                        println!("=========================");
-                        println!();
                     }
                     self.push_field(self.sub_components[sub_comp_index].signals[index]);
                 }
@@ -123,14 +125,11 @@ impl<F: PrimeField> Component<F> {
                     let signal = self.pop_field();
                     self.sub_components[sub_comp_index].signals[index] = signal;
                 }
-                //do we need those???
-                compiler::MpcOpCode::PushStackFrame => {
-                    // self.field_stack.push(StackFrame::default());
-                    // self.index_stack.push(StackFrame::default());
-                }
-                compiler::MpcOpCode::PopStackFrame => {
-                    // self.field_stack.pop().unwrap();
-                    // self.index_stack.pop().unwrap();
+                compiler::MpcOpCode::Assert => {
+                    let assertion = self.pop_field();
+                    if assertion.is_zero() {
+                        panic!("assertion failed");
+                    }
                 }
                 compiler::MpcOpCode::Add => {
                     let rhs = self.pop_field();
@@ -190,6 +189,7 @@ impl<F: PrimeField> Component<F> {
                     ip = *jump_to;
                     continue;
                 }
+
                 compiler::MpcOpCode::JumpIfFalse(jump_to) => {
                     let jump_to = *jump_to;
                     let cond = self.pop_field();
@@ -240,7 +240,6 @@ impl<P: Pairing> WitnessExtension<P> {
 #[cfg(test)]
 mod tests {
     use ark_bn254::Bn254;
-    use serde::de::IntoDeserializer;
 
     use self::compiler::CompilerBuilder;
 
@@ -289,6 +288,20 @@ mod tests {
         //       for ele in witness.values {
         //           println!("{ele}");
         //       }
+    }
+
+    #[test]
+    fn control_flow() {
+        println!("test");
+        let file = "../test_vectors/circuits/control_flow.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let result = builder
+            .build()
+            .parse()
+            .unwrap()
+            .run(vec![ark_bn254::Fr::from_str("1").unwrap()]);
+        assert_eq!(result, vec![ark_bn254::Fr::from_str("13").unwrap()]);
     }
 
     #[test]

@@ -52,7 +52,7 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn print(&self, to_print: &Self::FieldShareVec);
 }
 
-pub trait PrimeFieldWitnessExtension<F: PrimeField>: PrimeFieldMpcProtocol<F> {}
+pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F> {}
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
     type PointShare: CanonicalDeserialize + CanonicalDeserialize + Clone + Sync;

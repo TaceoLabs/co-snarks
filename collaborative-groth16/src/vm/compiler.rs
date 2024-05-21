@@ -1,9 +1,14 @@
 use ark_ec::pairing::Pairing;
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags},
-    intermediate_representation::ir_interface::{
-        AddressType, BranchBucket, ComputeBucket, CreateCmpBucket, Instruction, LoadBucket,
-        LocationRule, LoopBucket, OperatorType, StoreBucket, ValueBucket, ValueType,
+    intermediate_representation::{
+        self,
+        ir_interface::{
+            AddressType, AssertBucket, BranchBucket, ComputeBucket, CreateCmpBucket, Instruction,
+            LoadBucket, LocationRule, LoopBucket, OperatorType, StoreBucket, ValueBucket,
+            ValueType,
+        },
+        InstructionList,
     },
 };
 use circom_constraint_generation::BuildConfig;
@@ -31,9 +36,8 @@ pub enum MpcOpCode {
     OutputSubComp,
     InputSubComp,
     CreateCmp(String, Vec<usize>), //what else do we need?
-    PushStackFrame,
-    PopStackFrame,
     Return,
+    Assert,
     Add,
     Sub,
     Mul,
@@ -64,8 +68,7 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::LoadVar(template_id) => format!("LOAD_VAR_OP {}", template_id),
             MpcOpCode::StoreVar(template_id) => format!("STORE_VAR_OP {}", template_id),
             MpcOpCode::CreateCmp(header, dims) => format!("CREATE_CMP_OP {} {:?}", header, dims),
-            MpcOpCode::PushStackFrame => "PUSH_STACK_FRAME_OP".to_owned(),
-            MpcOpCode::PopStackFrame => "POP_STACK_FRAME_OP".to_owned(),
+            MpcOpCode::Assert => "ASSERT_OP".to_owned(),
             MpcOpCode::Add => "ADD_OP".to_owned(),
             MpcOpCode::Sub => "SUB_OP".to_owned(),
             MpcOpCode::Mul => "MUL_OP".to_owned(),
@@ -127,6 +130,7 @@ impl<P: Pairing> CompilerBuilder<P> {
             link_libraries: self.link_libraries,
             constant_table: vec![],
             current_code_block: vec![],
+            current_line_offset: 0,
             fun_decls: HashMap::new(),
             templ_decls: HashMap::new(),
         }
@@ -137,6 +141,7 @@ impl<P: Pairing> CompilerBuilder<P> {
 pub(crate) struct TemplateDecl {
     pub(crate) input_signals: usize,
     pub(crate) output_signals: usize,
+    pub(crate) intermediate_signals: usize,
     pub(crate) vars: usize,
     pub(crate) sub_comps: usize,
     pub(crate) body: Rc<CodeBlock>,
@@ -146,6 +151,7 @@ impl TemplateDecl {
     fn new(
         input_signals: usize,
         output_signals: usize,
+        intermediate_signals: usize,
         vars: usize,
         sub_comps: usize,
         body: CodeBlock,
@@ -153,6 +159,7 @@ impl TemplateDecl {
         Self {
             input_signals,
             output_signals,
+            intermediate_signals,
             vars,
             sub_comps,
             body: Rc::new(body),
@@ -168,6 +175,7 @@ pub struct CollaborativeCircomCompiler<P: Pairing> {
     pub(crate) fun_decls: HashMap<String, CodeBlock>,
     pub(crate) templ_decls: HashMap<String, TemplateDecl>,
     pub(crate) current_code_block: CodeBlock,
+    pub(crate) current_line_offset: usize,
 }
 
 impl<P: Pairing> CollaborativeCircomCompiler<P> {
@@ -199,7 +207,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
 
     fn build_circuit(&self, program_archive: ProgramArchive) -> Result<CircomCircuit> {
         let build_config = BuildConfig {
-            no_rounds: usize::MAX, //simplification_style. Use default
+            no_rounds: usize::MAX, //simplification_style. Use default from their lib
             flag_json_sub: false,
             json_substitutions: String::new(),
             flag_s: false,
@@ -220,13 +228,13 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn handle_store_bucket(&mut self, store_bucket: &StoreBucket) {
-        self.eject_mpc_opcode(&store_bucket.src);
+        self.handle_instruction(&store_bucket.src);
         match &store_bucket.dest {
             LocationRule::Indexed {
                 location,
                 template_header,
             } => {
-                self.eject_mpc_opcode(location);
+                self.handle_instruction(location);
                 if template_header.is_some() {
                     //TODO what do we do with the template header
                 }
@@ -253,8 +261,8 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 is_output,
                 input_information,
             } => {
-                self.eject_mpc_opcode(cmp_address);
-                self.current_code_block.push(MpcOpCode::InputSubComp);
+                self.handle_instruction(cmp_address);
+                self.emit_opcode(MpcOpCode::InputSubComp);
 
                 //               println!("{}", store_bucket.to_string());
                 //               println!();
@@ -277,16 +285,40 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         }
     }
 
+    #[inline(always)]
+    fn emit_opcode(&mut self, op_code: MpcOpCode) {
+        self.current_code_block.push(op_code);
+    }
+
+    #[inline(always)]
+    fn add_code_block(&mut self, code_block: CodeBlock) {
+        self.current_code_block.extend(code_block);
+    }
+
+    #[inline(always)]
+    fn handle_inner_body(&mut self, instr_list: &InstructionList) -> CodeBlock {
+        let mut inner_block = CodeBlock::default();
+        let offset = self.current_code_block.len();
+        self.current_line_offset += offset;
+        std::mem::swap(&mut inner_block, &mut self.current_code_block);
+        instr_list
+            .iter()
+            .for_each(|inst| self.handle_instruction(inst));
+        self.current_line_offset -= offset;
+        std::mem::swap(&mut inner_block, &mut self.current_code_block);
+        inner_block
+    }
+
     fn handle_compute_bucket(&mut self, compute_bucket: &ComputeBucket) {
         //load stack
         compute_bucket.stack.iter().for_each(|inst| {
-            self.eject_mpc_opcode(inst);
+            self.handle_instruction(inst);
         });
         match compute_bucket.op {
-            OperatorType::Add => self.current_code_block.push(MpcOpCode::Add),
-            OperatorType::Sub => todo!(),
-            OperatorType::Mul => self.current_code_block.push(MpcOpCode::Mul),
-            OperatorType::Div => todo!(),
+            OperatorType::Add => self.emit_opcode(MpcOpCode::Add),
+            OperatorType::Sub => self.emit_opcode(MpcOpCode::Sub),
+            OperatorType::Mul => self.emit_opcode(MpcOpCode::Mul),
+            OperatorType::Div => self.emit_opcode(MpcOpCode::Div),
             OperatorType::Pow => todo!(),
             OperatorType::IntDiv => todo!(),
             OperatorType::Mod => todo!(),
@@ -294,9 +326,12 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             OperatorType::ShiftR => todo!(),
             OperatorType::LesserEq => todo!(),
             OperatorType::GreaterEq => todo!(),
-            OperatorType::Lesser => self.current_code_block.push(MpcOpCode::Lt),
+            OperatorType::Lesser => self.emit_opcode(MpcOpCode::Lt),
             OperatorType::Greater => todo!(),
-            OperatorType::Eq(_) => todo!(),
+            OperatorType::Eq(size) => {
+                assert_ne!(size, 0);
+                self.emit_opcode(MpcOpCode::Eq);
+            }
             OperatorType::NotEq => todo!(),
             OperatorType::BoolOr => todo!(),
             OperatorType::BoolAnd => todo!(),
@@ -307,13 +342,13 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             OperatorType::BoolNot => todo!(),
             OperatorType::Complement => todo!(),
             OperatorType::ToAddress => {
-                self.current_code_block.push(MpcOpCode::ToIndex);
+                self.emit_opcode(MpcOpCode::ToIndex);
             }
             OperatorType::MulAddress => {
-                self.current_code_block.push(MpcOpCode::MulIndex);
+                self.emit_opcode(MpcOpCode::MulIndex);
             }
             OperatorType::AddAddress => {
-                self.current_code_block.push(MpcOpCode::AddIndex);
+                self.emit_opcode(MpcOpCode::AddIndex);
             }
         }
     }
@@ -331,7 +366,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 location,
                 template_header,
             } => {
-                self.eject_mpc_opcode(location);
+                self.handle_instruction(location);
                 // assert!(
                 //     template_header.is_none(),
                 //     "TODO template header is not none in load"
@@ -355,16 +390,16 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 is_output: _,
                 input_information: _,
             } => {
-                self.eject_mpc_opcode(cmp_address);
-                self.current_code_block.push(MpcOpCode::OutputSubComp);
+                self.handle_instruction(cmp_address);
+                self.emit_opcode(MpcOpCode::OutputSubComp);
             }
         }
     }
 
     fn handle_create_cmp_bucket(&mut self, create_cmp_bucket: &CreateCmpBucket) {
         //get the id:
-        self.eject_mpc_opcode(&create_cmp_bucket.sub_cmp_id);
-        self.current_code_block.push(MpcOpCode::CreateCmp(
+        self.handle_instruction(&create_cmp_bucket.sub_cmp_id);
+        self.emit_opcode(MpcOpCode::CreateCmp(
             create_cmp_bucket.symbol.clone(),
             create_cmp_bucket.dimensions.clone(),
         ));
@@ -383,38 +418,50 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn handle_loop_bucket(&mut self, loop_bucket: &LoopBucket) {
-        self.current_code_block.push(MpcOpCode::PushStackFrame);
-        let start_condition = self.current_code_block.len();
-        let mut body_code_block = CodeBlock::default();
-        std::mem::swap(&mut body_code_block, &mut self.current_code_block);
-        loop_bucket.body.iter().for_each(|inst| {
-            self.eject_mpc_opcode(inst);
-        });
-        self.current_code_block
-            .push(MpcOpCode::Jump(start_condition));
-        std::mem::swap(&mut body_code_block, &mut self.current_code_block);
-        self.eject_mpc_opcode(&loop_bucket.continue_condition);
-        self.current_code_block.push(MpcOpCode::JumpIfFalse(
-            body_code_block.len() + self.current_code_block.len() + 1,
+        let start_condition = self.current_line_offset + self.current_code_block.len();
+        let mut body_code_block = self.handle_inner_body(&loop_bucket.body);
+        body_code_block.push(MpcOpCode::Jump(start_condition));
+        self.handle_instruction(&loop_bucket.continue_condition);
+        self.emit_opcode(MpcOpCode::JumpIfFalse(
+            self.current_line_offset + body_code_block.len() + self.current_code_block.len() + 1,
         ));
         self.current_code_block.append(&mut body_code_block);
-        self.current_code_block.push(MpcOpCode::PopStackFrame);
     }
 
     fn handle_branch_bucket(&mut self, branch_bucket: &BranchBucket) {
-        println!("{}", branch_bucket.line);
-        panic!()
+        self.handle_instruction(&branch_bucket.cond);
+        let truthy_block = self.handle_inner_body(&branch_bucket.if_branch);
+        println!("current line offset is: {}", self.current_line_offset);
+        let falsy_offset =
+            self.current_line_offset + self.current_code_block.len() + truthy_block.len() + 2;
+        self.emit_opcode(MpcOpCode::JumpIfFalse(falsy_offset));
+        self.add_code_block(truthy_block);
+        let falsy_block = self.handle_inner_body(&branch_bucket.else_branch);
+        let falsy_end =
+            self.current_line_offset + self.current_code_block.len() + falsy_block.len() + 1;
+        self.emit_opcode(MpcOpCode::Jump(falsy_end));
+        self.add_code_block(falsy_block);
+        Self::debug_code_block(&self.current_code_block);
+        println!();
+        println!();
+        println!();
+    }
+
+    fn handle_assert_bucket(&mut self, assert_bucket: &AssertBucket) {
+        //evaluate the assertion
+        self.handle_instruction(&assert_bucket.evaluate);
+        self.emit_opcode(MpcOpCode::Assert);
     }
 
     fn handle_value_bucket(&mut self, value_bucket: &ValueBucket) {
         let index = value_bucket.value;
         match value_bucket.parse_as {
-            ValueType::BigInt => self.current_code_block.push(MpcOpCode::PushConstant(index)),
-            ValueType::U32 => self.current_code_block.push(MpcOpCode::PushIndex(index)),
+            ValueType::BigInt => self.emit_opcode(MpcOpCode::PushConstant(index)),
+            ValueType::U32 => self.emit_opcode(MpcOpCode::PushIndex(index)),
         }
     }
 
-    fn eject_mpc_opcode(&mut self, inst: &Instruction) {
+    fn handle_instruction(&mut self, inst: &Instruction) {
         match inst {
             Instruction::Value(value_bucket) => self.handle_value_bucket(value_bucket),
             Instruction::Load(load_bucket) => self.handle_load_bucket(load_bucket),
@@ -423,7 +470,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             Instruction::Call(_call_bucket) => todo!(),
             Instruction::Branch(branch_bucket) => self.handle_branch_bucket(branch_bucket),
             Instruction::Return(_) => todo!(),
-            Instruction::Assert(_) => todo!(),
+            Instruction::Assert(assert_bucket) => self.handle_assert_bucket(assert_bucket),
             Instruction::Log(_) => todo!(),
             Instruction::Loop(loop_bucket) => self.handle_loop_bucket(loop_bucket),
             Instruction::CreateCmp(create_cmp_bucket) => {
@@ -445,7 +492,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         //build functions
         for fun in circuit.functions.iter() {
             fun.body.iter().for_each(|inst| {
-                self.eject_mpc_opcode(inst);
+                self.handle_instruction(inst);
             });
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
@@ -464,7 +511,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             println!("#expr   : {}", templ.expression_stack_depth);
             println!("#signal : {}", templ.signal_stack_depth);
             templ.body.iter().for_each(|inst| {
-                self.eject_mpc_opcode(inst);
+                self.handle_instruction(inst);
             });
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
@@ -475,6 +522,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 TemplateDecl::new(
                     templ.number_of_inputs,
                     templ.number_of_outputs,
+                    templ.number_of_intermediates,
                     templ.var_stack_depth,
                     templ.number_of_components,
                     new_code_block,
