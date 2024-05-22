@@ -143,7 +143,7 @@ impl<F: PrimeField> Component<F> {
                     let index = self.pop_index();
                     self.push_field(self.vars[index]);
                 }
-                compiler::MpcOpCode::StoreVar(_template_id) => {
+                compiler::MpcOpCode::StoreVar => {
                     let index = self.pop_index();
                     let signal = self.pop_field();
                     self.vars[index] = signal;
@@ -218,6 +218,10 @@ impl<F: PrimeField> Component<F> {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     self.push_field(lhs * rhs);
+                }
+                compiler::MpcOpCode::Neg => {
+                    let x = self.pop_field();
+                    self.push_field(-x);
                 }
                 compiler::MpcOpCode::Div => {
                     let rhs = self.pop_field();
@@ -373,8 +377,6 @@ impl<P: Pairing> WitnessExtension<P> {
 #[cfg(test)]
 mod tests {
     use ark_bn254::Bn254;
-    use itertools::Itertools;
-    use rand::{thread_rng, Rng};
 
     use self::compiler::CompilerBuilder;
 
@@ -417,12 +419,6 @@ mod tests {
             result,
             vec![ark_bn254::Fr::from_str("65383718400000").unwrap()]
         );
-
-        //       let witness = File::open("/home/fnieddu/tmp/multiplier16_js/witness.wtns").unwrap();
-        //       let witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        //       for ele in witness.values {
-        //           println!("{ele}");
-        //       }
     }
 
     #[test]
@@ -482,24 +478,70 @@ mod tests {
         assert_eq!(is_result, should_result,);
     }
 
-    // #[test]
-    // fn poseidon() {
-    //     let file = "../test_vectors/circuits/poseidon_hasher.circom";
-    //     let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-    //         .link_library("../test_vectors/circuits/libs/");
-    //     let result = builder.build().parse().unwrap().run(vec![
-    //         ark_bn254::Fr::from_str("5").unwrap(),
-    //         ark_bn254::Fr::from_str("5").unwrap(),
-    //     ]);
-    //     assert_eq!(
-    //         result,
-    //         vec![ark_bn254::Fr::from_str("65383718400000").unwrap()]
-    //     );
+    #[test]
+    fn mimc() {
+        let file = "../test_vectors/circuits/mimc_hasher.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let result = builder.build().parse().unwrap().run(vec![
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("2").unwrap(),
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("4").unwrap(),
+        ]);
 
-    //     //       let witness = File::open("/home/fnieddu/tmp/multiplier16_js/witness.wtns").unwrap();
-    //     //       let witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-    //     //       for ele in witness.values {
-    //     //           println!("{ele}");
-    //     //       }
-    // }
+        assert_eq!(
+            result,
+            vec![ark_bn254::Fr::from_str(
+                "11942780089454131051516189009900830211326444317633948057223561824931207289212"
+            )
+            .unwrap()]
+        );
+    }
+
+    #[test]
+    fn pedersen() {
+        let file = "../test_vectors/circuits/pedersen_hasher.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let result = builder
+            .build()
+            .parse()
+            .unwrap()
+            .run(vec![ark_bn254::Fr::from_str("5").unwrap()]);
+
+        assert_eq!(
+            result,
+            vec![
+                ark_bn254::Fr::from_str(
+                    "19441207193282408010869542901357472504167256274773843225760657733604163132135",
+                )
+                .unwrap(),
+                ark_bn254::Fr::from_str(
+                    "19990967530340248564771981790127553242175633003074614939043423483648966286700",
+                )
+                .unwrap()
+            ]
+        );
+    }
+
+    #[ignore = "wip: known bug. Recursive if-else is not working"]
+    #[test]
+    fn poseidon() {
+        let file = "../test_vectors/circuits/poseidon_hasher.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let result = builder
+            .build()
+            .parse()
+            .unwrap()
+            .run(vec![ark_bn254::Fr::from_str("5").unwrap()]);
+        assert_eq!(
+            result,
+            vec![ark_bn254::Fr::from_str(
+                "19065150524771031435284970883882288895168425523179566388456001105768498065277"
+            )
+            .unwrap()]
+        );
+    }
 }
