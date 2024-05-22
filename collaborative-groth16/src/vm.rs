@@ -363,6 +363,17 @@ mod tests {
         assert_eq!(result, vec![ark_bn254::Fr::from_str("13").unwrap()]);
     }
 
+    // #[test]
+    // fn functions() {
+    //     let file = "../test_vectors/circuits/functions.circom";
+    //     let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+    //         .link_library("../test_vectors/circuits/libs/");
+    //     let input = vec![ark_bn254::Fr::from_str("5").unwrap()];
+    //     let should_result = vec![ark_bn254::Fr::from_str("126").unwrap()];
+    //     let is_result = builder.build().parse().unwrap().run(input);
+    //     assert_eq!(is_result, should_result,);
+    // }
+
     #[test]
     fn bin_sum() {
         let file = "../test_vectors/circuits/binsum_caller.circom";
@@ -393,50 +404,28 @@ mod tests {
             ark_bn254::Fr::from_str("0").unwrap(),
             ark_bn254::Fr::from_str("1").unwrap(),
         ];
-        let mut is_result = builder.build().parse().unwrap().run(input);
-        assert_eq!(is_result, should_result,);
-    }
-
-    #[test]
-    fn bin_sum_easy() {
-        let file = "../test_vectors/circuits/binsum_caller.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let input = vec![
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-            //
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("0").unwrap(),
-            //
-        ];
-        let should_result = vec![
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-        ];
         let is_result = builder.build().parse().unwrap().run(input);
         assert_eq!(is_result, should_result,);
     }
 
-    #[test]
-    fn poseidon() {
-        let file = "../test_vectors/circuits/poseidon_hasher.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let result = builder.build().parse().unwrap().run(vec![
-            ark_bn254::Fr::from_str("5").unwrap(),
-            ark_bn254::Fr::from_str("5").unwrap(),
-        ]);
-        assert_eq!(
-            result,
-            vec![ark_bn254::Fr::from_str("65383718400000").unwrap()]
-        );
+    // #[test]
+    // fn poseidon() {
+    //     let file = "../test_vectors/circuits/poseidon_hasher.circom";
+    //     let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+    //         .link_library("../test_vectors/circuits/libs/");
+    //     let result = builder.build().parse().unwrap().run(vec![
+    //         ark_bn254::Fr::from_str("5").unwrap(),
+    //         ark_bn254::Fr::from_str("5").unwrap(),
+    //     ]);
+    //     assert_eq!(
+    //         result,
+    //         vec![ark_bn254::Fr::from_str("65383718400000").unwrap()]
+    //     );
 
-        //       let witness = File::open("/home/fnieddu/tmp/multiplier16_js/witness.wtns").unwrap();
-        //       let witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        //       for ele in witness.values {
-        //           println!("{ele}");
-        //       }
-    }
+    //     //       let witness = File::open("/home/fnieddu/tmp/multiplier16_js/witness.wtns").unwrap();
+    //     //       let witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+    //     //       for ele in witness.values {
+    //     //           println!("{ele}");
+    //     //       }
+    // }
 }

@@ -518,8 +518,12 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| eyre!("cannot parse string in constant list"))?;
         println!("==== constants ====");
-        for (idx, constant) in self.constant_table.iter().enumerate() {
-            println!("{idx}:    {constant}");
+        if self.constant_table.len() > 8 {
+            println!("omitting {} constants...", self.constant_table.len());
+        } else {
+            for (idx, constant) in self.constant_table.iter().enumerate() {
+                println!("{idx}:    {constant}");
+            }
         }
 
         //build functions
