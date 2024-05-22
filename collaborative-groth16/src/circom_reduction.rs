@@ -26,11 +26,12 @@
 
 // copied from https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/circom/qap.rs
 
-use ark_ff::PrimeField;
+use ark_ff::{LegendreSymbol, PrimeField};
 use ark_groth16::r1cs_to_qap::{evaluate_constraint, LibsnarkReduction, R1CSToQAP};
 use ark_poly::EvaluationDomain;
 use ark_relations::r1cs::{ConstraintMatrices, ConstraintSystemRef, SynthesisError};
 use ark_std::{cfg_into_iter, cfg_iter, cfg_iter_mut, vec};
+use num_traits::ToPrimitive;
 
 /// Implements the witness map used by snarkjs. The arkworks witness map calculates the
 /// coefficients of H through computing (AB-C)/Z in the evaluation domain and going back to the
@@ -88,12 +89,37 @@ impl R1CSToQAP for CircomReduction {
         domain.ifft_in_place(&mut a);
         domain.ifft_in_place(&mut b);
 
-        let root_of_unity = {
-            let domain_size_double = 2 * domain_size;
-            let domain_double =
-                D::new(domain_size_double).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-            domain_double.element(1)
+        /* old way of computing root of unity, does not work for bls12_381:
+                let root_of_unity = {
+                    let domain_size_double = 2 * domain_size;
+                    let domain_double =
+                        D::new(domain_size_double).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+                    domain_double.element(1)
+                };
+
+        new one is computed in the same way as in snarkjs (More precisely in ffjavascript/src/wasm_field1.js)
+        calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) also calculate smallest t (F::TRACE) s.t. p-1=2^s*t, s is the two_adicity
+        use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
+        then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
+        */
+
+        let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
+        let mut q = F::one();
+        while q.legendre() != LegendreSymbol::QuadraticNonResidue {
+            q += F::one();
+        }
+        let z = q.pow(F::TRACE);
+        roots[0] = z;
+        for i in 1..roots.len() {
+            roots[i] = roots[i - 1].square();
+        }
+        roots.reverse();
+        let root_of_unity = if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
+            q.square()
+        } else {
+            roots[domain.log_size_of_group().to_usize().unwrap() + 1]
         };
+     
         D::distribute_powers_and_mul_by_const(&mut a, root_of_unity, F::one());
         D::distribute_powers_and_mul_by_const(&mut b, root_of_unity, F::one());
 
