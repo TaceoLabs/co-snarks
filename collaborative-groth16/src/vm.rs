@@ -1,3 +1,4 @@
+use std::env::vars;
 use std::rc::Rc;
 use std::{collections::HashMap, vec};
 
@@ -34,6 +35,9 @@ type StackFrame<F> = Vec<F>;
 
 #[derive(Default, Clone)]
 struct Component<F: PrimeField> {
+    //investigate later if we need stack frames
+    //like that or if a single stack frame is enough??
+    //depends on how complex functions work
     field_stack: StackFrame<F>,
     index_stack: StackFrame<usize>,
     output_signals: usize,
@@ -66,6 +70,22 @@ impl<F: PrimeField> Component<F> {
             body: Rc::clone(&templ_decl.body),
         }
     }
+
+    fn from_fun_decl(fun_decl: &FunDecl) -> Self {
+        Self {
+            output_signals: 0,
+            input_signals: 0,
+            intermediate_signals: 0,
+            has_output: false,
+            signals: vec![],
+            vars: vec![F::zero(); fun_decl.vars],
+            sub_components: vec![],
+            field_stack: Default::default(),
+            index_stack: Default::default(),
+            body: Rc::clone(&fun_decl.body),
+        }
+    }
+
     fn set_input_signals(&mut self, input_signals: Vec<F>) {
         assert_eq!(
             self.input_signals,
@@ -95,10 +115,16 @@ impl<F: PrimeField> Component<F> {
         self.index_stack.pop().unwrap()
     }
 
-    pub fn run(&mut self, templ_decls: &HashMap<String, TemplateDecl>, constant_table: &[F]) {
+    pub fn run(
+        &mut self,
+        fun_decls: &HashMap<String, FunDecl>,
+        templ_decls: &HashMap<String, TemplateDecl>,
+        constant_table: &[F],
+    ) {
         let mut ip = 0;
+        let current_body = Rc::clone(&self.body);
         loop {
-            let inst = &self.body[ip];
+            let inst = &current_body[ip];
             println!("DEBUG: {ip}    | Doing {inst}");
             match inst {
                 compiler::MpcOpCode::PushConstant(index) => self.push_field(constant_table[*index]),
@@ -107,7 +133,7 @@ impl<F: PrimeField> Component<F> {
                     let index = self.pop_index();
                     self.push_field(self.signals[index]);
                 }
-                compiler::MpcOpCode::StoreSignal(_template_id) => {
+                compiler::MpcOpCode::StoreSignal => {
                     //get index
                     let index = self.pop_index();
                     let signal = self.pop_field();
@@ -121,6 +147,27 @@ impl<F: PrimeField> Component<F> {
                     let index = self.pop_index();
                     let signal = self.pop_field();
                     self.vars[index] = signal;
+                }
+                compiler::MpcOpCode::Call(symbol) => {
+                    let fun_decl = fun_decls.get(symbol).unwrap();
+                    for params in fun_decl.params.iter() {
+                        assert!(
+                            params.length.is_empty(),
+                            "TODO we need to check how to call this and when this happens"
+                        );
+                    }
+                    let mut callable = Component::<F>::from_fun_decl(fun_decl);
+                    let to_copy = self.field_stack.len() - fun_decl.params.len();
+
+                    //copy the parameters
+                    for (idx, param) in self.field_stack[to_copy..].iter().enumerate() {
+                        callable.vars[idx] = *param;
+                    }
+                    callable.run(fun_decls, templ_decls, constant_table);
+                    //copy the return value
+                    for signal in callable.field_stack {
+                        self.push_field(signal);
+                    }
                 }
                 compiler::MpcOpCode::CreateCmp(symbol, dims) => {
                     //todo when we have multiple components we need to check where to put them with ids..
@@ -137,7 +184,11 @@ impl<F: PrimeField> Component<F> {
                     let index = self.pop_index();
                     //check whether we have to compute the output
                     if !self.sub_components[sub_comp_index].has_output {
-                        self.sub_components[sub_comp_index].run(templ_decls, constant_table);
+                        self.sub_components[sub_comp_index].run(
+                            fun_decls,
+                            templ_decls,
+                            constant_table,
+                        );
                     }
                     self.push_field(self.sub_components[sub_comp_index].signals[index]);
                 }
@@ -182,9 +233,33 @@ impl<F: PrimeField> Component<F> {
                         self.push_field(F::zero());
                     }
                 }
-                compiler::MpcOpCode::Le => todo!(),
-                compiler::MpcOpCode::Gt => todo!(),
-                compiler::MpcOpCode::Ge => todo!(),
+                compiler::MpcOpCode::Le => {
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    if lhs <= rhs {
+                        self.push_field(F::one());
+                    } else {
+                        self.push_field(F::zero());
+                    }
+                }
+                compiler::MpcOpCode::Gt => {
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    if lhs > rhs {
+                        self.push_field(F::one());
+                    } else {
+                        self.push_field(F::zero());
+                    }
+                }
+                compiler::MpcOpCode::Ge => {
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    if lhs >= rhs {
+                        self.push_field(F::one());
+                    } else {
+                        self.push_field(F::zero());
+                    }
+                }
                 compiler::MpcOpCode::Eq => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
@@ -290,7 +365,7 @@ impl<P: Pairing> WitnessExtension<P> {
         let main_templ = self.templ_decls.get(&self.main).unwrap().clone();
         let mut main_component = Component::<P::ScalarField>::init(&main_templ);
         main_component.set_input_signals(input_signals);
-        main_component.run(&self.templ_decls, &self.constant_table);
+        main_component.run(&self.fun_decls, &self.templ_decls, &self.constant_table);
         main_component.signals[..main_component.output_signals].to_vec()
     }
 }
@@ -363,17 +438,16 @@ mod tests {
         assert_eq!(result, vec![ark_bn254::Fr::from_str("13").unwrap()]);
     }
 
-    // #[test]
-    // fn functions() {
-    //     let file = "../test_vectors/circuits/functions.circom";
-    //     let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-    //         .link_library("../test_vectors/circuits/libs/");
-    //     let input = vec![ark_bn254::Fr::from_str("5").unwrap()];
-    //     let should_result = vec![ark_bn254::Fr::from_str("126").unwrap()];
-    //     let is_result = builder.build().parse().unwrap().run(input);
-    //     assert_eq!(is_result, should_result,);
-    // }
-
+    #[test]
+    fn functions() {
+        let file = "../test_vectors/circuits/functions.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let input = vec![ark_bn254::Fr::from_str("5").unwrap()];
+        let should_result = vec![ark_bn254::Fr::from_str("2").unwrap()];
+        let is_result = builder.build().parse().unwrap().run(input);
+        assert_eq!(is_result, should_result,);
+    }
     #[test]
     fn bin_sum() {
         let file = "../test_vectors/circuits/binsum_caller.circom";

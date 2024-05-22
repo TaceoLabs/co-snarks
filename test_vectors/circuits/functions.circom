@@ -1,16 +1,16 @@
 
 pragma circom 2.0.0;
 
-function pow(x, exp) {
-    return x * exp;
+function sub(x, y) {
+    assert(x > y);
+    return x - y;
 }
 
 
 template Pow(N) {
     signal input a;
     signal output b;
-
-    b <== pow(a,N);    
+    b <== sub(a,N);    
 }
 
 component main = Pow(3);

@@ -1,11 +1,12 @@
 use ark_ec::pairing::Pairing;
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags},
+    hir::very_concrete_program::Param,
     intermediate_representation::{
         ir_interface::{
-            AddressType, AssertBucket, BranchBucket, ComputeBucket, CreateCmpBucket, Instruction,
-            LoadBucket, LocationRule, LoopBucket, OperatorType, StoreBucket, ValueBucket,
-            ValueType,
+            AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket, CreateCmpBucket,
+            Instruction, LoadBucket, LocationRule, LoopBucket, OperatorType, ReturnBucket,
+            ReturnType, StoreBucket, ValueBucket, ValueType,
         },
         InstructionList,
     },
@@ -29,12 +30,13 @@ pub enum MpcOpCode {
     PushConstant(usize),
     PushIndex(usize),
     LoadSignal(usize),
-    StoreSignal(usize),
+    StoreSignal,
     LoadVar(usize),
     StoreVar(usize),
     OutputSubComp,
     InputSubComp,
     CreateCmp(String, Vec<usize>), //what else do we need?
+    Call(String),
     Return,
     Assert,
     Add,
@@ -71,9 +73,10 @@ impl std::fmt::Display for MpcOpCode {
             }
             MpcOpCode::PushIndex(index) => format!("PUSH_INDEX_OP {}", index),
             MpcOpCode::LoadSignal(template_id) => format!("LOAD_SIGNAL_OP {}", template_id),
-            MpcOpCode::StoreSignal(template_id) => format!("STORE_SIGNAL_OP {}", template_id),
+            MpcOpCode::StoreSignal => "STORE_SIGNAL_OP".to_owned(),
             MpcOpCode::LoadVar(template_id) => format!("LOAD_VAR_OP {}", template_id),
             MpcOpCode::StoreVar(template_id) => format!("STORE_VAR_OP {}", template_id),
+            MpcOpCode::Call(symbol) => format!("CALL_OP {symbol}"),
             MpcOpCode::CreateCmp(header, dims) => format!("CREATE_CMP_OP {} {:?}", header, dims),
             MpcOpCode::Assert => "ASSERT_OP".to_owned(),
             MpcOpCode::Add => "ADD_OP".to_owned(),
@@ -163,12 +166,16 @@ pub(crate) struct TemplateDecl {
 }
 
 pub(crate) struct FunDecl {
+    pub(crate) params: Vec<Param>,
+    pub(crate) vars: usize,
     pub(crate) body: Rc<CodeBlock>,
 }
 
 impl FunDecl {
-    fn new(body: CodeBlock) -> Self {
+    fn new(params: Vec<Param>, vars: usize, body: CodeBlock) -> Self {
         Self {
+            params,
+            vars,
             body: Rc::new(body),
         }
     }
@@ -279,9 +286,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             AddressType::Variable => self
                 .current_code_block
                 .push(MpcOpCode::StoreVar(store_bucket.message_id)),
-            AddressType::Signal => self
-                .current_code_block
-                .push(MpcOpCode::StoreSignal(store_bucket.message_id)),
+            AddressType::Signal => self.current_code_block.push(MpcOpCode::StoreSignal),
             AddressType::SubcmpSignal {
                 cmp_address,
                 uniform_parallel_value,
@@ -354,7 +359,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             OperatorType::LesserEq => todo!(),
             OperatorType::GreaterEq => todo!(),
             OperatorType::Lesser => self.emit_opcode(MpcOpCode::Lt),
-            OperatorType::Greater => todo!(),
+            OperatorType::Greater => self.emit_opcode(MpcOpCode::Gt),
             OperatorType::Eq(size) => {
                 assert_ne!(size, 0);
                 self.emit_opcode(MpcOpCode::Eq);
@@ -481,6 +486,56 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         self.emit_opcode(MpcOpCode::Assert);
     }
 
+    fn handle_return_bucket(&mut self, return_bucket: &ReturnBucket) {
+        self.handle_instruction(&return_bucket.value);
+        self.emit_opcode(MpcOpCode::Return);
+    }
+
+    fn handle_call_bucket(&mut self, call_bucket: &CallBucket) {
+        //todo check what the return info means
+        //todo check what argument types mean
+        call_bucket
+            .arguments
+            .iter()
+            .for_each(|inst| self.handle_instruction(inst));
+        self.emit_opcode(MpcOpCode::Call(call_bucket.symbol.clone()));
+        match &call_bucket.return_info {
+            ReturnType::Intermediate { op_aux_no: _ } => todo!(),
+            ReturnType::Final(final_data) => {
+                match &final_data.dest {
+                    LocationRule::Indexed {
+                        location,
+                        template_header,
+                    } => {
+                        self.handle_instruction(location);
+                        if template_header.is_some() {
+                            //TODO what do we do with the template header
+                        }
+                        //assert!(
+                        //    template_header.is_none(),
+                        //    "TODO template header is not none in load"
+                        //);
+                    }
+                    LocationRule::Mapped {
+                        signal_code,
+                        indexes,
+                    } => todo!(),
+                }
+                println!("final data");
+                match &final_data.dest_address_type {
+                    AddressType::Variable => todo!(),
+                    AddressType::Signal => self.current_code_block.push(MpcOpCode::StoreSignal),
+                    AddressType::SubcmpSignal {
+                        cmp_address,
+                        uniform_parallel_value,
+                        is_output,
+                        input_information,
+                    } => todo!(),
+                }
+            }
+        };
+    }
+
     fn handle_value_bucket(&mut self, value_bucket: &ValueBucket) {
         let index = value_bucket.value;
         match value_bucket.parse_as {
@@ -495,9 +550,9 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             Instruction::Load(load_bucket) => self.handle_load_bucket(load_bucket),
             Instruction::Store(store_bucket) => self.handle_store_bucket(store_bucket),
             Instruction::Compute(compute_bucket) => self.handle_compute_bucket(compute_bucket),
-            Instruction::Call(_call_bucket) => todo!(),
+            Instruction::Call(call_bucket) => self.handle_call_bucket(call_bucket),
             Instruction::Branch(branch_bucket) => self.handle_branch_bucket(branch_bucket),
-            Instruction::Return(_) => todo!(),
+            Instruction::Return(return_bucket) => self.handle_return_bucket(return_bucket),
             Instruction::Assert(assert_bucket) => self.handle_assert_bucket(assert_bucket),
             Instruction::Log(log_bucket) => todo!(),
             Instruction::Loop(loop_bucket) => self.handle_loop_bucket(loop_bucket),
@@ -533,8 +588,11 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             });
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
-            self.fun_decls
-                .insert(fun.header.clone(), FunDecl::new(new_code_block));
+            Self::debug_code_block(&new_code_block);
+            self.fun_decls.insert(
+                fun.header.clone(),
+                FunDecl::new(fun.params.clone(), fun.max_number_of_vars, new_code_block),
+            );
         }
         println!("functions: {}", self.fun_decls.len());
         for templ in circuit.templates.iter() {
