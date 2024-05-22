@@ -3,10 +3,32 @@ use std::{collections::HashMap, vec};
 
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use circom_compiler::num_bigint::BigUint;
+use color_eyre::eyre::eyre;
 
-use self::compiler::{CodeBlock, CollaborativeCircomCompiler, TemplateDecl};
+use self::compiler::{CodeBlock, CollaborativeCircomCompiler, FunDecl, TemplateDecl};
 
 pub mod compiler;
+
+macro_rules! to_field {
+    ($big_int:expr) => {
+        F::from_str(&$big_int.to_string())
+            .map_err(|_| eyre!("Cannot parse string?"))
+            .unwrap()
+    };
+}
+
+macro_rules! to_usize {
+    ($field:expr) => {
+        $field.into_bigint().to_string().parse::<usize>().unwrap()
+    };
+}
+
+macro_rules! to_bigint {
+    ($field:expr) => {
+        $field.into_bigint().to_string().parse::<BigUint>().unwrap()
+    };
+}
 
 type StackFrame<F> = Vec<F>;
 
@@ -77,7 +99,7 @@ impl<F: PrimeField> Component<F> {
         let mut ip = 0;
         loop {
             let inst = &self.body[ip];
-            // println!("DEBUG: {ip}    | Doing {inst}");
+            println!("DEBUG: {ip}    | Doing {inst}");
             match inst {
                 compiler::MpcOpCode::PushConstant(index) => self.push_field(constant_table[*index]),
                 compiler::MpcOpCode::PushIndex(index) => self.push_index(*index),
@@ -163,8 +185,44 @@ impl<F: PrimeField> Component<F> {
                 compiler::MpcOpCode::Le => todo!(),
                 compiler::MpcOpCode::Gt => todo!(),
                 compiler::MpcOpCode::Ge => todo!(),
-                compiler::MpcOpCode::Eq => todo!(),
+                compiler::MpcOpCode::Eq => {
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    if lhs == rhs {
+                        self.push_field(F::one());
+                    } else {
+                        self.push_field(F::zero());
+                    }
+                }
                 compiler::MpcOpCode::Ne => todo!(),
+                compiler::MpcOpCode::ShiftR => {
+                    let rhs = to_usize!(self.pop_field());
+                    let lhs = to_bigint!(self.pop_field());
+                    self.push_field(to_field!(lhs >> rhs));
+                }
+                compiler::MpcOpCode::ShiftL => {
+                    let rhs = to_usize!(self.pop_field());
+                    let lhs = to_bigint!(self.pop_field());
+                    self.push_field(to_field!(lhs << rhs));
+                }
+                compiler::MpcOpCode::Neq => todo!(),
+                compiler::MpcOpCode::BoolOr => todo!(),
+                compiler::MpcOpCode::BoolAnd => todo!(),
+                compiler::MpcOpCode::BitOr => {
+                    let rhs = to_bigint!(self.pop_field());
+                    let lhs = to_bigint!(self.pop_field());
+                    self.push_field(to_field!(lhs | rhs));
+                }
+                compiler::MpcOpCode::BitAnd => {
+                    let rhs = to_bigint!(self.pop_field());
+                    let lhs = to_bigint!(self.pop_field());
+                    self.push_field(to_field!(lhs & rhs));
+                }
+                compiler::MpcOpCode::BitXOr => {
+                    let rhs = to_bigint!(self.pop_field());
+                    let lhs = to_bigint!(self.pop_field());
+                    self.push_field(to_field!(lhs ^ rhs));
+                }
                 compiler::MpcOpCode::AddIndex => {
                     let rhs = self.pop_index();
                     let lhs = self.pop_index();
@@ -181,7 +239,7 @@ impl<F: PrimeField> Component<F> {
                     if signal.is_zero() {
                         self.push_index(0);
                     } else {
-                        self.push_index(signal.to_string().parse().unwrap());
+                        self.push_index(to_usize!(signal));
                     }
                 }
 
@@ -213,7 +271,7 @@ impl<F: PrimeField> Component<F> {
 
 pub struct WitnessExtension<P: Pairing> {
     constant_table: Vec<P::ScalarField>,
-    fun_decls: HashMap<String, CodeBlock>,
+    fun_decls: HashMap<String, FunDecl>,
     templ_decls: HashMap<String, TemplateDecl>,
     main: String,
 }
@@ -240,6 +298,8 @@ impl<P: Pairing> WitnessExtension<P> {
 #[cfg(test)]
 mod tests {
     use ark_bn254::Bn254;
+    use itertools::Itertools;
+    use rand::{thread_rng, Rng};
 
     use self::compiler::CompilerBuilder;
 
@@ -301,6 +361,62 @@ mod tests {
             .unwrap()
             .run(vec![ark_bn254::Fr::from_str("1").unwrap()]);
         assert_eq!(result, vec![ark_bn254::Fr::from_str("13").unwrap()]);
+    }
+
+    #[test]
+    fn bin_sum() {
+        let file = "../test_vectors/circuits/binsum_caller.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let input = vec![
+            //13
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            //12
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            //10
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+        ];
+        let should_result = vec![
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+        ];
+        let mut is_result = builder.build().parse().unwrap().run(input);
+        assert_eq!(is_result, should_result,);
+    }
+
+    #[test]
+    fn bin_sum_easy() {
+        let file = "../test_vectors/circuits/binsum_caller.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let input = vec![
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            //
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("0").unwrap(),
+            //
+        ];
+        let should_result = vec![
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+        ];
+        let is_result = builder.build().parse().unwrap().run(input);
+        assert_eq!(is_result, should_result,);
     }
 
     #[test]

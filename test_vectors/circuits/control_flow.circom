@@ -5,6 +5,7 @@ template ControlFlow(R){
   signal values[2][R];
   signal output b;
   values[0][0] <== a + 1;
+  assert(R>1);
   for (var j=1; j<R; j++) {
     if (j<R/2) {
         values[0][j] <== values[0][j-1] + 1;

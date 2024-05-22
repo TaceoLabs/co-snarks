@@ -2,7 +2,6 @@ use ark_ec::pairing::Pairing;
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags},
     intermediate_representation::{
-        self,
         ir_interface::{
             AddressType, AssertBucket, BranchBucket, ComputeBucket, CreateCmpBucket, Instruction,
             LoadBucket, LocationRule, LoopBucket, OperatorType, StoreBucket, ValueBucket,
@@ -48,6 +47,14 @@ pub enum MpcOpCode {
     Ge,
     Eq,
     Ne,
+    Neq,
+    BoolOr,
+    BoolAnd,
+    BitOr,
+    BitAnd,
+    BitXOr,
+    ShiftR,
+    ShiftL,
     MulIndex,
     AddIndex,
     ToIndex,
@@ -79,6 +86,14 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::Ge => "GREATER_EQ_OP".to_owned(),
             MpcOpCode::Eq => "IS_EQUAL_OP".to_owned(),
             MpcOpCode::Ne => "NOT_EQUAL_OP".to_owned(),
+            MpcOpCode::Neq => "NOT_EQUAL_OP".to_owned(),
+            MpcOpCode::BoolOr => "BOOL_OR_OP".to_owned(),
+            MpcOpCode::BoolAnd => "BOOL_AND_OP".to_owned(),
+            MpcOpCode::BitOr => "BIT_OR_OP".to_owned(),
+            MpcOpCode::BitAnd => "BIT_AND_OP".to_owned(),
+            MpcOpCode::BitXOr => "BIT_XOR_OP".to_owned(),
+            MpcOpCode::ShiftR => "RIGHT_SHIFT_OP".to_owned(),
+            MpcOpCode::ShiftL => "LEFT_SHIFT_OP".to_owned(),
             MpcOpCode::AddIndex => "ADD_INDEX_OP".to_owned(),
             MpcOpCode::MulIndex => "MUL_INDEX_OP".to_owned(),
             MpcOpCode::ToIndex => "TO_INDEX_OP".to_owned(),
@@ -147,6 +162,18 @@ pub(crate) struct TemplateDecl {
     pub(crate) body: Rc<CodeBlock>,
 }
 
+pub(crate) struct FunDecl {
+    pub(crate) body: Rc<CodeBlock>,
+}
+
+impl FunDecl {
+    fn new(body: CodeBlock) -> Self {
+        Self {
+            body: Rc::new(body),
+        }
+    }
+}
+
 impl TemplateDecl {
     fn new(
         input_signals: usize,
@@ -172,7 +199,7 @@ pub struct CollaborativeCircomCompiler<P: Pairing> {
     version: String,
     link_libraries: Vec<PathBuf>,
     pub(crate) constant_table: Vec<P::ScalarField>,
-    pub(crate) fun_decls: HashMap<String, CodeBlock>,
+    pub(crate) fun_decls: HashMap<String, FunDecl>,
     pub(crate) templ_decls: HashMap<String, TemplateDecl>,
     pub(crate) current_code_block: CodeBlock,
     pub(crate) current_line_offset: usize,
@@ -322,8 +349,8 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             OperatorType::Pow => todo!(),
             OperatorType::IntDiv => todo!(),
             OperatorType::Mod => todo!(),
-            OperatorType::ShiftL => todo!(),
-            OperatorType::ShiftR => todo!(),
+            OperatorType::ShiftL => self.emit_opcode(MpcOpCode::ShiftL),
+            OperatorType::ShiftR => self.emit_opcode(MpcOpCode::ShiftR),
             OperatorType::LesserEq => todo!(),
             OperatorType::GreaterEq => todo!(),
             OperatorType::Lesser => self.emit_opcode(MpcOpCode::Lt),
@@ -332,12 +359,12 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 assert_ne!(size, 0);
                 self.emit_opcode(MpcOpCode::Eq);
             }
-            OperatorType::NotEq => todo!(),
-            OperatorType::BoolOr => todo!(),
-            OperatorType::BoolAnd => todo!(),
-            OperatorType::BitOr => todo!(),
-            OperatorType::BitAnd => todo!(),
-            OperatorType::BitXor => todo!(),
+            OperatorType::NotEq => self.emit_opcode(MpcOpCode::Neq),
+            OperatorType::BoolOr => self.emit_opcode(MpcOpCode::BoolOr),
+            OperatorType::BoolAnd => self.emit_opcode(MpcOpCode::BoolAnd),
+            OperatorType::BitOr => self.emit_opcode(MpcOpCode::BitOr),
+            OperatorType::BitAnd => self.emit_opcode(MpcOpCode::BitAnd),
+            OperatorType::BitXor => self.emit_opcode(MpcOpCode::BitXOr),
             OperatorType::PrefixSub => todo!(),
             OperatorType::BoolNot => todo!(),
             OperatorType::Complement => todo!(),
@@ -437,7 +464,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     fn handle_branch_bucket(&mut self, branch_bucket: &BranchBucket) {
         self.handle_instruction(&branch_bucket.cond);
         let truthy_block = self.handle_inner_body(&branch_bucket.if_branch);
-        println!("current line offset is: {}", self.current_line_offset);
         let falsy_offset =
             self.current_line_offset + self.current_code_block.len() + truthy_block.len() + 2;
         self.emit_opcode(MpcOpCode::JumpIfFalse(falsy_offset));
@@ -447,10 +473,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             self.current_line_offset + self.current_code_block.len() + falsy_block.len() + 1;
         self.emit_opcode(MpcOpCode::Jump(falsy_end));
         self.add_code_block(falsy_block);
-        Self::debug_code_block(&self.current_code_block);
-        println!();
-        println!();
-        println!();
     }
 
     fn handle_assert_bucket(&mut self, assert_bucket: &AssertBucket) {
@@ -495,6 +517,11 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             .map(|s| s.parse::<P::ScalarField>())
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| eyre!("cannot parse string in constant list"))?;
+        println!("==== constants ====");
+        for (idx, constant) in self.constant_table.iter().enumerate() {
+            println!("{idx}:    {constant}");
+        }
+
         //build functions
         for fun in circuit.functions.iter() {
             fun.body.iter().for_each(|inst| {
@@ -502,8 +529,10 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             });
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
-            self.fun_decls.insert(fun.header.clone(), new_code_block);
+            self.fun_decls
+                .insert(fun.header.clone(), FunDecl::new(new_code_block));
         }
+        println!("functions: {}", self.fun_decls.len());
         for templ in circuit.templates.iter() {
             println!("==============");
             println!("id      : {}", templ.id);
