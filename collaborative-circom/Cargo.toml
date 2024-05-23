@@ -11,3 +11,5 @@ color-eyre.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 toml = "0.8.13"
+circom-types = { version = "0.1.0", path = "../circom-types" }
+ark-bn254.workspace = true

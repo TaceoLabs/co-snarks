@@ -1,7 +1,10 @@
-use std::path::PathBuf;
+use std::{fs::File, io::BufReader, path::PathBuf};
 
+use ark_bn254::Bn254;
+use circom_types::{groth16::zkey::ZKey, r1cs::R1CS};
 use clap::{Parser, Subcommand};
 use collaborative_circom::{config::NetworkConfig, file_utils};
+use color_eyre::eyre::Context;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -155,10 +158,21 @@ fn main() -> color_eyre::Result<()> {
             file_utils::check_file_exists(&config)?;
 
             // parse witness shares
+            let witness_file =
+                BufReader::new(File::open(witness).context("trying to open witness share file")?);
+
+            // TODO: how to best allow for different MPC protocols here
+            let witness_share = todo!();
 
             // parse Circom r1cs file
+            let r1cs_file = BufReader::new(File::open(r1cs).context("trying to open R1CS file")?);
+            // TODO: allow different curves: move all of this into a generic function and match on curve...
+            let r1cs =
+                R1CS::<Bn254>::from_reader(r1cs_file).context("trying to parse R1CS file")?;
 
             // parse Circom zkey file
+            let zkey_file = File::open(zkey)?;
+            let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
 
             // parse network configuration
             let config = std::fs::read_to_string(config)?;
