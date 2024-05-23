@@ -13,3 +13,7 @@ serde.workspace = true
 toml = "0.8.13"
 circom-types = { version = "0.1.0", path = "../circom-types" }
 ark-bn254.workspace = true
+collaborative-groth16 = { version = "0.1.0", path = "../collaborative-groth16" }
+mpc-core = { version = "0.1.0", path = "../mpc-core" }
+mpc-net.workspace = true
+bincode.workspace = true

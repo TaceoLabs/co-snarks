@@ -1,6 +1,5 @@
 - id: 0
-  dns_name: "party0"
-  socket_addr: "127.0.0.1:10000"
+  dns_name: "localhost:10000"
   cert_path: "data/cert0.der"
 - id: 1
   dns_name: "party1"

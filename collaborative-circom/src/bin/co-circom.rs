@@ -1,10 +1,16 @@
-use std::{fs::File, io::BufReader, path::PathBuf};
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter},
+    path::PathBuf,
+};
 
 use ark_bn254::Bn254;
 use circom_types::{groth16::zkey::ZKey, r1cs::R1CS};
 use clap::{Parser, Subcommand};
 use collaborative_circom::{config::NetworkConfig, file_utils};
+use collaborative_groth16::groth16::SharedWitness;
 use color_eyre::eyre::Context;
+use mpc_core::protocols::aby3::{network::Aby3MpcNet, Aby3Protocol};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -142,7 +148,11 @@ fn main() -> color_eyre::Result<()> {
             // execute witness generation in MPC
 
             // write result to output file
-            let _out_file = std::fs::File::create(out)?;
+            let witness_share: SharedWitness<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254> =
+                todo!();
+            let out_file = BufWriter::new(std::fs::File::create(out)?);
+            bincode::serialize_into(out_file, &witness_share)?;
+            tracing
         }
         Commands::GenerateProof {
             witness,
@@ -162,7 +172,9 @@ fn main() -> color_eyre::Result<()> {
                 BufReader::new(File::open(witness).context("trying to open witness share file")?);
 
             // TODO: how to best allow for different MPC protocols here
-            let witness_share = todo!();
+            let witness_share: SharedWitness<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254> =
+                bincode::deserialize_from(witness_file)
+                    .context("trying to parse witness share file")?;
 
             // parse Circom r1cs file
             let r1cs_file = BufReader::new(File::open(r1cs).context("trying to open R1CS file")?);
@@ -178,9 +190,8 @@ fn main() -> color_eyre::Result<()> {
             let config = std::fs::read_to_string(config)?;
             let _config: NetworkConfig = toml::from_str(&config)?;
 
-            // construct relevant protocol
-
             // connect to network
+            let net = Aby3MpcNet::new(config.aby3);
 
             // execute prover in MPC
 

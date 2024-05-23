@@ -6,8 +6,6 @@ use std::{net::SocketAddr, path::PathBuf};
 pub struct NetworkParty {
     pub id: usize,
     pub dns_name: String,
-    pub bind_addr: SocketAddr,
-    pub public_addr: SocketAddr,
     pub cert_path: PathBuf,
 }
 
@@ -15,6 +13,7 @@ pub struct NetworkParty {
 pub struct NetworkConfig {
     pub parties: Vec<NetworkParty>,
     pub my_id: usize,
+    pub bind_addr: SocketAddr,
     pub key_path: PathBuf,
 }
 
