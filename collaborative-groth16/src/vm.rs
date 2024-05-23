@@ -125,7 +125,7 @@ impl<F: PrimeField> Component<F> {
         let current_body = Rc::clone(&self.body);
         loop {
             let inst = &current_body[ip];
-            println!("DEBUG: {ip}    | Doing {inst}");
+            //println!("DEBUG: {ip}    | Doing {inst}");
             match inst {
                 compiler::MpcOpCode::PushConstant(index) => self.push_field(constant_table[*index]),
                 compiler::MpcOpCode::PushIndex(index) => self.push_index(*index),
@@ -321,17 +321,21 @@ impl<F: PrimeField> Component<F> {
                         self.push_index(to_usize!(signal));
                     }
                 }
-
-                compiler::MpcOpCode::Jump(jump_to) => {
-                    ip = *jump_to;
+                compiler::MpcOpCode::Jump(jump_forward) => {
+                    ip += *jump_forward;
                     continue;
                 }
 
-                compiler::MpcOpCode::JumpIfFalse(jump_to) => {
-                    let jump_to = *jump_to;
+                compiler::MpcOpCode::JumpBack(jump_backward) => {
+                    ip -= *jump_backward;
+                    continue;
+                }
+
+                compiler::MpcOpCode::JumpIfFalse(jump_forward) => {
+                    let jump_to = *jump_forward;
                     let cond = self.pop_field();
                     if cond.is_zero() {
-                        ip = jump_to;
+                        ip += jump_to;
                         continue;
                     }
                 }

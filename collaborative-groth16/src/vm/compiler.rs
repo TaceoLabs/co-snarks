@@ -63,6 +63,7 @@ pub enum MpcOpCode {
     AddIndex,
     ToIndex,
     Jump(usize),
+    JumpBack(usize),
     JumpIfFalse(usize),
     Panic(String),
 }
@@ -104,6 +105,7 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::MulIndex => "MUL_INDEX_OP".to_owned(),
             MpcOpCode::ToIndex => "TO_INDEX_OP".to_owned(),
             MpcOpCode::Jump(line) => format!("JUMP_OP {line}"),
+            MpcOpCode::JumpBack(line) => format!("JUMP_BACK_OP {line}"),
             MpcOpCode::JumpIfFalse(line) => format!("JUMP_IF_FALSE_OP {line}"),
             MpcOpCode::Return => "RETURN_OP".to_owned(),
             MpcOpCode::Panic(message) => format!("PANIC_OP {message}"),
@@ -435,33 +437,24 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn handle_loop_bucket(&mut self, loop_bucket: &LoopBucket) {
-        let start_condition = self.current_line_offset + self.current_code_block.len();
+        let start_condition = self.current_code_block.len();
         self.handle_instruction(&loop_bucket.continue_condition);
-
-        //we need one extra offset because we will add a jump if false later
-        //we don't know at this point where to jump though
-        self.current_line_offset += 1;
+        let predicate_len = self.current_code_block.len() - start_condition;
         let mut body_code_block = self.handle_inner_body(&loop_bucket.body);
-        body_code_block.push(MpcOpCode::Jump(start_condition));
-        self.current_line_offset -= 1;
-
-        self.emit_opcode(MpcOpCode::JumpIfFalse(
-            self.current_line_offset + body_code_block.len() + self.current_code_block.len() + 1,
-        ));
+        let body_len = body_code_block.len();
+        body_code_block.push(MpcOpCode::JumpBack(body_len + predicate_len + 1));
+        self.emit_opcode(MpcOpCode::JumpIfFalse(body_len + 2));
         self.current_code_block.append(&mut body_code_block);
     }
 
     fn handle_branch_bucket(&mut self, branch_bucket: &BranchBucket) {
         self.handle_instruction(&branch_bucket.cond);
         let truthy_block = self.handle_inner_body(&branch_bucket.if_branch);
-        //FIXME the plus needs to be added 2 for every recursive branch!!!
-        let falsy_offset =
-            self.current_line_offset + self.current_code_block.len() + truthy_block.len() + 2;
+        let falsy_offset = truthy_block.len() + 2;
         self.emit_opcode(MpcOpCode::JumpIfFalse(falsy_offset));
         self.add_code_block(truthy_block);
         let falsy_block = self.handle_inner_body(&branch_bucket.else_branch);
-        let falsy_end =
-            self.current_line_offset + self.current_code_block.len() + falsy_block.len() + 1;
+        let falsy_end = falsy_block.len() + 1;
         self.emit_opcode(MpcOpCode::Jump(falsy_end));
         self.add_code_block(falsy_block);
     }
@@ -569,7 +562,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
             new_code_block.push(MpcOpCode::Return);
-            Self::debug_code_block(&new_code_block);
             self.templ_decls.insert(
                 templ.header.clone(),
                 TemplateDecl::new(
