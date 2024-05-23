@@ -187,20 +187,6 @@ impl<F: PrimeField> Aby3PrimeFieldShareVec<F> {
         (self.a, self.b)
     }
 
-    pub fn to_ref(&self) -> Aby3PrimeFieldShareSlice<F> {
-        Aby3PrimeFieldShareSlice {
-            a: &self.a,
-            b: &self.b,
-        }
-    }
-
-    pub fn to_mut(&mut self) -> Aby3PrimeFieldShareSliceMut<F> {
-        Aby3PrimeFieldShareSliceMut {
-            a: &mut self.a,
-            b: &mut self.b,
-        }
-    }
-
     pub fn is_empty(&self) -> bool {
         debug_assert_eq!(self.a.is_empty(), self.b.is_empty());
         self.a.is_empty()
@@ -227,83 +213,5 @@ impl<F: PrimeField> std::ops::Add for Aby3PrimeFieldShareVec<F> {
             a: self.a.iter().zip(rhs.a).map(|(a, b)| *a + b).collect(),
             b: self.b.iter().zip(rhs.b).map(|(a, b)| *a + b).collect(),
         }
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Aby3PrimeFieldShareSlice<'a, F: PrimeField> {
-    // Deliberately a &Vec<F> instead of a &[F] since fft_in_place requires it
-    pub(crate) a: &'a Vec<F>,
-    pub(crate) b: &'a Vec<F>,
-}
-
-impl<'a, F: PrimeField> Aby3PrimeFieldShareSlice<'a, F> {
-    fn clone_to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
-        Aby3PrimeFieldShareVec {
-            a: self.a.to_vec(),
-            b: self.b.to_vec(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        debug_assert_eq!(self.a.is_empty(), self.b.is_empty());
-        self.a.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        debug_assert_eq!(self.a.len(), self.b.len());
-        self.a.len()
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Aby3PrimeFieldShareSliceMut<'a, F: PrimeField> {
-    // Deliberately a &Vec<F> instead of a &[F] since fft_in_place requires it
-    pub(crate) a: &'a mut Vec<F>,
-    pub(crate) b: &'a mut Vec<F>,
-}
-
-impl<'a, F: PrimeField> Aby3PrimeFieldShareSliceMut<'a, F> {
-    fn clone_to_vec(&self) -> Aby3PrimeFieldShareVec<F> {
-        Aby3PrimeFieldShareVec {
-            a: self.a.to_vec(),
-            b: self.b.to_vec(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        debug_assert_eq!(self.a.is_empty(), self.b.is_empty());
-        self.a.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        debug_assert_eq!(self.a.len(), self.b.len());
-        self.a.len()
-    }
-}
-
-impl<'a, F: PrimeField> From<&'a Aby3PrimeFieldShareVec<F>> for Aby3PrimeFieldShareSlice<'a, F> {
-    fn from(value: &'a Aby3PrimeFieldShareVec<F>) -> Self {
-        value.to_ref()
-    }
-}
-
-impl<'a, F: PrimeField> From<&'a mut Aby3PrimeFieldShareVec<F>>
-    for Aby3PrimeFieldShareSliceMut<'a, F>
-{
-    fn from(value: &'a mut Aby3PrimeFieldShareVec<F>) -> Self {
-        value.to_mut()
-    }
-}
-
-impl<F: PrimeField> From<Aby3PrimeFieldShareSlice<'_, F>> for Aby3PrimeFieldShareVec<F> {
-    fn from(value: Aby3PrimeFieldShareSlice<F>) -> Self {
-        value.clone_to_vec()
-    }
-}
-
-impl<F: PrimeField> From<Aby3PrimeFieldShareSliceMut<'_, F>> for Aby3PrimeFieldShareVec<F> {
-    fn from(value: Aby3PrimeFieldShareSliceMut<F>) -> Self {
-        value.clone_to_vec()
     }
 }

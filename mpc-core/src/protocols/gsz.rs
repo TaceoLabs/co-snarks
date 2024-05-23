@@ -1,8 +1,5 @@
 use self::{
-    fieldshare::{
-        GSZPrimeFieldShare, GSZPrimeFieldShareSlice, GSZPrimeFieldShareSliceMut,
-        GSZPrimeFieldShareVec,
-    },
+    fieldshare::{GSZPrimeFieldShare, GSZPrimeFieldShareVec},
     network::GSZNetwork,
     pointshare::GSZPointShare,
     shamir::Shamir,
@@ -252,8 +249,6 @@ impl<F: PrimeField, N: GSZNetwork> GSZProtocol<F, N> {
 
 impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N> {
     type FieldShare = GSZPrimeFieldShare<F>;
-    type FieldShareSlice<'a> = GSZPrimeFieldShareSlice<'a, F>;
-    type FieldShareSliceMut<'a> = GSZPrimeFieldShareSliceMut<'a, F>;
     type FieldShareVec = GSZPrimeFieldShareVec<F>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
@@ -268,12 +263,8 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
         b + a
     }
 
-    fn sub_assign_vec(
-        &mut self,
-        a: &mut Self::FieldShareSliceMut<'_>,
-        b: &Self::FieldShareSlice<'_>,
-    ) {
-        for (a, b) in izip!(a.a.iter_mut(), b.a) {
+    fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec) {
+        for (a, b) in izip!(a.a.iter_mut(), &b.a) {
             *a -= b;
         }
     }
@@ -362,8 +353,8 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
 
     fn mul_vec(
         &mut self,
-        a: &Self::FieldShareSlice<'_>,
-        b: &Self::FieldShareSlice<'_>,
+        a: &Self::FieldShareVec,
+        b: &Self::FieldShareVec,
     ) -> std::io::Result<Self::FieldShareVec> {
         let len = a.len();
         debug_assert_eq!(len, b.len());
@@ -452,12 +443,7 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
         Self::FieldShareVec::new(shares)
     }
 
-    fn distribute_powers_and_mul_by_const(
-        &mut self,
-        coeffs: &mut Self::FieldShareSliceMut<'_>,
-        g: F,
-        c: F,
-    ) {
+    fn distribute_powers_and_mul_by_const(&mut self, coeffs: &mut Self::FieldShareVec, g: F, c: F) {
         let mut pow = c;
         for a in coeffs.a.iter_mut() {
             *a *= pow;
@@ -469,7 +455,7 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
         &mut self,
         lhs: &[(F, usize)],
         public_inputs: &[F],
-        private_witness: &Self::FieldShareSlice<'_>,
+        private_witness: &Self::FieldShareVec,
     ) -> Self::FieldShare {
         let mut acc = GSZPrimeFieldShare::default();
         for (coeff, index) in lhs {
@@ -486,8 +472,8 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
 
     fn clone_from_slice(
         &self,
-        dst: &mut Self::FieldShareSliceMut<'_>,
-        src: &Self::FieldShareSlice<'_>,
+        dst: &mut Self::FieldShareVec,
+        src: &Self::FieldShareVec,
         dst_offset: usize,
         src_offset: usize,
         len: usize,
@@ -507,22 +493,6 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
             print!("{a}, ")
         }
         println!("]");
-    }
-
-    fn print_slice(&self, to_print: &Self::FieldShareSlice<'_>) {
-        let my_id = self.network.get_id();
-        if my_id == 0 {
-            println!("==================");
-        }
-        thread::sleep(Duration::from_millis(200 * my_id as u64 + 100));
-        print!("[");
-        for a in to_print.a.iter() {
-            print!("{a}, ")
-        }
-        println!("]");
-        if my_id == self.network.get_num_parties() - 1 {
-            println!("==================");
-        };
     }
 }
 
@@ -662,36 +632,32 @@ impl<P: Pairing, N: GSZNetwork> PairingEcMpcProtocol<P> for GSZProtocol<P::Scala
 impl<F: PrimeField, N: GSZNetwork> FFTProvider<F> for GSZProtocol<F, N> {
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSlice<'_>,
+        data: Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        let a = domain.fft(data.a);
+        let a = domain.fft(&data.a);
         Self::FieldShareVec::new(a)
     }
 
-    fn fft_in_place<D: EvaluationDomain<F>>(
-        &mut self,
-        data: &mut Self::FieldShareSliceMut<'_>,
-        domain: &D,
-    ) {
-        domain.fft_in_place(data.a);
+    fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D) {
+        domain.fft_in_place(&mut data.a);
     }
 
     fn ifft<D: EvaluationDomain<F>>(
         &mut self,
-        data: &Self::FieldShareSlice<'_>,
+        data: &Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        let a = domain.ifft(data.a);
+        let a = domain.ifft(&data.a);
         Self::FieldShareVec::new(a)
     }
 
     fn ifft_in_place<D: EvaluationDomain<F>>(
         &mut self,
-        data: &mut Self::FieldShareSliceMut<'_>,
+        data: &mut Self::FieldShareVec,
         domain: &D,
     ) {
-        domain.ifft_in_place(data.a);
+        domain.ifft_in_place(&mut data.a);
     }
 }
 
@@ -852,10 +818,10 @@ impl<C: CurveGroup, N: GSZNetwork> MSMProvider<C> for GSZProtocol<C::ScalarField
     fn msm_public_points(
         &mut self,
         points: &[C::Affine],
-        scalars: Self::FieldShareSlice<'_>,
+        scalars: &Self::FieldShareVec,
     ) -> Self::PointShare {
         debug_assert_eq!(points.len(), scalars.len());
-        let res = C::msm_unchecked(points, scalars.a);
+        let res = C::msm_unchecked(points, &scalars.a);
         Self::PointShare { a: res }
     }
 }

@@ -142,11 +142,7 @@ mod field_share {
     use crate::protocols::aby3::Aby3TestNetwork;
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
-    use mpc_core::protocols::aby3::{
-        self,
-        fieldshare::{Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareVec},
-        Aby3Protocol,
-    };
+    use mpc_core::protocols::aby3::{self, fieldshare::Aby3PrimeFieldShareVec, Aby3Protocol};
     use mpc_core::traits::PrimeFieldMpcProtocol;
     use rand::thread_rng;
     use std::{collections::HashSet, thread};
@@ -343,9 +339,7 @@ mod field_share {
             thread::spawn(move || {
                 let mut aby3 = Aby3Protocol::new(net).unwrap();
 
-                let x_slice = Aby3PrimeFieldShareSlice::from(&x);
-                let y_slice = Aby3PrimeFieldShareSlice::from(&y);
-                let mul = aby3.mul_vec(&x_slice, &y_slice).unwrap();
+                let mul = aby3.mul_vec(&x, &y).unwrap();
                 tx.send(mul)
             });
         }
@@ -409,11 +403,8 @@ mod field_share {
             thread::spawn(move || {
                 let mut aby3 = Aby3Protocol::new(net).unwrap();
 
-                let x_slice = Aby3PrimeFieldShareSlice::from(&x);
-                let y_slice = Aby3PrimeFieldShareSlice::from(&y);
-                let mul = aby3.mul_vec(&x_slice, &y_slice).unwrap();
-                let mul_slice = Aby3PrimeFieldShareSlice::from(&mul);
-                let mul = aby3.mul_vec(&mul_slice, &y_slice).unwrap();
+                let mul = aby3.mul_vec(&x, &y).unwrap();
+                let mul = aby3.mul_vec(&mul, &y).unwrap();
                 tx.send(mul)
             });
         }
