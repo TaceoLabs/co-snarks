@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use collaborative_circom::file_utils;
+use collaborative_circom::{config::NetworkConfig, file_utils};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -129,6 +129,8 @@ fn main() -> color_eyre::Result<()> {
             // parse circuit file & put through our compiler
 
             // parse network configuration
+            let config = std::fs::read_to_string(config)?;
+            let config: NetworkConfig = toml::from_str(&config)?;
 
             // construct relevant protocol
 
@@ -159,6 +161,8 @@ fn main() -> color_eyre::Result<()> {
             // parse Circom zkey file
 
             // parse network configuration
+            let config = std::fs::read_to_string(config)?;
+            let config: NetworkConfig = toml::from_str(&config)?;
 
             // construct relevant protocol
 

@@ -1,0 +1,14 @@
+my_id = 0
+bind_addr = "0.0.0.0:8000"
+
+[[parties]]
+party_id = 0
+addr = "localhost:8000"
+
+[[parties]]
+party_id = 1
+addr = "localhost:8001"
+
+[[parties]]
+party_id = 2
+addr = "localhost:8002"
