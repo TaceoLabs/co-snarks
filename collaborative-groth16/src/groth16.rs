@@ -36,12 +36,15 @@ type CurveFieldShareVec<T, C> = <T as PrimeFieldMpcProtocol<
     <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
 >>::FieldShareVec;
 
-//FIXME I want to use serde(transparent) but not working
 #[derive(Serialize, Deserialize)]
 pub struct SharedWitness<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
+    #[serde(
+        serialize_with = "crate::serde_compat::ark_se",
+        deserialize_with = "crate::serde_compat::ark_de"
+    )]
     pub values: FieldShareVec<T, P>,
 }
 
@@ -385,7 +388,7 @@ mod test {
                 witness.values,
                 &mut rng,
             );
-        println!("{}", serde_json::to_string(&s1.values).unwrap());
+        println!("{}", serde_json::to_string(&s1).unwrap());
     }
 
     fn test_gsz_inner(num_parties: usize, threshold: usize) {
@@ -398,7 +401,7 @@ mod test {
             num_parties,
             &mut rng,
         );
-        println!("{}", serde_json::to_string(&s1[0].values).unwrap());
+        println!("{}", serde_json::to_string(&s1[0]).unwrap());
     }
 
     #[ignore]

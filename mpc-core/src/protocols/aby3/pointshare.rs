@@ -1,7 +1,8 @@
 use super::Aby3PrimeFieldShare;
 use ark_ec::CurveGroup;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Aby3PointShare<C: CurveGroup> {
     pub(crate) a: C,
     pub(crate) b: C,

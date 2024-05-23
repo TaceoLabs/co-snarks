@@ -1,9 +1,8 @@
 use ark_ff::PrimeField;
-use serde::ser::SerializeSeq;
-use serde::{de, Deserialize, Serialize, Serializer};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use std::mem::ManuallyDrop;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 #[repr(transparent)]
 pub struct GSZPrimeFieldShare<F: PrimeField> {
     pub(crate) a: F,
@@ -141,27 +140,9 @@ impl<F: PrimeField> std::ops::Neg for &GSZPrimeFieldShare<F> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct GSZPrimeFieldShareVec<F: PrimeField> {
-    #[serde(serialize_with = "serialize_vec::<_, F>")]
-    #[serde(deserialize_with = "deserialize_vec::<_, F>")]
     pub(crate) a: Vec<F>,
-}
-
-fn serialize_vec<S: Serializer, F: PrimeField>(p: &[F], ser: S) -> Result<S::Ok, S::Error> {
-    // TODO check this
-    let mut seq = ser.serialize_seq(Some(1))?;
-    for ser in p.iter().map(|x| x.to_string()) {
-        seq.serialize_element(&ser)?;
-    }
-    seq.end()
-}
-
-fn deserialize_vec<'de, D, F: PrimeField>(_deserializer: D) -> Result<Vec<F>, D::Error>
-where
-    D: de::Deserializer<'de>,
-{
-    todo!()
 }
 
 impl<F: PrimeField> GSZPrimeFieldShareVec<F> {

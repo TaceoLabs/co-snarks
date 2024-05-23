@@ -2,12 +2,16 @@ use ark_ec::{pairing::Pairing, CurveGroup};
 
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
-use serde::{de::DeserializeOwned, Serialize};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
-    type FieldShare: Default + Clone;
-    type FieldShareVec: 'static + From<Vec<Self::FieldShare>> + Clone + Serialize + DeserializeOwned;
+    type FieldShare: Default + Clone + CanonicalSerialize + CanonicalDeserialize + Sync;
+    type FieldShareVec: From<Vec<Self::FieldShare>>
+        + Clone
+        + CanonicalSerialize
+        + CanonicalDeserialize
+        + Sync;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
@@ -49,7 +53,7 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
-    type PointShare;
+    type PointShare: CanonicalDeserialize + CanonicalDeserialize + Clone + Sync;
     fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
     fn sub_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
     fn add_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare);

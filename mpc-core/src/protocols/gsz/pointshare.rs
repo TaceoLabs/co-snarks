@@ -1,10 +1,11 @@
 use std::mem::ManuallyDrop;
 
 use ark_ec::CurveGroup;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 use super::fieldshare::GSZPrimeFieldShare;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 #[repr(transparent)]
 pub struct GSZPointShare<C: CurveGroup> {
     pub(crate) a: C,
