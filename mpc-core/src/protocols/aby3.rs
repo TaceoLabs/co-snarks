@@ -15,9 +15,7 @@ use crate::{
 pub use fieldshare::Aby3PrimeFieldShare;
 
 use self::{
-    fieldshare::{Aby3PrimeFieldShareSlice, Aby3PrimeFieldShareSliceMut, Aby3PrimeFieldShareVec},
-    id::PartyID,
-    network::Aby3Network,
+    fieldshare::Aby3PrimeFieldShareVec, id::PartyID, network::Aby3Network,
     pointshare::Aby3PointShare,
 };
 
@@ -165,8 +163,6 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
 impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F, N> {
     type FieldShare = Aby3PrimeFieldShare<F>;
-    type FieldShareSlice<'a> = Aby3PrimeFieldShareSlice<'a, F>;
-    type FieldShareSliceMut<'a> = Aby3PrimeFieldShareSliceMut<'a, F>;
     type FieldShareVec = Aby3PrimeFieldShareVec<F>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
@@ -247,8 +243,8 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
 
     fn mul_vec(
         &mut self,
-        a: &Self::FieldShareSlice<'_>,
-        b: &Self::FieldShareSlice<'_>,
+        a: &Self::FieldShareVec,
+        b: &Self::FieldShareVec,
     ) -> std::io::Result<Self::FieldShareVec> {
         debug_assert_eq!(a.len(), b.len());
         let local_a = izip!(a.a.iter(), a.b.iter(), b.a.iter(), b.b.iter())
@@ -267,25 +263,16 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         Ok(Self::FieldShareVec::new(local_a, local_b))
     }
 
-    fn sub_assign_vec(
-        &mut self,
-        a: &mut Self::FieldShareSliceMut<'_>,
-        b: &Self::FieldShareSlice<'_>,
-    ) {
-        for (a, b) in izip!(a.a.iter_mut(), b.a) {
+    fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec) {
+        for (a, b) in izip!(a.a.iter_mut(), &b.a) {
             *a -= b;
         }
-        for (a, b) in izip!(a.b.iter_mut(), b.b) {
+        for (a, b) in izip!(a.b.iter_mut(), &b.b) {
             *a -= b;
         }
     }
 
-    fn distribute_powers_and_mul_by_const(
-        &mut self,
-        coeffs: &mut Self::FieldShareSliceMut<'_>,
-        g: F,
-        c: F,
-    ) {
+    fn distribute_powers_and_mul_by_const(&mut self, coeffs: &mut Self::FieldShareVec, g: F, c: F) {
         let mut pow = c;
         for (a, b) in coeffs.a.iter_mut().zip(coeffs.b.iter_mut()) {
             *a *= pow;
@@ -298,7 +285,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         &mut self,
         lhs: &[(F, usize)],
         public_inputs: &[F],
-        private_witness: &Self::FieldShareSlice<'_>,
+        private_witness: &Self::FieldShareVec,
     ) -> Self::FieldShare {
         let mut acc = Aby3PrimeFieldShare::default();
         for (coeff, index) in lhs {
@@ -316,8 +303,8 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
 
     fn clone_from_slice(
         &self,
-        dst: &mut Self::FieldShareSliceMut<'_>,
-        src: &Self::FieldShareSlice<'_>,
+        dst: &mut Self::FieldShareVec,
+        src: &Self::FieldShareVec,
         dst_offset: usize,
         src_offset: usize,
         len: usize,
@@ -342,26 +329,6 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
             print!("{a}, ")
         }
         println!("]");
-    }
-
-    fn print_slice(&self, to_print: &Self::FieldShareSlice<'_>) {
-        match self.network.get_id() {
-            PartyID::ID0 => {
-                println!("==================");
-                thread::sleep(Duration::from_millis(10));
-            }
-            PartyID::ID1 => thread::sleep(Duration::from_millis(100)),
-            PartyID::ID2 => thread::sleep(Duration::from_millis(300)),
-        }
-        print!("[");
-        for a in to_print.a.iter() {
-            print!("{a}, ")
-        }
-        println!("]");
-        let id = self.network.get_id();
-        if id == PartyID::ID2 {
-            println!("==================");
-        };
     }
 }
 
@@ -480,40 +447,36 @@ impl<P: Pairing, N: Aby3Network> PairingEcMpcProtocol<P> for Aby3Protocol<P::Sca
 impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSlice<'_>,
+        data: Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        let a = domain.fft(data.a);
-        let b = domain.fft(data.b);
+        let a = domain.fft(&data.a);
+        let b = domain.fft(&data.b);
         Self::FieldShareVec::new(a, b)
     }
 
-    fn fft_in_place<D: EvaluationDomain<F>>(
-        &mut self,
-        data: &mut Self::FieldShareSliceMut<'_>,
-        domain: &D,
-    ) {
-        domain.fft_in_place(data.a);
-        domain.fft_in_place(data.b);
+    fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D) {
+        domain.fft_in_place(&mut data.a);
+        domain.fft_in_place(&mut data.b);
     }
 
     fn ifft<D: EvaluationDomain<F>>(
         &mut self,
-        data: &Self::FieldShareSlice<'_>,
+        data: &Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        let a = domain.ifft(data.a);
-        let b = domain.ifft(data.b);
+        let a = domain.ifft(&data.a);
+        let b = domain.ifft(&data.b);
         Self::FieldShareVec::new(a, b)
     }
 
     fn ifft_in_place<D: EvaluationDomain<F>>(
         &mut self,
-        data: &mut Self::FieldShareSliceMut<'_>,
+        data: &mut Self::FieldShareVec,
         domain: &D,
     ) {
-        domain.ifft_in_place(data.a);
-        domain.ifft_in_place(data.b);
+        domain.ifft_in_place(&mut data.a);
+        domain.ifft_in_place(&mut data.b);
     }
 }
 
@@ -556,11 +519,11 @@ impl<C: CurveGroup, N: Aby3Network> MSMProvider<C> for Aby3Protocol<C::ScalarFie
     fn msm_public_points(
         &mut self,
         points: &[C::Affine],
-        scalars: Self::FieldShareSlice<'_>,
+        scalars: &Self::FieldShareVec,
     ) -> Self::PointShare {
         debug_assert_eq!(points.len(), scalars.len());
-        let res_a = C::msm_unchecked(points, scalars.a);
-        let res_b = C::msm_unchecked(points, scalars.b);
+        let res_a = C::msm_unchecked(points, &scalars.a);
+        let res_b = C::msm_unchecked(points, &scalars.b);
         Self::PointShare { a: res_a, b: res_b }
     }
 }

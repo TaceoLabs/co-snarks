@@ -173,14 +173,6 @@ impl<F: PrimeField> GSZPrimeFieldShareVec<F> {
         self.a
     }
 
-    pub fn to_ref(&self) -> GSZPrimeFieldShareSlice<F> {
-        GSZPrimeFieldShareSlice { a: &self.a }
-    }
-
-    pub fn to_mut(&mut self) -> GSZPrimeFieldShareSliceMut<F> {
-        GSZPrimeFieldShareSliceMut { a: &mut self.a }
-    }
-
     pub fn is_empty(&self) -> bool {
         self.a.is_empty()
     }
@@ -205,72 +197,6 @@ impl<F: PrimeField> std::ops::Add for GSZPrimeFieldShareVec<F> {
         Self {
             a: self.a.iter().zip(rhs.a).map(|(a, b)| *a + b).collect(),
         }
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct GSZPrimeFieldShareSlice<'a, F: PrimeField> {
-    // Deliberately a &Vec<F> instead of a &[F] since fft_in_place requires it
-    pub(crate) a: &'a Vec<F>,
-}
-
-impl<'a, F: PrimeField> GSZPrimeFieldShareSlice<'a, F> {
-    fn clone_to_vec(&self) -> GSZPrimeFieldShareVec<F> {
-        GSZPrimeFieldShareVec { a: self.a.to_vec() }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.a.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.a.len()
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct GSZPrimeFieldShareSliceMut<'a, F: PrimeField> {
-    // Deliberately a &Vec<F> instead of a &[F] since fft_in_place requires it
-    pub(crate) a: &'a mut Vec<F>,
-}
-
-impl<'a, F: PrimeField> GSZPrimeFieldShareSliceMut<'a, F> {
-    fn clone_to_vec(&self) -> GSZPrimeFieldShareVec<F> {
-        GSZPrimeFieldShareVec { a: self.a.to_vec() }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.a.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.a.len()
-    }
-}
-
-impl<'a, F: PrimeField> From<&'a GSZPrimeFieldShareVec<F>> for GSZPrimeFieldShareSlice<'a, F> {
-    fn from(value: &'a GSZPrimeFieldShareVec<F>) -> Self {
-        value.to_ref()
-    }
-}
-
-impl<'a, F: PrimeField> From<&'a mut GSZPrimeFieldShareVec<F>>
-    for GSZPrimeFieldShareSliceMut<'a, F>
-{
-    fn from(value: &'a mut GSZPrimeFieldShareVec<F>) -> Self {
-        value.to_mut()
-    }
-}
-
-impl<F: PrimeField> From<GSZPrimeFieldShareSlice<'_, F>> for GSZPrimeFieldShareVec<F> {
-    fn from(value: GSZPrimeFieldShareSlice<F>) -> Self {
-        value.clone_to_vec()
-    }
-}
-
-impl<F: PrimeField> From<GSZPrimeFieldShareSliceMut<'_, F>> for GSZPrimeFieldShareVec<F> {
-    fn from(value: GSZPrimeFieldShareSliceMut<F>) -> Self {
-        value.clone_to_vec()
     }
 }
 

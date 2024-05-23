@@ -432,7 +432,7 @@ mod field_share {
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             thread::spawn(move || {
                 let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                let mul = gsz.mul_vec(&x.to_ref(), &y.to_ref()).unwrap();
+                let mul = gsz.mul_vec(&x, &y).unwrap();
                 tx.send(mul)
             });
         }
@@ -489,8 +489,8 @@ mod field_share {
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             thread::spawn(move || {
                 let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                let mul = gsz.mul_vec(&x.to_ref(), &y.to_ref()).unwrap();
-                let mul = gsz.mul_vec(&mul.to_ref(), &y.to_ref()).unwrap();
+                let mul = gsz.mul_vec(&x, &y).unwrap();
+                let mul = gsz.mul_vec(&mul, &y).unwrap();
                 tx.send(mul)
             });
         }

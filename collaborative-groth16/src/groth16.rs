@@ -31,14 +31,10 @@ pub type Aby3CollaborativeGroth16<P> =
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
-type ScalarFieldShareSlice<'a, T, P> =
-    <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareSlice<'a>;
-type FieldShareSliceMut<'a, T, P> =
-    <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareSliceMut<'a>;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
-type CurveFieldShareSlice<'a, T, C> = <T as PrimeFieldMpcProtocol<
+type CurveFieldShareVec<T, C> = <T as PrimeFieldMpcProtocol<
     <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
->>::FieldShareSlice<'a>;
+>>::FieldShareVec;
 
 //FIXME I want to use serde(transparent) but not working
 #[derive(Serialize, Deserialize)]
@@ -88,7 +84,7 @@ where
         let matrices = cs.to_matrices().unwrap();
         let num_inputs = cs.num_instance_variables();
         let num_constraints = cs.num_constraints();
-        let private_witness = private_witness.get_ref();
+        let private_witness = &private_witness.values;
         let h = self.witness_map_from_matrices(
             &matrices,
             num_constraints,
@@ -96,10 +92,9 @@ where
             public_inputs,
             private_witness,
         )?;
-        let h_slice = ScalarFieldShareSlice::<T, P>::from(&h);
         let r = self.driver.rand()?;
         let s = self.driver.rand()?;
-        self.create_proof_with_assignment(pk, r, s, h_slice, &public_inputs[1..], private_witness)
+        self.create_proof_with_assignment(pk, r, s, &h, &public_inputs[1..], private_witness)
     }
 
     fn witness_map_from_matrices(
@@ -108,7 +103,7 @@ where
         num_constraints: usize,
         num_inputs: usize,
         public_inputs: &[P::ScalarField],
-        private_witness: ScalarFieldShareSlice<T, P>,
+        private_witness: &FieldShareVec<T, P>,
     ) -> Result<FieldShareVec<T, P>> {
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
             .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
@@ -118,36 +113,23 @@ where
         for (a, b, at_i, bt_i) in izip!(&mut a, &mut b, &matrices.a, &matrices.b) {
             *a = self
                 .driver
-                .evaluate_constraint(at_i, public_inputs, &private_witness);
+                .evaluate_constraint(at_i, public_inputs, private_witness);
             *b = self
                 .driver
-                .evaluate_constraint(bt_i, public_inputs, &private_witness);
+                .evaluate_constraint(bt_i, public_inputs, private_witness);
         }
         let mut a = FieldShareVec::<T, P>::from(a);
         {
-            let mut a_mut = FieldShareSliceMut::<T, P>::from(&mut a);
             let promoted_public = self.driver.promote_to_trivial_share(public_inputs);
-            self.driver.clone_from_slice(
-                &mut a_mut,
-                &ScalarFieldShareSlice::<T, P>::from(&promoted_public),
-                num_constraints,
-                0,
-                num_inputs,
-            );
+            self.driver
+                .clone_from_slice(&mut a, &promoted_public, num_constraints, 0, num_inputs);
         }
 
         let mut b = FieldShareVec::<T, P>::from(b);
-        let mut c = {
-            let a_slice = ScalarFieldShareSlice::<T, P>::from(&a);
-            let b_slice = ScalarFieldShareSlice::<T, P>::from(&b);
-            self.driver.mul_vec(&a_slice, &b_slice)?
-        };
+        let mut c = { self.driver.mul_vec(&a, &b)? };
 
-        let mut a_mut = FieldShareSliceMut::<T, P>::from(&mut a);
-        let mut b_mut = FieldShareSliceMut::<T, P>::from(&mut b);
-
-        self.driver.ifft_in_place(&mut a_mut, &domain);
-        self.driver.ifft_in_place(&mut b_mut, &domain);
+        self.driver.ifft_in_place(&mut a, &domain);
+        self.driver.ifft_in_place(&mut b, &domain);
         let root_of_unity = {
             let domain_size_double = 2 * domain_size;
             let domain_double = GeneralEvaluationDomain::new(domain_size_double)
@@ -155,42 +137,33 @@ where
             domain_double.element(1)
         };
         self.driver.distribute_powers_and_mul_by_const(
-            &mut a_mut,
+            &mut a,
             root_of_unity,
             P::ScalarField::one(),
         );
         self.driver.distribute_powers_and_mul_by_const(
-            &mut b_mut,
+            &mut b,
             root_of_unity,
             P::ScalarField::one(),
         );
-        self.driver.fft_in_place(&mut a_mut, &domain);
-        self.driver.fft_in_place(&mut b_mut, &domain);
-        std::mem::drop(a_mut);
-        std::mem::drop(b_mut);
+        self.driver.fft_in_place(&mut a, &domain);
+        self.driver.fft_in_place(&mut b, &domain);
         let mut ab = {
-            let a_slice = ScalarFieldShareSlice::<T, P>::from(&a);
-            let b_slice = ScalarFieldShareSlice::<T, P>::from(&b);
             //this can be in-place so that we do not have to allocate memory
-            self.driver.mul_vec(&a_slice, &b_slice)?
+            self.driver.mul_vec(&a, &b)?
         };
         std::mem::drop(a);
         std::mem::drop(b);
 
-        let mut c_mut = FieldShareSliceMut::<T, P>::from(&mut c);
-        self.driver.ifft_in_place(&mut c_mut, &domain);
+        self.driver.ifft_in_place(&mut c, &domain);
         self.driver.distribute_powers_and_mul_by_const(
-            &mut c_mut,
+            &mut c,
             root_of_unity,
             P::ScalarField::one(),
         );
-        self.driver.fft_in_place(&mut c_mut, &domain);
-        std::mem::drop(c_mut);
+        self.driver.fft_in_place(&mut c, &domain);
 
-        let mut ab_mut = FieldShareSliceMut::<T, P>::from(&mut ab);
-        let c_slice = ScalarFieldShareSlice::<T, P>::from(&c);
-        self.driver.sub_assign_vec(&mut ab_mut, &c_slice);
-        std::mem::drop(ab_mut);
+        self.driver.sub_assign_vec(&mut ab, &c);
         Ok(ab)
     }
 
@@ -236,7 +209,7 @@ where
         query: &[C::Affine],
         vk_param: C::Affine,
         input_assignment: &[C::ScalarField],
-        aux_assignment: CurveFieldShareSlice<'_, T, C>,
+        aux_assignment: &CurveFieldShareVec<T, C>,
     ) -> PointShare<T, C>
     where
         T: EcMpcProtocol<C>,
@@ -264,9 +237,9 @@ where
         pk: &ProvingKey<P>,
         r: FieldShare<T, P>,
         s: FieldShare<T, P>,
-        h: ScalarFieldShareSlice<'_, T, P>,
+        h: &FieldShareVec<T, P>,
         input_assignment: &[P::ScalarField],
-        aux_assignment: ScalarFieldShareSlice<'_, T, P>,
+        aux_assignment: &FieldShareVec<T, P>,
     ) -> Result<Proof<P>> {
         //let c_acc_time = start_timer!(|| "Compute C");
         let h_acc = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &pk.h_query, h);
@@ -358,15 +331,6 @@ impl<P: Pairing> Aby3CollaborativeGroth16<P> {
         let mpc_net = Aby3MpcNet::new(config)?;
         let driver = Aby3Protocol::<P::ScalarField, Aby3MpcNet>::new(mpc_net)?;
         Ok(CollaborativeGroth16::new(driver))
-    }
-}
-
-impl<T, P: Pairing> SharedWitness<T, P>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    fn get_ref(&self) -> T::FieldShareSlice<'_> {
-        T::FieldShareSlice::from(&self.values)
     }
 }
 

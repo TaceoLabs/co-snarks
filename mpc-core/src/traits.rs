@@ -7,23 +7,12 @@ use serde::{de::DeserializeOwned, Serialize};
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     type FieldShare: Default + Clone;
-    type FieldShareVec: 'static
-        + for<'a> From<Self::FieldShareSliceMut<'a>>
-        + From<Vec<Self::FieldShare>>
-        + Clone
-        + Serialize
-        + DeserializeOwned;
-    type FieldShareSlice<'a>: Copy + From<&'a Self::FieldShareVec>;
-    type FieldShareSliceMut<'a>: From<&'a mut Self::FieldShareVec>;
+    type FieldShareVec: 'static + From<Vec<Self::FieldShare>> + Clone + Serialize + DeserializeOwned;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
     fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
-    fn sub_assign_vec(
-        &mut self,
-        a: &mut Self::FieldShareSliceMut<'_>,
-        b: &Self::FieldShareSlice<'_>,
-    );
+    fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec);
     fn mul(
         &mut self,
         a: &Self::FieldShare,
@@ -36,33 +25,27 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F>;
     fn mul_vec(
         &mut self,
-        a: &Self::FieldShareSlice<'_>,
-        b: &Self::FieldShareSlice<'_>,
+        a: &Self::FieldShareVec,
+        b: &Self::FieldShareVec,
     ) -> std::io::Result<Self::FieldShareVec>;
     fn promote_to_trivial_share(&self, public_values: &[F]) -> Self::FieldShareVec;
-    fn distribute_powers_and_mul_by_const(
-        &mut self,
-        coeffs: &mut Self::FieldShareSliceMut<'_>,
-        g: F,
-        c: F,
-    );
+    fn distribute_powers_and_mul_by_const(&mut self, coeffs: &mut Self::FieldShareVec, g: F, c: F);
     fn evaluate_constraint(
         &mut self,
         lhs: &[(F, usize)],
         public_inputs: &[F],
-        private_witness: &Self::FieldShareSlice<'_>,
+        private_witness: &Self::FieldShareVec,
     ) -> Self::FieldShare;
     fn clone_from_slice(
         &self,
-        dst: &mut Self::FieldShareSliceMut<'_>,
-        src: &Self::FieldShareSlice<'_>,
+        dst: &mut Self::FieldShareVec,
+        src: &Self::FieldShareVec,
         dst_offset: usize,
         src_offset: usize,
         len: usize,
     );
 
     fn print(&self, to_print: &Self::FieldShareVec);
-    fn print_slice(&self, to_print: &Self::FieldShareSlice<'_>);
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
@@ -100,30 +83,22 @@ pub trait PairingEcMpcProtocol<P: Pairing>: EcMpcProtocol<P::G1> + EcMpcProtocol
 pub trait FFTProvider<F: PrimeField>: PrimeFieldMpcProtocol<F> {
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
-        data: Self::FieldShareSlice<'_>,
+        data: Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec;
-    fn fft_in_place<D: EvaluationDomain<F>>(
-        &mut self,
-        data: &mut Self::FieldShareSliceMut<'_>,
-        domain: &D,
-    );
+    fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D);
     fn ifft<D: EvaluationDomain<F>>(
         &mut self,
-        data: &Self::FieldShareSlice<'_>,
+        data: &Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec;
-    fn ifft_in_place<D: EvaluationDomain<F>>(
-        &mut self,
-        data: &mut Self::FieldShareSliceMut<'_>,
-        domain: &D,
-    );
+    fn ifft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D);
 }
 
 pub trait MSMProvider<C: CurveGroup>: EcMpcProtocol<C> {
     fn msm_public_points(
         &mut self,
         points: &[C::Affine],
-        scalars: Self::FieldShareSlice<'_>,
+        scalars: &Self::FieldShareVec,
     ) -> Self::PointShare;
 }
