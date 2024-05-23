@@ -2,6 +2,7 @@
 members = [
     "circom-types",
     "collaborative-groth16",
+    "collaborative-circom",
     "mpc-core",
     "mpc-net",
     "tests",
