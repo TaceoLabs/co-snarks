@@ -23,6 +23,7 @@ pub mod fieldshare;
 pub mod id;
 pub mod network;
 pub mod pointshare;
+pub mod witness_extension_impl;
 
 type IoResult<T> = std::io::Result<T>;
 
