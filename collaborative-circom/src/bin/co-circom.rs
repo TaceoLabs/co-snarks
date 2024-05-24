@@ -83,7 +83,7 @@ fn main() -> color_eyre::Result<()> {
     match args.command {
         Commands::SplitWitness {
             input,
-            protocol,
+            protocol: _,
             out_dir,
         } => {
             file_utils::check_file_exists(&input)?;
@@ -99,7 +99,7 @@ fn main() -> color_eyre::Result<()> {
         }
         Commands::SplitInput {
             input,
-            protocol,
+            protocol: _,
             out_dir,
         } => {
             file_utils::check_file_exists(&input)?;
@@ -116,7 +116,7 @@ fn main() -> color_eyre::Result<()> {
         Commands::GenerateWitness {
             input,
             circuit,
-            protocol,
+            protocol: _,
             config,
             out,
         } => {
@@ -130,7 +130,7 @@ fn main() -> color_eyre::Result<()> {
 
             // parse network configuration
             let config = std::fs::read_to_string(config)?;
-            let config: NetworkConfig = toml::from_str(&config)?;
+            let _config: NetworkConfig = toml::from_str(&config)?;
 
             // construct relevant protocol
 
@@ -139,13 +139,13 @@ fn main() -> color_eyre::Result<()> {
             // execute witness generation in MPC
 
             // write result to output file
-            let out_file = std::fs::File::create(out)?;
+            let _out_file = std::fs::File::create(out)?;
         }
         Commands::GenerateProof {
             witness,
             r1cs,
             zkey,
-            protocol,
+            protocol: _,
             config,
             out,
         } => {
@@ -162,7 +162,7 @@ fn main() -> color_eyre::Result<()> {
 
             // parse network configuration
             let config = std::fs::read_to_string(config)?;
-            let config: NetworkConfig = toml::from_str(&config)?;
+            let _config: NetworkConfig = toml::from_str(&config)?;
 
             // construct relevant protocol
 
@@ -171,7 +171,7 @@ fn main() -> color_eyre::Result<()> {
             // execute prover in MPC
 
             // write result to output file
-            let out_file = std::fs::File::create(out)?;
+            let _out_file = std::fs::File::create(out)?;
         }
     }
 

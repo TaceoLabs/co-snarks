@@ -16,6 +16,17 @@ ark-relations = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 byteorder = { workspace = true }
+circom-circom_algebra = { workspace = true }
+circom-code_producers = { workspace = true }
+circom-compiler = { workspace = true }
+circom-constant_tracking = { workspace = true }
+circom-constraint_generation = { workspace = true }
+circom-constraint_list = { workspace = true }
+circom-constraint_writers = { workspace = true }
+circom-dag = { workspace = true }
+circom-parser = { workspace = true }
+circom-program_structure = { workspace = true }
+circom-type_analysis = { workspace = true }
 circom-types = { version = "0.1.0", path = "../circom-types" }
 color-eyre = { workspace = true }
 itertools = { workspace = true }

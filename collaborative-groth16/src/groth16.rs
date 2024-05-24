@@ -122,14 +122,12 @@ where
                 .evaluate_constraint(bt_i, public_inputs, private_witness);
         }
         let mut a = FieldShareVec::<T, P>::from(a);
-        {
-            let promoted_public = self.driver.promote_to_trivial_share(public_inputs);
-            self.driver
-                .clone_from_slice(&mut a, &promoted_public, num_constraints, 0, num_inputs);
-        }
+        let promoted_public = self.driver.promote_to_trivial_share(public_inputs);
+        self.driver
+            .clone_from_slice(&mut a, &promoted_public, num_constraints, 0, num_inputs);
 
         let mut b = FieldShareVec::<T, P>::from(b);
-        let mut c = { self.driver.mul_vec(&a, &b)? };
+        let mut c = self.driver.mul_vec(&a, &b)?;
 
         self.driver.ifft_in_place(&mut a, &domain);
         self.driver.ifft_in_place(&mut b, &domain);
@@ -151,10 +149,8 @@ where
         );
         self.driver.fft_in_place(&mut a, &domain);
         self.driver.fft_in_place(&mut b, &domain);
-        let mut ab = {
-            //this can be in-place so that we do not have to allocate memory
-            self.driver.mul_vec(&a, &b)?
-        };
+        //this can be in-place so that we do not have to allocate memory
+        let mut ab = self.driver.mul_vec(&a, &b)?;
         std::mem::drop(a);
         std::mem::drop(b);
 
@@ -165,7 +161,6 @@ where
             P::ScalarField::one(),
         );
         self.driver.fft_in_place(&mut c, &domain);
-
         self.driver.sub_assign_vec(&mut ab, &c);
         Ok(ab)
     }
@@ -355,7 +350,6 @@ impl<N: GSZNetwork, P: Pairing> SharedWitness<GSZProtocol<P::ScalarField, N>, P>
         rng: &mut R,
     ) -> Vec<Self> {
         let shares = gsz::utils::share_field_elements(witness, degree, num_parties, rng);
-
         shares
             .into_iter()
             .map(|share| Self { values: share })
