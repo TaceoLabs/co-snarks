@@ -75,7 +75,7 @@ pub mod utils {
     }
 
     pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
-        vals: Vec<F>,
+        vals: &[F],
         degree: usize,
         num_parties: usize,
         rng: &mut R,
@@ -85,7 +85,7 @@ pub mod utils {
             .collect::<Vec<_>>();
 
         for val in vals {
-            let shares = Shamir::share(val, num_parties, degree, rng);
+            let shares = Shamir::share(*val, num_parties, degree, rng);
 
             for (r, s) in izip!(&mut result, shares) {
                 r.a.push(s);

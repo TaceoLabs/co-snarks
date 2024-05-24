@@ -45,7 +45,12 @@ where
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
     )]
-    pub values: FieldShareVec<T, P>,
+    pub public_inputs: Vec<P::ScalarField>,
+    #[serde(
+        serialize_with = "crate::serde_compat::ark_se",
+        deserialize_with = "crate::serde_compat::ark_de"
+    )]
+    pub witness: FieldShareVec<T, P>,
 }
 
 pub struct CollaborativeGroth16<T, P: Pairing>
@@ -87,7 +92,7 @@ where
         let matrices = cs.to_matrices().unwrap();
         let num_inputs = cs.num_instance_variables();
         let num_constraints = cs.num_constraints();
-        let private_witness = &private_witness.values;
+        let private_witness = &private_witness.witness;
         let h = self.witness_map_from_matrices(
             &matrices,
             num_constraints,
@@ -333,18 +338,32 @@ impl<P: Pairing> Aby3CollaborativeGroth16<P> {
 }
 
 impl<N: Aby3Network, P: Pairing> SharedWitness<Aby3Protocol<P::ScalarField, N>, P> {
-    pub fn share_aby3<R: Rng + CryptoRng>(witness: Vec<P::ScalarField>, rng: &mut R) -> [Self; 3] {
-        let [share1, share2, share3] = aby3::utils::share_field_elements(witness, rng);
-        let witness1 = Self { values: share1 };
-        let witness2 = Self { values: share2 };
-        let witness3 = Self { values: share3 };
+    pub fn share_aby3<R: Rng + CryptoRng>(
+        witness: &[P::ScalarField],
+        public_inputs: &[P::ScalarField],
+        rng: &mut R,
+    ) -> [Self; 3] {
+        let [share1, share2, share3] = aby3::utils::share_field_elements(&witness, rng);
+        let witness1 = Self {
+            public_inputs: public_inputs.to_vec(),
+            witness: share1,
+        };
+        let witness2 = Self {
+            public_inputs: public_inputs.to_vec(),
+            witness: share2,
+        };
+        let witness3 = Self {
+            public_inputs: public_inputs.to_vec(),
+            witness: share3,
+        };
         [witness1, witness2, witness3]
     }
 }
 
 impl<N: GSZNetwork, P: Pairing> SharedWitness<GSZProtocol<P::ScalarField, N>, P> {
     pub fn share_gsz<R: Rng + CryptoRng>(
-        witness: Vec<P::ScalarField>,
+        witness: &[P::ScalarField],
+        public_inputs: &[P::ScalarField],
         degree: usize,
         num_parties: usize,
         rng: &mut R,
@@ -352,7 +371,10 @@ impl<N: GSZNetwork, P: Pairing> SharedWitness<GSZProtocol<P::ScalarField, N>, P>
         let shares = gsz::utils::share_field_elements(witness, degree, num_parties, rng);
         shares
             .into_iter()
-            .map(|share| Self { values: share })
+            .map(|share| Self {
+                public_inputs: public_inputs.to_vec(),
+                witness: share,
+            })
             .collect()
     }
 }
@@ -362,7 +384,7 @@ mod test {
     use std::fs::File;
 
     use ark_bn254::Bn254;
-    use circom_types::groth16::witness::Witness;
+    use circom_types::{groth16::witness::Witness, r1cs::R1CS};
     use mpc_core::protocols::{
         aby3::{network::Aby3MpcNet, Aby3Protocol},
         gsz::{network::GSZMpcNet, GSZProtocol},
@@ -376,10 +398,13 @@ mod test {
     fn test_aby3() {
         let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
+        let r1cs = R1CS::<ark_bn254::Bn254>::from_reader(r1cs_file).unwrap();
         let mut rng = thread_rng();
         let [s1, _, _] =
             SharedWitness::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::share_aby3(
-                witness.values,
+                &witness.values[r1cs.num_inputs..],
+                &witness.values[..r1cs.num_inputs],
                 &mut rng,
             );
         println!("{}", serde_json::to_string(&s1).unwrap());
@@ -388,9 +413,12 @@ mod test {
     fn test_gsz_inner(num_parties: usize, threshold: usize) {
         let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
+        let r1cs = R1CS::<ark_bn254::Bn254>::from_reader(r1cs_file).unwrap();
         let mut rng = thread_rng();
         let s1 = SharedWitness::<GSZProtocol<ark_bn254::Fr, GSZMpcNet>, Bn254>::share_gsz(
-            witness.values,
+            &witness.values[r1cs.num_inputs..],
+            &witness.values[..r1cs.num_inputs],
             threshold,
             num_parties,
             &mut rng,

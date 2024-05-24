@@ -244,7 +244,8 @@ mod gsz_tests {
         let public_inputs = vec![public_inputs1.clone(); num_parties];
         let inputs = circuit.public_inputs();
         let mut rng = thread_rng();
-        let witness_share = SharedWitness::share_gsz(witness, threshold, num_parties, &mut rng);
+        let witness_share =
+            SharedWitness::share_gsz(&witness, &public_inputs1, threshold, num_parties, &mut rng);
 
         let test_network = GSZTestNetwork::new(num_parties);
         let mut tx = Vec::with_capacity(num_parties);
