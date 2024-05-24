@@ -5,9 +5,8 @@ use circom_compiler::{
     intermediate_representation::{
         ir_interface::{
             AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket, CreateCmpBucket,
-            InputInformation, Instruction, LoadBucket, LocationRule, LogBucket, LogBucketArg,
-            LoopBucket, OperatorType, ReturnBucket, ReturnType, StatusInput, StoreBucket,
-            ValueBucket, ValueType,
+            Instruction, LoadBucket, LocationRule, LogBucket, LogBucketArg, LoopBucket,
+            OperatorType, ReturnBucket, ReturnType, StoreBucket, ValueBucket, ValueType,
         },
         InstructionList,
     },
@@ -19,8 +18,7 @@ use color_eyre::{
     eyre::{bail, eyre},
     Result,
 };
-use rand::seq::index;
-use std::{collections::HashMap, marker::PhantomData, os::linux::raw::stat, path::PathBuf, rc::Rc};
+use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
 
 use super::WitnessExtension;
 
@@ -69,7 +67,6 @@ pub enum MpcOpCode {
     JumpBack(usize),
     JumpIfFalse(usize),
     Panic(String),
-    BreakPoint(String),
     Log(usize, usize),
 }
 
@@ -119,7 +116,6 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::OutputSubComp => "OUTPUT_SUB_COMP_OP".to_owned(),
             MpcOpCode::InputSubComp(true) => "INPUT_SUB_COMP_MAPPED_OP".to_owned(),
             MpcOpCode::InputSubComp(false) => "INPUT_SUB_COMP_OP".to_owned(),
-            MpcOpCode::BreakPoint(message) => format!("BREAK_POINT {message}"),
             MpcOpCode::Log(line, amount) => format!("LOG {line} {amount}"),
         };
         f.write_str(&string)
@@ -171,7 +167,6 @@ impl<P: Pairing> CompilerBuilder<P> {
 
 #[derive(Clone)]
 pub(crate) struct TemplateDecl {
-    pub(crate) symbol: String,
     pub(crate) input_signals: usize,
     pub(crate) output_signals: usize,
     pub(crate) intermediate_signals: usize,
@@ -181,16 +176,14 @@ pub(crate) struct TemplateDecl {
 }
 
 pub(crate) struct FunDecl {
-    pub(crate) symbol: String,
     pub(crate) params: Vec<Param>,
     pub(crate) vars: usize,
     pub(crate) body: Rc<CodeBlock>,
 }
 
 impl FunDecl {
-    fn new(symbol: String, params: Vec<Param>, vars: usize, body: CodeBlock) -> Self {
+    fn new(params: Vec<Param>, vars: usize, body: CodeBlock) -> Self {
         Self {
-            symbol,
             params,
             vars,
             body: Rc::new(body),
@@ -200,7 +193,6 @@ impl FunDecl {
 
 impl TemplateDecl {
     fn new(
-        symbol: String,
         input_signals: usize,
         output_signals: usize,
         intermediate_signals: usize,
@@ -209,7 +201,6 @@ impl TemplateDecl {
         body: CodeBlock,
     ) -> Self {
         Self {
-            symbol,
             input_signals,
             output_signals,
             intermediate_signals,
@@ -319,27 +310,8 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn handle_store_bucket(&mut self, store_bucket: &StoreBucket) {
-        let mut mapped = false;
-        match &store_bucket.dest {
-            LocationRule::Indexed {
-                location,
-                template_header,
-            } => (),
-            LocationRule::Mapped {
-                signal_code,
-                indexes,
-            } => {
-                if store_bucket.line == 150 {
-                    self.emit_opcode(MpcOpCode::BreakPoint("I AM HEREEEE".to_owned()));
-                    mapped = true;
-                }
-            }
-        };
         self.handle_instruction(&store_bucket.src);
         self.emit_store_opcodes(&store_bucket.dest, &store_bucket.dest_address_type);
-        if store_bucket.line == 150 && mapped {
-            self.emit_opcode(MpcOpCode::BreakPoint("EEEEND".to_owned()));
-        }
     }
 
     #[inline(always)]
@@ -407,6 +379,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         }
     }
 
+    #[allow(dead_code)]
     fn debug_code_block(code_block: &CodeBlock) {
         for (idx, op) in code_block.iter().enumerate() {
             println!("{idx}|    {op}");
@@ -447,27 +420,12 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn handle_create_cmp_bucket(&mut self, create_cmp_bucket: &CreateCmpBucket) {
-        println!("{}", create_cmp_bucket.to_string());
         //get the id:
         self.handle_instruction(&create_cmp_bucket.sub_cmp_id);
         self.emit_opcode(MpcOpCode::CreateCmp(
             create_cmp_bucket.symbol.clone(),
             create_cmp_bucket.number_of_cmp,
         ));
-        //       println!("{}", create_cmp_bucket.message_id);
-        //       println!("{}", create_cmp_bucket.template_id);
-        //       println!("{}", create_cmp_bucket.cmp_unique_id);
-        //       println!("{}", create_cmp_bucket.symbol);
-        //       println!("{}", create_cmp_bucket.sub_cmp_id.to_string());
-        //       println!("{}", create_cmp_bucket.name_subcomponent);
-        //       println!("{:?}", create_cmp_bucket.defined_positions);
-        //       println!("{:?}", create_cmp_bucket.dimensions);
-        //       println!("{:?}", create_cmp_bucket.signal_offset);
-        //       println!("{:?}", create_cmp_bucket.signal_offset_jump);
-        //       println!("{:?}", create_cmp_bucket.number_of_cmp);
-        //       println!("{:?}", create_cmp_bucket.has_inputs);
-        //       println!("");
-        //       println!("");
     }
 
     fn handle_loop_bucket(&mut self, loop_bucket: &LoopBucket) {
@@ -552,7 +510,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 if final_data.context.size == 1 {
                     self.emit_store_opcodes(&final_data.dest, &final_data.dest_address_type);
                 } else {
-                    let mapped = match &final_data.dest {
+                    match &final_data.dest {
                         LocationRule::Indexed {
                             location,
                             template_header: _,
@@ -565,27 +523,21 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                             } else {
                                 panic!("Another way for multiple return vals???");
                             }
-                            false
-                            //What do we do with the template header??
                         }
                         LocationRule::Mapped {
                             signal_code: _,
-                            indexes,
+                            indexes: _,
                         } => {
                             todo!();
-                            //indexes
-                            //    .iter()
-                            //    .for_each(|inst| self.handle_instruction(inst));
-                            //true
                         }
                     };
                     match &final_data.dest_address_type {
                         AddressType::Variable => self.emit_opcode(MpcOpCode::StoreVars),
                         AddressType::Signal => todo!(),
                         AddressType::SubcmpSignal {
-                            cmp_address,
+                            cmp_address: _,
                             uniform_parallel_value: _,
-                            is_output,
+                            is_output: _,
                             input_information: _,
                         } => {
                             todo!()
@@ -605,9 +557,9 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     fn handle_log_bucket(&mut self, log_bucket: &LogBucket) {
         //todo
         for to_log in log_bucket.argsprint.iter() {
-            match to_log {
-                LogBucketArg::LogExp(log_expr) => self.handle_instruction(&log_expr),
-                LogBucketArg::LogStr(usize) => {
+            match &to_log {
+                LogBucketArg::LogExp(log_expr) => self.handle_instruction(log_expr),
+                LogBucketArg::LogStr(_) => {
                     todo!()
                 }
             }
@@ -652,15 +604,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| eyre!("cannot parse string in constant list"))?;
 
-        println!("==== constants ====");
-        if self.constant_table.len() > 8 {
-            println!("omitting {} constants...", self.constant_table.len());
-        } else {
-            for (idx, constant) in self.constant_table.iter().enumerate() {
-                println!("{idx}:    {constant}");
-            }
-        }
-
         //build functions
         for fun in circuit.functions.iter() {
             fun.body.iter().for_each(|inst| {
@@ -670,27 +613,10 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
             self.fun_decls.insert(
                 fun.header.clone(),
-                FunDecl::new(
-                    fun.header.clone(),
-                    fun.params.clone(),
-                    fun.max_number_of_vars,
-                    new_code_block,
-                ),
+                FunDecl::new(fun.params.clone(), fun.max_number_of_vars, new_code_block),
             );
         }
-        println!("functions: {}", self.fun_decls.len());
         for templ in circuit.templates.iter() {
-            println!("==============");
-            println!("id      : {}", templ.id);
-            println!("name    : {}", templ.name);
-            println!("header  : {}", templ.header);
-            println!("#ins    : {}", templ.number_of_inputs);
-            println!("#outs   : {}", templ.number_of_outputs);
-            println!("#inters : {}", templ.number_of_intermediates);
-            println!("#cmps   : {}", templ.number_of_components);
-            println!("#var    : {}", templ.var_stack_depth);
-            println!("#expr   : {}", templ.expression_stack_depth);
-            println!("#signal : {}", templ.signal_stack_depth);
             templ.body.iter().for_each(|inst| {
                 self.handle_instruction(inst);
             });
@@ -700,7 +626,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             self.templ_decls.insert(
                 templ.header.clone(),
                 TemplateDecl::new(
-                    templ.header.clone(),
                     templ.number_of_inputs,
                     templ.number_of_outputs,
                     templ.number_of_intermediates,
