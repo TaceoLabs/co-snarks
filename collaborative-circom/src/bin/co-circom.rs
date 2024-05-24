@@ -2,11 +2,15 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter},
     path::PathBuf,
+    process::{ExitCode, ExitStatus},
 };
 
 use ark_bn254::Bn254;
+use ark_groth16::{Groth16, Proof};
 use circom_types::{
-    groth16::{proof::JsonProof, witness::Witness, zkey::ZKey},
+    groth16::{
+        proof::JsonProof, verification_key::JsonVerificationKey, witness::Witness, zkey::ZKey,
+    },
     r1cs::R1CS,
 };
 use clap::{Parser, Subcommand};
@@ -17,10 +21,17 @@ use mpc_core::protocols::aby3::{network::Aby3MpcNet, Aby3Protocol};
 use mpc_net::config::NetworkConfig;
 
 fn install_tracing() {
-    use tracing_subscriber::EnvFilter;
+    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{fmt, EnvFilter};
 
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+    let fmt_layer = fmt::layer().with_target(true).with_line_number(true);
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
+
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(fmt_layer)
         .init();
 }
 
@@ -95,13 +106,25 @@ enum Commands {
         /// The path to MPC network configuration file
         #[arg(long)]
         config: PathBuf,
-        /// The output file where the final proof is written to
+        /// The output file where the final proof is written to. If not passed, this party will not write the proof to a file.
         #[arg(long)]
-        out: PathBuf,
+        out: Option<PathBuf>,
+    },
+    /// Verification of a Circom proof.
+    Verify {
+        /// The path to the proof file
+        #[arg(long)]
+        proof: PathBuf,
+        /// The path to the verification key file
+        #[arg(long)]
+        vk: PathBuf,
+        /// The path to the public inputs file
+        #[arg(long)]
+        public_inputs: PathBuf,
     },
 }
 
-fn main() -> color_eyre::Result<()> {
+fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
     let args = Cli::parse();
 
@@ -226,12 +249,8 @@ fn main() -> color_eyre::Result<()> {
                     .context("trying to parse witness share file")?;
 
             // parse public inputs
-            let public_input = {
-                let mut public_input = Vec::with_capacity(witness_share.public_inputs.len() + 1);
-                public_input.push(ark_bn254::Fr::from(1));
-                public_input.extend(witness_share.public_inputs.iter().cloned());
-                public_input
-            };
+            // TODO: decision: ATM 1 is still in the public inputs, should we remove it?
+            let public_input = witness_share.public_inputs.clone();
 
             // parse Circom r1cs file
             let r1cs_file = BufReader::new(File::open(r1cs).context("trying to open R1CS file")?);
@@ -259,14 +278,62 @@ fn main() -> color_eyre::Result<()> {
             let proof = prover.prove(&pk, &r1cs, &public_input, witness_share)?;
 
             // write result to output file
-            let out_file =
-                BufWriter::new(std::fs::File::create(out).context("while opening output file")?);
+            if let Some(out) = out {
+                let out_file = BufWriter::new(
+                    std::fs::File::create(&out).context("while opening output file")?,
+                );
 
-            serde_json::to_writer(out_file, &JsonProof::<Bn254>::from(proof))
-                .context("while serializing proof to JSON file")?;
+                serde_json::to_writer(out_file, &JsonProof::<Bn254>::from(proof))
+                    .context("while serializing proof to JSON file")?;
+                tracing::info!("Wrote proof to file {}", out.display());
+            }
             tracing::info!("Proof generation finished successfully")
+        }
+        Commands::Verify {
+            proof,
+            vk,
+            public_inputs,
+        } => {
+            file_utils::check_file_exists(&proof)?;
+            file_utils::check_file_exists(&vk)?;
+            file_utils::check_file_exists(&public_inputs)?;
+
+            // parse Circom proof file
+            let proof_file =
+                BufReader::new(File::open(&proof).context("while opening proof file")?);
+            let proof: JsonProof<Bn254> = serde_json::from_reader(proof_file)
+                .context("while deserializing proof from file")?;
+            let proof = Proof::<Bn254>::from(proof);
+
+            // parse Circom verification key file
+            let vk_file =
+                BufReader::new(File::open(&vk).context("while opening verification key file")?);
+            let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file)
+                .context("while deserializing verification key from file")?;
+            let vk: ark_groth16::PreparedVerifyingKey<Bn254> = vk.into();
+
+            // parse public inputs
+            let public_inputs_file = BufReader::new(
+                File::open(&public_inputs).context("while opening public inputs file")?,
+            );
+            // TODO: real parsing of public inputs file
+            let witness_share: SharedWitness<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254> =
+                bincode::deserialize_from(public_inputs_file)
+                    .context("trying to parse witness share file")?;
+            // skip 1 atm
+            let public_inputs = &witness_share.public_inputs[1..];
+
+            // verify proof
+            if Groth16::<Bn254>::verify_proof(&vk, &proof, public_inputs)
+                .context("while verifying proof")?
+            {
+                tracing::info!("Proof verified successfully");
+            } else {
+                tracing::error!("Proof verification failed");
+                return Ok(ExitCode::FAILURE);
+            }
         }
     }
 
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }

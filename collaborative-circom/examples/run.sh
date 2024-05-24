@@ -1,0 +1,5 @@
+cargo run --bin co-circom -- split-witness --input test_vectors/poseidon/witness.wtns --r1cs test_vectors/poseidon/poseidon.r1cs --protocol bla --out-dir test_vectors/poseidon
+cargo run --bin co-circom -- generate-proof --witness test_vectors/poseidon/witness.wtns.0.shared --r1cs test_vectors/poseidon/poseidon.r1cs --zkey test_vectors/poseidon/circuit_0000.zkey --protocol bla --config configs/party1.toml --out proof.0.json1 &
+cargo run --bin co-circom -- generate-proof --witness test_vectors/poseidon/witness.wtns.1.shared --r1cs test_vectors/poseidon/poseidon.r1cs --zkey test_vectors/poseidon/circuit_0000.zkey --protocol bla --config configs/party2.toml --out proof.1.json1 &
+cargo run --bin co-circom -- generate-proof --witness test_vectors/poseidon/witness.wtns.2.shared --r1cs test_vectors/poseidon/poseidon.r1cs --zkey test_vectors/poseidon/circuit_0000.zkey --protocol bla --config configs/party3.toml --out proof.2.json1
+cargo run --bin co-circom -- verify --proof proof.0.json1 --vk test_vectors/poseidon/verification_key.json --public-inputs test_vectors/poseidon/witness.wtns.0.shared
