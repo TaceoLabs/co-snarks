@@ -346,7 +346,8 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             OperatorType::Mul => self.emit_opcode(MpcOpCode::Mul),
             OperatorType::Div => self.emit_opcode(MpcOpCode::Div),
             OperatorType::Pow => todo!(),
-            OperatorType::IntDiv => todo!(),
+            //FIXME THIS IS MOST LIKELY WRONG
+            OperatorType::IntDiv => self.emit_opcode(MpcOpCode::Div),
             OperatorType::Mod => todo!(),
             OperatorType::ShiftL => self.emit_opcode(MpcOpCode::ShiftL),
             OperatorType::ShiftR => self.emit_opcode(MpcOpCode::ShiftR),
@@ -479,6 +480,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                     let inner: &Instruction = location;
                     if let Instruction::Value(value_bucket) = inner {
                         debug_assert!(matches!(value_bucket.parse_as, ValueType::U32));
+                        println!("got with size: {}", return_bucket.with_size);
                         self.emit_opcode(MpcOpCode::PushIndex(
                             value_bucket.value + return_bucket.with_size,
                         ));
@@ -518,6 +520,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                             let inner: &Instruction = location;
                             if let Instruction::Value(value_bucket) = inner {
                                 debug_assert!(matches!(value_bucket.parse_as, ValueType::U32));
+                                println!("final data context size: {}", final_data.context.size);
                                 self.emit_opcode(MpcOpCode::PushIndex(final_data.context.size));
                                 self.emit_opcode(MpcOpCode::PushIndex(value_bucket.value));
                             } else {

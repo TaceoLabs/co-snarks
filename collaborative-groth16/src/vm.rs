@@ -122,6 +122,7 @@ impl<F: PrimeField> Runnable<F> {
         let current_body = Rc::clone(&self.body);
         loop {
             let inst = &current_body[ip];
+            println!("DEBUG: {ip:0>3}    | Doing {inst}");
             match inst {
                 compiler::MpcOpCode::PushConstant(index) => {
                     self.push_field(constant_table[*index]);
@@ -301,7 +302,17 @@ impl<F: PrimeField> Runnable<F> {
                 }
                 compiler::MpcOpCode::Neq => todo!(),
                 compiler::MpcOpCode::BoolOr => todo!(),
-                compiler::MpcOpCode::BoolAnd => todo!(),
+                compiler::MpcOpCode::BoolAnd => {
+                    let rhs = to_usize!(self.pop_field());
+                    let lhs = to_usize!(self.pop_field());
+                    debug_assert!(rhs == 0 || rhs == 1);
+                    debug_assert!(lhs == 0 || lhs == 1);
+                    if rhs == 1 && lhs == 1 {
+                        self.push_field(F::one());
+                    } else {
+                        self.push_field(F::zero());
+                    }
+                }
                 compiler::MpcOpCode::BitOr => {
                     let rhs = to_bigint!(self.pop_field());
                     let lhs = to_bigint!(self.pop_field());
@@ -567,6 +578,5 @@ mod tests {
             )
             .unwrap()]
         );
-        std::thread::sleep(Duration::from_secs(1));
     }
 }
