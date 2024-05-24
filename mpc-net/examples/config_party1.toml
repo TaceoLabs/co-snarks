@@ -1,0 +1,15 @@
+my_id = 0
+bind_addr = "0.0.0.0:10000"
+key_path = "data/key0.der"
+[[parties]]
+id = 0
+dns_name = "localhost:10000"
+cert_path = "data/cert0.der"
+[[parties]]
+id = 1
+dns_name = "localhost:10001"
+cert_path = "data/cert1.der"
+[[parties]]
+id = 2
+dns_name = "localhost:10002"
+cert_path = "data/cert2.der"

@@ -1,15 +1,57 @@
 use color_eyre::eyre;
 use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, path::PathBuf};
+use std::{
+    fmt::Formatter,
+    net::{SocketAddr, ToSocketAddrs},
+    path::PathBuf,
+};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct Address {
+    pub hostname: String,
+    pub port: u16,
+}
+
+impl std::fmt::Display for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.hostname, self.port)
+    }
+}
+
+impl ToSocketAddrs for Address {
+    type Iter = std::vec::IntoIter<SocketAddr>;
+    fn to_socket_addrs(&self) -> std::io::Result<Self::Iter> {
+        format!("{}:{}", self.hostname, self.port).to_socket_addrs()
+    }
+}
+
+impl Serialize for Address {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&format!("{}:{}", self.hostname, self.port))
+    }
+}
+
+impl<'de> Deserialize<'de> for Address {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            return Err(serde::de::Error::custom("invalid address format"));
+        }
+        let hostname = parts[0].to_string();
+        let port = parts[1].parse().map_err(serde::de::Error::custom)?;
+        Ok(Address { hostname, port })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct NetworkParty {
     pub id: usize,
-    pub dns_name: String,
+    pub dns_name: Address,
     pub cert_path: PathBuf,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct NetworkConfig {
     pub parties: Vec<NetworkParty>,
     pub my_id: usize,

@@ -101,7 +101,7 @@ impl MpcNetworkHandler {
                             })?
                             .next()
                             .ok_or(eyre::eyre!("could not resolve DNS name {}", party.dns_name))?,
-                        &party.dns_name,
+                        &party.dns_name.hostname,
                     )
                     .with_context(|| {
                         format!("setting up client connection with party {}", party.id)
