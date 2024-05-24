@@ -17,3 +17,6 @@ collaborative-groth16 = { version = "0.1.0", path = "../collaborative-groth16" }
 mpc-core = { version = "0.1.0", path = "../mpc-core" }
 mpc-net.workspace = true
 bincode.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+rand.workspace = true

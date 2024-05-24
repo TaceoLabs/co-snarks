@@ -5,12 +5,24 @@ use std::{
 };
 
 use ark_bn254::Bn254;
-use circom_types::{groth16::zkey::ZKey, r1cs::R1CS};
+use circom_types::{
+    groth16::{witness::Witness, zkey::ZKey},
+    r1cs::R1CS,
+};
 use clap::{Parser, Subcommand};
-use collaborative_circom::{config::NetworkConfig, file_utils};
-use collaborative_groth16::groth16::SharedWitness;
-use color_eyre::eyre::Context;
+use collaborative_circom::file_utils;
+use collaborative_groth16::groth16::{CollaborativeGroth16, SharedWitness};
+use color_eyre::eyre::{eyre, Context};
 use mpc_core::protocols::aby3::{network::Aby3MpcNet, Aby3Protocol};
+use mpc_net::config::NetworkConfig;
+
+fn install_tracing() {
+    use tracing_subscriber::EnvFilter;
+
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
+}
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -87,6 +99,7 @@ enum Commands {
 }
 
 fn main() -> color_eyre::Result<()> {
+    install_tracing();
     let args = Cli::parse();
 
     match args.command {
@@ -98,13 +111,38 @@ fn main() -> color_eyre::Result<()> {
             file_utils::check_file_exists(&input)?;
             file_utils::check_dir_exists(&out_dir)?;
 
-            // read the Circom witness file
+            // TODO: make generic over curve/protocol
 
-            // construct relevant protocol
+            // read the Circom witness file
+            let witness_file =
+                BufReader::new(File::open(&input).context("while opening witness file")?);
+            let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file)
+                .context("while parsing witness file")?;
+
+            let mut rng = rand::thread_rng();
 
             // create witness shares
+            let shares =
+                SharedWitness::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::share_aby3(
+                    witness.values,
+                    &mut rng,
+                );
 
             // write out the shares to the output directory
+            let base_name = input
+                .file_name()
+                .expect("we have a file name")
+                .to_str()
+                .ok_or(eyre!("input file name is not valid UTF-8"))?;
+            for (i, share) in shares.iter().enumerate() {
+                let path = out_dir.join(format!("{}.{}.shared", base_name, i));
+                let out_file =
+                    BufWriter::new(File::create(&path).context("while creating output file")?);
+                bincode::serialize_into(out_file, share)
+                    .context("while serializing witness share")?;
+                tracing::info!("Wrote witness share {} to file {}", i, path.display());
+            }
+            tracing::info!("Split witness into shares successfully")
         }
         Commands::SplitInput {
             input,
@@ -152,7 +190,7 @@ fn main() -> color_eyre::Result<()> {
                 todo!();
             let out_file = BufWriter::new(std::fs::File::create(out)?);
             bincode::serialize_into(out_file, &witness_share)?;
-            tracing
+            tracing::info!("Witness generation finished successfully")
         }
         Commands::GenerateProof {
             witness,
@@ -176,6 +214,9 @@ fn main() -> color_eyre::Result<()> {
                 bincode::deserialize_from(witness_file)
                     .context("trying to parse witness share file")?;
 
+            // parse public inputs
+            let public_input = Vec::new();
+
             // parse Circom r1cs file
             let r1cs_file = BufReader::new(File::open(r1cs).context("trying to open R1CS file")?);
             // TODO: allow different curves: move all of this into a generic function and match on curve...
@@ -191,12 +232,20 @@ fn main() -> color_eyre::Result<()> {
             let _config: NetworkConfig = toml::from_str(&config)?;
 
             // connect to network
-            let net = Aby3MpcNet::new(config.aby3);
+            let net = Aby3MpcNet::new(config)?;
+
+            // init MPC protocol
+            let protocol = Aby3Protocol::<ark_bn254::Fr, _>::new(net)?;
+            let mut prover =
+                CollaborativeGroth16::<Aby3Protocol<ark_bn254::Fr, _>, Bn254>::new(protocol);
 
             // execute prover in MPC
+            let proof = prover.prove(&pk, &r1cs, &public_input, witness_share)?;
 
             // write result to output file
-            let _out_file = std::fs::File::create(out)?;
+            let out_file =
+                BufWriter::new(std::fs::File::create(out).context("while opening output file")?);
+            tracing::info!("Proof generation finished successfully")
         }
     }
 
