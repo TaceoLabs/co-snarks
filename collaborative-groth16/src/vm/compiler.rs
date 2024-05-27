@@ -18,6 +18,7 @@ use color_eyre::{
     eyre::{bail, eyre},
     Result,
 };
+use itertools::Itertools;
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
 
 use super::WitnessExtension;
@@ -32,26 +33,26 @@ pub enum MpcOpCode {
     LoadSignal,
     StoreSignal,
     LoadVar,
-    LoadVars,
     StoreVars,
     StoreVar,
-    OutputSubComp,
-    InputSubComp(bool),
+    OutputSubComp(bool, usize),
+    InputSubComp(bool, usize),
     CreateCmp(String, usize), //what else do we need?
-    Call(String),
+    Call(String, usize),
     Return,
+    ReturnFun,
     Assert,
     Add,
     Sub,
     Mul,
     Div,
+    IntDiv,
     Neg,
     Lt,
     Le,
     Gt,
     Ge,
     Eq,
-    Ne,
     Neq,
     BoolOr,
     BoolAnd,
@@ -80,23 +81,22 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::LoadSignal => "LOAD_SIGNAL_OP".to_owned(),
             MpcOpCode::StoreSignal => "STORE_SIGNAL_OP".to_owned(),
             MpcOpCode::LoadVar => "LOAD_VAR_OP".to_owned(),
-            MpcOpCode::LoadVars => "LOAD_VARS_OP".to_owned(),
             MpcOpCode::StoreVar => "STORE_VAR_OP".to_owned(),
             MpcOpCode::StoreVars => "STORE_VARS_OP".to_owned(),
-            MpcOpCode::Call(symbol) => format!("CALL_OP {symbol}"),
+            MpcOpCode::Call(symbol, return_vals) => format!("CALL_OP {symbol} {return_vals}"),
             MpcOpCode::CreateCmp(header, amount) => format!("CREATE_CMP_OP {} [{amount}]", header),
             MpcOpCode::Assert => "ASSERT_OP".to_owned(),
             MpcOpCode::Add => "ADD_OP".to_owned(),
             MpcOpCode::Sub => "SUB_OP".to_owned(),
             MpcOpCode::Mul => "MUL_OP".to_owned(),
             MpcOpCode::Div => "DIV_OP".to_owned(),
+            MpcOpCode::IntDiv => "INT_DIV_OP".to_owned(),
             MpcOpCode::Neg => "NEG_OP".to_owned(),
             MpcOpCode::Lt => "LESS_THAN_OP".to_owned(),
             MpcOpCode::Le => "LESS_EQ_OP".to_owned(),
             MpcOpCode::Gt => "GREATER_THAN_OP".to_owned(),
             MpcOpCode::Ge => "GREATER_EQ_OP".to_owned(),
             MpcOpCode::Eq => "IS_EQUAL_OP".to_owned(),
-            MpcOpCode::Ne => "NOT_EQUAL_OP".to_owned(),
             MpcOpCode::Neq => "NOT_EQUAL_OP".to_owned(),
             MpcOpCode::BoolOr => "BOOL_OR_OP".to_owned(),
             MpcOpCode::BoolAnd => "BOOL_AND_OP".to_owned(),
@@ -112,10 +112,14 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::JumpBack(line) => format!("JUMP_BACK_OP {line}"),
             MpcOpCode::JumpIfFalse(line) => format!("JUMP_IF_FALSE_OP {line}"),
             MpcOpCode::Return => "RETURN_OP".to_owned(),
+            MpcOpCode::ReturnFun => "RETURN_FUN_OP".to_owned(),
             MpcOpCode::Panic(message) => format!("PANIC_OP {message}"),
-            MpcOpCode::OutputSubComp => "OUTPUT_SUB_COMP_OP".to_owned(),
-            MpcOpCode::InputSubComp(true) => "INPUT_SUB_COMP_MAPPED_OP".to_owned(),
-            MpcOpCode::InputSubComp(false) => "INPUT_SUB_COMP_OP".to_owned(),
+            MpcOpCode::OutputSubComp(mapped, signal_code) => {
+                format!("OUTPUT_SUB_COMP_OP {mapped} {signal_code}")
+            }
+            MpcOpCode::InputSubComp(mapped, signal_code) => {
+                format!("INPUT_SUB_COMP_OP {mapped} {signal_code}")
+            }
             MpcOpCode::Log(line, amount) => format!("LOG {line} {amount}"),
         };
         f.write_str(&string)
@@ -167,23 +171,27 @@ impl<P: Pairing> CompilerBuilder<P> {
 
 #[derive(Clone)]
 pub(crate) struct TemplateDecl {
+    pub(crate) symbol: String,
     pub(crate) input_signals: usize,
     pub(crate) output_signals: usize,
     pub(crate) intermediate_signals: usize,
     pub(crate) sub_components: usize,
     pub(crate) vars: usize,
+    pub(crate) mappings: Vec<usize>,
     pub(crate) body: Rc<CodeBlock>,
 }
 
 pub(crate) struct FunDecl {
+    pub(crate) symbol: String,
     pub(crate) params: Vec<Param>,
     pub(crate) vars: usize,
     pub(crate) body: Rc<CodeBlock>,
 }
 
 impl FunDecl {
-    fn new(params: Vec<Param>, vars: usize, body: CodeBlock) -> Self {
+    fn new(symbol: String, params: Vec<Param>, vars: usize, body: CodeBlock) -> Self {
         Self {
+            symbol,
             params,
             vars,
             body: Rc::new(body),
@@ -193,19 +201,23 @@ impl FunDecl {
 
 impl TemplateDecl {
     fn new(
+        symbol: String,
         input_signals: usize,
         output_signals: usize,
         intermediate_signals: usize,
         sub_components: usize,
         vars: usize,
+        mappings: Vec<usize>,
         body: CodeBlock,
     ) -> Self {
         Self {
+            symbol,
             input_signals,
             output_signals,
             intermediate_signals,
             sub_components,
             vars,
+            mappings,
             body: Rc::new(body),
         }
     }
@@ -271,23 +283,23 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn emit_store_opcodes(&mut self, location_rule: &LocationRule, dest_addr: &AddressType) {
-        let mapped = match location_rule {
+        let (mapped, signal_code) = match location_rule {
             LocationRule::Indexed {
                 location,
                 template_header: _,
             } => {
                 self.handle_instruction(location);
-                false
-                //What do we do with the template header??
+                (false, 0)
             }
             LocationRule::Mapped {
-                signal_code: _,
+                signal_code,
                 indexes,
             } => {
+                debug_assert!(*signal_code > 0);
                 indexes
                     .iter()
                     .for_each(|inst| self.handle_instruction(inst));
-                true
+                (true, *signal_code)
             }
         };
         match dest_addr {
@@ -301,7 +313,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             } => {
                 debug_assert!(!is_output);
                 self.handle_instruction(cmp_address);
-                self.emit_opcode(MpcOpCode::InputSubComp(mapped));
+                self.emit_opcode(MpcOpCode::InputSubComp(mapped, signal_code));
                 //There are a lot of additional information for this arm
                 //For the time being it works but maybe we need some information
                 //for more complex problems
@@ -340,14 +352,14 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         compute_bucket.stack.iter().for_each(|inst| {
             self.handle_instruction(inst);
         });
+
         match compute_bucket.op {
             OperatorType::Add => self.emit_opcode(MpcOpCode::Add),
             OperatorType::Sub => self.emit_opcode(MpcOpCode::Sub),
             OperatorType::Mul => self.emit_opcode(MpcOpCode::Mul),
             OperatorType::Div => self.emit_opcode(MpcOpCode::Div),
             OperatorType::Pow => todo!(),
-            //FIXME THIS IS MOST LIKELY WRONG
-            OperatorType::IntDiv => self.emit_opcode(MpcOpCode::Div),
+            OperatorType::IntDiv => self.emit_opcode(MpcOpCode::IntDiv),
             OperatorType::Mod => todo!(),
             OperatorType::ShiftL => self.emit_opcode(MpcOpCode::ShiftL),
             OperatorType::ShiftR => self.emit_opcode(MpcOpCode::ShiftR),
@@ -389,22 +401,24 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
 
     fn handle_load_bucket(&mut self, load_bucket: &LoadBucket) {
         //first eject for src
-        match &load_bucket.src {
+        let (mapped, signal_code) = match &load_bucket.src {
             LocationRule::Indexed {
                 location,
                 template_header: _,
             } => {
                 self.handle_instruction(location);
+                (false, 0)
             }
             LocationRule::Mapped {
-                signal_code: _,
+                signal_code,
                 indexes,
             } => {
                 indexes
                     .iter()
                     .for_each(|inst| self.handle_instruction(inst));
+                (true, *signal_code)
             }
-        }
+        };
         match &load_bucket.address_type {
             AddressType::Variable => self.current_code_block.push(MpcOpCode::LoadVar),
             AddressType::Signal => self.current_code_block.push(MpcOpCode::LoadSignal),
@@ -415,7 +429,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 input_information: _,
             } => {
                 self.handle_instruction(cmp_address);
-                self.emit_opcode(MpcOpCode::OutputSubComp);
+                self.emit_opcode(MpcOpCode::OutputSubComp(mapped, signal_code));
             }
         }
     }
@@ -480,13 +494,8 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                     let inner: &Instruction = location;
                     if let Instruction::Value(value_bucket) = inner {
                         debug_assert!(matches!(value_bucket.parse_as, ValueType::U32));
-                        println!("got with size: {}", return_bucket.with_size);
-                        self.emit_opcode(MpcOpCode::PushIndex(
-                            value_bucket.value + return_bucket.with_size,
-                        ));
                         self.emit_opcode(MpcOpCode::PushIndex(value_bucket.value));
-                        self.emit_opcode(MpcOpCode::LoadVars);
-                        self.emit_opcode(MpcOpCode::Return);
+                        self.emit_opcode(MpcOpCode::ReturnFun);
                     } else {
                         panic!("Another way for multiple return vals???");
                     }
@@ -505,12 +514,12 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             .arguments
             .iter()
             .for_each(|inst| self.handle_instruction(inst));
-        self.emit_opcode(MpcOpCode::Call(call_bucket.symbol.clone()));
         match &call_bucket.return_info {
             ReturnType::Intermediate { op_aux_no: _ } => todo!(),
             ReturnType::Final(final_data) => {
                 if final_data.context.size == 1 {
                     self.emit_store_opcodes(&final_data.dest, &final_data.dest_address_type);
+                    self.emit_opcode(MpcOpCode::Call(call_bucket.symbol.clone(), 1));
                 } else {
                     match &final_data.dest {
                         LocationRule::Indexed {
@@ -519,8 +528,11 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                         } => {
                             let inner: &Instruction = location;
                             if let Instruction::Value(value_bucket) = inner {
+                                self.emit_opcode(MpcOpCode::Call(
+                                    call_bucket.symbol.clone(),
+                                    final_data.context.size,
+                                ));
                                 debug_assert!(matches!(value_bucket.parse_as, ValueType::U32));
-                                println!("final data context size: {}", final_data.context.size);
                                 self.emit_opcode(MpcOpCode::PushIndex(final_data.context.size));
                                 self.emit_opcode(MpcOpCode::PushIndex(value_bucket.value));
                             } else {
@@ -544,12 +556,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                             input_information: _,
                         } => {
                             todo!()
-                            //debug_assert!(!is_output);
-                            //self.handle_instruction(cmp_address);
-                            //self.emit_opcode(MpcOpCode::InputSubComp(mapped));
-                            //There are a lot of additional information for this arm
-                            //For the time being it works but maybe we need some information
-                            //for more complex problems
                         }
                     }
                 }
@@ -614,9 +620,15 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             });
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
+
             self.fun_decls.insert(
                 fun.header.clone(),
-                FunDecl::new(fun.params.clone(), fun.max_number_of_vars, new_code_block),
+                FunDecl::new(
+                    fun.header.clone(),
+                    fun.params.clone(),
+                    fun.max_number_of_vars,
+                    new_code_block,
+                ),
             );
         }
         for templ in circuit.templates.iter() {
@@ -626,14 +638,23 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
             new_code_block.push(MpcOpCode::Return);
+            //check if we need mapping for store bucket
+            let mappings = if let Some(mappings) = circuit.c_producer.io_map.get(&templ.id) {
+                mappings.iter().map(|m| m.offset).collect_vec()
+            } else {
+                vec![]
+            };
+
             self.templ_decls.insert(
                 templ.header.clone(),
                 TemplateDecl::new(
+                    templ.header.clone(),
                     templ.number_of_inputs,
                     templ.number_of_outputs,
                     templ.number_of_intermediates,
                     templ.number_of_components,
                     templ.var_stack_depth,
+                    mappings,
                     new_code_block,
                 ),
             );

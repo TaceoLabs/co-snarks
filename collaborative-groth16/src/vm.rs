@@ -38,6 +38,7 @@ struct Runnable<F: PrimeField> {
     //investigate later if we need stack frames
     //like that or if a single stack frame is enough??
     //depends on how complex functions work
+    symbol: String,
     field_stack: StackFrame<F>,
     index_stack: StackFrame<usize>,
     output_signals: usize,
@@ -45,6 +46,7 @@ struct Runnable<F: PrimeField> {
     has_output: bool,
     signals: Vec<F>,
     vars: Vec<F>,
+    mappings: Vec<usize>,
     sub_components: Vec<Option<Runnable<F>>>,
     body: Rc<CodeBlock>,
 }
@@ -52,6 +54,7 @@ struct Runnable<F: PrimeField> {
 impl<F: PrimeField> Runnable<F> {
     fn init(templ_decl: &TemplateDecl) -> Self {
         Self {
+            symbol: templ_decl.symbol.clone(),
             output_signals: templ_decl.output_signals,
             input_signals: templ_decl.input_signals,
             has_output: false,
@@ -63,6 +66,7 @@ impl<F: PrimeField> Runnable<F> {
             ],
             sub_components: vec![None; templ_decl.sub_components], //vec![Component::default(); templ_decl.sub_comps],
             vars: vec![F::zero(); templ_decl.vars],
+            mappings: templ_decl.mappings.clone(),
             field_stack: Default::default(),
             index_stack: Default::default(),
             body: Rc::clone(&templ_decl.body),
@@ -71,11 +75,13 @@ impl<F: PrimeField> Runnable<F> {
 
     fn from_fun_decl(fun_decl: &FunDecl) -> Self {
         Self {
+            symbol: fun_decl.symbol.clone(),
             output_signals: 0,
             input_signals: 0,
             has_output: false,
             signals: vec![],
             vars: vec![F::zero(); fun_decl.vars],
+            mappings: vec![],
             sub_components: vec![],
             field_stack: Default::default(),
             index_stack: Default::default(),
@@ -142,14 +148,6 @@ impl<F: PrimeField> Runnable<F> {
                     let index = self.pop_index();
                     self.push_field(self.vars[index]);
                 }
-                compiler::MpcOpCode::LoadVars => {
-                    let start = self.pop_index();
-                    let end = self.pop_index();
-                    let vals = self.vars[start..end].iter().cloned().collect_vec();
-                    vals.into_iter().for_each(|var| {
-                        self.push_field(var);
-                    });
-                }
                 compiler::MpcOpCode::StoreVar => {
                     let index = self.pop_index();
                     let signal = self.pop_field();
@@ -162,7 +160,7 @@ impl<F: PrimeField> Runnable<F> {
                         self.vars[index + amount - i - 1] = self.pop_field();
                     });
                 }
-                compiler::MpcOpCode::Call(symbol) => {
+                compiler::MpcOpCode::Call(symbol, return_vals) => {
                     let fun_decl = fun_decls.get(symbol).unwrap();
                     for params in fun_decl.params.iter() {
                         assert!(
@@ -171,12 +169,23 @@ impl<F: PrimeField> Runnable<F> {
                         );
                     }
                     let mut callable = Runnable::<F>::from_fun_decl(fun_decl);
-                    let to_copy = self.field_stack.len() - fun_decl.params.len();
+                    println!(
+                        "trying to {} - {}",
+                        self.field_stack.len(),
+                        fun_decl.params.len()
+                    );
+                    let to_copy = if self.field_stack.len() < fun_decl.params.len() {
+                        0
+                    } else {
+                        self.field_stack.len() - fun_decl.params.len()
+                    };
 
                     //copy the parameters
                     for (idx, param) in self.field_stack[to_copy..].iter().enumerate() {
                         callable.vars[idx] = *param;
                     }
+                    //set size of return value
+                    callable.output_signals = *return_vals;
                     callable.run(fun_decls, templ_decls, constant_table);
                     //copy the return value
                     for signal in callable.field_stack {
@@ -190,26 +199,29 @@ impl<F: PrimeField> Runnable<F> {
                         self.sub_components[index + i] = Some(Runnable::init(templ_decl));
                     }
                 }
-                compiler::MpcOpCode::OutputSubComp => {
+                compiler::MpcOpCode::OutputSubComp(mapped, signal_code) => {
                     //we have to compute the output signals if we did not do that already
                     let sub_comp_index = self.pop_index();
-                    let index = self.pop_index();
+                    let mut index = self.pop_index();
                     //check whether we have to compute the output
                     let mut component = self.sub_components[sub_comp_index].take().unwrap();
                     if !component.has_output {
                         component.run(fun_decls, templ_decls, constant_table);
                     }
+                    if *mapped {
+                        index += component.mappings[*signal_code];
+                    }
                     let result = component.signals[index];
                     self.sub_components[sub_comp_index] = Some(component);
                     self.push_field(result);
                 }
-                compiler::MpcOpCode::InputSubComp(mapped) => {
+                compiler::MpcOpCode::InputSubComp(mapped, signal_code) => {
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
                     let signal = self.pop_field();
                     let mut component = self.sub_components[sub_comp_index].take().unwrap();
                     if *mapped {
-                        index += component.output_signals;
+                        index += component.mappings[*signal_code];
                     }
                     component.signals[index] = signal;
                     self.sub_components[sub_comp_index] = Some(component);
@@ -242,7 +254,18 @@ impl<F: PrimeField> Runnable<F> {
                 compiler::MpcOpCode::Div => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(lhs / rhs);
+                    if rhs == F::zero() {
+                        panic!("div by zero");
+                    } else if rhs == F::one() {
+                        self.push_field(lhs);
+                    } else {
+                        self.push_field(lhs / rhs);
+                    }
+                }
+                compiler::MpcOpCode::IntDiv => {
+                    let rhs = to_usize!(self.pop_field());
+                    let lhs = to_usize!(self.pop_field());
+                    self.push_field(to_field!(lhs / rhs));
                 }
                 compiler::MpcOpCode::Lt => {
                     let rhs = self.pop_field();
@@ -289,7 +312,15 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_field(F::zero());
                     }
                 }
-                compiler::MpcOpCode::Ne => todo!(),
+                compiler::MpcOpCode::Neq => {
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    if lhs != rhs {
+                        self.push_field(F::one());
+                    } else {
+                        self.push_field(F::zero());
+                    }
+                }
                 compiler::MpcOpCode::ShiftR => {
                     let rhs = to_usize!(self.pop_field());
                     let lhs = to_bigint!(self.pop_field());
@@ -300,7 +331,6 @@ impl<F: PrimeField> Runnable<F> {
                     let lhs = to_bigint!(self.pop_field());
                     self.push_field(to_field!(lhs << rhs));
                 }
-                compiler::MpcOpCode::Neq => todo!(),
                 compiler::MpcOpCode::BoolOr => todo!(),
                 compiler::MpcOpCode::BoolAnd => {
                     let rhs = to_usize!(self.pop_field());
@@ -368,6 +398,15 @@ impl<F: PrimeField> Runnable<F> {
                     //we are done
                     //just return
                     self.has_output = true;
+                    break;
+                }
+                compiler::MpcOpCode::ReturnFun => {
+                    let start = self.pop_index();
+                    let end = self.output_signals;
+                    let vals = self.vars[start..start + end].iter().cloned().collect_vec();
+                    vals.into_iter().for_each(|var| {
+                        self.push_field(var);
+                    });
                     break;
                 }
                 compiler::MpcOpCode::Panic(message) => panic!("{message}"),
@@ -562,8 +601,8 @@ mod tests {
     }
 
     #[test]
-    fn poseidon() {
-        let file = "../test_vectors/circuits/poseidon_hasher.circom";
+    fn poseidon1() {
+        let file = "../test_vectors/circuits/poseidon_hasher1.circom";
         let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
             .link_library("../test_vectors/circuits/libs/");
         let result = builder
@@ -577,6 +616,81 @@ mod tests {
                 "19065150524771031435284970883882288895168425523179566388456001105768498065277"
             )
             .unwrap()]
+        );
+    }
+
+    #[test]
+    fn poseidon2() {
+        let file = "../test_vectors/circuits/poseidon_hasher2.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let result = builder.build().parse().unwrap().run(vec![
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+        ]);
+        assert_eq!(
+            result,
+            vec![ark_bn254::Fr::from_str(
+                "12583541437132735734108669866114103169564651237895298778035846191048104863326"
+            )
+            .unwrap()]
+        );
+    }
+
+    #[test]
+    fn poseidon16() {
+        let file = "../test_vectors/circuits/poseidon_hasher16.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let result = builder.build().parse().unwrap().run(
+            (0..16)
+                .map(|i| ark_bn254::Fr::from_str(i.to_string().as_str()).unwrap())
+                .collect_vec(),
+        );
+        assert_eq!(
+            result,
+            vec![ark_bn254::Fr::from_str(
+                "12416070427041714118890402457152010846953662431720703103496516574407903181398"
+            )
+            .unwrap()]
+        );
+    }
+
+    #[test]
+    fn eddsa_verify() {
+        let file = "../test_vectors/circuits/eddsa_verify.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let result = builder.build().parse().unwrap().run(vec![
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("2").unwrap(),
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("4").unwrap(),
+            ark_bn254::Fr::from_str("5").unwrap(),
+            ark_bn254::Fr::from_str("6").unwrap(),
+        ]);
+
+        assert_eq!(
+            result,
+            vec![
+                ark_bn254::Fr::from_str(
+                    "2763488322167937039616325905516046217694264098671987087929565332380420898366"
+                )
+                .unwrap(),
+                ark_bn254::Fr::from_str(
+                    "2925416330664408197684231514117296356864480091858857935805219172378067397648"
+                )
+                .unwrap(),
+                ark_bn254::Fr::from_str(
+                    "15305195750036305661220525648961313310481046260814497672243197092298550508693"
+                )
+                .unwrap(),
+                ark_bn254::Fr::from_str(
+                    "7063342465777781127300100846030462898353260585544312659291125182526882563299"
+                )
+                .unwrap(),
+            ]
         );
     }
 }

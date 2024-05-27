@@ -35,6 +35,8 @@ template EdDSAPoseidonVerifier() {
 
     signal input M;
 
+    signal output out[4];
+
     var i;
 
 // Ensure S<Subgroup Order
@@ -120,4 +122,8 @@ template EdDSAPoseidonVerifier() {
     eqCheckY.enabled <== enabled;
     eqCheckY.in[0] <== mulFix.out[1];
     eqCheckY.in[1] <== addRight.yout;
+    out[0] <== mulFix.out[0];
+    out[1] <== addRight.xout;
+    out[2] <== mulFix.out[1];
+    out[3] <== addRight.yout;
 }
