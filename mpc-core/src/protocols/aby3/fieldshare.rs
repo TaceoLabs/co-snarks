@@ -6,6 +6,7 @@ pub struct Aby3PrimeFieldShare<F: PrimeField> {
     pub(crate) a: F,
     pub(crate) b: F,
 }
+
 impl<F: PrimeField> Aby3PrimeFieldShare<F> {
     pub fn new(a: F, b: F) -> Self {
         Self { a, b }

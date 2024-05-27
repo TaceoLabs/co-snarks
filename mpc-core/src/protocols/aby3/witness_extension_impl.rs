@@ -5,6 +5,7 @@ use ark_ff::PrimeField;
 pub enum Aby3VmType<F: PrimeField> {
     Public(F),
     Shared(Aby3PrimeFieldShare<F>),
+    BitShared,
 }
 
 impl<F: PrimeField> Aby3VmType<F> {
@@ -18,6 +19,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 Aby3VmType::Shared(party.add_with_public(&b, &a))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => Aby3VmType::Shared(party.add(&a, &b)),
+            (_, _) => todo!("BitShared not yet implemented"),
         }
     }
 
@@ -31,6 +33,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 Aby3VmType::Shared(party.add_with_public(&b, &-a))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => Aby3VmType::Shared(party.sub(&a, &b)),
+            (_, _) => todo!("BitShared not yet implemented"),
         }
     }
 
@@ -46,6 +49,7 @@ impl<F: PrimeField> Aby3VmType<F> {
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 Aby3VmType::Shared(party.mul(&a, &b)?)
             }
+            (_, _) => todo!("BitShared not yet implemented"),
         };
         Ok(res)
     }
@@ -54,6 +58,7 @@ impl<F: PrimeField> Aby3VmType<F> {
         match a {
             Aby3VmType::Public(a) => Aby3VmType::Public(-a),
             Aby3VmType::Shared(a) => Aby3VmType::Shared(party.neg(&a)),
+            _ => todo!("BitShared not yet implemented"),
         }
     }
 }

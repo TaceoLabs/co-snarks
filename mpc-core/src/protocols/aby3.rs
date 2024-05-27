@@ -3,8 +3,9 @@ use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
 use itertools::{izip, Itertools};
+use num_bigint::BigUint;
 use rand::{Rng, SeedableRng};
-use std::{marker::PhantomData, thread, time::Duration};
+use std::{array, marker::PhantomData, thread, time::Duration};
 
 use crate::{
     traits::{
@@ -19,6 +20,7 @@ use self::{
     pointshare::Aby3PointShare,
 };
 
+pub mod a2b;
 pub mod fieldshare;
 pub mod id;
 pub mod network;
@@ -512,6 +514,13 @@ impl Aby3CorrelatedRng {
     pub fn random_ecs<C: CurveGroup>(&mut self) -> (C, C) {
         let a = C::rand(&mut self.rng1);
         let b = C::rand(&mut self.rng2);
+        (a, b)
+    }
+
+    pub fn random_biguint<F: PrimeField>(&mut self) -> (BigUint, BigUint) {
+        let limbsize = (F::MODULUS_BIT_SIZE + 31) / 32;
+        let a = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
+        let b = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
         (a, b)
     }
 }
