@@ -35,9 +35,7 @@ type StackFrame<F> = Vec<F>;
 
 #[derive(Default, Clone)]
 struct Runnable<F: PrimeField> {
-    //investigate later if we need stack frames
-    //like that or if a single stack frame is enough??
-    //depends on how complex functions work
+    #[allow(dead_code)]
     symbol: String,
     field_stack: StackFrame<F>,
     index_stack: StackFrame<usize>,
@@ -169,11 +167,6 @@ impl<F: PrimeField> Runnable<F> {
                         );
                     }
                     let mut callable = Runnable::<F>::from_fun_decl(fun_decl);
-                    println!(
-                        "trying to {} - {}",
-                        self.field_stack.len(),
-                        fun_decl.params.len()
-                    );
                     let to_copy = self.field_stack.len() - fun_decl.params.len();
 
                     //copy the parameters
@@ -452,7 +445,7 @@ mod tests {
     use self::compiler::CompilerBuilder;
 
     use super::*;
-    use std::{str::FromStr, time::Duration};
+    use std::str::FromStr;
     #[test]
     fn mul2() {
         let file = "../test_vectors/circuits/multiplier2.circom";
@@ -505,7 +498,6 @@ mod tests {
         assert_eq!(result, vec![ark_bn254::Fr::from_str("23").unwrap()]);
     }
 
-    #[ignore = "currently a bug with copy of args"]
     #[test]
     fn functions() {
         let file = "../test_vectors/circuits/functions.circom";

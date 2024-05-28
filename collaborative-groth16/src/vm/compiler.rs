@@ -83,7 +83,9 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::LoadVar => "LOAD_VAR_OP".to_owned(),
             MpcOpCode::StoreVar => "STORE_VAR_OP".to_owned(),
             MpcOpCode::StoreVars => "STORE_VARS_OP".to_owned(),
-            MpcOpCode::Call(symbol, return_vals) => format!("CALL_OP {symbol} {return_vals}"),
+            MpcOpCode::Call(symbol, return_vals) => {
+                format!("CALL_OP {symbol} {return_vals}")
+            }
             MpcOpCode::CreateCmp(header, amount) => format!("CREATE_CMP_OP {} [{amount}]", header),
             MpcOpCode::Assert => "ASSERT_OP".to_owned(),
             MpcOpCode::Add => "ADD_OP".to_owned(),
@@ -200,6 +202,7 @@ impl FunDecl {
 }
 
 impl TemplateDecl {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         symbol: String,
         input_signals: usize,
@@ -509,17 +512,23 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn handle_call_bucket(&mut self, call_bucket: &CallBucket) {
-        //todo check what argument types mean
         call_bucket
             .arguments
             .iter()
-            .for_each(|inst| self.handle_instruction(inst));
+            .enumerate()
+            .for_each(|(idx, inst)| {
+                debug_assert_eq!(
+                    call_bucket.argument_types[idx].size, 1,
+                    "TODO argument type size is > 1"
+                );
+                self.handle_instruction(inst);
+            });
         match &call_bucket.return_info {
             ReturnType::Intermediate { op_aux_no: _ } => todo!(),
             ReturnType::Final(final_data) => {
                 if final_data.context.size == 1 {
-                    self.emit_store_opcodes(&final_data.dest, &final_data.dest_address_type);
                     self.emit_opcode(MpcOpCode::Call(call_bucket.symbol.clone(), 1));
+                    self.emit_store_opcodes(&final_data.dest, &final_data.dest_address_type);
                 } else {
                     match &final_data.dest {
                         LocationRule::Indexed {
