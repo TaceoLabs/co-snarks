@@ -397,7 +397,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     fn handle_return_bucket(&mut self, return_bucket: &ReturnBucket) {
         if return_bucket.with_size == 1 {
             self.handle_instruction(&return_bucket.value);
-            self.emit_opcode(MpcOpCode::Return);
+            self.emit_opcode(MpcOpCode::ReturnFun);
         } else {
             //unwrap the return value instruction and get the index
             if let Instruction::Load(load_bucket) = &*return_bucket.value {

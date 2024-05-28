@@ -37,9 +37,11 @@ type StackFrame<F> = Vec<F>;
 struct Runnable<F: PrimeField> {
     #[allow(dead_code)]
     symbol: String,
-    field_stack: StackFrame<F>,
-    index_stack: StackFrame<usize>,
-    set_input_signals: usize,
+    field_stack: Vec<StackFrame<F>>,
+    index_stack: Vec<StackFrame<usize>>,
+    functions: Vec<FunctionCtx<F>>,
+    amount_vars: usize,
+    provided_input_signals: usize,
     input_signals: usize,
     output_signals: usize,
     /// the offset inside the signals array
@@ -47,46 +49,53 @@ struct Runnable<F: PrimeField> {
     /// all signals this component needs including all sub components
     total_signal_size: usize,
     signals: Rc<RefCell<Vec<F>>>,
-    vars: Vec<F>,
     mappings: Vec<usize>,
     sub_components: Vec<Option<Runnable<F>>>,
+    current_return_vals: usize,
     body: Rc<CodeBlock>,
+}
+
+#[derive(Default, Clone)]
+struct FunctionCtx<F: PrimeField> {
+    ip: usize,
+    return_vals: usize,
+    vars: Vec<F>,
+    body: Rc<CodeBlock>,
+}
+
+impl<F: PrimeField> FunctionCtx<F> {
+    fn new(ip: usize, return_vals: usize, vars: Vec<F>, body: Rc<CodeBlock>) -> Self {
+        Self {
+            ip,
+            return_vals,
+            vars,
+            body,
+        }
+    }
+
+    fn consume(self) -> (usize, usize, Vec<F>, Rc<CodeBlock>) {
+        (self.ip, self.return_vals, self.vars, self.body)
+    }
 }
 
 impl<F: PrimeField> Runnable<F> {
     fn init(templ_decl: &TemplateDecl, signal_offset: usize, signals: Rc<RefCell<Vec<F>>>) -> Self {
         Self {
             symbol: templ_decl.symbol.clone(),
-            set_input_signals: 0,
+            provided_input_signals: 0,
             output_signals: templ_decl.output_signals,
             input_signals: templ_decl.input_signals,
             my_offset: signal_offset,
+            amount_vars: templ_decl.vars,
             total_signal_size: templ_decl.signal_size,
             signals,
             sub_components: vec![None; templ_decl.sub_components], //vec![Component::default(); templ_decl.sub_comps],
-            vars: vec![F::zero(); templ_decl.vars],
+            functions: vec![],
             mappings: templ_decl.mappings.clone(),
-            field_stack: Default::default(),
-            index_stack: Default::default(),
+            field_stack: vec![vec![]],
+            index_stack: vec![vec![]],
             body: Rc::clone(&templ_decl.body),
-        }
-    }
-
-    fn from_fun_decl(fun_decl: &FunDecl) -> Self {
-        Self {
-            symbol: fun_decl.symbol.clone(),
-            set_input_signals: 0,
-            output_signals: 0,
-            input_signals: 0,
-            total_signal_size: 0,
-            my_offset: 0,
-            signals: Rc::new(RefCell::new(vec![])),
-            vars: vec![F::zero(); fun_decl.vars],
-            mappings: vec![],
-            sub_components: vec![],
-            field_stack: Default::default(),
-            index_stack: Default::default(),
-            body: Rc::clone(&fun_decl.body),
+            current_return_vals: 0,
         }
     }
 
@@ -103,21 +112,21 @@ impl<F: PrimeField> Runnable<F> {
 
     #[inline]
     fn push_field(&mut self, val: F) {
-        self.field_stack.push(val)
+        self.field_stack.last_mut().unwrap().push(val)
     }
 
     #[inline]
     fn pop_field(&mut self) -> F {
-        self.field_stack.pop().unwrap()
+        self.field_stack.last_mut().unwrap().pop().unwrap()
     }
     #[inline]
     fn push_index(&mut self, val: usize) {
-        self.index_stack.push(val)
+        self.index_stack.last_mut().unwrap().push(val)
     }
 
     #[inline]
     fn pop_index(&mut self) -> usize {
-        self.index_stack.pop().unwrap()
+        self.index_stack.last_mut().unwrap().pop().unwrap()
     }
 
     pub fn run(
@@ -127,9 +136,11 @@ impl<F: PrimeField> Runnable<F> {
         constant_table: &[F],
     ) {
         let mut ip = 0;
-        let current_body = Rc::clone(&self.body);
+        let mut current_body = Rc::clone(&self.body);
+        let mut current_vars = vec![F::zero(); self.amount_vars];
         loop {
             let inst = &current_body[ip];
+            println!("DEBUG {ip:0>3}  | {inst}");
             match inst {
                 op_codes::MpcOpCode::PushConstant(index) => {
                     self.push_field(constant_table[*index]);
@@ -148,18 +159,18 @@ impl<F: PrimeField> Runnable<F> {
                 }
                 op_codes::MpcOpCode::LoadVar => {
                     let index = self.pop_index();
-                    self.push_field(self.vars[index]);
+                    self.push_field(current_vars[index]);
                 }
                 op_codes::MpcOpCode::StoreVar => {
                     let index = self.pop_index();
                     let signal = self.pop_field();
-                    self.vars[index] = signal;
+                    current_vars[index] = signal;
                 }
                 op_codes::MpcOpCode::StoreVars => {
                     let index = self.pop_index();
                     let amount = self.pop_index();
                     (0..amount).for_each(|i| {
-                        self.vars[index + amount - i - 1] = self.pop_field();
+                        current_vars[index + amount - i - 1] = self.pop_field();
                     });
                 }
                 op_codes::MpcOpCode::Call(symbol, return_vals) => {
@@ -170,20 +181,30 @@ impl<F: PrimeField> Runnable<F> {
                             "TODO we need to check how to call this and when this happens"
                         );
                     }
-                    let mut callable = Runnable::<F>::from_fun_decl(fun_decl);
-                    let to_copy = self.field_stack.len() - fun_decl.params.len();
-
+                    let mut func_vars = vec![F::zero(); fun_decl.vars];
+                    let to_copy = self.field_stack.last().unwrap().len() - fun_decl.params.len();
                     //copy the parameters
-                    for (idx, param) in self.field_stack[to_copy..].iter().enumerate() {
-                        callable.vars[idx] = *param;
+                    for (idx, param) in self.field_stack.last().unwrap()[to_copy..]
+                        .iter()
+                        .enumerate()
+                    {
+                        println!("setting {idx}<-{}", *param);
+                        func_vars[idx] = *param;
                     }
+                    std::mem::swap(&mut func_vars, &mut current_vars);
                     //set size of return value
-                    callable.output_signals = *return_vals;
-                    callable.run(fun_decls, templ_decls, constant_table);
-                    //copy the return value
-                    for signal in callable.field_stack {
-                        self.push_field(signal);
-                    }
+                    self.current_return_vals = *return_vals;
+                    self.index_stack.push(StackFrame::default());
+                    self.field_stack.push(StackFrame::default());
+                    self.functions.push(FunctionCtx::new(
+                        ip,
+                        self.current_return_vals,
+                        func_vars,
+                        Rc::clone(&current_body),
+                    ));
+                    current_body = Rc::clone(&fun_decl.body);
+                    ip = 0;
+                    continue;
                 }
                 op_codes::MpcOpCode::CreateCmp(symbol, amount) => {
                     let relative_offset = self.pop_index();
@@ -217,8 +238,8 @@ impl<F: PrimeField> Runnable<F> {
                         index += component.mappings[*signal_code];
                     }
                     component.signals.borrow_mut()[component.my_offset + index] = signal;
-                    component.set_input_signals += 1;
-                    if component.set_input_signals == component.input_signals {
+                    component.provided_input_signals += 1;
+                    if component.provided_input_signals == component.input_signals {
                         component.run(fun_decls, templ_decls, constant_table);
                     }
                     self.sub_components[sub_comp_index] = Some(component);
@@ -397,13 +418,32 @@ impl<F: PrimeField> Runnable<F> {
                     break;
                 }
                 op_codes::MpcOpCode::ReturnFun => {
-                    let start = self.pop_index();
-                    let end = self.output_signals;
-                    let vals = self.vars[start..start + end].iter().cloned().collect_vec();
-                    vals.into_iter().for_each(|var| {
-                        self.push_field(var);
-                    });
-                    break;
+                    //check if we have multiple return values
+                    if self.current_return_vals == 1 {
+                        //copy the return value
+                        let func_field_stack = self.field_stack.pop().unwrap();
+                        for signal in func_field_stack {
+                            self.push_field(signal);
+                        }
+                    } else {
+                        let start = self.pop_index();
+                        let end = self.current_return_vals;
+                        self.index_stack.pop().unwrap();
+                        self.field_stack.pop().unwrap();
+                        let vals = current_vars[start..start + end]
+                            .iter()
+                            .cloned()
+                            .collect_vec();
+                        vals.into_iter().for_each(|var| {
+                            self.push_field(var);
+                        });
+                    }
+                    let (old_ip, old_return_vals, mut old_vars, old_body) =
+                        self.functions.pop().unwrap().consume();
+                    ip = old_ip;
+                    self.current_return_vals = old_return_vals;
+                    std::mem::swap(&mut current_vars, &mut old_vars);
+                    current_body = old_body;
                 }
                 op_codes::MpcOpCode::Log(line, amount) => {
                     //for now we only want expr log
