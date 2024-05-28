@@ -5,7 +5,7 @@ use eyre::{bail, Report};
 use itertools::{izip, Itertools};
 use num_bigint::BigUint;
 use rand::{Rng, SeedableRng};
-use std::{array, marker::PhantomData, thread, time::Duration};
+use std::{marker::PhantomData, thread, time::Duration};
 
 use crate::{
     traits::{
