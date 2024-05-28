@@ -343,7 +343,7 @@ impl<N: Aby3Network, P: Pairing> SharedWitness<Aby3Protocol<P::ScalarField, N>, 
         public_inputs: &[P::ScalarField],
         rng: &mut R,
     ) -> [Self; 3] {
-        let [share1, share2, share3] = aby3::utils::share_field_elements(&witness, rng);
+        let [share1, share2, share3] = aby3::utils::share_field_elements(witness, rng);
         let witness1 = Self {
             public_inputs: public_inputs.to_vec(),
             witness: share1,

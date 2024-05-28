@@ -1,4 +1,4 @@
-mod circom_reduction;
+pub mod circom_reduction;
 pub mod circuit;
 pub mod groth16;
 mod serde_compat;
