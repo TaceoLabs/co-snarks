@@ -328,8 +328,8 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             ^ y_msb.b.iter_u64_digits().next().unwrap())
             & 1;
         let ov = Aby3BigUintShare::new(
-            BigUint::from(ov_a) << Self::BITLEN,
-            BigUint::from(ov_b) << Self::BITLEN,
+            (BigUint::from(ov_a) << Self::BITLEN) - BigUint::one(),
+            (BigUint::from(ov_b) << Self::BITLEN) - BigUint::one(),
         );
 
         // one big multiplexer
