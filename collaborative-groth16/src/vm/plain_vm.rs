@@ -1,13 +1,14 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::{collections::HashMap, vec};
 
+use super::compiler::{self, CodeBlock, CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl};
 use ark_ec::pairing::Pairing;
+use ark_ff::One;
 use ark_ff::PrimeField;
 use circom_compiler::num_bigint::BigUint;
 use color_eyre::eyre::eyre;
 use itertools::Itertools;
-
-use super::compiler::{self, CodeBlock, CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl};
 
 macro_rules! to_field {
     ($big_int:expr) => {
@@ -38,10 +39,14 @@ struct Runnable<F: PrimeField> {
     field_stack: StackFrame<F>,
     index_stack: StackFrame<usize>,
     set_input_signals: usize,
-    output_signals: usize,
     input_signals: usize,
+    output_signals: usize,
+    intermediate_signals: usize,
+    already_used_offset: usize,
     has_output: bool,
-    signals: Vec<F>,
+    signal_offset: usize,
+    signal_size: usize,
+    signals: Rc<RefCell<Vec<F>>>,
     vars: Vec<F>,
     mappings: Vec<usize>,
     sub_components: Vec<Option<Runnable<F>>>,
@@ -49,19 +54,21 @@ struct Runnable<F: PrimeField> {
 }
 
 impl<F: PrimeField> Runnable<F> {
-    fn init(templ_decl: &TemplateDecl) -> Self {
+    fn init(templ_decl: &TemplateDecl, signal_offset: usize, signals: Rc<RefCell<Vec<F>>>) -> Self {
         Self {
             symbol: templ_decl.symbol.clone(),
             set_input_signals: 0,
             output_signals: templ_decl.output_signals,
             input_signals: templ_decl.input_signals,
+            intermediate_signals: templ_decl.intermediate_signals,
+            already_used_offset: templ_decl.output_signals
+                + templ_decl.input_signals
+                + templ_decl.intermediate_signals
+                + signal_offset,
             has_output: false,
-            signals: vec![
-                F::zero();
-                templ_decl.input_signals
-                    + templ_decl.output_signals
-                    + templ_decl.intermediate_signals
-            ],
+            signal_offset,
+            signal_size: templ_decl.signal_size,
+            signals,
             sub_components: vec![None; templ_decl.sub_components], //vec![Component::default(); templ_decl.sub_comps],
             vars: vec![F::zero(); templ_decl.vars],
             mappings: templ_decl.mappings.clone(),
@@ -76,9 +83,13 @@ impl<F: PrimeField> Runnable<F> {
             symbol: fun_decl.symbol.clone(),
             set_input_signals: 0,
             output_signals: 0,
+            already_used_offset: 0,
             input_signals: 0,
+            intermediate_signals: 0,
+            signal_size: 0,
             has_output: false,
-            signals: vec![],
+            signal_offset: 0,
+            signals: Rc::new(RefCell::new(vec![])),
             vars: vec![F::zero(); fun_decl.vars],
             mappings: vec![],
             sub_components: vec![],
@@ -94,7 +105,8 @@ impl<F: PrimeField> Runnable<F> {
             input_signals.len(),
             "You have to provide the input signals"
         );
-        self.signals[self.output_signals..self.output_signals + self.input_signals]
+        let mut signals = self.signals.borrow_mut();
+        signals[1 + self.output_signals..1 + self.output_signals + self.input_signals]
             .copy_from_slice(&input_signals);
     }
 
@@ -134,13 +146,14 @@ impl<F: PrimeField> Runnable<F> {
                 compiler::MpcOpCode::PushIndex(index) => self.push_index(*index),
                 compiler::MpcOpCode::LoadSignal => {
                     let index = self.pop_index();
-                    self.push_field(self.signals[index]);
+                    let signal = self.signals.borrow()[self.signal_offset + index];
+                    self.push_field(signal);
                 }
                 compiler::MpcOpCode::StoreSignal => {
                     //get index
                     let index = self.pop_index();
                     let signal = self.pop_field();
-                    self.signals[index] = signal;
+                    self.signals.borrow_mut()[self.signal_offset + index] = signal;
                 }
                 compiler::MpcOpCode::LoadVar => {
                     let index = self.pop_index();
@@ -182,17 +195,20 @@ impl<F: PrimeField> Runnable<F> {
                     }
                 }
                 compiler::MpcOpCode::CreateCmp(symbol, amount) => {
+                    let relative_offset = self.pop_index();
                     let index = self.pop_index();
                     let templ_decl = templ_decls.get(symbol).unwrap();
+                    let mut offset = self.signal_offset + relative_offset;
                     for i in 0..*amount {
-                        self.sub_components[index + i] = Some(Runnable::init(templ_decl));
+                        let sub_component =
+                            Runnable::init(templ_decl, offset, Rc::clone(&self.signals));
+                        offset += sub_component.signal_size;
+                        self.sub_components[index + i] = Some(sub_component);
                     }
                 }
                 compiler::MpcOpCode::OutputSubComp(mapped, signal_code) => {
-                    //we have to compute the output signals if we did not do that already
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
-                    //check whether we have to compute the output
                     let component = self.sub_components[sub_comp_index].take().unwrap();
                     if !component.has_output {
                         panic!("We did not run already????");
@@ -200,7 +216,7 @@ impl<F: PrimeField> Runnable<F> {
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
-                    let result = component.signals[index];
+                    let result = component.signals.borrow()[component.signal_offset + index];
                     self.sub_components[sub_comp_index] = Some(component);
                     self.push_field(result);
                 }
@@ -212,7 +228,7 @@ impl<F: PrimeField> Runnable<F> {
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
-                    component.signals[index] = signal;
+                    component.signals.borrow_mut()[component.signal_offset + index] = signal;
                     component.set_input_signals += 1;
                     if component.set_input_signals == component.input_signals {
                         debug_assert!(!component.has_output);
@@ -418,6 +434,8 @@ impl<F: PrimeField> Runnable<F> {
 }
 
 pub struct PlainWitnessExtension<P: Pairing> {
+    signals: Rc<RefCell<Vec<P::ScalarField>>>,
+    signal_to_witness: Vec<usize>,
     constant_table: Vec<P::ScalarField>,
     fun_decls: HashMap<String, FunDecl>,
     templ_decls: HashMap<String, TemplateDecl>,
@@ -426,7 +444,11 @@ pub struct PlainWitnessExtension<P: Pairing> {
 
 impl<P: Pairing> PlainWitnessExtension<P> {
     pub fn new(parser: CollaborativeCircomCompilerParsed<P>) -> Self {
+        let mut signals = vec![P::ScalarField::default(); parser.amount_signals];
+        signals[0] = P::ScalarField::one();
         Self {
+            signals: Rc::new(RefCell::new(signals)),
+            signal_to_witness: parser.signal_to_witness,
             main: parser.main,
             constant_table: parser.constant_table,
             fun_decls: parser.fun_decls,
@@ -434,11 +456,19 @@ impl<P: Pairing> PlainWitnessExtension<P> {
         }
     }
 
-    pub fn run(&mut self, input_signals: Vec<P::ScalarField>) -> Vec<P::ScalarField> {
+    pub fn run(self, input_signals: Vec<P::ScalarField>) -> Vec<P::ScalarField> {
         let main_templ = self.templ_decls.get(&self.main).unwrap().clone();
-        let mut main_component = Runnable::<P::ScalarField>::init(&main_templ);
+        let mut main_component =
+            Runnable::<P::ScalarField>::init(&main_templ, 1, Rc::clone(&self.signals));
         main_component.set_input_signals(input_signals);
         main_component.run(&self.fun_decls, &self.templ_decls, &self.constant_table);
-        main_component.signals[..main_component.output_signals].to_vec()
+        std::mem::drop(main_component);
+        let ref_cell = Rc::try_unwrap(self.signals).expect("everyone else was dropped");
+        let signals = RefCell::into_inner(ref_cell);
+        let mut witness = Vec::with_capacity(self.signal_to_witness.len());
+        for idx in self.signal_to_witness {
+            witness.push(signals[idx]);
+        }
+        witness
     }
 }
