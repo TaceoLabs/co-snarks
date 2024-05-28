@@ -499,6 +499,7 @@ mod field_share {
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
         let is_result = result1.get_a() ^ result2.get_a() ^ result3.get_a();
+
         let should_result = x.into();
         assert_eq!(is_result, should_result);
         let is_result_f: ark_bn254::Fr = is_result.into();

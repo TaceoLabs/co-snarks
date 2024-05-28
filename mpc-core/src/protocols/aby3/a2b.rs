@@ -22,8 +22,8 @@ impl Aby3BigUintShare {
     fn xor_with_public(&self, a: &BigUint, id: PartyID) -> Aby3BigUintShare {
         let mut res = self.to_owned();
         match id {
-            PartyID::ID0 => res.a += a,
-            PartyID::ID1 => res.b += a,
+            PartyID::ID0 => res.a ^= a,
+            PartyID::ID1 => res.b ^= a,
             PartyID::ID2 => {}
         }
         res
