@@ -1,0 +1,7 @@
+{
+  "circom-types": "0.0.1",
+  "collaborative-circom": "0.0.1",
+  "collaborative-groth16": "0.0.1",
+  "mpc-core": "0.0.1",
+  "mpc-net": "0.0.1"
+}
