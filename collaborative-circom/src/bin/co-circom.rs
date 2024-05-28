@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter},
     path::PathBuf,
-    process::{ExitCode, ExitStatus},
+    process::ExitCode,
 };
 
 use ark_bn254::Bn254;
@@ -132,7 +132,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::SplitWitness {
             input,
             r1cs,
-            protocol,
+            protocol: _,
             out_dir,
         } => {
             file_utils::check_file_exists(&input)?;
@@ -199,7 +199,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             circuit,
             protocol: _,
             config,
-            out,
+            out: _,
         } => {
             file_utils::check_file_exists(&input)?;
             file_utils::check_file_exists(&circuit)?;
@@ -220,10 +220,10 @@ fn main() -> color_eyre::Result<ExitCode> {
             // execute witness generation in MPC
 
             // write result to output file
-            let witness_share: SharedWitness<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254> =
-                todo!();
-            let out_file = BufWriter::new(std::fs::File::create(out)?);
-            bincode::serialize_into(out_file, &witness_share)?;
+            // let witness_share: SharedWitness<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254> =
+            //     todo!();
+            // let out_file = BufWriter::new(std::fs::File::create(out)?);
+            // bincode::serialize_into(out_file, &witness_share)?;
             tracing::info!("Witness generation finished successfully")
         }
         Commands::GenerateProof {
