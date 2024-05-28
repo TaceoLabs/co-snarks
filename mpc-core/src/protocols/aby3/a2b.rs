@@ -1,5 +1,5 @@
 use super::{id::PartyID, network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol, IoResult};
-use ark_ff::{One, PrimeField};
+use ark_ff::{One, PrimeField, Zero};
 use itertools::Itertools;
 use num_bigint::BigUint;
 
@@ -224,6 +224,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let mut p = &x1 ^ &x2;
         let mut g = self.and(x1, x2)?;
         let s_ = p.to_owned();
+
         for i in 0..d {
             let shift = 1 << i;
             let mut p_ = p.to_owned();
@@ -231,7 +232,6 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             let mask = (BigUint::from(1u64) << shift) - BigUint::one();
             p_ &= &mask;
             g_ &= &mask;
-
             let p_shift = &p >> shift;
 
             let (r1, r2) = self.and_twice(p_shift, g_, p_)?;
@@ -259,7 +259,6 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             let mask = (BigUint::from(1u64) << shift) - BigUint::one();
             p_ &= &mask;
             g_ &= &mask;
-
             let p_shift = &p >> shift;
 
             let (r1, r2) = self.and_twice(p_shift, g_, p_)?;
@@ -327,10 +326,18 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let ov_b = (x_msb.b.iter_u64_digits().next().unwrap()
             ^ y_msb.b.iter_u64_digits().next().unwrap())
             & 1;
-        let ov = Aby3BigUintShare::new(
-            (BigUint::from(ov_a) << Self::BITLEN) - BigUint::one(),
-            (BigUint::from(ov_b) << Self::BITLEN) - BigUint::one(),
-        );
+
+        let ov_a = if ov_a == 1 {
+            (BigUint::from(ov_a) << Self::BITLEN) - BigUint::one()
+        } else {
+            BigUint::zero()
+        };
+        let ov_b = if ov_b == 1 {
+            (BigUint::from(ov_b) << Self::BITLEN) - BigUint::one()
+        } else {
+            BigUint::zero()
+        };
+        let ov = Aby3BigUintShare::new(ov_a, ov_b);
 
         // one big multiplexer
         let res = self.cmux(ov, y, x)?;
