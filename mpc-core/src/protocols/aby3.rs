@@ -520,7 +520,7 @@ impl Aby3CorrelatedRng {
     pub fn random_biguint<F: PrimeField>(&mut self) -> (BigUint, BigUint) {
         let limbsize = (F::MODULUS_BIT_SIZE + 31) / 32;
         let a = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
-        let b = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
+        let b = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
         (a, b)
     }
 }
