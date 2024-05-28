@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::{collections::HashMap, vec};
 
-use super::compiler::{self, CodeBlock, CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl};
+use super::compiler::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl};
+use super::op_codes::{self, CodeBlock};
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::PrimeField;
@@ -41,11 +42,10 @@ struct Runnable<F: PrimeField> {
     set_input_signals: usize,
     input_signals: usize,
     output_signals: usize,
-    intermediate_signals: usize,
-    already_used_offset: usize,
-    has_output: bool,
-    signal_offset: usize,
-    signal_size: usize,
+    /// the offset inside the signals array
+    my_offset: usize,
+    /// all signals this component needs including all sub components
+    total_signal_size: usize,
     signals: Rc<RefCell<Vec<F>>>,
     vars: Vec<F>,
     mappings: Vec<usize>,
@@ -60,14 +60,8 @@ impl<F: PrimeField> Runnable<F> {
             set_input_signals: 0,
             output_signals: templ_decl.output_signals,
             input_signals: templ_decl.input_signals,
-            intermediate_signals: templ_decl.intermediate_signals,
-            already_used_offset: templ_decl.output_signals
-                + templ_decl.input_signals
-                + templ_decl.intermediate_signals
-                + signal_offset,
-            has_output: false,
-            signal_offset,
-            signal_size: templ_decl.signal_size,
+            my_offset: signal_offset,
+            total_signal_size: templ_decl.signal_size,
             signals,
             sub_components: vec![None; templ_decl.sub_components], //vec![Component::default(); templ_decl.sub_comps],
             vars: vec![F::zero(); templ_decl.vars],
@@ -83,12 +77,9 @@ impl<F: PrimeField> Runnable<F> {
             symbol: fun_decl.symbol.clone(),
             set_input_signals: 0,
             output_signals: 0,
-            already_used_offset: 0,
             input_signals: 0,
-            intermediate_signals: 0,
-            signal_size: 0,
-            has_output: false,
-            signal_offset: 0,
+            total_signal_size: 0,
+            my_offset: 0,
             signals: Rc::new(RefCell::new(vec![])),
             vars: vec![F::zero(); fun_decl.vars],
             mappings: vec![],
@@ -140,38 +131,38 @@ impl<F: PrimeField> Runnable<F> {
         loop {
             let inst = &current_body[ip];
             match inst {
-                compiler::MpcOpCode::PushConstant(index) => {
+                op_codes::MpcOpCode::PushConstant(index) => {
                     self.push_field(constant_table[*index]);
                 }
-                compiler::MpcOpCode::PushIndex(index) => self.push_index(*index),
-                compiler::MpcOpCode::LoadSignal => {
+                op_codes::MpcOpCode::PushIndex(index) => self.push_index(*index),
+                op_codes::MpcOpCode::LoadSignal => {
                     let index = self.pop_index();
-                    let signal = self.signals.borrow()[self.signal_offset + index];
+                    let signal = self.signals.borrow()[self.my_offset + index];
                     self.push_field(signal);
                 }
-                compiler::MpcOpCode::StoreSignal => {
+                op_codes::MpcOpCode::StoreSignal => {
                     //get index
                     let index = self.pop_index();
                     let signal = self.pop_field();
-                    self.signals.borrow_mut()[self.signal_offset + index] = signal;
+                    self.signals.borrow_mut()[self.my_offset + index] = signal;
                 }
-                compiler::MpcOpCode::LoadVar => {
+                op_codes::MpcOpCode::LoadVar => {
                     let index = self.pop_index();
                     self.push_field(self.vars[index]);
                 }
-                compiler::MpcOpCode::StoreVar => {
+                op_codes::MpcOpCode::StoreVar => {
                     let index = self.pop_index();
                     let signal = self.pop_field();
                     self.vars[index] = signal;
                 }
-                compiler::MpcOpCode::StoreVars => {
+                op_codes::MpcOpCode::StoreVars => {
                     let index = self.pop_index();
                     let amount = self.pop_index();
                     (0..amount).for_each(|i| {
                         self.vars[index + amount - i - 1] = self.pop_field();
                     });
                 }
-                compiler::MpcOpCode::Call(symbol, return_vals) => {
+                op_codes::MpcOpCode::Call(symbol, return_vals) => {
                     let fun_decl = fun_decls.get(symbol).unwrap();
                     for params in fun_decl.params.iter() {
                         assert!(
@@ -194,33 +185,30 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_field(signal);
                     }
                 }
-                compiler::MpcOpCode::CreateCmp(symbol, amount) => {
+                op_codes::MpcOpCode::CreateCmp(symbol, amount) => {
                     let relative_offset = self.pop_index();
                     let index = self.pop_index();
                     let templ_decl = templ_decls.get(symbol).unwrap();
-                    let mut offset = self.signal_offset + relative_offset;
+                    let mut offset = self.my_offset + relative_offset;
                     for i in 0..*amount {
                         let sub_component =
                             Runnable::init(templ_decl, offset, Rc::clone(&self.signals));
-                        offset += sub_component.signal_size;
+                        offset += sub_component.total_signal_size;
                         self.sub_components[index + i] = Some(sub_component);
                     }
                 }
-                compiler::MpcOpCode::OutputSubComp(mapped, signal_code) => {
+                op_codes::MpcOpCode::OutputSubComp(mapped, signal_code) => {
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
                     let component = self.sub_components[sub_comp_index].take().unwrap();
-                    if !component.has_output {
-                        panic!("We did not run already????");
-                    }
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
-                    let result = component.signals.borrow()[component.signal_offset + index];
+                    let result = component.signals.borrow()[component.my_offset + index];
                     self.sub_components[sub_comp_index] = Some(component);
                     self.push_field(result);
                 }
-                compiler::MpcOpCode::InputSubComp(mapped, signal_code) => {
+                op_codes::MpcOpCode::InputSubComp(mapped, signal_code) => {
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
                     let signal = self.pop_field();
@@ -228,40 +216,39 @@ impl<F: PrimeField> Runnable<F> {
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
-                    component.signals.borrow_mut()[component.signal_offset + index] = signal;
+                    component.signals.borrow_mut()[component.my_offset + index] = signal;
                     component.set_input_signals += 1;
                     if component.set_input_signals == component.input_signals {
-                        debug_assert!(!component.has_output);
                         component.run(fun_decls, templ_decls, constant_table);
                     }
                     self.sub_components[sub_comp_index] = Some(component);
                 }
-                compiler::MpcOpCode::Assert => {
+                op_codes::MpcOpCode::Assert => {
                     let assertion = self.pop_field();
                     if assertion.is_zero() {
                         panic!("assertion failed");
                     }
                 }
-                compiler::MpcOpCode::Add => {
+                op_codes::MpcOpCode::Add => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     self.push_field(lhs + rhs);
                 }
-                compiler::MpcOpCode::Sub => {
+                op_codes::MpcOpCode::Sub => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     self.push_field(lhs - rhs);
                 }
-                compiler::MpcOpCode::Mul => {
+                op_codes::MpcOpCode::Mul => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     self.push_field(lhs * rhs);
                 }
-                compiler::MpcOpCode::Neg => {
+                op_codes::MpcOpCode::Neg => {
                     let x = self.pop_field();
                     self.push_field(-x);
                 }
-                compiler::MpcOpCode::Div => {
+                op_codes::MpcOpCode::Div => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     if rhs == F::zero() {
@@ -272,12 +259,12 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_field(lhs / rhs);
                     }
                 }
-                compiler::MpcOpCode::IntDiv => {
+                op_codes::MpcOpCode::IntDiv => {
                     let rhs = to_usize!(self.pop_field());
                     let lhs = to_usize!(self.pop_field());
                     self.push_field(to_field!(lhs / rhs));
                 }
-                compiler::MpcOpCode::Lt => {
+                op_codes::MpcOpCode::Lt => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     if lhs < rhs {
@@ -286,7 +273,7 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_field(F::zero());
                     }
                 }
-                compiler::MpcOpCode::Le => {
+                op_codes::MpcOpCode::Le => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     if lhs <= rhs {
@@ -295,7 +282,7 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_field(F::zero());
                     }
                 }
-                compiler::MpcOpCode::Gt => {
+                op_codes::MpcOpCode::Gt => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     if lhs > rhs {
@@ -304,7 +291,7 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_field(F::zero());
                     }
                 }
-                compiler::MpcOpCode::Ge => {
+                op_codes::MpcOpCode::Ge => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     if lhs >= rhs {
@@ -313,7 +300,7 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_field(F::zero());
                     }
                 }
-                compiler::MpcOpCode::Eq => {
+                op_codes::MpcOpCode::Eq => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     if lhs == rhs {
@@ -322,7 +309,7 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_field(F::zero());
                     }
                 }
-                compiler::MpcOpCode::Neq => {
+                op_codes::MpcOpCode::Neq => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
                     if lhs != rhs {
@@ -331,18 +318,18 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_field(F::zero());
                     }
                 }
-                compiler::MpcOpCode::ShiftR => {
+                op_codes::MpcOpCode::ShiftR => {
                     let rhs = to_usize!(self.pop_field());
                     let lhs = to_bigint!(self.pop_field());
                     self.push_field(to_field!(lhs >> rhs));
                 }
-                compiler::MpcOpCode::ShiftL => {
+                op_codes::MpcOpCode::ShiftL => {
                     let rhs = to_usize!(self.pop_field());
                     let lhs = to_bigint!(self.pop_field());
                     self.push_field(to_field!(lhs << rhs));
                 }
-                compiler::MpcOpCode::BoolOr => todo!(),
-                compiler::MpcOpCode::BoolAnd => {
+                op_codes::MpcOpCode::BoolOr => todo!(),
+                op_codes::MpcOpCode::BoolAnd => {
                     let rhs = to_usize!(self.pop_field());
                     let lhs = to_usize!(self.pop_field());
                     debug_assert!(rhs == 0 || rhs == 1);
@@ -353,32 +340,32 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_field(F::zero());
                     }
                 }
-                compiler::MpcOpCode::BitOr => {
+                op_codes::MpcOpCode::BitOr => {
                     let rhs = to_bigint!(self.pop_field());
                     let lhs = to_bigint!(self.pop_field());
                     self.push_field(to_field!(lhs | rhs));
                 }
-                compiler::MpcOpCode::BitAnd => {
+                op_codes::MpcOpCode::BitAnd => {
                     let rhs = to_bigint!(self.pop_field());
                     let lhs = to_bigint!(self.pop_field());
                     self.push_field(to_field!(lhs & rhs));
                 }
-                compiler::MpcOpCode::BitXOr => {
+                op_codes::MpcOpCode::BitXOr => {
                     let rhs = to_bigint!(self.pop_field());
                     let lhs = to_bigint!(self.pop_field());
                     self.push_field(to_field!(lhs ^ rhs));
                 }
-                compiler::MpcOpCode::AddIndex => {
+                op_codes::MpcOpCode::AddIndex => {
                     let rhs = self.pop_index();
                     let lhs = self.pop_index();
                     self.push_index(lhs + rhs);
                 }
-                compiler::MpcOpCode::MulIndex => {
+                op_codes::MpcOpCode::MulIndex => {
                     let rhs = self.pop_index();
                     let lhs = self.pop_index();
                     self.push_index(lhs * rhs);
                 }
-                compiler::MpcOpCode::ToIndex => {
+                op_codes::MpcOpCode::ToIndex => {
                     let signal = self.pop_field();
                     if signal.is_zero() {
                         self.push_index(0);
@@ -386,31 +373,30 @@ impl<F: PrimeField> Runnable<F> {
                         self.push_index(to_usize!(signal));
                     }
                 }
-                compiler::MpcOpCode::Jump(jump_forward) => {
-                    ip += *jump_forward;
+                op_codes::MpcOpCode::Jump(jump_forward) => {
+                    ip += jump_forward;
                     continue;
                 }
 
-                compiler::MpcOpCode::JumpBack(jump_backward) => {
-                    ip -= *jump_backward;
+                op_codes::MpcOpCode::JumpBack(jump_backward) => {
+                    ip -= jump_backward;
                     continue;
                 }
 
-                compiler::MpcOpCode::JumpIfFalse(jump_forward) => {
-                    let jump_to = *jump_forward;
+                op_codes::MpcOpCode::JumpIfFalse(jump_forward) => {
+                    let jump_to = jump_forward;
                     let cond = self.pop_field();
                     if cond.is_zero() {
                         ip += jump_to;
                         continue;
                     }
                 }
-                compiler::MpcOpCode::Return => {
+                op_codes::MpcOpCode::Return => {
                     //we are done
                     //just return
-                    self.has_output = true;
                     break;
                 }
-                compiler::MpcOpCode::ReturnFun => {
+                op_codes::MpcOpCode::ReturnFun => {
                     let start = self.pop_index();
                     let end = self.output_signals;
                     let vals = self.vars[start..start + end].iter().cloned().collect_vec();
@@ -419,8 +405,7 @@ impl<F: PrimeField> Runnable<F> {
                     });
                     break;
                 }
-                compiler::MpcOpCode::Panic(message) => panic!("{message}"),
-                compiler::MpcOpCode::Log(line, amount) => {
+                op_codes::MpcOpCode::Log(line, amount) => {
                     //for now we only want expr log
                     //string log not supported
                     for _ in 0..*amount {

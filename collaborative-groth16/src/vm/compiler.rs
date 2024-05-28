@@ -5,9 +5,8 @@ use circom_compiler::{
     intermediate_representation::{
         ir_interface::{
             AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket, CreateCmpBucket,
-            InputInformation, Instruction, LoadBucket, LocationRule, LogBucket, LogBucketArg,
-            LoopBucket, OperatorType, ReturnBucket, ReturnType, StatusInput, StoreBucket,
-            ValueBucket, ValueType,
+            Instruction, LoadBucket, LocationRule, LogBucket, LogBucketArg, LoopBucket,
+            OperatorType, ReturnBucket, ReturnType, StoreBucket, ValueBucket, ValueType,
         },
         InstructionList,
     },
@@ -20,114 +19,14 @@ use color_eyre::{
     Result,
 };
 use itertools::Itertools;
-use std::{cell::RefCell, collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
+use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
 
-use super::plain_vm::PlainWitnessExtension;
+use super::{
+    op_codes::{CodeBlock, MpcOpCode},
+    plain_vm::PlainWitnessExtension,
+};
 
 const DEFAULT_VERSION: &str = "2.0.0";
-
-pub type CodeBlock = Vec<MpcOpCode>;
-#[derive(Clone)]
-pub enum MpcOpCode {
-    PushConstant(usize),
-    PushIndex(usize),
-    LoadSignal,
-    StoreSignal,
-    LoadVar,
-    StoreVars,
-    StoreVar,
-    OutputSubComp(bool, usize),
-    InputSubComp(bool, usize),
-    CreateCmp(String, usize), //what else do we need?
-    Call(String, usize),
-    Return,
-    ReturnFun,
-    Assert,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    IntDiv,
-    Neg,
-    Lt,
-    Le,
-    Gt,
-    Ge,
-    Eq,
-    Neq,
-    BoolOr,
-    BoolAnd,
-    BitOr,
-    BitAnd,
-    BitXOr,
-    ShiftR,
-    ShiftL,
-    MulIndex,
-    AddIndex,
-    ToIndex,
-    Jump(usize),
-    JumpBack(usize),
-    JumpIfFalse(usize),
-    Panic(String),
-    Log(usize, usize),
-}
-
-impl std::fmt::Display for MpcOpCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let string = match self {
-            MpcOpCode::PushConstant(constant_index) => {
-                format!("PUSH_CONSTANT_OP {}", constant_index)
-            }
-            MpcOpCode::PushIndex(index) => format!("PUSH_INDEX_OP {}", index),
-            MpcOpCode::LoadSignal => "LOAD_SIGNAL_OP".to_owned(),
-            MpcOpCode::StoreSignal => "STORE_SIGNAL_OP".to_owned(),
-            MpcOpCode::LoadVar => "LOAD_VAR_OP".to_owned(),
-            MpcOpCode::StoreVar => "STORE_VAR_OP".to_owned(),
-            MpcOpCode::StoreVars => "STORE_VARS_OP".to_owned(),
-            MpcOpCode::Call(symbol, return_vals) => {
-                format!("CALL_OP {symbol} {return_vals}")
-            }
-            MpcOpCode::CreateCmp(header, amount) => format!("CREATE_CMP_OP {} [{amount}]", header),
-            MpcOpCode::Assert => "ASSERT_OP".to_owned(),
-            MpcOpCode::Add => "ADD_OP".to_owned(),
-            MpcOpCode::Sub => "SUB_OP".to_owned(),
-            MpcOpCode::Mul => "MUL_OP".to_owned(),
-            MpcOpCode::Div => "DIV_OP".to_owned(),
-            MpcOpCode::IntDiv => "INT_DIV_OP".to_owned(),
-            MpcOpCode::Neg => "NEG_OP".to_owned(),
-            MpcOpCode::Lt => "LESS_THAN_OP".to_owned(),
-            MpcOpCode::Le => "LESS_EQ_OP".to_owned(),
-            MpcOpCode::Gt => "GREATER_THAN_OP".to_owned(),
-            MpcOpCode::Ge => "GREATER_EQ_OP".to_owned(),
-            MpcOpCode::Eq => "IS_EQUAL_OP".to_owned(),
-            MpcOpCode::Neq => "NOT_EQUAL_OP".to_owned(),
-            MpcOpCode::BoolOr => "BOOL_OR_OP".to_owned(),
-            MpcOpCode::BoolAnd => "BOOL_AND_OP".to_owned(),
-            MpcOpCode::BitOr => "BIT_OR_OP".to_owned(),
-            MpcOpCode::BitAnd => "BIT_AND_OP".to_owned(),
-            MpcOpCode::BitXOr => "BIT_XOR_OP".to_owned(),
-            MpcOpCode::ShiftR => "RIGHT_SHIFT_OP".to_owned(),
-            MpcOpCode::ShiftL => "LEFT_SHIFT_OP".to_owned(),
-            MpcOpCode::AddIndex => "ADD_INDEX_OP".to_owned(),
-            MpcOpCode::MulIndex => "MUL_INDEX_OP".to_owned(),
-            MpcOpCode::ToIndex => "TO_INDEX_OP".to_owned(),
-            MpcOpCode::Jump(line) => format!("JUMP_OP {line}"),
-            MpcOpCode::JumpBack(line) => format!("JUMP_BACK_OP {line}"),
-            MpcOpCode::JumpIfFalse(line) => format!("JUMP_IF_FALSE_OP {line}"),
-            MpcOpCode::Return => "RETURN_OP".to_owned(),
-            MpcOpCode::ReturnFun => "RETURN_FUN_OP".to_owned(),
-            MpcOpCode::Panic(message) => format!("PANIC_OP {message}"),
-            MpcOpCode::OutputSubComp(mapped, signal_code) => {
-                format!("OUTPUT_SUB_COMP_OP {mapped} {signal_code}")
-            }
-            MpcOpCode::InputSubComp(mapped, signal_code) => {
-                format!("INPUT_SUB_COMP_OP {mapped} {signal_code}")
-            }
-            MpcOpCode::Log(line, amount) => format!("LOG {line} {amount}"),
-        };
-        f.write_str(&string)
-    }
-}
 
 pub struct CompilerBuilder<P: Pairing> {
     file: String,
@@ -179,7 +78,6 @@ pub(crate) struct TemplateDecl {
     pub(crate) symbol: String,
     pub(crate) input_signals: usize,
     pub(crate) output_signals: usize,
-    pub(crate) intermediate_signals: usize,
     pub(crate) signal_size: usize,
     pub(crate) sub_components: usize,
     pub(crate) vars: usize,
@@ -211,7 +109,6 @@ impl TemplateDecl {
         symbol: String,
         input_signals: usize,
         output_signals: usize,
-        intermediate_signals: usize,
         signal_size: usize,
         sub_components: usize,
         vars: usize,
@@ -222,7 +119,6 @@ impl TemplateDecl {
             symbol,
             input_signals,
             output_signals,
-            intermediate_signals,
             signal_size,
             sub_components,
             vars,
@@ -380,8 +276,8 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             OperatorType::Mod => todo!(),
             OperatorType::ShiftL => self.emit_opcode(MpcOpCode::ShiftL),
             OperatorType::ShiftR => self.emit_opcode(MpcOpCode::ShiftR),
-            OperatorType::LesserEq => todo!(),
-            OperatorType::GreaterEq => todo!(),
+            OperatorType::LesserEq => self.emit_opcode(MpcOpCode::Le),
+            OperatorType::GreaterEq => self.emit_opcode(MpcOpCode::Ge),
             OperatorType::Lesser => self.emit_opcode(MpcOpCode::Lt),
             OperatorType::Greater => self.emit_opcode(MpcOpCode::Gt),
             OperatorType::Eq(size) => {
@@ -682,7 +578,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                     templ.header.clone(),
                     templ.number_of_inputs,
                     templ.number_of_outputs,
-                    templ.number_of_intermediates,
                     signal_size,
                     templ.number_of_components,
                     templ.var_stack_depth,
@@ -713,7 +608,6 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
 mod tests {
     use ark_bn254::Bn254;
     use circom_types::groth16::witness::Witness;
-    use itertools::izip;
 
     use super::*;
     use std::{fs::File, str::FromStr};
