@@ -264,7 +264,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 
             // parse network configuration
             let config = std::fs::read_to_string(config)?;
-            let _config: NetworkConfig = toml::from_str(&config)?;
+            let config: NetworkConfig = toml::from_str(&config)?;
 
             // connect to network
             let net = Aby3MpcNet::new(config)?;
