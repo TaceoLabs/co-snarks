@@ -1,0 +1,12 @@
+on:
+  push:
+    branches:
+      - main
+name: release-please
+jobs:
+  release-please:
+    runs-on: [arc-runner-set]
+    steps:
+      - uses: google-github-actions/release-please-action@v4
+        with:
+          command: manifest

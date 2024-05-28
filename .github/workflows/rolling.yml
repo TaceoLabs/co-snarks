@@ -1,0 +1,89 @@
+name: Rolling Tests & Lints
+
+env:
+  # incremental builds are slower and don't make much sense in ci
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: FULL
+  RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: "7 7 * * *"
+
+jobs:
+  # https://twitter.com/mycoliza/status/1571295690063753218
+  nightly-test:
+    runs-on: [arc-runner-set]
+    name: Nightly tests
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install nightly
+        uses: dtolnay/rust-toolchain@nightly
+      - name: cargo generate-lockfile
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+      - name: cargo test --locked
+        run: cargo test --locked --all-features --all-targets
+  # https://twitter.com/alcuadrado/status/1571291687837732873
+  update:
+    runs-on: [arc-runner-set]
+    name: ubuntu / beta / updated
+    # There's no point running this if no Cargo.lock was checked in in the
+    # first place, since we'd just redo what happened in the regular test job.
+    # Unfortunately, hashFiles only works in if on steps, so we reepeat it.
+    # if: hashFiles('Cargo.lock') != ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install beta
+        if: hashFiles('Cargo.lock') != ''
+        uses: dtolnay/rust-toolchain@beta
+      - name: cargo update
+        if: hashFiles('Cargo.lock') != ''
+        run: cargo update
+      - name: cargo test
+        if: hashFiles('Cargo.lock') != ''
+        run: cargo test --locked --all-features --all-targets
+        env:
+          RUSTFLAGS: -D deprecated
+  nightly-lints:
+    name: Nightly lints
+    runs-on: [arc-runner-set]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rustfmt, clippy
+      - name: Clippy
+        id: nightly-clippy
+        run: |
+          cargo clippy --workspace --tests --examples --benches -q --color=never 2> clippy.txt
+          sed -i '/^remote: Hello from chartered/d' clippy.txt
+      - name: Build documentation
+        id: nightly-doc
+        run: |
+          cargo doc --workspace --no-deps -q --color=never 2> doc.txt
+      - name: Write to Job Summary
+        id: report
+        shell: bash
+        run: |
+          ([ -s clippy.txt ] || [ -s doc.txt ]) &&
+          (echo "## Nightly Lint Report" >> report.md &&
+          echo "### Clippy" >> report.md &&
+          echo "\`\`\`" >> report.md &&
+          cat clippy.txt >> report.md &&
+          echo "\`\`\`" >> report.md &&
+          echo "### Doc" >> report.md &&
+          echo "\`\`\`" >> report.md &&
+          cat doc.txt >> report.md &&
+          echo "\`\`\`" >> report.md &&
+          cat report.md >> $GITHUB_STEP_SUMMARY);
+          ([ -f report.md ] && false || true);
