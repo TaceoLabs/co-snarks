@@ -229,7 +229,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             let shift = 1 << i;
             let mut p_ = p.to_owned();
             let mut g_ = g.to_owned();
-            let mask = (BigUint::from(1u64) << shift) - BigUint::one();
+            let mask = (BigUint::from(1u64) << (Self::BITLEN - shift)) - BigUint::one();
             p_ &= &mask;
             g_ &= &mask;
             let p_shift = &p >> shift;
@@ -256,7 +256,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             let shift = 1 << i;
             let mut p_ = p.to_owned();
             let mut g_ = g.to_owned();
-            let mask = (BigUint::from(1u64) << shift) - BigUint::one();
+            let mask = (BigUint::from(1u64) << (Self::BITLEN - shift)) - BigUint::one();
             p_ &= &mask;
             g_ &= &mask;
             let p_shift = &p >> shift;
