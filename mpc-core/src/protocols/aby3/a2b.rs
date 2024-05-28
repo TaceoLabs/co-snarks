@@ -1,13 +1,29 @@
-use super::{network::Aby3Network, Aby3Protocol, IoResult};
+use super::{id::PartyID, network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol, IoResult};
 use ark_ff::{One, PrimeField};
 use itertools::Itertools;
 use num_bigint::BigUint;
 
 // TODO CanonicalDeserialize and CanonicalSerialize
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Aby3BigUintShare {
     pub(crate) a: BigUint,
     pub(crate) b: BigUint,
+}
+
+impl Aby3BigUintShare {
+    fn new(a: BigUint, b: BigUint) -> Self {
+        Self { a, b }
+    }
+
+    fn xor_with_public(&self, a: &BigUint, id: PartyID) -> Aby3BigUintShare {
+        let mut res = self.to_owned();
+        match id {
+            PartyID::ID0 => res.a += a,
+            PartyID::ID1 => res.b += a,
+            PartyID::ID2 => {}
+        }
+        res
+    }
 }
 
 impl std::ops::BitXor for &Aby3BigUintShare {
@@ -48,6 +64,17 @@ impl std::ops::BitAndAssign<&BigUint> for Aby3BigUintShare {
     fn bitand_assign(&mut self, rhs: &BigUint) {
         self.a &= rhs;
         self.b &= rhs;
+    }
+}
+
+impl std::ops::BitAnd<&BigUint> for &Aby3BigUintShare {
+    type Output = Aby3BigUintShare;
+
+    fn bitand(self, rhs: &BigUint) -> Self::Output {
+        Aby3BigUintShare {
+            a: &self.a & rhs,
+            b: &self.b & rhs,
+        }
     }
 }
 
@@ -210,5 +237,99 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         g <<= 1;
         g ^= s_;
         Ok(g)
+    }
+
+    fn low_depth_binary_sub_p(&mut self, x: &Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
+        let p_ = (BigUint::from(1u64) << Self::BITLEN) - F::MODULUS.into();
+        let d = usize::ilog2(Self::BITLEN);
+
+        // Add x1 + p_ via a packed Kogge-Stone adder
+        let mut p = x.xor_with_public(&p_, self.network.get_id());
+        let mut g = x & &p_;
+        let s_ = p.to_owned();
+
+        for i in 0..d {
+            let shift = 1 << i;
+            let mut p_ = p.to_owned();
+            let mut g_ = g.to_owned();
+            let mask = (BigUint::from(1u64) << shift) - BigUint::one();
+            p_ &= &mask;
+            g_ &= &mask;
+
+            let p_shift = &p >> shift;
+
+            let (r1, r2) = self.and_twice(p_shift, g_, p_)?;
+            p = r2 << shift;
+            g ^= r1 << shift;
+        }
+        g <<= 1;
+        g ^= s_;
+        Ok(g)
+    }
+
+    fn cmux(
+        &mut self,
+        c: Aby3BigUintShare,
+        x_t: Aby3BigUintShare,
+        x_f: Aby3BigUintShare,
+    ) -> IoResult<Aby3BigUintShare> {
+        let mut xor = x_t;
+        xor ^= &x_f;
+        let mut and = self.and(c, xor)?;
+        and ^= x_f;
+        Ok(and)
+    }
+
+    fn a2b(&mut self, x: Aby3PrimeFieldShare<F>) -> IoResult<Aby3BigUintShare> {
+        let mut x01 = Aby3BigUintShare::default();
+        let mut x2 = Aby3BigUintShare::default();
+
+        let (mut r, r2) = self.rngs.random_biguint::<F>();
+        r ^= r2;
+
+        match self.network.get_id() {
+            PartyID::ID0 => {
+                x01.a = r;
+                x2.b = x.b.into();
+            }
+            PartyID::ID1 => {
+                let val: BigUint = (x.a + x.b).into();
+                x01.a = val ^ r;
+            }
+            PartyID::ID2 => {
+                x01.a = r;
+                x2.a = x.a.into();
+            }
+        }
+
+        // Reshare x01
+        self.network.send_next(x01.a.to_owned())?;
+        let local_b = self.network.recv_prev()?;
+        x01.b = local_b;
+
+        // Circuits
+        let mask = BigUint::from(1u64) << Self::BITLEN;
+        let mut x = self.low_depth_binary_add_2(x01, x2)?;
+        let x_msb = &x >> (Self::BITLEN);
+        x &= &mask;
+        let mut y = self.low_depth_binary_sub_p(&x)?;
+        let y_msb = &y >> (Self::BITLEN);
+        y &= &mask;
+
+        // Spread the ov share to the whole biguint
+        let ov_a = (x_msb.a.iter_u64_digits().next().unwrap()
+            ^ y_msb.a.iter_u64_digits().next().unwrap())
+            & 1;
+        let ov_b = (x_msb.b.iter_u64_digits().next().unwrap()
+            ^ y_msb.b.iter_u64_digits().next().unwrap())
+            & 1;
+        let ov = Aby3BigUintShare::new(
+            BigUint::from(ov_a) << Self::BITLEN,
+            BigUint::from(ov_b) << Self::BITLEN,
+        );
+
+        // one big multiplexer
+        let res = self.cmux(ov, y, x)?;
+        Ok(res)
     }
 }

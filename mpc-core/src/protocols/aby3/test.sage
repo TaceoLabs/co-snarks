@@ -89,7 +89,7 @@ def kogge_sub_p(a):
     a_ = copy(a)
     a_.pop()
     new_len = len(a_)
-    b_ = (1 << length) - P
+    b_ = (1 << new_len) - P
     b_ = [int(y) for y in reversed(bin(b_)[2:].zfill(length))]
     while len(b_) > new_len:
         b_.pop()
