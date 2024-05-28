@@ -1,5 +1,5 @@
 use super::{network::Aby3Network, Aby3Protocol, IoResult};
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use itertools::Itertools;
 use num_bigint::BigUint;
 
@@ -44,6 +44,13 @@ impl std::ops::BitAnd for Aby3BigUintShare {
     }
 }
 
+impl std::ops::BitAndAssign<&BigUint> for Aby3BigUintShare {
+    fn bitand_assign(&mut self, rhs: &BigUint) {
+        self.a &= rhs;
+        self.b &= rhs;
+    }
+}
+
 impl std::ops::BitAnd<&Self> for Aby3BigUintShare {
     type Output = BigUint;
 
@@ -57,6 +64,28 @@ impl std::ops::ShlAssign<usize> for Aby3BigUintShare {
     fn shl_assign(&mut self, rhs: usize) {
         self.a <<= rhs;
         self.b <<= rhs;
+    }
+}
+
+impl std::ops::Shl<usize> for Aby3BigUintShare {
+    type Output = Self;
+
+    fn shl(self, rhs: usize) -> Self::Output {
+        Aby3BigUintShare {
+            a: &self.a << rhs,
+            b: &self.b << rhs,
+        }
+    }
+}
+
+impl std::ops::Shr<usize> for &Aby3BigUintShare {
+    type Output = Aby3BigUintShare;
+
+    fn shr(self, rhs: usize) -> Self::Output {
+        Aby3BigUintShare {
+            a: &self.a >> rhs,
+            b: &self.b >> rhs,
+        }
     }
 }
 
@@ -157,8 +186,8 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         &mut self,
         x1: Aby3BigUintShare,
         x2: Aby3BigUintShare,
-    ) -> IoResult<()> {
-        let d = Self::ceil_log2(Self::BITLEN);
+    ) -> IoResult<Aby3BigUintShare> {
+        let d = usize::ilog2(Self::BITLEN);
 
         // Add x1 + x2 via a packed Kogge-Stone adder
         let mut p = &x1 ^ &x2;
@@ -168,17 +197,18 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             let shift = 1 << i;
             let mut p_ = p.to_owned();
             let mut g_ = g.to_owned();
-            Self::shift_left_mod(&mut p_.a, shift);
-            Self::shift_left_mod(&mut p_.b, shift);
-            Self::shift_left_mod(&mut g_.a, shift);
-            Self::shift_left_mod(&mut g_.b, shift);
+            let mask = (BigUint::from(1u64) << shift) - BigUint::one();
+            p_ &= &mask;
+            g_ &= &mask;
 
-            // TODO shift right for optimized performance
+            let p_shift = &p >> shift;
 
-            let (r1, r2) = self.and_twice(p, g_, p_)?;
-            p = r2;
+            let (r1, r2) = self.and_twice(p_shift, g_, p_)?;
+            p = r2 << shift;
+            g ^= r1 << shift;
         }
-
-        todo!()
+        g <<= 1;
+        g ^= s_;
+        Ok(g)
     }
 }

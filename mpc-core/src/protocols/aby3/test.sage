@@ -32,7 +32,7 @@ def kogge_add_2(a, b):
         g.append(a[i] & b[i])
     s_ = p.copy()
 
-    d = int(ceil(log(length, 2)))
+    d = int(floor(log(length, 2)))
 
     for i in range(0, d):
         shift = 1 << i
@@ -62,7 +62,7 @@ def kogge_add_2_v2(a, b):
         g.append(a[i] & b[i])
     s_ = p.copy()
 
-    d = int(ceil(log(length, 2)))
+    d = int(floor(log(length, 2)))
 
     for i in range(0, d):
         shift = 1 << i
@@ -72,11 +72,12 @@ def kogge_add_2_v2(a, b):
 
         p_shift = shift_right(p, shift)
 
+        for j in range(shift):
+            p[j] = 0
         for j in range(0, len(p_)):
             g_[j] = g_[j] & p_shift[j]
             p[j + shift] = p_[j] & p_shift[j]
             g[j + shift] = g[j + shift] ^^ g_[j]
-
 
     g = [0] + g[:]
     for i in range(length):
