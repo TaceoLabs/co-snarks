@@ -311,7 +311,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         x01.b = local_b;
 
         // Circuits
-        let mask = BigUint::from(1u64) << Self::BITLEN;
+        let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
         let mut x = self.low_depth_binary_add_2(x01, x2)?;
         let x_msb = &x >> (Self::BITLEN);
         x &= &mask;
@@ -328,15 +328,11 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             & 1;
 
         let ov_a = if ov_a == 1 {
-            (BigUint::from(ov_a) << Self::BITLEN) - BigUint::one()
+            mask.to_owned()
         } else {
             BigUint::zero()
         };
-        let ov_b = if ov_b == 1 {
-            (BigUint::from(ov_b) << Self::BITLEN) - BigUint::one()
-        } else {
-            BigUint::zero()
-        };
+        let ov_b = if ov_b == 1 { mask } else { BigUint::zero() };
         let ov = Aby3BigUintShare::new(ov_a, ov_b);
 
         // one big multiplexer
