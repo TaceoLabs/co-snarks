@@ -4,11 +4,13 @@ use std::{collections::HashMap, vec};
 
 use super::compiler::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl};
 use super::op_codes::{self, CodeBlock};
+use super::stack::Stack;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use circom_compiler::num_bigint::BigUint;
 use color_eyre::eyre::eyre;
+use color_eyre::eyre::Result;
 use itertools::Itertools;
 
 macro_rules! to_field {
@@ -31,28 +33,26 @@ macro_rules! to_bigint {
     };
 }
 
-type StackFrame<F> = Vec<F>;
-
 #[derive(Default, Clone)]
-struct Runnable<F: PrimeField> {
+struct Component<F: PrimeField> {
     #[allow(dead_code)]
     symbol: String,
-    field_stack: Vec<StackFrame<F>>,
-    index_stack: Vec<StackFrame<usize>>,
-    functions: Vec<FunctionCtx<F>>,
     amount_vars: usize,
     provided_input_signals: usize,
     input_signals: usize,
     output_signals: usize,
+    current_return_vals: usize,
     /// the offset inside the signals array
     my_offset: usize,
     /// all signals this component needs including all sub components
     total_signal_size: usize,
+    field_stack: Stack<F>,
+    index_stack: Stack<usize>,
+    functions_ctx: Stack<FunctionCtx<F>>,
     signals: Rc<RefCell<Vec<F>>>,
     mappings: Vec<usize>,
-    sub_components: Vec<Option<Runnable<F>>>,
-    current_return_vals: usize,
-    body: Rc<CodeBlock>,
+    sub_components: Vec<Component<F>>,
+    component_body: Rc<CodeBlock>,
 }
 
 #[derive(Default, Clone)]
@@ -78,24 +78,24 @@ impl<F: PrimeField> FunctionCtx<F> {
     }
 }
 
-impl<F: PrimeField> Runnable<F> {
+impl<F: PrimeField> Component<F> {
     fn init(templ_decl: &TemplateDecl, signal_offset: usize, signals: Rc<RefCell<Vec<F>>>) -> Self {
         Self {
             symbol: templ_decl.symbol.clone(),
-            provided_input_signals: 0,
-            output_signals: templ_decl.output_signals,
-            input_signals: templ_decl.input_signals,
-            my_offset: signal_offset,
             amount_vars: templ_decl.vars,
-            total_signal_size: templ_decl.signal_size,
-            signals,
-            sub_components: vec![None; templ_decl.sub_components], //vec![Component::default(); templ_decl.sub_comps],
-            functions: vec![],
-            mappings: templ_decl.mappings.clone(),
-            field_stack: vec![vec![]],
-            index_stack: vec![vec![]],
-            body: Rc::clone(&templ_decl.body),
+            provided_input_signals: 0,
+            input_signals: templ_decl.input_signals,
+            output_signals: templ_decl.output_signals,
             current_return_vals: 0,
+            my_offset: signal_offset,
+            total_signal_size: templ_decl.signal_size,
+            field_stack: Stack::default(),
+            index_stack: Stack::default(),
+            functions_ctx: Stack::default(),
+            signals,
+            mappings: templ_decl.mappings.clone(),
+            sub_components: Vec::with_capacity(templ_decl.sub_components),
+            component_body: Rc::clone(&templ_decl.body),
         }
     }
 
@@ -112,21 +112,22 @@ impl<F: PrimeField> Runnable<F> {
 
     #[inline]
     fn push_field(&mut self, val: F) {
-        self.field_stack.last_mut().unwrap().push(val)
+        self.field_stack.push(val)
     }
 
-    #[inline]
+    #[inline(always)]
     fn pop_field(&mut self) -> F {
-        self.field_stack.last_mut().unwrap().pop().unwrap()
-    }
-    #[inline]
-    fn push_index(&mut self, val: usize) {
-        self.index_stack.last_mut().unwrap().push(val)
+        self.field_stack.pop()
     }
 
-    #[inline]
+    #[inline(always)]
+    fn push_index(&mut self, val: usize) {
+        self.index_stack.push(val)
+    }
+
+    #[inline(always)]
     fn pop_index(&mut self) -> usize {
-        self.index_stack.last_mut().unwrap().pop().unwrap()
+        self.index_stack.pop()
     }
 
     pub fn run(
@@ -134,13 +135,12 @@ impl<F: PrimeField> Runnable<F> {
         fun_decls: &HashMap<String, FunDecl>,
         templ_decls: &HashMap<String, TemplateDecl>,
         constant_table: &[F],
-    ) {
+    ) -> Result<()> {
         let mut ip = 0;
-        let mut current_body = Rc::clone(&self.body);
+        let mut current_body = Rc::clone(&self.component_body);
         let mut current_vars = vec![F::zero(); self.amount_vars];
         loop {
             let inst = &current_body[ip];
-            println!("DEBUG {ip:0>3}  | {inst}");
             match inst {
                 op_codes::MpcOpCode::PushConstant(index) => {
                     self.push_field(constant_table[*index]);
@@ -174,7 +174,9 @@ impl<F: PrimeField> Runnable<F> {
                     });
                 }
                 op_codes::MpcOpCode::Call(symbol, return_vals) => {
-                    let fun_decl = fun_decls.get(symbol).unwrap();
+                    let fun_decl = fun_decls.get(symbol).ok_or(eyre!(
+                        "{symbol} not found in function declaration. This must be a bug.."
+                    ))?;
                     for params in fun_decl.params.iter() {
                         assert!(
                             params.length.is_empty(),
@@ -182,21 +184,20 @@ impl<F: PrimeField> Runnable<F> {
                         );
                     }
                     let mut func_vars = vec![F::zero(); fun_decl.vars];
-                    let to_copy = self.field_stack.last().unwrap().len() - fun_decl.params.len();
+                    let to_copy = self.field_stack.frame_len() - fun_decl.params.len();
                     //copy the parameters
-                    for (idx, param) in self.field_stack.last().unwrap()[to_copy..]
+                    for (idx, param) in self.field_stack.peek_stack_frame()[to_copy..]
                         .iter()
                         .enumerate()
                     {
-                        println!("setting {idx}<-{}", *param);
                         func_vars[idx] = *param;
                     }
                     std::mem::swap(&mut func_vars, &mut current_vars);
                     //set size of return value
                     self.current_return_vals = *return_vals;
-                    self.index_stack.push(StackFrame::default());
-                    self.field_stack.push(StackFrame::default());
-                    self.functions.push(FunctionCtx::new(
+                    self.index_stack.push_stack_frame();
+                    self.field_stack.push_stack_frame();
+                    self.functions_ctx.push(FunctionCtx::new(
                         ip,
                         self.current_return_vals,
                         func_vars,
@@ -208,41 +209,40 @@ impl<F: PrimeField> Runnable<F> {
                 }
                 op_codes::MpcOpCode::CreateCmp(symbol, amount) => {
                     let relative_offset = self.pop_index();
-                    let index = self.pop_index();
-                    let templ_decl = templ_decls.get(symbol).unwrap();
+                    let templ_decl = templ_decls.get(symbol).ok_or(eyre!(
+                        "{symbol} not found in template declarations. This must be a bug"
+                    ))?;
                     let mut offset = self.my_offset + relative_offset;
-                    for i in 0..*amount {
+                    (0..*amount).for_each(|_| {
                         let sub_component =
-                            Runnable::init(templ_decl, offset, Rc::clone(&self.signals));
+                            Component::init(templ_decl, offset, Rc::clone(&self.signals));
                         offset += sub_component.total_signal_size;
-                        self.sub_components[index + i] = Some(sub_component);
-                    }
+                        self.sub_components.push(sub_component);
+                    });
                 }
                 op_codes::MpcOpCode::OutputSubComp(mapped, signal_code) => {
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
-                    let component = self.sub_components[sub_comp_index].take().unwrap();
+                    let component = &mut self.sub_components[sub_comp_index];
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
                     let result = component.signals.borrow()[component.my_offset + index];
-                    self.sub_components[sub_comp_index] = Some(component);
                     self.push_field(result);
                 }
                 op_codes::MpcOpCode::InputSubComp(mapped, signal_code) => {
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
                     let signal = self.pop_field();
-                    let mut component = self.sub_components[sub_comp_index].take().unwrap();
+                    let component = &mut self.sub_components[sub_comp_index];
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
                     component.signals.borrow_mut()[component.my_offset + index] = signal;
                     component.provided_input_signals += 1;
                     if component.provided_input_signals == component.input_signals {
-                        component.run(fun_decls, templ_decls, constant_table);
+                        component.run(fun_decls, templ_decls, constant_table)?;
                     }
-                    self.sub_components[sub_comp_index] = Some(component);
                 }
                 op_codes::MpcOpCode::Assert => {
                     let assertion = self.pop_field();
@@ -421,15 +421,15 @@ impl<F: PrimeField> Runnable<F> {
                     //check if we have multiple return values
                     if self.current_return_vals == 1 {
                         //copy the return value
-                        let func_field_stack = self.field_stack.pop().unwrap();
+                        let func_field_stack = self.field_stack.pop_stack_frame();
                         for signal in func_field_stack {
                             self.push_field(signal);
                         }
                     } else {
                         let start = self.pop_index();
                         let end = self.current_return_vals;
-                        self.index_stack.pop().unwrap();
-                        self.field_stack.pop().unwrap();
+                        self.index_stack.pop_stack_frame();
+                        self.field_stack.pop_stack_frame();
                         let vals = current_vars[start..start + end]
                             .iter()
                             .cloned()
@@ -439,7 +439,7 @@ impl<F: PrimeField> Runnable<F> {
                         });
                     }
                     let (old_ip, old_return_vals, mut old_vars, old_body) =
-                        self.functions.pop().unwrap().consume();
+                        self.functions_ctx.pop().consume();
                     ip = old_ip;
                     self.current_return_vals = old_return_vals;
                     std::mem::swap(&mut current_vars, &mut old_vars);
@@ -455,6 +455,7 @@ impl<F: PrimeField> Runnable<F> {
             }
             ip += 1;
         }
+        Ok(())
     }
 }
 
@@ -481,12 +482,15 @@ impl<P: Pairing> PlainWitnessExtension<P> {
         }
     }
 
-    pub fn run(self, input_signals: Vec<P::ScalarField>) -> Vec<P::ScalarField> {
-        let main_templ = self.templ_decls.get(&self.main).unwrap().clone();
+    pub fn run(self, input_signals: Vec<P::ScalarField>) -> Result<Vec<P::ScalarField>> {
+        let main_templ = self
+            .templ_decls
+            .get(&self.main)
+            .ok_or(eyre!("cannot find main template: {}", self.main))?;
         let mut main_component =
-            Runnable::<P::ScalarField>::init(&main_templ, 1, Rc::clone(&self.signals));
+            Component::<P::ScalarField>::init(main_templ, 1, Rc::clone(&self.signals));
         main_component.set_input_signals(input_signals);
-        main_component.run(&self.fun_decls, &self.templ_decls, &self.constant_table);
+        main_component.run(&self.fun_decls, &self.templ_decls, &self.constant_table)?;
         std::mem::drop(main_component);
         let ref_cell = Rc::try_unwrap(self.signals).expect("everyone else was dropped");
         let signals = RefCell::into_inner(ref_cell);
@@ -494,6 +498,6 @@ impl<P: Pairing> PlainWitnessExtension<P> {
         for idx in self.signal_to_witness {
             witness.push(signals[idx]);
         }
-        witness
+        Ok(witness)
     }
 }
