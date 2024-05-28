@@ -7,9 +7,7 @@ use circom_compiler::num_bigint::BigUint;
 use color_eyre::eyre::eyre;
 use itertools::Itertools;
 
-use self::compiler::{CodeBlock, CollaborativeCircomCompiler, FunDecl, TemplateDecl};
-
-pub mod compiler;
+use super::compiler::{self, CodeBlock, CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl};
 
 macro_rules! to_field {
     ($big_int:expr) => {
@@ -39,6 +37,7 @@ struct Runnable<F: PrimeField> {
     symbol: String,
     field_stack: StackFrame<F>,
     index_stack: StackFrame<usize>,
+    set_input_signals: usize,
     output_signals: usize,
     input_signals: usize,
     has_output: bool,
@@ -53,6 +52,7 @@ impl<F: PrimeField> Runnable<F> {
     fn init(templ_decl: &TemplateDecl) -> Self {
         Self {
             symbol: templ_decl.symbol.clone(),
+            set_input_signals: 0,
             output_signals: templ_decl.output_signals,
             input_signals: templ_decl.input_signals,
             has_output: false,
@@ -74,6 +74,7 @@ impl<F: PrimeField> Runnable<F> {
     fn from_fun_decl(fun_decl: &FunDecl) -> Self {
         Self {
             symbol: fun_decl.symbol.clone(),
+            set_input_signals: 0,
             output_signals: 0,
             input_signals: 0,
             has_output: false,
@@ -126,7 +127,6 @@ impl<F: PrimeField> Runnable<F> {
         let current_body = Rc::clone(&self.body);
         loop {
             let inst = &current_body[ip];
-            println!("DEBUG: {ip:0>3}    | Doing {inst}");
             match inst {
                 compiler::MpcOpCode::PushConstant(index) => {
                     self.push_field(constant_table[*index]);
@@ -193,9 +193,9 @@ impl<F: PrimeField> Runnable<F> {
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
                     //check whether we have to compute the output
-                    let mut component = self.sub_components[sub_comp_index].take().unwrap();
+                    let component = self.sub_components[sub_comp_index].take().unwrap();
                     if !component.has_output {
-                        component.run(fun_decls, templ_decls, constant_table);
+                        panic!("We did not run already????");
                     }
                     if *mapped {
                         index += component.mappings[*signal_code];
@@ -213,6 +213,11 @@ impl<F: PrimeField> Runnable<F> {
                         index += component.mappings[*signal_code];
                     }
                     component.signals[index] = signal;
+                    component.set_input_signals += 1;
+                    if component.set_input_signals == component.input_signals {
+                        debug_assert!(!component.has_output);
+                        component.run(fun_decls, templ_decls, constant_table);
+                    }
                     self.sub_components[sub_comp_index] = Some(component);
                 }
                 compiler::MpcOpCode::Assert => {
@@ -412,20 +417,20 @@ impl<F: PrimeField> Runnable<F> {
     }
 }
 
-pub struct WitnessExtension<P: Pairing> {
+pub struct PlainWitnessExtension<P: Pairing> {
     constant_table: Vec<P::ScalarField>,
     fun_decls: HashMap<String, FunDecl>,
     templ_decls: HashMap<String, TemplateDecl>,
     main: String,
 }
 
-impl<P: Pairing> WitnessExtension<P> {
-    pub fn new(parser: CollaborativeCircomCompiler<P>, main: String) -> Self {
+impl<P: Pairing> PlainWitnessExtension<P> {
+    pub fn new(parser: CollaborativeCircomCompilerParsed<P>) -> Self {
         Self {
+            main: parser.main,
             constant_table: parser.constant_table,
             fun_decls: parser.fun_decls,
             templ_decls: parser.templ_decls,
-            main,
         }
     }
 
@@ -435,251 +440,5 @@ impl<P: Pairing> WitnessExtension<P> {
         main_component.set_input_signals(input_signals);
         main_component.run(&self.fun_decls, &self.templ_decls, &self.constant_table);
         main_component.signals[..main_component.output_signals].to_vec()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use ark_bn254::Bn254;
-
-    use self::compiler::CompilerBuilder;
-
-    use super::*;
-    use std::str::FromStr;
-    #[test]
-    fn mul2() {
-        let file = "../test_vectors/circuits/multiplier2.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
-        let result = builder.parse().unwrap().run(vec![
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-        ]);
-        assert_eq!(result, vec![ark_bn254::Fr::from_str("33").unwrap()])
-    }
-
-    #[test]
-    fn mul16() {
-        let file = "../test_vectors/circuits/multiplier16.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
-        let result = builder.parse().unwrap().run(vec![
-            ark_bn254::Fr::from_str("5").unwrap(),
-            ark_bn254::Fr::from_str("10").unwrap(),
-            ark_bn254::Fr::from_str("2").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("4").unwrap(),
-            ark_bn254::Fr::from_str("5").unwrap(),
-            ark_bn254::Fr::from_str("6").unwrap(),
-            ark_bn254::Fr::from_str("7").unwrap(),
-            ark_bn254::Fr::from_str("8").unwrap(),
-            ark_bn254::Fr::from_str("9").unwrap(),
-            ark_bn254::Fr::from_str("10").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-            ark_bn254::Fr::from_str("12").unwrap(),
-            ark_bn254::Fr::from_str("13").unwrap(),
-            ark_bn254::Fr::from_str("14").unwrap(),
-            ark_bn254::Fr::from_str("15").unwrap(),
-        ]);
-        assert_eq!(
-            result,
-            vec![ark_bn254::Fr::from_str("65383718400000").unwrap()]
-        );
-    }
-
-    #[test]
-    fn control_flow() {
-        let file = "../test_vectors/circuits/control_flow.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let result = builder
-            .build()
-            .parse()
-            .unwrap()
-            .run(vec![ark_bn254::Fr::from_str("1").unwrap()]);
-        assert_eq!(result, vec![ark_bn254::Fr::from_str("23").unwrap()]);
-    }
-
-    #[test]
-    fn functions() {
-        let file = "../test_vectors/circuits/functions.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let input = vec![ark_bn254::Fr::from_str("5").unwrap()];
-        let should_result = vec![ark_bn254::Fr::from_str("2").unwrap()];
-        let is_result = builder.build().parse().unwrap().run(input);
-        assert_eq!(is_result, should_result,);
-    }
-    #[test]
-    fn bin_sum() {
-        let file = "../test_vectors/circuits/binsum_caller.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let input = vec![
-            //13
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-            //12
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-            //10
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-        ];
-        let should_result = vec![
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-        ];
-        let is_result = builder.build().parse().unwrap().run(input);
-        assert_eq!(is_result, should_result,);
-    }
-
-    #[test]
-    fn mimc() {
-        let file = "../test_vectors/circuits/mimc_hasher.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let result = builder.build().parse().unwrap().run(vec![
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("2").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("4").unwrap(),
-        ]);
-
-        assert_eq!(
-            result,
-            vec![ark_bn254::Fr::from_str(
-                "11942780089454131051516189009900830211326444317633948057223561824931207289212"
-            )
-            .unwrap()]
-        );
-    }
-
-    #[test]
-    fn pedersen() {
-        let file = "../test_vectors/circuits/pedersen_hasher.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let result = builder
-            .build()
-            .parse()
-            .unwrap()
-            .run(vec![ark_bn254::Fr::from_str("5").unwrap()]);
-
-        assert_eq!(
-            result,
-            vec![
-                ark_bn254::Fr::from_str(
-                    "19441207193282408010869542901357472504167256274773843225760657733604163132135",
-                )
-                .unwrap(),
-                ark_bn254::Fr::from_str(
-                    "19990967530340248564771981790127553242175633003074614939043423483648966286700",
-                )
-                .unwrap()
-            ]
-        );
-    }
-
-    #[test]
-    fn poseidon1() {
-        let file = "../test_vectors/circuits/poseidon_hasher1.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let result = builder
-            .build()
-            .parse()
-            .unwrap()
-            .run(vec![ark_bn254::Fr::from_str("5").unwrap()]);
-        assert_eq!(
-            result,
-            vec![ark_bn254::Fr::from_str(
-                "19065150524771031435284970883882288895168425523179566388456001105768498065277"
-            )
-            .unwrap()]
-        );
-    }
-
-    #[test]
-    fn poseidon2() {
-        let file = "../test_vectors/circuits/poseidon_hasher2.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let result = builder.build().parse().unwrap().run(vec![
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-        ]);
-        assert_eq!(
-            result,
-            vec![ark_bn254::Fr::from_str(
-                "12583541437132735734108669866114103169564651237895298778035846191048104863326"
-            )
-            .unwrap()]
-        );
-    }
-
-    #[test]
-    fn poseidon16() {
-        let file = "../test_vectors/circuits/poseidon_hasher16.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let result = builder.build().parse().unwrap().run(
-            (0..16)
-                .map(|i| ark_bn254::Fr::from_str(i.to_string().as_str()).unwrap())
-                .collect_vec(),
-        );
-        assert_eq!(
-            result,
-            vec![ark_bn254::Fr::from_str(
-                "12416070427041714118890402457152010846953662431720703103496516574407903181398"
-            )
-            .unwrap()]
-        );
-    }
-
-    #[test]
-    fn eddsa_verify() {
-        let file = "../test_vectors/circuits/eddsa_verify.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
-            .link_library("../test_vectors/circuits/libs/");
-        let result = builder.build().parse().unwrap().run(vec![
-            ark_bn254::Fr::from_str("0").unwrap(),
-            ark_bn254::Fr::from_str("1").unwrap(),
-            ark_bn254::Fr::from_str("2").unwrap(),
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("4").unwrap(),
-            ark_bn254::Fr::from_str("5").unwrap(),
-            ark_bn254::Fr::from_str("6").unwrap(),
-        ]);
-
-        assert_eq!(
-            result,
-            vec![
-                ark_bn254::Fr::from_str(
-                    "2763488322167937039616325905516046217694264098671987087929565332380420898366"
-                )
-                .unwrap(),
-                ark_bn254::Fr::from_str(
-                    "2925416330664408197684231514117296356864480091858857935805219172378067397648"
-                )
-                .unwrap(),
-                ark_bn254::Fr::from_str(
-                    "15305195750036305661220525648961313310481046260814497672243197092298550508693"
-                )
-                .unwrap(),
-                ark_bn254::Fr::from_str(
-                    "7063342465777781127300100846030462898353260585544312659291125182526882563299"
-                )
-                .unwrap(),
-            ]
-        );
     }
 }
