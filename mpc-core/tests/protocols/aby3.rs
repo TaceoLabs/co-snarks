@@ -475,6 +475,37 @@ mod field_share {
     }
 
     #[tokio::test]
+    async fn aby3_a2b() {
+        let test_network = Aby3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let x_shares = aby3::utils::share_field_element(x, &mut rng);
+
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+        let (tx3, rx3) = oneshot::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut aby3 = Aby3Protocol::new(net).unwrap();
+                tx.send(aby3.a2b(&x).unwrap())
+            });
+        }
+        let result1 = rx1.await.unwrap();
+        let result2 = rx2.await.unwrap();
+        let result3 = rx3.await.unwrap();
+        let is_result = result1.get_a() ^ result2.get_a() ^ result3.get_a();
+        let should_result = x.into();
+        assert_eq!(is_result, should_result);
+        let is_result_f: ark_bn254::Fr = is_result.into();
+        assert_eq!(is_result_f, x);
+    }
+
+    #[tokio::test]
     async fn aby3_random() {
         let test_network = Aby3TestNetwork::default();
         let (tx1, rx1) = oneshot::channel();

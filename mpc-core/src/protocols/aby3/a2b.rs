@@ -15,6 +15,10 @@ impl Aby3BigUintShare {
         Self { a, b }
     }
 
+    pub fn get_a(self) -> BigUint {
+        self.a
+    }
+
     fn xor_with_public(&self, a: &BigUint, id: PartyID) -> Aby3BigUintShare {
         let mut res = self.to_owned();
         match id {
@@ -280,7 +284,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(and)
     }
 
-    fn a2b(&mut self, x: Aby3PrimeFieldShare<F>) -> IoResult<Aby3BigUintShare> {
+    pub fn a2b(&mut self, x: &Aby3PrimeFieldShare<F>) -> IoResult<Aby3BigUintShare> {
         let mut x01 = Aby3BigUintShare::default();
         let mut x2 = Aby3BigUintShare::default();
 
