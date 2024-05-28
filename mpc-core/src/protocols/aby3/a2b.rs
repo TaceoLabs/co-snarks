@@ -336,7 +336,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let ov = Aby3BigUintShare::new(ov_a, ov_b);
 
         // one big multiplexer
-        let res = self.cmux(ov, y, x)?;
+        let res = self.cmux(ov, x, y)?;
         Ok(res)
     }
 }
