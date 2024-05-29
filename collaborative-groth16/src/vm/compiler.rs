@@ -18,13 +18,13 @@ use eyre::eyre;
 use eyre::{bail, Result};
 use itertools::Itertools;
 use mpc_core::protocols::aby3::network::{Aby3MpcNet, Aby3Network};
+use mpc_core::protocols::plain::PlainDriver;
 use mpc_net::config::NetworkConfig;
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
 
 use super::{
     mpc_vm::{Aby3WitnessExtension, PlainWitnessExtension, WitnessExtension},
     op_codes::{CodeBlock, MpcOpCode},
-    PlainDriver,
 };
 
 const DEFAULT_VERSION: &str = "2.0.0";

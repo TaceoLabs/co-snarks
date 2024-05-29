@@ -11,10 +11,16 @@ use codecs::BincodeCodec;
 use color_eyre::eyre::{self, Context, Report};
 use config::NetworkConfig;
 use quinn::{
+    crypto::rustls::QuicClientConfig,
+    rustls::{
+        pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
+        RootCertStore,
+    },
+};
+use quinn::{
     ClientConfig, Connection, Endpoint, IdleTimeout, RecvStream, SendStream, TransportConfig,
     VarInt,
 };
-use rustls::{Certificate, PrivateKey};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
@@ -37,24 +43,23 @@ impl MpcNetworkHandler {
         config.check_config()?;
         // a client socket, let the OS pick the port
         let local_client_socket = SocketAddr::from(([0, 0, 0, 0], 0));
-        let certs: HashMap<usize, Certificate> = config
+        let certs: HashMap<usize, CertificateDer> = config
             .parties
             .iter()
             .map(|p| {
                 let cert = std::fs::read(&p.cert_path)
                     .with_context(|| format!("reading certificate of party {}", p.id))?;
-                Ok((p.id, Certificate(cert)))
+                Ok((p.id, CertificateDer::from(cert)))
             })
             .collect::<Result<_, Report>>()?;
 
-        let mut root_store = rustls::RootCertStore::empty();
+        let mut root_store = RootCertStore::empty();
         for (id, cert) in &certs {
             root_store
-                .add(cert)
+                .add(cert.clone())
                 .with_context(|| format!("adding certificate for party {} to root store", id))?;
         }
-        let crypto = rustls::ClientConfig::builder()
-            .with_safe_defaults()
+        let crypto = quinn::rustls::ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
@@ -65,12 +70,15 @@ impl MpcNetworkHandler {
             ));
             // atm clients send keepalive packets
             transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
-            let mut client_config = ClientConfig::new(Arc::new(crypto));
+            let mut client_config =
+                ClientConfig::new(Arc::new(QuicClientConfig::try_from(crypto)?));
             client_config.transport_config(Arc::new(transport_config));
             client_config
         };
 
-        let key = PrivateKey(std::fs::read(config.key_path).context("reading own key file")?);
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            std::fs::read(config.key_path).context("reading own key file")?,
+        ));
         let server_config =
             quinn::ServerConfig::with_single_cert(vec![certs[&config.my_id].clone()], key)
                 .context("creating our server config")?;
@@ -112,7 +120,7 @@ impl MpcNetworkHandler {
                 uni.write_u32(u32::try_from(config.my_id).expect("party id fits into u32"))
                     .await?;
                 uni.flush().await?;
-                uni.finish().await?;
+                uni.finish()?;
                 tracing::trace!(
                     "Conn with id {} from {} to {}",
                     conn.stable_id(),

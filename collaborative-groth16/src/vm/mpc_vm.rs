@@ -2,12 +2,12 @@ use super::{
     compiler::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl},
     op_codes::{self, CodeBlock},
     stack::Stack,
-    PlainDriver,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use eyre::{bail, eyre, Result};
 use itertools::Itertools;
+use mpc_core::protocols::plain::PlainDriver;
 use mpc_core::{
     protocols::aby3::{
         network::{Aby3MpcNet, Aby3Network},

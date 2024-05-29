@@ -1,4 +1,5 @@
 use color_eyre::{eyre::Context, Result};
+use rcgen::CertifiedKey;
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -20,11 +21,11 @@ struct CliArgs {
 fn main() -> Result<()> {
     let args = CliArgs::parse();
 
-    let cert =
+    let CertifiedKey { cert, key_pair } =
         rcgen::generate_simple_self_signed(args.sans).context("generating self-signed cert")?;
-    let key = cert.serialize_private_key_der();
+    let key = key_pair.serialize_der();
     std::fs::write(args.key_path, key).context("writing key file")?;
-    let cert = cert.serialize_der().context("serializing certificate")?;
+    let cert = cert.der();
     std::fs::write(args.cert_path, cert).context("writing certificate file")?;
     Ok(())
 }
