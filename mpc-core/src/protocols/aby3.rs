@@ -57,7 +57,7 @@ pub mod utils {
     }
 
     pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
-        vals: Vec<F>,
+        vals: &[F],
         rng: &mut R,
     ) -> [Aby3PrimeFieldShareVec<F>; 3] {
         let mut shares1a = Vec::with_capacity(vals.len());
@@ -69,7 +69,7 @@ pub mod utils {
         for val in vals {
             let a = F::rand(rng);
             let b = F::rand(rng);
-            let c = val - a - b;
+            let c = -a - b + val;
             shares1a.push(a);
             shares1b.push(c);
             shares2a.push(b);
