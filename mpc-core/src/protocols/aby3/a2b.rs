@@ -305,8 +305,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // let mut x2 = Aby3BigUintShare::default();
         // let mut x3 = Aby3BigUintShare::default();
         let mut y = Aby3BigUintShare::default();
-        let mut opened2 = None;
-        let mut opened3 = None;
+        let mut res = Aby3PrimeFieldShare::default();
 
         let (mut r, r2) = self.rngs.rand.random_biguint::<F>();
         r ^= r2;
@@ -320,8 +319,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
                 // x2.b = k2.1.into();
                 // x3.a = k3.0.into();
                 // x3.b = k3.2.into();
-                let k3_comp = k3.0 + k3.1 + k3.2;
-                opened3 = Some(k3_comp);
+                res.b = (k3.0 + k3.1 + k3.2).neg();
                 y.a = r;
             }
             PartyID::ID1 => {
@@ -332,8 +330,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
                 // x2.b = k2.2.into();
                 // x3.a = k3.0.into();
                 // x3.b = k3.1.into();
-                let k2_comp = k2.0 + k2.1 + k2.2;
-                opened2 = Some(k2_comp);
+                res.a = (k2.0 + k2.1 + k2.2).neg();
                 y.a = r;
             }
             PartyID::ID2 => {
@@ -346,40 +343,34 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
                 // x3.b = k3.2.into();
                 let k2_comp = k2.0 + k2.1 + k2.2;
                 let k3_comp = k3.0 + k3.1 + k3.2;
-                y.a = (k2_comp + k3_comp).into();
-                opened2 = Some(k2_comp);
-                opened3 = Some(k3_comp);
+                let val: BigUint = (k2_comp + k3_comp).into();
+                y.a = val ^ r;
+                res.a = k2_comp.neg();
+                res.b = k3_comp.neg();
             }
         }
 
-        // Reshare y01
+        // Reshare y
         self.network.send_next(y.a.to_owned())?;
         let local_b = self.network.recv_prev()?;
         y.b = local_b;
 
         let z = self.low_depth_binary_add_2_mod_p(x, y)?;
 
-        let res = match self.network.get_id() {
+        match self.network.get_id() {
             PartyID::ID0 => {
                 self.network.send_next(z.b.to_owned())?;
                 let rcv: BigUint = self.network.recv_prev()?;
-                let opened1: F = (z.a + z.b + rcv).into();
-                let opened3 = opened3.unwrap().neg();
-                Aby3PrimeFieldShare::new(opened1, opened3)
+                res.a = (z.a + z.b + rcv).into();
             }
             PartyID::ID1 => {
                 let rcv: BigUint = self.network.recv_prev()?;
-                let opened1: F = (z.a + z.b + rcv).into();
-                let opened2 = opened2.unwrap().neg();
-                Aby3PrimeFieldShare::new(opened2, opened1)
+                res.b = (z.a + z.b + rcv).into();
             }
             PartyID::ID2 => {
                 self.network.send_next(z.b)?;
-                let opened2 = opened2.unwrap().neg();
-                let opened3 = opened3.unwrap().neg();
-                Aby3PrimeFieldShare::new(opened3, opened2)
             }
-        };
+        }
         Ok(res)
     }
 }
