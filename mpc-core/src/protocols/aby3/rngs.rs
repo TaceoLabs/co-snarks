@@ -76,7 +76,7 @@ pub(crate) struct Aby3RandBitComp {
 }
 
 impl Aby3RandBitComp {
-    pub(crate) fn new_2(rng1: [u8; crate::SEED_SIZE], rng2: [u8; crate::SEED_SIZE]) -> Self {
+    pub fn new_2keys(rng1: [u8; crate::SEED_SIZE], rng2: [u8; crate::SEED_SIZE]) -> Self {
         Self {
             rng1: RngType::from_seed(rng1),
             rng2: RngType::from_seed(rng2),
@@ -84,7 +84,7 @@ impl Aby3RandBitComp {
         }
     }
 
-    pub(crate) fn new_3(
+    pub fn new_3keys(
         rng1: [u8; crate::SEED_SIZE],
         rng2: [u8; crate::SEED_SIZE],
         rng3: [u8; crate::SEED_SIZE],
@@ -94,5 +94,22 @@ impl Aby3RandBitComp {
             rng2: RngType::from_seed(rng2),
             rng3: Some(RngType::from_seed(rng3)),
         }
+    }
+
+    pub fn random_fes_2keys<F: PrimeField>(&mut self) -> (F, F) {
+        let a = F::rand(&mut self.rng1);
+        let b = F::rand(&mut self.rng2);
+        (a, b)
+    }
+
+    pub fn random_fes_3keys<F: PrimeField>(&mut self) -> (F, F, F) {
+        let a = F::rand(&mut self.rng1);
+        let b = F::rand(&mut self.rng2);
+        let c = if let Some(rng3) = &mut self.rng3 {
+            F::rand(rng3)
+        } else {
+            unreachable!()
+        };
+        (a, b, c)
     }
 }

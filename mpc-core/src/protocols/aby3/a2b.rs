@@ -301,6 +301,49 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     }
 
     pub fn b2a(&mut self, x: &Aby3BigUintShare) -> IoResult<Aby3PrimeFieldShare<F>> {
+        let mut x2 = Aby3BigUintShare::default();
+        let mut x3 = Aby3BigUintShare::default();
+        let mut opened2 = None;
+        let mut opened3 = None;
+
+        match self.network.get_id() {
+            PartyID::ID0 => {
+                let k2 = self.rngs.bitcomp1.random_fes_2keys::<F>();
+                let k3 = self.rngs.bitcomp2.random_fes_3keys::<F>();
+
+                x2.a = k2.0.into();
+                x2.b = k2.1.into();
+                x3.a = k3.0.into();
+                x3.b = k3.2.into();
+                let k3_comp = k3.0 + k3.1 + k3.2;
+                opened3 = Some(k3_comp);
+            }
+            PartyID::ID1 => {
+                let k2 = self.rngs.bitcomp1.random_fes_3keys::<F>();
+                let k3 = self.rngs.bitcomp2.random_fes_2keys::<F>();
+
+                x2.a = k2.0.into();
+                x2.b = k2.2.into();
+                x3.a = k3.0.into();
+                x3.b = k3.1.into();
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                opened2 = Some(k2_comp);
+            }
+            PartyID::ID2 => {
+                let k2 = self.rngs.bitcomp1.random_fes_3keys::<F>();
+                let k3 = self.rngs.bitcomp2.random_fes_3keys::<F>();
+
+                x2.a = k2.0.into();
+                x2.b = k2.2.into();
+                x3.a = k3.0.into();
+                x3.b = k3.2.into();
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                let k3_comp = k3.0 + k3.1 + k3.2;
+                opened2 = Some(k2_comp);
+                opened3 = Some(k3_comp);
+            }
+        }
+
         todo!()
     }
 }

@@ -190,23 +190,23 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             PartyID::ID0 => {
                 network.send_next(k1c)?;
                 let k2b: [u8; crate::SEED_SIZE] = network.recv_prev()?;
-                let bitcomp1 = Aby3RandBitComp::new_2(k1a, k1c);
-                let bitcomp2 = Aby3RandBitComp::new_3(k2a, k2b, k2c);
+                let bitcomp1 = Aby3RandBitComp::new_2keys(k1a, k1c);
+                let bitcomp2 = Aby3RandBitComp::new_3keys(k2a, k2b, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
             PartyID::ID1 => {
                 network.send_next((k1c, k2c))?;
                 let k1b: [u8; crate::SEED_SIZE] = network.recv_prev()?;
-                let bitcomp1 = Aby3RandBitComp::new_3(k1a, k1b, k1c);
-                let bitcomp2 = Aby3RandBitComp::new_2(k2a, k2c);
+                let bitcomp1 = Aby3RandBitComp::new_3keys(k1a, k1b, k1c);
+                let bitcomp2 = Aby3RandBitComp::new_2keys(k2a, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
             PartyID::ID2 => {
                 network.send_next(k2c)?;
                 let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) =
                     network.recv_prev()?;
-                let bitcomp1 = Aby3RandBitComp::new_3(k1a, k1b, k1c);
-                let bitcomp2 = Aby3RandBitComp::new_3(k2a, k2b, k2c);
+                let bitcomp1 = Aby3RandBitComp::new_3keys(k1a, k1b, k1c);
+                let bitcomp2 = Aby3RandBitComp::new_3keys(k2a, k2b, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
         }
