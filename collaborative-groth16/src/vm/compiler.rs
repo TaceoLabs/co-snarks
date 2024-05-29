@@ -483,7 +483,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn handle_log_bucket(&mut self, log_bucket: &LogBucket) {
-        //todo
         for to_log in log_bucket.argsprint.iter() {
             match &to_log {
                 LogBucketArg::LogExp(log_expr) => {
