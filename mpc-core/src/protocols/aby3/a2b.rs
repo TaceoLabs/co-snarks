@@ -300,10 +300,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         self.low_depth_binary_add_2_mod_p(x01, x2)
     }
 
-    // TODO check what is necessary
     pub fn b2a(&mut self, x: Aby3BigUintShare) -> IoResult<Aby3PrimeFieldShare<F>> {
-        // let mut x2 = Aby3BigUintShare::default();
-        // let mut x3 = Aby3BigUintShare::default();
         let mut y = Aby3BigUintShare::default();
         let mut res = Aby3PrimeFieldShare::default();
 
@@ -312,29 +309,27 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
         match self.network.get_id() {
             PartyID::ID0 => {
-                let k2 = self.rngs.bitcomp1.random_biguint_2keys::<F>();
-                let k3 = self.rngs.bitcomp2.random_biguint_3keys::<F>();
+                let k3 = self.rngs.bitcomp2.random_fes_3keys::<F>();
 
-                res.b = F::from(k3.0 ^ k3.1 ^ k3.2).neg();
+                res.b = (k3.0 + k3.1 + k3.2).neg();
                 y.a = r;
             }
             PartyID::ID1 => {
-                let k2 = self.rngs.bitcomp1.random_biguint_3keys::<F>();
-                let k3 = self.rngs.bitcomp2.random_biguint_2keys::<F>();
+                let k2 = self.rngs.bitcomp1.random_fes_3keys::<F>();
 
-                res.a = F::from(k2.0 ^ k2.1 ^ k2.2).neg();
+                res.a = (k2.0 + k2.1 + k2.2).neg();
                 y.a = r;
             }
             PartyID::ID2 => {
-                let k2 = self.rngs.bitcomp1.random_biguint_3keys::<F>();
-                let k3 = self.rngs.bitcomp2.random_biguint_3keys::<F>();
+                let k2 = self.rngs.bitcomp1.random_fes_3keys::<F>();
+                let k3 = self.rngs.bitcomp2.random_fes_3keys::<F>();
 
-                let k2_comp = F::from(k2.0 ^ k2.1 ^ k2.2);
-                let k3_comp = F::from(k3.0 ^ k3.1 ^ k3.2);
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                let k3_comp = k3.0 + k3.1 + k3.2;
                 let val: BigUint = (k2_comp + k3_comp).into();
                 y.a = val ^ r;
-                res.a = k2_comp.neg();
-                res.b = k3_comp.neg();
+                res.a = k3_comp.neg();
+                res.b = k2_comp.neg();
             }
         }
 
