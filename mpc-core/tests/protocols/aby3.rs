@@ -518,7 +518,7 @@ mod field_share {
         {
             thread::spawn(move || {
                 let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.b2a(&x).unwrap())
+                tx.send(aby3.b2a(x).unwrap())
             });
         }
         let result1: Aby3PrimeFieldShare<ark_bn254::Fr> = rx1.await.unwrap();
