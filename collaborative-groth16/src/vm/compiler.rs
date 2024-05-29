@@ -593,6 +593,10 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
     pub fn to_plain_vm(self) -> PlainWitnessExtension<P> {
         PlainWitnessExtension::new(self)
     }
+
+    pub fn to_aby3_vm(self) -> PlainWitnessExtension<P> {
+        PlainWitnessExtension::new(self)
+    }
 }
 
 #[cfg(test)]
