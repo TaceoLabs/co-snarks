@@ -300,6 +300,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         self.low_depth_binary_add_2_mod_p(x01, x2)
     }
 
+    // Keep in mind: Only works if input is actually a binary sharing of a valid field element
     pub fn b2a(&mut self, x: Aby3BigUintShare) -> IoResult<Aby3PrimeFieldShare<F>> {
         let mut y = Aby3BigUintShare::default();
         let mut res = Aby3PrimeFieldShare::default();
