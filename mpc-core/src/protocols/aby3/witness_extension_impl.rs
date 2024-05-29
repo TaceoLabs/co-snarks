@@ -69,7 +69,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 Aby3VmType::Shared(party.add_with_public(&a, &-b))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                Aby3VmType::Shared(party.add_with_public(&b, &-a))
+                Aby3VmType::Shared(party.add_with_public(&-b, &a))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => Aby3VmType::Shared(party.sub(&a, &b)),
             (_, _) => todo!("BitShared not yet implemented"),

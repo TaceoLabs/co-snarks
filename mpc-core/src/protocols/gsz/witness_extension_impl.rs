@@ -67,7 +67,7 @@ impl<F: PrimeField> GSZVmType<F> {
                 GSZVmType::Shared(party.add_with_public(&a, &-b))
             }
             (GSZVmType::Shared(a), GSZVmType::Public(b)) => {
-                GSZVmType::Shared(party.add_with_public(&b, &-a))
+                GSZVmType::Shared(party.add_with_public(&-b, &a))
             }
             (GSZVmType::Shared(a), GSZVmType::Shared(b)) => GSZVmType::Shared(party.sub(&a, &b)),
             (_, _) => todo!("BitShared not yet implemented"),
