@@ -94,11 +94,30 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn div<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> IoResult<Self> {
+    // Implemented as a * b^-1
+    fn div<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> IoResult<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_div(a, b)?)
+            }
+            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
+                let b_inv = party.inv(&b)?;
+                Aby3VmType::Shared(party.mul_with_public(&a, &b_inv))
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+                if b.is_zero() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "Cannot invert zero",
+                    ));
+                }
+                let b_inv = b.inverse().unwrap();
+                Aby3VmType::Shared(party.mul_with_public(&b_inv, &a))
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                let b_inv = party.inv(&b)?;
+                Aby3VmType::Shared(party.mul(&a, &b_inv)?)
             }
             (_, _) => todo!("Shared not implemented"),
         };
