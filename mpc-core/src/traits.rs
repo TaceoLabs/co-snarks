@@ -53,8 +53,7 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 }
 
 pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F> {
-    type VmType;
-
+    type VmType: Clone + Default;
     fn vm_add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
     fn vm_sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
     fn vm_mul(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
