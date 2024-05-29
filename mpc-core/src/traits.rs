@@ -52,7 +52,14 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn print(&self, to_print: &Self::FieldShareVec);
 }
 
-pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F> {}
+pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F> {
+    type VmType;
+
+    fn vm_add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
+    fn vm_sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
+    fn vm_mul(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
+    fn vm_neg(&mut self, a: Self::VmType) -> Self::VmType;
+}
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
     type PointShare: CanonicalDeserialize + CanonicalDeserialize + Clone + Sync;

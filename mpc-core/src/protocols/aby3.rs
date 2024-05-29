@@ -1,9 +1,10 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
-use eyre::{bail, Report};
+use eyre::Report;
 use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
+use rngs::{Aby3CorrelatedRng, Aby3Rand, Aby3RandBitComp};
 use std::{marker::PhantomData, thread, time::Duration};
 
 use crate::{
@@ -19,20 +20,25 @@ use self::{
     pointshare::Aby3PointShare,
 };
 
+pub mod a2b;
 pub mod fieldshare;
 pub mod id;
 pub mod network;
 pub mod pointshare;
+pub mod rngs;
+pub mod witness_extension_impl;
 
 type IoResult<T> = std::io::Result<T>;
 
 pub mod utils {
     use ark_ec::CurveGroup;
     use ark_ff::PrimeField;
+    use num_bigint::BigUint;
     use rand::{CryptoRng, Rng};
 
     use super::{
-        fieldshare::Aby3PrimeFieldShareVec, pointshare::Aby3PointShare, Aby3PrimeFieldShare,
+        a2b::Aby3BigUintShare, fieldshare::Aby3PrimeFieldShareVec, pointshare::Aby3PointShare,
+        Aby3PrimeFieldShare,
     };
 
     pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
@@ -48,12 +54,35 @@ pub mod utils {
         [share1, share2, share3]
     }
 
+    pub fn xor_share_biguint<F: PrimeField, R: Rng + CryptoRng>(
+        val: F,
+        rng: &mut R,
+    ) -> [Aby3BigUintShare; 3] {
+        let val: BigUint = val.into();
+        let limbsize = (F::MODULUS_BIT_SIZE + 31) / 32;
+        let a = BigUint::new((0..limbsize).map(|_| rng.gen()).collect());
+        let b = BigUint::new((0..limbsize).map(|_| rng.gen()).collect());
+        let c = val ^ &a ^ &b;
+        let share1 = Aby3BigUintShare::new(a.to_owned(), c.to_owned());
+        let share2 = Aby3BigUintShare::new(b.to_owned(), a);
+        let share3 = Aby3BigUintShare::new(c, b);
+        [share1, share2, share3]
+    }
+
     pub fn combine_field_element<F: PrimeField>(
         share1: Aby3PrimeFieldShare<F>,
         share2: Aby3PrimeFieldShare<F>,
         share3: Aby3PrimeFieldShare<F>,
     ) -> F {
         share1.a + share2.a + share3.a
+    }
+
+    pub fn xor_combine_biguint(
+        share1: Aby3BigUintShare,
+        share2: Aby3BigUintShare,
+        share3: Aby3BigUintShare,
+    ) -> BigUint {
+        share1.get_a() ^ share2.get_a() ^ share3.get_a()
     }
 
     pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
@@ -142,20 +171,55 @@ pub struct Aby3Protocol<F: PrimeField, N: Aby3Network> {
 }
 
 impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
-    pub fn new(mut network: N) -> Result<Self, Report> {
+    fn setup_prf(network: &mut N) -> Result<Aby3Rand, Report> {
         let seed1: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
-        let seed2_bytes = network.send_and_receive_seed(seed1.to_vec().into())?;
-        if seed2_bytes.len() != crate::SEED_SIZE {
-            bail!("Received seed is not {} bytes long", crate::SEED_SIZE);
+        network.send_next(seed1)?;
+        let seed2: [u8; crate::SEED_SIZE] = network.recv_prev()?;
+
+        Ok(Aby3Rand::new(seed1, seed2))
+    }
+
+    fn setup_bitcomp(
+        network: &mut N,
+        rands: &mut Aby3Rand,
+    ) -> Result<(Aby3RandBitComp, Aby3RandBitComp), Report> {
+        let (k1a, k1c) = rands.random_seeds();
+        let (k2a, k2c) = rands.random_seeds();
+
+        match network.get_id() {
+            PartyID::ID0 => {
+                network.send_next(k1c)?;
+                let k2b: [u8; crate::SEED_SIZE] = network.recv_prev()?;
+                let bitcomp1 = Aby3RandBitComp::new_2keys(k1a, k1c);
+                let bitcomp2 = Aby3RandBitComp::new_3keys(k2a, k2b, k2c);
+                Ok((bitcomp1, bitcomp2))
+            }
+            PartyID::ID1 => {
+                network.send_next((k1c, k2c))?;
+                let k1b: [u8; crate::SEED_SIZE] = network.recv_prev()?;
+                let bitcomp1 = Aby3RandBitComp::new_3keys(k1a, k1b, k1c);
+                let bitcomp2 = Aby3RandBitComp::new_2keys(k2a, k2c);
+                Ok((bitcomp1, bitcomp2))
+            }
+            PartyID::ID2 => {
+                network.send_next(k2c)?;
+                let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) =
+                    network.recv_prev()?;
+                let bitcomp1 = Aby3RandBitComp::new_3keys(k1a, k1b, k1c);
+                let bitcomp2 = Aby3RandBitComp::new_3keys(k2a, k2b, k2c);
+                Ok((bitcomp1, bitcomp2))
+            }
         }
-        let seed2 = {
-            let mut buf = [0u8; crate::SEED_SIZE];
-            buf[..].copy_from_slice(&seed2_bytes[..]);
-            buf
-        };
+    }
+
+    pub fn new(mut network: N) -> Result<Self, Report> {
+        let mut rand = Self::setup_prf(&mut network)?;
+        let bitcomps = Self::setup_bitcomp(&mut network, &mut rand)?;
+        let rngs = Aby3CorrelatedRng::new(rand, bitcomps.0, bitcomps.1);
+
         Ok(Self {
             network,
-            rngs: Aby3CorrelatedRng::new(seed1, seed2),
+            rngs,
             field: PhantomData,
         })
     }
@@ -174,7 +238,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
     }
 
     fn mul(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> IoResult<Self::FieldShare> {
-        let local_a = a * b + self.rngs.masking_field_element::<F>();
+        let local_a = a * b + self.rngs.rand.masking_field_element::<F>();
         self.network.send_next(local_a)?;
         let local_b = self.network.recv_prev()?;
         Ok(Self::FieldShare {
@@ -202,7 +266,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
     }
 
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
-        let (a, b) = self.rngs.random_fes();
+        let (a, b) = self.rngs.rand.random_fes();
         Ok(Self::FieldShare { a, b })
     }
 
@@ -249,7 +313,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         debug_assert_eq!(a.len(), b.len());
         let local_a = izip!(a.a.iter(), a.b.iter(), b.a.iter(), b.b.iter())
             .map(|(aa, ab, ba, bb)| {
-                *aa * ba + *aa * bb + *ab * ba + self.rngs.masking_field_element::<F>()
+                *aa * ba + *aa * bb + *ab * ba + self.rngs.rand.masking_field_element::<F>()
             })
             .collect_vec();
         self.network.send_next_many(&local_a)?;
@@ -412,7 +476,7 @@ impl<C: CurveGroup, N: Aby3Network> EcMpcProtocol<C> for Aby3Protocol<C::ScalarF
         a: &Self::PointShare,
         b: &Self::FieldShare,
     ) -> IoResult<Self::PointShare> {
-        let local_a = b * a + self.rngs.masking_ec_element::<C>();
+        let local_a = b * a + self.rngs.rand.masking_ec_element::<C>();
         self.network.send_next(local_a)?;
         let local_b = self.network.recv_prev()?;
         Ok(Self::PointShare {
@@ -477,41 +541,6 @@ impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
     ) {
         domain.ifft_in_place(&mut data.a);
         domain.ifft_in_place(&mut data.b);
-    }
-}
-
-struct Aby3CorrelatedRng {
-    rng1: RngType,
-    rng2: RngType,
-}
-
-impl Aby3CorrelatedRng {
-    pub fn new(seed1: [u8; crate::SEED_SIZE], seed2: [u8; crate::SEED_SIZE]) -> Self {
-        let rng1 = RngType::from_seed(seed1);
-        let rng2 = RngType::from_seed(seed2);
-        Self { rng1, rng2 }
-    }
-
-    pub fn masking_field_element<F: PrimeField>(&mut self) -> F {
-        let (a, b) = self.random_fes::<F>();
-        a - b
-    }
-
-    pub fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
-        let a = F::rand(&mut self.rng1);
-        let b = F::rand(&mut self.rng2);
-        (a, b)
-    }
-
-    pub fn masking_ec_element<C: CurveGroup>(&mut self) -> C {
-        let (a, b) = self.random_ecs::<C>();
-        a - b
-    }
-
-    pub fn random_ecs<C: CurveGroup>(&mut self) -> (C, C) {
-        let a = C::rand(&mut self.rng1);
-        let b = C::rand(&mut self.rng2);
-        (a, b)
     }
 }
 

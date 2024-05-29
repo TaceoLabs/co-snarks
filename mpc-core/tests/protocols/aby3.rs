@@ -1,5 +1,5 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use mpc_core::protocols::aby3::id::PartyID;
 use mpc_core::protocols::aby3::network::Aby3Network;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -130,18 +130,12 @@ impl Aby3Network for PartyTestNetwork {
             panic!("You want to read from yourself?")
         }
     }
-
-    fn send_and_receive_seed(&mut self, seed: Bytes) -> std::io::Result<BytesMut> {
-        self.send_next.send(seed).expect("can send to next");
-        let mut their_seed = BytesMut::new();
-        their_seed.extend(self.recv_prev.blocking_recv().unwrap().to_vec());
-        Ok(their_seed)
-    }
 }
 mod field_share {
     use crate::protocols::aby3::Aby3TestNetwork;
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
+    use mpc_core::protocols::aby3::Aby3PrimeFieldShare;
     use mpc_core::protocols::aby3::{self, fieldshare::Aby3PrimeFieldShareVec, Aby3Protocol};
     use mpc_core::traits::PrimeFieldMpcProtocol;
     use rand::thread_rng;
@@ -472,6 +466,66 @@ mod field_share {
         let result3 = rx3.await.unwrap();
         let is_result = aby3::utils::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn aby3_a2b() {
+        let test_network = Aby3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let x_shares = aby3::utils::share_field_element(x, &mut rng);
+
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+        let (tx3, rx3) = oneshot::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut aby3 = Aby3Protocol::new(net).unwrap();
+                tx.send(aby3.a2b(&x).unwrap())
+            });
+        }
+        let result1 = rx1.await.unwrap();
+        let result2 = rx2.await.unwrap();
+        let result3 = rx3.await.unwrap();
+        let is_result = aby3::utils::xor_combine_biguint(result1, result2, result3);
+
+        let should_result = x.into();
+        assert_eq!(is_result, should_result);
+        let is_result_f: ark_bn254::Fr = is_result.into();
+        assert_eq!(is_result_f, x);
+    }
+
+    #[tokio::test]
+    async fn aby3_b2a() {
+        let test_network = Aby3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let x_shares = aby3::utils::xor_share_biguint(x, &mut rng);
+
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+        let (tx3, rx3) = oneshot::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut aby3 = Aby3Protocol::new(net).unwrap();
+                tx.send(aby3.b2a(x).unwrap())
+            });
+        }
+        let result1: Aby3PrimeFieldShare<ark_bn254::Fr> = rx1.await.unwrap();
+        let result2 = rx2.await.unwrap();
+        let result3 = rx3.await.unwrap();
+        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        assert_eq!(is_result, x);
     }
 
     #[tokio::test]

@@ -4,7 +4,7 @@ mod aby3_tests {
     use ark_bn254::Bn254;
     use ark_groth16::{prepare_verifying_key, Groth16};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-    use bytes::{Bytes, BytesMut};
+    use bytes::Bytes;
     use circom_types::{
         groth16::{proof::JsonProof, witness::Witness, zkey::ZKey},
         r1cs::R1CS,
@@ -146,13 +146,6 @@ mod aby3_tests {
             } else {
                 panic!("You want to read from yourself?")
             }
-        }
-
-        fn send_and_receive_seed(&mut self, seed: Bytes) -> std::io::Result<BytesMut> {
-            self.send_next.send(seed).expect("can send to next");
-            let mut their_seed = BytesMut::new();
-            their_seed.extend(self.recv_prev.blocking_recv().unwrap().to_vec());
-            Ok(their_seed)
         }
 
         fn send<F: CanonicalSerialize>(&mut self, target: PartyID, data: F) -> std::io::Result<()> {

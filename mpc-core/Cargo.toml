@@ -17,6 +17,7 @@ ark-ff = { workspace = true }
 ark-poly = { workspace = true }
 ark-serialize = { workspace = true }
 bytes = { workspace = true }
+num-bigint = "0.4"
 eyre = { workspace = true }
 itertools = { workspace = true }
 mpc-net = { workspace = true }
