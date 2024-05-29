@@ -94,6 +94,17 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
+    fn div<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> IoResult<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_div(a, b)?)
+            }
+            (_, _) => todo!("Shared not implemented"),
+        };
+        Ok(res)
+    }
+
     fn int_div<N: Aby3Network>(
         _party: &mut Aby3Protocol<F, N>,
         a: Self,
@@ -198,6 +209,82 @@ impl<F: PrimeField> Aby3VmType<F> {
         };
         Ok(res)
     }
+
+    fn bool_and<N: Aby3Network>(
+        _party: &mut Aby3Protocol<F, N>,
+        a: Self,
+        b: Self,
+    ) -> IoResult<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_bool_and(a, b)?)
+            }
+            (_, _) => todo!("Shared not implemented"),
+        };
+        Ok(res)
+    }
+
+    fn bit_and<N: Aby3Network>(
+        _party: &mut Aby3Protocol<F, N>,
+        a: Self,
+        b: Self,
+    ) -> IoResult<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_bit_and(a, b)?)
+            }
+            (_, _) => todo!("Shared not implemented"),
+        };
+        Ok(res)
+    }
+
+    fn bit_xor<N: Aby3Network>(
+        _party: &mut Aby3Protocol<F, N>,
+        a: Self,
+        b: Self,
+    ) -> IoResult<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_bit_xor(a, b)?)
+            }
+            (_, _) => todo!("Shared not implemented"),
+        };
+        Ok(res)
+    }
+
+    fn bit_or<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> IoResult<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_bit_or(a, b)?)
+            }
+            (_, _) => todo!("Shared not implemented"),
+        };
+        Ok(res)
+    }
+
+    fn is_zero<N: Aby3Network>(_party: &Aby3Protocol<F, N>, a: Self) -> bool {
+        match a {
+            Aby3VmType::Public(a) => {
+                let plain = PlainDriver::default();
+                plain.is_zero(a)
+            }
+            _ => todo!("Shared not implemented"),
+        }
+    }
+
+    fn to_index<N: Aby3Network>(_party: &Aby3Protocol<F, N>, a: Self) -> F {
+        match a {
+            Aby3VmType::Public(a) => {
+                let plain = PlainDriver::default();
+                plain.to_index(a)
+            }
+            _ => todo!("Shared not implemented"),
+        }
+    }
 }
 
 impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Protocol<F, N> {
@@ -217,7 +304,7 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     }
 
     fn vm_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        Self::VmType::div(self, a, b)
     }
 
     fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
@@ -257,26 +344,26 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     }
 
     fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        Self::VmType::bool_and(self, a, b)
     }
 
     fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        Self::VmType::bit_xor(self, a, b)
     }
 
     fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        Self::VmType::bit_or(self, a, b)
     }
 
     fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        Self::VmType::bit_and(self, a, b)
     }
 
     fn is_zero(&self, a: Self::VmType) -> bool {
-        todo!()
+        Self::VmType::is_zero(self, a)
     }
 
     fn to_index(&self, a: Self::VmType) -> F {
-        todo!()
+        Self::VmType::to_index(self, a)
     }
 }
