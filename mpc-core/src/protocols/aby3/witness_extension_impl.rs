@@ -94,11 +94,105 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn int_div<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> IoResult<Self> {
+    fn int_div<N: Aby3Network>(
+        _party: &mut Aby3Protocol<F, N>,
+        a: Self,
+        b: Self,
+    ) -> IoResult<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_int_div(a, b)?)
+            }
+            (_, _) => todo!("Shared not implemented"),
+        };
+        Ok(res)
+    }
+
+    fn lt<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+        match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_lt(a, b))
+            }
+            (_, _) => todo!("Shared not implemented"),
+        }
+    }
+
+    fn le<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+        match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_le(a, b))
+            }
+            (_, _) => todo!("Shared not implemented"),
+        }
+    }
+
+    fn gt<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+        match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_gt(a, b))
+            }
+            (_, _) => todo!("Shared not implemented"),
+        }
+    }
+
+    fn ge<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+        match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_ge(a, b))
+            }
+            (_, _) => todo!("Shared not implemented"),
+        }
+    }
+
+    fn eq<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+        match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_eq(a, b))
+            }
+            (_, _) => todo!("Shared not implemented"),
+        }
+    }
+
+    fn neq<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+        match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_neq(a, b))
+            }
+            (_, _) => todo!("Shared not implemented"),
+        }
+    }
+
+    fn shift_l<N: Aby3Network>(
+        _party: &mut Aby3Protocol<F, N>,
+        a: Self,
+        b: Self,
+    ) -> IoResult<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_shift_l(a, b)?)
+            }
+            (_, _) => todo!("Shared not implemented"),
+        };
+        Ok(res)
+    }
+
+    fn shift_r<N: Aby3Network>(
+        _party: &mut Aby3Protocol<F, N>,
+        a: Self,
+        b: Self,
+    ) -> IoResult<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_shift_r(a, b)?)
             }
             (_, _) => todo!("Shared not implemented"),
         };
@@ -131,35 +225,35 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     }
 
     fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        Self::VmType::lt(self, a, b)
     }
 
     fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        Self::VmType::le(self, a, b)
     }
 
     fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        Self::VmType::gt(self, a, b)
     }
 
     fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        Self::VmType::ge(self, a, b)
     }
 
     fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        Self::VmType::eq(self, a, b)
     }
 
     fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        Self::VmType::neq(self, a, b)
     }
 
     fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        Self::VmType::shift_r(self, a, b)
     }
 
     fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        Self::VmType::shift_l(self, a, b)
     }
 
     fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
