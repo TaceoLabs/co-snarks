@@ -218,30 +218,55 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     }
 
     fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        let rhs_bigint: BigUint = a.into();
+        let lhs_bigint: BigUint = b.into();
+        let res = F::from(rhs_bigint >> lhs_bigint.to_u64().unwrap());
+        Ok(res)
     }
 
     fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        let rhs_bigint: BigUint = a.into();
+        let lhs_bigint: BigUint = b.into();
+        let res = F::from(rhs_bigint << lhs_bigint.to_u64().unwrap());
+        Ok(res)
     }
 
     fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        let rhs_bigint: BigUint = a.into();
+        let lhs_bigint: BigUint = b.into();
+        let rhs = rhs_bigint.to_u64().unwrap();
+        let lhs = lhs_bigint.to_u64().unwrap();
+        debug_assert!(rhs == 0 || rhs == 1);
+        debug_assert!(lhs == 0 || lhs == 1);
+        if lhs == 1 && rhs == 1 {
+            Ok(F::one())
+        } else {
+            Ok(F::zero())
+        }
     }
 
     fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        let rhs_bigint: BigUint = a.into();
+        let lhs_bigint: BigUint = b.into();
+        let res = F::from(rhs_bigint ^ lhs_bigint);
+        Ok(res)
     }
 
     fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        let rhs_bigint: BigUint = a.into();
+        let lhs_bigint: BigUint = b.into();
+        let res = F::from(rhs_bigint | lhs_bigint);
+        Ok(res)
     }
 
     fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        let rhs_bigint: BigUint = a.into();
+        let lhs_bigint: BigUint = b.into();
+        let res = F::from(rhs_bigint & lhs_bigint);
+        Ok(res)
     }
 
     fn to_index(&self, a: Self::VmType) -> F {
-        todo!()
+        a
     }
 }
