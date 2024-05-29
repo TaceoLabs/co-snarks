@@ -14,10 +14,8 @@ use circom_compiler::{
 use circom_constraint_generation::BuildConfig;
 use circom_program_structure::{error_definition::Report, program_archive::ProgramArchive};
 use circom_type_analysis::check_types;
-use color_eyre::{
-    eyre::{bail, eyre},
-    Result,
-};
+use eyre::eyre;
+use eyre::{bail, Result};
 use itertools::Itertools;
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
 

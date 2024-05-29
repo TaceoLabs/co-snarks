@@ -18,7 +18,7 @@ bincode.workspace = true
 circom-types = { version = "0.1.0", path = "../circom-types" }
 clap.workspace = true
 collaborative-groth16 = { version = "0.1.0", path = "../collaborative-groth16" }
-color-eyre.workspace = true
+color-eyre = "0.6.3"
 mpc-core = { version = "0.1.0", path = "../mpc-core" }
 mpc-net.workspace = true
 rand.workspace = true

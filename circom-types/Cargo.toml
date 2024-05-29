@@ -27,6 +27,4 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-num-bigint = { version = "0.4.4", default-features = false, features = [
-    "rand",
-] }
+num-bigint = { workspace = true }

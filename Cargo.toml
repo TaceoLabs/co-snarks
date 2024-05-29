@@ -47,13 +47,14 @@ circom-parser = { git = "https://github.com/TaceoLabs/circom", package = "parser
 circom-program_structure = { git = "https://github.com/TaceoLabs/circom", package = "program_structure", branch = "dev" }
 circom-type_analysis = { git = "https://github.com/TaceoLabs/circom", package = "type_analysis", branch = "dev" }
 clap = { version = "4.4.8", features = ["derive"] }
-color-eyre = "0.6.2"
+color-eyre = "0.6.3"
 criterion = { version = "0.5", features = ["async_tokio"] }
 eyre = "0.6"
 futures = "0.3.30"
 hex-literal = "0.4.1"
 itertools = "0.13.0"
 mpc-net = { path = "mpc-net" }
+num-bigint = { version = "0.4.5" }
 num-traits = { version = "0.2.18", default-features = false }
 rand_chacha = "0.3"
 rcgen = "0.12"
