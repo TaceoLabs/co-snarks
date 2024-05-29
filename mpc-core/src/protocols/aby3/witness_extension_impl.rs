@@ -1,11 +1,30 @@
+use std::default;
+
 use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol, IoResult};
 use crate::traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol};
 use ark_ff::PrimeField;
 
+#[derive(Clone)]
 pub enum Aby3VmType<F: PrimeField> {
     Public(F),
     Shared(Aby3PrimeFieldShare<F>),
     BitShared,
+}
+
+impl<F: PrimeField> Default for Aby3VmType<F> {
+    fn default() -> Self {
+        Self::Public(F::default())
+    }
+}
+
+impl<F: PrimeField> std::fmt::Debug for Aby3VmType<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(arg0) => f.debug_tuple("Public").field(arg0).finish(),
+            Self::Shared(arg0) => f.debug_tuple("Shared").field(arg0).finish(),
+            Self::BitShared => write!(f, "BitShared"),
+        }
+    }
 }
 
 impl<F: PrimeField> Aby3VmType<F> {
@@ -77,5 +96,69 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     }
     fn vm_neg(&mut self, a: Self::VmType) -> Self::VmType {
         Self::VmType::neg(self, a)
+    }
+
+    fn vm_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+        todo!()
+    }
+
+    fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+        todo!()
+    }
+
+    fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+        todo!()
+    }
+
+    fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+        todo!()
+    }
+
+    fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+        todo!()
+    }
+
+    fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+        todo!()
+    }
+
+    fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+        todo!()
+    }
+
+    fn is_zero(&self, a: Self::VmType) -> bool {
+        todo!()
+    }
+
+    fn to_index(&self, a: Self::VmType) -> F {
+        todo!()
     }
 }
