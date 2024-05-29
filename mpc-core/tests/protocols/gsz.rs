@@ -416,10 +416,8 @@ mod field_share {
             .unwrap(),
         ];
 
-        let x_shares =
-            gsz::utils::share_field_elements(x.to_vec(), threshold, num_parties, &mut rng);
-        let y_shares =
-            gsz::utils::share_field_elements(y.to_vec(), threshold, num_parties, &mut rng);
+        let x_shares = gsz::utils::share_field_elements(&x, threshold, num_parties, &mut rng);
+        let y_shares = gsz::utils::share_field_elements(&y, threshold, num_parties, &mut rng);
 
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
@@ -473,10 +471,8 @@ mod field_share {
             should_result.push((x * y) * y);
         }
 
-        let x_shares =
-            gsz::utils::share_field_elements(x.to_vec(), threshold, num_parties, &mut rng);
-        let y_shares =
-            gsz::utils::share_field_elements(y.to_vec(), threshold, num_parties, &mut rng);
+        let x_shares = gsz::utils::share_field_elements(&x, threshold, num_parties, &mut rng);
+        let y_shares = gsz::utils::share_field_elements(&y, threshold, num_parties, &mut rng);
 
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);

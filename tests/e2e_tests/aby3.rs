@@ -201,7 +201,7 @@ mod aby3_tests {
         let inputs = circuit.public_inputs();
         let mut rng = thread_rng();
         let [witness_share1, witness_share2, witness_share3] =
-            SharedWitness::share_aby3(witness, &mut rng);
+            SharedWitness::share_aby3(&witness, &public_inputs1, &mut rng);
         let test_network = Aby3TestNetwork::default();
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();

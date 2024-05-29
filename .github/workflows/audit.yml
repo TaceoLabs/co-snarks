@@ -1,0 +1,38 @@
+name: "Audit Dependencies"
+on:
+  push:
+    paths:
+      # Run if workflow changes
+      - ".github/workflows/audit.yml"
+      # Run on changed dependencies
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      # Run if the configuration file changes
+      - "**/audit.toml"
+  # Rerun periodicly to pick up new advisories
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
+
+permissions: read-all
+
+jobs:
+  cargo-deny:
+    runs-on: [arc-runner-set]
+    strategy:
+      matrix:
+        checks:
+          - advisories
+          - bans licenses sources
+
+    # Prevent sudden announcement of a new advisory from failing ci:
+    continue-on-error: ${{ matrix.checks == 'advisories' }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@cargo-deny
+      - name: Run cargo-deny
+        run: cargo deny --log-level warn --all-features check ${{ matrix.checks }}

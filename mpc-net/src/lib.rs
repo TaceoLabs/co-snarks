@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     io,
-    net::SocketAddr,
+    net::{SocketAddr, ToSocketAddrs},
     sync::Arc,
     time::Duration,
 };
@@ -74,12 +74,7 @@ impl MpcNetworkHandler {
         let server_config =
             quinn::ServerConfig::with_single_cert(vec![certs[&config.my_id].clone()], key)
                 .context("creating our server config")?;
-        let our_socket_addr = config
-            .parties
-            .iter()
-            .find(|p| p.id == config.my_id)
-            .map(|p| p.bind_addr)
-            .expect("we are in the list of parties, so we should have a socket address");
+        let our_socket_addr = config.bind_addr;
 
         let mut endpoints = Vec::new();
         let server_endpoint = quinn::Endpoint::server(server_config.clone(), our_socket_addr)?;
@@ -96,7 +91,18 @@ impl MpcNetworkHandler {
                 let endpoint = quinn::Endpoint::client(local_client_socket)
                     .with_context(|| format!("creating client endpoint to party {}", party.id))?;
                 let conn = endpoint
-                    .connect_with(client_config.clone(), party.public_addr, &party.dns_name)
+                    .connect_with(
+                        client_config.clone(),
+                        party
+                            .dns_name
+                            .to_socket_addrs()
+                            .with_context(|| {
+                                format!("while resolving DNS name for {}", party.dns_name)
+                            })?
+                            .next()
+                            .ok_or(eyre::eyre!("could not resolve DNS name {}", party.dns_name))?,
+                        &party.dns_name.hostname,
+                    )
                     .with_context(|| {
                         format!("setting up client connection with party {}", party.id)
                     })?

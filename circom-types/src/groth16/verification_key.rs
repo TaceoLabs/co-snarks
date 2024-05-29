@@ -144,7 +144,7 @@ where
     fn from(value: PreparedVerifyingKey<P>) -> Self {
         let vk = value.vk;
         Self {
-            n_public: 1, //how to learn this???
+            n_public: vk.gamma_abc_g1.len() - 1,
             alpha_1: vk.alpha_g1,
             beta_2: vk.beta_g2,
             gamma_2: vk.gamma_g2,

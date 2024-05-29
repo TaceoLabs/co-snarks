@@ -23,7 +23,7 @@ rcgen = { workspace = true }
 # need this rustls version for quinn
 rustls = { version = "0.21.9", features = ["quic", "dangerous_configuration"] }
 serde = { workspace = true }
-serde_yaml = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { version = "0.7.10", features = ["codec"] }
+toml.workspace = true
 tracing = { workspace = true }

@@ -1,0 +1,30 @@
+name: Rust Tests
+
+on:
+  push:
+    branches:
+      - main
+    tags-ignore:
+      - v*
+  pull_request:
+
+env:
+  # incremental builds are slower and don't make much sense in ci
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: FULL
+  RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
+
+jobs:
+  test:
+    name: Test
+    runs-on: [arc-runner-set]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Test with default features
+        run: cargo test --workspace
+      - name: Test with all features
+        run: cargo test --workspace --all-features
