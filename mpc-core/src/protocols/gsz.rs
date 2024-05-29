@@ -22,6 +22,7 @@ pub mod fieldshare;
 pub mod network;
 pub mod pointshare;
 pub(crate) mod shamir;
+pub mod witness_extension_impl;
 
 pub mod utils {
     use self::{
