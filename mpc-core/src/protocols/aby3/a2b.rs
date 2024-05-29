@@ -169,38 +169,27 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         x1: Aby3BigUintShare,
         x2: Aby3BigUintShare,
     ) -> IoResult<Aby3BigUintShare> {
-        let d = usize::ilog2(Self::BITLEN);
-
         // Add x1 + x2 via a packed Kogge-Stone adder
-        let mut p = &x1 ^ &x2;
-        let mut g = self.and(x1, x2)?;
-        let s_ = p.to_owned();
-
-        for i in 0..d {
-            let shift = 1 << i;
-            let mut p_ = p.to_owned();
-            let mut g_ = g.to_owned();
-            let mask = (BigUint::from(1u64) << (Self::BITLEN - shift)) - BigUint::one();
-            p_ &= &mask;
-            g_ &= &mask;
-            let p_shift = &p >> shift;
-
-            let (r1, r2) = self.and_twice(p_shift, g_, p_)?;
-            p = r2 << shift;
-            g ^= r1 << shift;
-        }
-        g <<= 1;
-        g ^= s_;
-        Ok(g)
+        let p = &x1 ^ &x2;
+        let g = self.and(x1, x2)?;
+        self.kogge_stone_inner(p, g)
     }
 
     fn low_depth_binary_sub_p(&mut self, x: &Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
         let p_ = (BigUint::from(1u64) << Self::BITLEN) - F::MODULUS.into();
-        let d = usize::ilog2(Self::BITLEN);
 
         // Add x1 + p_ via a packed Kogge-Stone adder
-        let mut p = x.xor_with_public(&p_, self.network.get_id());
-        let mut g = x & &p_;
+        let p = x.xor_with_public(&p_, self.network.get_id());
+        let g = x & &p_;
+        self.kogge_stone_inner(p, g)
+    }
+
+    fn kogge_stone_inner(
+        &mut self,
+        mut p: Aby3BigUintShare,
+        mut g: Aby3BigUintShare,
+    ) -> IoResult<Aby3BigUintShare> {
+        let d = usize::ilog2(Self::BITLEN);
         let s_ = p.to_owned();
 
         for i in 0..d {
