@@ -2,7 +2,6 @@ use super::{id::PartyID, network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol
 use ark_ff::{One, PrimeField, Zero};
 use num_bigint::BigUint;
 
-// TODO CanonicalDeserialize and CanonicalSerialize
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Aby3BigUintShare {
     pub(crate) a: BigUint,
