@@ -18,7 +18,7 @@ bytes = { workspace = true }
 clap = { workspace = true }
 color-eyre = { workspace = true }
 futures = { workspace = true }
-quinn = "0.10"
+quinn = "0.11"
 rcgen = { workspace = true }
 # need this rustls version for quinn
 rustls = { version = "0.21.9", features = ["quic", "dangerous_configuration"] }
