@@ -7,7 +7,6 @@ use super::id::PartyID;
 
 pub trait Aby3Network {
     fn get_id(&self) -> PartyID;
-    fn send_and_receive_seed(&mut self, seed: Bytes) -> std::io::Result<BytesMut>;
 
     fn send<F: CanonicalSerialize>(&mut self, target: PartyID, data: F) -> std::io::Result<()> {
         self.send_many(target, &[data])
@@ -140,11 +139,6 @@ impl Aby3MpcNet {
 impl Aby3Network for Aby3MpcNet {
     fn get_id(&self) -> PartyID {
         self.id
-    }
-
-    fn send_and_receive_seed(&mut self, seed: Bytes) -> std::io::Result<BytesMut> {
-        self.send_bytes(self.id.next_id(), seed)?;
-        self.recv_bytes(self.id.prev_id())
     }
 
     fn send_many<F: CanonicalSerialize>(

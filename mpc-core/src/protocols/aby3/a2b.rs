@@ -123,7 +123,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     const BITLEN: usize = F::MODULUS_BIT_SIZE as usize;
 
     fn and(&mut self, a: Aby3BigUintShare, b: Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
-        let (mut mask, mask_b) = self.rngs.random_biguint::<F>();
+        let (mut mask, mask_b) = self.rngs.rand.random_biguint::<F>();
         mask ^= mask_b;
         let local_a = (a & b) ^ mask;
         self.network.send_next(local_a.to_owned())?;
@@ -140,10 +140,10 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         b1: Aby3BigUintShare,
         b2: Aby3BigUintShare,
     ) -> IoResult<(Aby3BigUintShare, Aby3BigUintShare)> {
-        let (mut mask1, mask_b) = self.rngs.random_biguint::<F>();
+        let (mut mask1, mask_b) = self.rngs.rand.random_biguint::<F>();
         mask1 ^= mask_b;
 
-        let (mut mask2, mask_b) = self.rngs.random_biguint::<F>();
+        let (mut mask2, mask_b) = self.rngs.rand.random_biguint::<F>();
         mask2 ^= mask_b;
 
         let local_a1 = (b1 & &a) ^ mask1;
@@ -274,7 +274,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let mut x01 = Aby3BigUintShare::default();
         let mut x2 = Aby3BigUintShare::default();
 
-        let (mut r, r2) = self.rngs.random_biguint::<F>();
+        let (mut r, r2) = self.rngs.rand.random_biguint::<F>();
         r ^= r2;
 
         match self.network.get_id() {

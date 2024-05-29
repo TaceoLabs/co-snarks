@@ -1,5 +1,5 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use mpc_core::protocols::aby3::id::PartyID;
 use mpc_core::protocols::aby3::network::Aby3Network;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -129,13 +129,6 @@ impl Aby3Network for PartyTestNetwork {
         } else {
             panic!("You want to read from yourself?")
         }
-    }
-
-    fn send_and_receive_seed(&mut self, seed: Bytes) -> std::io::Result<BytesMut> {
-        self.send_next.send(seed).expect("can send to next");
-        let mut their_seed = BytesMut::new();
-        their_seed.extend(self.recv_prev.blocking_recv().unwrap().to_vec());
-        Ok(their_seed)
     }
 }
 mod field_share {

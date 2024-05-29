@@ -1,10 +1,10 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
-use eyre::{bail, Report};
+use eyre::Report;
 use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
-use rngs::Aby3CorrelatedRng;
+use rngs::{Aby3CorrelatedRng, Aby3Rand, Aby3RandBitComp};
 use std::{marker::PhantomData, thread, time::Duration};
 
 use crate::{
@@ -146,20 +146,42 @@ pub struct Aby3Protocol<F: PrimeField, N: Aby3Network> {
 }
 
 impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
-    pub fn new(mut network: N) -> Result<Self, Report> {
+    fn setup_prf(network: &mut N) -> Result<Aby3Rand, Report> {
         let seed1: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
-        let seed2_bytes = network.send_and_receive_seed(seed1.to_vec().into())?;
-        if seed2_bytes.len() != crate::SEED_SIZE {
-            bail!("Received seed is not {} bytes long", crate::SEED_SIZE);
+        network.send_next(seed1)?;
+        let seed2: [u8; crate::SEED_SIZE] = network.recv_prev()?;
+
+        Ok(Aby3Rand::new(seed1, seed2))
+    }
+
+    fn setup_bitcomp(
+        network: &mut N,
+        rands: &mut Aby3Rand,
+    ) -> Result<(Aby3RandBitComp, Aby3RandBitComp), Report> {
+        let (k1a, k1c) = rands.random_seeds();
+        let (k2a, k2c) = rands.random_seeds();
+
+        match network.get_id() {
+            PartyID::ID0 => {
+                network.send_next(k1c)?;
+                let k2b: [u8; crate::SEED_SIZE] = network.recv_prev()?;
+                let bitcomp1 = Aby3RandBitComp::new_2(k1a, k1c);
+                let bitcomp2 = Aby3RandBitComp::new_3(k2a, k2b, k2c);
+                Ok((bitcomp1, bitcomp2))
+            }
+            PartyID::ID1 => todo!(),
+            PartyID::ID2 => todo!(),
         }
-        let seed2 = {
-            let mut buf = [0u8; crate::SEED_SIZE];
-            buf[..].copy_from_slice(&seed2_bytes[..]);
-            buf
-        };
+    }
+
+    pub fn new(mut network: N) -> Result<Self, Report> {
+        let mut rand = Self::setup_prf(&mut network)?;
+        let bitcomps = Self::setup_bitcomp(&mut network, &mut rand)?;
+        let rngs = Aby3CorrelatedRng::new(rand, bitcomps.0, bitcomps.1);
+
         Ok(Self {
             network,
-            rngs: Aby3CorrelatedRng::new(seed1, seed2),
+            rngs,
             field: PhantomData,
         })
     }
@@ -178,7 +200,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
     }
 
     fn mul(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> IoResult<Self::FieldShare> {
-        let local_a = a * b + self.rngs.masking_field_element::<F>();
+        let local_a = a * b + self.rngs.rand.masking_field_element::<F>();
         self.network.send_next(local_a)?;
         let local_b = self.network.recv_prev()?;
         Ok(Self::FieldShare {
@@ -206,7 +228,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
     }
 
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
-        let (a, b) = self.rngs.random_fes();
+        let (a, b) = self.rngs.rand.random_fes();
         Ok(Self::FieldShare { a, b })
     }
 
@@ -253,7 +275,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         debug_assert_eq!(a.len(), b.len());
         let local_a = izip!(a.a.iter(), a.b.iter(), b.a.iter(), b.b.iter())
             .map(|(aa, ab, ba, bb)| {
-                *aa * ba + *aa * bb + *ab * ba + self.rngs.masking_field_element::<F>()
+                *aa * ba + *aa * bb + *ab * ba + self.rngs.rand.masking_field_element::<F>()
             })
             .collect_vec();
         self.network.send_next_many(&local_a)?;
@@ -416,7 +438,7 @@ impl<C: CurveGroup, N: Aby3Network> EcMpcProtocol<C> for Aby3Protocol<C::ScalarF
         a: &Self::PointShare,
         b: &Self::FieldShare,
     ) -> IoResult<Self::PointShare> {
-        let local_a = b * a + self.rngs.masking_ec_element::<C>();
+        let local_a = b * a + self.rngs.rand.masking_ec_element::<C>();
         self.network.send_next(local_a)?;
         let local_b = self.network.recv_prev()?;
         Ok(Self::PointShare {
