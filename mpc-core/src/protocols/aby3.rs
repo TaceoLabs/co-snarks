@@ -33,10 +33,12 @@ type IoResult<T> = std::io::Result<T>;
 pub mod utils {
     use ark_ec::CurveGroup;
     use ark_ff::PrimeField;
+    use num_bigint::BigUint;
     use rand::{CryptoRng, Rng};
 
     use super::{
-        fieldshare::Aby3PrimeFieldShareVec, pointshare::Aby3PointShare, Aby3PrimeFieldShare,
+        a2b::Aby3BigUintShare, fieldshare::Aby3PrimeFieldShareVec, pointshare::Aby3PointShare,
+        Aby3PrimeFieldShare,
     };
 
     pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
@@ -52,12 +54,35 @@ pub mod utils {
         [share1, share2, share3]
     }
 
+    pub fn xor_share_biguint<F: PrimeField, R: Rng + CryptoRng>(
+        val: F,
+        rng: &mut R,
+    ) -> [Aby3BigUintShare; 3] {
+        let val: BigUint = val.into();
+        let limbsize = (F::MODULUS_BIT_SIZE + 31) / 32;
+        let a = BigUint::new((0..limbsize).map(|_| rng.gen()).collect());
+        let b = BigUint::new((0..limbsize).map(|_| rng.gen()).collect());
+        let c = val ^ &a ^ &b;
+        let share1 = Aby3BigUintShare::new(a.to_owned(), c.to_owned());
+        let share2 = Aby3BigUintShare::new(b.to_owned(), a);
+        let share3 = Aby3BigUintShare::new(c, b);
+        [share1, share2, share3]
+    }
+
     pub fn combine_field_element<F: PrimeField>(
         share1: Aby3PrimeFieldShare<F>,
         share2: Aby3PrimeFieldShare<F>,
         share3: Aby3PrimeFieldShare<F>,
     ) -> F {
         share1.a + share2.a + share3.a
+    }
+
+    pub fn xor_combine_biguint(
+        share1: Aby3BigUintShare,
+        share2: Aby3BigUintShare,
+        share3: Aby3BigUintShare,
+    ) -> BigUint {
+        share1.get_a() ^ share2.get_a() ^ share3.get_a()
     }
 
     pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(

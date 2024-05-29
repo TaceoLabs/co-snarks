@@ -10,7 +10,7 @@ pub struct Aby3BigUintShare {
 }
 
 impl Aby3BigUintShare {
-    fn new(a: BigUint, b: BigUint) -> Self {
+    pub(crate) fn new(a: BigUint, b: BigUint) -> Self {
         Self { a, b }
     }
 
@@ -298,5 +298,9 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         x01.b = local_b;
 
         self.low_depth_binary_add_2_mod_p(x01, x2)
+    }
+
+    pub fn b2a(&mut self, x: &Aby3BigUintShare) -> IoResult<Aby3PrimeFieldShare<F>> {
+        todo!()
     }
 }
