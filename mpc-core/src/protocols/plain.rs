@@ -186,19 +186,35 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     }
 
     fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        if a > b {
+            F::one()
+        } else {
+            F::zero()
+        }
     }
 
     fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        if a >= b {
+            F::one()
+        } else {
+            F::zero()
+        }
     }
 
     fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        if a == b {
+            F::one()
+        } else {
+            F::zero()
+        }
     }
 
     fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        if a != b {
+            F::one()
+        } else {
+            F::zero()
+        }
     }
 
     fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
