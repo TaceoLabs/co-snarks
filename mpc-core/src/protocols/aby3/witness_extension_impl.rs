@@ -119,7 +119,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let b_inv = party.inv(&b)?;
                 Aby3VmType::Shared(party.mul(&a, &b_inv)?)
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("BitShared not implemented"),
         };
         Ok(res)
     }
