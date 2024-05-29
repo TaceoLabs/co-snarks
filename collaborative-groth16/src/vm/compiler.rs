@@ -22,8 +22,10 @@ use itertools::Itertools;
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
 
 use super::{
+    mpc_vm::{PlainWitnessExtension2, WitnessExtension},
     op_codes::{CodeBlock, MpcOpCode},
     plain_vm::PlainWitnessExtension,
+    PlainDriver,
 };
 
 const DEFAULT_VERSION: &str = "2.0.0";
@@ -592,6 +594,10 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
 impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
     pub fn to_plain_vm(self) -> PlainWitnessExtension<P> {
         PlainWitnessExtension::new(self)
+    }
+
+    pub fn to_plain_vm2(self) -> WitnessExtension<P, PlainDriver> {
+        PlainWitnessExtension2::new(self)
     }
 
     pub fn to_aby3_vm(self) -> PlainWitnessExtension<P> {

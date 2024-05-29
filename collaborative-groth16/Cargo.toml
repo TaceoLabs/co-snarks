@@ -42,6 +42,8 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-
+tracing = { workspace = true }
+num-bigint = "0.4"
 [dev-dependencies]
 serde_json = { workspace = true }
+tracing-test = { workspace = true }
