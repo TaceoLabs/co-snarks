@@ -5,12 +5,11 @@ use super::{
     PlainDriver,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{BigInt, One, PrimeField};
-use color_eyre::eyre::{eyre, Result};
+use ark_ff::One;
+use eyre::{eyre, Result};
 use itertools::Itertools;
 use mpc_core::traits::CircomWitnessExtensionProtocol;
 use num_bigint::BigUint;
-use num_traits::sign;
 use num_traits::ToPrimitive;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
@@ -465,10 +464,12 @@ impl<P: Pairing> PlainWitnessExtension2<P> {
 #[cfg(test)]
 mod tests {
     use ark_bn254::Bn254;
+    use circom_types::groth16::witness::Witness;
+    use itertools::Itertools;
     use tracing_test::traced_test;
 
     use crate::vm::compiler::CompilerBuilder;
-    use std::str::FromStr;
+    use std::{fs::File, str::FromStr};
 
     #[traced_test]
     #[test]
@@ -493,5 +494,242 @@ mod tests {
                 ark_bn254::Fr::from_str("11").unwrap()
             ]
         )
+    }
+
+    #[test]
+    fn mul16() {
+        let file = "../test_vectors/circuits/multiplier16.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
+        let is_witness = builder
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(vec![
+                ark_bn254::Fr::from_str("5").unwrap(),
+                ark_bn254::Fr::from_str("10").unwrap(),
+                ark_bn254::Fr::from_str("2").unwrap(),
+                ark_bn254::Fr::from_str("3").unwrap(),
+                ark_bn254::Fr::from_str("4").unwrap(),
+                ark_bn254::Fr::from_str("5").unwrap(),
+                ark_bn254::Fr::from_str("6").unwrap(),
+                ark_bn254::Fr::from_str("7").unwrap(),
+                ark_bn254::Fr::from_str("8").unwrap(),
+                ark_bn254::Fr::from_str("9").unwrap(),
+                ark_bn254::Fr::from_str("10").unwrap(),
+                ark_bn254::Fr::from_str("11").unwrap(),
+                ark_bn254::Fr::from_str("12").unwrap(),
+                ark_bn254::Fr::from_str("13").unwrap(),
+                ark_bn254::Fr::from_str("14").unwrap(),
+                ark_bn254::Fr::from_str("15").unwrap(),
+            ])
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/multiplier16/witness.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(is_witness, should_witness.values);
+    }
+
+    #[test]
+    fn control_flow() {
+        let file = "../test_vectors/circuits/control_flow.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(vec![ark_bn254::Fr::from_str("1").unwrap()])
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/control_flow/witness.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(is_witness, should_witness.values);
+    }
+
+    #[test]
+    fn functions() {
+        let file = "../test_vectors/circuits/functions.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let input = vec![ark_bn254::Fr::from_str("5").unwrap()];
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(input)
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/functions/witness.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(is_witness, should_witness.values);
+    }
+    #[test]
+    fn bin_sum() {
+        let file = "../test_vectors/circuits/binsum_caller.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let input = vec![
+            //13
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            //12
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            //10
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+            ark_bn254::Fr::from_str("0").unwrap(),
+            ark_bn254::Fr::from_str("1").unwrap(),
+        ];
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(input)
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/bin_sum/witness.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(is_witness, should_witness.values);
+    }
+
+    #[test]
+    fn mimc() {
+        let file = "../test_vectors/circuits/mimc_hasher.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(vec![
+                ark_bn254::Fr::from_str("1").unwrap(),
+                ark_bn254::Fr::from_str("2").unwrap(),
+                ark_bn254::Fr::from_str("3").unwrap(),
+                ark_bn254::Fr::from_str("4").unwrap(),
+            ])
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/mimc/witness.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(is_witness, should_witness.values);
+    }
+
+    #[test]
+    fn pedersen() {
+        let file = "../test_vectors/circuits/pedersen_hasher.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(vec![ark_bn254::Fr::from_str("5").unwrap()])
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/pedersen/witness.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(is_witness, should_witness.values);
+    }
+
+    #[test]
+    fn poseidon1() {
+        let file = "../test_vectors/circuits/poseidon_hasher1.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(vec![ark_bn254::Fr::from_str("5").unwrap()])
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/poseidon/poseidon1.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(is_witness, should_witness.values);
+    }
+
+    #[test]
+    fn poseidon2() {
+        let file = "../test_vectors/circuits/poseidon_hasher2.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(vec![
+                ark_bn254::Fr::from_str("0").unwrap(),
+                ark_bn254::Fr::from_str("1").unwrap(),
+            ])
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/poseidon/poseidon2.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(is_witness, should_witness.values);
+    }
+
+    #[test]
+    fn poseidon16() {
+        let file = "../test_vectors/circuits/poseidon_hasher16.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(
+                (0..16)
+                    .map(|i| ark_bn254::Fr::from_str(i.to_string().as_str()).unwrap())
+                    .collect_vec(),
+            )
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/poseidon/poseidon16.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(is_witness, should_witness.values);
+    }
+
+    #[test]
+    fn eddsa_verify() {
+        let file = "../test_vectors/circuits/eddsa_verify.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(vec![
+                ark_bn254::Fr::from_str("1").unwrap(),
+                ark_bn254::Fr::from_str(
+                    "13277427435165878497778222415993513565335242147425444199013288855685581939618",
+                )
+                .unwrap(),
+                ark_bn254::Fr::from_str(
+                    "13622229784656158136036771217484571176836296686641868549125388198837476602820",
+                )
+                .unwrap(),
+                ark_bn254::Fr::from_str(
+                    "2010143491207902444122668013146870263468969134090678646686512037244361350365",
+                )
+                .unwrap(),
+                ark_bn254::Fr::from_str(
+                    "11220723668893468001994760120794694848178115379170651044669708829805665054484",
+                )
+                .unwrap(),
+                ark_bn254::Fr::from_str(
+                    "2367470421002446880004241260470975644531657398480773647535134774673409612366",
+                )
+                .unwrap(),
+                ark_bn254::Fr::from_str("1234").unwrap(),
+            ])
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/eddsa/witness.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(is_witness, should_witness.values);
     }
 }

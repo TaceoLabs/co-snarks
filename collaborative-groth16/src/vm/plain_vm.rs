@@ -9,8 +9,8 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use circom_compiler::num_bigint::BigUint;
-use color_eyre::eyre::eyre;
-use color_eyre::eyre::Result;
+use eyre::eyre;
+use eyre::Result;
 use itertools::Itertools;
 
 macro_rules! to_field {

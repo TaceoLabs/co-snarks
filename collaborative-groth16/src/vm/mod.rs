@@ -132,11 +132,19 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     }
 
     fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        if a < b {
+            F::one()
+        } else {
+            F::zero()
+        }
     }
 
     fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        if a <= b {
+            F::one()
+        } else {
+            F::zero()
+        }
     }
 
     fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {

@@ -1,5 +1,3 @@
-use std::default;
-
 use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol, IoResult};
 use crate::traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol};
 use ark_ff::PrimeField;
