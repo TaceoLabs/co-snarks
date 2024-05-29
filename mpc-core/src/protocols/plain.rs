@@ -1,29 +1,34 @@
-use crate::traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol};
+use crate::{
+    traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
+    RngType,
+};
 use ark_ff::PrimeField;
+use num_bigint::BigUint;
+use num_traits::cast::ToPrimitive;
+use rand::SeedableRng;
 
 //this is just for the time being
 #[derive(Default)]
 pub struct PlainDriver {}
 
 impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver {
-    type FieldShare = ();
-
-    type FieldShareVec = Vec<()>;
+    type FieldShare = F;
+    type FieldShareVec = Vec<F>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
-        todo!()
+        *a + b
     }
 
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
-        todo!()
+        *a - b
     }
 
     fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
-        todo!()
+        *a + b
     }
 
     fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec) {
-        todo!()
+        a.iter_mut().zip(b.iter()).for_each(|(a, b)| *a -= b);
     }
 
     fn mul(
@@ -31,27 +36,34 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver {
         a: &Self::FieldShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::FieldShare> {
-        todo!()
+        Ok(*a * b)
     }
 
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
-        todo!()
+        *a * b
     }
 
     fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare> {
-        todo!()
+        if a.is_zero() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Cannot invert zero",
+            ));
+        }
+        Ok(a.inverse().unwrap())
     }
 
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
-        todo!()
+        -*a
     }
 
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
-        todo!()
+        let mut rng = RngType::from_entropy();
+        Ok(F::rand(&mut rng))
     }
 
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F> {
-        todo!()
+        Ok(*a)
     }
 
     fn mul_vec(
@@ -59,15 +71,19 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver {
         a: &Self::FieldShareVec,
         b: &Self::FieldShareVec,
     ) -> std::io::Result<Self::FieldShareVec> {
-        todo!()
+        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
     fn promote_to_trivial_share(&self, public_values: &[F]) -> Self::FieldShareVec {
-        todo!()
+        public_values.to_vec()
     }
 
     fn distribute_powers_and_mul_by_const(&mut self, coeffs: &mut Self::FieldShareVec, g: F, c: F) {
-        todo!()
+        let mut pow = c;
+        for c in coeffs.iter_mut() {
+            *c *= pow;
+            pow *= g;
+        }
     }
 
     fn evaluate_constraint(
@@ -76,7 +92,15 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver {
         public_inputs: &[F],
         private_witness: &Self::FieldShareVec,
     ) -> Self::FieldShare {
-        todo!()
+        let mut acc = F::default();
+        for (coeff, index) in lhs {
+            if index < &public_inputs.len() {
+                acc += *coeff * public_inputs[*index];
+            } else {
+                acc += *coeff * private_witness[*index - public_inputs.len()];
+            }
+        }
+        acc
     }
 
     fn clone_from_slice(
@@ -87,11 +111,18 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver {
         src_offset: usize,
         len: usize,
     ) {
-        todo!()
+        assert!(dst.len() >= dst_offset + len);
+        assert!(src.len() >= src_offset + len);
+        assert!(len > 0);
+        dst[dst_offset..dst_offset + len].clone_from_slice(&src[src_offset..src_offset + len]);
     }
 
     fn print(&self, to_print: &Self::FieldShareVec) {
-        todo!()
+        print!("[");
+        for a in to_print.iter() {
+            print!("{a}, ")
+        }
+        println!("]");
     }
 }
 
@@ -115,15 +146,27 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     }
 
     fn vm_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        if b.is_zero() {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Cannot invert zero",
+            ))
+        } else if b.is_one() {
+            return Ok(a);
+        } else {
+            Ok(a / b)
+        }
     }
 
     fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        let rhs_bigint: BigUint = a.into();
+        let lhs_bigint: BigUint = b.into();
+        let res = F::from(rhs_bigint.to_u64().unwrap() / lhs_bigint.to_u64().unwrap());
+        Ok(res)
     }
 
     fn is_zero(&self, a: Self::VmType) -> bool {
-        todo!()
+        a.is_zero()
     }
 
     fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
