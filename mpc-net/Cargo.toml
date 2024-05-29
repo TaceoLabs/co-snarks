@@ -21,7 +21,7 @@ futures = { workspace = true }
 quinn = "0.10"
 rcgen = { workspace = true }
 # need this rustls version for quinn
-rustls = { version = "0.21.9", features = ["quic", "dangerous_configuration"] }
+rustls = { version = "0.23.8", features = ["quic", "dangerous_configuration"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { version = "0.7.10", features = ["codec"] }
