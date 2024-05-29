@@ -56,7 +56,7 @@ itertools = "0.13.0"
 mpc-net = { path = "mpc-net" }
 num-traits = { version = "0.2.18", default-features = false }
 rand_chacha = "0.3"
-rcgen = "0.12"
+rcgen = "0.13"
 sha2 = "0.10"
 serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0"
