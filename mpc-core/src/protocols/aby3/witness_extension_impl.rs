@@ -1,6 +1,4 @@
-use std::fmt::Debug;
-
-use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol, IoResult};
+use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol};
 use crate::{
     protocols::plain::PlainDriver,
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
@@ -304,7 +302,7 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         Self::VmType::sub(self, a, b)
     }
     fn vm_mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        Ok(Self::VmType::mul(self, a, b)?)
+        Self::VmType::mul(self, a, b)
     }
     fn vm_neg(&mut self, a: Self::VmType) -> Self::VmType {
         Self::VmType::neg(self, a)
