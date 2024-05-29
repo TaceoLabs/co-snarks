@@ -2,13 +2,12 @@ use super::{
     compiler::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl},
     op_codes::{self, CodeBlock},
     stack::Stack,
-    PlainDriver,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use eyre::{eyre, Result};
 use itertools::Itertools;
-use mpc_core::traits::CircomWitnessExtensionProtocol;
+use mpc_core::{protocols::plain::PlainDriver, traits::CircomWitnessExtensionProtocol};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};

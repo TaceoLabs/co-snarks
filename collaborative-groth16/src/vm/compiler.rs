@@ -17,13 +17,13 @@ use circom_type_analysis::check_types;
 use eyre::eyre;
 use eyre::{bail, Result};
 use itertools::Itertools;
+use mpc_core::protocols::plain::PlainDriver;
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
 
 use super::{
     mpc_vm::{PlainWitnessExtension2, WitnessExtension},
     op_codes::{CodeBlock, MpcOpCode},
     plain_vm::PlainWitnessExtension,
-    PlainDriver,
 };
 
 const DEFAULT_VERSION: &str = "2.0.0";

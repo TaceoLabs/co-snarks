@@ -1,5 +1,8 @@
 use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol, IoResult};
-use crate::traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol};
+use crate::{
+    protocols::plain::PlainDriver,
+    traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
+};
 use ark_ff::PrimeField;
 
 #[derive(Clone)]
@@ -28,7 +31,10 @@ impl<F: PrimeField> std::fmt::Debug for Aby3VmType<F> {
 impl<F: PrimeField> Aby3VmType<F> {
     fn add<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => Aby3VmType::Public(a + b),
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_add(a, b))
+            }
             (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
                 Aby3VmType::Shared(party.add_with_public(&a, &b))
             }
@@ -42,7 +48,10 @@ impl<F: PrimeField> Aby3VmType<F> {
 
     fn sub<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => Aby3VmType::Public(a - b),
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_sub(a, b))
+            }
             (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
                 Aby3VmType::Shared(party.add_with_public(&a, &-b))
             }
@@ -56,7 +65,10 @@ impl<F: PrimeField> Aby3VmType<F> {
 
     fn mul<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> IoResult<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => Aby3VmType::Public(a * b),
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_mul(a, b)?)
+            }
             (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
                 Aby3VmType::Shared(party.mul_with_public(&a, &b))
             }
@@ -73,10 +85,24 @@ impl<F: PrimeField> Aby3VmType<F> {
 
     fn neg<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Self {
         match a {
-            Aby3VmType::Public(a) => Aby3VmType::Public(-a),
+            Aby3VmType::Public(a) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_neg(a))
+            }
             Aby3VmType::Shared(a) => Aby3VmType::Shared(party.neg(&a)),
             _ => todo!("BitShared not yet implemented"),
         }
+    }
+
+    fn int_div<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> IoResult<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_int_div(a, b)?)
+            }
+            (_, _) => todo!("Shared not implemented"),
+        };
+        Ok(res)
     }
 }
 
@@ -101,7 +127,7 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     }
 
     fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+        Self::VmType::int_div(self, a, b)
     }
 
     fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
