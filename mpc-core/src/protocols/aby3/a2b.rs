@@ -1,6 +1,5 @@
 use super::{id::PartyID, network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol, IoResult};
 use ark_ff::{One, PrimeField, Zero};
-use itertools::Itertools;
 use num_bigint::BigUint;
 
 // TODO CanonicalDeserialize and CanonicalSerialize
@@ -121,54 +120,7 @@ impl std::ops::Shr<usize> for &Aby3BigUintShare {
 }
 
 impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
-    const LIMB_BITS: usize = 64;
     const BITLEN: usize = F::MODULUS_BIT_SIZE as usize;
-    const LIMBS: usize = (Self::BITLEN + 63) / 64;
-    const UPPER_MASK: u64 = (1u64 << (Self::BITLEN % 64)) - 1;
-
-    fn ceil_log2(x: usize) -> usize {
-        let mut y = 0;
-        let mut x = x - 1;
-        while x > 0 {
-            x >>= 1;
-            y += 1;
-        }
-        y
-    }
-
-    fn shift_left_mod(x: &mut BigUint, shift: usize) {
-        let n_unit = shift / Self::LIMB_BITS;
-        let mut data = match n_unit {
-            0 => x.to_u64_digits(),
-            _ => {
-                let x_iter = x.iter_u64_digits();
-                let len = x_iter.len();
-                let mut data = Vec::with_capacity(len);
-                data.resize(n_unit, 0);
-                for elem in x_iter.take(len - n_unit) {
-                    data.push(elem);
-                }
-                data
-            }
-        };
-
-        let n_bits = shift % Self::LIMB_BITS;
-        if n_bits > 0 {
-            let mut carry = 0;
-            for elem in data[n_unit..].iter_mut() {
-                let new_carry = *elem >> (Self::LIMB_BITS - n_bits);
-                *elem = (*elem << n_bits) | carry;
-                carry = new_carry;
-            }
-        }
-        data[Self::LIMBS - 1] &= Self::UPPER_MASK;
-        *x = BigUint::from_bytes_le(
-            data.into_iter()
-                .flat_map(|x| x.to_le_bytes())
-                .collect_vec()
-                .as_slice(),
-        );
-    }
 
     fn and(&mut self, a: Aby3BigUintShare, b: Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
         let (mut mask, mask_b) = self.rngs.random_biguint::<F>();
