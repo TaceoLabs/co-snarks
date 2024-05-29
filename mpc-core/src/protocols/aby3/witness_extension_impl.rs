@@ -1,6 +1,9 @@
+use std::fmt::Debug;
+
 use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol, IoResult};
 use crate::traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol};
 use ark_ff::PrimeField;
+use eyre::Result;
 
 #[derive(Clone)]
 pub enum Aby3VmType<F: PrimeField> {
@@ -21,6 +24,18 @@ impl<F: PrimeField> std::fmt::Debug for Aby3VmType<F> {
             Self::Public(arg0) => f.debug_tuple("Public").field(arg0).finish(),
             Self::Shared(arg0) => f.debug_tuple("Shared").field(arg0).finish(),
             Self::BitShared => write!(f, "BitShared"),
+        }
+    }
+}
+
+impl<F: PrimeField> std::fmt::Display for Aby3VmType<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Aby3VmType::Public(field) => f.write_str(&format!("PUBLIC ({field})")),
+            Aby3VmType::Shared(share) => {
+                f.write_str(&format!("SHARED (a: {}, b: {})", share.a, share.b))
+            }
+            Aby3VmType::BitShared => f.write_str("BIT_SHARED (TODO)"),
         }
     }
 }
@@ -89,18 +104,18 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     fn vm_sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
         Self::VmType::sub(self, a, b)
     }
-    fn vm_mul(&mut self, a: Self::VmType, b: Self::VmType) -> IoResult<Self::VmType> {
-        Self::VmType::mul(self, a, b)
+    fn vm_mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Ok(Self::VmType::mul(self, a, b)?)
     }
     fn vm_neg(&mut self, a: Self::VmType) -> Self::VmType {
         Self::VmType::neg(self, a)
     }
 
-    fn vm_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+    fn vm_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         todo!()
     }
 
-    fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+    fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         todo!()
     }
 
@@ -128,27 +143,27 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         todo!()
     }
 
-    fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+    fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         todo!()
     }
 
-    fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+    fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         todo!()
     }
 
-    fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+    fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         todo!()
     }
 
-    fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+    fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         todo!()
     }
 
-    fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+    fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         todo!()
     }
 
-    fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+    fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         todo!()
     }
 

@@ -17,12 +17,13 @@ use circom_type_analysis::check_types;
 use eyre::eyre;
 use eyre::{bail, Result};
 use itertools::Itertools;
+use mpc_core::protocols::aby3::network::{Aby3MpcNet, Aby3Network};
+use mpc_net::config::NetworkConfig;
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
 
 use super::{
-    mpc_vm::{PlainWitnessExtension2, WitnessExtension},
+    mpc_vm::{Aby3WitnessExtension, PlainWitnessExtension, WitnessExtension},
     op_codes::{CodeBlock, MpcOpCode},
-    plain_vm::PlainWitnessExtension,
     PlainDriver,
 };
 
@@ -65,10 +66,10 @@ impl<P: Pairing> CompilerBuilder<P> {
             link_libraries: self.link_libraries,
             current_offset: 0,
             templ_to_size: HashMap::new(),
-            constant_table: vec![],
             current_code_block: vec![],
             fun_decls: HashMap::new(),
             templ_decls: HashMap::new(),
+            phantom_data: PhantomData,
         }
     }
 }
@@ -132,7 +133,7 @@ pub struct CollaborativeCircomCompiler<P: Pairing> {
     link_libraries: Vec<PathBuf>,
     templ_to_size: HashMap<String, usize>,
     current_offset: usize,
-    pub(crate) constant_table: Vec<P::ScalarField>,
+    phantom_data: PhantomData<P>,
     pub(crate) fun_decls: HashMap<String, FunDecl>,
     pub(crate) templ_decls: HashMap<String, TemplateDecl>,
     pub(crate) current_code_block: CodeBlock,
@@ -142,6 +143,7 @@ pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
     pub(crate) main: String,
     pub(crate) amount_signals: usize,
     pub(crate) constant_table: Vec<P::ScalarField>,
+    pub(crate) string_table: Vec<String>,
     pub(crate) fun_decls: HashMap<String, FunDecl>,
     pub(crate) templ_decls: HashMap<String, TemplateDecl>,
     pub(crate) signal_to_witness: Vec<usize>,
@@ -484,13 +486,16 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         //todo
         for to_log in log_bucket.argsprint.iter() {
             match &to_log {
-                LogBucketArg::LogExp(log_expr) => self.handle_instruction(log_expr),
-                LogBucketArg::LogStr(_) => {
-                    todo!()
+                LogBucketArg::LogExp(log_expr) => {
+                    self.handle_instruction(log_expr);
+                    self.emit_opcode(MpcOpCode::Log);
+                }
+                LogBucketArg::LogStr(idx) => {
+                    self.emit_opcode(MpcOpCode::LogString(*idx));
                 }
             }
         }
-        self.emit_opcode(MpcOpCode::Log(log_bucket.line, log_bucket.argsprint.len()))
+        self.emit_opcode(MpcOpCode::LogFlush(log_bucket.line));
     }
 
     fn handle_value_bucket(&mut self, value_bucket: &ValueBucket) {
@@ -522,13 +527,14 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     pub fn parse(mut self) -> Result<CollaborativeCircomCompilerParsed<P>> {
         let program_archive = self.get_program_archive()?;
         let circuit = self.build_circuit(program_archive)?;
-        self.constant_table = circuit
+        let constant_table = circuit
             .c_producer
             .get_field_constant_list()
             .iter()
             .map(|s| s.parse::<P::ScalarField>())
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| eyre!("cannot parse string in constant list"))?;
+        let string_table = circuit.c_producer.get_string_table().to_owned();
 
         //build functions
         for fun in circuit.functions.iter() {
@@ -582,7 +588,8 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             main: circuit.c_producer.main_header,
             signal_to_witness: circuit.c_producer.witness_to_signal_list,
             amount_signals: circuit.c_producer.total_number_of_signals,
-            constant_table: self.constant_table,
+            constant_table,
+            string_table,
             fun_decls: self.fun_decls,
             templ_decls: self.templ_decls,
         })
@@ -590,16 +597,22 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
 }
 
 impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
-    pub fn to_plain_vm(self) -> PlainWitnessExtension<P> {
+    pub fn to_plain_vm(self) -> WitnessExtension<P, PlainDriver> {
         PlainWitnessExtension::new(self)
     }
 
-    pub fn to_plain_vm2(self) -> WitnessExtension<P, PlainDriver> {
-        PlainWitnessExtension2::new(self)
+    pub fn to_aby3_vm(
+        self,
+        network_config: NetworkConfig,
+    ) -> Result<Aby3WitnessExtension<P, Aby3MpcNet>> {
+        Aby3WitnessExtension::new(self, network_config)
     }
 
-    pub fn to_aby3_vm(self) -> PlainWitnessExtension<P> {
-        PlainWitnessExtension::new(self)
+    pub fn to_aby3_vm_with_network<N: Aby3Network>(
+        self,
+        network: N,
+    ) -> Result<Aby3WitnessExtension<P, N>> {
+        Aby3WitnessExtension::from_network(self, network)
     }
 }
 
@@ -607,11 +620,14 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
 mod tests {
     use ark_bn254::Bn254;
     use circom_types::groth16::witness::Witness;
+    use tracing_test::traced_test;
 
     use super::*;
     use std::{fs::File, str::FromStr};
+
+    #[traced_test]
     #[test]
-    fn mul2() {
+    fn logs() {
         let file = "../test_vectors/circuits/multiplier2.circom";
         let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
         let is_witness = builder
@@ -631,7 +647,10 @@ mod tests {
                 ark_bn254::Fr::from_str("3").unwrap(),
                 ark_bn254::Fr::from_str("11").unwrap()
             ]
-        )
+        );
+        assert!(logs_contain(
+            "This is a test to see whether the logging work:  33"
+        ));
     }
 
     #[test]

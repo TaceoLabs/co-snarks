@@ -40,7 +40,9 @@ pub enum MpcOpCode {
     Jump(usize),
     JumpBack(usize),
     JumpIfFalse(usize),
-    Log(usize, usize),
+    Log,
+    LogString(usize),
+    LogFlush(usize),
 }
 
 impl std::fmt::Display for MpcOpCode {
@@ -93,7 +95,9 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::InputSubComp(mapped, signal_code) => {
                 format!("INPUT_SUB_COMP_OP {mapped} {signal_code}")
             }
-            MpcOpCode::Log(line, amount) => format!("LOG {line} {amount}"),
+            MpcOpCode::Log => format!("LOG"),
+            MpcOpCode::LogString(idx) => format!("LOG_STR {idx}"),
+            MpcOpCode::LogFlush(line) => format!("FLUSH_LOG_BUF {line}"),
         };
         f.write_str(&string)
     }

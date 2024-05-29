@@ -1,6 +1,7 @@
 use core::fmt;
 
 use ark_ec::{pairing::Pairing, CurveGroup};
+use eyre::Result;
 
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
@@ -55,14 +56,14 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 }
 
 pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F> {
-    type VmType: Clone + Default + fmt::Debug;
+    type VmType: Clone + Default + fmt::Debug + fmt::Display;
     fn vm_add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
     fn vm_sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
-    fn vm_mul(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
-    fn vm_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
+    fn vm_mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
     fn vm_neg(&mut self, a: Self::VmType) -> Self::VmType;
 
-    fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
+    fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
     fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
@@ -71,14 +72,14 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
     fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
     fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
 
-    fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
-    fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
+    fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
-    fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
+    fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
-    fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
-    fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
-    fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType>;
+    fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     fn is_zero(&self, a: Self::VmType) -> bool;
 

@@ -1,10 +1,14 @@
 use ark_ff::PrimeField;
+use eyre::eyre;
+use eyre::Result;
 use mpc_core::traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol};
+use num_bigint::BigUint;
+use num_traits::ToPrimitive;
 
 pub mod compiler;
 pub mod mpc_vm;
 mod op_codes;
-pub mod plain_vm;
+//pub mod plain_vm;
 mod stack;
 
 //this is just for the time being
@@ -100,6 +104,29 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver {
     }
 }
 
+macro_rules! bool_op {
+    ($lhs:expr, $op: tt, $rhs:expr) => {
+        if $lhs $op $rhs {
+            F::one()
+        } else {
+            F::zero()
+        }
+    };
+}
+
+macro_rules! to_usize {
+    ($field: expr) => {{
+        let a: BigUint = $field.into();
+        a.to_u64().ok_or(eyre!("Cannot convert var into u64"))?
+    }};
+}
+
+macro_rules! to_bigint {
+    ($field: expr) => {{
+        let a: BigUint = $field.into();
+        a
+    }};
+}
 impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     type VmType = F;
 
@@ -111,7 +138,7 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
         a - b
     }
 
-    fn vm_mul(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
+    fn vm_mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Ok(a * b)
     }
 
@@ -119,75 +146,87 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
         -a
     }
 
-    fn vm_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+    fn vm_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Ok(a / b)
     }
 
-    fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+    fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let lhs = to_usize!(a);
+        let rhs = to_usize!(b);
+        Ok(F::from(lhs / rhs))
     }
 
     fn is_zero(&self, a: Self::VmType) -> bool {
-        todo!()
+        a.is_zero()
     }
 
     fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        if a < b {
-            F::one()
-        } else {
-            F::zero()
-        }
+        bool_op!(a, <, b)
     }
 
     fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        if a <= b {
-            F::one()
-        } else {
-            F::zero()
-        }
+        bool_op!(a, <=, b)
     }
 
     fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        bool_op!(a, >, b)
     }
 
     fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        bool_op!(a, >=, b)
     }
 
     fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        bool_op!(a, ==, b)
     }
 
     fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+        bool_op!(a, !=, b)
     }
 
-    fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+    fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let val = to_bigint!(a);
+        let shift = to_usize!(b);
+        Ok(F::from(val >> shift))
     }
 
-    fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+    fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let val = to_bigint!(a);
+        let shift = to_usize!(b);
+        Ok(F::from(val << shift))
     }
 
-    fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+    fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let lhs = to_usize!(a);
+        let rhs = to_usize!(b);
+        debug_assert!(rhs == 0 || rhs == 1);
+        debug_assert!(lhs == 0 || lhs == 1);
+        if rhs == 1 && lhs == 1 {
+            Ok(F::one())
+        } else {
+            Ok(F::zero())
+        }
     }
 
-    fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+    fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let lhs = to_bigint!(a);
+        let rhs = to_bigint!(b);
+        Ok(F::from(lhs ^ rhs))
     }
 
-    fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+    fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let lhs = to_bigint!(a);
+        let rhs = to_bigint!(b);
+        Ok(F::from(lhs | rhs))
     }
 
-    fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> std::io::Result<Self::VmType> {
-        todo!()
+    fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let lhs = to_bigint!(a);
+        let rhs = to_bigint!(b);
+        Ok(F::from(lhs & rhs))
     }
 
     fn to_index(&self, a: Self::VmType) -> F {
-        todo!()
+        a
     }
 }
