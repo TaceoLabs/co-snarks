@@ -112,4 +112,23 @@ impl Aby3RandBitComp {
         };
         (a, b, c)
     }
+
+    pub fn random_biguint_2keys<F: PrimeField>(&mut self) -> (BigUint, BigUint) {
+        let limbsize = (F::MODULUS_BIT_SIZE + 31) / 32;
+        let a = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
+        let b = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
+        (a, b)
+    }
+
+    pub fn random_biguint_3keys<F: PrimeField>(&mut self) -> (BigUint, BigUint, BigUint) {
+        let limbsize = (F::MODULUS_BIT_SIZE + 31) / 32;
+        let a = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
+        let b = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
+        let c = if let Some(rng3) = &mut self.rng3 {
+            BigUint::new((0..limbsize).map(|_| rng3.gen()).collect())
+        } else {
+            unreachable!()
+        };
+        (a, b, c)
+    }
 }
