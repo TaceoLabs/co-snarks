@@ -1,23 +1,29 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
 use super::{
-    compiler::{FunDecl, TemplateDecl},
+    compiler::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl},
     op_codes::{self, CodeBlock},
     stack::Stack,
+    PlainDriver,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
+use ark_ff::{BigInt, One, PrimeField};
 use color_eyre::eyre::{eyre, Result};
 use itertools::Itertools;
 use mpc_core::traits::CircomWitnessExtensionProtocol;
-pub struct PlainWitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
+use num_bigint::BigUint;
+use num_traits::sign;
+use num_traits::ToPrimitive;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
+    driver: C,
     signals: Rc<RefCell<Vec<C::VmType>>>,
     signal_to_witness: Vec<usize>,
-    constant_table: Vec<P::ScalarField>,
+    constant_table: Vec<C::VmType>,
     fun_decls: HashMap<String, FunDecl>,
     templ_decls: HashMap<String, TemplateDecl>,
     main: String,
 }
+
+pub type PlainWitnessExtension2<P> = WitnessExtension<P, PlainDriver>;
 
 #[derive(Default, Clone)]
 struct Component<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
@@ -132,6 +138,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
         let mut current_vars = vec![C::VmType::default(); self.amount_vars];
         loop {
             let inst = &current_body[ip];
+            tracing::debug!("{ip:0>4}|   {inst}");
             match inst {
                 op_codes::MpcOpCode::PushConstant(index) => {
                     self.push_field(constant_table[*index].clone());
@@ -237,150 +244,99 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 }
                 op_codes::MpcOpCode::Assert => {
                     let assertion = self.pop_field();
-                    todo!("is zero needed")
-                    //if assertion.is_zero() {
-                    //    panic!("assertion failed");
-                    //}
+                    if protocol.is_zero(assertion) {
+                        panic!("assertion failed");
+                    }
                 }
                 op_codes::MpcOpCode::Add => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    protocol.vm_add(lhs, rhs);
+                    self.push_field(protocol.vm_add(lhs, rhs));
                 }
                 op_codes::MpcOpCode::Sub => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    protocol.vm_sub(lhs, rhs);
+                    self.push_field(protocol.vm_sub(lhs, rhs));
                 }
                 op_codes::MpcOpCode::Mul => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    protocol.vm_mul(lhs, rhs);
+                    self.push_field(protocol.vm_mul(lhs, rhs)?);
+                }
+                op_codes::MpcOpCode::Div => {
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_div(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Neg => {
                     let x = self.pop_field();
-                    protocol.vm_neg(x);
-                }
-                op_codes::MpcOpCode::Div => {
-                    todo!("field div");
-                    // let rhs = self.pop_field();
-                    // let lhs = self.pop_field();
-                    // if rhs == F::zero() {
-                    //     panic!("div by zero");
-                    // } else if rhs == F::one() {
-                    //     self.push_field(lhs);
-                    // } else {
-                    //     self.push_field(lhs / rhs);
-                    // }
+                    self.push_field(protocol.vm_neg(x));
                 }
                 op_codes::MpcOpCode::IntDiv => {
-                    todo!("int div");
-                    //let rhs = to_usize!(self.pop_field());
-                    //let lhs = to_usize!(self.pop_field());
-                    //self.push_field(to_field!(lhs / rhs));
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_int_div(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Lt => {
-                    todo!("lt");
-                    //let rhs = self.pop_field();
-                    //let lhs = self.pop_field();
-                    //if lhs < rhs {
-                    //    self.push_field(F::one());
-                    //} else {
-                    //    self.push_field(F::zero());
-                    //}
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_lt(lhs, rhs));
                 }
                 op_codes::MpcOpCode::Le => {
-                    todo!("le")
-                    //let rhs = self.pop_field();
-                    //let lhs = self.pop_field();
-                    //if lhs <= rhs {
-                    //    self.push_field(F::one());
-                    //} else {
-                    //    self.push_field(F::zero());
-                    //}
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_le(lhs, rhs));
                 }
                 op_codes::MpcOpCode::Gt => {
-                    todo!("gt")
-                    //let rhs = self.pop_field();
-                    //let lhs = self.pop_field();
-                    //if lhs > rhs {
-                    //    self.push_field(F::one());
-                    //} else {
-                    //    self.push_field(F::zero());
-                    //}
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_gt(lhs, rhs));
                 }
                 op_codes::MpcOpCode::Ge => {
-                    todo!("Ge");
-                    //let rhs = self.pop_field();
-                    //let lhs = self.pop_field();
-                    //if lhs >= rhs {
-                    //    self.push_field(F::one());
-                    //} else {
-                    //    self.push_field(F::zero());
-                    //}
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_ge(lhs, rhs));
                 }
                 op_codes::MpcOpCode::Eq => {
-                    todo!("eq")
-                    //let rhs = self.pop_field();
-                    //let lhs = self.pop_field();
-                    //if lhs == rhs {
-                    //    self.push_field(F::one());
-                    //} else {
-                    //    self.push_field(F::zero());
-                    //}
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_eq(lhs, rhs));
                 }
                 op_codes::MpcOpCode::Neq => {
-                    todo!("neq")
-                    //let rhs = self.pop_field();
-                    //let lhs = self.pop_field();
-                    //if lhs != rhs {
-                    //    self.push_field(F::one());
-                    //} else {
-                    //    self.push_field(F::zero());
-                    //}
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_neq(lhs, rhs));
                 }
                 op_codes::MpcOpCode::ShiftR => {
-                    todo!("shiftR");
-                    //let rhs = to_usize!(self.pop_field());
-                    //let lhs = to_bigint!(self.pop_field());
-                    //self.push_field(to_field!(lhs >> rhs));
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_shift_r(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::ShiftL => {
-                    todo!("ShiftL");
-                    //let rhs = to_usize!(self.pop_field());
-                    //let lhs = to_bigint!(self.pop_field());
-                    //self.push_field(to_field!(lhs << rhs));
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_shift_l(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::BoolOr => todo!(),
                 op_codes::MpcOpCode::BoolAnd => {
-                    todo!("boolAnd");
-                    //let rhs = to_usize!(self.pop_field());
-                    //let lhs = to_usize!(self.pop_field());
-                    //debug_assert!(rhs == 0 || rhs == 1);
-                    //debug_assert!(lhs == 0 || lhs == 1);
-                    //if rhs == 1 && lhs == 1 {
-                    //    self.push_field(F::one());
-                    //} else {
-                    //    self.push_field(F::zero());
-                    //}
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_bool_and(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::BitOr => {
-                    todo!("bitOr");
-                    //let rhs = to_bigint!(self.pop_field());
-                    //let lhs = to_bigint!(self.pop_field());
-                    //self.push_field(to_field!(lhs | rhs));
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_bit_or(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::BitAnd => {
-                    todo!("bitAnd");
-                    //let rhs = to_bigint!(self.pop_field());
-                    //let lhs = to_bigint!(self.pop_field());
-                    //self.push_field(to_field!(lhs & rhs));
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_bit_and(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::BitXOr => {
-                    todo!("bixXor");
-                    //let rhs = to_bigint!(self.pop_field());
-                    //let lhs = to_bigint!(self.pop_field());
-                    //self.push_field(to_field!(lhs ^ rhs));
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_bit_xor(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::AddIndex => {
                     let rhs = self.pop_index();
@@ -393,13 +349,12 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     self.push_index(lhs * rhs);
                 }
                 op_codes::MpcOpCode::ToIndex => {
-                    todo!("toIndex");
-                    //let signal = self.pop_field();
-                    //if signal.is_zero() {
-                    //    self.push_index(0);
-                    //} else {
-                    //    self.push_index(to_usize!(signal));
-                    //}
+                    let signal = self.pop_field();
+                    let opened: BigUint = protocol.to_index(signal).into();
+                    let idx = opened
+                        .to_u64()
+                        .ok_or(eyre!("Cannot convert var into u64"))?;
+                    self.push_index(usize::try_from(idx)?);
                 }
                 op_codes::MpcOpCode::Jump(jump_forward) => {
                     ip += jump_forward;
@@ -412,13 +367,12 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 }
 
                 op_codes::MpcOpCode::JumpIfFalse(jump_forward) => {
-                    todo!("jumpIfFalse")
-                    //let jump_to = jump_forward;
-                    //let cond = self.pop_field();
-                    //if cond.is_zero() {
-                    //    ip += jump_to;
-                    //    continue;
-                    //}
+                    let jump_to = jump_forward;
+                    let cond = self.pop_field();
+                    if protocol.is_zero(cond) {
+                        ip += jump_to;
+                        continue;
+                    }
                 }
                 op_codes::MpcOpCode::Return => {
                     //we are done
@@ -454,7 +408,6 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     current_body = old_body;
                 }
                 op_codes::MpcOpCode::Log(line, amount) => {
-                    todo!("log");
                     //for now we only want expr log
                     //string log not supported
                     //for _ in 0..*amount {
@@ -467,25 +420,78 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
         Ok(())
     }
 }
-/*
-impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> PlainWitnessExtension<P, C> {
-    pub fn run(self, input_signals: Vec<P::ScalarField>) -> Result<Vec<P::ScalarField>> {
+
+impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExtension<P, C> {
+    pub fn run(mut self, input_signals: Vec<C::VmType>) -> Result<Vec<C::VmType>> {
         let main_templ = self
             .templ_decls
             .get(&self.main)
             .ok_or(eyre!("cannot find main template: {}", self.main))?;
-        let mut main_component =
-            Component::<P::ScalarField>::init(main_templ, 1, Rc::clone(&self.signals));
+        let mut main_component = Component::<P, C>::init(main_templ, 1, Rc::clone(&self.signals));
         main_component.set_input_signals(input_signals);
-        main_component.run(&self.fun_decls, &self.templ_decls, &self.constant_table)?;
+        main_component.run(
+            &mut self.driver,
+            &self.fun_decls,
+            &self.templ_decls,
+            &self.constant_table,
+        )?;
         std::mem::drop(main_component);
         let ref_cell = Rc::try_unwrap(self.signals).expect("everyone else was dropped");
         let signals = RefCell::into_inner(ref_cell);
         let mut witness = Vec::with_capacity(self.signal_to_witness.len());
         for idx in self.signal_to_witness {
-            witness.push(signals[idx]);
+            witness.push(signals[idx].clone());
         }
         Ok(witness)
     }
 }
-*/
+
+impl<P: Pairing> PlainWitnessExtension2<P> {
+    pub fn new(parser: CollaborativeCircomCompilerParsed<P>) -> Self {
+        let mut signals = vec![P::ScalarField::default(); parser.amount_signals];
+        signals[0] = P::ScalarField::one();
+        Self {
+            driver: PlainDriver {},
+            signals: Rc::new(RefCell::new(signals)),
+            signal_to_witness: parser.signal_to_witness,
+            main: parser.main,
+            constant_table: parser.constant_table,
+            fun_decls: parser.fun_decls,
+            templ_decls: parser.templ_decls,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ark_bn254::Bn254;
+    use tracing_test::traced_test;
+
+    use crate::vm::compiler::CompilerBuilder;
+    use std::str::FromStr;
+
+    #[traced_test]
+    #[test]
+    fn mul2() {
+        let file = "../test_vectors/circuits/multiplier2.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
+        let is_witness = builder
+            .parse()
+            .unwrap()
+            .to_plain_vm2()
+            .run(vec![
+                ark_bn254::Fr::from_str("3").unwrap(),
+                ark_bn254::Fr::from_str("11").unwrap(),
+            ])
+            .unwrap();
+        assert_eq!(
+            is_witness,
+            vec![
+                ark_bn254::Fr::from_str("1").unwrap(),
+                ark_bn254::Fr::from_str("33").unwrap(),
+                ark_bn254::Fr::from_str("3").unwrap(),
+                ark_bn254::Fr::from_str("11").unwrap()
+            ]
+        )
+    }
+}
