@@ -283,6 +283,41 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(and)
     }
 
+    fn low_depth_binary_add_2_mod_p(
+        &mut self,
+        x1: Aby3BigUintShare,
+        x2: Aby3BigUintShare,
+    ) -> IoResult<Aby3BigUintShare> {
+        // Circuits
+        let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
+        let mut x = self.low_depth_binary_add_2(x1, x2)?;
+        let x_msb = &x >> (Self::BITLEN);
+        x &= &mask;
+        let mut y = self.low_depth_binary_sub_p(&x)?;
+        let y_msb = &y >> (Self::BITLEN);
+        y &= &mask;
+
+        // Spread the ov share to the whole biguint
+        let ov_a = (x_msb.a.iter_u64_digits().next().unwrap()
+            ^ y_msb.a.iter_u64_digits().next().unwrap())
+            & 1;
+        let ov_b = (x_msb.b.iter_u64_digits().next().unwrap()
+            ^ y_msb.b.iter_u64_digits().next().unwrap())
+            & 1;
+
+        let ov_a = if ov_a == 1 {
+            mask.to_owned()
+        } else {
+            BigUint::zero()
+        };
+        let ov_b = if ov_b == 1 { mask } else { BigUint::zero() };
+        let ov = Aby3BigUintShare::new(ov_a, ov_b);
+
+        // one big multiplexer
+        let res = self.cmux(ov, y, x)?;
+        Ok(res)
+    }
+
     pub fn a2b(&mut self, x: &Aby3PrimeFieldShare<F>) -> IoResult<Aby3BigUintShare> {
         let mut x01 = Aby3BigUintShare::default();
         let mut x2 = Aby3BigUintShare::default();
@@ -310,33 +345,6 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let local_b = self.network.recv_prev()?;
         x01.b = local_b;
 
-        // Circuits
-        let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
-        let mut x = self.low_depth_binary_add_2(x01, x2)?;
-        let x_msb = &x >> (Self::BITLEN);
-        x &= &mask;
-        let mut y = self.low_depth_binary_sub_p(&x)?;
-        let y_msb = &y >> (Self::BITLEN);
-        y &= &mask;
-
-        // Spread the ov share to the whole biguint
-        let ov_a = (x_msb.a.iter_u64_digits().next().unwrap()
-            ^ y_msb.a.iter_u64_digits().next().unwrap())
-            & 1;
-        let ov_b = (x_msb.b.iter_u64_digits().next().unwrap()
-            ^ y_msb.b.iter_u64_digits().next().unwrap())
-            & 1;
-
-        let ov_a = if ov_a == 1 {
-            mask.to_owned()
-        } else {
-            BigUint::zero()
-        };
-        let ov_b = if ov_b == 1 { mask } else { BigUint::zero() };
-        let ov = Aby3BigUintShare::new(ov_a, ov_b);
-
-        // one big multiplexer
-        let res = self.cmux(ov, y, x)?;
-        Ok(res)
+        self.low_depth_binary_add_2_mod_p(x01, x2)
     }
 }
