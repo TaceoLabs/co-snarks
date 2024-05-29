@@ -234,14 +234,8 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(and)
     }
 
-    fn low_depth_binary_add_2_mod_p(
-        &mut self,
-        x1: Aby3BigUintShare,
-        x2: Aby3BigUintShare,
-    ) -> IoResult<Aby3BigUintShare> {
-        // Circuits
+    fn low_depth_sub_p_cmux(&mut self, mut x: Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
         let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
-        let mut x = self.low_depth_binary_add_2(x1, x2)?;
         let x_msb = &x >> (Self::BITLEN);
         x &= &mask;
         let mut y = self.low_depth_binary_sub_p(&x)?;
@@ -267,6 +261,15 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // one big multiplexer
         let res = self.cmux(ov, y, x)?;
         Ok(res)
+    }
+
+    fn low_depth_binary_add_2_mod_p(
+        &mut self,
+        x1: Aby3BigUintShare,
+        x2: Aby3BigUintShare,
+    ) -> IoResult<Aby3BigUintShare> {
+        let x = self.low_depth_binary_add_2(x1, x2)?;
+        self.low_depth_sub_p_cmux(x)
     }
 
     pub fn a2b(&mut self, x: &Aby3PrimeFieldShare<F>) -> IoResult<Aby3BigUintShare> {
@@ -300,6 +303,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     }
 
     // Keep in mind: Only works if input is actually a binary sharing of a valid field element
+    // If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
     pub fn b2a(&mut self, x: Aby3BigUintShare) -> IoResult<Aby3PrimeFieldShare<F>> {
         let mut y = Aby3BigUintShare::default();
         let mut res = Aby3PrimeFieldShare::default();
