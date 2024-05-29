@@ -1,4 +1,4 @@
-use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol};
+use super::{fieldshare::GSZPrimeFieldShare, network::GSZNetwork, GSZProtocol};
 use crate::{
     protocols::plain::PlainDriver,
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
@@ -7,19 +7,19 @@ use ark_ff::PrimeField;
 use eyre::{bail, Result};
 
 #[derive(Clone)]
-pub enum Aby3VmType<F: PrimeField> {
+pub enum GSZVmType<F: PrimeField> {
     Public(F),
-    Shared(Aby3PrimeFieldShare<F>),
+    Shared(GSZPrimeFieldShare<F>),
     BitShared,
 }
 
-impl<F: PrimeField> Default for Aby3VmType<F> {
+impl<F: PrimeField> Default for GSZVmType<F> {
     fn default() -> Self {
         Self::Public(F::default())
     }
 }
 
-impl<F: PrimeField> std::fmt::Debug for Aby3VmType<F> {
+impl<F: PrimeField> std::fmt::Debug for GSZVmType<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(arg0) => f.debug_tuple("Public").field(arg0).finish(),
@@ -29,251 +29,247 @@ impl<F: PrimeField> std::fmt::Debug for Aby3VmType<F> {
     }
 }
 
-impl<F: PrimeField> std::fmt::Display for Aby3VmType<F> {
+impl<F: PrimeField> std::fmt::Display for GSZVmType<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Aby3VmType::Public(field) => f.write_str(&format!("PUBLIC ({field})")),
-            Aby3VmType::Shared(share) => {
-                f.write_str(&format!("SHARED (a: {}, b: {})", share.a, share.b))
-            }
-            Aby3VmType::BitShared => f.write_str("BIT_SHARED (TODO)"),
+            GSZVmType::Public(field) => f.write_str(&format!("PUBLIC ({field})")),
+            GSZVmType::Shared(share) => f.write_str(&format!("SHARED ({})", share.a)),
+            GSZVmType::BitShared => f.write_str("BIT_SHARED (TODO)"),
         }
     }
 }
 
-impl<F: PrimeField> Aby3VmType<F> {
-    fn add<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+impl<F: PrimeField> GSZVmType<F> {
+    fn add<N: GSZNetwork>(party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_add(a, b))
+                GSZVmType::Public(plain.vm_add(a, b))
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
-                Aby3VmType::Shared(party.add_with_public(&a, &b))
+            (GSZVmType::Public(a), GSZVmType::Shared(b)) => {
+                GSZVmType::Shared(party.add_with_public(&a, &b))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                Aby3VmType::Shared(party.add_with_public(&b, &a))
+            (GSZVmType::Shared(a), GSZVmType::Public(b)) => {
+                GSZVmType::Shared(party.add_with_public(&b, &a))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => Aby3VmType::Shared(party.add(&a, &b)),
+            (GSZVmType::Shared(a), GSZVmType::Shared(b)) => GSZVmType::Shared(party.add(&a, &b)),
             (_, _) => todo!("BitShared not yet implemented"),
         }
     }
 
-    fn sub<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn sub<N: GSZNetwork>(party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_sub(a, b))
+                GSZVmType::Public(plain.vm_sub(a, b))
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
-                Aby3VmType::Shared(party.add_with_public(&a, &-b))
+            (GSZVmType::Public(a), GSZVmType::Shared(b)) => {
+                GSZVmType::Shared(party.add_with_public(&a, &-b))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                Aby3VmType::Shared(party.add_with_public(&b, &-a))
+            (GSZVmType::Shared(a), GSZVmType::Public(b)) => {
+                GSZVmType::Shared(party.add_with_public(&b, &-a))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => Aby3VmType::Shared(party.sub(&a, &b)),
+            (GSZVmType::Shared(a), GSZVmType::Shared(b)) => GSZVmType::Shared(party.sub(&a, &b)),
             (_, _) => todo!("BitShared not yet implemented"),
         }
     }
 
-    fn mul<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn mul<N: GSZNetwork>(party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_mul(a, b)?)
+                GSZVmType::Public(plain.vm_mul(a, b)?)
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
-                Aby3VmType::Shared(party.mul_with_public(&a, &b))
+            (GSZVmType::Public(a), GSZVmType::Shared(b)) => {
+                GSZVmType::Shared(party.mul_with_public(&a, &b))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                Aby3VmType::Shared(party.mul_with_public(&b, &a))
+            (GSZVmType::Shared(a), GSZVmType::Public(b)) => {
+                GSZVmType::Shared(party.mul_with_public(&b, &a))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
-                Aby3VmType::Shared(party.mul(&a, &b)?)
-            }
+            (GSZVmType::Shared(a), GSZVmType::Shared(b)) => GSZVmType::Shared(party.mul(&a, &b)?),
             (_, _) => todo!("BitShared not yet implemented"),
         };
         Ok(res)
     }
 
-    fn neg<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Self {
+    fn neg<N: GSZNetwork>(party: &mut GSZProtocol<F, N>, a: Self) -> Self {
         match a {
-            Aby3VmType::Public(a) => {
+            GSZVmType::Public(a) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_neg(a))
+                GSZVmType::Public(plain.vm_neg(a))
             }
-            Aby3VmType::Shared(a) => Aby3VmType::Shared(party.neg(&a)),
+            GSZVmType::Shared(a) => GSZVmType::Shared(party.neg(&a)),
             _ => todo!("BitShared not yet implemented"),
         }
     }
 
     // Implemented as a * b^-1
-    fn div<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn div<N: GSZNetwork>(party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_div(a, b)?)
+                GSZVmType::Public(plain.vm_div(a, b)?)
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Shared(b)) => {
                 let b_inv = party.inv(&b)?;
-                Aby3VmType::Shared(party.mul_with_public(&a, &b_inv))
+                GSZVmType::Shared(party.mul_with_public(&a, &b_inv))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Shared(a), GSZVmType::Public(b)) => {
                 if b.is_zero() {
                     bail!("Cannot invert zero");
                 }
                 let b_inv = b.inverse().unwrap();
-                Aby3VmType::Shared(party.mul_with_public(&b_inv, &a))
+                GSZVmType::Shared(party.mul_with_public(&b_inv, &a))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+            (GSZVmType::Shared(a), GSZVmType::Shared(b)) => {
                 let b_inv = party.inv(&b)?;
-                Aby3VmType::Shared(party.mul(&a, &b_inv)?)
+                GSZVmType::Shared(party.mul(&a, &b_inv)?)
             }
             (_, _) => todo!("BitShared not implemented"),
         };
         Ok(res)
     }
 
-    fn int_div<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn int_div<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_int_div(a, b)?)
+                GSZVmType::Public(plain.vm_int_div(a, b)?)
             }
             (_, _) => todo!("Shared not implemented"),
         };
         Ok(res)
     }
 
-    fn lt<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn lt<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_lt(a, b))
+                GSZVmType::Public(plain.vm_lt(a, b))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn le<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn le<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_le(a, b))
+                GSZVmType::Public(plain.vm_le(a, b))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn gt<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn gt<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_gt(a, b))
+                GSZVmType::Public(plain.vm_gt(a, b))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn ge<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn ge<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_ge(a, b))
+                GSZVmType::Public(plain.vm_ge(a, b))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn eq<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn eq<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_eq(a, b))
+                GSZVmType::Public(plain.vm_eq(a, b))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn neq<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn neq<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_neq(a, b))
+                GSZVmType::Public(plain.vm_neq(a, b))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn shift_l<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn shift_l<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_shift_l(a, b)?)
+                GSZVmType::Public(plain.vm_shift_l(a, b)?)
             }
             (_, _) => todo!("Shared not implemented"),
         };
         Ok(res)
     }
 
-    fn shift_r<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn shift_r<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_shift_r(a, b)?)
+                GSZVmType::Public(plain.vm_shift_r(a, b)?)
             }
             (_, _) => todo!("Shared not implemented"),
         };
         Ok(res)
     }
 
-    fn bool_and<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bool_and<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_bool_and(a, b)?)
+                GSZVmType::Public(plain.vm_bool_and(a, b)?)
             }
             (_, _) => todo!("Shared not implemented"),
         };
         Ok(res)
     }
 
-    fn bit_and<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bit_and<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_bit_and(a, b)?)
+                GSZVmType::Public(plain.vm_bit_and(a, b)?)
             }
             (_, _) => todo!("Shared not implemented"),
         };
         Ok(res)
     }
 
-    fn bit_xor<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bit_xor<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_bit_xor(a, b)?)
+                GSZVmType::Public(plain.vm_bit_xor(a, b)?)
             }
             (_, _) => todo!("Shared not implemented"),
         };
         Ok(res)
     }
 
-    fn bit_or<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bit_or<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_bit_or(a, b)?)
+                GSZVmType::Public(plain.vm_bit_or(a, b)?)
             }
             (_, _) => todo!("Shared not implemented"),
         };
         Ok(res)
     }
 
-    fn is_zero<N: Aby3Network>(_party: &Aby3Protocol<F, N>, a: Self) -> bool {
+    fn is_zero<N: GSZNetwork>(_party: &GSZProtocol<F, N>, a: Self) -> bool {
         match a {
-            Aby3VmType::Public(a) => {
+            GSZVmType::Public(a) => {
                 let plain = PlainDriver::default();
                 plain.is_zero(a)
             }
@@ -281,9 +277,9 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn to_index<N: Aby3Network>(_party: &Aby3Protocol<F, N>, a: Self) -> F {
+    fn to_index<N: GSZNetwork>(_party: &GSZProtocol<F, N>, a: Self) -> F {
         match a {
-            Aby3VmType::Public(a) => {
+            GSZVmType::Public(a) => {
                 let plain = PlainDriver::default();
                 plain.to_index(a)
             }
@@ -292,8 +288,8 @@ impl<F: PrimeField> Aby3VmType<F> {
     }
 }
 
-impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Protocol<F, N> {
-    type VmType = Aby3VmType<F>;
+impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProtocol<F, N> {
+    type VmType = GSZVmType<F>;
 
     fn vm_add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
         Self::VmType::add(self, a, b)

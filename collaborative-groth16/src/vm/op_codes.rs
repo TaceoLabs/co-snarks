@@ -95,7 +95,7 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::InputSubComp(mapped, signal_code) => {
                 format!("INPUT_SUB_COMP_OP {mapped} {signal_code}")
             }
-            MpcOpCode::Log => format!("LOG"),
+            MpcOpCode::Log => "LOG".to_string(),
             MpcOpCode::LogString(idx) => format!("LOG_STR {idx}"),
             MpcOpCode::LogFlush(line) => format!("FLUSH_LOG_BUF {line}"),
         };
