@@ -12,14 +12,9 @@ mod aby3_tests {
     use collaborative_groth16::{
         circuit::Circuit,
         groth16::{CollaborativeGroth16, SharedWitness},
-        vm::compiler::CompilerBuilder,
     };
-    use itertools::izip;
-    use mpc_core::protocols::aby3::{
-        self, id::PartyID, network::Aby3Network, utils::combine_field_elements_for_vm, Aby3Protocol,
-    };
+    use mpc_core::protocols::aby3::{id::PartyID, network::Aby3Network, Aby3Protocol};
     use rand::thread_rng;
-    use std::str::FromStr;
     use std::{fs::File, thread};
     use tokio::sync::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
@@ -241,43 +236,131 @@ mod aby3_tests {
         assert!(verified);
     }
 
-    #[tokio::test]
-    async fn e2e_witness_extension_mul2() {
-        let file = "../test_vectors/circuits/multiplier2.circom";
-        let input = vec![
-            ark_bn254::Fr::from_str("3").unwrap(),
-            ark_bn254::Fr::from_str("11").unwrap(),
-        ];
-        let mut rng = thread_rng();
-        let inputs = aby3::utils::share_field_elements_for_vm(&input, &mut rng);
-        let test_network = Aby3TestNetwork::default();
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+    mod witness_extension {
+        use super::*;
+        use ark_bn254::Bn254;
+        use circom_types::groth16::witness::Witness;
+        use collaborative_groth16::vm::compiler::CompilerBuilder;
+        use itertools::izip;
+        use mpc_core::protocols::aby3::{self, utils::combine_field_elements_for_vm};
+        use rand::thread_rng;
+        use std::str::FromStr;
+        use std::{fs::File, thread};
+        use tokio::sync::oneshot;
 
-        for (net, tx, input) in izip!(test_network.get_party_networks(), [tx1, tx2, tx3], inputs) {
-            thread::spawn(move || {
-                let witness_extension = CompilerBuilder::<Bn254>::new(file.to_owned())
-                    .build()
-                    .parse()
-                    .unwrap()
-                    .to_aby3_vm_with_network(net)
-                    .unwrap();
-                tx.send(witness_extension.run(input).unwrap()).unwrap()
-            });
+        macro_rules! run_test {
+            ($file: expr, $input: expr) => {{
+                let mut rng = thread_rng();
+                let inputs = aby3::utils::share_field_elements_for_vm($input, &mut rng);
+                let test_network = Aby3TestNetwork::default();
+                let (tx1, rx1) = oneshot::channel();
+                let (tx2, rx2) = oneshot::channel();
+                let (tx3, rx3) = oneshot::channel();
+
+                for (net, tx, input) in
+                    izip!(test_network.get_party_networks(), [tx1, tx2, tx3], inputs)
+                {
+                    thread::spawn(move || {
+                        let witness_extension = CompilerBuilder::<Bn254>::new($file.to_owned())
+                            .link_library("../test_vectors/circuits/libs/")
+                            .build()
+                            .parse()
+                            .unwrap()
+                            .to_aby3_vm_with_network(net)
+                            .unwrap();
+                        tx.send(witness_extension.run(input).unwrap()).unwrap()
+                    });
+                }
+                let result1 = rx1.await.unwrap();
+                let result2 = rx2.await.unwrap();
+                let result3 = rx3.await.unwrap();
+                combine_field_elements_for_vm(result1, result2, result3)
+            }};
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
-        let is_witness = combine_field_elements_for_vm(result1, result2, result3);
-        assert_eq!(
-            is_witness,
-            vec![
-                ark_bn254::Fr::from_str("1").unwrap(),
-                ark_bn254::Fr::from_str("33").unwrap(),
-                ark_bn254::Fr::from_str("3").unwrap(),
-                ark_bn254::Fr::from_str("11").unwrap()
+
+        macro_rules! witness_extension_test {
+            ($name: ident, $file: expr, $input: expr, $should_folder: expr, $should_file: expr) => {
+                #[tokio::test]
+                async fn $name() {
+                    let input = $input
+                        .iter()
+                        .map(|s| ark_bn254::Fr::from_str(s).unwrap())
+                        .collect::<Vec<_>>();
+                    let is_witness =
+                        run_test!(format!("../test_vectors/circuits/{}.circom", $file), &input);
+                    let witness = File::open(format!(
+                        "../test_vectors/bn254/{}/{}.wtns",
+                        $should_folder, $should_file
+                    ))
+                    .unwrap();
+                    let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+                    assert_eq!(is_witness, should_witness.values);
+                }
+            };
+
+            ($name: ident, $file: expr, $input: expr, $should:expr) => {
+                witness_extension_test!($name, $file, $input, $should, "witness");
+            };
+
+            ($name: ident, $file: expr, $input: expr) => {
+                witness_extension_test!($name, $file, $input, $file);
+            };
+        }
+        witness_extension_test!(multiplier2, "multiplier2", ["3", "11"]);
+        witness_extension_test!(
+            multiplier16,
+            "multiplier16",
+            [
+                "5", "10", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14",
+                "15",
             ]
         );
+        witness_extension_test!(control_flow, "control_flow", ["1"]);
+        witness_extension_test!(mimc, "mimc_hasher", ["1", "2", "3", "4"], "mimc");
+        witness_extension_test!(
+            poseidon1,
+            "poseidon_hasher1",
+            ["5"],
+            "poseidon",
+            "poseidon1"
+        );
+        witness_extension_test!(
+            poseidon2,
+            "poseidon_hasher2",
+            ["0", "1"],
+            "poseidon",
+            "poseidon2"
+        );
+        witness_extension_test!(
+            poseidon16,
+            "poseidon_hasher16",
+            (0..16).map(|i| i.to_string()).collect::<Vec<_>>(),
+            "poseidon",
+            "poseidon16"
+        );
+        //TODO The following tests do not work atm because we need some logic
+        //in the MPC driver
+        /*
+        witness_extension_test!(functions, "functions", ["5"]);
+        witness_extension_test!(
+            bin_sum,
+            "binsum_caller",
+            ["1", "0", "1", "1", "0", "0", "1", "1", "0", "1", "0", "1",]
+        );
+        witness_extension_test!(pedersen, "pedersen_hasher", ["5"], "pedersen");
+        witness_extension_test!(
+            eddsa_verify,
+            "eddsa_verify",
+            [
+                "1",
+                "13277427435165878497778222415993513565335242147425444199013288855685581939618",
+                "13622229784656158136036771217484571176836296686641868549125388198837476602820",
+                "2010143491207902444122668013146870263468969134090678646686512037244361350365",
+                "11220723668893468001994760120794694848178115379170651044669708829805665054484",
+                "2367470421002446880004241260470975644531657398480773647535134774673409612366",
+                "1234",
+            ],
+            "eddsa"
+        );*/
     }
 }
