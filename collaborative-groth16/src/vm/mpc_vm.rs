@@ -14,21 +14,18 @@ use mpc_core::{
         witness_extension_impl::Aby3VmType,
         Aby3Protocol,
     },
+    to_usize,
     traits::CircomWitnessExtensionProtocol,
 };
 use mpc_net::config::NetworkConfig;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
 pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
-    driver: C,
-    signals: Rc<RefCell<Vec<C::VmType>>>,
-    signal_to_witness: Vec<usize>,
-    constant_table: Vec<C::VmType>,
-    string_table: Vec<String>,
-    fun_decls: HashMap<String, FunDecl>,
-    templ_decls: HashMap<String, TemplateDecl>,
     main: String,
+    ctx: WitnessExtensionCtx<P, C>,
+    signal_to_witness: Vec<usize>,
+    driver: C,
 }
 
 pub type PlainWitnessExtension<P> = WitnessExtension<P, PlainDriver>;
@@ -51,11 +48,36 @@ struct Component<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> 
     field_stack: Stack<C::VmType>,
     index_stack: Stack<usize>,
     functions_ctx: Stack<FunctionCtx<C::VmType>>,
-    signals: Rc<RefCell<Vec<C::VmType>>>,
     mappings: Vec<usize>,
     sub_components: Vec<Component<P, C>>,
     component_body: Rc<CodeBlock>,
     log_buf: String,
+}
+
+struct WitnessExtensionCtx<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
+    signals: Vec<C::VmType>,
+    fun_decls: HashMap<String, FunDecl>,
+    templ_decls: HashMap<String, TemplateDecl>,
+    constant_table: Vec<C::VmType>,
+    string_table: Vec<String>,
+}
+
+impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExtensionCtx<P, C> {
+    fn new(
+        signals: Vec<C::VmType>,
+        constant_table: Vec<C::VmType>,
+        fun_decls: HashMap<String, FunDecl>,
+        templ_decls: HashMap<String, TemplateDecl>,
+        string_table: Vec<String>,
+    ) -> Self {
+        Self {
+            signals,
+            constant_table,
+            fun_decls,
+            templ_decls,
+            string_table,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -82,11 +104,7 @@ impl<T> FunctionCtx<T> {
 }
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P, C> {
-    fn init(
-        templ_decl: &TemplateDecl,
-        signal_offset: usize,
-        signals: Rc<RefCell<Vec<C::VmType>>>,
-    ) -> Self {
+    fn init(templ_decl: &TemplateDecl, signal_offset: usize) -> Self {
         Self {
             symbol: templ_decl.symbol.clone(),
             amount_vars: templ_decl.vars,
@@ -99,7 +117,6 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
             field_stack: Stack::default(),
             index_stack: Stack::default(),
             functions_ctx: Stack::default(),
-            signals,
             mappings: templ_decl.mappings.clone(),
             sub_components: Vec::with_capacity(templ_decl.sub_components),
             component_body: Rc::clone(&templ_decl.body),
@@ -107,13 +124,12 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
         }
     }
 
-    fn set_input_signals(&mut self, input_signals: Vec<C::VmType>) {
+    fn set_input_signals(&mut self, signals: &mut [C::VmType], input_signals: Vec<C::VmType>) {
         assert_eq!(
             self.input_signals,
             input_signals.len(),
             "You have to provide the input signals"
         );
-        let mut signals = self.signals.borrow_mut();
         signals[1 + self.output_signals..1 + self.output_signals + self.input_signals]
             .clone_from_slice(&input_signals);
     }
@@ -138,14 +154,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
         self.index_stack.pop()
     }
 
-    pub fn run(
-        &mut self,
-        protocol: &mut C,
-        fun_decls: &HashMap<String, FunDecl>,
-        templ_decls: &HashMap<String, TemplateDecl>,
-        constant_table: &[C::VmType],
-        string_table: &[String],
-    ) -> Result<()> {
+    pub fn run(&mut self, protocol: &mut C, ctx: &mut WitnessExtensionCtx<P, C>) -> Result<()> {
         let mut ip = 0;
         let mut current_body = Rc::clone(&self.component_body);
         let mut current_vars = vec![C::VmType::default(); self.amount_vars];
@@ -154,19 +163,19 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
             tracing::debug!("{ip:0>4}|   {inst}");
             match inst {
                 op_codes::MpcOpCode::PushConstant(index) => {
-                    self.push_field(constant_table[*index].clone());
+                    self.push_field(ctx.constant_table[*index].clone());
                 }
                 op_codes::MpcOpCode::PushIndex(index) => self.push_index(*index),
                 op_codes::MpcOpCode::LoadSignal => {
                     let index = self.pop_index();
-                    let signal = self.signals.borrow()[self.my_offset + index].clone();
+                    let signal = ctx.signals[self.my_offset + index].clone();
                     self.push_field(signal);
                 }
                 op_codes::MpcOpCode::StoreSignal => {
                     //get index
                     let index = self.pop_index();
                     let signal = self.pop_field();
-                    self.signals.borrow_mut()[self.my_offset + index] = signal;
+                    ctx.signals[self.my_offset + index] = signal;
                 }
                 op_codes::MpcOpCode::LoadVar => {
                     let index = self.pop_index();
@@ -185,7 +194,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     });
                 }
                 op_codes::MpcOpCode::Call(symbol, return_vals) => {
-                    let fun_decl = fun_decls.get(symbol).ok_or(eyre!(
+                    let fun_decl = ctx.fun_decls.get(symbol).ok_or(eyre!(
                         "{symbol} not found in function declaration. This must be a bug.."
                     ))?;
                     for params in fun_decl.params.iter() {
@@ -220,13 +229,12 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 }
                 op_codes::MpcOpCode::CreateCmp(symbol, amount) => {
                     let relative_offset = self.pop_index();
-                    let templ_decl = templ_decls.get(symbol).ok_or(eyre!(
+                    let templ_decl = ctx.templ_decls.get(symbol).ok_or(eyre!(
                         "{symbol} not found in template declarations. This must be a bug"
                     ))?;
                     let mut offset = self.my_offset + relative_offset;
                     (0..*amount).for_each(|_| {
-                        let sub_component =
-                            Component::init(templ_decl, offset, Rc::clone(&self.signals));
+                        let sub_component = Component::init(templ_decl, offset);
                         offset += sub_component.total_signal_size;
                         self.sub_components.push(sub_component);
                     });
@@ -238,7 +246,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
-                    let result = component.signals.borrow()[component.my_offset + index].clone();
+                    let result = ctx.signals[component.my_offset + index].clone();
                     self.push_field(result);
                 }
                 op_codes::MpcOpCode::InputSubComp(mapped, signal_code) => {
@@ -249,16 +257,10 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
-                    component.signals.borrow_mut()[component.my_offset + index] = signal;
+                    ctx.signals[component.my_offset + index] = signal;
                     component.provided_input_signals += 1;
                     if component.provided_input_signals == component.input_signals {
-                        component.run(
-                            protocol,
-                            fun_decls,
-                            templ_decls,
-                            constant_table,
-                            string_table,
-                        )?;
+                        component.run(protocol, ctx)?;
                     }
                 }
                 op_codes::MpcOpCode::Assert => {
@@ -368,12 +370,9 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     self.push_index(lhs * rhs);
                 }
                 op_codes::MpcOpCode::ToIndex => {
+                    //TODO what to do about that. This may leak some information
                     let signal = self.pop_field();
-                    let opened: BigUint = protocol.to_index(signal).into();
-                    let idx = opened
-                        .to_u64()
-                        .ok_or(eyre!("Cannot convert var into u64"))?;
-                    self.push_index(usize::try_from(idx)?);
+                    self.push_index(to_usize!(protocol.vm_open(signal)));
                 }
                 op_codes::MpcOpCode::Jump(jump_forward) => {
                     ip += jump_forward;
@@ -402,22 +401,23 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     //check if we have multiple return values
                     if self.current_return_vals == 1 {
                         //copy the return value
-                        let func_field_stack = self.field_stack.pop_stack_frame();
-                        for signal in func_field_stack {
-                            self.push_field(signal);
-                        }
+                        self.field_stack
+                            .pop_stack_frame()
+                            .into_iter()
+                            .for_each(|signal| {
+                                self.push_field(signal);
+                            });
                     } else {
                         let start = self.pop_index();
                         let end = self.current_return_vals;
                         self.index_stack.pop_stack_frame();
                         self.field_stack.pop_stack_frame();
-                        let vals = current_vars[start..start + end]
+                        current_vars[start..start + end]
                             .iter()
                             .cloned()
-                            .collect_vec();
-                        vals.into_iter().for_each(|var| {
-                            self.push_field(var);
-                        });
+                            .for_each(|var| {
+                                self.push_field(var);
+                            });
                     }
                     let (old_ip, old_return_vals, mut old_vars, old_body) =
                         self.functions_ctx.pop().consume();
@@ -432,13 +432,13 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     self.log_buf.push(' ');
                 }
                 op_codes::MpcOpCode::LogString(idx) => {
-                    if *idx >= string_table.len() {
+                    if *idx >= ctx.string_table.len() {
                         bail!(
                             "trying to access string on pos: {idx} but len is {}",
-                            string_table.len()
+                            ctx.string_table.len()
                         );
                     }
-                    self.log_buf.push_str(&string_table[*idx]);
+                    self.log_buf.push_str(&ctx.string_table[*idx]);
                     self.log_buf.push(' ');
                 }
                 op_codes::MpcOpCode::LogFlush(line) => {
@@ -455,70 +455,70 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExtension<P, C> {
     pub fn run(mut self, input_signals: Vec<C::VmType>) -> Result<Vec<C::VmType>> {
         let main_templ = self
+            .ctx
             .templ_decls
             .get(&self.main)
             .ok_or(eyre!("cannot find main template: {}", self.main))?;
-        let mut main_component = Component::<P, C>::init(main_templ, 1, Rc::clone(&self.signals));
-        main_component.set_input_signals(input_signals);
-        main_component.run(
-            &mut self.driver,
-            &self.fun_decls,
-            &self.templ_decls,
-            &self.constant_table,
-            &self.string_table,
-        )?;
-        std::mem::drop(main_component);
-        let ref_cell = Rc::try_unwrap(self.signals).expect("everyone else was dropped");
-        let signals = RefCell::into_inner(ref_cell);
+        let mut main_component = Component::init(main_templ, 1);
+        main_component.set_input_signals(&mut self.ctx.signals, input_signals);
+        main_component.run(&mut self.driver, &mut self.ctx)?;
         let mut witness = Vec::with_capacity(self.signal_to_witness.len());
         for idx in self.signal_to_witness {
-            witness.push(signals[idx].clone());
+            witness.push(self.ctx.signals[idx].clone());
         }
         Ok(witness)
     }
 }
 
 impl<P: Pairing> PlainWitnessExtension<P> {
-    pub fn new(parser: CollaborativeCircomCompilerParsed<P>) -> Self {
+    pub(crate) fn new(parser: CollaborativeCircomCompilerParsed<P>) -> Self {
         let mut signals = vec![P::ScalarField::default(); parser.amount_signals];
         signals[0] = P::ScalarField::one();
         Self {
             driver: PlainDriver {},
-            signals: Rc::new(RefCell::new(signals)),
             signal_to_witness: parser.signal_to_witness,
             main: parser.main,
-            constant_table: parser.constant_table,
-            string_table: parser.string_table,
-            fun_decls: parser.fun_decls,
-            templ_decls: parser.templ_decls,
+            ctx: WitnessExtensionCtx::new(
+                signals,
+                parser.constant_table,
+                parser.fun_decls,
+                parser.templ_decls,
+                parser.string_table,
+            ),
         }
     }
 }
 
 impl<P: Pairing, N: Aby3Network> Aby3WitnessExtension<P, N> {
-    pub fn from_network(parser: CollaborativeCircomCompilerParsed<P>, network: N) -> Result<Self> {
-        let driver = Aby3Protocol::<P::ScalarField, N>::new(network)?;
-        let mut signals = vec![Aby3VmType::<P::ScalarField>::default(); parser.amount_signals];
-        signals[0] = Aby3VmType::<P::ScalarField>::Public(P::ScalarField::one());
+    pub(crate) fn from_network(
+        parser: CollaborativeCircomCompilerParsed<P>,
+        network: N,
+    ) -> Result<Self> {
+        let driver = Aby3Protocol::new(network)?;
+        let mut signals = vec![Aby3VmType::default(); parser.amount_signals];
+        signals[0] = Aby3VmType::Public(P::ScalarField::one());
+        let constant_table = parser
+            .constant_table
+            .into_iter()
+            .map(Aby3VmType::Public)
+            .collect_vec();
         Ok(Self {
             driver,
-            signals: Rc::new(RefCell::new(signals)),
             signal_to_witness: parser.signal_to_witness,
             main: parser.main,
-            constant_table: parser
-                .constant_table
-                .into_iter()
-                .map(Aby3VmType::<P::ScalarField>::Public)
-                .collect_vec(),
-            string_table: parser.string_table,
-            fun_decls: parser.fun_decls,
-            templ_decls: parser.templ_decls,
+            ctx: WitnessExtensionCtx::new(
+                signals,
+                constant_table,
+                parser.fun_decls,
+                parser.templ_decls,
+                parser.string_table,
+            ),
         })
     }
 }
 
 impl<P: Pairing> Aby3WitnessExtension<P, Aby3MpcNet> {
-    pub fn new(
+    pub(crate) fn new(
         parser: CollaborativeCircomCompilerParsed<P>,
         config: NetworkConfig,
     ) -> Result<Self> {

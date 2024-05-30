@@ -83,7 +83,7 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
 
     fn is_zero(&self, a: Self::VmType) -> bool;
 
-    fn to_index(&self, a: Self::VmType) -> F;
+    fn vm_open(&self, a: Self::VmType) -> F;
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {

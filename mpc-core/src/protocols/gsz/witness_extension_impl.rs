@@ -281,7 +281,7 @@ impl<F: PrimeField> GSZVmType<F> {
         match a {
             GSZVmType::Public(a) => {
                 let plain = PlainDriver::default();
-                plain.to_index(a)
+                plain.vm_open(a)
             }
             _ => todo!("Shared not implemented"),
         }
@@ -364,7 +364,7 @@ impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProt
         Self::VmType::is_zero(self, a)
     }
 
-    fn to_index(&self, a: Self::VmType) -> F {
+    fn vm_open(&self, a: Self::VmType) -> F {
         Self::VmType::to_index(self, a)
     }
 }

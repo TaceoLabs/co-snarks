@@ -285,7 +285,7 @@ impl<F: PrimeField> Aby3VmType<F> {
         match a {
             Aby3VmType::Public(a) => {
                 let plain = PlainDriver::default();
-                plain.to_index(a)
+                plain.vm_open(a)
             }
             _ => todo!("Shared not implemented"),
         }
@@ -368,7 +368,7 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         Self::VmType::is_zero(self, a)
     }
 
-    fn to_index(&self, a: Self::VmType) -> F {
+    fn vm_open(&self, a: Self::VmType) -> F {
         Self::VmType::to_index(self, a)
     }
 }
