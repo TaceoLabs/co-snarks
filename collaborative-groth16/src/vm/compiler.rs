@@ -35,6 +35,45 @@ pub struct CompilerBuilder<P: Pairing> {
     link_libraries: Vec<PathBuf>,
     phantom_data: PhantomData<P>,
 }
+pub struct CollaborativeCircomCompiler<P: Pairing> {
+    file: String,
+    version: String,
+    link_libraries: Vec<PathBuf>,
+    templ_to_size: HashMap<String, usize>,
+    current_offset: usize,
+    phantom_data: PhantomData<P>,
+    pub(crate) fun_decls: HashMap<String, FunDecl>,
+    pub(crate) templ_decls: HashMap<String, TemplateDecl>,
+    pub(crate) current_code_block: CodeBlock,
+}
+
+pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
+    pub(crate) main: String,
+    pub(crate) amount_signals: usize,
+    pub(crate) constant_table: Vec<P::ScalarField>,
+    pub(crate) string_table: Vec<String>,
+    pub(crate) fun_decls: HashMap<String, FunDecl>,
+    pub(crate) templ_decls: HashMap<String, TemplateDecl>,
+    pub(crate) signal_to_witness: Vec<usize>,
+}
+
+#[derive(Clone)]
+pub(crate) struct TemplateDecl {
+    pub(crate) symbol: String,
+    pub(crate) input_signals: usize,
+    pub(crate) output_signals: usize,
+    pub(crate) signal_size: usize,
+    pub(crate) sub_components: usize,
+    pub(crate) vars: usize,
+    pub(crate) mappings: Vec<usize>,
+    pub(crate) body: Rc<CodeBlock>,
+}
+
+pub(crate) struct FunDecl {
+    pub(crate) params: Vec<Param>,
+    pub(crate) vars: usize,
+    pub(crate) body: Rc<CodeBlock>,
+}
 
 impl<P: Pairing> CompilerBuilder<P> {
     pub fn new(file: String) -> Self {
@@ -74,24 +113,6 @@ impl<P: Pairing> CompilerBuilder<P> {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct TemplateDecl {
-    pub(crate) symbol: String,
-    pub(crate) input_signals: usize,
-    pub(crate) output_signals: usize,
-    pub(crate) signal_size: usize,
-    pub(crate) sub_components: usize,
-    pub(crate) vars: usize,
-    pub(crate) mappings: Vec<usize>,
-    pub(crate) body: Rc<CodeBlock>,
-}
-
-pub(crate) struct FunDecl {
-    pub(crate) params: Vec<Param>,
-    pub(crate) vars: usize,
-    pub(crate) body: Rc<CodeBlock>,
-}
-
 impl FunDecl {
     fn new(params: Vec<Param>, vars: usize, body: CodeBlock) -> Self {
         Self {
@@ -125,28 +146,6 @@ impl TemplateDecl {
             body: Rc::new(body),
         }
     }
-}
-
-pub struct CollaborativeCircomCompiler<P: Pairing> {
-    file: String,
-    version: String,
-    link_libraries: Vec<PathBuf>,
-    templ_to_size: HashMap<String, usize>,
-    current_offset: usize,
-    phantom_data: PhantomData<P>,
-    pub(crate) fun_decls: HashMap<String, FunDecl>,
-    pub(crate) templ_decls: HashMap<String, TemplateDecl>,
-    pub(crate) current_code_block: CodeBlock,
-}
-
-pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
-    pub(crate) main: String,
-    pub(crate) amount_signals: usize,
-    pub(crate) constant_table: Vec<P::ScalarField>,
-    pub(crate) string_table: Vec<String>,
-    pub(crate) fun_decls: HashMap<String, FunDecl>,
-    pub(crate) templ_decls: HashMap<String, TemplateDecl>,
-    pub(crate) signal_to_witness: Vec<usize>,
 }
 
 impl<P: Pairing> CollaborativeCircomCompiler<P> {

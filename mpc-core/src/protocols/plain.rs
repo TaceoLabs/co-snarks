@@ -9,6 +9,37 @@ use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 use rand::SeedableRng;
 
+#[macro_export]
+macro_rules! to_usize {
+    ($field: expr) => {{
+        let a: BigUint = $field.into();
+        usize::try_from(a.to_u64().ok_or(eyre!("Cannot convert var into u64"))?)?
+    }};
+}
+
+macro_rules! bool_op {
+    ($lhs: expr, $op: tt, $rhs: expr) => {
+       if $lhs $op $rhs {
+        F::one()
+       } else {
+        F::zero()
+       }
+    };
+}
+
+macro_rules! to_u64 {
+    ($field: expr) => {{
+        let a: BigUint = $field.into();
+        a.to_u64().ok_or(eyre!("Cannot convert var into u64"))?
+    }};
+}
+
+macro_rules! to_bigint {
+    ($field: expr) => {{
+        let a: BigUint = $field.into();
+        a
+    }};
+}
 #[derive(Default)]
 pub struct PlainDriver {}
 
@@ -127,29 +158,6 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver {
     }
 }
 
-macro_rules! bool_op {
-    ($lhs: expr, $op: tt, $rhs: expr) => {
-       if $lhs $op $rhs {
-        F::one()
-       } else {
-        F::zero()
-       }
-    };
-}
-
-macro_rules! to_usize {
-    ($field: expr) => {{
-        let a: BigUint = $field.into();
-        a.to_u64().ok_or(eyre!("Cannot convert var into u64"))?
-    }};
-}
-
-macro_rules! to_bigint {
-    ($field: expr) => {{
-        let a: BigUint = $field.into();
-        a
-    }};
-}
 impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     type VmType = F;
 
@@ -174,8 +182,8 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     }
 
     fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_usize!(a);
-        let rhs = to_usize!(b);
+        let lhs = to_u64!(a);
+        let rhs = to_u64!(b);
         Ok(F::from(lhs / rhs))
     }
 
@@ -249,7 +257,9 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
         Ok(F::from(lhs & rhs))
     }
 
-    fn to_index(&self, a: Self::VmType) -> F {
+    fn vm_open(&self, a: Self::VmType) -> F {
         a
     }
 }
+
+pub use to_usize;
