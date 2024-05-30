@@ -12,9 +12,14 @@ mod aby3_tests {
     use collaborative_groth16::{
         circuit::Circuit,
         groth16::{CollaborativeGroth16, SharedWitness},
+        vm::compiler::CompilerBuilder,
     };
-    use mpc_core::protocols::aby3::{id::PartyID, network::Aby3Network, Aby3Protocol};
+    use itertools::izip;
+    use mpc_core::protocols::aby3::{
+        self, id::PartyID, network::Aby3Network, utils::combine_field_elements_for_vm, Aby3Protocol,
+    };
     use rand::thread_rng;
+    use std::str::FromStr;
     use std::{fs::File, thread};
     use tokio::sync::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
@@ -182,7 +187,7 @@ mod aby3_tests {
     }
 
     #[tokio::test]
-    async fn e2e_poseidon_bn254() {
+    async fn e2e_proof_poseidon_bn254() {
         let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
         let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
         let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
@@ -234,5 +239,45 @@ mod aby3_tests {
         let verified =
             Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
         assert!(verified);
+    }
+
+    #[tokio::test]
+    async fn e2e_witness_extension_mul2() {
+        let file = "../test_vectors/circuits/multiplier2.circom";
+        let input = vec![
+            ark_bn254::Fr::from_str("3").unwrap(),
+            ark_bn254::Fr::from_str("11").unwrap(),
+        ];
+        let mut rng = thread_rng();
+        let inputs = aby3::utils::share_field_elements_for_vm(&input, &mut rng);
+        let test_network = Aby3TestNetwork::default();
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+        let (tx3, rx3) = oneshot::channel();
+
+        for (net, tx, input) in izip!(test_network.get_party_networks(), [tx1, tx2, tx3], inputs) {
+            thread::spawn(move || {
+                let witness_extension = CompilerBuilder::<Bn254>::new(file.to_owned())
+                    .build()
+                    .parse()
+                    .unwrap()
+                    .to_aby3_vm_with_network(net)
+                    .unwrap();
+                tx.send(witness_extension.run(input).unwrap()).unwrap()
+            });
+        }
+        let result1 = rx1.await.unwrap();
+        let result2 = rx2.await.unwrap();
+        let result3 = rx3.await.unwrap();
+        let is_witness = combine_field_elements_for_vm(result1, result2, result3);
+        assert_eq!(
+            is_witness,
+            vec![
+                ark_bn254::Fr::from_str("1").unwrap(),
+                ark_bn254::Fr::from_str("33").unwrap(),
+                ark_bn254::Fr::from_str("3").unwrap(),
+                ark_bn254::Fr::from_str("11").unwrap()
+            ]
+        );
     }
 }

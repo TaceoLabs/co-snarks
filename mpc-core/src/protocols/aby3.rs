@@ -33,12 +33,13 @@ type IoResult<T> = std::io::Result<T>;
 pub mod utils {
     use ark_ec::CurveGroup;
     use ark_ff::PrimeField;
+    use itertools::izip;
     use num_bigint::BigUint;
     use rand::{CryptoRng, Rng};
 
     use super::{
         a2b::Aby3BigUintShare, fieldshare::Aby3PrimeFieldShareVec, pointshare::Aby3PointShare,
-        Aby3PrimeFieldShare,
+        witness_extension_impl::Aby3VmType, Aby3PrimeFieldShare,
     };
 
     pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
@@ -83,6 +84,22 @@ pub mod utils {
         share3: Aby3BigUintShare,
     ) -> BigUint {
         share1.get_a() ^ share2.get_a() ^ share3.get_a()
+    }
+
+    pub fn share_field_elements_for_vm<F: PrimeField, R: Rng + CryptoRng>(
+        vals: &[F],
+        rng: &mut R,
+    ) -> [Vec<Aby3VmType<F>>; 3] {
+        let mut shares1 = Vec::with_capacity(vals.len());
+        let mut shares2 = Vec::with_capacity(vals.len());
+        let mut shares3 = Vec::with_capacity(vals.len());
+        for val in vals {
+            let [share1, share2, share3] = share_field_element(*val, rng);
+            shares1.push(Aby3VmType::Shared(share1));
+            shares2.push(Aby3VmType::Shared(share2));
+            shares3.push(Aby3VmType::Shared(share3));
+        }
+        [shares1, shares2, shares3]
     }
 
     pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
@@ -140,6 +157,38 @@ pub mod utils {
         .collect::<Vec<_>>();
         assert_eq!(a_result, b_result);
         a_result
+    }
+
+    pub fn combine_field_elements_for_vm<F: PrimeField>(
+        shares1: Vec<Aby3VmType<F>>,
+        shares2: Vec<Aby3VmType<F>>,
+        shares3: Vec<Aby3VmType<F>>,
+    ) -> Vec<F> {
+        debug_assert_eq!(shares1.len(), shares2.len());
+        debug_assert_eq!(shares2.len(), shares3.len());
+        let mut vec = Vec::with_capacity(shares1.len());
+        for shares in izip!(shares1, shares2, shares3) {
+            let combined = match shares {
+                (
+                    Aby3VmType::Public(share1),
+                    Aby3VmType::Public(share2),
+                    Aby3VmType::Public(share3),
+                ) => {
+                    debug_assert_eq!(share1, share2);
+                    debug_assert_eq!(share2, share3);
+                    share1
+                }
+                (
+                    Aby3VmType::Shared(share1),
+                    Aby3VmType::Shared(share2),
+                    Aby3VmType::Shared(share3),
+                ) => combine_field_element(share1, share2, share3),
+                (Aby3VmType::BitShared, Aby3VmType::BitShared, Aby3VmType::BitShared) => todo!(),
+                _ => panic!(),
+            };
+            vec.push(combined);
+        }
+        vec
     }
 
     pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(

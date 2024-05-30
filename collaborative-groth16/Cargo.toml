@@ -34,7 +34,7 @@ circom-parser = { workspace = true }
 circom-program_structure = { workspace = true }
 circom-type_analysis = { workspace = true }
 circom-types = { version = "0.1.0", path = "../circom-types" }
-color-eyre = { workspace = true }
+eyre = { workspace = true }
 itertools = { workspace = true }
 mpc-core = { version = "0.1.0", path = "../mpc-core" }
 mpc-net = { version = "0.1.0", path = "../mpc-net" }
@@ -42,6 +42,8 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-
+tracing = { workspace = true }
+num-bigint = { workspace = true }
 [dev-dependencies]
 serde_json = { workspace = true }
+tracing-test = { workspace = true }

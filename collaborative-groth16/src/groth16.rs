@@ -10,7 +10,7 @@ use ark_relations::r1cs::{
     SynthesisError, Variable,
 };
 use circom_types::r1cs::R1CS;
-use color_eyre::eyre::Result;
+use eyre::Result;
 use itertools::izip;
 use mpc_core::protocols::aby3::network::Aby3Network;
 use mpc_core::protocols::gsz::network::GSZNetwork;
