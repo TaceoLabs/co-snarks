@@ -1,5 +1,6 @@
+use crate::types::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl};
+
 use super::{
-    compiler::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl},
     op_codes::{self, CodeBlock},
     stack::Stack,
 };
@@ -197,14 +198,8 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     let fun_decl = ctx.fun_decls.get(symbol).ok_or(eyre!(
                         "{symbol} not found in function declaration. This must be a bug.."
                     ))?;
-                    for params in fun_decl.params.iter() {
-                        assert!(
-                            params.length.is_empty(),
-                            "TODO we need to check how to call this and when this happens"
-                        );
-                    }
                     let mut func_vars = vec![C::VmType::default(); fun_decl.vars];
-                    let to_copy = self.field_stack.frame_len() - fun_decl.params.len();
+                    let to_copy = self.field_stack.frame_len() - fun_decl.num_params;
                     //copy the parameters
                     for (idx, param) in self.field_stack.peek_stack_frame()[to_copy..]
                         .iter()

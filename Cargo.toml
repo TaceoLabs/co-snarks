@@ -1,11 +1,13 @@
 [workspace]
 members = [
+    "circom-mpc-vm",
     "circom-types",
     "collaborative-groth16",
     "collaborative-circom",
     "mpc-core",
     "mpc-net",
     "tests",
+    "circom-mpc-compiler",
 ]
 resolver = "1" # need resolver 1 because of circom upstream
 
@@ -35,17 +37,6 @@ bincode = "1.3.3"
 bytemuck = { version = "1.15", features = ["derive"] }
 byteorder = "1.5.0"
 bytes = "1.5.0"
-circom-circom_algebra = { git = "https://github.com/TaceoLabs/circom", package = "circom_algebra", branch = "dev" }
-circom-code_producers = { git = "https://github.com/TaceoLabs/circom", package = "code_producers", branch = "dev" }
-circom-compiler = { git = "https://github.com/TaceoLabs/circom", package = "compiler", branch = "dev" }
-circom-constant_tracking = { git = "https://github.com/TaceoLabs/circom", package = "constant_tracking", branch = "dev" }
-circom-constraint_generation = { git = "https://github.com/TaceoLabs/circom", package = "constraint_generation", branch = "dev" }
-circom-constraint_list = { git = "https://github.com/TaceoLabs/circom", package = "constraint_list", branch = "dev" }
-circom-constraint_writers = { git = "https://github.com/TaceoLabs/circom", package = "constraint_writers", branch = "dev" }
-circom-dag = { git = "https://github.com/TaceoLabs/circom", package = "dag", branch = "dev" }
-circom-parser = { git = "https://github.com/TaceoLabs/circom", package = "parser", branch = "dev" }
-circom-program_structure = { git = "https://github.com/TaceoLabs/circom", package = "program_structure", branch = "dev" }
-circom-type_analysis = { git = "https://github.com/TaceoLabs/circom", package = "type_analysis", branch = "dev" }
 clap = { version = "4.4.8", features = ["derive"] }
 color-eyre = "0.6.3"
 criterion = { version = "0.5", features = ["async_tokio"] }
