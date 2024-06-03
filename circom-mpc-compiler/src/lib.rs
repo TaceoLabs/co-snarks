@@ -1,7 +1,6 @@
 use ark_ec::pairing::Pairing;
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags},
-    hir::very_concrete_program::Param,
     intermediate_representation::{
         ir_interface::{
             AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket, CreateCmpBucket,
@@ -12,20 +11,16 @@ use circom_compiler::{
     },
 };
 use circom_constraint_generation::BuildConfig;
+use circom_mpc_vm::{
+    op_codes::{CodeBlock, MpcOpCode},
+    types::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl},
+};
 use circom_program_structure::{error_definition::Report, program_archive::ProgramArchive};
 use circom_type_analysis::check_types;
 use eyre::eyre;
 use eyre::{bail, Result};
 use itertools::Itertools;
-use mpc_core::protocols::aby3::network::{Aby3MpcNet, Aby3Network};
-use mpc_core::protocols::plain::PlainDriver;
-use mpc_net::config::NetworkConfig;
-use std::{collections::HashMap, marker::PhantomData, path::PathBuf, rc::Rc};
-
-use super::{
-    mpc_vm::{Aby3WitnessExtension, PlainWitnessExtension, WitnessExtension},
-    op_codes::{CodeBlock, MpcOpCode},
-};
+use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 const DEFAULT_VERSION: &str = "2.0.0";
 
@@ -45,34 +40,6 @@ pub struct CollaborativeCircomCompiler<P: Pairing> {
     pub(crate) fun_decls: HashMap<String, FunDecl>,
     pub(crate) templ_decls: HashMap<String, TemplateDecl>,
     pub(crate) current_code_block: CodeBlock,
-}
-
-pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
-    pub(crate) main: String,
-    pub(crate) amount_signals: usize,
-    pub(crate) constant_table: Vec<P::ScalarField>,
-    pub(crate) string_table: Vec<String>,
-    pub(crate) fun_decls: HashMap<String, FunDecl>,
-    pub(crate) templ_decls: HashMap<String, TemplateDecl>,
-    pub(crate) signal_to_witness: Vec<usize>,
-}
-
-#[derive(Clone)]
-pub(crate) struct TemplateDecl {
-    pub(crate) symbol: String,
-    pub(crate) input_signals: usize,
-    pub(crate) output_signals: usize,
-    pub(crate) signal_size: usize,
-    pub(crate) sub_components: usize,
-    pub(crate) vars: usize,
-    pub(crate) mappings: Vec<usize>,
-    pub(crate) body: Rc<CodeBlock>,
-}
-
-pub(crate) struct FunDecl {
-    pub(crate) params: Vec<Param>,
-    pub(crate) vars: usize,
-    pub(crate) body: Rc<CodeBlock>,
 }
 
 impl<P: Pairing> CompilerBuilder<P> {
@@ -109,41 +76,6 @@ impl<P: Pairing> CompilerBuilder<P> {
             fun_decls: HashMap::new(),
             templ_decls: HashMap::new(),
             phantom_data: PhantomData,
-        }
-    }
-}
-
-impl FunDecl {
-    fn new(params: Vec<Param>, vars: usize, body: CodeBlock) -> Self {
-        Self {
-            params,
-            vars,
-            body: Rc::new(body),
-        }
-    }
-}
-
-impl TemplateDecl {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        symbol: String,
-        input_signals: usize,
-        output_signals: usize,
-        signal_size: usize,
-        sub_components: usize,
-        vars: usize,
-        mappings: Vec<usize>,
-        body: CodeBlock,
-    ) -> Self {
-        Self {
-            symbol,
-            input_signals,
-            output_signals,
-            signal_size,
-            sub_components,
-            vars,
-            mappings,
-            body: Rc::new(body),
         }
     }
 }
@@ -542,9 +474,16 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
 
+            // moved here from vm
+            for params in fun.params.iter() {
+                assert!(
+                    params.length.is_empty(),
+                    "TODO we need to check how to call this and when this happens"
+                );
+            }
             self.fun_decls.insert(
                 fun.header.clone(),
-                FunDecl::new(fun.params.clone(), fun.max_number_of_vars, new_code_block),
+                FunDecl::new(fun.params.len(), fun.max_number_of_vars, new_code_block),
             );
         }
         for templ in circuit.templates.iter() {
@@ -582,35 +521,15 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             );
         }
 
-        Ok(CollaborativeCircomCompilerParsed {
-            main: circuit.c_producer.main_header,
-            signal_to_witness: circuit.c_producer.witness_to_signal_list,
-            amount_signals: circuit.c_producer.total_number_of_signals,
+        Ok(CollaborativeCircomCompilerParsed::new(
+            circuit.c_producer.main_header,
+            circuit.c_producer.total_number_of_signals,
             constant_table,
             string_table,
-            fun_decls: self.fun_decls,
-            templ_decls: self.templ_decls,
-        })
-    }
-}
-
-impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
-    pub fn to_plain_vm(self) -> WitnessExtension<P, PlainDriver> {
-        PlainWitnessExtension::new(self)
-    }
-
-    pub fn to_aby3_vm(
-        self,
-        network_config: NetworkConfig,
-    ) -> Result<Aby3WitnessExtension<P, Aby3MpcNet>> {
-        Aby3WitnessExtension::new(self, network_config)
-    }
-
-    pub fn to_aby3_vm_with_network<N: Aby3Network>(
-        self,
-        network: N,
-    ) -> Result<Aby3WitnessExtension<P, N>> {
-        Aby3WitnessExtension::from_network(self, network)
+            self.fun_decls,
+            self.templ_decls,
+            circuit.c_producer.witness_to_signal_list,
+        ))
     }
 }
 

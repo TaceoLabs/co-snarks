@@ -239,8 +239,8 @@ mod aby3_tests {
     mod witness_extension {
         use super::*;
         use ark_bn254::Bn254;
+        use circom_mpc_compiler::CompilerBuilder;
         use circom_types::groth16::witness::Witness;
-        use collaborative_groth16::vm::compiler::CompilerBuilder;
         use itertools::izip;
         use mpc_core::protocols::aby3::{self, utils::combine_field_elements_for_vm};
         use rand::thread_rng;

@@ -1,4 +1,6 @@
 {
+  "circom-mpc-compiler": "0.0.1",
+  "circom-mpc-vm": "0.0.1",
   "circom-types": "0.0.1",
   "collaborative-circom": "0.0.1",
   "collaborative-groth16": "0.0.1",

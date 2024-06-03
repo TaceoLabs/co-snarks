@@ -1,5 +1,21 @@
 {
   "packages": {
+    "circom-mpc-compiler": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "rust",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    },
+    "circom-mpc-vm": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "rust",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    },
     "circom-types": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
