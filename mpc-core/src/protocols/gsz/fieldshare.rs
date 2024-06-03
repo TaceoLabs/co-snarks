@@ -1,5 +1,6 @@
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use itertools::Itertools;
 use std::mem::ManuallyDrop;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
@@ -140,7 +141,7 @@ impl<F: PrimeField> std::ops::Neg for &GSZPrimeFieldShare<F> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct GSZPrimeFieldShareVec<F: PrimeField> {
     pub(crate) a: Vec<F>,
 }
@@ -178,6 +179,20 @@ impl<F: PrimeField> std::ops::Add for GSZPrimeFieldShareVec<F> {
         Self {
             a: self.a.iter().zip(rhs.a).map(|(a, b)| *a + b).collect(),
         }
+    }
+}
+
+impl<F: PrimeField> IntoIterator for GSZPrimeFieldShareVec<F> {
+    type Item = GSZPrimeFieldShare<F>;
+    type IntoIter = std::vec::IntoIter<GSZPrimeFieldShare<F>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        // TODO: can we save this collect? cannot name map type directly yet
+        self.a
+            .into_iter()
+            .map(GSZPrimeFieldShare::new)
+            .collect_vec()
+            .into_iter()
     }
 }
 

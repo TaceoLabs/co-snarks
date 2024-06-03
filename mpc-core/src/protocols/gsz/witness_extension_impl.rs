@@ -367,4 +367,12 @@ impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProt
     fn vm_open(&self, a: Self::VmType) -> F {
         Self::VmType::to_index(self, a)
     }
+
+    fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare {
+        match a {
+            GSZVmType::Public(a) => self.promote_to_trivial_share(a),
+            GSZVmType::Shared(a) => a,
+            GSZVmType::BitShared => todo!("BitShared not yet implemented"),
+        }
+    }
 }

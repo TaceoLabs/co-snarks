@@ -7,6 +7,7 @@ use std::{
 
 use ark_bn254::Bn254;
 use ark_groth16::{Groth16, Proof};
+use circom_mpc_compiler::CompilerBuilder;
 use circom_types::{
     groth16::{
         proof::JsonProof, verification_key::JsonVerificationKey, witness::Witness, zkey::ZKey,
@@ -17,7 +18,7 @@ use clap::{Parser, Subcommand};
 use collaborative_circom::file_utils;
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedWitness};
 use color_eyre::eyre::{eyre, Context};
-use mpc_core::protocols::aby3::{network::Aby3MpcNet, Aby3Protocol};
+use mpc_core::protocols::aby3::{self, network::Aby3MpcNet, Aby3Protocol};
 use mpc_net::config::NetworkConfig;
 
 fn install_tracing() {
@@ -78,7 +79,10 @@ enum Commands {
         input: PathBuf,
         /// The path to the circuit file
         #[arg(long)]
-        circuit: PathBuf,
+        circuit: String,
+        /// The path to Circom library files
+        #[arg(long)]
+        link_library: Vec<String>,
         /// The MPC protocol to be used
         #[arg(long)]
         protocol: String, // TODO: which datatype? an enum?
@@ -197,33 +201,53 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::GenerateWitness {
             input,
             circuit,
+            link_library,
             protocol: _,
             config,
-            out: _,
+            out,
         } => {
             file_utils::check_file_exists(&input)?;
-            file_utils::check_file_exists(&circuit)?;
+            let circuit_path = PathBuf::from(&circuit);
+            file_utils::check_file_exists(&circuit_path)?;
             file_utils::check_file_exists(&config)?;
 
             // parse input shares
+            let input_share_file =
+                BufReader::new(File::open(&input).context("while opening input share file")?);
+            let input_share = Vec::new();
 
             // parse circuit file & put through our compiler
+            let mut builder = CompilerBuilder::<Bn254>::new(circuit);
+            for lib in link_library {
+                builder = builder.link_library(lib);
+            }
+            let parsed_circom_circuit = builder
+                .build()
+                .parse()
+                .context("while parsing circuit file")?;
 
             // parse network configuration
-            let config = std::fs::read_to_string(config)?;
-            let _config: NetworkConfig = toml::from_str(&config)?;
-
-            // construct relevant protocol
+            let config =
+                std::fs::read_to_string(config).context("while reading network config file")?;
+            let config: NetworkConfig =
+                toml::from_str(&config).context("while parsing network config")?;
 
             // connect to network
+            let net = Aby3MpcNet::new(config).context("while connecting to network")?;
+
+            // init MPC protocol
+            let aby3_vm = parsed_circom_circuit
+                .to_aby3_vm_with_network(net)
+                .context("while constructing MPC VM")?;
 
             // execute witness generation in MPC
+            let result_witness_share = aby3_vm
+                .run(input_share)
+                .context("while running witness generation")?;
 
             // write result to output file
-            // let witness_share: SharedWitness<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254> =
-            //     todo!();
-            // let out_file = BufWriter::new(std::fs::File::create(out)?);
-            // bincode::serialize_into(out_file, &witness_share)?;
+            let out_file = BufWriter::new(std::fs::File::create(out)?);
+            bincode::serialize_into(out_file, &result_witness_share)?;
             tracing::info!("Witness generation finished successfully")
         }
         Commands::GenerateProof {

@@ -33,7 +33,6 @@ type IoResult<T> = std::io::Result<T>;
 pub mod utils {
     use ark_ec::CurveGroup;
     use ark_ff::PrimeField;
-    use itertools::izip;
     use num_bigint::BigUint;
     use rand::{CryptoRng, Rng};
 
@@ -159,38 +158,6 @@ pub mod utils {
         a_result
     }
 
-    pub fn combine_field_elements_for_vm<F: PrimeField>(
-        shares1: Vec<Aby3VmType<F>>,
-        shares2: Vec<Aby3VmType<F>>,
-        shares3: Vec<Aby3VmType<F>>,
-    ) -> Vec<F> {
-        debug_assert_eq!(shares1.len(), shares2.len());
-        debug_assert_eq!(shares2.len(), shares3.len());
-        let mut vec = Vec::with_capacity(shares1.len());
-        for shares in izip!(shares1, shares2, shares3) {
-            let combined = match shares {
-                (
-                    Aby3VmType::Public(share1),
-                    Aby3VmType::Public(share2),
-                    Aby3VmType::Public(share3),
-                ) => {
-                    debug_assert_eq!(share1, share2);
-                    debug_assert_eq!(share2, share3);
-                    share1
-                }
-                (
-                    Aby3VmType::Shared(share1),
-                    Aby3VmType::Shared(share2),
-                    Aby3VmType::Shared(share3),
-                ) => combine_field_element(share1, share2, share3),
-                (Aby3VmType::BitShared, Aby3VmType::BitShared, Aby3VmType::BitShared) => todo!(),
-                _ => panic!(),
-            };
-            vec.push(combined);
-        }
-        vec
-    }
-
     pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
         val: C,
         rng: &mut R,
@@ -213,6 +180,7 @@ pub mod utils {
     }
 }
 
+#[derive(Debug)]
 pub struct Aby3Protocol<F: PrimeField, N: Aby3Network> {
     rngs: Aby3CorrelatedRng,
     network: N,
@@ -339,7 +307,15 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         Ok(a.a + a.b + c)
     }
 
-    fn promote_to_trivial_share(&self, public_values: &[F]) -> Self::FieldShareVec {
+    fn promote_to_trivial_share(&self, public_value: F) -> Self::FieldShare {
+        match self.network.get_id() {
+            PartyID::ID0 => Aby3PrimeFieldShare::new(public_value, F::zero()),
+            PartyID::ID1 => Aby3PrimeFieldShare::new(F::zero(), public_value),
+            PartyID::ID2 => Aby3PrimeFieldShare::default(),
+        }
+    }
+
+    fn promote_to_trivial_shares(&self, public_values: &[F]) -> Self::FieldShareVec {
         let mut vec = Vec::with_capacity(public_values.len());
         //additive share1 gets the value everyone else zero
         //therefore id1 and id2 needs the share

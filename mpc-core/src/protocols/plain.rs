@@ -106,7 +106,11 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver {
         Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
-    fn promote_to_trivial_share(&self, public_values: &[F]) -> Self::FieldShareVec {
+    fn promote_to_trivial_share(&self, public_value: F) -> Self::FieldShare {
+        public_value
+    }
+
+    fn promote_to_trivial_shares(&self, public_values: &[F]) -> Self::FieldShareVec {
         public_values.to_vec()
     }
 
@@ -258,6 +262,10 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     }
 
     fn vm_open(&self, a: Self::VmType) -> F {
+        a
+    }
+
+    fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare {
         a
     }
 }

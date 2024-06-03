@@ -537,10 +537,17 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
 mod tests {
     use ark_bn254::Bn254;
     use circom_types::groth16::witness::Witness;
+    use collaborative_groth16::groth16::SharedWitness;
+    use mpc_core::protocols::plain::PlainDriver;
     use tracing_test::traced_test;
 
     use super::*;
     use std::{fs::File, str::FromStr};
+
+    fn convert_witness(mut witness: SharedWitness<PlainDriver, Bn254>) -> Vec<ark_bn254::Fr> {
+        witness.public_inputs.extend(witness.witness);
+        witness.public_inputs
+    }
 
     #[traced_test]
     #[test]
@@ -557,7 +564,7 @@ mod tests {
             ])
             .unwrap();
         assert_eq!(
-            is_witness,
+            convert_witness(is_witness),
             vec![
                 ark_bn254::Fr::from_str("1").unwrap(),
                 ark_bn254::Fr::from_str("33").unwrap(),
@@ -599,7 +606,7 @@ mod tests {
             .unwrap();
         let witness = File::open("../test_vectors/bn254/multiplier16/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        assert_eq!(is_witness, should_witness.values);
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
 
     #[test]
@@ -616,7 +623,7 @@ mod tests {
             .unwrap();
         let witness = File::open("../test_vectors/bn254/control_flow/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        assert_eq!(is_witness, should_witness.values);
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
 
     #[test]
@@ -634,7 +641,7 @@ mod tests {
             .unwrap();
         let witness = File::open("../test_vectors/bn254/functions/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        assert_eq!(is_witness, should_witness.values);
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
     #[test]
     fn bin_sum() {
@@ -667,7 +674,7 @@ mod tests {
             .unwrap();
         let witness = File::open("../test_vectors/bn254/bin_sum/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        assert_eq!(is_witness, should_witness.values);
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
 
     #[test]
@@ -689,7 +696,7 @@ mod tests {
             .unwrap();
         let witness = File::open("../test_vectors/bn254/mimc/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        assert_eq!(is_witness, should_witness.values);
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
 
     #[test]
@@ -706,7 +713,7 @@ mod tests {
             .unwrap();
         let witness = File::open("../test_vectors/bn254/pedersen/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        assert_eq!(is_witness, should_witness.values);
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
 
     #[test]
@@ -723,7 +730,7 @@ mod tests {
             .unwrap();
         let witness = File::open("../test_vectors/bn254/poseidon/poseidon1.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        assert_eq!(is_witness, should_witness.values);
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
 
     #[test]
@@ -743,7 +750,7 @@ mod tests {
             .unwrap();
         let witness = File::open("../test_vectors/bn254/poseidon/poseidon2.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        assert_eq!(is_witness, should_witness.values);
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
 
     #[test]
@@ -764,7 +771,7 @@ mod tests {
             .unwrap();
         let witness = File::open("../test_vectors/bn254/poseidon/poseidon16.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        assert_eq!(is_witness, should_witness.values);
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
 
     #[test]
@@ -804,6 +811,6 @@ mod tests {
             .unwrap();
         let witness = File::open("../test_vectors/bn254/eddsa/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
-        assert_eq!(is_witness, should_witness.values);
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
 }

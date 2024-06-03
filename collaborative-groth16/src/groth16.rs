@@ -36,7 +36,8 @@ type CurveFieldShareVec<T, C> = <T as PrimeFieldMpcProtocol<
     <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
 >>::FieldShareVec;
 
-#[derive(Serialize, Deserialize)]
+// TODO: maybe move this type to some other crate, as this is the only used type from this crate for many dependencies
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedWitness<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -127,7 +128,7 @@ where
                 .evaluate_constraint(bt_i, public_inputs, private_witness);
         }
         let mut a = FieldShareVec::<T, P>::from(a);
-        let promoted_public = self.driver.promote_to_trivial_share(public_inputs);
+        let promoted_public = self.driver.promote_to_trivial_shares(public_inputs);
         self.driver
             .clone_from_slice(&mut a, &promoted_public, num_constraints, 0, num_inputs);
 

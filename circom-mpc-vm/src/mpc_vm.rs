@@ -6,6 +6,7 @@ use super::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
+use collaborative_groth16::groth16::SharedWitness;
 use eyre::{bail, eyre, Result};
 use itertools::Itertools;
 use mpc_core::protocols::plain::PlainDriver;
@@ -448,7 +449,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
 }
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExtension<P, C> {
-    pub fn run(mut self, input_signals: Vec<C::VmType>) -> Result<Vec<C::VmType>> {
+    pub fn run(mut self, input_signals: Vec<C::VmType>) -> Result<SharedWitness<C, P>> {
         let main_templ = self
             .ctx
             .templ_decls
@@ -457,11 +458,22 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
         let mut main_component = Component::init(main_templ, 1);
         main_component.set_input_signals(&mut self.ctx.signals, input_signals);
         main_component.run(&mut self.driver, &mut self.ctx)?;
-        let mut witness = Vec::with_capacity(self.signal_to_witness.len());
+        // TODO: capacities
+        let mut public_inputs = Vec::new();
+        let mut witness = Vec::new();
+        let mut count = 0;
         for idx in self.signal_to_witness {
-            witness.push(self.ctx.signals[idx].clone());
+            if count < main_component.output_signals {
+                public_inputs.push(self.driver.vm_open(self.ctx.signals[idx].clone()));
+            } else {
+                witness.push(self.driver.vm_to_share(self.ctx.signals[idx].clone()));
+            }
+            count += 1;
         }
-        Ok(witness)
+        Ok(SharedWitness {
+            public_inputs,
+            witness: witness.into(),
+        })
     }
 }
 

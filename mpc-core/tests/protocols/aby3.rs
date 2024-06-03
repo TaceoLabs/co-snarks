@@ -83,6 +83,7 @@ impl Aby3TestNetwork {
     }
 }
 
+#[derive(Debug)]
 pub struct PartyTestNetwork {
     id: PartyID,
     send_prev: UnboundedSender<Bytes>,

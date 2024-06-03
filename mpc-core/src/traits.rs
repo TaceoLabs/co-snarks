@@ -9,11 +9,19 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
-    type FieldShare: Default + Clone + CanonicalSerialize + CanonicalDeserialize + Sync;
+    type FieldShare: Default
+        + std::fmt::Debug
+        + Clone
+        + CanonicalSerialize
+        + CanonicalDeserialize
+        + Sync;
     type FieldShareVec: From<Vec<Self::FieldShare>>
         + Clone
         + CanonicalSerialize
         + CanonicalDeserialize
+        + Default
+        + std::fmt::Debug
+        + IntoIterator<Item = Self::FieldShare>
         + Sync;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
@@ -35,7 +43,8 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         a: &Self::FieldShareVec,
         b: &Self::FieldShareVec,
     ) -> std::io::Result<Self::FieldShareVec>;
-    fn promote_to_trivial_share(&self, public_values: &[F]) -> Self::FieldShareVec;
+    fn promote_to_trivial_share(&self, public_values: F) -> Self::FieldShare;
+    fn promote_to_trivial_shares(&self, public_values: &[F]) -> Self::FieldShareVec;
     fn distribute_powers_and_mul_by_const(&mut self, coeffs: &mut Self::FieldShareVec, g: F, c: F);
     fn evaluate_constraint(
         &mut self,
@@ -84,6 +93,8 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
     fn is_zero(&self, a: Self::VmType) -> bool;
 
     fn vm_open(&self, a: Self::VmType) -> F;
+
+    fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare;
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {

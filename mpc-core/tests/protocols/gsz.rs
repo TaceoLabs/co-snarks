@@ -68,6 +68,7 @@ impl GSZTestNetwork {
     }
 }
 
+#[derive(Debug)]
 pub struct PartyTestNetwork {
     id: usize,
     num_parties: usize,

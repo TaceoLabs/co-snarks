@@ -1,5 +1,6 @@
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use itertools::Itertools;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Aby3PrimeFieldShare<F: PrimeField> {
@@ -153,7 +154,7 @@ impl<F: PrimeField> std::ops::Neg for &Aby3PrimeFieldShare<F> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Aby3PrimeFieldShareVec<F: PrimeField> {
     pub(crate) a: Vec<F>,
     pub(crate) b: Vec<F>,
@@ -194,5 +195,20 @@ impl<F: PrimeField> std::ops::Add for Aby3PrimeFieldShareVec<F> {
             a: self.a.iter().zip(rhs.a).map(|(a, b)| *a + b).collect(),
             b: self.b.iter().zip(rhs.b).map(|(a, b)| *a + b).collect(),
         }
+    }
+}
+
+impl<F: PrimeField> IntoIterator for Aby3PrimeFieldShareVec<F> {
+    type Item = Aby3PrimeFieldShare<F>;
+    type IntoIter = std::vec::IntoIter<Aby3PrimeFieldShare<F>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.a
+            .into_iter()
+            .zip(self.b.into_iter())
+            .map(|(a, b)| Aby3PrimeFieldShare::<F>::new(a, b))
+            // TODO: can we save this collect? cannot name map type directly yet
+            .collect_vec()
+            .into_iter()
     }
 }
