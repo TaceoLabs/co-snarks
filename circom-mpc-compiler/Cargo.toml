@@ -31,4 +31,5 @@ itertools.workspace = true
 ark-bn254.workspace = true
 circom-types = { path = "../circom-types" }
 tracing.workspace = true
-tracing-test.workspace = true
+# we want to test logging of other crates, so we disable the env filter
+tracing-test = { workspace = true, features = ["no-env-filter"] }
