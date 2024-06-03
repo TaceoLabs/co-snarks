@@ -11,8 +11,8 @@ ark-groth16 = { workspace = true }
 ark-ec = { workspace = true }
 ark-serialize = { workspace = true }
 ark-ff = { workspace = true }
-collaborative-groth16 = { path = "../collaborative-groth16" }
-circom-mpc-compiler = { path = "../circom-mpc-compiler" }
+collaborative-groth16 = { version = "0.1.0", path = "../collaborative-groth16" }
+circom-mpc-compiler = { version = "0.1.0", path = "../circom-mpc-compiler" }
 circom-types = { version = "0.1.0", path = "../circom-types" }
 itertools = { workspace = true }
 mpc-core = { version = "0.1.0", path = "../mpc-core" }
