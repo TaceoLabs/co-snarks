@@ -2,6 +2,8 @@ pub mod circom_reduction;
 pub mod circuit;
 pub mod groth16;
 mod serde_compat;
+mod compiler_tests;
+
 
 #[cfg(test)]
 mod tests {
