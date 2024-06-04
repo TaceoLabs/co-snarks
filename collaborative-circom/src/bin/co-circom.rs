@@ -16,9 +16,11 @@ use circom_types::{
 };
 use clap::{Parser, Subcommand};
 use collaborative_circom::file_utils;
-use collaborative_groth16::groth16::{CollaborativeGroth16, SharedWitness};
+use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
 use color_eyre::eyre::{eyre, Context};
-use mpc_core::protocols::aby3::{self, network::Aby3MpcNet, Aby3Protocol};
+use mpc_core::protocols::aby3::{
+    self, network::Aby3MpcNet, witness_extension_impl::Aby3VmType, Aby3Protocol,
+};
 use mpc_net::config::NetworkConfig;
 
 fn install_tracing() {
@@ -171,7 +173,7 @@ fn main() -> color_eyre::Result<ExitCode> {
                 .file_name()
                 .expect("we have a file name")
                 .to_str()
-                .ok_or(eyre!("input file name is not valid UTF-8"))?;
+                .ok_or(eyre!("witness file name is not valid UTF-8"))?;
             for (i, share) in shares.iter().enumerate() {
                 let path = out_dir.join(format!("{}.{}.shared", base_name, i));
                 let out_file =
@@ -191,12 +193,56 @@ fn main() -> color_eyre::Result<ExitCode> {
             file_utils::check_dir_exists(&out_dir)?;
 
             // read the input file
+            let input_file =
+                BufReader::new(File::open(&input).context("while opening input file")?);
+
+            let input_json: serde_json::Map<String, serde_json::Value> =
+                serde_json::from_reader(input_file).context("while parsing input file")?;
 
             // construct relevant protocol
+            // TODO: make generic over curve/protocol
 
             // create input shares
+            let mut shares = [
+                SharedInput::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::default(),
+                SharedInput::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::default(),
+                SharedInput::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::default(),
+            ];
+
+            let mut rng = rand::thread_rng();
+            for (name, val) in input_json {
+                let val_fe: ark_bn254::Fr = val
+                    .as_str()
+                    .ok_or_else(|| {
+                        eyre!(
+                            "expected input to be a field element string, got \"{}\"",
+                            val
+                        )
+                    })?
+                    .parse()
+                    .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
+                    .context("while parsing field element")?;
+                let [share0, share1, share2] = aby3::utils::share_field_element(val_fe, &mut rng);
+                shares[0].shared_inputs.insert(name.clone(), share0);
+                shares[1].shared_inputs.insert(name.clone(), share1);
+                shares[2].shared_inputs.insert(name.clone(), share2);
+            }
 
             // write out the shares to the output directory
+            let base_name = input
+                .file_name()
+                .expect("we have a file name")
+                .to_str()
+                .ok_or(eyre!("input file name is not valid UTF-8"))?;
+            for (i, share) in shares.iter().enumerate() {
+                let path = out_dir.join(format!("{}.{}.shared", base_name, i));
+                let out_file =
+                    BufWriter::new(File::create(&path).context("while creating output file")?);
+                bincode::serialize_into(out_file, share)
+                    .context("while serializing witness share")?;
+                tracing::info!("Wrote input share {} to file {}", i, path.display());
+            }
+            tracing::info!("Split input into shares successfully")
         }
         Commands::GenerateWitness {
             input,
@@ -214,7 +260,9 @@ fn main() -> color_eyre::Result<ExitCode> {
             // parse input shares
             let input_share_file =
                 BufReader::new(File::open(&input).context("while opening input share file")?);
-            let input_share = Vec::new();
+            let input_share: SharedInput<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254> =
+                bincode::deserialize_from(input_share_file)
+                    .context("trying to parse input share file")?;
 
             // parse circuit file & put through our compiler
             let mut builder = CompilerBuilder::<Bn254>::new(circuit);
@@ -225,6 +273,15 @@ fn main() -> color_eyre::Result<ExitCode> {
                 .build()
                 .parse()
                 .context("while parsing circuit file")?;
+
+            // map input shares to mpc vm type
+            // TODO: outsource this to a function
+            let input_share: Vec<_> = input_share
+                .shared_inputs
+                .into_iter()
+                .map(|(_, share)| share) // TODO: correct order based on main component decl.
+                .map(|share| Aby3VmType::Shared(share))
+                .collect();
 
             // parse network configuration
             let config =

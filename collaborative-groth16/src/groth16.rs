@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use ark_ec::pairing::Pairing;
@@ -52,6 +53,34 @@ where
         deserialize_with = "crate::serde_compat::ark_de"
     )]
     pub witness: FieldShareVec<T, P>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SharedInput<T, P: Pairing>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    #[serde(
+        serialize_with = "crate::serde_compat::ark_se",
+        deserialize_with = "crate::serde_compat::ark_de"
+    )]
+    /// A map from variable names to the share of the field element.
+    /// This is a BTreeMap because it implements Canonical(De)Serialize.
+    pub shared_inputs: BTreeMap<String, T::FieldShare>,
+    // TODO: what to do about multi-dimensional inputs?
+    // In the input json they are just arrays, but i guess they are interpreted as individual signals in circom
+    // What is the naming convention there @fnieddu?
+}
+
+impl<T, P: Pairing> Default for SharedInput<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn default() -> Self {
+        Self {
+            shared_inputs: BTreeMap::new(),
+        }
+    }
 }
 
 pub struct CollaborativeGroth16<T, P: Pairing>
