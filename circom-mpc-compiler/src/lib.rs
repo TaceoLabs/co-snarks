@@ -533,7 +533,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         ))
     }
 }
-
 #[cfg(test)]
 mod tests {
     use ark_bn254::Bn254;
