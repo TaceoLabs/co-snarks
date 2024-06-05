@@ -30,8 +30,4 @@ itertools.workspace = true
 [dev-dependencies]
 ark-bn254.workspace = true
 circom-types = { version = "0.1.0", path = "../circom-types" }
-collaborative-groth16 = { version = "0.1.0", path = "../collaborative-groth16" }
-mpc-core = { version = "0.1.0", path = "../mpc-core" }
 tracing.workspace = true
-# we want to test logging of other crates, so we disable the env filter
-tracing-test = { workspace = true, features = ["no-env-filter"] }

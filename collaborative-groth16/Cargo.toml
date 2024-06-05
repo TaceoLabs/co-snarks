@@ -36,4 +36,3 @@ tracing = { workspace = true }
 num-bigint = { workspace = true }
 [dev-dependencies]
 serde_json = { workspace = true }
-tracing-test = { workspace = true }

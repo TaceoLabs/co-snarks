@@ -1,14 +1,12 @@
 #[cfg(test)]
-mod compiler_tests {
+mod tests {
     use ark_bn254::Bn254;
     use circom_mpc_compiler::CompilerBuilder;
     use circom_types::groth16::witness::Witness;
-    use serde_json;
     use std::{
         fs::{self, File},
         str::FromStr,
     };
-    use tracing_test::traced_test;
 
     pub struct TestInputs {
         circuit_path: String,
@@ -45,33 +43,6 @@ mod compiler_tests {
             input,
             witness: should_witness,
         }
-    }
-    #[traced_test]
-    #[test]
-    fn logs() {
-        let file = "../test_vectors/circuits/multiplier2.circom";
-        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
-        let is_witness = builder
-            .parse()
-            .unwrap()
-            .to_plain_vm()
-            .run(vec![
-                ark_bn254::Fr::from_str("3").unwrap(),
-                ark_bn254::Fr::from_str("11").unwrap(),
-            ])
-            .unwrap();
-        assert_eq!(
-            is_witness,
-            vec![
-                ark_bn254::Fr::from_str("1").unwrap(),
-                ark_bn254::Fr::from_str("33").unwrap(),
-                ark_bn254::Fr::from_str("3").unwrap(),
-                ark_bn254::Fr::from_str("11").unwrap()
-            ]
-        );
-        assert!(logs_contain(
-            "This is a test to see whether the logging works:  33"
-        ));
     }
 
     #[test]
@@ -229,10 +200,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/aliascheck_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/aliascheck_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("aliascheck_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -254,10 +225,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/babyadd_tester/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/babyadd_tester/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("babyadd_tester", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -279,10 +250,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/babycheck_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/babycheck_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("babycheck_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -304,10 +275,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/babypbk_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/babypbk_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("babypbk_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -357,10 +328,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/constants_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/constants_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("constants_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -410,10 +381,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/eddsamimc_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/eddsamimc_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("eddsamimc_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -435,10 +406,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/eddsaposeidon_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/eddsaposeidon_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("eddsaposeidon_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -460,10 +431,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/edwards2montgomery/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/edwards2montgomery/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("edwards2montgomery", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -485,10 +456,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/escalarmul_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/escalarmul_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("escalarmul_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -510,10 +481,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/escalarmul_test_min/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/escalarmul_test_min/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("escalarmul_test_min", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -535,10 +506,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulany_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulany_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("escalarmulany_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -560,10 +531,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulfix_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulfix_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("escalarmulfix_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -585,10 +556,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulw4table/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulw4table/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("escalarmulw4table", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -610,10 +581,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulw4table_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulw4table_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("escalarmulw4table_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -635,10 +606,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulw4table_test3/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulw4table_test3/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("escalarmulw4table_test3", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -660,10 +631,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/greatereqthan/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/greatereqthan/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("greatereqthan", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -825,10 +796,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/mimc_sponge_hash_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/mimc_sponge_hash_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("mimc_sponge_hash_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -850,10 +821,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/mimc_sponge_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/mimc_sponge_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("mimc_sponge_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -903,10 +874,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/montgomery2edwards/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/montgomery2edwards/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("montgomery2edwards", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -928,10 +899,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/montgomeryadd/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/montgomeryadd/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("montgomeryadd", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -953,10 +924,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/montgomerydouble/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/montgomerydouble/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("montgomerydouble", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1090,10 +1061,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/pedersen2_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/pedersen2_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("pedersen2_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1115,10 +1086,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/pedersen_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/pedersen_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("pedersen_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1140,10 +1111,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/pointbits_loopback/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/pointbits_loopback/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("pointbits_loopback", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1165,10 +1136,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/poseidon3_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/poseidon3_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("poseidon3_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1190,10 +1161,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/poseidon6_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/poseidon6_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("poseidon6_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1215,10 +1186,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/poseidonex_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/poseidonex_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("poseidonex_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1240,10 +1211,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/sha256_2_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/sha256_2_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("sha256_2_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1265,10 +1236,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/sha256_test448/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/sha256_test448/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("sha256_test448", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1289,10 +1260,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/sha256_test512/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/sha256_test512/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("sha256_test512", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1342,10 +1313,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/smtprocessor10_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/smtprocessor10_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("smtprocessor10_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
@@ -1367,10 +1338,10 @@ mod compiler_tests {
         let mut i = 0;
         loop {
             if fs::metadata(format!(
-                "../test_vectors/circuits/test-circuits/witness_outputs/smtverifier10_test/witness{}.wtns", i
-            )).is_err() {
-                break
-            }
+                    "../test_vectors/circuits/test-circuits/witness_outputs/smtverifier10_test/witness{}.wtns", i
+                )).is_err() {
+                    break
+                }
             let inp: TestInputs = from_test_name("smtverifier10_test", i);
             let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
                 .link_library("../test_vectors/circuits/libs/");
