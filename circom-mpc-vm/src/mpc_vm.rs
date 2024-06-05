@@ -467,8 +467,8 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
                 .ok_or(eyre!("Cannot find signal \"{name}\" in provided input"))?;
             let mut counter = 0;
             for input in inputs.into_iter() {
-                counter += 1;
                 self.ctx.signals[offset + counter] = C::VmType::from(input);
+                counter += 1;
             }
             if counter != *size {
                 bail!("for input \"{name}\" expected {size} signals, got {counter}");
@@ -499,11 +499,13 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
     }
     pub fn run_with_flat(mut self, input_signals: Vec<C::VmType>) -> Result<SharedWitness<C, P>> {
         self.set_flat_input_signals(input_signals);
+        tracing::info!("{:?}", &self.ctx.signals);
         self.call_main_component()?;
         self.post_processing()
     }
     pub fn run(mut self, input_signals: SharedInput<C, P>) -> Result<SharedWitness<C, P>> {
         self.set_input_signals(input_signals)?;
+        tracing::info!("{:?}", &self.ctx.signals);
         self.call_main_component()?;
         self.post_processing()
     }
