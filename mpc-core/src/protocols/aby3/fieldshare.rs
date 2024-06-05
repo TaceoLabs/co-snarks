@@ -178,6 +178,13 @@ impl<F: PrimeField> Aby3PrimeFieldShareVec<F> {
         debug_assert_eq!(self.a.len(), self.b.len());
         self.a.len()
     }
+
+    pub fn get(&self, i: usize) -> Aby3PrimeFieldShare<F> {
+        Aby3PrimeFieldShare {
+            a: self.a[i],
+            b: self.b[i],
+        }
+    }
 }
 
 impl<F: PrimeField> From<Vec<Aby3PrimeFieldShare<F>>> for Aby3PrimeFieldShareVec<F> {
