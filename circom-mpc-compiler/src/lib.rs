@@ -465,7 +465,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| eyre!("cannot parse string in constant list"))?;
         let string_table = circuit.c_producer.get_string_table().to_owned();
-
         //build functions
         for fun in circuit.functions.iter() {
             fun.body.iter().for_each(|inst| {
@@ -511,7 +510,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 TemplateDecl::new(
                     templ.header.clone(),
                     templ.number_of_inputs,
-                    templ.number_of_outputs,
                     signal_size,
                     templ.number_of_components,
                     templ.var_stack_depth,
@@ -529,6 +527,9 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             self.fun_decls,
             self.templ_decls,
             circuit.c_producer.witness_to_signal_list,
+            circuit.c_producer.number_of_main_inputs,
+            circuit.c_producer.number_of_main_outputs,
+            circuit.c_producer.main_input_list.clone(),
         ))
     }
 }
@@ -558,7 +559,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(vec![
+            .run_with_flat(vec![
                 ark_bn254::Fr::from_str("3").unwrap(),
                 ark_bn254::Fr::from_str("11").unwrap(),
             ])
@@ -576,7 +577,6 @@ mod tests {
             "This is a test to see whether the logging work:  33"
         ));
     }
-
     #[test]
     fn mul16() {
         let file = "../test_vectors/circuits/multiplier16.circom";
@@ -585,7 +585,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(vec![
+            .run_with_flat(vec![
                 ark_bn254::Fr::from_str("5").unwrap(),
                 ark_bn254::Fr::from_str("10").unwrap(),
                 ark_bn254::Fr::from_str("2").unwrap(),
@@ -619,7 +619,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(vec![ark_bn254::Fr::from_str("1").unwrap()])
+            .run_with_flat(vec![ark_bn254::Fr::from_str("1").unwrap()])
             .unwrap();
         let witness = File::open("../test_vectors/bn254/control_flow/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
@@ -637,7 +637,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(input)
+            .run_with_flat(input)
             .unwrap();
         let witness = File::open("../test_vectors/bn254/functions/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
@@ -670,7 +670,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(input)
+            .run_with_flat(input)
             .unwrap();
         let witness = File::open("../test_vectors/bn254/bin_sum/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
@@ -687,7 +687,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(vec![
+            .run_with_flat(vec![
                 ark_bn254::Fr::from_str("1").unwrap(),
                 ark_bn254::Fr::from_str("2").unwrap(),
                 ark_bn254::Fr::from_str("3").unwrap(),
@@ -709,7 +709,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(vec![ark_bn254::Fr::from_str("5").unwrap()])
+            .run_with_flat(vec![ark_bn254::Fr::from_str("5").unwrap()])
             .unwrap();
         let witness = File::open("../test_vectors/bn254/pedersen/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
@@ -726,7 +726,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(vec![ark_bn254::Fr::from_str("5").unwrap()])
+            .run_with_flat(vec![ark_bn254::Fr::from_str("5").unwrap()])
             .unwrap();
         let witness = File::open("../test_vectors/bn254/poseidon/poseidon1.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
@@ -743,7 +743,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(vec![
+            .run_with_flat(vec![
                 ark_bn254::Fr::from_str("0").unwrap(),
                 ark_bn254::Fr::from_str("1").unwrap(),
             ])
@@ -763,7 +763,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(
+            .run_with_flat(
                 (0..16)
                     .map(|i| ark_bn254::Fr::from_str(i.to_string().as_str()).unwrap())
                     .collect_vec(),
@@ -784,7 +784,7 @@ mod tests {
             .parse()
             .unwrap()
             .to_plain_vm()
-            .run(vec![
+            .run_with_flat(vec![
                 ark_bn254::Fr::from_str("1").unwrap(),
                 ark_bn254::Fr::from_str(
                     "13277427435165878497778222415993513565335242147425444199013288855685581939618",

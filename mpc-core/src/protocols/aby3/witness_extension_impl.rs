@@ -301,6 +301,12 @@ impl<F: PrimeField> Aby3VmType<F> {
     }
 }
 
+impl<F: PrimeField> From<Aby3PrimeFieldShare<F>> for Aby3VmType<F> {
+    fn from(value: Aby3PrimeFieldShare<F>) -> Self {
+        Aby3VmType::Shared(value)
+    }
+}
+
 impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Protocol<F, N> {
     type VmType = Aby3VmType<F>;
 

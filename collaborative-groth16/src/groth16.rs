@@ -26,7 +26,6 @@ use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-
 pub type Aby3CollaborativeGroth16<P> =
     CollaborativeGroth16<Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet>, P>;
 
@@ -66,7 +65,7 @@ where
     )]
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub shared_inputs: BTreeMap<String, T::FieldShare>,
+    pub shared_inputs: BTreeMap<String, T::FieldShareVec>,
     // TODO: what to do about multi-dimensional inputs?
     // In the input json they are just arrays, but i guess they are interpreted as individual signals in circom
     // What is the naming convention there @fnieddu?

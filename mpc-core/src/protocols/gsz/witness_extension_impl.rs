@@ -288,6 +288,11 @@ impl<F: PrimeField> GSZVmType<F> {
     }
 }
 
+impl<F: PrimeField> From<GSZPrimeFieldShare<F>> for GSZVmType<F> {
+    fn from(value: GSZPrimeFieldShare<F>) -> Self {
+        GSZVmType::Shared(value)
+    }
+}
 impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProtocol<F, N> {
     type VmType = GSZVmType<F>;
 

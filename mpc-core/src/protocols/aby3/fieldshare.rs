@@ -205,7 +205,7 @@ impl<F: PrimeField> IntoIterator for Aby3PrimeFieldShareVec<F> {
     fn into_iter(self) -> Self::IntoIter {
         self.a
             .into_iter()
-            .zip(self.b.into_iter())
+            .zip(self.b)
             .map(|(a, b)| Aby3PrimeFieldShare::<F>::new(a, b))
             // TODO: can we save this collect? cannot name map type directly yet
             .collect_vec()

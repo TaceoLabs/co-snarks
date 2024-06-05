@@ -286,7 +286,8 @@ mod aby3_tests {
                             .unwrap()
                             .to_aby3_vm_with_network(net)
                             .unwrap();
-                        tx.send(witness_extension.run(input).unwrap()).unwrap()
+                        tx.send(witness_extension.run_with_flat(input).unwrap())
+                            .unwrap()
                     });
                 }
                 let result1 = rx1.await.unwrap();

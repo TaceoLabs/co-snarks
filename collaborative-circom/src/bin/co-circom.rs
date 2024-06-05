@@ -18,9 +18,7 @@ use clap::{Parser, Subcommand};
 use collaborative_circom::file_utils;
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
 use color_eyre::eyre::{eyre, Context};
-use mpc_core::protocols::aby3::{
-    self, network::Aby3MpcNet, witness_extension_impl::Aby3VmType, Aby3Protocol,
-};
+use mpc_core::protocols::aby3::{self, network::Aby3MpcNet, Aby3Protocol};
 use mpc_net::config::NetworkConfig;
 
 fn install_tracing() {
@@ -211,18 +209,14 @@ fn main() -> color_eyre::Result<ExitCode> {
 
             let mut rng = rand::thread_rng();
             for (name, val) in input_json {
-                let val_fe: ark_bn254::Fr = val
-                    .as_str()
-                    .ok_or_else(|| {
-                        eyre!(
-                            "expected input to be a field element string, got \"{}\"",
-                            val
-                        )
-                    })?
-                    .parse()
-                    .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
-                    .context("while parsing field element")?;
-                let [share0, share1, share2] = aby3::utils::share_field_element(val_fe, &mut rng);
+                let parsed_vals = if val.is_array() {
+                    parse_array(&val)?
+                } else {
+                    vec![parse_field(&val)?]
+                };
+
+                let [share0, share1, share2] =
+                    aby3::utils::share_field_elements(&parsed_vals, &mut rng);
                 shares[0].shared_inputs.insert(name.clone(), share0);
                 shares[1].shared_inputs.insert(name.clone(), share1);
                 shares[2].shared_inputs.insert(name.clone(), share2);
@@ -274,15 +268,6 @@ fn main() -> color_eyre::Result<ExitCode> {
                 .parse()
                 .context("while parsing circuit file")?;
 
-            // map input shares to mpc vm type
-            // TODO: outsource this to a function
-            let input_share: Vec<_> = input_share
-                .shared_inputs
-                .into_iter()
-                .map(|(_, share)| share) // TODO: correct order based on main component decl.
-                .map(|share| Aby3VmType::Shared(share))
-                .collect();
-
             // parse network configuration
             let config =
                 std::fs::read_to_string(config).context("while reading network config file")?;
@@ -303,9 +288,9 @@ fn main() -> color_eyre::Result<ExitCode> {
                 .context("while running witness generation")?;
 
             // write result to output file
-            let out_file = BufWriter::new(std::fs::File::create(out)?);
+            let out_file = BufWriter::new(std::fs::File::create(&out)?);
             bincode::serialize_into(out_file, &result_witness_share)?;
-            tracing::info!("Witness generation finished successfully")
+            tracing::info!("Witness successfully written to {}", out.display());
         }
         Commands::GenerateProof {
             witness,
@@ -417,4 +402,30 @@ fn main() -> color_eyre::Result<ExitCode> {
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn parse_field(val: &serde_json::Value) -> color_eyre::Result<ark_bn254::Fr> {
+    val.as_str()
+        .ok_or_else(|| {
+            eyre!(
+                "expected input to be a field element string, got \"{}\"",
+                val
+            )
+        })?
+        .parse::<ark_bn254::Fr>()
+        .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
+        .context("while parsing field element")
+}
+
+fn parse_array(val: &serde_json::Value) -> color_eyre::Result<Vec<ark_bn254::Fr>> {
+    let json_arr = val.as_array().expect("is an array");
+    let mut field_elements = vec![];
+    for ele in json_arr {
+        if ele.is_array() {
+            field_elements.extend(parse_array(ele)?);
+        } else {
+            field_elements.push(parse_field(ele)?);
+        }
+    }
+    Ok(field_elements)
 }
