@@ -46,11 +46,14 @@ where
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
     )]
+    /// The public inputs (which are the outputs of the circom circuit).
+    /// This also includes the constant 1 at position 0.
     pub public_inputs: Vec<P::ScalarField>,
     #[serde(
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
     )]
+    /// The secret-shared witness elements.
     pub witness: FieldShareVec<T, P>,
 }
 

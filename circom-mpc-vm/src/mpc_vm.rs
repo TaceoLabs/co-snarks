@@ -445,7 +445,8 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
         let mut public_inputs = Vec::new();
         let mut witness = Vec::new();
         for (count, idx) in self.signal_to_witness.into_iter().enumerate() {
-            if count < self.main_outputs {
+            // the +1 here is for the constant 1 which always is at position 0.
+            if count < self.main_outputs + 1 {
                 public_inputs.push(self.driver.vm_open(self.ctx.signals[idx].clone()));
             } else {
                 witness.push(self.driver.vm_to_share(self.ctx.signals[idx].clone()));

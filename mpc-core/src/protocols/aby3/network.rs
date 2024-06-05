@@ -43,6 +43,7 @@ pub trait Aby3Network {
     }
 }
 
+#[derive(Debug)]
 pub struct Aby3MpcNet {
     id: PartyID,
     runtime: tokio::runtime::Runtime,
