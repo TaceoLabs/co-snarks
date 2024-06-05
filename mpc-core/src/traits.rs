@@ -92,7 +92,7 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
 
     fn is_zero(&self, a: Self::VmType) -> bool;
 
-    fn vm_open(&self, a: Self::VmType) -> F;
+    fn vm_open(&mut self, a: Self::VmType) -> Result<F>;
 
     fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare;
 }

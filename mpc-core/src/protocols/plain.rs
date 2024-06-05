@@ -261,8 +261,8 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
         Ok(F::from(lhs & rhs))
     }
 
-    fn vm_open(&self, a: Self::VmType) -> F {
-        a
+    fn vm_open(&mut self, a: Self::VmType) -> Result<F> {
+        Ok(a)
     }
 
     fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare {

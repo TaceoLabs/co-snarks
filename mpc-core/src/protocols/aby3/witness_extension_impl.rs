@@ -290,12 +290,13 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn to_index<N: Aby3Network>(_party: &Aby3Protocol<F, N>, a: Self) -> F {
+    fn to_index<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Result<F> {
         match a {
             Aby3VmType::Public(a) => {
-                let plain = PlainDriver::default();
+                let mut plain = PlainDriver::default();
                 plain.vm_open(a)
             }
+            Aby3VmType::Shared(a) => Ok(party.open(&a)?),
             _ => todo!("Shared not implemented"),
         }
     }
@@ -383,7 +384,7 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         Self::VmType::is_zero(self, a)
     }
 
-    fn vm_open(&self, a: Self::VmType) -> F {
+    fn vm_open(&mut self, a: Self::VmType) -> Result<F> {
         Self::VmType::to_index(self, a)
     }
 

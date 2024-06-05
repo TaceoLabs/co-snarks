@@ -359,7 +359,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 op_codes::MpcOpCode::ToIndex => {
                     //TODO what to do about that. This may leak some information
                     let signal = self.pop_field();
-                    self.push_index(to_usize!(protocol.vm_open(signal)));
+                    self.push_index(to_usize!(protocol.vm_open(signal)?));
                 }
                 op_codes::MpcOpCode::Jump(jump_forward) => {
                     ip += jump_forward;
@@ -440,14 +440,14 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
 }
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExtension<P, C> {
-    fn post_processing(self) -> Result<SharedWitness<C, P>> {
+    fn post_processing(mut self) -> Result<SharedWitness<C, P>> {
         // TODO: capacities
         let mut public_inputs = Vec::new();
         let mut witness = Vec::new();
         for (count, idx) in self.signal_to_witness.into_iter().enumerate() {
             // the +1 here is for the constant 1 which always is at position 0.
             if count < self.main_outputs + 1 {
-                public_inputs.push(self.driver.vm_open(self.ctx.signals[idx].clone()));
+                public_inputs.push(self.driver.vm_open(self.ctx.signals[idx].clone())?);
             } else {
                 witness.push(self.driver.vm_to_share(self.ctx.signals[idx].clone()));
             }
