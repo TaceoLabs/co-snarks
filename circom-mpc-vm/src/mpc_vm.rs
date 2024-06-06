@@ -260,7 +260,8 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 op_codes::MpcOpCode::Assert => {
                     let assertion = self.pop_field();
                     if protocol.is_zero(assertion) {
-                        panic!("assertion failed");
+                        // TODO: Handle nicer
+                        panic!("Assertion failed during execution");
                     }
                 }
                 op_codes::MpcOpCode::Add => {
@@ -343,7 +344,11 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     let lhs = self.pop_field();
                     self.push_field(protocol.vm_shift_l(lhs, rhs)?);
                 }
-                op_codes::MpcOpCode::BoolOr => todo!(),
+                op_codes::MpcOpCode::BoolOr => {
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_bool_or(lhs, rhs)?);
+                }
                 op_codes::MpcOpCode::BoolAnd => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();

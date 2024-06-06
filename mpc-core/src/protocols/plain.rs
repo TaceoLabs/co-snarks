@@ -256,6 +256,18 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
         }
     }
 
+    fn vm_bool_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let lhs = to_usize!(a);
+        let rhs = to_usize!(b);
+        debug_assert!(rhs == 0 || rhs == 1);
+        debug_assert!(lhs == 0 || lhs == 1);
+        if rhs == 1 || lhs == 1 {
+            Ok(F::one())
+        } else {
+            Ok(F::zero())
+        }
+    }
+
     fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let lhs = to_bigint!(a);
         let rhs = to_bigint!(b);

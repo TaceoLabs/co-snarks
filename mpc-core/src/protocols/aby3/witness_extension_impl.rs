@@ -1,10 +1,11 @@
 use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol};
 use crate::{
-    protocols::plain::PlainDriver,
+    protocols::{aby3::a2b::Aby3BigUintShare, plain::PlainDriver},
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
 };
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use eyre::{bail, Result};
+use num_bigint::BigUint;
 
 #[derive(Clone)]
 pub enum Aby3VmType<F: PrimeField> {
@@ -64,7 +65,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 Aby3VmType::Shared(party.add_with_public(&b, &a))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => Aby3VmType::Shared(party.add(&a, &b)),
-            (_, _) => todo!("BitShared not yet implemented"),
+            (_, _) => todo!("BitShared add not yet implemented"),
         }
     }
 
@@ -81,7 +82,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 Aby3VmType::Shared(party.add_with_public(&-b, &a))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => Aby3VmType::Shared(party.sub(&a, &b)),
-            (_, _) => todo!("BitShared not yet implemented"),
+            (_, _) => todo!("BitShared sub not yet implemented"),
         }
     }
 
@@ -100,7 +101,7 @@ impl<F: PrimeField> Aby3VmType<F> {
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 Aby3VmType::Shared(party.mul(&a, &b)?)
             }
-            (_, _) => todo!("BitShared not yet implemented"),
+            (_, _) => todo!("BitShared mul not yet implemented"),
         };
         Ok(res)
     }
@@ -112,7 +113,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 Aby3VmType::Public(plain.vm_neg(a))
             }
             Aby3VmType::Shared(a) => Aby3VmType::Shared(party.neg(&a)),
-            _ => todo!("BitShared not yet implemented"),
+            _ => todo!("BitShared neg not yet implemented"),
         }
     }
 
@@ -138,7 +139,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let b_inv = party.inv(&b)?;
                 Aby3VmType::Shared(party.mul(&a, &b_inv)?)
             }
-            (_, _) => todo!("BitShared not implemented"),
+            (_, _) => todo!("BitShared div not implemented"),
         };
         Ok(res)
     }
@@ -149,7 +150,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_int_div(a, b)?)
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared int_div not implemented"),
         };
         Ok(res)
     }
@@ -160,7 +161,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_lt(a, b))
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared LT not implemented"),
         }
     }
 
@@ -170,7 +171,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_le(a, b))
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared LE not implemented"),
         }
     }
 
@@ -180,7 +181,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_gt(a, b))
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared GT not implemented"),
         }
     }
 
@@ -190,7 +191,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_ge(a, b))
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared GE not implemented"),
         }
     }
 
@@ -200,7 +201,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_eq(a, b))
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared EQ not implemented"),
         }
     }
 
@@ -210,7 +211,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_neq(a, b))
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared NEQ not implemented"),
         }
     }
 
@@ -220,18 +221,66 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_shift_l(a, b)?)
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared shift_left not implemented"),
         };
         Ok(res)
     }
 
-    fn shift_r<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn shift_r<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        // TODO: The circom handling of shifts can handle "negative" inputs, translating them to other type of shift...
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_shift_r(a, b)?)
             }
-            (_, _) => todo!("Shared not implemented"),
+            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
+                // some special casing
+                if a == F::zero() {
+                    return Ok(Aby3VmType::Public(F::zero()));
+                }
+                // TODO: check for overflows
+                // This case is equivalent to a*2^b
+                // Strategy: limit size of b to k bits
+                // bit-decompose b into bits b_i
+                let bit_shares = party.a2b(&b)?;
+                let individual_bit_shares = (0..8)
+                    .map(|i| {
+                        let bit = Aby3BigUintShare {
+                            a: (bit_shares.a.clone() >> i) & BigUint::one(),
+                            b: (bit_shares.b.clone() >> i) & BigUint::one(),
+                        };
+                        let share = party.b2a(bit);
+                        share
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                // v_i = 2^2^i * <b_i> + 1 - <b_i>
+                let mut vs: Vec<_> = individual_bit_shares
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, b_i)| {
+                        let two = F::from(2u64);
+                        let two_to_two_to_i = two.pow(&[2u64.pow(i as u32)]);
+                        let v = party.mul_with_public(&two_to_two_to_i, &b_i);
+                        let v = party.add_with_public(&F::one(), &v);
+                        party.sub(&v, &b_i)
+                    })
+                    .collect();
+
+                // v = \prod v_i
+                // TODO: This should be done in a multiplication tree
+                let last = vs.pop().unwrap();
+                let v = vs.into_iter().try_fold(last, |a, b| party.mul(&a, &b))?;
+                let res = party.mul_with_public(&a, &v);
+                Aby3VmType::Shared(res)
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+                // TODO: handle overflows
+                // This case is equivalent to a*2^b
+                // TODO: assert b < 256?
+                let shift = F::from(2u64).pow(&[b.into_bigint().as_mut()[0]]);
+                Aby3VmType::Shared(party.mul_with_public(&shift, &a))
+            }
+            (_, _) => todo!("Shared shift_right not implemented"),
         };
         Ok(res)
     }
@@ -242,7 +291,18 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_bool_and(a, b)?)
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared bool_and not implemented"),
+        };
+        Ok(res)
+    }
+
+    fn bool_or<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_bool_or(a, b)?)
+            }
+            (_, _) => todo!("Shared bool_or not implemented"),
         };
         Ok(res)
     }
@@ -253,7 +313,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_bit_and(a, b)?)
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared bit_and not implemented"),
         };
         Ok(res)
     }
@@ -264,7 +324,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_bit_xor(a, b)?)
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared bit_xor not implemented"),
         };
         Ok(res)
     }
@@ -275,7 +335,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_bit_or(a, b)?)
             }
-            (_, _) => todo!("Shared not implemented"),
+            (_, _) => todo!("Shared bit_or not implemented"),
         };
         Ok(res)
     }
@@ -286,7 +346,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let plain = PlainDriver::default();
                 plain.is_zero(a)
             }
-            _ => todo!("Shared not implemented"),
+            _ => todo!("Shared is_zero not implemented"),
         }
     }
 
@@ -297,7 +357,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 plain.vm_open(a)
             }
             Aby3VmType::Shared(a) => Ok(party.open(&a)?),
-            _ => todo!("Shared not implemented"),
+            _ => todo!("Shared to_index not implemented"),
         }
     }
 }
@@ -374,6 +434,10 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
 
     fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::bool_and(self, a, b)
+    }
+
+    fn vm_bool_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Self::VmType::bool_or(self, a, b)
     }
 
     fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
