@@ -337,7 +337,11 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     let lhs = self.pop_field();
                     self.push_field(protocol.vm_shift_l(lhs, rhs)?);
                 }
-                op_codes::MpcOpCode::BoolOr => todo!(),
+                op_codes::MpcOpCode::BoolOr => {
+                    let rhs = self.pop_field();
+                    let lhs = self.pop_field();
+                    self.push_field(protocol.vm_bool_or(lhs, rhs)?);
+                }
                 op_codes::MpcOpCode::BoolAnd => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
