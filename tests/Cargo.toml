@@ -29,3 +29,11 @@ path = "e2e_tests/aby3.rs"
 [[test]]
 name = "e2e_gsz"
 path = "e2e_tests/gsz.rs"
+
+[[test]]
+name = "wtns_ext_aby3"
+path = "witness-extension_test/aby3.rs"
+
+[[test]]
+name = "wtns_ext_plain_vm"
+path = "witness-extension_test/plain_vm.rs"
