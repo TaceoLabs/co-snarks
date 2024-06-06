@@ -259,7 +259,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 }
                 op_codes::MpcOpCode::Assert => {
                     let assertion = self.pop_field();
-                    if protocol.is_zero(assertion) {
+                    if protocol.is_zero(assertion, true)? {
                         // TODO: Handle nicer
                         panic!("Assertion failed during execution");
                     }
@@ -307,32 +307,32 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 op_codes::MpcOpCode::Lt => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.vm_lt(lhs, rhs));
+                    self.push_field(protocol.vm_lt(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Le => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.vm_le(lhs, rhs));
+                    self.push_field(protocol.vm_le(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Gt => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.vm_gt(lhs, rhs));
+                    self.push_field(protocol.vm_gt(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Ge => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.vm_ge(lhs, rhs));
+                    self.push_field(protocol.vm_ge(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Eq => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.vm_eq(lhs, rhs));
+                    self.push_field(protocol.vm_eq(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Neq => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.vm_neq(lhs, rhs));
+                    self.push_field(protocol.vm_neq(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::ShiftR => {
                     let rhs = self.pop_field();
@@ -397,7 +397,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 op_codes::MpcOpCode::JumpIfFalse(jump_forward) => {
                     let jump_to = jump_forward;
                     let cond = self.pop_field();
-                    if protocol.is_zero(cond) {
+                    if protocol.is_zero(cond, false)? {
                         ip += jump_to;
                         continue;
                     }
