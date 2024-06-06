@@ -201,6 +201,10 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_eq(a, b))
             }
+            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
+            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+                todo!("Shared EQ (public/shared) not implemented")
+            }
             (_, _) => todo!("Shared EQ not implemented"),
         }
     }
@@ -210,6 +214,10 @@ impl<F: PrimeField> Aby3VmType<F> {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_neq(a, b))
+            }
+            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
+            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+                todo!("Shared NEQ (public/shared) not implemented")
             }
             (_, _) => todo!("Shared NEQ not implemented"),
         }
@@ -307,12 +315,14 @@ impl<F: PrimeField> Aby3VmType<F> {
         Ok(res)
     }
 
-    fn bit_and<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bit_and<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_bit_and(a, b)?)
             }
+            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
+            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => bit_and_public(party, a, b)?,
             (_, _) => todo!("Shared bit_and not implemented"),
         };
         Ok(res)
@@ -467,4 +477,25 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
             Aby3VmType::BitShared => todo!("BitShared not yet implemented"),
         }
     }
+}
+
+fn bit_and_public<N: Aby3Network, F: PrimeField>(
+    party: &mut Aby3Protocol<F, N>,
+    a: Aby3PrimeFieldShare<F>,
+    b: F,
+) -> Result<Aby3VmType<F>> {
+    if b == F::zero() {
+        return Ok(Aby3VmType::Public(F::zero()));
+    }
+    if b == F::one() {
+        // TODO: Special case for b == 1 as lsb-extract
+        let bit_shares = party.a2b(&a)?;
+        let bit_share = Aby3BigUintShare {
+            a: bit_shares.a.clone() & BigUint::one(),
+            b: bit_shares.b.clone() & BigUint::one(),
+        };
+        let res = party.b2a(bit_share)?;
+        return Ok(Aby3VmType::Shared(res));
+    }
+    todo!("Shared bit_and (public/shared) not implemented")
 }
