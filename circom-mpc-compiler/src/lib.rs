@@ -390,14 +390,13 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                     //replace Load{Var/Signal} with with respective MultiOpCode
                     let last_instruction = self.current_code_block.pop().expect("is not empty");
                     //self.emit_opcode(MpcOpCode::PushIndex(arg_size));
+                    //TODO CLEAN UP
                     match last_instruction {
                         MpcOpCode::LoadVars(amount) => {
-                            println!("is same uwu");
                             debug_assert_eq!(arg_size, amount);
                             self.emit_opcode(MpcOpCode::LoadVars(amount))
                         }
                         MpcOpCode::LoadSignals(amount) => {
-                            println!("is same uwu");
                             debug_assert_eq!(arg_size, amount);
                             self.emit_opcode(MpcOpCode::LoadSignals(amount))
                         }

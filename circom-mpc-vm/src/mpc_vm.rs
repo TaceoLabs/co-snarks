@@ -458,9 +458,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         current_vars[start..start + end]
                             .iter()
                             .cloned()
-                            .enumerate()
-                            .for_each(|(idx, var)| {
-                                println!("return {idx} is {var}");
+                            .for_each(|var| {
                                 self.push_field(var);
                             });
                     }
