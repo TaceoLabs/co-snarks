@@ -552,31 +552,6 @@ mod tests {
     }
 
     #[test]
-    fn escalarmulw4table() {
-        let mut i = 0;
-        loop {
-            if fs::metadata(format!(
-                    "../test_vectors/circuits/test-circuits/witness_outputs/escalarmulw4table/witness{}.wtns", i
-                )).is_err() {
-                    break
-                }
-            let inp: TestInputs = from_test_name("escalarmulw4table", i);
-            let builder = CompilerBuilder::<Bn254>::new(inp.circuit_path.as_str().to_owned())
-                .link_library("../test_vectors/circuits/libs/");
-            let is_witness = builder
-                .build()
-                .parse()
-                .unwrap()
-                .to_plain_vm()
-                .run(inp.input)
-                .unwrap();
-            assert_eq!(is_witness, inp.witness.values);
-            i += 1;
-        }
-        assert_ne!(i, 0);
-    }
-
-    #[test]
     fn escalarmulw4table_test() {
         let mut i = 0;
         loop {
