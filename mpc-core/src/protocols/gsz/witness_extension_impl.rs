@@ -313,6 +313,14 @@ impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProt
         Self::VmType::div(self, a, b)
     }
 
+    fn vm_pow(&mut self, _a: Self::VmType, _b: Self::VmType) -> Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_mod(&mut self, _a: Self::VmType, _b: Self::VmType) -> Result<Self::VmType> {
+        todo!()
+    }
+
     fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::int_div(self, a, b)
     }
