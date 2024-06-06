@@ -223,18 +223,32 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn shift_l<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn shift_r<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_shift_l(a, b)?)
             }
-            (_, _) => todo!("Shared shift_left not implemented"),
+            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
+                // some special casing
+                if a == F::zero() {
+                    return Ok(Aby3VmType::Public(F::zero()));
+                }
+                todo!("Shared shift_right (public by shared) not implemented");
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+                // some special casing
+                if b == F::zero() {
+                    return Ok(Aby3VmType::Shared(a));
+                }
+                todo!("Shared shift_right (shared by public) not implemented");
+            }
+            (_, _) => todo!("Shared shift_right not implemented"),
         };
         Ok(res)
     }
 
-    fn shift_r<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn shift_l<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         // TODO: The circom handling of shifts can handle "negative" inputs, translating them to other type of shift...
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
@@ -288,7 +302,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let shift = F::from(2u64).pow(&[b.into_bigint().as_mut()[0]]);
                 Aby3VmType::Shared(party.mul_with_public(&shift, &a))
             }
-            (_, _) => todo!("Shared shift_right not implemented"),
+            (_, _) => todo!("Shared shift_left not implemented"),
         };
         Ok(res)
     }
