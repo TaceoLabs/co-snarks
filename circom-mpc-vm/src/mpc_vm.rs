@@ -39,7 +39,6 @@ pub type Aby3WitnessExtension<P, N> =
 
 #[derive(Default, Clone)]
 struct Component<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
-    #[allow(dead_code)]
     symbol: String,
     amount_vars: usize,
     provided_input_signals: usize,
@@ -147,13 +146,19 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
         self.index_stack.pop()
     }
 
+    #[allow(dead_code)]
+    fn debug_code_block(code_block: Rc<CodeBlock>) {
+        for (idx, inst) in code_block.iter().enumerate() {
+            tracing::info!("{idx:0>4}|   {inst}");
+        }
+    }
     pub fn run(&mut self, protocol: &mut C, ctx: &mut WitnessExtensionCtx<P, C>) -> Result<()> {
         let mut ip = 0;
         let mut current_body = Rc::clone(&self.component_body);
         let mut current_vars = vec![C::VmType::default(); self.amount_vars];
         loop {
             let inst = &current_body[ip];
-            tracing::debug!("{ip:0>4}|   {inst}");
+            tracing::trace!("{ip:0>4}|   {inst}");
             match inst {
                 op_codes::MpcOpCode::PushConstant(index) => {
                     self.push_field(ctx.constant_table[*index].clone());
@@ -212,6 +217,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     ));
                     current_body = Rc::clone(&fun_decl.body);
                     ip = 0;
+                    tracing::debug!("Calling {}", fun_decl.symbol);
                     continue;
                 }
                 op_codes::MpcOpCode::CreateCmp(symbol, amount) => {
@@ -234,6 +240,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         index += component.mappings[*signal_code];
                     }
                     let result = ctx.signals[component.my_offset + index].clone();
+                    tracing::debug!("Loading output from {}: \"{}\"", component.symbol, result);
                     self.push_field(result);
                 }
                 op_codes::MpcOpCode::InputSubComp(mapped, signal_code) => {
@@ -425,6 +432,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     current_body = old_body;
                 }
                 op_codes::MpcOpCode::Log => {
+                    Self::debug_code_block(Rc::clone(&current_body));
                     let field = self.pop_field();
                     self.log_buf.push_str(&field.to_string());
                     self.log_buf.push(' ');
@@ -510,13 +518,11 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
     }
     pub fn run_with_flat(mut self, input_signals: Vec<C::VmType>) -> Result<SharedWitness<C, P>> {
         self.set_flat_input_signals(input_signals);
-        tracing::info!("{:?}", &self.ctx.signals);
         self.call_main_component()?;
         self.post_processing()
     }
     pub fn run(mut self, input_signals: SharedInput<C, P>) -> Result<SharedWitness<C, P>> {
         self.set_input_signals(input_signals)?;
-        tracing::info!("{:?}", &self.ctx.signals);
         self.call_main_component()?;
         self.post_processing()
     }
