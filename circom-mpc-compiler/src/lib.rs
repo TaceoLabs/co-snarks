@@ -257,9 +257,16 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 signal_code,
                 indexes,
             } => {
-                indexes
-                    .iter()
-                    .for_each(|inst| self.handle_instruction(inst));
+                if indexes.is_empty() {
+                    // Just push 0 to signal that it is the first signal of the component
+                    // I am not sure if this is correct for all cases, so maybe investigate
+                    // this further
+                    self.emit_opcode(MpcOpCode::PushIndex(0));
+                } else {
+                    indexes
+                        .iter()
+                        .for_each(|inst| self.handle_instruction(inst));
+                }
                 (true, *signal_code)
             }
         };
@@ -482,7 +489,12 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             }
             self.fun_decls.insert(
                 fun.header.clone(),
-                FunDecl::new(fun.params.len(), fun.max_number_of_vars, new_code_block),
+                FunDecl::new(
+                    fun.header.clone(),
+                    fun.params.len(),
+                    fun.max_number_of_vars,
+                    new_code_block,
+                ),
             );
         }
         for templ in circuit.templates.iter() {

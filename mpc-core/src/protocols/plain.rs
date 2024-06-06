@@ -8,6 +8,7 @@ use eyre::Result;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 use rand::SeedableRng;
+use tracing;
 
 #[macro_export]
 macro_rules! to_usize {
@@ -20,8 +21,10 @@ macro_rules! to_usize {
 macro_rules! bool_op {
     ($lhs: expr, $op: tt, $rhs: expr) => {
        if $lhs $op $rhs {
+        tracing::debug!("{}{}{} -> 1", $lhs,stringify!($op), $rhs);
         F::one()
        } else {
+        tracing::debug!("{}{}{} -> 0", $lhs,stringify!($op), $rhs);
         F::zero()
        }
     };
