@@ -17,7 +17,6 @@ use eyre::Result;
 pub struct TemplateDecl {
     pub(crate) symbol: String,
     pub(crate) input_signals: usize,
-    pub(crate) output_signals: usize,
     pub(crate) signal_size: usize,
     pub(crate) sub_components: usize,
     pub(crate) vars: usize,
@@ -30,7 +29,6 @@ impl TemplateDecl {
     pub fn new(
         symbol: String,
         input_signals: usize,
-        output_signals: usize,
         signal_size: usize,
         sub_components: usize,
         vars: usize,
@@ -40,7 +38,6 @@ impl TemplateDecl {
         Self {
             symbol,
             input_signals,
-            output_signals,
             signal_size,
             sub_components,
             vars,
@@ -66,6 +63,8 @@ impl FunDecl {
     }
 }
 
+pub type InputList = Vec<(String, usize, usize)>;
+
 pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
     pub(crate) main: String,
     pub(crate) amount_signals: usize,
@@ -74,9 +73,13 @@ pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
     pub(crate) fun_decls: HashMap<String, FunDecl>,
     pub(crate) templ_decls: HashMap<String, TemplateDecl>,
     pub(crate) signal_to_witness: Vec<usize>,
+    pub(crate) main_inputs: usize,
+    pub(crate) main_outputs: usize,
+    pub(crate) main_input_list: InputList,
 }
 
 impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         main: String,
         amount_signals: usize,
@@ -85,6 +88,9 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         fun_decls: HashMap<String, FunDecl>,
         templ_decls: HashMap<String, TemplateDecl>,
         signal_to_witness: Vec<usize>,
+        main_inputs: usize,
+        main_outputs: usize,
+        main_input_list: InputList,
     ) -> Self {
         Self {
             main,
@@ -94,6 +100,9 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
             fun_decls,
             templ_decls,
             signal_to_witness,
+            main_inputs,
+            main_outputs,
+            main_input_list,
         }
     }
 }

@@ -439,7 +439,11 @@ impl<F: PrimeField, N: GSZNetwork> PrimeFieldMpcProtocol<F> for GSZProtocol<F, N
         Ok(Self::FieldShareVec::new(my_shares))
     }
 
-    fn promote_to_trivial_share(&self, public_values: &[F]) -> Self::FieldShareVec {
+    fn promote_to_trivial_share(&self, public_value: F) -> Self::FieldShare {
+        Self::FieldShare::new(public_value)
+    }
+
+    fn promote_to_trivial_shares(&self, public_values: &[F]) -> Self::FieldShareVec {
         let shares = public_values.to_owned();
         Self::FieldShareVec::new(shares)
     }

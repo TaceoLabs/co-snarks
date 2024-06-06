@@ -277,10 +277,10 @@ impl<F: PrimeField> GSZVmType<F> {
         }
     }
 
-    fn to_index<N: GSZNetwork>(_party: &GSZProtocol<F, N>, a: Self) -> F {
+    fn to_index<N: GSZNetwork>(_party: &GSZProtocol<F, N>, a: Self) -> Result<F> {
         match a {
             GSZVmType::Public(a) => {
-                let plain = PlainDriver::default();
+                let mut plain = PlainDriver::default();
                 plain.vm_open(a)
             }
             _ => todo!("Shared not implemented"),
@@ -288,6 +288,11 @@ impl<F: PrimeField> GSZVmType<F> {
     }
 }
 
+impl<F: PrimeField> From<GSZPrimeFieldShare<F>> for GSZVmType<F> {
+    fn from(value: GSZPrimeFieldShare<F>) -> Self {
+        GSZVmType::Shared(value)
+    }
+}
 impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProtocol<F, N> {
     type VmType = GSZVmType<F>;
 
@@ -364,7 +369,15 @@ impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProt
         Self::VmType::is_zero(self, a)
     }
 
-    fn vm_open(&self, a: Self::VmType) -> F {
+    fn vm_open(&mut self, a: Self::VmType) -> Result<F> {
         Self::VmType::to_index(self, a)
+    }
+
+    fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare {
+        match a {
+            GSZVmType::Public(a) => self.promote_to_trivial_share(a),
+            GSZVmType::Shared(a) => a,
+            GSZVmType::BitShared => todo!("BitShared not yet implemented"),
+        }
     }
 }

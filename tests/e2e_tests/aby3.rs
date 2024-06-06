@@ -101,6 +101,7 @@ mod aby3_tests {
         }
     }
 
+    #[derive(Debug)]
     pub struct PartyTestNetwork {
         id: PartyID,
         send_prev: UnboundedSender<Bytes>,
@@ -242,11 +243,28 @@ mod aby3_tests {
         use circom_mpc_compiler::CompilerBuilder;
         use circom_types::groth16::witness::Witness;
         use itertools::izip;
-        use mpc_core::protocols::aby3::{self, utils::combine_field_elements_for_vm};
+        use mpc_core::protocols::aby3;
         use rand::thread_rng;
         use std::str::FromStr;
         use std::{fs::File, thread};
         use tokio::sync::oneshot;
+
+        fn combine_field_elements_for_vm(
+            a: SharedWitness<Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
+            b: SharedWitness<Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
+            c: SharedWitness<Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
+        ) -> Vec<ark_bn254::Fr> {
+            let mut res = Vec::with_capacity(a.public_inputs.len() + a.witness.len());
+            for (a, b, c) in izip!(a.public_inputs, b.public_inputs, c.public_inputs) {
+                assert_eq!(a, b);
+                assert_eq!(b, c);
+                res.push(a);
+            }
+            res.extend(aby3::utils::combine_field_elements(
+                a.witness, b.witness, c.witness,
+            ));
+            res
+        }
 
         macro_rules! run_test {
             ($file: expr, $input: expr) => {{
@@ -268,7 +286,8 @@ mod aby3_tests {
                             .unwrap()
                             .to_aby3_vm_with_network(net)
                             .unwrap();
-                        tx.send(witness_extension.run(input).unwrap()).unwrap()
+                        tx.send(witness_extension.run_with_flat(input).unwrap())
+                            .unwrap()
                     });
                 }
                 let result1 = rx1.await.unwrap();

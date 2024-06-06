@@ -13,6 +13,15 @@ pub enum Aby3VmType<F: PrimeField> {
     BitShared,
 }
 
+impl<F: PrimeField> From<Aby3VmType<F>> for Aby3PrimeFieldShare<F> {
+    fn from(vm_type: Aby3VmType<F>) -> Self {
+        match vm_type {
+            Aby3VmType::Shared(share) => share,
+            _ => panic!("Cannot convert to share"),
+        }
+    }
+}
+
 impl<F: PrimeField> Default for Aby3VmType<F> {
     fn default() -> Self {
         Self::Public(F::default())
@@ -281,14 +290,21 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn to_index<N: Aby3Network>(_party: &Aby3Protocol<F, N>, a: Self) -> F {
+    fn to_index<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Result<F> {
         match a {
             Aby3VmType::Public(a) => {
-                let plain = PlainDriver::default();
+                let mut plain = PlainDriver::default();
                 plain.vm_open(a)
             }
+            Aby3VmType::Shared(a) => Ok(party.open(&a)?),
             _ => todo!("Shared not implemented"),
         }
+    }
+}
+
+impl<F: PrimeField> From<Aby3PrimeFieldShare<F>> for Aby3VmType<F> {
+    fn from(value: Aby3PrimeFieldShare<F>) -> Self {
+        Aby3VmType::Shared(value)
     }
 }
 
@@ -368,7 +384,15 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         Self::VmType::is_zero(self, a)
     }
 
-    fn vm_open(&self, a: Self::VmType) -> F {
+    fn vm_open(&mut self, a: Self::VmType) -> Result<F> {
         Self::VmType::to_index(self, a)
+    }
+
+    fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare {
+        match a {
+            Aby3VmType::Public(a) => self.promote_to_trivial_share(a),
+            Aby3VmType::Shared(share) => share,
+            Aby3VmType::BitShared => todo!("BitShared not yet implemented"),
+        }
     }
 }

@@ -7,7 +7,7 @@ authors.workspace = true
 edition.workspace = true
 repository.workspace = true
 homepage.workspace = true
-license.workspace = true
+license = "GPL-3.0"           # due to transitive dependency on circom-mpc-compiler
 rust-version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -16,6 +16,7 @@ rust-version.workspace = true
 ark-bn254.workspace = true
 bincode.workspace = true
 circom-types = { version = "0.1.0", path = "../circom-types" }
+circom-mpc-compiler = { version = "0.1.0", path = "../circom-mpc-compiler" }
 clap.workspace = true
 collaborative-groth16 = { version = "0.1.0", path = "../collaborative-groth16" }
 color-eyre = "0.6.3"

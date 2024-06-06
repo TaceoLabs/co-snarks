@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use ark_ec::pairing::Pairing;
@@ -25,7 +26,6 @@ use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-
 pub type Aby3CollaborativeGroth16<P> =
     CollaborativeGroth16<Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet>, P>;
 
@@ -36,7 +36,8 @@ type CurveFieldShareVec<T, C> = <T as PrimeFieldMpcProtocol<
     <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
 >>::FieldShareVec;
 
-#[derive(Serialize, Deserialize)]
+// TODO: maybe move this type to some other crate, as this is the only used type from this crate for many dependencies
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedWitness<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -45,12 +46,43 @@ where
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
     )]
+    /// The public inputs (which are the outputs of the circom circuit).
+    /// This also includes the constant 1 at position 0.
     pub public_inputs: Vec<P::ScalarField>,
     #[serde(
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
     )]
+    /// The secret-shared witness elements.
     pub witness: FieldShareVec<T, P>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SharedInput<T, P: Pairing>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    #[serde(
+        serialize_with = "crate::serde_compat::ark_se",
+        deserialize_with = "crate::serde_compat::ark_de"
+    )]
+    /// A map from variable names to the share of the field element.
+    /// This is a BTreeMap because it implements Canonical(De)Serialize.
+    pub shared_inputs: BTreeMap<String, T::FieldShareVec>,
+    // TODO: what to do about multi-dimensional inputs?
+    // In the input json they are just arrays, but i guess they are interpreted as individual signals in circom
+    // What is the naming convention there @fnieddu?
+}
+
+impl<T, P: Pairing> Default for SharedInput<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn default() -> Self {
+        Self {
+            shared_inputs: BTreeMap::new(),
+        }
+    }
 }
 
 pub struct CollaborativeGroth16<T, P: Pairing>
@@ -127,7 +159,7 @@ where
                 .evaluate_constraint(bt_i, public_inputs, private_witness);
         }
         let mut a = FieldShareVec::<T, P>::from(a);
-        let promoted_public = self.driver.promote_to_trivial_share(public_inputs);
+        let promoted_public = self.driver.promote_to_trivial_shares(public_inputs);
         self.driver
             .clone_from_slice(&mut a, &promoted_public, num_constraints, 0, num_inputs);
 

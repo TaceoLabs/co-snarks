@@ -1,4 +1,4 @@
-use crate::types::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl};
+use crate::types::{CollaborativeCircomCompilerParsed, FunDecl, InputList, TemplateDecl};
 
 use super::{
     op_codes::{self, CodeBlock},
@@ -6,6 +6,7 @@ use super::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
+use collaborative_groth16::groth16::{SharedInput, SharedWitness};
 use eyre::{bail, eyre, Result};
 use itertools::Itertools;
 use mpc_core::protocols::plain::PlainDriver;
@@ -26,6 +27,9 @@ pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::Sca
     main: String,
     ctx: WitnessExtensionCtx<P, C>,
     signal_to_witness: Vec<usize>,
+    main_inputs: usize,
+    main_outputs: usize,
+    main_input_list: InputList,
     driver: C,
 }
 
@@ -40,7 +44,6 @@ struct Component<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> 
     amount_vars: usize,
     provided_input_signals: usize,
     input_signals: usize,
-    output_signals: usize,
     current_return_vals: usize,
     /// the offset inside the signals array
     my_offset: usize,
@@ -111,7 +114,6 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
             amount_vars: templ_decl.vars,
             provided_input_signals: 0,
             input_signals: templ_decl.input_signals,
-            output_signals: templ_decl.output_signals,
             current_return_vals: 0,
             my_offset: signal_offset,
             total_signal_size: templ_decl.signal_size,
@@ -123,16 +125,6 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
             component_body: Rc::clone(&templ_decl.body),
             log_buf: String::with_capacity(1024),
         }
-    }
-
-    fn set_input_signals(&mut self, signals: &mut [C::VmType], input_signals: Vec<C::VmType>) {
-        assert_eq!(
-            self.input_signals,
-            input_signals.len(),
-            "You have to provide the input signals"
-        );
-        signals[1 + self.output_signals..1 + self.output_signals + self.input_signals]
-            .clone_from_slice(&input_signals);
     }
 
     #[inline]
@@ -367,7 +359,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 op_codes::MpcOpCode::ToIndex => {
                     //TODO what to do about that. This may leak some information
                     let signal = self.pop_field();
-                    self.push_index(to_usize!(protocol.vm_open(signal)));
+                    self.push_index(to_usize!(protocol.vm_open(signal)?));
                 }
                 op_codes::MpcOpCode::Jump(jump_forward) => {
                     ip += jump_forward;
@@ -448,20 +440,74 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
 }
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExtension<P, C> {
-    pub fn run(mut self, input_signals: Vec<C::VmType>) -> Result<Vec<C::VmType>> {
+    fn post_processing(mut self) -> Result<SharedWitness<C, P>> {
+        // TODO: capacities
+        let mut public_inputs = Vec::new();
+        let mut witness = Vec::new();
+        for (count, idx) in self.signal_to_witness.into_iter().enumerate() {
+            // the +1 here is for the constant 1 which always is at position 0.
+            if count < self.main_outputs + 1 {
+                public_inputs.push(self.driver.vm_open(self.ctx.signals[idx].clone())?);
+            } else {
+                witness.push(self.driver.vm_to_share(self.ctx.signals[idx].clone()));
+            }
+        }
+        Ok(SharedWitness {
+            public_inputs,
+            witness: witness.into(),
+        })
+    }
+
+    fn set_input_signals(&mut self, input_signals: SharedInput<C, P>) -> Result<()> {
+        for (name, offset, size) in self.main_input_list.iter() {
+            let inputs = input_signals
+                .shared_inputs
+                .get(name)
+                .cloned()
+                .ok_or(eyre!("Cannot find signal \"{name}\" in provided input"))?;
+            let mut counter = 0;
+            for input in inputs.into_iter() {
+                self.ctx.signals[offset + counter] = C::VmType::from(input);
+                counter += 1;
+            }
+            if counter != *size {
+                bail!("for input \"{name}\" expected {size} signals, got {counter}");
+            }
+        }
+        Ok(())
+    }
+
+    fn set_flat_input_signals(&mut self, input_signals: Vec<C::VmType>) {
+        assert_eq!(
+            self.main_inputs,
+            input_signals.len(),
+            "You have to provide the input signals"
+        );
+        self.ctx.signals[1 + self.main_outputs..1 + self.main_outputs + self.main_inputs]
+            .clone_from_slice(&input_signals);
+    }
+
+    fn call_main_component(&mut self) -> Result<()> {
         let main_templ = self
             .ctx
             .templ_decls
             .get(&self.main)
             .ok_or(eyre!("cannot find main template: {}", self.main))?;
         let mut main_component = Component::init(main_templ, 1);
-        main_component.set_input_signals(&mut self.ctx.signals, input_signals);
         main_component.run(&mut self.driver, &mut self.ctx)?;
-        let mut witness = Vec::with_capacity(self.signal_to_witness.len());
-        for idx in self.signal_to_witness {
-            witness.push(self.ctx.signals[idx].clone());
-        }
-        Ok(witness)
+        Ok(())
+    }
+    pub fn run_with_flat(mut self, input_signals: Vec<C::VmType>) -> Result<SharedWitness<C, P>> {
+        self.set_flat_input_signals(input_signals);
+        tracing::info!("{:?}", &self.ctx.signals);
+        self.call_main_component()?;
+        self.post_processing()
+    }
+    pub fn run(mut self, input_signals: SharedInput<C, P>) -> Result<SharedWitness<C, P>> {
+        self.set_input_signals(input_signals)?;
+        tracing::info!("{:?}", &self.ctx.signals);
+        self.call_main_component()?;
+        self.post_processing()
     }
 }
 
@@ -480,6 +526,9 @@ impl<P: Pairing> PlainWitnessExtension<P> {
                 parser.templ_decls,
                 parser.string_table,
             ),
+            main_inputs: parser.main_inputs,
+            main_outputs: parser.main_outputs,
+            main_input_list: parser.main_input_list,
         }
     }
 }
@@ -508,6 +557,9 @@ impl<P: Pairing, N: Aby3Network> Aby3WitnessExtension<P, N> {
                 parser.templ_decls,
                 parser.string_table,
             ),
+            main_inputs: parser.main_inputs,
+            main_outputs: parser.main_outputs,
+            main_input_list: parser.main_input_list,
         })
     }
 }

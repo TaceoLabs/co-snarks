@@ -124,6 +124,7 @@ struct ReadJob<MRecv> {
     ret: oneshot::Sender<Result<MRecv, io::Error>>,
 }
 
+#[derive(Debug)]
 pub struct ChannelHandle<MSend, MRecv> {
     write_job_queue: mpsc::Sender<WriteJob<MSend>>,
     read_job_queue: mpsc::Sender<ReadJob<MRecv>>,

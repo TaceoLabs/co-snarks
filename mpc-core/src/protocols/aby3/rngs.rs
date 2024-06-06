@@ -4,6 +4,7 @@ use ark_ff::PrimeField;
 use num_bigint::BigUint;
 use rand::{Rng, SeedableRng};
 
+#[derive(Debug)]
 pub(crate) struct Aby3CorrelatedRng {
     pub(crate) rand: Aby3Rand,
     pub(crate) bitcomp1: Aby3RandBitComp,
@@ -20,6 +21,7 @@ impl Aby3CorrelatedRng {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Aby3Rand {
     rng1: RngType,
     rng2: RngType,
@@ -69,6 +71,7 @@ impl Aby3Rand {
 }
 
 /// This struct is responsible for creating random shares for the Binary to Arithmetic conversion. The approach is the following: for a final sharing x = x1 + x2 + x3, we want to have random values x2, x3 and subtract these from the original value x using a binary circuit to get the share x1. Hence, we need to sample random x2 and x3 and share them amongst the parties. One RandBitComp struct is responsible for either sampling x2 or x3. For sampling x2, parties 1 and 2 will get x2 in plain (since this is the final share of x), so they need to have a PRF key from all parties. party 3, however, will not get x2 in plain and must thus only be able to sample its shares of x2, requiring two PRF keys.
+#[derive(Debug)]
 pub(crate) struct Aby3RandBitComp {
     rng1: RngType,
     rng2: RngType,
