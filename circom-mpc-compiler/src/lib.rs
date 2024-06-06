@@ -539,7 +539,6 @@ mod tests {
     use circom_types::groth16::witness::Witness;
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
-    use tracing_test::traced_test;
 
     use super::*;
     use std::{fs::File, str::FromStr};
@@ -549,9 +548,8 @@ mod tests {
         witness.public_inputs
     }
 
-    #[traced_test]
     #[test]
-    fn logs() {
+    fn mul2() {
         let file = "../test_vectors/circuits/multiplier2.circom";
         let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
         let is_witness = builder
@@ -572,9 +570,6 @@ mod tests {
                 ark_bn254::Fr::from_str("11").unwrap()
             ]
         );
-        assert!(logs_contain(
-            "This is a test to see whether the logging work:  33"
-        ));
     }
     #[test]
     fn mul16() {

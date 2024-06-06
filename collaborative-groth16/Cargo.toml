@@ -23,7 +23,6 @@ ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 byteorder = { workspace = true }
 circom-types = { version = "0.1.0", path = "../circom-types" }
-circom-mpc-compiler={version ="0.1.0", path="../circom-mpc-compiler"}
 eyre = { workspace = true }
 itertools = { workspace = true }
 mpc-core = { version = "0.1.0", path = "../mpc-core" }

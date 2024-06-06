@@ -9,11 +9,16 @@ mod tests {
     use ark_bn254::Bn254;
     use circom_mpc_compiler::CompilerBuilder;
     use circom_types::groth16::witness::Witness;
+    use collaborative_groth16::groth16::SharedWitness;
+    use mpc_core::protocols::plain::PlainDriver;
     use std::{
         fs::{self, File},
         str::FromStr,
     };
-
+    fn convert_witness(mut witness: SharedWitness<PlainDriver, Bn254>) -> Vec<ark_bn254::Fr> {
+        witness.public_inputs.extend(witness.witness);
+        witness.public_inputs
+    }
     macro_rules! witness_extension_test_plain {
         ($name: ident) => {
             #[test]
@@ -30,9 +35,9 @@ mod tests {
                         .parse()
                         .unwrap()
                         .to_plain_vm()
-                        .run(inp.inputs[i].to_owned())
+                        .run_with_flat(inp.inputs[i].to_owned())
                         .unwrap();
-                    assert_eq!(is_witness, inp.witnesses[i].values);
+                    assert_eq!(convert_witness(is_witness), inp.witnesses[i].values);
                 }
             }
         };
