@@ -70,9 +70,12 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
     fn vm_sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
     fn vm_mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
     fn vm_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
-    fn vm_neg(&mut self, a: Self::VmType) -> Self::VmType;
-
     fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+
+    fn vm_pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_mod(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+
+    fn vm_neg(&mut self, a: Self::VmType) -> Self::VmType;
 
     fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
     fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
