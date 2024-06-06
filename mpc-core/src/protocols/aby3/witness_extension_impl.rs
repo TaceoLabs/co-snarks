@@ -243,7 +243,7 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn shift_r<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn shift_r<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
@@ -261,7 +261,13 @@ impl<F: PrimeField> Aby3VmType<F> {
                 if b == F::zero() {
                     return Ok(Aby3VmType::Shared(a));
                 }
-                todo!("Shared shift_right (shared by public) not implemented");
+                // TODO: check bounds of b
+                let shift = usize::try_from(b.into_bigint().as_mut()[0]).unwrap();
+                let bits = party.a2b(&a)?;
+                let shifted = &bits >> shift;
+
+                let res = party.b2a(shifted)?;
+                Aby3VmType::Shared(res)
             }
             (_, _) => todo!("Shared shift_right not implemented"),
         };
@@ -301,7 +307,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                     .enumerate()
                     .map(|(i, b_i)| {
                         let two = F::from(2u64);
-                        let two_to_two_to_i = two.pow(&[2u64.pow(i as u32)]);
+                        let two_to_two_to_i = two.pow([2u64.pow(i as u32)]);
                         let v = party.mul_with_public(&two_to_two_to_i, &b_i);
                         let v = party.add_with_public(&F::one(), &v);
                         party.sub(&v, &b_i)
@@ -319,7 +325,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 // TODO: handle overflows
                 // This case is equivalent to a*2^b
                 // TODO: assert b < 256?
-                let shift = F::from(2u64).pow(&[b.into_bigint().as_mut()[0]]);
+                let shift = F::from(2u64).pow([b.into_bigint().as_mut()[0]]);
                 Aby3VmType::Shared(party.mul_with_public(&shift, &a))
             }
             (_, _) => todo!("Shared shift_left not implemented"),
