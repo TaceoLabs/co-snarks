@@ -25,6 +25,7 @@ mpc-net = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 tokio = { workspace = true }
+tracing.workspace = true
 serde = { workspace = true }
 
 [dev-dependencies]
