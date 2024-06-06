@@ -234,6 +234,17 @@ impl<F: PrimeField> GSZVmType<F> {
         Ok(res)
     }
 
+    fn bool_or<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        let res = match (a, b) {
+            (GSZVmType::Public(a), GSZVmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                GSZVmType::Public(plain.vm_bool_or(a, b)?)
+            }
+            (_, _) => todo!("Shared not implemented"),
+        };
+        Ok(res)
+    }
+
     fn bit_and<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (GSZVmType::Public(a), GSZVmType::Public(b)) => {
@@ -359,6 +370,10 @@ impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProt
 
     fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::bool_and(self, a, b)
+    }
+
+    fn vm_bool_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Self::VmType::bool_or(self, a, b)
     }
 
     fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
