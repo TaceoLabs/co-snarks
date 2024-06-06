@@ -141,61 +141,61 @@ impl<F: PrimeField> GSZVmType<F> {
         Ok(res)
     }
 
-    fn lt<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
+    fn lt<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                GSZVmType::Public(plain.vm_lt(a, b))
+                Ok(GSZVmType::Public(plain.vm_lt(a, b)?))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn le<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
+    fn le<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                GSZVmType::Public(plain.vm_le(a, b))
+                Ok(GSZVmType::Public(plain.vm_le(a, b)?))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn gt<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
+    fn gt<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                GSZVmType::Public(plain.vm_gt(a, b))
+                Ok(GSZVmType::Public(plain.vm_gt(a, b)?))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn ge<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
+    fn ge<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                GSZVmType::Public(plain.vm_ge(a, b))
+                Ok(GSZVmType::Public(plain.vm_ge(a, b)?))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn eq<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
+    fn eq<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                GSZVmType::Public(plain.vm_eq(a, b))
+                Ok(GSZVmType::Public(plain.vm_eq(a, b)?))
             }
             (_, _) => todo!("Shared not implemented"),
         }
     }
 
-    fn neq<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Self {
+    fn neq<N: GSZNetwork>(_party: &mut GSZProtocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (GSZVmType::Public(a), GSZVmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                GSZVmType::Public(plain.vm_neq(a, b))
+                Ok(GSZVmType::Public(plain.vm_neq(a, b)?))
             }
             (_, _) => todo!("Shared not implemented"),
         }
@@ -278,11 +278,11 @@ impl<F: PrimeField> GSZVmType<F> {
         Ok(res)
     }
 
-    fn is_zero<N: GSZNetwork>(_party: &GSZProtocol<F, N>, a: Self) -> bool {
+    fn is_zero<N: GSZNetwork>(_party: &GSZProtocol<F, N>, a: Self) -> Result<bool> {
         match a {
             GSZVmType::Public(a) => {
-                let plain = PlainDriver::default();
-                plain.is_zero(a)
+                let mut plain = PlainDriver::default();
+                plain.is_zero(a, false)
             }
             _ => todo!("Shared not implemented"),
         }
@@ -336,27 +336,27 @@ impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProt
         Self::VmType::int_div(self, a, b)
     }
 
-    fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::lt(self, a, b)
     }
 
-    fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::le(self, a, b)
     }
 
-    fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::gt(self, a, b)
     }
 
-    fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::ge(self, a, b)
     }
 
-    fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::eq(self, a, b)
     }
 
-    fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::neq(self, a, b)
     }
 
@@ -388,7 +388,10 @@ impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProt
         Self::VmType::bit_and(self, a, b)
     }
 
-    fn is_zero(&self, a: Self::VmType) -> bool {
+    fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool> {
+        if !matches!(a, GSZVmType::Public(_)) && !allow_secret_inputs {
+            bail!("is_zero called on secret inputs when not allowed")
+        }
         Self::VmType::is_zero(self, a)
     }
 

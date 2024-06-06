@@ -1,3 +1,5 @@
+use crate::traits::PrimeFieldMpcProtocol;
+
 use super::{id::PartyID, network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol, IoResult};
 use ark_ff::{One, PrimeField, Zero};
 use num_bigint::BigUint;
@@ -35,6 +37,17 @@ impl std::ops::BitXor for &Aby3BigUintShare {
         Self::Output {
             a: &self.a ^ &rhs.a,
             b: &self.b ^ &rhs.b,
+        }
+    }
+}
+
+impl std::ops::BitXor<&BigUint> for &Aby3BigUintShare {
+    type Output = Aby3BigUintShare;
+
+    fn bitxor(self, rhs: &BigUint) -> Self::Output {
+        Self::Output {
+            a: &self.a ^ rhs,
+            b: &self.b ^ rhs,
         }
     }
 }
@@ -348,5 +361,96 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             }
         }
         Ok(res)
+    }
+
+    pub fn is_zero(&mut self, x: Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
+        let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
+
+        // negate
+        let mut x = &x ^ &mask;
+
+        // do ands in a tree
+        let mut len = Self::BITLEN;
+        while len > 1 {
+            let splitting_point = len / 2;
+            len = len - splitting_point;
+            let y = &x >> len;
+            x = self.and(x, y)?;
+        }
+
+        // extract LSB
+        let x = &x & &BigUint::one();
+        // negate again
+        let x = &x ^ &BigUint::one();
+        Ok(x)
+    }
+
+    pub fn bit_inject(&mut self, x: Aby3BigUintShare) -> IoResult<Aby3PrimeFieldShare<F>> {
+        // standard bitinject
+        assert!(x.a.bits() <= 1);
+
+        let (b0, b1, b2) = match self.network.get_id() {
+            PartyID::ID0 => {
+                let b0 = Aby3PrimeFieldShare {
+                    a: x.a.into(),
+                    b: F::zero(),
+                };
+                let b1 = Aby3PrimeFieldShare {
+                    a: F::zero(),
+                    b: F::zero(),
+                };
+                let b2 = Aby3PrimeFieldShare {
+                    a: F::zero(),
+                    b: x.b.into(),
+                };
+                (b0, b1, b2)
+            }
+            PartyID::ID1 => {
+                let b0 = Aby3PrimeFieldShare {
+                    a: F::zero(),
+                    b: x.b.into(),
+                };
+                let b1 = Aby3PrimeFieldShare {
+                    a: x.a.into(),
+                    b: F::zero(),
+                };
+                let b2 = Aby3PrimeFieldShare {
+                    a: F::zero(),
+                    b: F::zero(),
+                };
+                (b0, b1, b2)
+            }
+            PartyID::ID2 => {
+                let b0 = Aby3PrimeFieldShare {
+                    a: F::zero(),
+                    b: F::zero(),
+                };
+                let b1 = Aby3PrimeFieldShare {
+                    a: F::zero(),
+                    b: x.b.into(),
+                };
+                let b2 = Aby3PrimeFieldShare {
+                    a: x.a.into(),
+                    b: F::zero(),
+                };
+                (b0, b1, b2)
+            }
+        };
+
+        let d = self.arithmetic_xor(b0, b1)?;
+        let e = self.arithmetic_xor(d, b2)?;
+        Ok(e)
+    }
+
+    fn arithmetic_xor(
+        &mut self,
+        x: Aby3PrimeFieldShare<F>,
+        y: Aby3PrimeFieldShare<F>,
+    ) -> IoResult<Aby3PrimeFieldShare<F>> {
+        let d = self.mul(&x, &y)?;
+        let d = self.mul_with_public(&F::from(2u64), &d);
+        let e = self.add(&x, &y);
+        let d = self.sub(&e, &d);
+        Ok(d)
     }
 }

@@ -206,32 +206,32 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
         Ok(F::from(lhs / rhs))
     }
 
-    fn is_zero(&self, a: Self::VmType) -> bool {
-        a.is_zero()
+    fn is_zero(&mut self, a: Self::VmType, _: bool) -> Result<bool> {
+        Ok(a.is_zero())
     }
 
-    fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        bool_op!(a, <, b)
+    fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Ok(bool_op!(a, <, b))
     }
 
-    fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        bool_op!(a, <=, b)
+    fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Ok(bool_op!(a, <=, b))
     }
 
-    fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        bool_op!(a, >, b)
+    fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Ok(bool_op!(a, >, b))
     }
 
-    fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        bool_op!(a, >=, b)
+    fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Ok(bool_op!(a, >=, b))
     }
 
-    fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        bool_op!(a, ==, b)
+    fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Ok(bool_op!(a, ==, b))
     }
 
-    fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        bool_op!(a, !=, b)
+    fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Ok(bool_op!(a, !=, b))
     }
 
     fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {

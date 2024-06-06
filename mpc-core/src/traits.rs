@@ -77,12 +77,12 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
 
     fn vm_neg(&mut self, a: Self::VmType) -> Self::VmType;
 
-    fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
-    fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
-    fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
-    fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
-    fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
-    fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
+    fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
     fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
@@ -94,7 +94,7 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
     fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
     fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
-    fn is_zero(&self, a: Self::VmType) -> bool;
+    fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool>;
 
     fn vm_open(&mut self, a: Self::VmType) -> Result<F>;
 
