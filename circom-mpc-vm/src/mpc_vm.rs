@@ -253,7 +253,8 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 op_codes::MpcOpCode::Assert => {
                     let assertion = self.pop_field();
                     if protocol.is_zero(assertion) {
-                        panic!("assertion failed");
+                        // TODO: Handle nicer
+                        panic!("Assertion failed during execution");
                     }
                 }
                 op_codes::MpcOpCode::Add => {
