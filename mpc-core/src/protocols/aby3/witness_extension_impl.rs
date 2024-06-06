@@ -155,69 +155,89 @@ impl<F: PrimeField> Aby3VmType<F> {
         Ok(res)
     }
 
-    fn lt<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn lt<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_lt(a, b))
+                Ok(Aby3VmType::Public(plain.vm_lt(a, b)?))
             }
             (_, _) => todo!("Shared LT not implemented"),
         }
     }
 
-    fn le<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn le<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_le(a, b))
+                Ok(Aby3VmType::Public(plain.vm_le(a, b)?))
             }
             (_, _) => todo!("Shared LE not implemented"),
         }
     }
 
-    fn gt<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn gt<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_gt(a, b))
+                Ok(Aby3VmType::Public(plain.vm_gt(a, b)?))
             }
             (_, _) => todo!("Shared GT not implemented"),
         }
     }
 
-    fn ge<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn ge<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_ge(a, b))
+                Ok(Aby3VmType::Public(plain.vm_ge(a, b)?))
             }
             (_, _) => todo!("Shared GE not implemented"),
         }
     }
 
-    fn eq<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn eq<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_eq(a, b))
+                Ok(Aby3VmType::Public(plain.vm_eq(a, b)?))
             }
             (Aby3VmType::Public(b), Aby3VmType::Shared(a))
-            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                todo!("Shared EQ (public/shared) not implemented")
+            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => eq_public(party, a, b),
+            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                let eq = party.sub(&a, &b);
+                is_zero(party, eq)
             }
             (_, _) => todo!("Shared EQ not implemented"),
         }
     }
 
-    fn neq<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn neq<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_neq(a, b))
+                Ok(Aby3VmType::Public(plain.vm_neq(a, b)?))
             }
             (Aby3VmType::Public(b), Aby3VmType::Shared(a))
             | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                todo!("Shared NEQ (public/shared) not implemented")
+                let eq = eq_public(party, a, b)?;
+                match eq {
+                    Aby3VmType::Public(eq) => Ok(Aby3VmType::Public(F::one() - eq)),
+                    Aby3VmType::Shared(eq) => {
+                        Ok(Aby3VmType::Shared(party.add_with_public(&-F::one(), &eq)))
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                let eq = party.sub(&a, &b);
+                let is_zero = is_zero(party, eq)?;
+                match is_zero {
+                    Aby3VmType::Public(eq) => Ok(Aby3VmType::Public(F::one() - eq)),
+                    Aby3VmType::Shared(eq) => {
+                        Ok(Aby3VmType::Shared(party.add_with_public(&-F::one(), &eq)))
+                    }
+                    _ => unreachable!(),
+                }
             }
             (_, _) => todo!("Shared NEQ not implemented"),
         }
@@ -229,7 +249,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_shift_l(a, b)?)
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
+            (Aby3VmType::Public(a), Aby3VmType::Shared(_b)) => {
                 // some special casing
                 if a == F::zero() {
                     return Ok(Aby3VmType::Public(F::zero()));
@@ -364,13 +384,24 @@ impl<F: PrimeField> Aby3VmType<F> {
         Ok(res)
     }
 
-    fn is_zero<N: Aby3Network>(_party: &Aby3Protocol<F, N>, a: Self) -> bool {
+    fn is_zero<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Result<bool> {
         match a {
             Aby3VmType::Public(a) => {
-                let plain = PlainDriver::default();
-                plain.is_zero(a)
+                let mut plain = PlainDriver::default();
+                plain.is_zero(a, false)
             }
-            _ => todo!("Shared is_zero not implemented"),
+            Aby3VmType::Shared(a) => {
+                let res = is_zero(party, a)?;
+                match res {
+                    Aby3VmType::Public(res) => Ok(res.is_zero()),
+                    Aby3VmType::Shared(res) => {
+                        let x = party.open(&res)?;
+                        Ok(x.is_zero())
+                    }
+                    _ => todo!("BitShared is_zero not implemented"),
+                }
+            }
+            _ => todo!("BitShared is_zero not implemented"),
         }
     }
 
@@ -424,27 +455,27 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         Self::VmType::int_div(self, a, b)
     }
 
-    fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::lt(self, a, b)
     }
 
-    fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::le(self, a, b)
     }
 
-    fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::gt(self, a, b)
     }
 
-    fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::ge(self, a, b)
     }
 
-    fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::eq(self, a, b)
     }
 
-    fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::neq(self, a, b)
     }
 
@@ -476,7 +507,10 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         Self::VmType::bit_and(self, a, b)
     }
 
-    fn is_zero(&self, a: Self::VmType) -> bool {
+    fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool> {
+        if !matches!(a, Aby3VmType::Public(_)) && !allow_secret_inputs {
+            bail!("is_zero called on secret inputs when not allowed")
+        }
         Self::VmType::is_zero(self, a)
     }
 
@@ -512,4 +546,24 @@ fn bit_and_public<N: Aby3Network, F: PrimeField>(
         return Ok(Aby3VmType::Shared(res));
     }
     todo!("Shared bit_and (public/shared) not implemented")
+}
+
+fn eq_public<N: Aby3Network, F: PrimeField>(
+    party: &mut Aby3Protocol<F, N>,
+    a: Aby3PrimeFieldShare<F>,
+    b: F,
+) -> Result<Aby3VmType<F>> {
+    let val = party.add_with_public(&-b, &a);
+    is_zero(party, val)
+}
+
+fn is_zero<N: Aby3Network, F: PrimeField>(
+    party: &mut Aby3Protocol<F, N>,
+    a: Aby3PrimeFieldShare<F>,
+) -> Result<Aby3VmType<F>> {
+    let bits = party.a2b(&a)?;
+    let is_zero = party.is_zero(bits)?;
+    let is_zero_f = party.bit_inject(is_zero)?;
+
+    Ok(Aby3VmType::Shared(is_zero_f))
 }
