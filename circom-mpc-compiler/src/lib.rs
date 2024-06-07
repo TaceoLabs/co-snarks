@@ -346,7 +346,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     fn handle_assert_bucket(&mut self, assert_bucket: &AssertBucket) {
         //evaluate the assertion
         self.handle_instruction(&assert_bucket.evaluate);
-        self.emit_opcode(MpcOpCode::Assert);
+        self.emit_opcode(MpcOpCode::Assert(assert_bucket.line));
     }
 
     fn handle_return_bucket(&mut self, return_bucket: &ReturnBucket) {
