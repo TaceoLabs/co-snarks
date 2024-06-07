@@ -548,7 +548,7 @@ fn bit_and_public<N: Aby3Network, F: PrimeField>(
             a: bit_shares.a.clone() & BigUint::one(),
             b: bit_shares.b.clone() & BigUint::one(),
         };
-        let res = party.b2a(bit_share)?;
+        let res = party.bit_inject(bit_share)?;
         return Ok(Aby3VmType::Shared(res));
     }
     todo!("Shared bit_and (public/shared) not implemented")

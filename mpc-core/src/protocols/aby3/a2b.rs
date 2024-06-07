@@ -185,31 +185,32 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // Add x1 + x2 via a packed Kogge-Stone adder
         let p = &x1 ^ &x2;
         let g = self.and(x1, x2)?;
-        self.kogge_stone_inner(p, g)
+        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
     }
 
     fn low_depth_binary_sub_p(&mut self, x: &Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
-        let p_ = (BigUint::from(1u64) << Self::BITLEN) - F::MODULUS.into();
+        let p_ = (BigUint::from(1u64) << (Self::BITLEN + 1)) - F::MODULUS.into();
 
         // Add x1 + p_ via a packed Kogge-Stone adder
         let p = x.xor_with_public(&p_, self.network.get_id());
         let g = x & &p_;
-        self.kogge_stone_inner(p, g)
+        self.kogge_stone_inner(p, g, Self::BITLEN + 2)
     }
 
     fn kogge_stone_inner(
         &mut self,
         mut p: Aby3BigUintShare,
         mut g: Aby3BigUintShare,
+        bit_len: usize,
     ) -> IoResult<Aby3BigUintShare> {
-        let d = usize::ilog2(Self::BITLEN);
+        let d = usize::ilog2(bit_len);
         let s_ = p.to_owned();
 
         for i in 0..d {
             let shift = 1 << i;
             let mut p_ = p.to_owned();
             let mut g_ = g.to_owned();
-            let mask = (BigUint::from(1u64) << (Self::BITLEN - shift)) - BigUint::one();
+            let mask = (BigUint::from(1u64) << (bit_len - shift)) - BigUint::one();
             p_ &= &mask;
             g_ &= &mask;
             let p_shift = &p >> shift;
@@ -241,7 +242,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let x_msb = &x >> (Self::BITLEN);
         x &= &mask;
         let mut y = self.low_depth_binary_sub_p(&x)?;
-        let y_msb = &y >> (Self::BITLEN);
+        let y_msb = &y >> (Self::BITLEN + 1);
         y &= &mask;
 
         // Spread the ov share to the whole biguint
@@ -452,5 +453,11 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let e = self.add(&x, &y);
         let d = self.sub(&e, &d);
         Ok(d)
+    }
+
+    pub(crate) fn open_bit_share(&mut self, a: &Aby3BigUintShare) -> IoResult<BigUint> {
+        self.network.send_next(a.b.clone())?;
+        let c = self.network.recv_prev::<BigUint>()?;
+        Ok(&a.a ^ &a.b ^ c)
     }
 }
