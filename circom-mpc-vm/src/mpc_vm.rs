@@ -243,15 +243,26 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     continue;
                 }
                 op_codes::MpcOpCode::CreateCmp(symbol, amount) => {
-                    let relative_offset = self.pop_index();
-                    let templ_decl = ctx.templ_decls.get(symbol).ok_or(eyre!(
-                        "{symbol} not found in template declarations. This must be a bug"
-                    ))?;
-                    let mut offset = self.my_offset + relative_offset;
-                    for _ in 0..*amount {
-                        let sub_component = Component::init(templ_decl, offset);
-                        offset += sub_component.total_signal_size;
-                        self.sub_components.push(sub_component);
+                    let new_components = {
+                        let relative_offset = self.pop_index();
+                        let templ_decl = ctx.templ_decls.get(symbol).ok_or(eyre!(
+                            "{symbol} not found in template declarations. This must be a bug"
+                        ))?;
+                        let mut offset = self.my_offset + relative_offset;
+                        (0..*amount)
+                            .map(|_| {
+                                let sub_component = Component::<P, C>::init(templ_decl, offset);
+                                offset += sub_component.total_signal_size;
+                                sub_component
+                            })
+                            .collect_vec()
+                    };
+                    //check if we can run it instantly
+                    for mut component in new_components {
+                        if component.input_signals == 0 {
+                            component.run(protocol, ctx)?;
+                        }
+                        self.sub_components.push(component);
                     }
                 }
                 op_codes::MpcOpCode::OutputSubComp(mapped, signal_code) => {
