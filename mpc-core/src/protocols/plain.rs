@@ -169,7 +169,9 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     type VmType = F;
 
     fn vm_add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        a + b
+        let result = a + b;
+        tracing::debug!("{a}+{b}={result}");
+        result
     }
 
     fn vm_sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {

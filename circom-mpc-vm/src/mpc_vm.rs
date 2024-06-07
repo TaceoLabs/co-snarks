@@ -161,37 +161,59 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
             tracing::trace!("{ip:0>4}|   {inst}");
             match inst {
                 op_codes::MpcOpCode::PushConstant(index) => {
-                    self.push_field(ctx.constant_table[*index].clone());
+                    let constant = ctx.constant_table[*index].clone();
+                    tracing::debug!("pushing constant {}", constant);
+                    self.push_field(constant);
                 }
                 op_codes::MpcOpCode::PushIndex(index) => self.push_index(*index),
-                op_codes::MpcOpCode::LoadSignal => {
+                //op_codes::MpcOpCode::LoadSignal => {
+                //    let index = self.pop_index();
+                //    let signal = ctx.signals[self.my_offset + index].clone();
+                //    self.push_field(signal);
+                //}
+                op_codes::MpcOpCode::LoadSignals(amount) => {
                     let index = self.pop_index();
-                    let signal = ctx.signals[self.my_offset + index].clone();
-                    self.push_field(signal);
+                    let start = self.my_offset + index;
+                    ctx.signals[start..start + amount]
+                        .iter()
+                        .cloned()
+                        .for_each(|signal| {
+                            self.push_field(signal);
+                        });
                 }
-                op_codes::MpcOpCode::StoreSignal => {
+                op_codes::MpcOpCode::StoreSignals(amount) => {
                     //get index
                     let index = self.pop_index();
                     let signal = self.pop_field();
                     ctx.signals[self.my_offset + index] = signal;
                 }
-                op_codes::MpcOpCode::LoadVar => {
+                //               op_codes::MpcOpCode::LoadVar => {
+                //                   let index = self.pop_index();
+                //                   tracing::debug!("loading from index {index}<-{}", current_vars[index]);
+                //                   self.push_field(current_vars[index].clone());
+                //               }
+                op_codes::MpcOpCode::LoadVars(amount) => {
                     let index = self.pop_index();
-                    self.push_field(current_vars[index].clone());
+                    current_vars[index..index + amount]
+                        .iter()
+                        .cloned()
+                        .for_each(|signal| {
+                            self.push_field(signal);
+                        });
                 }
-                op_codes::MpcOpCode::StoreVar => {
+                //op_codes::MpcOpCode::StoreVar => {
+                //    let index = self.pop_index();
+                //    let signal = self.pop_field();
+                //    current_vars[index] = signal;
+                //}
+                op_codes::MpcOpCode::StoreVars(amount) => {
                     let index = self.pop_index();
-                    let signal = self.pop_field();
-                    current_vars[index] = signal;
-                }
-                op_codes::MpcOpCode::StoreVars => {
-                    let index = self.pop_index();
-                    let amount = self.pop_index();
-                    (0..amount).for_each(|i| {
+                    (0..*amount).for_each(|i| {
                         current_vars[index + amount - i - 1] = self.pop_field();
                     });
                 }
                 op_codes::MpcOpCode::Call(symbol, return_vals) => {
+                    tracing::debug!("Calling {symbol}");
                     let fun_decl = ctx.fun_decls.get(symbol).ok_or(eyre!(
                         "{symbol} not found in function declaration. This must be a bug.."
                     ))?;
@@ -202,11 +224,10 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         .iter()
                         .enumerate()
                     {
+                        tracing::debug!("setting {idx} to {param}");
                         func_vars[idx] = param.clone();
                     }
                     std::mem::swap(&mut func_vars, &mut current_vars);
-                    //set size of return value
-                    self.current_return_vals = *return_vals;
                     self.index_stack.push_stack_frame();
                     self.field_stack.push_stack_frame();
                     self.functions_ctx.push(FunctionCtx::new(
@@ -215,9 +236,10 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         func_vars,
                         Rc::clone(&current_body),
                     ));
+                    //set size of return value
+                    self.current_return_vals = *return_vals;
                     current_body = Rc::clone(&fun_decl.body);
                     ip = 0;
-                    tracing::debug!("Calling {}", fun_decl.symbol);
                     continue;
                 }
                 op_codes::MpcOpCode::CreateCmp(symbol, amount) => {
@@ -226,11 +248,11 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         "{symbol} not found in template declarations. This must be a bug"
                     ))?;
                     let mut offset = self.my_offset + relative_offset;
-                    (0..*amount).for_each(|_| {
+                    for _ in 0..*amount {
                         let sub_component = Component::init(templ_decl, offset);
                         offset += sub_component.total_signal_size;
                         self.sub_components.push(sub_component);
-                    });
+                    }
                 }
                 op_codes::MpcOpCode::OutputSubComp(mapped, signal_code) => {
                     let sub_comp_index = self.pop_index();
@@ -425,7 +447,9 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         current_vars[start..start + end]
                             .iter()
                             .cloned()
-                            .for_each(|var| {
+                            .enumerate()
+                            .for_each(|(idx, var)| {
+                                println!("return {idx} is {var}");
                                 self.push_field(var);
                             });
                     }
@@ -437,7 +461,6 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     current_body = old_body;
                 }
                 op_codes::MpcOpCode::Log => {
-                    Self::debug_code_block(Rc::clone(&current_body));
                     let field = self.pop_field();
                     self.log_buf.push_str(&field.to_string());
                     self.log_buf.push(' ');

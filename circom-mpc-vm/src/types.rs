@@ -48,16 +48,14 @@ impl TemplateDecl {
 }
 
 pub struct FunDecl {
-    pub(crate) symbol: String,
     pub(crate) num_params: usize,
     pub(crate) vars: usize,
     pub(crate) body: Rc<CodeBlock>,
 }
 
 impl FunDecl {
-    pub fn new(symbol: String, num_params: usize, vars: usize, body: CodeBlock) -> Self {
+    pub fn new(num_params: usize, vars: usize, body: CodeBlock) -> Self {
         Self {
-            symbol,
             num_params,
             vars,
             body: Rc::new(body),

@@ -3,11 +3,10 @@ pub type CodeBlock = Vec<MpcOpCode>;
 pub enum MpcOpCode {
     PushConstant(usize),
     PushIndex(usize),
-    LoadSignal,
-    StoreSignal,
-    LoadVar,
-    StoreVars,
-    StoreVar,
+    LoadSignals(usize),
+    StoreSignals(usize),
+    LoadVars(usize),
+    StoreVars(usize),
     OutputSubComp(bool, usize),
     InputSubComp(bool, usize),
     CreateCmp(String, usize), //what else do we need?
@@ -54,11 +53,10 @@ impl std::fmt::Display for MpcOpCode {
                 format!("PUSH_CONSTANT_OP {}", constant_index)
             }
             MpcOpCode::PushIndex(index) => format!("PUSH_INDEX_OP {}", index),
-            MpcOpCode::LoadSignal => "LOAD_SIGNAL_OP".to_owned(),
-            MpcOpCode::StoreSignal => "STORE_SIGNAL_OP".to_owned(),
-            MpcOpCode::LoadVar => "LOAD_VAR_OP".to_owned(),
-            MpcOpCode::StoreVar => "STORE_VAR_OP".to_owned(),
-            MpcOpCode::StoreVars => "STORE_VARS_OP".to_owned(),
+            MpcOpCode::LoadSignals(amount) => format!("LOAD_SIGNALS_OP {amount}"),
+            MpcOpCode::StoreSignals(amount) => format!("STORE_SIGNALS_OP {amount}"),
+            MpcOpCode::LoadVars(amount) => format!("LOAD_VARS_OP {amount}"),
+            MpcOpCode::StoreVars(amount) => format!("STORE_VARS_OP {amount}"),
             MpcOpCode::Call(symbol, return_vals) => {
                 format!("CALL_OP {symbol} {return_vals}")
             }

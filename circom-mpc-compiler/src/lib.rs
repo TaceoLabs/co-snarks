@@ -129,7 +129,12 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         Ok(CircomCircuit::build(vcp, flags, &self.version))
     }
 
-    fn emit_store_opcodes(&mut self, location_rule: &LocationRule, dest_addr: &AddressType) {
+    fn emit_store_opcodes(
+        &mut self,
+        location_rule: &LocationRule,
+        dest_addr: &AddressType,
+        context_size: usize,
+    ) {
         let (mapped, signal_code) = match location_rule {
             LocationRule::Indexed {
                 location,
@@ -150,8 +155,12 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             }
         };
         match dest_addr {
-            AddressType::Variable => self.current_code_block.push(MpcOpCode::StoreVar),
-            AddressType::Signal => self.current_code_block.push(MpcOpCode::StoreSignal),
+            AddressType::Variable => self
+                .current_code_block
+                .push(MpcOpCode::StoreVars(context_size)),
+            AddressType::Signal => self
+                .current_code_block
+                .push(MpcOpCode::StoreSignals(context_size)),
             AddressType::SubcmpSignal {
                 cmp_address,
                 uniform_parallel_value: _,
@@ -167,7 +176,11 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
 
     fn handle_store_bucket(&mut self, store_bucket: &StoreBucket) {
         self.handle_instruction(&store_bucket.src);
-        self.emit_store_opcodes(&store_bucket.dest, &store_bucket.dest_address_type);
+        self.emit_store_opcodes(
+            &store_bucket.dest,
+            &store_bucket.dest_address_type,
+            store_bucket.context.size,
+        );
     }
 
     #[inline(always)]
@@ -244,6 +257,8 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn handle_load_bucket(&mut self, load_bucket: &LoadBucket) {
+        //TODO ContextSize > 1
+        let context_size = load_bucket.context.size;
         //first eject for src
         let (mapped, signal_code) = match &load_bucket.src {
             LocationRule::Indexed {
@@ -271,8 +286,12 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             }
         };
         match &load_bucket.address_type {
-            AddressType::Variable => self.current_code_block.push(MpcOpCode::LoadVar),
-            AddressType::Signal => self.current_code_block.push(MpcOpCode::LoadSignal),
+            AddressType::Variable => self
+                .current_code_block
+                .push(MpcOpCode::LoadVars(context_size)),
+            AddressType::Signal => self
+                .current_code_block
+                .push(MpcOpCode::LoadSignals(context_size)),
             AddressType::SubcmpSignal {
                 cmp_address,
                 uniform_parallel_value: _,
@@ -365,18 +384,38 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             .iter()
             .enumerate()
             .for_each(|(idx, inst)| {
-                debug_assert_eq!(
-                    call_bucket.argument_types[idx].size, 1,
-                    "TODO argument type size is > 1"
-                );
+                let arg_size = call_bucket.argument_types[idx].size;
                 self.handle_instruction(inst);
+                if arg_size > 1 {
+                    //replace Load{Var/Signal} with with respective MultiOpCode
+                    let last_instruction = self.current_code_block.pop().expect("is not empty");
+                    //self.emit_opcode(MpcOpCode::PushIndex(arg_size));
+                    match last_instruction {
+                        MpcOpCode::LoadVars(amount) => {
+                            println!("is same uwu");
+                            debug_assert_eq!(arg_size, amount);
+                            self.emit_opcode(MpcOpCode::LoadVars(amount))
+                        }
+                        MpcOpCode::LoadSignals(amount) => {
+                            println!("is same uwu");
+                            debug_assert_eq!(arg_size, amount);
+                            self.emit_opcode(MpcOpCode::LoadSignals(amount))
+                        }
+                        MpcOpCode::PushConstant(idx) => {
+                            for i in 0..arg_size {
+                                self.emit_opcode(MpcOpCode::PushConstant(idx + i));
+                            }
+                        }
+                        x => unreachable!("last instruction for loading multi params is {x}?"),
+                    }
+                }
             });
         match &call_bucket.return_info {
             ReturnType::Intermediate { op_aux_no: _ } => todo!(),
             ReturnType::Final(final_data) => {
                 if final_data.context.size == 1 {
                     self.emit_opcode(MpcOpCode::Call(call_bucket.symbol.clone(), 1));
-                    self.emit_store_opcodes(&final_data.dest, &final_data.dest_address_type);
+                    self.emit_store_opcodes(&final_data.dest, &final_data.dest_address_type, 1);
                 } else {
                     match &final_data.dest {
                         LocationRule::Indexed {
@@ -390,7 +429,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                                     final_data.context.size,
                                 ));
                                 debug_assert!(matches!(value_bucket.parse_as, ValueType::U32));
-                                self.emit_opcode(MpcOpCode::PushIndex(final_data.context.size));
                                 self.emit_opcode(MpcOpCode::PushIndex(value_bucket.value));
                             } else {
                                 panic!("Another way for multiple return vals???");
@@ -404,7 +442,9 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                         }
                     };
                     match &final_data.dest_address_type {
-                        AddressType::Variable => self.emit_opcode(MpcOpCode::StoreVars),
+                        AddressType::Variable => {
+                            self.emit_opcode(MpcOpCode::StoreVars(final_data.context.size))
+                        }
                         AddressType::Signal => todo!(),
                         AddressType::SubcmpSignal {
                             cmp_address: _,
@@ -480,21 +520,14 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
 
-            // moved here from vm
-            for params in fun.params.iter() {
-                assert!(
-                    params.length.is_empty(),
-                    "TODO we need to check how to call this and when this happens"
-                );
-            }
+            let params_length = fun
+                .params
+                .iter()
+                .map(|p| p.length.iter().product::<usize>())
+                .sum::<usize>();
             self.fun_decls.insert(
                 fun.header.clone(),
-                FunDecl::new(
-                    fun.header.clone(),
-                    fun.params.len(),
-                    fun.max_number_of_vars,
-                    new_code_block,
-                ),
+                FunDecl::new(params_length, fun.max_number_of_vars, new_code_block),
             );
         }
         for templ in circuit.templates.iter() {
