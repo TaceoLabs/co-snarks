@@ -19,15 +19,17 @@ macro_rules! to_usize {
 }
 
 macro_rules! bool_op {
-    ($lhs: expr, $op: tt, $rhs: expr) => {
-       if $lhs $op $rhs {
-        tracing::debug!("{}{}{} -> 1", $lhs,stringify!($op), $rhs);
+    ($lhs: expr, $op: tt, $rhs: expr) => {{
+        let xor1 = PlainDriver::val($lhs);
+        let xor2 = PlainDriver::val($rhs);
+       if ($lhs $op $rhs) ^ xor1 ^ xor2{
+        tracing::trace!("{}{}{} -> 1", $lhs,stringify!($op), $rhs);
         F::one()
        } else {
-        tracing::debug!("{}{}{} -> 0", $lhs,stringify!($op), $rhs);
+        tracing::trace!("{}{}{} -> 0", $lhs,stringify!($op), $rhs);
         F::zero()
        }
-    };
+    }};
 }
 
 macro_rules! to_u64 {
@@ -45,6 +47,14 @@ macro_rules! to_bigint {
 }
 #[derive(Default)]
 pub struct PlainDriver {}
+impl PlainDriver {
+    fn val<F: PrimeField>(z: F) -> bool {
+        let modulus = to_bigint!(F::MODULUS);
+        let one = to_bigint!(F::one());
+        let two = one.clone() + one.clone();
+        modulus / two + one <= to_bigint!(z)
+    }
+}
 
 impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver {
     type FieldShare = F;
@@ -227,11 +237,19 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     }
 
     fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        Ok(bool_op!(a, ==, b))
+        if a == b {
+            Ok(F::one())
+        } else {
+            Ok(F::zero())
+        }
     }
 
     fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        Ok(bool_op!(a, !=, b))
+        if a != b {
+            Ok(F::one())
+        } else {
+            Ok(F::zero())
+        }
     }
 
     fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
