@@ -290,11 +290,15 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         component.run(protocol, ctx)?;
                     }
                 }
-                op_codes::MpcOpCode::Assert => {
+                op_codes::MpcOpCode::Assert(line) => {
                     let assertion = self.pop_field();
                     if protocol.is_zero(assertion, true)? {
                         // TODO: Handle nicer
-                        panic!("Assertion failed during execution");
+                        // TODO: Don't use symbol but name of component
+                        panic!(
+                            "Assertion failed during execution on line {line} in component {}",
+                            self.symbol
+                        );
                     }
                 }
                 op_codes::MpcOpCode::Add => {

@@ -13,7 +13,7 @@ pub enum MpcOpCode {
     Call(String, usize),
     Return,
     ReturnFun,
-    Assert,
+    Assert(usize),
     Add,
     Sub,
     Mul,
@@ -61,7 +61,7 @@ impl std::fmt::Display for MpcOpCode {
                 format!("CALL_OP {symbol} {return_vals}")
             }
             MpcOpCode::CreateCmp(header, amount) => format!("CREATE_CMP_OP {} [{amount}]", header),
-            MpcOpCode::Assert => "ASSERT_OP".to_owned(),
+            MpcOpCode::Assert(line) => format!("ASSERT_OP {line}"),
             MpcOpCode::Add => "ADD_OP".to_owned(),
             MpcOpCode::Sub => "SUB_OP".to_owned(),
             MpcOpCode::Mul => "MUL_OP".to_owned(),
