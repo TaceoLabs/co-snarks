@@ -238,16 +238,20 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
 
     fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         if a == b {
+            tracing::trace!("{a}=={b} -> 1");
             Ok(F::one())
         } else {
+            tracing::trace!("{a}=={b} -> 0");
             Ok(F::zero())
         }
     }
 
     fn vm_neq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         if a != b {
+            tracing::trace!("{a}!={b} -> 1");
             Ok(F::one())
         } else {
+            tracing::trace!("{a}!={b} -> 0");
             Ok(F::zero())
         }
     }
