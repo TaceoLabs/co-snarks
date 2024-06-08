@@ -530,7 +530,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 self.handle_instruction(inst);
             });
             let mut new_code_block = CodeBlock::default();
-            self.debug_code_block();
+            // self.debug_code_block();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
             new_code_block.push(MpcOpCode::Return);
             //store our current offset
