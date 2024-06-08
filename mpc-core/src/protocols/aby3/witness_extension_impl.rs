@@ -537,7 +537,18 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     }
 
     fn vm_bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
-        todo!()
+        match a {
+            Aby3VmType::Public(a) => {
+                let mut plain = PlainDriver::default();
+                Ok(Aby3VmType::Public(plain.vm_bool_not(a)?))
+            }
+            Aby3VmType::Shared(a) => {
+                // todo: check if 1? or do a bitextract?
+                // todo: make a proper sub_public since this happens often
+                Ok(Aby3VmType::Shared(self.add_with_public(&-F::one(), &a)))
+            }
+            Aby3VmType::BitShared => todo!("BitShared not yet implemented"),
+        }
     }
 
     fn vm_cmux(
@@ -546,7 +557,14 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         truthy: Self::VmType,
         falsy: Self::VmType,
     ) -> Result<Self::VmType> {
-        todo!()
+        assert!(
+            matches!(cond, Aby3VmType::Shared(_)),
+            "ATM we do not call this on non-shared values"
+        );
+
+        let b_min_a = self.vm_sub(falsy, truthy.clone());
+        let d = self.vm_mul(cond, b_min_a)?;
+        Ok(self.vm_add(truthy, d))
     }
 }
 
