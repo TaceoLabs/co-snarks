@@ -531,6 +531,23 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
             Aby3VmType::BitShared => todo!("BitShared not yet implemented"),
         }
     }
+
+    fn is_shared(&mut self, a: &Self::VmType) -> Result<bool> {
+        Ok(matches!(a, Aby3VmType::Public(_)))
+    }
+
+    fn vm_bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_cmux(
+        &mut self,
+        cond: Self::VmType,
+        truthy: Self::VmType,
+        falsy: Self::VmType,
+    ) -> Result<Self::VmType> {
+        todo!()
+    }
 }
 
 fn bit_and_public<N: Aby3Network, F: PrimeField>(

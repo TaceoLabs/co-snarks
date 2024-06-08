@@ -4,7 +4,7 @@ pub enum MpcOpCode {
     PushConstant(usize),
     PushIndex(usize),
     LoadSignals(usize),
-    StoreSignals(usize),
+    StoreSignal,
     LoadVars(usize),
     StoreVars(usize),
     OutputSubComp(bool, usize),
@@ -14,6 +14,9 @@ pub enum MpcOpCode {
     Return,
     ReturnFun,
     Assert(usize),
+    If(usize),
+    EndTruthyBranch(usize),
+    EndFalsyBranch,
     Add,
     Sub,
     Mul,
@@ -54,7 +57,7 @@ impl std::fmt::Display for MpcOpCode {
             }
             MpcOpCode::PushIndex(index) => format!("PUSH_INDEX_OP {}", index),
             MpcOpCode::LoadSignals(amount) => format!("LOAD_SIGNALS_OP {amount}"),
-            MpcOpCode::StoreSignals(amount) => format!("STORE_SIGNALS_OP {amount}"),
+            MpcOpCode::StoreSignal => "STORE_SIGNALS_OP".to_owned(),
             MpcOpCode::LoadVars(amount) => format!("LOAD_VARS_OP {amount}"),
             MpcOpCode::StoreVars(amount) => format!("STORE_VARS_OP {amount}"),
             MpcOpCode::Call(symbol, return_vals) => {
@@ -62,6 +65,9 @@ impl std::fmt::Display for MpcOpCode {
             }
             MpcOpCode::CreateCmp(header, amount) => format!("CREATE_CMP_OP {} [{amount}]", header),
             MpcOpCode::Assert(line) => format!("ASSERT_OP {line}"),
+            MpcOpCode::If(jump) => format!("IF_OP {jump}"),
+            MpcOpCode::EndTruthyBranch(jump) => format!("END_TRUTHY_OP {jump}"),
+            MpcOpCode::EndFalsyBranch => "END_FALSY_OP".to_owned(),
             MpcOpCode::Add => "ADD_OP".to_owned(),
             MpcOpCode::Sub => "SUB_OP".to_owned(),
             MpcOpCode::Mul => "MUL_OP".to_owned(),

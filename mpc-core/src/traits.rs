@@ -87,14 +87,22 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
     fn vm_shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
     fn vm_shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
+    fn vm_bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType>;
     fn vm_bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
     fn vm_bool_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_cmux(
+        &mut self,
+        cond: Self::VmType,
+        truthy: Self::VmType,
+        falsy: Self::VmType,
+    ) -> Result<Self::VmType>;
 
     fn vm_bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
     fn vm_bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
     fn vm_bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool>;
+    fn is_shared(&mut self, a: &Self::VmType) -> Result<bool>;
 
     fn vm_open(&mut self, a: Self::VmType) -> Result<F>;
 

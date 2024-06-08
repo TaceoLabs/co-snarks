@@ -158,9 +158,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             AddressType::Variable => self
                 .current_code_block
                 .push(MpcOpCode::StoreVars(context_size)),
-            AddressType::Signal => self
-                .current_code_block
-                .push(MpcOpCode::StoreSignals(context_size)),
+            AddressType::Signal => self.current_code_block.push(MpcOpCode::StoreSignal),
             AddressType::SubcmpSignal {
                 cmp_address,
                 uniform_parallel_value: _,
@@ -250,9 +248,9 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     #[allow(dead_code)]
-    fn debug_code_block(code_block: &CodeBlock) {
-        for (idx, op) in code_block.iter().enumerate() {
-            println!("{idx}|    {op}");
+    fn debug_code_block(&self) {
+        for (idx, op) in self.current_code_block.iter().enumerate() {
+            println!("{idx:0>3}|    {op}");
         }
     }
 
@@ -328,18 +326,16 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         let has_else_branch = !branch_bucket.else_branch.is_empty();
         self.handle_instruction(&branch_bucket.cond);
         let truthy_block = self.handle_inner_body(&branch_bucket.if_branch);
-        let falsy_offset = if has_else_branch {
-            truthy_block.len() + 2
-        } else {
-            truthy_block.len() + 1
-        };
-        self.emit_opcode(MpcOpCode::JumpIfFalse(falsy_offset));
+        self.emit_opcode(MpcOpCode::If(truthy_block.len() + 2));
         self.add_code_block(truthy_block);
         if has_else_branch {
             let falsy_block = self.handle_inner_body(&branch_bucket.else_branch);
-            let falsy_end = falsy_block.len() + 1;
-            self.emit_opcode(MpcOpCode::Jump(falsy_end));
+            let falsy_end = falsy_block.len() + 2;
+            self.emit_opcode(MpcOpCode::EndTruthyBranch(falsy_end));
             self.add_code_block(falsy_block);
+            self.emit_opcode(MpcOpCode::EndFalsyBranch);
+        } else {
+            self.emit_opcode(MpcOpCode::EndTruthyBranch(0));
         }
     }
 
@@ -534,6 +530,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 self.handle_instruction(inst);
             });
             let mut new_code_block = CodeBlock::default();
+            self.debug_code_block();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
             new_code_block.push(MpcOpCode::Return);
             //store our current offset

@@ -406,4 +406,21 @@ impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProt
             GSZVmType::BitShared => todo!("BitShared not yet implemented"),
         }
     }
+
+    fn is_shared(&mut self, a: &Self::VmType) -> Result<bool> {
+        todo!()
+    }
+
+    fn vm_bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_cmux(
+        &mut self,
+        cond: Self::VmType,
+        truthy: Self::VmType,
+        falsy: Self::VmType,
+    ) -> Result<Self::VmType> {
+        todo!()
+    }
 }
