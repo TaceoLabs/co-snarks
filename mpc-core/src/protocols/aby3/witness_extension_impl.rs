@@ -533,7 +533,10 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     }
 
     fn is_shared(&mut self, a: &Self::VmType) -> Result<bool> {
-        Ok(matches!(a, Aby3VmType::Public(_)))
+        match a {
+            Aby3VmType::Shared(_) | Aby3VmType::BitShared => Ok(true),
+            Aby3VmType::Public(_) => Ok(false),
+        }
     }
 
     fn vm_bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
