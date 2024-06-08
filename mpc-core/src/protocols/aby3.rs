@@ -269,10 +269,12 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         let tmp = self.mul(a, &r)?;
         let y = self.open(&tmp)?;
         if y.is_zero() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Cannot invert zero",
-            ));
+            // TODO: just testing for now, implement checked_div
+            return Ok(Self::FieldShare::default());
+            // return Err(std::io::Error::new(
+            //     std::io::ErrorKind::InvalidData,
+            //     "Cannot invert zero",
+            // ));
         }
         let y_inv = y.inverse().unwrap();
         Ok(r * y_inv)
