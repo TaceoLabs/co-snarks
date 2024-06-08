@@ -548,7 +548,8 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
             Aby3VmType::Shared(a) => {
                 // todo: check if 1? or do a bitextract?
                 // todo: make a proper sub_public since this happens often
-                Ok(Aby3VmType::Shared(self.add_with_public(&-F::one(), &a)))
+                let neg_a = self.neg(&a);
+                Ok(Aby3VmType::Shared(self.add_with_public(&F::one(), &neg_a)))
             }
             Aby3VmType::BitShared => todo!("BitShared not yet implemented"),
         }
@@ -565,9 +566,9 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
             "ATM we do not call this on non-shared values"
         );
 
-        let b_min_a = self.vm_sub(falsy, truthy.clone());
+        let b_min_a = self.vm_sub(truthy, falsy.clone());
         let d = self.vm_mul(cond, b_min_a)?;
-        Ok(self.vm_add(truthy, d))
+        Ok(self.vm_add(falsy, d))
     }
 }
 

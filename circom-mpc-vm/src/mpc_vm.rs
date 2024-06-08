@@ -107,6 +107,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P
         if let Some(IfCtx::Shared(last_condition)) =
             self.0.iter().rev().find(|c| matches!(c, IfCtx::Shared(_)))
         {
+            panic!("test");
             let combined = protocol.vm_bool_and(last_condition.clone(), cond)?;
             self.0.push(IfCtx::Shared(combined));
         } else {
@@ -118,7 +119,15 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P
 
     fn toggle_last_shared(&mut self, protocol: &mut C) -> Result<()> {
         if let Some(IfCtx::Shared(last_condition)) = self.0.last_mut() {
+            tracing::info!(
+                "before toggle: {}",
+                protocol.vm_open(last_condition.clone())?
+            );
             *last_condition = protocol.vm_bool_not(last_condition.clone())?;
+            tracing::info!(
+                "after toggle: {}",
+                protocol.vm_open(last_condition.clone())?
+            );
         } else {
             panic!("last must be shared");
         }
@@ -582,7 +591,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     current_body = old_body;
                 }
                 op_codes::MpcOpCode::Log => {
-                    let field = self.pop_field();
+                    let field = protocol.vm_open(self.pop_field())?;
                     self.log_buf.push_str(&field.to_string());
                     self.log_buf.push(' ');
                 }

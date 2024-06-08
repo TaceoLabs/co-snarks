@@ -27,7 +27,10 @@ template IsZero() {
 
     signal inv;
 
+    log("in", in);
+    log("a", 1/in);
     inv <-- in!=0 ? 1/in : 0;
+    log("inv", inv);
 
     out <== -in*inv +1;
     in*out === 0;
