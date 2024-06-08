@@ -38,6 +38,9 @@ pub type Aby3WitnessExtension<P, N> =
     WitnessExtension<P, Aby3Protocol<<P as Pairing>::ScalarField, N>>;
 
 #[derive(Default, Clone)]
+struct IfCtxStack<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>>(Vec<IfCtx<P, C>>);
+
+#[derive(Default, Clone)]
 struct Component<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
     symbol: String,
     amount_vars: usize,
@@ -50,6 +53,7 @@ struct Component<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> 
     total_signal_size: usize,
     field_stack: Stack<C::VmType>,
     index_stack: Stack<usize>,
+    if_stack: IfCtxStack<P, C>,
     functions_ctx: Stack<FunctionCtx<C::VmType>>,
     mappings: Vec<usize>,
     sub_components: Vec<Component<P, C>>,
@@ -63,6 +67,67 @@ struct WitnessExtensionCtx<P: Pairing, C: CircomWitnessExtensionProtocol<P::Scal
     templ_decls: HashMap<String, TemplateDecl>,
     constant_table: Vec<C::VmType>,
     string_table: Vec<String>,
+}
+
+#[derive(Clone)]
+enum IfCtx<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
+    Public,
+    Shared(C::VmType),
+}
+
+impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P, C> {
+    fn new() -> Self {
+        Self(vec![])
+    }
+
+    fn is_shared(&self) -> bool {
+        self.0.iter().any(|cond| matches!(cond, IfCtx::Shared(_)))
+    }
+
+    fn get_shared_condition(&self) -> C::VmType {
+        if let Some(IfCtx::Shared(last_condition)) =
+            self.0.iter().rev().find(|c| matches!(c, IfCtx::Shared(_)))
+        {
+            last_condition.clone()
+        } else {
+            panic!("must be there");
+        }
+    }
+
+    fn peek(&self) -> &IfCtx<P, C> {
+        self.0.last().expect("must be here")
+    }
+
+    fn pop(&mut self) {
+        self.0.pop().expect("must be here");
+    }
+
+    fn push_shared(&mut self, protocol: &mut C, cond: C::VmType) -> Result<()> {
+        //find last shared
+        if let Some(IfCtx::Shared(last_condition)) =
+            self.0.iter().rev().find(|c| matches!(c, IfCtx::Shared(_)))
+        {
+            let combined = protocol.vm_bool_and(last_condition.clone(), cond)?;
+            self.0.push(IfCtx::Shared(combined));
+        } else {
+            //first shared
+            self.0.push(IfCtx::Shared(cond));
+        }
+        Ok(())
+    }
+
+    fn toggle_last_shared(&mut self, protocol: &mut C) -> Result<()> {
+        if let Some(IfCtx::Shared(last_condition)) = self.0.last_mut() {
+            *last_condition = protocol.vm_bool_not(last_condition.clone())?;
+        } else {
+            panic!("last must be shared");
+        }
+        Ok(())
+    }
+
+    fn push_public(&mut self) {
+        self.0.push(IfCtx::Public);
+    }
 }
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExtensionCtx<P, C> {
@@ -118,6 +183,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
             total_signal_size: templ_decl.signal_size,
             field_stack: Stack::default(),
             index_stack: Stack::default(),
+            if_stack: IfCtxStack::new(),
             functions_ctx: Stack::default(),
             mappings: templ_decl.mappings.clone(),
             sub_components: Vec::with_capacity(templ_decl.sub_components),
@@ -166,11 +232,6 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     self.push_field(constant);
                 }
                 op_codes::MpcOpCode::PushIndex(index) => self.push_index(*index),
-                //op_codes::MpcOpCode::LoadSignal => {
-                //    let index = self.pop_index();
-                //    let signal = ctx.signals[self.my_offset + index].clone();
-                //    self.push_field(signal);
-                //}
                 op_codes::MpcOpCode::LoadSignals(amount) => {
                     let index = self.pop_index();
                     let start = self.my_offset + index;
@@ -181,17 +242,18 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                             self.push_field(signal);
                         });
                 }
-                op_codes::MpcOpCode::StoreSignals(amount) => {
+                op_codes::MpcOpCode::StoreSignal => {
                     //get index
                     let index = self.pop_index();
                     let signal = self.pop_field();
-                    ctx.signals[self.my_offset + index] = signal;
+                    if self.if_stack.is_shared() {
+                        let old = ctx.signals[self.my_offset + index].clone();
+                        ctx.signals[self.my_offset + index] =
+                            protocol.vm_cmux(self.if_stack.get_shared_condition(), signal, old)?;
+                    } else {
+                        ctx.signals[self.my_offset + index] = signal;
+                    }
                 }
-                //               op_codes::MpcOpCode::LoadVar => {
-                //                   let index = self.pop_index();
-                //                   tracing::debug!("loading from index {index}<-{}", current_vars[index]);
-                //                   self.push_field(current_vars[index].clone());
-                //               }
                 op_codes::MpcOpCode::LoadVars(amount) => {
                     let index = self.pop_index();
                     current_vars[index..index + amount]
@@ -201,16 +263,20 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                             self.push_field(signal);
                         });
                 }
-                //op_codes::MpcOpCode::StoreVar => {
-                //    let index = self.pop_index();
-                //    let signal = self.pop_field();
-                //    current_vars[index] = signal;
-                //}
                 op_codes::MpcOpCode::StoreVars(amount) => {
                     let index = self.pop_index();
-                    (0..*amount).for_each(|i| {
-                        current_vars[index + amount - i - 1] = self.pop_field();
-                    });
+                    if self.if_stack.is_shared() {
+                        let cond = self.if_stack.get_shared_condition();
+                        for i in 0..*amount {
+                            let old = current_vars[index + amount - i - 1].clone();
+                            current_vars[index + amount - i - 1] =
+                                protocol.vm_cmux(cond.clone(), self.pop_field(), old)?;
+                        }
+                    } else {
+                        for i in 0..*amount {
+                            current_vars[index + amount - i - 1] = self.pop_field();
+                        }
+                    }
                 }
                 op_codes::MpcOpCode::Call(symbol, return_vals) => {
                     tracing::debug!("Calling {symbol}");
@@ -277,6 +343,10 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     self.push_field(result);
                 }
                 op_codes::MpcOpCode::InputSubComp(mapped, signal_code) => {
+                    assert!(
+                        !self.if_stack.is_shared(),
+                        "Cannot be shared when providing inputs for sub component"
+                    );
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
                     let signal = self.pop_field();
@@ -300,6 +370,43 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                             self.symbol
                         );
                     }
+                }
+                op_codes::MpcOpCode::If(jump) => {
+                    let cond = self.pop_field();
+                    if protocol.is_shared(&cond)? {
+                        //push the new shared condition on stack
+                        self.if_stack.push_shared(protocol, cond)?;
+                    } else {
+                        self.if_stack.push_public();
+                        //not shared we can just check
+                        if protocol.is_zero(cond, false)? {
+                            //we need to jump
+                            ip += jump;
+                            continue;
+                        }
+                    }
+                }
+                op_codes::MpcOpCode::EndTruthyBranch(jump) => {
+                    let if_ctx = self.if_stack.peek();
+                    match if_ctx {
+                        IfCtx::Public => {
+                            //we need to jump and pop the element
+                            ip += std::cmp::max(1, *jump);
+                            self.if_stack.pop();
+                            continue;
+                        }
+                        IfCtx::Shared(_) => {
+                            if *jump == 0 {
+                                //no else branch
+                                self.if_stack.pop();
+                            } else {
+                                self.if_stack.toggle_last_shared(protocol)?;
+                            }
+                        }
+                    }
+                }
+                op_codes::MpcOpCode::EndFalsyBranch => {
+                    self.if_stack.pop();
                 }
                 op_codes::MpcOpCode::Add => {
                     let rhs = self.pop_field();
@@ -419,6 +526,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 op_codes::MpcOpCode::ToIndex => {
                     //TODO what to do about that. This may leak some information
                     let signal = self.pop_field();
+                    assert!(!protocol.is_shared(&signal)?, "ToIndex on shared value");
                     self.push_index(to_usize!(protocol.vm_open(signal)?));
                 }
                 op_codes::MpcOpCode::Jump(jump_forward) => {

@@ -317,6 +317,23 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare {
         a
     }
+
+    fn is_shared(&mut self, _: &Self::VmType) -> Result<bool> {
+        Ok(false)
+    }
+
+    fn vm_bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
+        todo!()
+    }
+
+    fn vm_cmux(
+        &mut self,
+        cond: Self::VmType,
+        truthy: Self::VmType,
+        falsy: Self::VmType,
+    ) -> Result<Self::VmType> {
+        todo!()
+    }
 }
 
 pub use to_usize;
