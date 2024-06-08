@@ -323,7 +323,8 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     }
 
     fn vm_bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
-        todo!()
+        assert!(a.is_one() || a.is_zero());
+        Ok(F::one() - a)
     }
 
     fn vm_cmux(
@@ -332,7 +333,12 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
         truthy: Self::VmType,
         falsy: Self::VmType,
     ) -> Result<Self::VmType> {
-        todo!()
+        assert!(cond.is_one() || cond.is_zero());
+        if cond.is_one() {
+            Ok(truthy)
+        } else {
+            Ok(falsy)
+        }
     }
 }
 

@@ -526,7 +526,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 op_codes::MpcOpCode::ToIndex => {
                     //TODO what to do about that. This may leak some information
                     let signal = self.pop_field();
-                    assert!(!protocol.is_shared(&signal)?, "ToIndex on shared value");
+                    // assert!(!protocol.is_shared(&signal)?, "ToIndex on shared value");
                     self.push_index(to_usize!(protocol.vm_open(signal)?));
                 }
                 op_codes::MpcOpCode::Jump(jump_forward) => {
