@@ -3,7 +3,7 @@ use core::fmt;
 use ark_ec::{pairing::Pairing, CurveGroup};
 use eyre::Result;
 
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
@@ -107,6 +107,8 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
     fn vm_open(&mut self, a: Self::VmType) -> Result<F>;
 
     fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare;
+
+    fn public_one(&self) -> Self::VmType;
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
