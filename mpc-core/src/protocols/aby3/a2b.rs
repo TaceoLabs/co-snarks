@@ -371,10 +371,29 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let mut x = &x ^ &mask;
 
         // do ands in a tree
+        // TODO: Make and tree more communication efficient, ATM we send the full element for each level, even though they halve in size
         let mut len = Self::BITLEN;
-        while len >= 2 {
-            let splitting_point = len / 2;
-            len -= splitting_point;
+        while len > 1 {
+            if len % 2 == 1 {
+                len += 1;
+                // pad with a 1 in MSB position
+                // since this publicly known we just set the bit in party 0's share and its replication
+                match self.network.get_id() {
+                    PartyID::ID0 => {
+                        x.a.set_bit(len as u64 - 1, true);
+                        x.b.set_bit(len as u64 - 1, false);
+                    }
+                    PartyID::ID1 => {
+                        x.a.set_bit(len as u64 - 1, false);
+                        x.b.set_bit(len as u64 - 1, true);
+                    }
+                    PartyID::ID2 => {
+                        x.a.set_bit(len as u64 - 1, false);
+                        x.b.set_bit(len as u64 - 1, false);
+                    }
+                }
+            }
+            len /= 2;
             let y = &x >> len;
             x = self.and(x, y)?;
         }
