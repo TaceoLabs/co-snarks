@@ -72,7 +72,7 @@ struct WitnessExtensionCtx<P: Pairing, C: CircomWitnessExtensionProtocol<P::Scal
 #[derive(Clone)]
 enum IfCtx<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
     Public,
-    Shared(C::VmType),
+    Shared(C::VmType, C::VmType),
 }
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P, C> {
@@ -81,12 +81,17 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P
     }
 
     fn is_shared(&self) -> bool {
-        self.0.iter().any(|cond| matches!(cond, IfCtx::Shared(_)))
+        self.0
+            .iter()
+            .any(|cond| matches!(cond, IfCtx::Shared(_, _)))
     }
 
     fn get_shared_condition(&self) -> C::VmType {
-        if let Some(IfCtx::Shared(last_condition)) =
-            self.0.iter().rev().find(|c| matches!(c, IfCtx::Shared(_)))
+        if let Some(IfCtx::Shared(_, last_condition)) = self
+            .0
+            .iter()
+            .rev()
+            .find(|c| matches!(c, IfCtx::Shared(_, _)))
         {
             last_condition.clone()
         } else {
@@ -102,23 +107,25 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P
         self.0.pop().expect("must be here");
     }
 
-    fn push_shared(&mut self, _protocol: &mut C, cond: C::VmType) -> Result<()> {
+    fn push_shared(&mut self, protocol: &mut C, cond: C::VmType) -> Result<()> {
         //find last shared
-        if let Some(IfCtx::Shared(_last_condition)) =
-            self.0.iter().rev().find(|c| matches!(c, IfCtx::Shared(_)))
+        if let Some(IfCtx::Shared(acc_condition, _)) = self
+            .0
+            .iter()
+            .rev()
+            .find(|c| matches!(c, IfCtx::Shared(_, _)))
         {
-            unreachable!("So far not happening in any test");
-            //let combined = protocol.vm_bool_and(last_condition.clone(), cond)?;
-            //self.0.push(IfCtx::Shared(combined));
+            let combined = protocol.vm_bool_and(acc_condition.clone(), cond.clone())?;
+            self.0.push(IfCtx::Shared(combined, cond));
         } else {
             //first shared
-            self.0.push(IfCtx::Shared(cond));
+            self.0.push(IfCtx::Shared(protocol.public_one(), cond));
         }
         Ok(())
     }
 
     fn toggle_last_shared(&mut self, protocol: &mut C) -> Result<()> {
-        if let Some(IfCtx::Shared(last_condition)) = self.0.last_mut() {
+        if let Some(IfCtx::Shared(_, last_condition)) = self.0.last_mut() {
             *last_condition = protocol.vm_bool_not(last_condition.clone())?;
         } else {
             panic!("last must be shared");
@@ -396,7 +403,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                             self.if_stack.pop();
                             continue;
                         }
-                        IfCtx::Shared(_) => {
+                        IfCtx::Shared(_, _) => {
                             if *jump == 0 {
                                 //no else branch
                                 self.if_stack.pop();

@@ -299,8 +299,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                             a: (bit_shares.a.clone() >> i) & BigUint::one(),
                             b: (bit_shares.b.clone() >> i) & BigUint::one(),
                         };
-                        let share = party.b2a(bit);
-                        share
+                        party.b2a(bit)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 // v_i = 2^2^i * <b_i> + 1 - <b_i>
@@ -571,6 +570,10 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         let b_min_a = self.vm_sub(truthy, falsy.clone());
         let d = self.vm_mul(cond, b_min_a)?;
         Ok(self.vm_add(falsy, d))
+    }
+
+    fn public_one(&self) -> Self::VmType {
+        Aby3VmType::Public(F::one())
     }
 }
 

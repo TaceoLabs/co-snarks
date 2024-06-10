@@ -340,6 +340,10 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
             Ok(falsy)
         }
     }
+
+    fn public_one(&self) -> Self::VmType {
+        F::one()
+    }
 }
 
 pub use to_usize;
