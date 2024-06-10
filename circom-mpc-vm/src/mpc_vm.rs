@@ -102,14 +102,14 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P
         self.0.pop().expect("must be here");
     }
 
-    fn push_shared(&mut self, protocol: &mut C, cond: C::VmType) -> Result<()> {
+    fn push_shared(&mut self, _protocol: &mut C, cond: C::VmType) -> Result<()> {
         //find last shared
-        if let Some(IfCtx::Shared(last_condition)) =
+        if let Some(IfCtx::Shared(_last_condition)) =
             self.0.iter().rev().find(|c| matches!(c, IfCtx::Shared(_)))
         {
-            panic!("test");
-            let combined = protocol.vm_bool_and(last_condition.clone(), cond)?;
-            self.0.push(IfCtx::Shared(combined));
+            unreachable!("So far not happening in any test");
+            //let combined = protocol.vm_bool_and(last_condition.clone(), cond)?;
+            //self.0.push(IfCtx::Shared(combined));
         } else {
             //first shared
             self.0.push(IfCtx::Shared(cond));
