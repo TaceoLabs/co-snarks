@@ -119,15 +119,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P
 
     fn toggle_last_shared(&mut self, protocol: &mut C) -> Result<()> {
         if let Some(IfCtx::Shared(last_condition)) = self.0.last_mut() {
-            tracing::info!(
-                "before toggle: {}",
-                protocol.vm_open(last_condition.clone())?
-            );
             *last_condition = protocol.vm_bool_not(last_condition.clone())?;
-            tracing::info!(
-                "after toggle: {}",
-                protocol.vm_open(last_condition.clone())?
-            );
         } else {
             panic!("last must be shared");
         }

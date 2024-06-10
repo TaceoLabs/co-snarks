@@ -223,7 +223,9 @@ impl<F: PrimeField> Aby3VmType<F> {
                 match eq {
                     Aby3VmType::Public(eq) => Ok(Aby3VmType::Public(F::one() - eq)),
                     Aby3VmType::Shared(eq) => {
-                        Ok(Aby3VmType::Shared(party.add_with_public(&-F::one(), &eq)))
+                        let neg_a = party.neg(&eq);
+                        let result = party.add_with_public(&F::one(), &neg_a);
+                        Ok(Aby3VmType::Shared(result))
                     }
                     _ => unreachable!(),
                 }
@@ -399,10 +401,10 @@ impl<F: PrimeField> Aby3VmType<F> {
             Aby3VmType::Shared(a) => {
                 let res = is_zero(party, a)?;
                 match res {
-                    Aby3VmType::Public(res) => Ok(res.is_zero()),
+                    Aby3VmType::Public(res) => Ok(res.is_one()),
                     Aby3VmType::Shared(res) => {
                         let x = party.open(&res)?;
-                        Ok(x.is_zero())
+                        Ok(x.is_one())
                     }
                     _ => todo!("BitShared is_zero not implemented"),
                 }
@@ -609,6 +611,5 @@ fn is_zero<N: Aby3Network, F: PrimeField>(
     let bits = party.a2b(&a)?;
     let is_zero = party.is_zero(bits)?;
     let is_zero_f = party.bit_inject(is_zero)?;
-
     Ok(Aby3VmType::Shared(is_zero_f))
 }
