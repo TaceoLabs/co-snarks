@@ -372,17 +372,14 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
         // do ands in a tree
         let mut len = Self::BITLEN;
-        while len > 1 {
+        while len >= 2 {
             let splitting_point = len / 2;
-            len = len - splitting_point;
+            len -= splitting_point;
             let y = &x >> len;
             x = self.and(x, y)?;
         }
-
         // extract LSB
         let x = &x & &BigUint::one();
-        // negate again
-        let x = &x ^ &BigUint::one();
         Ok(x)
     }
 
