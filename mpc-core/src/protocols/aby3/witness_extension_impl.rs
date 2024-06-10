@@ -6,6 +6,7 @@ use crate::{
 use ark_ff::{One, PrimeField};
 use eyre::{bail, Result};
 use num_bigint::BigUint;
+use num_traits::Zero;
 
 #[derive(Clone)]
 pub enum Aby3VmType<F: PrimeField> {
@@ -140,6 +141,46 @@ impl<F: PrimeField> Aby3VmType<F> {
                 Aby3VmType::Shared(party.mul(&a, &b_inv)?)
             }
             (_, _) => todo!("BitShared div not implemented"),
+        };
+        Ok(res)
+    }
+
+    fn pow<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_pow(a, b)?)
+            }
+            (Aby3VmType::Shared(mut a), Aby3VmType::Public(b)) => {
+                if b.is_zero() {
+                    return Ok(Aby3VmType::Public(F::one()));
+                }
+                // TODO: are negative exponents allowed in circom?
+                let mut res = party.promote_to_trivial_share(F::one());
+                let mut b: BigUint = b.into_bigint().into();
+                while !b.is_zero() {
+                    if b.bit(0) {
+                        b = b - 1u64;
+                        res = party.mul(&res, &a)?;
+                    }
+                    a = party.mul(&a, &a)?;
+                    b = b >> 1;
+                }
+                res = party.mul(&res, &a)?;
+                Aby3VmType::Shared(res)
+            }
+            (_, _) => todo!("Shared pow not implemented"),
+        };
+        Ok(res)
+    }
+
+    fn modulo<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        let res = match (a, b) {
+            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+                let mut plain = PlainDriver::default();
+                Aby3VmType::Public(plain.vm_mod(a, b)?)
+            }
+            (_, _) => todo!("Shared mod not implemented"),
         };
         Ok(res)
     }
@@ -450,12 +491,12 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         Self::VmType::div(self, a, b)
     }
 
-    fn vm_pow(&mut self, _a: Self::VmType, _b: Self::VmType) -> Result<Self::VmType> {
-        todo!()
+    fn vm_pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Self::VmType::pow(self, a, b)
     }
 
-    fn vm_mod(&mut self, _a: Self::VmType, _b: Self::VmType) -> Result<Self::VmType> {
-        todo!()
+    fn vm_mod(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        Self::VmType::modulo(self, a, b)
     }
 
     fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
