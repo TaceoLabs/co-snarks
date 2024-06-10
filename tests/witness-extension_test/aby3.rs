@@ -423,6 +423,7 @@ mod aby3_tests {
         witness_extension_test_aby3!(sha256_2_test);
         witness_extension_test_aby3!(sha256_test448);
         witness_extension_test_aby3!(sha256_test512);
+        witness_extension_test_aby3!(shared_control_flow);
         witness_extension_test_aby3!(sign_test);
         witness_extension_test_aby3!(smtprocessor10_test);
         witness_extension_test_aby3!(smtverifier10_test);
