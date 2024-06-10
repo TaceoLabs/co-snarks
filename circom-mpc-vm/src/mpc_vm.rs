@@ -432,8 +432,12 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     self.push_field(protocol.vm_mul(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Div => {
-                    let rhs = self.pop_field();
+                    let mut rhs = self.pop_field();
                     let lhs = self.pop_field();
+                    if self.if_stack.is_shared() {
+                        let cond = self.if_stack.get_shared_condition();
+                        rhs = protocol.vm_cmux(cond, rhs, protocol.public_one())?;
+                    }
                     self.push_field(protocol.vm_div(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Pow => {
