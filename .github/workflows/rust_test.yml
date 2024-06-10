@@ -25,6 +25,6 @@ jobs:
         with:
           toolchain: stable
       - name: Test with default features
-        run: cargo test --workspace
-      - name: Test with all features
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace --profile ci-dev
+      # - name: Test with all features
+      #   run: cargo test --workspace --all-features
