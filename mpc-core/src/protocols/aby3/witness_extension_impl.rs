@@ -356,7 +356,7 @@ impl<F: PrimeField> Aby3VmType<F> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_shift_l(a, b)?)
+                Aby3VmType::Public(plain.vm_shift_r(a, b)?)
             }
             (Aby3VmType::Public(a), Aby3VmType::Shared(_b)) => {
                 // some special casing
@@ -388,7 +388,7 @@ impl<F: PrimeField> Aby3VmType<F> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_shift_r(a, b)?)
+                Aby3VmType::Public(plain.vm_shift_l(a, b)?)
             }
             (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
                 // some special casing
