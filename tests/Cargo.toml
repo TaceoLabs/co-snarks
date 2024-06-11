@@ -21,6 +21,7 @@ bytes = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 [[test]]
 name = "e2e_aby3"
 path = "e2e_tests/aby3.rs"

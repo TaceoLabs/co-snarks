@@ -13,6 +13,7 @@ pub enum MpcOpCode {
     Call(String, usize),
     Return,
     ReturnFun,
+    ReturnSharedIfFun,
     Assert(usize),
     If(usize),
     EndTruthyBranch(usize),
@@ -97,6 +98,7 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::JumpIfFalse(line) => format!("JUMP_IF_FALSE_OP {line}"),
             MpcOpCode::Return => "RETURN_OP".to_owned(),
             MpcOpCode::ReturnFun => "RETURN_FUN_OP".to_owned(),
+            MpcOpCode::ReturnSharedIfFun => "RETURN_SHARED_IF_FUN_OP".to_owned(),
             MpcOpCode::OutputSubComp(mapped, signal_code) => {
                 format!("OUTPUT_SUB_COMP_OP {mapped} {signal_code}")
             }

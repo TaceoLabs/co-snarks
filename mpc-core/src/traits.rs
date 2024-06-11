@@ -109,6 +109,10 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
     fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare;
 
     fn public_one(&self) -> Self::VmType;
+    //if default doesn't return the zero element, overwrite this function
+    fn public_zero(&self) -> Self::VmType {
+        Self::VmType::default()
+    }
 }
 
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
