@@ -19,7 +19,7 @@ impl Aby3BigUintShare {
         self.a
     }
 
-    fn xor_with_public(&self, a: &BigUint, id: PartyID) -> Aby3BigUintShare {
+    pub(crate) fn xor_with_public(&self, a: &BigUint, id: PartyID) -> Aby3BigUintShare {
         let mut res = self.to_owned();
         match id {
             PartyID::ID0 => res.a ^= a,
@@ -134,7 +134,11 @@ impl std::ops::Shr<usize> for &Aby3BigUintShare {
 impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     const BITLEN: usize = F::MODULUS_BIT_SIZE as usize;
 
-    fn and(&mut self, a: Aby3BigUintShare, b: Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
+    pub(crate) fn and(
+        &mut self,
+        a: Aby3BigUintShare,
+        b: Aby3BigUintShare,
+    ) -> IoResult<Aby3BigUintShare> {
         let (mut mask, mask_b) = self.rngs.rand.random_biguint::<F>();
         mask ^= mask_b;
         let local_a = (a & b) ^ mask;
