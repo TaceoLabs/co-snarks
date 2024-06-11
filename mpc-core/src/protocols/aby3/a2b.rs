@@ -219,6 +219,8 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             g_ &= &mask;
             let p_shift = &p >> shift;
 
+            // TODO: Make and more communication efficient, ATM we send the full element for each level, even though they reduce in size
+            // maybe just input the mask into AND?
             let (r1, r2) = self.and_twice(p_shift, g_, p_)?;
             p = r2 << shift;
             g ^= r1 << shift;
@@ -380,22 +382,10 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         while len > 1 {
             if len % 2 == 1 {
                 len += 1;
-                // pad with a 1 in MSB position
-                // since this publicly known we just set the bit in party 0's share and its replication
-                match self.network.get_id() {
-                    PartyID::ID0 => {
-                        x.a.set_bit(len as u64 - 1, true);
-                        x.b.set_bit(len as u64 - 1, false);
-                    }
-                    PartyID::ID1 => {
-                        x.a.set_bit(len as u64 - 1, false);
-                        x.b.set_bit(len as u64 - 1, true);
-                    }
-                    PartyID::ID2 => {
-                        x.a.set_bit(len as u64 - 1, false);
-                        x.b.set_bit(len as u64 - 1, false);
-                    }
-                }
+                // pad with a 1 (= 1 xor 1 xor 1) in MSB position
+                // since this is publicly known we just set the bit in each party's share and its replication
+                x.a.set_bit(len as u64 - 1, true);
+                x.b.set_bit(len as u64 - 1, true);
             }
             len /= 2;
             let y = &x >> len;
@@ -469,7 +459,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         y: Aby3PrimeFieldShare<F>,
     ) -> IoResult<Aby3PrimeFieldShare<F>> {
         let d = self.mul(&x, &y)?;
-        let d = self.mul_with_public(&F::from(2u64), &d);
+        let d = self.add(&d, &d);
         let e = self.add(&x, &y);
         let d = self.sub(&e, &d);
         Ok(d)
