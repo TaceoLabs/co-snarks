@@ -400,51 +400,22 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // standard bitinject
         assert!(x.a.bits() <= 1);
 
-        let (b0, b1, b2) = match self.network.get_id() {
+        let mut b0 = Aby3PrimeFieldShare::default();
+        let mut b1 = Aby3PrimeFieldShare::default();
+        let mut b2 = Aby3PrimeFieldShare::default();
+
+        match self.network.get_id() {
             PartyID::ID0 => {
-                let b0 = Aby3PrimeFieldShare {
-                    a: x.a.into(),
-                    b: F::zero(),
-                };
-                let b1 = Aby3PrimeFieldShare {
-                    a: F::zero(),
-                    b: F::zero(),
-                };
-                let b2 = Aby3PrimeFieldShare {
-                    a: F::zero(),
-                    b: x.b.into(),
-                };
-                (b0, b1, b2)
+                b0.a = x.a.into();
+                b2.b = x.b.into();
             }
             PartyID::ID1 => {
-                let b0 = Aby3PrimeFieldShare {
-                    a: F::zero(),
-                    b: x.b.into(),
-                };
-                let b1 = Aby3PrimeFieldShare {
-                    a: x.a.into(),
-                    b: F::zero(),
-                };
-                let b2 = Aby3PrimeFieldShare {
-                    a: F::zero(),
-                    b: F::zero(),
-                };
-                (b0, b1, b2)
+                b1.a = x.a.into();
+                b0.b = x.b.into();
             }
             PartyID::ID2 => {
-                let b0 = Aby3PrimeFieldShare {
-                    a: F::zero(),
-                    b: F::zero(),
-                };
-                let b1 = Aby3PrimeFieldShare {
-                    a: F::zero(),
-                    b: x.b.into(),
-                };
-                let b2 = Aby3PrimeFieldShare {
-                    a: x.a.into(),
-                    b: F::zero(),
-                };
-                (b0, b1, b2)
+                b2.a = x.a.into();
+                b1.b = x.b.into();
             }
         };
 
