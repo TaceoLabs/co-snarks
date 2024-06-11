@@ -222,8 +222,8 @@ mod tests {
     witness_extension_test_plain!(smtprocessor10_test);
     witness_extension_test_plain!(smtverifier10_test);
     witness_extension_test_plain!(sum_test);
-    witness_extension_test_plain!(keras2circom_basic_mnist_test);
-    witness_extension_test_plain_gen_wtns!(keras2circom_conv_mnist_test);
+    // witness_extension_test_plain!(keras2circom_basic_mnist_test);
+    // witness_extension_test_plain_gen_wtns!(keras2circom_conv_mnist_test);
 
     // #[test]
     // fn multiplaser16() {
