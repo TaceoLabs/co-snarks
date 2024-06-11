@@ -13,6 +13,7 @@ mod tests {
     use mpc_core::protocols::plain::PlainDriver;
     use std::{
         fs::{self, File},
+        process::Command,
         str::FromStr,
     };
     fn convert_witness(mut witness: SharedWitness<PlainDriver, Bn254>) -> Vec<ark_bn254::Fr> {
@@ -48,6 +49,75 @@ mod tests {
 
         ($name: ident, $file: expr, $input: expr) => {
             witness_extension_test_plain!($name, $file, $input, $file);
+        };
+    }
+    macro_rules! witness_extension_test_plain_gen_wtns {
+        ($name: ident) => {
+            #[ignore]
+            #[test]
+            fn $name() {
+
+                // This test generates the reference witness files before testing using the executables circom and node.
+                // Make sure that these executables are available on your system.
+                //  - https://github.com/iden3/circom.git
+                //  - node -v v21.7.1
+
+                // also requires "native" input files, i.e. input files that are not flattened.
+
+                let out_circom = Command::new("circom")
+                    .arg(format!("../test_vectors/circuits/test-circuits/{}.circom", stringify!($name)))
+                    .arg("--wasm")
+                    .arg("-o")
+                    .arg(format!("../test_vectors/circuits/test-circuits"))
+                    .output().expect("can execute circom");
+                assert!(out_circom.status.success());
+
+                let mut i = 0;
+                loop {
+                    if fs::metadata(format!(
+                        "../test_vectors/circuits/test-circuits/witness_outputs/{}/input{}native.json",
+                        stringify!($name), i
+                    ))
+                    .is_err()
+                    {
+                        break;
+                    }
+                    let out_node = Command::new("node")
+                        .arg(format!("../test_vectors/circuits/test-circuits/{}_js/generate_witness.js", stringify!($name)))
+                        .arg(format!("../test_vectors/circuits/test-circuits/{}_js/{}.wasm", stringify!($name), stringify!($name)))
+                        .arg(format!("../test_vectors/circuits/test-circuits/witness_outputs/{}/input{}native.json", stringify!($name), i))
+                        .arg(format!("../test_vectors/circuits/test-circuits/witness_outputs/{}/witness{}.wtns", stringify!($name), i))
+                        .output().expect("can execute node");
+                    assert!(out_node.status.success());
+                    i += 1;
+                }
+
+                // starting the actual test (copied from witness_extension_test_plain)
+                let inp: TestInputs = from_test_name(stringify!($name));
+                for i in 0..inp.inputs.len() {
+                    let builder = CompilerBuilder::<Bn254>::new(format!(
+                        "../test_vectors/circuits/test-circuits/{}.circom",
+                        stringify!($name)
+                    ))
+                    .link_library("../test_vectors/circuits/libs/");
+                    let is_witness = builder
+                        .build()
+                        .parse()
+                        .unwrap()
+                        .to_plain_vm()
+                        .run_with_flat(inp.inputs[i].to_owned())
+                        .unwrap();
+                    assert_eq!(convert_witness(is_witness), inp.witnesses[i].values);
+                }
+            }
+        };
+
+        ($name: ident, $file: expr, $input: expr, $should:expr) => {
+            witness_extension_test_plain_gen_wtns!($name, $file, $input, $should, "witness");
+        };
+
+        ($name: ident, $file: expr, $input: expr) => {
+            witness_extension_test_plain_gen_wtns!($name, $file, $input, $file);
         };
     }
 
@@ -152,6 +222,8 @@ mod tests {
     witness_extension_test_plain!(smtprocessor10_test);
     witness_extension_test_plain!(smtverifier10_test);
     witness_extension_test_plain!(sum_test);
+    witness_extension_test_plain!(keras2circom_basic_mnist_test);
+    witness_extension_test_plain_gen_wtns!(keras2circom_conv_mnist_test);
 
     // #[test]
     // fn multiplaser16() {

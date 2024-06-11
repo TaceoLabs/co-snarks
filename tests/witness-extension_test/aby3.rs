@@ -265,6 +265,7 @@ mod aby3_tests {
         use mpc_core::protocols::aby3::{self};
         use rand::thread_rng;
         use std::fs;
+        use std::process::Command;
         use std::str::FromStr;
         use std::{fs::File, thread};
         use tokio::sync::oneshot;
@@ -387,6 +388,72 @@ mod aby3_tests {
             };
         }
 
+        macro_rules! witness_extension_test_aby3_gen_wtns {
+            ($name: ident) => {
+                #[ignore]
+                #[tokio::test]
+                async fn $name() {
+
+                    // This test generates the reference witness files before testing using the executables circom and node.
+                    // Make sure that these executables are available on your system.
+                    //  - https://github.com/iden3/circom.git
+                    //  - node -v v21.7.1
+
+                    // also requires "native" input files, i.e. input files that are not flattened.
+
+                    let out_circom = Command::new("circom")
+                        .arg(format!("../test_vectors/circuits/test-circuits/{}.circom", stringify!($name)))
+                        .arg("--wasm")
+                        .arg("-o")
+                        .arg(format!("../test_vectors/circuits/test-circuits"))
+                        .output().expect("can execute circom");
+                    assert!(out_circom.status.success());
+
+                    let mut i = 0;
+                    loop {
+                        if fs::metadata(format!(
+                            "../test_vectors/circuits/test-circuits/witness_outputs/{}/input{}native.json",
+                            stringify!($name), i
+                        ))
+                        .is_err()
+                        {
+                            break;
+                        }
+                        let out_node = Command::new("node")
+                            .arg(format!("../test_vectors/circuits/test-circuits/{}_js/generate_witness.js", stringify!($name)))
+                            .arg(format!("../test_vectors/circuits/test-circuits/{}_js/{}.wasm", stringify!($name), stringify!($name)))
+                            .arg(format!("../test_vectors/circuits/test-circuits/witness_outputs/{}/input{}native.json", stringify!($name), i))
+                            .arg(format!("../test_vectors/circuits/test-circuits/witness_outputs/{}/witness{}.wtns", stringify!($name), i))
+                            .output().expect("can execute node");
+                        assert!(out_node.status.success());
+                        i += 1;
+                    }
+
+                    // starting the actual test (copied from witness_extension_test_aby3)
+                    let inp: TestInputs = from_test_name(stringify!($name));
+                    // let path = inp.circuit_path.as_str().to_owned();
+                    for i in 0..inp.inputs.len() {
+                        let is_witness = run_test!(
+                            format!(
+                                "../test_vectors/circuits/test-circuits/{}.circom",
+                                stringify!($name)
+                            ),
+                            &inp.inputs[i]
+                        );
+                        assert_eq!(is_witness, inp.witnesses[i].values);
+                    }
+                }
+            };
+
+            ($name: ident, $file: expr, $input: expr, $should:expr) => {
+                witness_extension_test!($name, $file, $input, $should, "witness");
+            };
+
+            ($name: ident, $file: expr, $input: expr) => {
+                witness_extension_test!($name, $file, $input, $file);
+            };
+        }
+
         witness_extension_test_aby3!(aliascheck_test);
         witness_extension_test_aby3!(babyadd_tester);
         witness_extension_test_aby3!(babycheck_test);
@@ -447,6 +514,7 @@ mod aby3_tests {
         witness_extension_test_aby3!(smtverifier10_test);
         witness_extension_test_aby3!(sum_test);
         witness_extension_test_aby3!(keras2circom_basic_mnist_test);
+        witness_extension_test_aby3_gen_wtns!(keras2circom_conv_mnist_test);
 
         // witness_extension_test!(multiplier2, "multiplier2", ["3", "11"]);
         // witness_extension_test!(
