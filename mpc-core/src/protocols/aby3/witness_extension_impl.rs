@@ -461,13 +461,28 @@ impl<F: PrimeField> Aby3VmType<F> {
         Ok(res)
     }
 
-    fn bool_or<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bool_or<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_bool_or(a, b)?)
             }
-            (_, _) => todo!("Shared bool_or not implemented"),
+            // a + b - a * b
+            (Aby3VmType::Shared(a), Aby3VmType::Public(b))
+            | (Aby3VmType::Public(b), Aby3VmType::Shared(a)) => {
+                let mul = party.mul_with_public(&b, &a);
+                let add = party.add_with_public(&b, &a);
+                let sub = party.sub(&add, &mul);
+                Aby3VmType::Shared(sub)
+            }
+            // a + b - a * b
+            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                let mul = party.mul(&a, &b)?;
+                let add = party.add(&a, &b);
+                let sub = party.sub(&add, &mul);
+                Aby3VmType::Shared(sub)
+            }
+            (_, _) => todo!("BitShared not implemented"),
         };
         Ok(res)
     }
@@ -487,7 +502,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let res = party.b2a(bit_shares)?;
                 Aby3VmType::Shared(res)
             }
-            (_, _) => todo!("Shared bit_and not implemented"),
+            (_, _) => todo!("BitShared bit_and not implemented"),
         };
         Ok(res)
     }
@@ -501,13 +516,14 @@ impl<F: PrimeField> Aby3VmType<F> {
             (Aby3VmType::Public(b), Aby3VmType::Shared(a))
             | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => bit_xor_public(party, a, b)?,
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                // TODO: semantics of overflows in bit XOR?
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
                 let b = &a_bits ^ &b_bits;
                 let res = party.b2a(b)?;
                 Aby3VmType::Shared(res)
             }
-            (_, _) => todo!("Shared bit_xor not implemented"),
+            (_, _) => todo!("BitShared bit_xor not implemented"),
         };
         Ok(res)
     }
@@ -532,7 +548,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let res = party.b2a(bit_shares)?;
                 Aby3VmType::Shared(res)
             }
-            (_, _) => todo!("Shared bit_or not implemented"),
+            (_, _) => todo!("BitShared bit_or not implemented"),
         };
         Ok(res)
     }
