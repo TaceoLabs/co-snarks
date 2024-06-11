@@ -512,6 +512,9 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             fun.body.iter().for_each(|inst| {
                 self.handle_instruction(inst);
             });
+            //this opcode will only execute if we have a function
+            //with an shared if condition and no other return vals
+            self.emit_opcode(MpcOpCode::ReturnSharedIfFun);
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
 

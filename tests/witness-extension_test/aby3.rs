@@ -20,6 +20,21 @@ mod aby3_tests {
         mpsc::{self, UnboundedReceiver, UnboundedSender},
         oneshot,
     };
+
+    fn install_tracing() {
+        use tracing_subscriber::prelude::*;
+        use tracing_subscriber::{fmt, EnvFilter};
+
+        let fmt_layer = fmt::layer().with_target(true).with_line_number(true);
+        let filter_layer = EnvFilter::try_from_default_env()
+            .or_else(|_| EnvFilter::try_new("info"))
+            .unwrap();
+
+        tracing_subscriber::registry()
+            .with(filter_layer)
+            .with(fmt_layer)
+            .init();
+    }
     #[derive(Debug)]
     //todo remove me and put me in common test crate
     pub struct Aby3TestNetwork {
@@ -308,7 +323,6 @@ mod aby3_tests {
                 inputs.push(input);
                 i += 1
             }
-            println!("i: {}", i);
             TestInputs { inputs, witnesses }
         }
         macro_rules! run_test {

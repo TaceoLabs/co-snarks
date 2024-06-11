@@ -26,7 +26,7 @@ impl<F: PrimeField> From<Aby3VmType<F>> for Aby3PrimeFieldShare<F> {
 
 impl<F: PrimeField> Default for Aby3VmType<F> {
     fn default() -> Self {
-        Self::Public(F::default())
+        Self::Public(F::zero())
     }
 }
 
@@ -226,11 +226,44 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn ge<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn ge<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Ok(Aby3VmType::Public(plain.vm_ge(a, b)?))
+            }
+            //THIS IMPLEMENTATION IS NOT SECURE
+            //THIS IS JUST A PLACEHOLDER FOR TESTING!!!!!!
+            (Aby3VmType::Public(b), Aby3VmType::Shared(a)) => {
+                let opened_a = party.open(&a)?;
+                if b >= opened_a {
+                    Ok(Aby3VmType::Shared(party.promote_to_trivial_share(F::one())))
+                } else {
+                    Ok(Aby3VmType::Shared(
+                        party.promote_to_trivial_share(F::zero()),
+                    ))
+                }
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+                let opened_a = party.open(&a)?;
+                if opened_a >= b {
+                    Ok(Aby3VmType::Shared(party.promote_to_trivial_share(F::one())))
+                } else {
+                    Ok(Aby3VmType::Shared(
+                        party.promote_to_trivial_share(F::zero()),
+                    ))
+                }
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                let opened_a = party.open(&a)?;
+                let opened_b = party.open(&b)?;
+                if opened_a >= opened_b {
+                    Ok(Aby3VmType::Shared(party.promote_to_trivial_share(F::one())))
+                } else {
+                    Ok(Aby3VmType::Shared(
+                        party.promote_to_trivial_share(F::zero()),
+                    ))
+                }
             }
             (_, _) => todo!("Shared GE not implemented"),
         }
@@ -375,13 +408,22 @@ impl<F: PrimeField> Aby3VmType<F> {
         Ok(res)
     }
 
-    fn bool_and<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bool_and<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_bool_and(a, b)?)
             }
-            (_, _) => todo!("Shared bool_and not implemented"),
+            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+                Aby3VmType::Shared(party.mul_with_public(&b, &a))
+            }
+            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
+                Aby3VmType::Shared(party.mul_with_public(&a, &b))
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                Aby3VmType::Shared(party.mul(&a, &b)?)
+            }
+            (_, _) => todo!("BitShared not implemented"),
         };
         Ok(res)
     }

@@ -8,7 +8,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use collaborative_groth16::groth16::{SharedInput, SharedWitness};
 use eyre::{bail, eyre, Result};
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use mpc_core::protocols::plain::PlainDriver;
 use mpc_core::{
     protocols::aby3::{
@@ -72,7 +72,7 @@ struct WitnessExtensionCtx<P: Pairing, C: CircomWitnessExtensionProtocol<P::Scal
 #[derive(Clone)]
 enum IfCtx<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
     Public,
-    Shared(C::VmType, C::VmType),
+    Shared(C::VmType, C::VmType, C::VmType),
 }
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P, C> {
@@ -83,17 +83,17 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P
     fn is_shared(&self) -> bool {
         self.0
             .iter()
-            .any(|cond| matches!(cond, IfCtx::Shared(_, _)))
+            .any(|cond| matches!(cond, IfCtx::Shared(_, _, _)))
     }
 
     fn get_shared_condition(&self) -> C::VmType {
-        if let Some(IfCtx::Shared(_, last_condition)) = self
+        if let Some(IfCtx::Shared(_, acc_condition, _)) = self
             .0
             .iter()
             .rev()
-            .find(|c| matches!(c, IfCtx::Shared(_, _)))
+            .find(|c| matches!(c, IfCtx::Shared(_, _, _)))
         {
-            last_condition.clone()
+            acc_condition.clone()
         } else {
             panic!("must be there");
         }
@@ -109,24 +109,35 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> IfCtxStack<P
 
     fn push_shared(&mut self, protocol: &mut C, cond: C::VmType) -> Result<()> {
         //find last shared
-        if let Some(IfCtx::Shared(acc_condition, _)) = self
+        if let Some(IfCtx::Shared(_, acc_condition, _)) = self
             .0
             .iter()
             .rev()
-            .find(|c| matches!(c, IfCtx::Shared(_, _)))
+            .find(|c| matches!(c, IfCtx::Shared(_, _, _)))
         {
             let combined = protocol.vm_bool_and(acc_condition.clone(), cond.clone())?;
-            self.0.push(IfCtx::Shared(combined, cond));
+            self.0
+                .push(IfCtx::Shared(acc_condition.to_owned(), combined, cond));
         } else {
-            //first shared
-            self.0.push(IfCtx::Shared(protocol.public_one(), cond));
+            //first shared - set last condition to 1
+            let last_condition = protocol.public_one();
+            let acc_condition = protocol.vm_bool_and(last_condition.clone(), cond.clone())?;
+            self.0
+                .push(IfCtx::Shared(last_condition, acc_condition, cond));
         }
         Ok(())
     }
 
     fn toggle_last_shared(&mut self, protocol: &mut C) -> Result<()> {
-        if let Some(IfCtx::Shared(_, last_condition)) = self.0.last_mut() {
-            *last_condition = protocol.vm_bool_not(last_condition.clone())?;
+        if let Some(IfCtx::Shared(last_condition, acc_condition, current_cond)) = self
+            .0
+            .iter_mut()
+            .rev()
+            .find(|c| matches!(c, IfCtx::Shared(_, _, _)))
+        {
+            let toggled_current_cond = protocol.vm_bool_not(current_cond.to_owned())?;
+            *acc_condition =
+                protocol.vm_bool_and(last_condition.to_owned(), toggled_current_cond)?;
         } else {
             panic!("last must be shared");
         }
@@ -162,20 +173,34 @@ struct FunctionCtx<T> {
     return_vals: usize,
     vars: Vec<T>,
     body: Rc<CodeBlock>,
+    shared_return_vals: Vec<(T, Vec<T>)>,
 }
 
 impl<T> FunctionCtx<T> {
-    fn new(ip: usize, return_vals: usize, vars: Vec<T>, body: Rc<CodeBlock>) -> Self {
+    fn new(
+        ip: usize,
+        return_vals: usize,
+        vars: Vec<T>,
+        body: Rc<CodeBlock>,
+        shared_return_vals: Vec<(T, Vec<T>)>,
+    ) -> Self {
         Self {
             ip,
             return_vals,
             vars,
             body,
+            shared_return_vals,
         }
     }
 
-    fn consume(self) -> (usize, usize, Vec<T>, Rc<CodeBlock>) {
-        (self.ip, self.return_vals, self.vars, self.body)
+    fn consume(self) -> (usize, usize, Vec<T>, Rc<CodeBlock>, Vec<(T, Vec<T>)>) {
+        (
+            self.ip,
+            self.return_vals,
+            self.vars,
+            self.body,
+            self.shared_return_vals,
+        )
     }
 }
 
@@ -230,6 +255,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
         let mut ip = 0;
         let mut current_body = Rc::clone(&self.component_body);
         let mut current_vars = vec![C::VmType::default(); self.amount_vars];
+        let mut current_shared_ret_vals = vec![];
         loop {
             let inst = &current_body[ip];
             tracing::trace!("{ip:0>4}|   {inst}");
@@ -298,10 +324,11 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         .iter()
                         .enumerate()
                     {
-                        tracing::debug!("setting {idx} to {param}");
                         func_vars[idx] = param.clone();
                     }
                     std::mem::swap(&mut func_vars, &mut current_vars);
+                    let mut next_shared_ret_vals = vec![];
+                    std::mem::swap(&mut current_shared_ret_vals, &mut next_shared_ret_vals);
                     self.index_stack.push_stack_frame();
                     self.field_stack.push_stack_frame();
                     self.functions_ctx.push(FunctionCtx::new(
@@ -309,6 +336,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         self.current_return_vals,
                         func_vars,
                         Rc::clone(&current_body),
+                        next_shared_ret_vals,
                     ));
                     //set size of return value
                     self.current_return_vals = *return_vals;
@@ -403,7 +431,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                             self.if_stack.pop();
                             continue;
                         }
-                        IfCtx::Shared(_, _) => {
+                        IfCtx::Shared(_, _, _) => {
                             if *jump == 0 {
                                 //no else branch
                                 self.if_stack.pop();
@@ -567,29 +595,83 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 op_codes::MpcOpCode::ReturnFun => {
                     //check if we have multiple return values
                     if self.current_return_vals == 1 {
-                        //copy the return value
-                        self.field_stack
-                            .pop_stack_frame()
-                            .into_iter()
-                            .for_each(|signal| {
-                                self.push_field(signal);
-                            });
+                        //check if we currently in an shared if
+                        if self.if_stack.is_shared() {
+                            //we need to store the return val for later use
+                            let mut this_condition = self.if_stack.get_shared_condition();
+                            for (cond, _) in current_shared_ret_vals.iter() {
+                                let neg_cond = protocol.vm_bool_not(cond.to_owned())?;
+                                this_condition = protocol.vm_bool_and(this_condition, neg_cond)?;
+                            }
+                            let result = self.pop_field();
+                            current_shared_ret_vals
+                                .push((this_condition.clone(), vec![result.clone()]));
+                            //we need to continue
+                            ip += 1;
+                            continue;
+                        } else if !current_shared_ret_vals.is_empty() {
+                            // we return for sure here but we need to check if we return this value
+                            // or we need to short circuit
+                            let mut this_condition = protocol.public_one();
+                            for (cond, _) in current_shared_ret_vals.iter() {
+                                let neg_cond = protocol.vm_bool_not(cond.to_owned())?;
+                                this_condition = protocol.vm_bool_and(this_condition, neg_cond)?;
+                            }
+                            current_shared_ret_vals.push((this_condition, vec![self.pop_field()]));
+                            self.handle_shared_fun_return(protocol, &current_shared_ret_vals)?;
+                        } else {
+                            //copy the return value
+                            self.field_stack
+                                .pop_stack_frame()
+                                .into_iter()
+                                .for_each(|signal| {
+                                    self.push_field(signal);
+                                });
+                        }
                     } else {
                         let start = self.pop_index();
                         let end = self.current_return_vals;
-                        self.index_stack.pop_stack_frame();
-                        self.field_stack.pop_stack_frame();
-                        current_vars[start..start + end]
-                            .iter()
-                            .cloned()
-                            .for_each(|var| {
-                                self.push_field(var);
-                            });
+                        if self.if_stack.is_shared() {
+                            //we need to store the return val for later use
+                            let cond = self.if_stack.get_shared_condition();
+                            current_shared_ret_vals.push((
+                                cond,
+                                current_vars[start..start + end]
+                                    .iter()
+                                    .cloned()
+                                    .collect_vec(),
+                            ));
+                            //we need to continue
+                            ip += 1;
+                            continue;
+                        } else if !current_shared_ret_vals.is_empty() {
+                            todo!();
+                        } else {
+                            self.index_stack.pop_stack_frame();
+                            self.field_stack.pop_stack_frame();
+                            current_vars[start..start + end]
+                                .iter()
+                                .cloned()
+                                .for_each(|var| {
+                                    self.push_field(var);
+                                });
+                        }
                     }
-                    let (old_ip, old_return_vals, mut old_vars, old_body) =
+                    let (old_ip, old_return_vals, mut old_vars, old_body, shared_return_vals) =
                         self.functions_ctx.pop().consume();
                     ip = old_ip;
                     self.current_return_vals = old_return_vals;
+                    current_shared_ret_vals = shared_return_vals;
+                    std::mem::swap(&mut current_vars, &mut old_vars);
+                    current_body = old_body;
+                }
+                op_codes::MpcOpCode::ReturnSharedIfFun => {
+                    self.handle_shared_fun_return(protocol, &current_shared_ret_vals)?;
+                    let (old_ip, old_return_vals, mut old_vars, old_body, shared_return_vals) =
+                        self.functions_ctx.pop().consume();
+                    ip = old_ip;
+                    self.current_return_vals = old_return_vals;
+                    current_shared_ret_vals = shared_return_vals;
                     std::mem::swap(&mut current_vars, &mut old_vars);
                     current_body = old_body;
                 }
@@ -614,6 +696,32 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                 }
             }
             ip += 1;
+        }
+        Ok(())
+    }
+
+    fn handle_shared_fun_return(
+        &mut self,
+        protocol: &mut C,
+        current_shared_ret_vals: &[(C::VmType, Vec<C::VmType>)],
+    ) -> Result<()> {
+        let mut acc = vec![protocol.public_zero(); self.current_return_vals];
+        for (cond, maybe_ret_vals) in current_shared_ret_vals {
+            for (acc, x) in izip!(
+                acc.iter_mut(),
+                maybe_ret_vals
+                    .iter()
+                    .map(|v| protocol.vm_mul(cond.clone(), v.to_owned()))
+                    //we need to collect here because borrow checker is unhappy otherwise
+                    //we could remove the mut borrow for a lot of MPC operations I think
+                    //maybe we should do that???
+                    .collect::<Result<Vec<_>, _>>()?
+            ) {
+                *acc = protocol.vm_add(acc.to_owned(), x);
+            }
+        }
+        for shared_ret_val in acc {
+            self.push_field(shared_ret_val);
         }
         Ok(())
     }
