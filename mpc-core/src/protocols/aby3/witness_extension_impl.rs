@@ -1,4 +1,4 @@
-use super::{id::PartyID, network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol};
+use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol};
 use crate::{
     protocols::{aby3::a2b::Aby3BigUintShare, plain::PlainDriver},
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
