@@ -7,7 +7,7 @@ pub struct TestInputs {
 mod tests {
     use crate::TestInputs;
     use ark_bn254::Bn254;
-    use circom_mpc_compiler::CompilerBuilder;
+    use circom_mpc_compiler::{field_elem_from_signed_str, CompilerBuilder};
     use circom_types::groth16::witness::Witness;
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
@@ -85,7 +85,7 @@ mod tests {
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|s| ark_bn254::Fr::from_str(s.as_str().unwrap()).unwrap())
+                .map(|s| field_elem_from_signed_str::<ark_bn254::Fr>(s.as_str().unwrap()).unwrap())
                 .collect::<Vec<_>>();
             inputs.push(input);
             i += 1

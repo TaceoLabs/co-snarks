@@ -12,6 +12,7 @@ readme.workspace = true
 
 [dependencies]
 ark-ec.workspace = true
+ark-ff.workspace = true
 circom-circom_algebra = { version = "2.1.4", git = "https://github.com/TaceoLabs/circom", package = "circom_algebra", branch = "dev" }
 circom-code_producers = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "code_producers", branch = "dev" }
 circom-compiler = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "compiler", branch = "dev" }
@@ -26,6 +27,8 @@ circom-program_structure = { version = "2.1.9", git = "https://github.com/TaceoL
 circom-type_analysis = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "type_analysis", branch = "dev" }
 eyre.workspace = true
 itertools.workspace = true
+ark-bn254.workspace = true
+num-bigint.workspace = true
 
 [dev-dependencies]
 ark-bn254.workspace = true

@@ -1,4 +1,5 @@
 use ark_ec::pairing::Pairing;
+use ark_ff::PrimeField;
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags},
     intermediate_representation::{
@@ -20,6 +21,7 @@ use circom_type_analysis::check_types;
 use eyre::eyre;
 use eyre::{bail, Result};
 use itertools::Itertools;
+use std::str::FromStr;
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 const DEFAULT_VERSION: &str = "2.0.0";
@@ -581,6 +583,25 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         ))
     }
 }
+
+pub fn field_elem_from_signed_str<T>(input: &str) -> Result<T>
+where
+    T: PrimeField + FromStr,
+    <T as FromStr>::Err: std::fmt::Debug,
+{
+    if let Some(abs) = input.strip_prefix('-') {
+        let abs = num_bigint::BigInt::from_str(abs).unwrap();
+        if abs == num_bigint::BigInt::from(0) {
+            return Ok(T::from_str("0").unwrap());
+        }
+        let prime = <T as PrimeField>::MODULUS;
+        let prime = num_bigint::BigInt::from_str(&prime.to_string()).unwrap();
+        Ok(T::from_str(&(prime - abs).to_string()).unwrap())
+    } else {
+        Ok(T::from_str(input).unwrap())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ark_bn254::Bn254;
@@ -594,6 +615,30 @@ mod tests {
     fn convert_witness(mut witness: SharedWitness<PlainDriver, Bn254>) -> Vec<ark_bn254::Fr> {
         witness.public_inputs.extend(witness.witness);
         witness.public_inputs
+    }
+
+    #[test]
+    fn mul2_neg() {
+        let file = "../test_vectors/circuits/multiplier2.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
+        let is_witness = builder
+            .parse()
+            .unwrap()
+            .to_plain_vm()
+            .run_with_flat(vec![
+                field_elem_from_signed_str::<ark_bn254::Fr>("-7").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("19").unwrap(),
+            ])
+            .unwrap();
+        assert_eq!(
+            convert_witness(is_witness),
+            vec![
+                field_elem_from_signed_str::<ark_bn254::Fr>("1").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-133").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-7").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("19").unwrap()
+            ]
+        );
     }
 
     #[test]
@@ -618,6 +663,68 @@ mod tests {
                 ark_bn254::Fr::from_str("11").unwrap()
             ]
         );
+    }
+    #[test]
+    fn mul16_neg0() {
+        let file = "../test_vectors/circuits/multiplier16.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
+        let is_witness = builder
+            .parse()
+            .unwrap()
+            .to_plain_vm()
+            .run_with_flat(vec![
+                field_elem_from_signed_str::<ark_bn254::Fr>("5").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("9").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("8").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("54").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-84").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("2").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("4").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("5").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-45").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-23").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("11").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-19").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("43").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("16").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-15").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("18").unwrap(),
+            ])
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/multiplier16_neg/witness0.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(convert_witness(is_witness), should_witness.values);
+    }
+    #[test]
+    fn mul16_neg1() {
+        let file = "../test_vectors/circuits/multiplier16.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned()).build();
+        let is_witness = builder
+            .parse()
+            .unwrap()
+            .to_plain_vm()
+            .run_with_flat(vec![
+                field_elem_from_signed_str::<ark_bn254::Fr>("5").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("48").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("8").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("22").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-84").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("2").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("4").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("5").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-45").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-23").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-11").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-19").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("43").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("16").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-15").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("18").unwrap(),
+            ])
+            .unwrap();
+        let witness = File::open("../test_vectors/bn254/multiplier16_neg/witness1.wtns").unwrap();
+        let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
+        assert_eq!(convert_witness(is_witness), should_witness.values);
     }
     #[test]
     fn mul16() {
@@ -854,5 +961,90 @@ mod tests {
         let witness = File::open("../test_vectors/bn254/eddsa/witness.wtns").unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
         assert_eq!(convert_witness(is_witness), should_witness.values);
+    }
+
+    #[test]
+    fn less_than_0() {
+        // comparison operators all use less than internally
+        let file = "../test_vectors/circuits/lt.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm()
+            .run_with_flat(vec![
+                field_elem_from_signed_str::<ark_bn254::Fr>("87542").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("2354").unwrap(),
+            ])
+            .unwrap();
+        assert_eq!(
+            convert_witness(is_witness)[1],
+            field_elem_from_signed_str::<ark_bn254::Fr>("0").unwrap()
+        );
+    }
+    #[test]
+    fn less_than_1() {
+        // comparison operators all use less than internally
+        let file = "../test_vectors/circuits/lt.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm()
+            .run_with_flat(vec![
+                field_elem_from_signed_str::<ark_bn254::Fr>("255").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("987451").unwrap(),
+            ])
+            .unwrap();
+        assert_eq!(
+            convert_witness(is_witness)[1],
+            field_elem_from_signed_str::<ark_bn254::Fr>("1").unwrap()
+        );
+    }
+    #[test]
+    fn less_than_2() {
+        // comparison operators all use less than internally
+        let file = "../test_vectors/circuits/lt.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm()
+            .run_with_flat(vec![
+                field_elem_from_signed_str::<ark_bn254::Fr>("-255").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("987451").unwrap(),
+            ])
+            .unwrap();
+        assert_eq!(
+            convert_witness(is_witness)[1],
+            field_elem_from_signed_str::<ark_bn254::Fr>("1").unwrap()
+        );
+    }
+    #[test]
+    fn less_than_3() {
+        // comparison operators all use less than internally
+        let file = "../test_vectors/circuits/lt.circom";
+        let builder = CompilerBuilder::<Bn254>::new(file.to_owned())
+            .link_library("../test_vectors/circuits/libs/");
+        let is_witness = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm()
+            .run_with_flat(vec![
+                field_elem_from_signed_str::<ark_bn254::Fr>("-255").unwrap(),
+                field_elem_from_signed_str::<ark_bn254::Fr>("-8451255").unwrap(),
+            ])
+            .unwrap();
+        assert_eq!(
+            convert_witness(is_witness)[1],
+            field_elem_from_signed_str::<ark_bn254::Fr>("0").unwrap()
+        );
     }
 }

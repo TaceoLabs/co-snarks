@@ -259,7 +259,7 @@ mod aby3_tests {
     mod witness_extension {
         use super::*;
         use ark_bn254::Bn254;
-        use circom_mpc_compiler::CompilerBuilder;
+        use circom_mpc_compiler::{field_elem_from_signed_str, CompilerBuilder};
         use circom_types::groth16::witness::Witness;
         use itertools::izip;
         use mpc_core::protocols::aby3::{self};
@@ -318,7 +318,9 @@ mod aby3_tests {
                     .as_array()
                     .unwrap()
                     .iter()
-                    .map(|s| ark_bn254::Fr::from_str(s.as_str().unwrap()).unwrap())
+                    .map(|s| {
+                        field_elem_from_signed_str::<ark_bn254::Fr>(s.as_str().unwrap()).unwrap()
+                    })
                     .collect::<Vec<_>>();
                 inputs.push(input);
                 i += 1
