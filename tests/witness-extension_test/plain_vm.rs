@@ -147,6 +147,7 @@ mod tests {
     witness_extension_test_plain!(sha256_test448);
     witness_extension_test_plain!(sha256_test512);
     witness_extension_test_plain!(shared_control_flow);
+    witness_extension_test_plain!(shared_control_flow_arrays);
     witness_extension_test_plain!(sign_test);
     witness_extension_test_plain!(smtprocessor10_test);
     witness_extension_test_plain!(smtverifier10_test);

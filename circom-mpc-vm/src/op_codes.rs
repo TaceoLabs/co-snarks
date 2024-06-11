@@ -4,7 +4,7 @@ pub enum MpcOpCode {
     PushConstant(usize),
     PushIndex(usize),
     LoadSignals(usize),
-    StoreSignal,
+    StoreSignals(usize),
     LoadVars(usize),
     StoreVars(usize),
     OutputSubComp(bool, usize),
@@ -58,7 +58,7 @@ impl std::fmt::Display for MpcOpCode {
             }
             MpcOpCode::PushIndex(index) => format!("PUSH_INDEX_OP {}", index),
             MpcOpCode::LoadSignals(amount) => format!("LOAD_SIGNALS_OP {amount}"),
-            MpcOpCode::StoreSignal => "STORE_SIGNALS_OP".to_owned(),
+            MpcOpCode::StoreSignals(amount) => format!("STORE_SIGNALS_OP {amount}"),
             MpcOpCode::LoadVars(amount) => format!("LOAD_VARS_OP {amount}"),
             MpcOpCode::StoreVars(amount) => format!("STORE_VARS_OP {amount}"),
             MpcOpCode::Call(symbol, return_vals) => {
