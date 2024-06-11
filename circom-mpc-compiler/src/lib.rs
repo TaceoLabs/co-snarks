@@ -158,7 +158,9 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             AddressType::Variable => self
                 .current_code_block
                 .push(MpcOpCode::StoreVars(context_size)),
-            AddressType::Signal => self.current_code_block.push(MpcOpCode::StoreSignal),
+            AddressType::Signal => self
+                .current_code_block
+                .push(MpcOpCode::StoreSignals(context_size)),
             AddressType::SubcmpSignal {
                 cmp_address,
                 uniform_parallel_value: _,
@@ -440,7 +442,9 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                         AddressType::Variable => {
                             self.emit_opcode(MpcOpCode::StoreVars(final_data.context.size))
                         }
-                        AddressType::Signal => todo!(),
+                        AddressType::Signal => {
+                            self.emit_opcode(MpcOpCode::StoreSignals(final_data.context.size))
+                        }
                         AddressType::SubcmpSignal {
                             cmp_address: _,
                             uniform_parallel_value: _,

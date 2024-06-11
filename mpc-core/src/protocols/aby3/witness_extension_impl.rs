@@ -196,11 +196,44 @@ impl<F: PrimeField> Aby3VmType<F> {
         Ok(res)
     }
 
-    fn lt<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn lt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Ok(Aby3VmType::Public(plain.vm_lt(a, b)?))
+            }
+            //THIS IMPLEMENTATION IS NOT SECURE
+            //THIS IS JUST A PLACEHOLDER FOR TESTING!!!!!!
+            (Aby3VmType::Public(b), Aby3VmType::Shared(a)) => {
+                let opened_a = party.open(&a)?;
+                if b < opened_a {
+                    Ok(Aby3VmType::Shared(party.promote_to_trivial_share(F::one())))
+                } else {
+                    Ok(Aby3VmType::Shared(
+                        party.promote_to_trivial_share(F::zero()),
+                    ))
+                }
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+                let opened_a = party.open(&a)?;
+                if opened_a < b {
+                    Ok(Aby3VmType::Shared(party.promote_to_trivial_share(F::one())))
+                } else {
+                    Ok(Aby3VmType::Shared(
+                        party.promote_to_trivial_share(F::zero()),
+                    ))
+                }
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                let opened_a = party.open(&a)?;
+                let opened_b = party.open(&b)?;
+                if opened_a < opened_b {
+                    Ok(Aby3VmType::Shared(party.promote_to_trivial_share(F::one())))
+                } else {
+                    Ok(Aby3VmType::Shared(
+                        party.promote_to_trivial_share(F::zero()),
+                    ))
+                }
             }
             (_, _) => todo!("Shared LT not implemented"),
         }
@@ -649,7 +682,6 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
             matches!(cond, Aby3VmType::Shared(_)),
             "ATM we do not call this on non-shared values"
         );
-
         let b_min_a = self.vm_sub(truthy, falsy.clone());
         let d = self.vm_mul(cond, b_min_a)?;
         Ok(self.vm_add(falsy, d))

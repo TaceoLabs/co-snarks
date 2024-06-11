@@ -276,16 +276,21 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                             self.push_field(signal);
                         });
                 }
-                op_codes::MpcOpCode::StoreSignal => {
+                op_codes::MpcOpCode::StoreSignals(amount) => {
                     //get index
                     let index = self.pop_index();
-                    let signal = self.pop_field();
                     if self.if_stack.is_shared() {
-                        let old = ctx.signals[self.my_offset + index].clone();
-                        ctx.signals[self.my_offset + index] =
-                            protocol.vm_cmux(self.if_stack.get_shared_condition(), signal, old)?;
+                        let shared_condition = self.if_stack.get_shared_condition();
+                        for i in 0..*amount {
+                            let old = ctx.signals[self.my_offset + index + amount - i - 1].clone();
+                            let new = self.pop_field();
+                            ctx.signals[self.my_offset + index + amount - i - 1] =
+                                protocol.vm_cmux(shared_condition.clone(), new, old)?;
+                        }
                     } else {
-                        ctx.signals[self.my_offset + index] = signal;
+                        for i in 0..*amount {
+                            ctx.signals[self.my_offset + index + amount - i - 1] = self.pop_field();
+                        }
                     }
                 }
                 op_codes::MpcOpCode::LoadVars(amount) => {
@@ -631,11 +636,20 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     } else {
                         let start = self.pop_index();
                         let end = self.current_return_vals;
+                        //check whether we need to pad some return values
+                        //if we return an array with different sizes
+                        if current_vars.len() < start + end {
+                            current_vars.resize(start + end, protocol.public_zero());
+                        }
                         if self.if_stack.is_shared() {
                             //we need to store the return val for later use
-                            let cond = self.if_stack.get_shared_condition();
+                            let mut this_condition = self.if_stack.get_shared_condition();
+                            for (cond, _) in current_shared_ret_vals.iter() {
+                                let neg_cond = protocol.vm_bool_not(cond.to_owned())?;
+                                this_condition = protocol.vm_bool_and(this_condition, neg_cond)?;
+                            }
                             current_shared_ret_vals.push((
-                                cond,
+                                this_condition,
                                 current_vars[start..start + end]
                                     .iter()
                                     .cloned()
@@ -645,7 +659,21 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                             ip += 1;
                             continue;
                         } else if !current_shared_ret_vals.is_empty() {
-                            todo!();
+                            // we return for sure here but we need to check if we return this value
+                            // or we need to short circuit
+                            let mut this_condition = protocol.public_one();
+                            for (cond, _) in current_shared_ret_vals.iter() {
+                                let neg_cond = protocol.vm_bool_not(cond.to_owned())?;
+                                this_condition = protocol.vm_bool_and(this_condition, neg_cond)?;
+                            }
+                            current_shared_ret_vals.push((
+                                this_condition,
+                                current_vars[start..start + end]
+                                    .iter()
+                                    .cloned()
+                                    .collect_vec(),
+                            ));
+                            self.handle_shared_fun_return(protocol, &current_shared_ret_vals)?;
                         } else {
                             self.index_stack.pop_stack_frame();
                             self.field_stack.pop_stack_frame();
