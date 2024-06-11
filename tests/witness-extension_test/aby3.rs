@@ -446,6 +446,7 @@ mod aby3_tests {
         witness_extension_test_aby3!(smtprocessor10_test);
         witness_extension_test_aby3!(smtverifier10_test);
         witness_extension_test_aby3!(sum_test);
+        witness_extension_test_aby3!(keras2circom_basic_mnist_test);
 
         // witness_extension_test!(multiplier2, "multiplier2", ["3", "11"]);
         // witness_extension_test!(
