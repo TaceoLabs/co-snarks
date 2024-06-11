@@ -531,7 +531,10 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 plain.vm_open(a)
             }
-            Aby3VmType::Shared(a) => Ok(party.open(&a)?),
+            Aby3VmType::Shared(a) => {
+                tracing::warn!("Opening shared value that is coerced to an index!");
+                Ok(party.open(&a)?)
+            }
             _ => todo!("Shared to_index not implemented"),
         }
     }
