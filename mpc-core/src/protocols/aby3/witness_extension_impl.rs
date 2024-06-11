@@ -160,11 +160,11 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut b: BigUint = b.into_bigint().into();
                 while !b.is_zero() {
                     if b.bit(0) {
-                        b = b - 1u64;
+                        b -= 1u64;
                         res = party.mul(&res, &a)?;
                     }
                     a = party.mul(&a, &a)?;
-                    b = b >> 1;
+                    b >>= 1;
                 }
                 res = party.mul(&res, &a)?;
                 Aby3VmType::Shared(res)
@@ -202,7 +202,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Ok(Aby3VmType::Public(plain.vm_lt(a, b)?))
             }
-            //THIS IMPLEMENTATION IS NOT SECURE
+            //TODO: THIS IMPLEMENTATION IS NOT SECURE
             //THIS IS JUST A PLACEHOLDER FOR TESTING!!!!!!
             (Aby3VmType::Public(b), Aby3VmType::Shared(a)) => {
                 let opened_a = party.open(&a)?;
@@ -265,7 +265,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Ok(Aby3VmType::Public(plain.vm_ge(a, b)?))
             }
-            //THIS IMPLEMENTATION IS NOT SECURE
+            //TODO: THIS IMPLEMENTATION IS NOT SECURE
             //THIS IS JUST A PLACEHOLDER FOR TESTING!!!!!!
             (Aby3VmType::Public(b), Aby3VmType::Shared(a)) => {
                 let opened_a = party.open(&a)?;
@@ -790,10 +790,10 @@ fn bit_or_public<N: Aby3Network, F: PrimeField>(
     };
     match party.network.get_id() {
         PartyID::ID0 => {
-            bit_share.a = bit_share.a | b_bits;
+            bit_share.a |= b_bits;
         }
         PartyID::ID1 => {
-            bit_share.b = bit_share.b | b_bits;
+            bit_share.b |= b_bits;
         }
         PartyID::ID2 => {}
     }
