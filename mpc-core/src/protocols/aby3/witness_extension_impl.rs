@@ -1,4 +1,4 @@
-use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol};
+use super::{id::PartyID, network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol};
 use crate::{
     protocols::{aby3::a2b::Aby3BigUintShare, plain::PlainDriver},
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
@@ -480,27 +480,57 @@ impl<F: PrimeField> Aby3VmType<F> {
             }
             (Aby3VmType::Public(b), Aby3VmType::Shared(a))
             | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => bit_and_public(party, a, b)?,
+            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                let a_bits = party.a2b(&a)?;
+                let b_bits = party.a2b(&b)?;
+                let bit_shares = party.and(a_bits, b_bits)?;
+                let res = party.b2a(bit_shares)?;
+                Aby3VmType::Shared(res)
+            }
             (_, _) => todo!("Shared bit_and not implemented"),
         };
         Ok(res)
     }
 
-    fn bit_xor<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bit_xor<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_bit_xor(a, b)?)
+            }
+            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
+            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => bit_xor_public(party, a, b)?,
+            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                let a_bits = party.a2b(&a)?;
+                let b_bits = party.a2b(&b)?;
+                let b = &a_bits ^ &b_bits;
+                let res = party.b2a(b)?;
+                Aby3VmType::Shared(res)
             }
             (_, _) => todo!("Shared bit_xor not implemented"),
         };
         Ok(res)
     }
 
-    fn bit_or<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bit_or<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
                 Aby3VmType::Public(plain.vm_bit_or(a, b)?)
+            }
+            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
+            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => bit_or_public(party, a, b)?,
+            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+                // TODO: semantics of overflows in bit OR?
+                let mask = (BigUint::from(1u64) << F::MODULUS_BIT_SIZE) - BigUint::one();
+                let a_bits = party.a2b(&a)?;
+                let b_bits = party.a2b(&b)?;
+                let a_bits = &a_bits ^ &mask;
+                let b_bits = &b_bits ^ &mask;
+                let bit_shares = party.and(a_bits, b_bits)?;
+                let bit_shares = &bit_shares ^ &mask;
+                let res = party.b2a(bit_shares)?;
+                Aby3VmType::Shared(res)
             }
             (_, _) => todo!("Shared bit_or not implemented"),
         };
@@ -534,7 +564,10 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 plain.vm_open(a)
             }
-            Aby3VmType::Shared(a) => Ok(party.open(&a)?),
+            Aby3VmType::Shared(a) => {
+                tracing::warn!("Opening shared value that is coerced to an index!");
+                Ok(party.open(&a)?)
+            }
             _ => todo!("Shared to_index not implemented"),
         }
     }
@@ -704,13 +737,69 @@ fn bit_and_public<N: Aby3Network, F: PrimeField>(
         // TODO: Special case for b == 1 as lsb-extract
         let bit_shares = party.a2b(&a)?;
         let bit_share = Aby3BigUintShare {
-            a: bit_shares.a.clone() & BigUint::one(),
-            b: bit_shares.b.clone() & BigUint::one(),
+            a: bit_shares.a & BigUint::one(),
+            b: bit_shares.b & BigUint::one(),
         };
         let res = party.bit_inject(bit_share)?;
         return Ok(Aby3VmType::Shared(res));
     }
-    todo!("Shared bit_and (public/shared) not implemented")
+    // generic case
+    let bit_shares = party.a2b(&a)?;
+    let b_bits: BigUint = b.into_bigint().into();
+    let bit_share = Aby3BigUintShare {
+        a: bit_shares.a & &b_bits,
+        b: bit_shares.b & b_bits,
+    };
+    let res = party.b2a(bit_share)?;
+    Ok(Aby3VmType::Shared(res))
+}
+
+fn bit_xor_public<N: Aby3Network, F: PrimeField>(
+    party: &mut Aby3Protocol<F, N>,
+    a: Aby3PrimeFieldShare<F>,
+    b: F,
+) -> Result<Aby3VmType<F>> {
+    if b == F::zero() {
+        return Ok(Aby3VmType::Shared(a));
+    }
+    // generic case
+    let b_bits: BigUint = b.into_bigint().into();
+    let bit_shares = party.a2b(&a)?;
+    let bit_share = bit_shares.xor_with_public(&b_bits, party.network.get_id());
+    let res = party.b2a(bit_share)?;
+    Ok(Aby3VmType::Shared(res))
+}
+
+fn bit_or_public<N: Aby3Network, F: PrimeField>(
+    party: &mut Aby3Protocol<F, N>,
+    a: Aby3PrimeFieldShare<F>,
+    b: F,
+) -> Result<Aby3VmType<F>> {
+    if b == F::zero() {
+        return Ok(Aby3VmType::Shared(a));
+    }
+    // generic case
+    let mask = (BigUint::from(1u64) << F::MODULUS_BIT_SIZE) - BigUint::one();
+    let b_bits: BigUint = b.into_bigint().into();
+    let inv_mask = mask ^ &b_bits;
+    let bit_shares = party.a2b(&a)?;
+    // keep secret bits where b is zero
+    let mut bit_share = Aby3BigUintShare {
+        a: bit_shares.a & &inv_mask,
+        b: bit_shares.b & &inv_mask,
+    };
+    match party.network.get_id() {
+        PartyID::ID0 => {
+            bit_share.a = bit_share.a | b_bits;
+        }
+        PartyID::ID1 => {
+            bit_share.b = bit_share.b | b_bits;
+        }
+        PartyID::ID2 => {}
+    }
+
+    let res = party.b2a(bit_share)?;
+    Ok(Aby3VmType::Shared(res))
 }
 
 fn eq_public<N: Aby3Network, F: PrimeField>(
