@@ -327,6 +327,7 @@ mod aby3_tests {
         }
         macro_rules! run_test {
             ($file: expr, $input: expr) => {{
+                //install_tracing();
                 let mut rng = thread_rng();
                 let inputs = aby3::utils::share_field_elements_for_vm($input, &mut rng);
                 let test_network = Aby3TestNetwork::default();
@@ -438,6 +439,7 @@ mod aby3_tests {
         witness_extension_test_aby3!(sha256_test448);
         witness_extension_test_aby3!(sha256_test512);
         witness_extension_test_aby3!(shared_control_flow);
+        witness_extension_test_aby3!(shared_control_flow_arrays);
         witness_extension_test_aby3!(sign_test);
         witness_extension_test_aby3!(smtprocessor10_test);
         witness_extension_test_aby3!(smtverifier10_test);

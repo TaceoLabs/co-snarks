@@ -636,6 +636,11 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     } else {
                         let start = self.pop_index();
                         let end = self.current_return_vals;
+                        //check whether we need to pad some return values
+                        //if we return an array with different sizes
+                        if current_vars.len() < start + end {
+                            current_vars.resize(start + end, protocol.public_zero());
+                        }
                         if self.if_stack.is_shared() {
                             //we need to store the return val for later use
                             let mut this_condition = self.if_stack.get_shared_condition();
@@ -672,11 +677,6 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         } else {
                             self.index_stack.pop_stack_frame();
                             self.field_stack.pop_stack_frame();
-                            //check whether we need to pad some return values
-                            //if we return an array with different sizes
-                            if current_vars.len() < start + end {
-                                current_vars.resize(start + end, protocol.public_zero());
-                            }
                             current_vars[start..start + end]
                                 .iter()
                                 .cloned()

@@ -3,9 +3,6 @@ pragma circom 2.0.0;
 function evenAnotherFunction(x) {
     var arr[5] = [1,2,3,4,5];
     if (x != 0) {
-        for (var i =0;i<5;i++) {
-            arr[i] += x;
-        }
         return arr;
     }
     x += 1;
