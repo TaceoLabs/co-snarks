@@ -538,14 +538,12 @@ impl<F: PrimeField> Aby3VmType<F> {
             | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => bit_or_public(party, a, b)?,
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 // TODO: semantics of overflows in bit OR?
-                let mask = (BigUint::from(1u64) << F::MODULUS_BIT_SIZE) - BigUint::one();
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
-                let a_bits = &a_bits ^ &mask;
-                let b_bits = &b_bits ^ &mask;
-                let bit_shares = party.and(a_bits, b_bits)?;
-                let bit_shares = &bit_shares ^ &mask;
-                let res = party.b2a(bit_shares)?;
+                let mut xor = &a_bits ^ &b_bits;
+                let and = party.and(a_bits, b_bits)?;
+                xor ^= &and;
+                let res = party.b2a(xor)?;
                 Aby3VmType::Shared(res)
             }
             (_, _) => todo!("BitShared bit_or not implemented"),
@@ -795,26 +793,13 @@ fn bit_or_public<N: Aby3Network, F: PrimeField>(
         return Ok(Aby3VmType::Shared(a));
     }
     // generic case
-    let mask = (BigUint::from(1u64) << F::MODULUS_BIT_SIZE) - BigUint::one();
     let b_bits: BigUint = b.into_bigint().into();
-    let inv_mask = mask ^ &b_bits;
-    let bit_shares = party.a2b(&a)?;
-    // keep secret bits where b is zero
-    let mut bit_share = Aby3BigUintShare {
-        a: bit_shares.a & &inv_mask,
-        b: bit_shares.b & &inv_mask,
-    };
-    match party.network.get_id() {
-        PartyID::ID0 => {
-            bit_share.a |= b_bits;
-        }
-        PartyID::ID1 => {
-            bit_share.b |= b_bits;
-        }
-        PartyID::ID2 => {}
-    }
+    let mut bit_shares = party.a2b(&a)?;
+    let xor = bit_shares.xor_with_public(&b_bits, party.network.get_id());
+    bit_shares &= &b_bits;
+    bit_shares ^= &xor;
 
-    let res = party.b2a(bit_share)?;
+    let res = party.b2a(bit_shares)?;
     Ok(Aby3VmType::Shared(res))
 }
 
