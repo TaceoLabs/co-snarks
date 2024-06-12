@@ -563,7 +563,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 TemplateDecl::new(
                     templ.header.clone(),
                     templ.number_of_inputs,
-                    signal_size,
                     templ.number_of_components,
                     templ.var_stack_depth,
                     mappings,
