@@ -305,10 +305,15 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn handle_create_cmp_bucket(&mut self, create_cmp_bucket: &CreateCmpBucket) {
+        if create_cmp_bucket.defined_positions.len() != create_cmp_bucket.number_of_cmp {
+            todo!("In what case does this happen?");
+        }
         self.emit_opcode(MpcOpCode::PushIndex(create_cmp_bucket.signal_offset));
+        self.emit_opcode(MpcOpCode::PushIndex(create_cmp_bucket.signal_offset_jump));
         self.emit_opcode(MpcOpCode::CreateCmp(
             create_cmp_bucket.symbol.clone(),
             create_cmp_bucket.number_of_cmp,
+            create_cmp_bucket.has_inputs,
         ));
         self.current_offset += self.templ_to_size.get(&create_cmp_bucket.symbol).unwrap();
     }

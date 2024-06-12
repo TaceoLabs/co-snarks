@@ -9,7 +9,7 @@ pub enum MpcOpCode {
     StoreVars(usize),
     OutputSubComp(bool, usize),
     InputSubComp(bool, usize),
-    CreateCmp(String, usize), //what else do we need?
+    CreateCmp(String, usize, bool), //what else do we need?
     Call(String, usize),
     Return,
     ReturnFun,
@@ -64,7 +64,9 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::Call(symbol, return_vals) => {
                 format!("CALL_OP {symbol} {return_vals}")
             }
-            MpcOpCode::CreateCmp(header, amount) => format!("CREATE_CMP_OP {} [{amount}]", header),
+            MpcOpCode::CreateCmp(header, amount, has_inputs) => {
+                format!("CREATE_CMP_OP {} [{amount}] {has_inputs}", header)
+            }
             MpcOpCode::Assert(line) => format!("ASSERT_OP {line}"),
             MpcOpCode::If(jump) => format!("IF_OP {jump}"),
             MpcOpCode::EndTruthyBranch(jump) => format!("END_TRUTHY_OP {jump}"),

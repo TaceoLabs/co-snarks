@@ -349,18 +349,20 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     ip = 0;
                     continue;
                 }
-                op_codes::MpcOpCode::CreateCmp(symbol, amount) => {
+                op_codes::MpcOpCode::CreateCmp(symbol, amount, _has_inputs) => {
                     let new_components = {
+                        let offset_jump = self.pop_index();
                         let relative_offset = self.pop_index();
                         let templ_decl = ctx.templ_decls.get(symbol).ok_or(eyre!(
                             "{symbol} not found in template declarations. This must be a bug"
                         ))?;
                         let mut offset = self.my_offset + relative_offset;
                         (0..*amount)
-                            .map(|_| {
-                                let sub_component = Component::<P, C>::init(templ_decl, offset);
-                                offset += sub_component.total_signal_size;
-                                sub_component
+                            .map(|i| {
+                                if i != 0 {
+                                    offset += offset_jump;
+                                }
+                                Component::<P, C>::init(templ_decl, offset)
                             })
                             .collect_vec()
                     };
