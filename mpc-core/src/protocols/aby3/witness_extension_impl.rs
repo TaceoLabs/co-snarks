@@ -213,8 +213,21 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut plain = PlainDriver::default();
                 Ok(Aby3VmType::Public(plain.vm_lt(a, b)?))
             }
-            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
-            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
+                let a = PlainDriver::val(a);
+                let b = val(b, party);
+                // TODO: handle overflow
+                let neg_b = party.neg(&b);
+                let check = party.add_with_public(&a, &neg_b);
+                // TODO: refactor out this bit extraction block as it is the same for all cases below
+                let bits = party.a2b(&check)?;
+                let bit = Aby3BigUintShare {
+                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
+                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
+                };
+                Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
+            }
+            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
                 let a = val(a, party);
                 let b = PlainDriver::val(b);
                 // TODO: handle overflow
@@ -226,18 +239,17 @@ impl<F: PrimeField> Aby3VmType<F> {
                 };
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
-            //TODO: THIS IMPLEMENTATION IS NOT SECURE
-            //THIS IS JUST A PLACEHOLDER FOR TESTING!!!!!!
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
-                let opened_a = party.open(&a)?;
-                let opened_b = party.open(&b)?;
-                if opened_a < opened_b {
-                    Ok(Aby3VmType::Shared(party.promote_to_trivial_share(F::one())))
-                } else {
-                    Ok(Aby3VmType::Shared(
-                        party.promote_to_trivial_share(F::zero()),
-                    ))
-                }
+                let a = val(a, party);
+                let b = val(b, party);
+                // TODO: handle overflow
+                let check = party.sub(&a, &b);
+                let bits = party.a2b(&check)?;
+                let bit = Aby3BigUintShare {
+                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
+                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
+                };
+                Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
             (_, _) => todo!("Shared LT not implemented"),
         }
@@ -250,27 +262,8 @@ impl<F: PrimeField> Aby3VmType<F> {
     }
 
     fn gt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
-        match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
-                let mut plain = PlainDriver::default();
-                Ok(Aby3VmType::Public(plain.vm_gt(a, b)?))
-            }
-            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
-            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                let a = val(a, party);
-                let b = PlainDriver::val(b);
-                // TODO: handle overflow
-                let neg_a = party.neg(&a);
-                let check = party.add_with_public(&b, &neg_a);
-                let bits = party.a2b(&check)?;
-                let bit = Aby3BigUintShare {
-                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                };
-                Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
-            }
-            (_, _) => todo!("Shared GT not implemented"),
-        }
+        // a > b is equivalent to b < a
+        Aby3VmType::lt(party, b, a)
     }
 
     fn ge<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
