@@ -240,6 +240,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
             // TODO this is just from aby3, I don't think this directly applies to prime fields.... Need to check
+            // TODO It is better to directly built the LT circuit on a_bits and b_bits. Due to val we can do an unsigned comparison of the elements over Z_2^k, where 2^k is the smallest power of 2 that is larger than the modulus
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 let a = val(a, party);
                 let b = val(b, party);
@@ -248,7 +249,6 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
                 let sub_bits = party.a2b(&sub)?;
-                // TODO I may need to add something to these circuits to correct them, such that 0 is again at 0. This ensures that negative values have MSB set and positive values have MSB unset. This correction needs to take place in the Ring Z_2^k such that k is the smallest power of 2 that is larger than the modulus
 
                 let a_msb = Aby3BigUintShare {
                     a: (a_bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
