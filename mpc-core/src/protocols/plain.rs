@@ -218,6 +218,12 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
         Ok(F::from(a % b))
     }
 
+    fn vm_sqrt(&mut self, a: Self::VmType) -> Result<Self::VmType> {
+        //let a = to_bigint!(a);
+        //Ok(F::from(a.sqrt()))
+        Ok(a.sqrt().unwrap())
+    }
+
     fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let lhs = to_u64!(a);
         let rhs = to_u64!(b);

@@ -2,12 +2,16 @@ use std::{collections::HashMap, rc::Rc};
 
 use ark_ec::pairing::Pairing;
 use mpc_core::protocols::{
-    aby3::network::{Aby3MpcNet, Aby3Network},
+    aby3::{
+        network::{Aby3MpcNet, Aby3Network},
+        Aby3Protocol,
+    },
     plain::PlainDriver,
 };
 use mpc_net::config::NetworkConfig;
 
 use crate::{
+    accelerator::MpcAccelerator,
     mpc_vm::{Aby3WitnessExtension, PlainWitnessExtension, WitnessExtension},
     op_codes::CodeBlock,
 };
@@ -104,6 +108,8 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
     }
 }
 
+//TODO: Add another builder step here?
+//ParserCompiler -> into Aby3/GSZ -> build
 impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
     pub fn to_plain_vm(self) -> WitnessExtension<P, PlainDriver> {
         PlainWitnessExtension::new(self)
@@ -113,13 +119,29 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         self,
         network_config: NetworkConfig,
     ) -> Result<Aby3WitnessExtension<P, Aby3MpcNet>> {
-        Aby3WitnessExtension::new(self, network_config)
+        self.to_aby3_vm_with_accelerator(network_config, MpcAccelerator::full_mpc_accelerator())
+    }
+
+    pub fn to_aby3_vm_with_accelerator(
+        self,
+        network_config: NetworkConfig,
+        mpc_accelerator: MpcAccelerator<P, Aby3Protocol<P::ScalarField, Aby3MpcNet>>,
+    ) -> Result<Aby3WitnessExtension<P, Aby3MpcNet>> {
+        Aby3WitnessExtension::new(self, network_config, mpc_accelerator)
     }
 
     pub fn to_aby3_vm_with_network<N: Aby3Network>(
         self,
         network: N,
     ) -> Result<Aby3WitnessExtension<P, N>> {
-        Aby3WitnessExtension::from_network(self, network)
+        Aby3WitnessExtension::from_network(self, network, MpcAccelerator::full_mpc_accelerator())
+    }
+
+    pub fn to_aby3_vm_with_network_with_accelerator<N: Aby3Network>(
+        self,
+        network: N,
+        mpc_accelerator: MpcAccelerator<P, Aby3Protocol<P::ScalarField, N>>,
+    ) -> Result<Aby3WitnessExtension<P, N>> {
+        Aby3WitnessExtension::from_network(self, network, mpc_accelerator)
     }
 }

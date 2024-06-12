@@ -707,6 +707,10 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     fn public_one(&self) -> Self::VmType {
         Aby3VmType::Public(F::one())
     }
+
+    fn vm_sqrt(&mut self, _a: Self::VmType) -> Result<Self::VmType> {
+        todo!()
+    }
 }
 
 fn bit_and_public<N: Aby3Network, F: PrimeField>(

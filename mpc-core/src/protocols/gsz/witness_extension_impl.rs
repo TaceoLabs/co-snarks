@@ -427,4 +427,8 @@ impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProt
     fn public_one(&self) -> Self::VmType {
         todo!()
     }
+
+    fn vm_sqrt(&mut self, _a: Self::VmType) -> Result<Self::VmType> {
+        todo!()
+    }
 }

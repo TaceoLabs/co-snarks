@@ -1,5 +1,6 @@
 use crate::types::{CollaborativeCircomCompilerParsed, FunDecl, InputList, TemplateDecl};
 
+use super::accelerator::MpcAccelerator;
 use super::{
     op_codes::{self, CodeBlock},
     stack::Stack,
@@ -66,6 +67,7 @@ struct WitnessExtensionCtx<P: Pairing, C: CircomWitnessExtensionProtocol<P::Scal
     templ_decls: HashMap<String, TemplateDecl>,
     constant_table: Vec<C::VmType>,
     string_table: Vec<String>,
+    mpc_accelerator: MpcAccelerator<P, C>,
 }
 
 #[derive(Clone)]
@@ -155,6 +157,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
         fun_decls: HashMap<String, FunDecl>,
         templ_decls: HashMap<String, TemplateDecl>,
         string_table: Vec<String>,
+        mpc_accelerator: MpcAccelerator<P, C>,
     ) -> Self {
         Self {
             signals,
@@ -162,6 +165,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
             fun_decls,
             templ_decls,
             string_table,
+            mpc_accelerator,
         }
     }
 }
@@ -320,32 +324,46 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     let fun_decl = ctx.fun_decls.get(symbol).ok_or(eyre!(
                         "{symbol} not found in function declaration. This must be a bug.."
                     ))?;
-                    let mut func_vars = vec![C::VmType::default(); fun_decl.vars];
                     let to_copy = self.field_stack.frame_len() - fun_decl.num_params;
-                    //copy the parameters
-                    for (idx, param) in self.field_stack.peek_stack_frame()[to_copy..]
-                        .iter()
-                        .enumerate()
-                    {
-                        func_vars[idx] = param.clone();
+                    if ctx.mpc_accelerator.has_accelerator(symbol) {
+                        tracing::debug!("calling accelerator for {symbol}");
+                        //call the accelerator
+                        let mut result = ctx.mpc_accelerator.run_accelerator(
+                            symbol,
+                            protocol,
+                            &self.field_stack.peek_stack_frame()[to_copy..],
+                        )?;
+                        //TODO we need to perform a full ReturnFun here with shared returns and with arrays
+                        //for time being we support only sqrt therefore just assert that and push on stack
+                        assert_eq!(result.len(), 1);
+                        self.push_field(result.pop().unwrap());
+                    } else {
+                        let mut func_vars = vec![C::VmType::default(); fun_decl.vars];
+                        //copy the parameters
+                        for (idx, param) in self.field_stack.peek_stack_frame()[to_copy..]
+                            .iter()
+                            .enumerate()
+                        {
+                            func_vars[idx] = param.clone();
+                        }
+                        std::mem::swap(&mut func_vars, &mut current_vars);
+                        let mut next_shared_ret_vals = vec![];
+                        std::mem::swap(&mut current_shared_ret_vals, &mut next_shared_ret_vals);
+                        self.index_stack.push_stack_frame();
+                        self.field_stack.push_stack_frame();
+                        self.functions_ctx.push(FunctionCtx::new(
+                            ip,
+                            self.current_return_vals,
+                            func_vars,
+                            Rc::clone(&current_body),
+                            next_shared_ret_vals,
+                        ));
+                        //set size of return value
+                        self.current_return_vals = *return_vals;
+                        current_body = Rc::clone(&fun_decl.body);
+                        ip = 0;
+                        continue;
                     }
-                    std::mem::swap(&mut func_vars, &mut current_vars);
-                    let mut next_shared_ret_vals = vec![];
-                    std::mem::swap(&mut current_shared_ret_vals, &mut next_shared_ret_vals);
-                    self.index_stack.push_stack_frame();
-                    self.field_stack.push_stack_frame();
-                    self.functions_ctx.push(FunctionCtx::new(
-                        ip,
-                        self.current_return_vals,
-                        func_vars,
-                        Rc::clone(&current_body),
-                        next_shared_ret_vals,
-                    ));
-                    //set size of return value
-                    self.current_return_vals = *return_vals;
-                    current_body = Rc::clone(&fun_decl.body);
-                    ip = 0;
-                    continue;
                 }
                 op_codes::MpcOpCode::CreateCmp(symbol, amount, _has_inputs) => {
                     let new_components = {
@@ -839,6 +857,7 @@ impl<P: Pairing> PlainWitnessExtension<P> {
                 parser.fun_decls,
                 parser.templ_decls,
                 parser.string_table,
+                MpcAccelerator::full_mpc_accelerator(),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
@@ -851,6 +870,7 @@ impl<P: Pairing, N: Aby3Network> Aby3WitnessExtension<P, N> {
     pub(crate) fn from_network(
         parser: CollaborativeCircomCompilerParsed<P>,
         network: N,
+        mpc_accelerator: MpcAccelerator<P, Aby3Protocol<P::ScalarField, N>>,
     ) -> Result<Self> {
         let driver = Aby3Protocol::new(network)?;
         let mut signals = vec![Aby3VmType::default(); parser.amount_signals];
@@ -870,6 +890,7 @@ impl<P: Pairing, N: Aby3Network> Aby3WitnessExtension<P, N> {
                 parser.fun_decls,
                 parser.templ_decls,
                 parser.string_table,
+                mpc_accelerator,
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
@@ -882,7 +903,8 @@ impl<P: Pairing> Aby3WitnessExtension<P, Aby3MpcNet> {
     pub(crate) fn new(
         parser: CollaborativeCircomCompilerParsed<P>,
         config: NetworkConfig,
+        mpc_accelerator: MpcAccelerator<P, Aby3Protocol<P::ScalarField, Aby3MpcNet>>,
     ) -> Result<Self> {
-        Self::from_network(parser, Aby3MpcNet::new(config)?)
+        Self::from_network(parser, Aby3MpcNet::new(config)?, mpc_accelerator)
     }
 }
