@@ -239,7 +239,6 @@ impl<F: PrimeField> Aby3VmType<F> {
                 };
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
-            // TODO this is just from aby3, I don't think this directly applies to prime fields.... Need to check
             // TODO It is better to directly built the LT circuit on a_bits and b_bits. Due to val we can do an unsigned comparison of the elements over Z_2^k, where 2^k is the smallest power of 2 that is larger than the modulus
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 let a = val(a, party);
@@ -247,7 +246,7 @@ impl<F: PrimeField> Aby3VmType<F> {
 
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
-                todo!("binary lt circuit")
+                todo!("unsigned binary lt circuit")
                 // Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
             (_, _) => todo!("BitShared LT not implemented"),
