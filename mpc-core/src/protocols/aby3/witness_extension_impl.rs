@@ -239,6 +239,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 };
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
+            // TODO this is just from aby3, I don't think this directly applies to prime fields.... Need to check
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 let a = val(a, party);
                 let b = val(b, party);
