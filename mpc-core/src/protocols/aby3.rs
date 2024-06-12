@@ -259,7 +259,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         if c.len() != 2 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "Invalid number of elements received",
+                "During execution of square root in MPC: invalid number of elements received",
             ));
         }
         let y_sq = (mul.a[0] + mul.b[0] + c[0]).sqrt();
