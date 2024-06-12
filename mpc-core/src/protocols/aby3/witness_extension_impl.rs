@@ -242,16 +242,56 @@ impl<F: PrimeField> Aby3VmType<F> {
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 let a = val(a, party);
                 let b = val(b, party);
-                // TODO: handle overflow
-                let check = party.sub(&a, &b);
-                let bits = party.a2b(&check)?;
-                let bit = Aby3BigUintShare {
-                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
+                let sub = party.sub(&a, &b);
+
+                let a_bits = party.a2b(&a)?;
+                let b_bits = party.a2b(&b)?;
+                let sub_bits = party.a2b(&sub)?;
+
+                let a_msb = Aby3BigUintShare {
+                    a: (a_bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
+                    b: (a_bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
                 };
+                let b_msb = Aby3BigUintShare {
+                    a: (b_bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
+                    b: (b_bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
+                };
+                // The following would be our result, but we need to correct for potential overflows...
+                let sub_msb = Aby3BigUintShare {
+                    a: (sub_bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
+                    b: (sub_bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
+                };
+
+                // 3 AND gates (a & b, a & sub, b & sub), but we do it packed
+                let mut lhs = a_msb.to_owned();
+                lhs.a |= &a_msb.a << 1;
+                lhs.b |= &a_msb.b << 1;
+                lhs.a |= &b_msb.a << 2;
+                lhs.b |= &b_msb.b << 2;
+                let mut rhs = b_msb;
+                rhs.a |= &sub_msb.a << 1;
+                rhs.b |= &sub_msb.b << 1;
+                rhs.a |= &sub_msb.a << 2;
+                rhs.b |= &sub_msb.b << 2;
+                let mut and = party.and(lhs, rhs)?;
+
+                // The overflow is the XOR a_msb and the 3 AND results
+                let mut overflow = a_msb;
+                overflow ^= &and;
+                and.a >>= 1;
+                and.b >>= 1;
+                overflow ^= &and;
+                and.a >>= 1;
+                and.b >>= 1;
+                overflow ^= &and;
+                overflow &= &BigUint::one();
+
+                // Output is the XOR of sub_msb and overflow
+                let mut bit = sub_msb;
+                bit ^= overflow;
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
-            (_, _) => todo!("Shared LT not implemented"),
+            (_, _) => todo!("BitShared LT not implemented"),
         }
     }
 
