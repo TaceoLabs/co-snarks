@@ -436,6 +436,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(d)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn open_bit_share(&mut self, a: &Aby3BigUintShare) -> IoResult<BigUint> {
         self.network.send_next(a.b.clone())?;
         let c = self.network.recv_prev::<BigUint>()?;

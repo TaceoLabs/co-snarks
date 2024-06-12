@@ -407,19 +407,19 @@ impl<F: PrimeField, N: GSZNetwork> CircomWitnessExtensionProtocol<F> for GSZProt
         }
     }
 
-    fn is_shared(&mut self, a: &Self::VmType) -> Result<bool> {
+    fn is_shared(&mut self, _a: &Self::VmType) -> Result<bool> {
         todo!()
     }
 
-    fn vm_bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
+    fn vm_bool_not(&mut self, _a: Self::VmType) -> Result<Self::VmType> {
         todo!()
     }
 
     fn vm_cmux(
         &mut self,
-        cond: Self::VmType,
-        truthy: Self::VmType,
-        falsy: Self::VmType,
+        _cond: Self::VmType,
+        _truthy: Self::VmType,
+        _falsy: Self::VmType,
     ) -> Result<Self::VmType> {
         todo!()
     }

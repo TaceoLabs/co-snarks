@@ -36,6 +36,7 @@ pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::Sca
 pub type PlainWitnessExtension<P> = WitnessExtension<P, PlainDriver>;
 pub type Aby3WitnessExtension<P, N> =
     WitnessExtension<P, Aby3Protocol<<P as Pairing>::ScalarField, N>>;
+type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Rc<CodeBlock>, Vec<(T, Vec<T>)>);
 
 #[derive(Default, Clone)]
 struct IfCtxStack<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>>(Vec<IfCtx<P, C>>);
@@ -49,8 +50,6 @@ struct Component<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> 
     current_return_vals: usize,
     /// the offset inside the signals array
     my_offset: usize,
-    /// all signals this component needs including all sub components
-    total_signal_size: usize,
     field_stack: Stack<C::VmType>,
     index_stack: Stack<usize>,
     if_stack: IfCtxStack<P, C>,
@@ -193,7 +192,7 @@ impl<T> FunctionCtx<T> {
         }
     }
 
-    fn consume(self) -> (usize, usize, Vec<T>, Rc<CodeBlock>, Vec<(T, Vec<T>)>) {
+    fn consume(self) -> ConsumedFunCtx<T> {
         (
             self.ip,
             self.return_vals,
@@ -213,7 +212,6 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
             input_signals: templ_decl.input_signals,
             current_return_vals: 0,
             my_offset: signal_offset,
-            total_signal_size: templ_decl.signal_size,
             field_stack: Stack::default(),
             index_stack: Stack::default(),
             if_stack: IfCtxStack::new(),

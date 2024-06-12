@@ -17,7 +17,6 @@ use eyre::Result;
 pub struct TemplateDecl {
     pub(crate) symbol: String,
     pub(crate) input_signals: usize,
-    pub(crate) signal_size: usize,
     pub(crate) sub_components: usize,
     pub(crate) vars: usize,
     pub(crate) mappings: Vec<usize>,
@@ -29,7 +28,6 @@ impl TemplateDecl {
     pub fn new(
         symbol: String,
         input_signals: usize,
-        signal_size: usize,
         sub_components: usize,
         vars: usize,
         mappings: Vec<usize>,
@@ -38,7 +36,6 @@ impl TemplateDecl {
         Self {
             symbol,
             input_signals,
-            signal_size,
             sub_components,
             vars,
             mappings,
