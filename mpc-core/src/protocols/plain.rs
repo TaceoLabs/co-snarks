@@ -2,7 +2,7 @@ use crate::{
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
     RngType,
 };
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use eyre::eyre;
 use eyre::Result;
 use num_bigint::BigUint;
@@ -18,11 +18,11 @@ macro_rules! to_usize {
     }};
 }
 
-macro_rules! bool_op {
+macro_rules! bool_comp_op {
     ($lhs: expr, $op: tt, $rhs: expr) => {{
-        let xor1 = PlainDriver::val($lhs);
-        let xor2 = PlainDriver::val($rhs);
-       if ($lhs $op $rhs) ^ xor1 ^ xor2{
+        let lhs = PlainDriver::val($lhs);
+        let rhs = PlainDriver::val($rhs);
+       if (lhs $op rhs){
         tracing::trace!("{}{}{} -> 1", $lhs,stringify!($op), $rhs);
         F::one()
        } else {
@@ -48,11 +48,17 @@ macro_rules! to_bigint {
 #[derive(Default)]
 pub struct PlainDriver {}
 impl PlainDriver {
-    fn val<F: PrimeField>(z: F) -> bool {
+    /// Normally F is split into positive and negative numbers in the range [0, p/2] and [p/2 + 1, p)
+    /// However, for comparisons, we want the negative numbers to be "lower" than the positive ones.
+    /// Therefore we shift the input by p/2 + 1 to the left, which results in a mapping of [negative, 0, positive] into F.
+    /// We can then compare the numbers as if they were unsigned.
+    /// While this could be done easier by just comparing the numbers as BigInt, we do it this way because this is easier to replicate in MPC later.
+    fn val<F: PrimeField>(z: F) -> F {
         let modulus = to_bigint!(F::MODULUS);
-        let one = to_bigint!(F::one());
-        let two = one.clone() + one.clone();
-        modulus / two + one <= to_bigint!(z)
+        let one = BigUint::one();
+        let two = BigUint::from(2u64);
+        let p_half_plus_one = F::from(modulus / two + one);
+        z - p_half_plus_one
     }
 }
 
@@ -223,19 +229,19 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver {
     }
 
     fn vm_lt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        Ok(bool_op!(a, <, b))
+        Ok(bool_comp_op!(a, <, b))
     }
 
     fn vm_le(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        Ok(bool_op!(a, <=, b))
+        Ok(bool_comp_op!(a, <=, b))
     }
 
     fn vm_gt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        Ok(bool_op!(a, >, b))
+        Ok(bool_comp_op!(a, >, b))
     }
 
     fn vm_ge(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        Ok(bool_op!(a, >=, b))
+        Ok(bool_comp_op!(a, >=, b))
     }
 
     fn vm_eq(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
