@@ -242,7 +242,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     }
 
     // This algorithm produces a sqrt of a. It is not guaranteed to be the positive or negative square root (if interpreted as signed field element).
-    fn sqrt(&mut self, a: &Aby3PrimeFieldShare<F>) -> IoResult<Aby3PrimeFieldShare<F>> {
+    pub fn sqrt(&mut self, a: &Aby3PrimeFieldShare<F>) -> IoResult<Aby3PrimeFieldShare<F>> {
         let r_squ = self.rand()?;
         let r_inv = self.rand()?;
 
