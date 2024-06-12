@@ -248,6 +248,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
                 let sub_bits = party.a2b(&sub)?;
+                // TODO I may need to add something to these circuits to correct them, such that 0 is again at 0. This ensures that negative values have MSB set and positive values have MSB unset. This correction needs to take place in the Ring Z_2^k such that k is the smallest power of 2 that is larger than the modulus
 
                 let a_msb = Aby3BigUintShare {
                     a: (a_bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
@@ -277,6 +278,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let mut and = party.and(lhs, rhs)?;
 
                 // The overflow is the XOR a_msb and the 3 AND results
+                // TODO this is for signed comparison, but I think the val value requires unsigned comparison. Replace a_msb with b_msb if unsigned required
                 let mut overflow = a_msb;
                 overflow ^= &and;
                 and.a >>= 1;
