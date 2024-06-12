@@ -104,7 +104,7 @@ mod tests {
     witness_extension_test_plain!(control_flow);
     witness_extension_test_plain!(eddsa_test);
     witness_extension_test_plain!(eddsa_verify);
-    //witness_extension_test_plain!(eddsamimc_test);
+    witness_extension_test_plain!(eddsamimc_test);
     witness_extension_test_plain!(eddsaposeidon_test);
     witness_extension_test_plain!(edwards2montgomery);
     witness_extension_test_plain!(escalarmul_test);
