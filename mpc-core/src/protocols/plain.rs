@@ -53,7 +53,7 @@ impl PlainDriver {
     /// Therefore we shift the input by p/2 + 1 to the left, which results in a mapping of [negative, 0, positive] into F.
     /// We can then compare the numbers as if they were unsigned.
     /// While this could be done easier by just comparing the numbers as BigInt, we do it this way because this is easier to replicate in MPC later.
-    fn val<F: PrimeField>(z: F) -> F {
+    pub(crate) fn val<F: PrimeField>(z: F) -> F {
         let modulus = to_bigint!(F::MODULUS);
         let one = BigUint::one();
         let two = BigUint::from(2u64);
