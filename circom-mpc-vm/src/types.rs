@@ -111,7 +111,7 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
 //TODO: Add another builder step here?
 //ParserCompiler -> into Aby3/GSZ -> build
 impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
-    pub fn to_plain_vm(self) -> WitnessExtension<P, PlainDriver> {
+    pub fn to_plain_vm(self) -> WitnessExtension<P, PlainDriver<P::ScalarField>> {
         PlainWitnessExtension::new(self)
     }
 

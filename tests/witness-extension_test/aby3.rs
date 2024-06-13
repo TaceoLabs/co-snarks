@@ -442,6 +442,7 @@ mod aby3_tests {
         witness_extension_test_aby3!(shared_control_flow);
         witness_extension_test_aby3!(shared_control_flow_arrays);
         witness_extension_test_aby3!(sign_test);
+        witness_extension_test_aby3!(sqrt_test);
         witness_extension_test_aby3!(smtprocessor10_test);
         witness_extension_test_aby3!(smtverifier10_test);
         witness_extension_test_aby3!(sum_test);

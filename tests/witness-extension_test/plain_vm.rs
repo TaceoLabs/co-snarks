@@ -15,7 +15,9 @@ mod tests {
         fs::{self, File},
         str::FromStr,
     };
-    fn convert_witness(mut witness: SharedWitness<PlainDriver, Bn254>) -> Vec<ark_bn254::Fr> {
+    fn convert_witness(
+        mut witness: SharedWitness<PlainDriver<ark_bn254::Fr>, Bn254>,
+    ) -> Vec<ark_bn254::Fr> {
         witness.public_inputs.extend(witness.witness);
         witness.public_inputs
     }
@@ -149,6 +151,7 @@ mod tests {
     witness_extension_test_plain!(shared_control_flow);
     witness_extension_test_plain!(shared_control_flow_arrays);
     witness_extension_test_plain!(sign_test);
+    witness_extension_test_plain!(sqrt_test);
     witness_extension_test_plain!(smtprocessor10_test);
     witness_extension_test_plain!(smtverifier10_test);
     witness_extension_test_plain!(sum_test);

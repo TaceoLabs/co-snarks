@@ -34,7 +34,7 @@ pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::Sca
     driver: C,
 }
 
-pub type PlainWitnessExtension<P> = WitnessExtension<P, PlainDriver>;
+pub type PlainWitnessExtension<P> = WitnessExtension<P, PlainDriver<<P as Pairing>::ScalarField>>;
 pub type Aby3WitnessExtension<P, N> =
     WitnessExtension<P, Aby3Protocol<<P as Pairing>::ScalarField, N>>;
 type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Rc<CodeBlock>, Vec<(T, Vec<T>)>);
@@ -848,7 +848,7 @@ impl<P: Pairing> PlainWitnessExtension<P> {
         let mut signals = vec![P::ScalarField::default(); parser.amount_signals];
         signals[0] = P::ScalarField::one();
         Self {
-            driver: PlainDriver {},
+            driver: PlainDriver::new(),
             signal_to_witness: parser.signal_to_witness,
             main: parser.main,
             ctx: WitnessExtensionCtx::new(

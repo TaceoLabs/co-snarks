@@ -208,13 +208,13 @@ impl<F: PrimeField> Aby3VmType<F> {
     }
 
     fn lt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        let mut plain = PlainDriver::default();
         match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
-                let mut plain = PlainDriver::default();
                 Ok(Aby3VmType::Public(plain.vm_lt(a, b)?))
             }
             (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
-                let a = PlainDriver::val(a);
+                let a = plain.val(a);
                 let b = val(b, party);
                 // TODO: handle overflow
                 let neg_b = party.neg(&b);
@@ -229,7 +229,7 @@ impl<F: PrimeField> Aby3VmType<F> {
             }
             (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
                 let a = val(a, party);
-                let b = PlainDriver::val(b);
+                let b = plain.val(b);
                 // TODO: handle overflow
                 let check = party.add_with_public(&-b, &a);
                 let bits = party.a2b(&check)?;
