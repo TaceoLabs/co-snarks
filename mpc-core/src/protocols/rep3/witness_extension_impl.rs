@@ -1,6 +1,6 @@
-use super::{network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol};
+use super::{network::Rep3Network, Rep3PrimeFieldShare, Rep3Protocol};
 use crate::{
-    protocols::{aby3::a2b::Aby3BigUintShare, plain::PlainDriver},
+    protocols::{plain::PlainDriver, rep3::a2b::Rep3BigUintShare},
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
 };
 use ark_ff::{One, PrimeField};
@@ -9,28 +9,28 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 
 #[derive(Clone)]
-pub enum Aby3VmType<F: PrimeField> {
+pub enum Rep3VmType<F: PrimeField> {
     Public(F),
-    Shared(Aby3PrimeFieldShare<F>),
+    Shared(Rep3PrimeFieldShare<F>),
     BitShared,
 }
 
-impl<F: PrimeField> From<Aby3VmType<F>> for Aby3PrimeFieldShare<F> {
-    fn from(vm_type: Aby3VmType<F>) -> Self {
+impl<F: PrimeField> From<Rep3VmType<F>> for Rep3PrimeFieldShare<F> {
+    fn from(vm_type: Rep3VmType<F>) -> Self {
         match vm_type {
-            Aby3VmType::Shared(share) => share,
+            Rep3VmType::Shared(share) => share,
             _ => panic!("Cannot convert to share"),
         }
     }
 }
 
-impl<F: PrimeField> Default for Aby3VmType<F> {
+impl<F: PrimeField> Default for Rep3VmType<F> {
     fn default() -> Self {
         Self::Public(F::zero())
     }
 }
 
-impl<F: PrimeField> std::fmt::Debug for Aby3VmType<F> {
+impl<F: PrimeField> std::fmt::Debug for Rep3VmType<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(arg0) => f.debug_tuple("Public").field(arg0).finish(),
@@ -40,22 +40,22 @@ impl<F: PrimeField> std::fmt::Debug for Aby3VmType<F> {
     }
 }
 
-impl<F: PrimeField> std::fmt::Display for Aby3VmType<F> {
+impl<F: PrimeField> std::fmt::Display for Rep3VmType<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Aby3VmType::Public(field) => f.write_str(&format!("PUBLIC ({field})")),
-            Aby3VmType::Shared(share) => {
+            Rep3VmType::Public(field) => f.write_str(&format!("PUBLIC ({field})")),
+            Rep3VmType::Shared(share) => {
                 f.write_str(&format!("SHARED (a: {}, b: {})", share.a, share.b))
             }
-            Aby3VmType::BitShared => f.write_str("BIT_SHARED (TODO)"),
+            Rep3VmType::BitShared => f.write_str("BIT_SHARED (TODO)"),
         }
     }
 }
 
-fn val<F: PrimeField, N: Aby3Network>(
-    z: Aby3PrimeFieldShare<F>,
-    party: &mut Aby3Protocol<F, N>,
-) -> Aby3PrimeFieldShare<F> {
+fn val<F: PrimeField, N: Rep3Network>(
+    z: Rep3PrimeFieldShare<F>,
+    party: &mut Rep3Protocol<F, N>,
+) -> Rep3PrimeFieldShare<F> {
     let modulus: BigUint = F::MODULUS.into();
     let one = BigUint::one();
     let two = BigUint::from(2u64);
@@ -63,108 +63,108 @@ fn val<F: PrimeField, N: Aby3Network>(
     party.add_with_public(&-p_half_plus_one, &z)
 }
 
-impl<F: PrimeField> Aby3VmType<F> {
-    fn add<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+impl<F: PrimeField> Rep3VmType<F> {
+    fn add<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_add(a, b))
+                Rep3VmType::Public(plain.vm_add(a, b))
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
-                Aby3VmType::Shared(party.add_with_public(&a, &b))
+            (Rep3VmType::Public(a), Rep3VmType::Shared(b)) => {
+                Rep3VmType::Shared(party.add_with_public(&a, &b))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                Aby3VmType::Shared(party.add_with_public(&b, &a))
+            (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => {
+                Rep3VmType::Shared(party.add_with_public(&b, &a))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => Aby3VmType::Shared(party.add(&a, &b)),
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => Rep3VmType::Shared(party.add(&a, &b)),
             (_, _) => todo!("BitShared add not yet implemented"),
         }
     }
 
-    fn sub<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Self {
+    fn sub<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_sub(a, b))
+                Rep3VmType::Public(plain.vm_sub(a, b))
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
-                Aby3VmType::Shared(party.add_with_public(&a, &-b))
+            (Rep3VmType::Public(a), Rep3VmType::Shared(b)) => {
+                Rep3VmType::Shared(party.add_with_public(&a, &-b))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                Aby3VmType::Shared(party.add_with_public(&-b, &a))
+            (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => {
+                Rep3VmType::Shared(party.add_with_public(&-b, &a))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => Aby3VmType::Shared(party.sub(&a, &b)),
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => Rep3VmType::Shared(party.sub(&a, &b)),
             (_, _) => todo!("BitShared sub not yet implemented"),
         }
     }
 
-    fn mul<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn mul<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_mul(a, b)?)
+                Rep3VmType::Public(plain.vm_mul(a, b)?)
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
-                Aby3VmType::Shared(party.mul_with_public(&a, &b))
+            (Rep3VmType::Public(a), Rep3VmType::Shared(b)) => {
+                Rep3VmType::Shared(party.mul_with_public(&a, &b))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                Aby3VmType::Shared(party.mul_with_public(&b, &a))
+            (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => {
+                Rep3VmType::Shared(party.mul_with_public(&b, &a))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
-                Aby3VmType::Shared(party.mul(&a, &b)?)
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
+                Rep3VmType::Shared(party.mul(&a, &b)?)
             }
             (_, _) => todo!("BitShared mul not yet implemented"),
         };
         Ok(res)
     }
 
-    fn neg<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Self {
+    fn neg<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> Self {
         match a {
-            Aby3VmType::Public(a) => {
+            Rep3VmType::Public(a) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_neg(a))
+                Rep3VmType::Public(plain.vm_neg(a))
             }
-            Aby3VmType::Shared(a) => Aby3VmType::Shared(party.neg(&a)),
+            Rep3VmType::Shared(a) => Rep3VmType::Shared(party.neg(&a)),
             _ => todo!("BitShared neg not yet implemented"),
         }
     }
 
     // Implemented as a * b^-1
-    fn div<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn div<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_div(a, b)?)
+                Rep3VmType::Public(plain.vm_div(a, b)?)
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Shared(b)) => {
                 let b_inv = party.inv(&b)?;
-                Aby3VmType::Shared(party.mul_with_public(&a, &b_inv))
+                Rep3VmType::Shared(party.mul_with_public(&a, &b_inv))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => {
                 if b.is_zero() {
                     bail!("Cannot invert zero");
                 }
                 let b_inv = b.inverse().unwrap();
-                Aby3VmType::Shared(party.mul_with_public(&b_inv, &a))
+                Rep3VmType::Shared(party.mul_with_public(&b_inv, &a))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
                 let b_inv = party.inv(&b)?;
-                Aby3VmType::Shared(party.mul(&a, &b_inv)?)
+                Rep3VmType::Shared(party.mul(&a, &b_inv)?)
             }
             (_, _) => todo!("BitShared div not implemented"),
         };
         Ok(res)
     }
 
-    fn pow<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn pow<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_pow(a, b)?)
+                Rep3VmType::Public(plain.vm_pow(a, b)?)
             }
-            (Aby3VmType::Shared(mut a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Shared(mut a), Rep3VmType::Public(b)) => {
                 if b.is_zero() {
-                    return Ok(Aby3VmType::Public(F::one()));
+                    return Ok(Rep3VmType::Public(F::one()));
                 }
                 // TODO: are negative exponents allowed in circom?
                 let mut res = party.promote_to_trivial_share(F::one());
@@ -178,27 +178,27 @@ impl<F: PrimeField> Aby3VmType<F> {
                     b >>= 1;
                 }
                 res = party.mul(&res, &a)?;
-                Aby3VmType::Shared(res)
+                Rep3VmType::Shared(res)
             }
             (_, _) => todo!("Shared pow not implemented"),
         };
         Ok(res)
     }
 
-    fn sqrt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Result<Self> {
+    fn sqrt<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> Result<Self> {
         match a {
-            Aby3VmType::Public(a) => {
+            Rep3VmType::Public(a) => {
                 let mut plain = PlainDriver::default();
-                Ok(Aby3VmType::Public(plain.vm_sqrt(a)?))
+                Ok(Rep3VmType::Public(plain.vm_sqrt(a)?))
             }
-            Aby3VmType::Shared(a) => {
+            Rep3VmType::Shared(a) => {
                 let sqrt = party.sqrt(&a)?;
                 // Correction to give the result closest to 0
                 // I.e., 2 * is_pos * sqrt - sqrt
-                let is_pos = if let Aby3VmType::Shared(x) = Self::ge(
+                let is_pos = if let Rep3VmType::Shared(x) = Self::ge(
                     party,
-                    Aby3VmType::Shared(sqrt.to_owned()),
-                    Aby3VmType::Public(F::zero()),
+                    Rep3VmType::Shared(sqrt.to_owned()),
+                    Rep3VmType::Public(F::zero()),
                 )? {
                     x
                 } else {
@@ -208,88 +208,88 @@ impl<F: PrimeField> Aby3VmType<F> {
                 mul.double();
                 mul -= &sqrt;
 
-                Ok(Aby3VmType::Shared(mul))
+                Ok(Rep3VmType::Shared(mul))
             }
             _ => todo!("BitShared sqrt not yet implemented"),
         }
     }
 
-    fn modulo<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn modulo<N: Rep3Network>(_party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_mod(a, b)?)
+                Rep3VmType::Public(plain.vm_mod(a, b)?)
             }
             (_, _) => todo!("Shared mod not implemented"),
         };
         Ok(res)
     }
 
-    fn int_div<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn int_div<N: Rep3Network>(_party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_int_div(a, b)?)
+                Rep3VmType::Public(plain.vm_int_div(a, b)?)
             }
             (_, _) => todo!("Shared int_div not implemented"),
         };
         Ok(res)
     }
 
-    fn lt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn lt<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         // a < b is equivalent to !(a >= b)
-        let ge = Aby3VmType::ge(party, a, b)?;
+        let ge = Rep3VmType::ge(party, a, b)?;
         party.vm_bool_not(ge)
     }
 
-    fn le<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn le<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         // a <= b is equivalent to b >= a
-        Aby3VmType::ge(party, b, a)
+        Rep3VmType::ge(party, b, a)
     }
 
-    fn gt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn gt<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         // a > b is equivalent to !(a <= b)
-        let le = Aby3VmType::le(party, a, b)?;
+        let le = Rep3VmType::le(party, a, b)?;
         party.vm_bool_not(le)
     }
 
-    fn ge<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn ge<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let mut plain = PlainDriver::default();
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
-                Ok(Aby3VmType::Public(plain.vm_ge(a, b)?))
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
+                Ok(Rep3VmType::Public(plain.vm_ge(a, b)?))
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Shared(b)) => {
                 let a = plain.val(a);
                 let b = val(b, party);
                 let bit = party.unsigned_ge_const_lhs(a, b)?;
-                Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
+                Ok(Rep3VmType::Shared(party.bit_inject(bit)?))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => {
                 let a = val(a, party);
                 let b = plain.val(b);
                 let bit = party.unsigned_ge_const_rhs(a, b)?;
-                Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
+                Ok(Rep3VmType::Shared(party.bit_inject(bit)?))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
                 let a = val(a, party);
                 let b = val(b, party);
                 let bit = party.unsigned_ge(a, b)?;
-                Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
+                Ok(Rep3VmType::Shared(party.bit_inject(bit)?))
             }
             (_, _) => todo!("BitShared GE not implemented"),
         }
     }
 
-    fn eq<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn eq<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Ok(Aby3VmType::Public(plain.vm_eq(a, b)?))
+                Ok(Rep3VmType::Public(plain.vm_eq(a, b)?))
             }
-            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
-            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => eq_public(party, a, b),
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Public(b), Rep3VmType::Shared(a))
+            | (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => eq_public(party, a, b),
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
                 let eq = party.sub(&a, &b);
                 is_zero(party, eq)
             }
@@ -297,32 +297,32 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn neq<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn neq<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Ok(Aby3VmType::Public(plain.vm_neq(a, b)?))
+                Ok(Rep3VmType::Public(plain.vm_neq(a, b)?))
             }
-            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
-            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(b), Rep3VmType::Shared(a))
+            | (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => {
                 let eq = eq_public(party, a, b)?;
                 match eq {
-                    Aby3VmType::Public(eq) => Ok(Aby3VmType::Public(F::one() - eq)),
-                    Aby3VmType::Shared(eq) => {
+                    Rep3VmType::Public(eq) => Ok(Rep3VmType::Public(F::one() - eq)),
+                    Rep3VmType::Shared(eq) => {
                         let neg_a = party.neg(&eq);
                         let result = party.add_with_public(&F::one(), &neg_a);
-                        Ok(Aby3VmType::Shared(result))
+                        Ok(Rep3VmType::Shared(result))
                     }
                     _ => unreachable!(),
                 }
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
                 let eq = party.sub(&a, &b);
                 let is_zero = is_zero(party, eq)?;
                 match is_zero {
-                    Aby3VmType::Public(eq) => Ok(Aby3VmType::Public(F::one() - eq)),
-                    Aby3VmType::Shared(eq) => {
-                        Ok(Aby3VmType::Shared(party.add_with_public(&-F::one(), &eq)))
+                    Rep3VmType::Public(eq) => Ok(Rep3VmType::Public(F::one() - eq)),
+                    Rep3VmType::Shared(eq) => {
+                        Ok(Rep3VmType::Shared(party.add_with_public(&-F::one(), &eq)))
                     }
                     _ => unreachable!(),
                 }
@@ -331,23 +331,23 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn shift_r<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn shift_r<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_shift_r(a, b)?)
+                Rep3VmType::Public(plain.vm_shift_r(a, b)?)
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(_b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Shared(_b)) => {
                 // some special casing
                 if a == F::zero() {
-                    return Ok(Aby3VmType::Public(F::zero()));
+                    return Ok(Rep3VmType::Public(F::zero()));
                 }
                 todo!("Shared shift_right (public by shared) not implemented");
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => {
                 // some special casing
                 if b == F::zero() {
-                    return Ok(Aby3VmType::Shared(a));
+                    return Ok(Rep3VmType::Shared(a));
                 }
                 // TODO: check bounds of b
                 let shift = usize::try_from(b.into_bigint().as_mut()[0]).unwrap();
@@ -355,24 +355,24 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let shifted = &bits >> shift;
 
                 let res = party.b2a(shifted)?;
-                Aby3VmType::Shared(res)
+                Rep3VmType::Shared(res)
             }
             (_, _) => todo!("Shared shift_right not implemented"),
         };
         Ok(res)
     }
 
-    fn shift_l<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn shift_l<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         // TODO: The circom handling of shifts can handle "negative" inputs, translating them to other type of shift...
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_shift_l(a, b)?)
+                Rep3VmType::Public(plain.vm_shift_l(a, b)?)
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Shared(b)) => {
                 // some special casing
                 if a == F::zero() {
-                    return Ok(Aby3VmType::Public(F::zero()));
+                    return Ok(Rep3VmType::Public(F::zero()));
                 }
                 // TODO: check for overflows
                 // This case is equivalent to a*2^b
@@ -381,7 +381,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let bit_shares = party.a2b(&b)?;
                 let individual_bit_shares = (0..8)
                     .map(|i| {
-                        let bit = Aby3BigUintShare {
+                        let bit = Rep3BigUintShare {
                             a: (bit_shares.a.clone() >> i) & BigUint::one(),
                             b: (bit_shares.b.clone() >> i) & BigUint::one(),
                         };
@@ -406,116 +406,116 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let last = vs.pop().unwrap();
                 let v = vs.into_iter().try_fold(last, |a, b| party.mul(&a, &b))?;
                 let res = party.mul_with_public(&a, &v);
-                Aby3VmType::Shared(res)
+                Rep3VmType::Shared(res)
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => {
                 // TODO: handle overflows
                 // This case is equivalent to a*2^b
                 // TODO: assert b < 256?
                 let shift = F::from(2u64).pow([b.into_bigint().as_mut()[0]]);
-                Aby3VmType::Shared(party.mul_with_public(&shift, &a))
+                Rep3VmType::Shared(party.mul_with_public(&shift, &a))
             }
             (_, _) => todo!("Shared shift_left not implemented"),
         };
         Ok(res)
     }
 
-    fn bool_and<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bool_and<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_bool_and(a, b)?)
+                Rep3VmType::Public(plain.vm_bool_and(a, b)?)
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
-                Aby3VmType::Shared(party.mul_with_public(&b, &a))
+            (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => {
+                Rep3VmType::Shared(party.mul_with_public(&b, &a))
             }
-            (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
-                Aby3VmType::Shared(party.mul_with_public(&a, &b))
+            (Rep3VmType::Public(a), Rep3VmType::Shared(b)) => {
+                Rep3VmType::Shared(party.mul_with_public(&a, &b))
             }
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
-                Aby3VmType::Shared(party.mul(&a, &b)?)
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
+                Rep3VmType::Shared(party.mul(&a, &b)?)
             }
             (_, _) => todo!("BitShared not implemented"),
         };
         Ok(res)
     }
 
-    fn bool_or<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bool_or<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_bool_or(a, b)?)
+                Rep3VmType::Public(plain.vm_bool_or(a, b)?)
             }
             // a + b - a * b
-            (Aby3VmType::Shared(a), Aby3VmType::Public(b))
-            | (Aby3VmType::Public(b), Aby3VmType::Shared(a)) => {
+            (Rep3VmType::Shared(a), Rep3VmType::Public(b))
+            | (Rep3VmType::Public(b), Rep3VmType::Shared(a)) => {
                 let mul = party.mul_with_public(&b, &a);
                 let add = party.add_with_public(&b, &a);
                 let sub = party.sub(&add, &mul);
-                Aby3VmType::Shared(sub)
+                Rep3VmType::Shared(sub)
             }
             // a + b - a * b
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
                 let mul = party.mul(&a, &b)?;
                 let add = party.add(&a, &b);
                 let sub = party.sub(&add, &mul);
-                Aby3VmType::Shared(sub)
+                Rep3VmType::Shared(sub)
             }
             (_, _) => todo!("BitShared not implemented"),
         };
         Ok(res)
     }
 
-    fn bit_and<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bit_and<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_bit_and(a, b)?)
+                Rep3VmType::Public(plain.vm_bit_and(a, b)?)
             }
-            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
-            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => bit_and_public(party, a, b)?,
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Public(b), Rep3VmType::Shared(a))
+            | (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => bit_and_public(party, a, b)?,
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
                 let bit_shares = party.and(a_bits, b_bits, F::MODULUS_BIT_SIZE as usize)?;
                 let res = party.b2a(bit_shares)?;
-                Aby3VmType::Shared(res)
+                Rep3VmType::Shared(res)
             }
             (_, _) => todo!("BitShared bit_and not implemented"),
         };
         Ok(res)
     }
 
-    fn bit_xor<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bit_xor<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_bit_xor(a, b)?)
+                Rep3VmType::Public(plain.vm_bit_xor(a, b)?)
             }
-            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
-            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => bit_xor_public(party, a, b)?,
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Public(b), Rep3VmType::Shared(a))
+            | (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => bit_xor_public(party, a, b)?,
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
                 // TODO: semantics of overflows in bit XOR?
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
                 let b = &a_bits ^ &b_bits;
                 let res = party.b2a(b)?;
-                Aby3VmType::Shared(res)
+                Rep3VmType::Shared(res)
             }
             (_, _) => todo!("BitShared bit_xor not implemented"),
         };
         Ok(res)
     }
 
-    fn bit_or<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    fn bit_or<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
-            (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
-                Aby3VmType::Public(plain.vm_bit_or(a, b)?)
+                Rep3VmType::Public(plain.vm_bit_or(a, b)?)
             }
-            (Aby3VmType::Public(b), Aby3VmType::Shared(a))
-            | (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => bit_or_public(party, a, b)?,
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
+            (Rep3VmType::Public(b), Rep3VmType::Shared(a))
+            | (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => bit_or_public(party, a, b)?,
+            (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
                 // TODO: semantics of overflows in bit OR?
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
@@ -523,24 +523,24 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let and = party.and(a_bits, b_bits, F::MODULUS_BIT_SIZE as usize)?;
                 xor ^= &and;
                 let res = party.b2a(xor)?;
-                Aby3VmType::Shared(res)
+                Rep3VmType::Shared(res)
             }
             (_, _) => todo!("BitShared bit_or not implemented"),
         };
         Ok(res)
     }
 
-    fn is_zero<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Result<bool> {
+    fn is_zero<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> Result<bool> {
         match a {
-            Aby3VmType::Public(a) => {
+            Rep3VmType::Public(a) => {
                 let mut plain = PlainDriver::default();
                 plain.is_zero(a, false)
             }
-            Aby3VmType::Shared(a) => {
+            Rep3VmType::Shared(a) => {
                 let res = is_zero(party, a)?;
                 match res {
-                    Aby3VmType::Public(res) => Ok(res.is_one()),
-                    Aby3VmType::Shared(res) => {
+                    Rep3VmType::Public(res) => Ok(res.is_one()),
+                    Rep3VmType::Shared(res) => {
                         let x = party.open(&res)?;
                         Ok(x.is_one())
                     }
@@ -551,13 +551,10 @@ impl<F: PrimeField> Aby3VmType<F> {
         }
     }
 
-    fn to_index<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Result<F> {
+    fn to_index<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> Result<F> {
         match a {
-            Aby3VmType::Public(a) => {
-                let mut plain = PlainDriver::default();
-                plain.vm_open(a)
-            }
-            Aby3VmType::Shared(a) => {
+            Rep3VmType::Public(a) => Ok(a),
+            Rep3VmType::Shared(a) => {
                 tracing::warn!("Opening shared value that is coerced to an index!");
                 Ok(party.open(&a)?)
             }
@@ -566,14 +563,20 @@ impl<F: PrimeField> Aby3VmType<F> {
     }
 }
 
-impl<F: PrimeField> From<Aby3PrimeFieldShare<F>> for Aby3VmType<F> {
-    fn from(value: Aby3PrimeFieldShare<F>) -> Self {
-        Aby3VmType::Shared(value)
+impl<F: PrimeField> From<Rep3PrimeFieldShare<F>> for Rep3VmType<F> {
+    fn from(value: Rep3PrimeFieldShare<F>) -> Self {
+        Rep3VmType::Shared(value)
     }
 }
 
-impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Protocol<F, N> {
-    type VmType = Aby3VmType<F>;
+impl<F: PrimeField> From<F> for Rep3VmType<F> {
+    fn from(value: F) -> Self {
+        Rep3VmType::Public(value)
+    }
+}
+
+impl<F: PrimeField, N: Rep3Network> CircomWitnessExtensionProtocol<F> for Rep3Protocol<F, N> {
+    type VmType = Rep3VmType<F>;
 
     fn vm_add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
         Self::VmType::add(self, a, b)
@@ -661,7 +664,7 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     }
 
     fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool> {
-        if !matches!(a, Aby3VmType::Public(_)) && !allow_secret_inputs {
+        if !matches!(a, Rep3VmType::Public(_)) && !allow_secret_inputs {
             bail!("is_zero called on secret inputs when not allowed")
         }
         Self::VmType::is_zero(self, a)
@@ -673,32 +676,32 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
 
     fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare {
         match a {
-            Aby3VmType::Public(a) => self.promote_to_trivial_share(a),
-            Aby3VmType::Shared(share) => share,
-            Aby3VmType::BitShared => todo!("BitShared not yet implemented"),
+            Rep3VmType::Public(a) => self.promote_to_trivial_share(a),
+            Rep3VmType::Shared(share) => share,
+            Rep3VmType::BitShared => todo!("BitShared not yet implemented"),
         }
     }
 
     fn is_shared(&mut self, a: &Self::VmType) -> Result<bool> {
         match a {
-            Aby3VmType::Shared(_) | Aby3VmType::BitShared => Ok(true),
-            Aby3VmType::Public(_) => Ok(false),
+            Rep3VmType::Shared(_) | Rep3VmType::BitShared => Ok(true),
+            Rep3VmType::Public(_) => Ok(false),
         }
     }
 
     fn vm_bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
         match a {
-            Aby3VmType::Public(a) => {
+            Rep3VmType::Public(a) => {
                 let mut plain = PlainDriver::default();
-                Ok(Aby3VmType::Public(plain.vm_bool_not(a)?))
+                Ok(Rep3VmType::Public(plain.vm_bool_not(a)?))
             }
-            Aby3VmType::Shared(a) => {
+            Rep3VmType::Shared(a) => {
                 // todo: check if 1? or do a bitextract?
                 // todo: make a proper sub_public since this happens often
                 let neg_a = self.neg(&a);
-                Ok(Aby3VmType::Shared(self.add_with_public(&F::one(), &neg_a)))
+                Ok(Rep3VmType::Shared(self.add_with_public(&F::one(), &neg_a)))
             }
-            Aby3VmType::BitShared => todo!("BitShared not yet implemented"),
+            Rep3VmType::BitShared => todo!("BitShared not yet implemented"),
         }
     }
 
@@ -709,7 +712,7 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         falsy: Self::VmType,
     ) -> Result<Self::VmType> {
         assert!(
-            matches!(cond, Aby3VmType::Shared(_)),
+            matches!(cond, Rep3VmType::Shared(_)),
             "ATM we do not call this on non-shared values"
         );
         let b_min_a = self.vm_sub(truthy, falsy.clone());
@@ -718,62 +721,62 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
     }
 
     fn public_one(&self) -> Self::VmType {
-        Aby3VmType::Public(F::one())
+        Rep3VmType::Public(F::one())
     }
 }
 
-fn bit_and_public<N: Aby3Network, F: PrimeField>(
-    party: &mut Aby3Protocol<F, N>,
-    a: Aby3PrimeFieldShare<F>,
+fn bit_and_public<N: Rep3Network, F: PrimeField>(
+    party: &mut Rep3Protocol<F, N>,
+    a: Rep3PrimeFieldShare<F>,
     b: F,
-) -> Result<Aby3VmType<F>> {
+) -> Result<Rep3VmType<F>> {
     if b == F::zero() {
-        return Ok(Aby3VmType::Public(F::zero()));
+        return Ok(Rep3VmType::Public(F::zero()));
     }
     if b == F::one() {
         // TODO: Special case for b == 1 as lsb-extract
         let bit_shares = party.a2b(&a)?;
-        let bit_share = Aby3BigUintShare {
+        let bit_share = Rep3BigUintShare {
             a: bit_shares.a & BigUint::one(),
             b: bit_shares.b & BigUint::one(),
         };
         let res = party.bit_inject(bit_share)?;
-        return Ok(Aby3VmType::Shared(res));
+        return Ok(Rep3VmType::Shared(res));
     }
     // generic case
     let bit_shares = party.a2b(&a)?;
     let b_bits: BigUint = b.into_bigint().into();
-    let bit_share = Aby3BigUintShare {
+    let bit_share = Rep3BigUintShare {
         a: bit_shares.a & &b_bits,
         b: bit_shares.b & b_bits,
     };
     let res = party.b2a(bit_share)?;
-    Ok(Aby3VmType::Shared(res))
+    Ok(Rep3VmType::Shared(res))
 }
 
-fn bit_xor_public<N: Aby3Network, F: PrimeField>(
-    party: &mut Aby3Protocol<F, N>,
-    a: Aby3PrimeFieldShare<F>,
+fn bit_xor_public<N: Rep3Network, F: PrimeField>(
+    party: &mut Rep3Protocol<F, N>,
+    a: Rep3PrimeFieldShare<F>,
     b: F,
-) -> Result<Aby3VmType<F>> {
+) -> Result<Rep3VmType<F>> {
     if b == F::zero() {
-        return Ok(Aby3VmType::Shared(a));
+        return Ok(Rep3VmType::Shared(a));
     }
     // generic case
     let b_bits: BigUint = b.into_bigint().into();
     let bit_shares = party.a2b(&a)?;
     let bit_share = bit_shares.xor_with_public(&b_bits, party.network.get_id());
     let res = party.b2a(bit_share)?;
-    Ok(Aby3VmType::Shared(res))
+    Ok(Rep3VmType::Shared(res))
 }
 
-fn bit_or_public<N: Aby3Network, F: PrimeField>(
-    party: &mut Aby3Protocol<F, N>,
-    a: Aby3PrimeFieldShare<F>,
+fn bit_or_public<N: Rep3Network, F: PrimeField>(
+    party: &mut Rep3Protocol<F, N>,
+    a: Rep3PrimeFieldShare<F>,
     b: F,
-) -> Result<Aby3VmType<F>> {
+) -> Result<Rep3VmType<F>> {
     if b == F::zero() {
-        return Ok(Aby3VmType::Shared(a));
+        return Ok(Rep3VmType::Shared(a));
     }
     // generic case
     let b_bits: BigUint = b.into_bigint().into();
@@ -783,24 +786,24 @@ fn bit_or_public<N: Aby3Network, F: PrimeField>(
     bit_shares ^= &xor;
 
     let res = party.b2a(bit_shares)?;
-    Ok(Aby3VmType::Shared(res))
+    Ok(Rep3VmType::Shared(res))
 }
 
-fn eq_public<N: Aby3Network, F: PrimeField>(
-    party: &mut Aby3Protocol<F, N>,
-    a: Aby3PrimeFieldShare<F>,
+fn eq_public<N: Rep3Network, F: PrimeField>(
+    party: &mut Rep3Protocol<F, N>,
+    a: Rep3PrimeFieldShare<F>,
     b: F,
-) -> Result<Aby3VmType<F>> {
+) -> Result<Rep3VmType<F>> {
     let val = party.add_with_public(&-b, &a);
     is_zero(party, val)
 }
 
-fn is_zero<N: Aby3Network, F: PrimeField>(
-    party: &mut Aby3Protocol<F, N>,
-    a: Aby3PrimeFieldShare<F>,
-) -> Result<Aby3VmType<F>> {
+fn is_zero<N: Rep3Network, F: PrimeField>(
+    party: &mut Rep3Protocol<F, N>,
+    a: Rep3PrimeFieldShare<F>,
+) -> Result<Rep3VmType<F>> {
     let bits = party.a2b(&a)?;
     let is_zero = party.is_zero(bits)?;
     let is_zero_f = party.bit_inject(is_zero)?;
-    Ok(Aby3VmType::Shared(is_zero_f))
+    Ok(Rep3VmType::Shared(is_zero_f))
 }

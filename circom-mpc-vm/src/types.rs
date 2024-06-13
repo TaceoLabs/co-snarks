@@ -2,17 +2,25 @@ use std::{collections::HashMap, rc::Rc};
 
 use ark_ec::pairing::Pairing;
 use mpc_core::protocols::{
+<<<<<<< HEAD
     aby3::{
         network::{Aby3MpcNet, Aby3Network},
         Aby3Protocol,
     },
+=======
+>>>>>>> main
     plain::PlainDriver,
+    rep3::network::{Rep3MpcNet, Rep3Network},
 };
 use mpc_net::config::NetworkConfig;
 
 use crate::{
+<<<<<<< HEAD
     accelerator::MpcAccelerator,
     mpc_vm::{Aby3WitnessExtension, PlainWitnessExtension, WitnessExtension},
+=======
+    mpc_vm::{PlainWitnessExtension, Rep3WitnessExtension, WitnessExtension},
+>>>>>>> main
     op_codes::CodeBlock,
 };
 use eyre::Result;
@@ -115,9 +123,10 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         PlainWitnessExtension::new(self)
     }
 
-    pub fn to_aby3_vm(
+    pub fn to_rep3_vm(
         self,
         network_config: NetworkConfig,
+<<<<<<< HEAD
     ) -> Result<Aby3WitnessExtension<P, Aby3MpcNet>> {
         self.to_aby3_vm_with_accelerator(network_config, MpcAccelerator::full_mpc_accelerator())
     }
@@ -128,11 +137,16 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         mpc_accelerator: MpcAccelerator<P, Aby3Protocol<P::ScalarField, Aby3MpcNet>>,
     ) -> Result<Aby3WitnessExtension<P, Aby3MpcNet>> {
         Aby3WitnessExtension::new(self, network_config, mpc_accelerator)
+=======
+    ) -> Result<Rep3WitnessExtension<P, Rep3MpcNet>> {
+        Rep3WitnessExtension::new(self, network_config)
+>>>>>>> main
     }
 
-    pub fn to_aby3_vm_with_network<N: Aby3Network>(
+    pub fn to_rep3_vm_with_network<N: Rep3Network>(
         self,
         network: N,
+<<<<<<< HEAD
     ) -> Result<Aby3WitnessExtension<P, N>> {
         Aby3WitnessExtension::from_network(self, network, MpcAccelerator::full_mpc_accelerator())
     }
@@ -143,5 +157,9 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         mpc_accelerator: MpcAccelerator<P, Aby3Protocol<P::ScalarField, N>>,
     ) -> Result<Aby3WitnessExtension<P, N>> {
         Aby3WitnessExtension::from_network(self, network, mpc_accelerator)
+=======
+    ) -> Result<Rep3WitnessExtension<P, N>> {
+        Rep3WitnessExtension::from_network(self, network)
+>>>>>>> main
     }
 }

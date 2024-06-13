@@ -1,16 +1,16 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
-use mpc_core::protocols::gsz::network::GSZNetwork;
+use mpc_core::protocols::shamir::network::ShamirNetwork;
 use std::{cmp::Ordering, collections::HashMap};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-pub struct GSZTestNetwork {
+pub struct ShamirTestNetwork {
     num_parties: usize,
     sender: HashMap<(usize, usize), UnboundedSender<Bytes>>,
     receiver: HashMap<(usize, usize), UnboundedReceiver<Bytes>>,
 }
 
-impl GSZTestNetwork {
+impl ShamirTestNetwork {
     pub fn new(num_parties: usize) -> Self {
         // AT Most 1 message is buffered before they are read so this should be fine
         let mut sender = HashMap::with_capacity(num_parties * (num_parties - 1));
@@ -70,13 +70,13 @@ impl GSZTestNetwork {
 
 #[derive(Debug)]
 pub struct PartyTestNetwork {
-    id: usize,
-    num_parties: usize,
-    send: Vec<UnboundedSender<Bytes>>,
-    recv: Vec<UnboundedReceiver<Bytes>>,
+    pub(crate) id: usize,
+    pub(crate) num_parties: usize,
+    pub(crate) send: Vec<UnboundedSender<Bytes>>,
+    pub(crate) recv: Vec<UnboundedReceiver<Bytes>>,
 }
 
-impl GSZNetwork for PartyTestNetwork {
+impl ShamirNetwork for PartyTestNetwork {
     fn get_id(&self) -> usize {
         self.id
     }
@@ -177,7 +177,7 @@ impl GSZNetwork for PartyTestNetwork {
         let send_data = Bytes::from(ser_data);
 
         // Send
-        for s in 1..=num {
+        for s in 1..num {
             let mut other_id = (self.id + s) % self.num_parties;
             match other_id.cmp(&self.id) {
                 Ordering::Greater => other_id -= 1,
@@ -191,7 +191,8 @@ impl GSZNetwork for PartyTestNetwork {
 
         // Receive
         let mut res = Vec::with_capacity(num);
-        for r in 1..=num {
+        res.push(data.to_owned());
+        for r in 1..num {
             let mut other_id = (self.id + self.num_parties - r) % self.num_parties;
             match other_id.cmp(&self.id) {
                 Ordering::Greater => other_id -= 1,
@@ -210,25 +211,25 @@ impl GSZNetwork for PartyTestNetwork {
 }
 
 mod field_share {
-    use crate::protocols::gsz::GSZTestNetwork;
+    use crate::protocols::shamir::ShamirTestNetwork;
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
     use itertools::{izip, Itertools};
     use mpc_core::{
-        protocols::gsz::{self, GSZProtocol},
+        protocols::shamir::{self, ShamirProtocol},
         traits::PrimeFieldMpcProtocol,
     };
     use rand::thread_rng;
     use std::{str::FromStr, thread};
     use tokio::sync::oneshot;
 
-    async fn gsz_add_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_add_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = gsz::utils::share_field_element(x, threshold, num_parties, &mut rng);
-        let y_shares = gsz::utils::share_field_element(y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::utils::share_field_element(x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::utils::share_field_element(y, threshold, num_parties, &mut rng);
         let should_result = x + y;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -241,8 +242,8 @@ mod field_share {
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                tx.send(gsz.add(&x, &y))
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                tx.send(shamir.add(&x, &y))
             });
         }
 
@@ -251,7 +252,7 @@ mod field_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = gsz::utils::combine_field_element(
+        let is_result = shamir::utils::combine_field_element(
             &results,
             &(1..=num_parties).collect_vec(),
             threshold,
@@ -262,18 +263,18 @@ mod field_share {
     }
 
     #[tokio::test]
-    async fn gsz_add() {
-        gsz_add_inner(3, 1).await;
-        gsz_add_inner(10, 4).await;
+    async fn shamir_add() {
+        shamir_add_inner(3, 1).await;
+        shamir_add_inner(10, 4).await;
     }
 
-    async fn gsz_sub_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_sub_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = gsz::utils::share_field_element(x, threshold, num_parties, &mut rng);
-        let y_shares = gsz::utils::share_field_element(y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::utils::share_field_element(x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::utils::share_field_element(y, threshold, num_parties, &mut rng);
         let should_result = x - y;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -286,8 +287,8 @@ mod field_share {
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                tx.send(gsz.sub(&x, &y))
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                tx.send(shamir.sub(&x, &y))
             });
         }
 
@@ -296,7 +297,7 @@ mod field_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = gsz::utils::combine_field_element(
+        let is_result = shamir::utils::combine_field_element(
             &results,
             &(1..=num_parties).collect_vec(),
             threshold,
@@ -307,18 +308,18 @@ mod field_share {
     }
 
     #[tokio::test]
-    async fn gsz_sub() {
-        gsz_sub_inner(3, 1).await;
-        gsz_sub_inner(10, 4).await;
+    async fn shamir_sub() {
+        shamir_sub_inner(3, 1).await;
+        shamir_sub_inner(10, 4).await;
     }
 
-    async fn gsz_mul2_then_add_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_mul2_then_add_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = gsz::utils::share_field_element(x, threshold, num_parties, &mut rng);
-        let y_shares = gsz::utils::share_field_element(y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::utils::share_field_element(x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::utils::share_field_element(y, threshold, num_parties, &mut rng);
         let should_result = ((x * y) * y) + x;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -331,10 +332,10 @@ mod field_share {
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                let mul = gsz.mul(&x, &y).unwrap();
-                let mul = gsz.mul(&mul, &y).unwrap();
-                tx.send(gsz.add(&mul, &x))
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                let mul = shamir.mul(&x, &y).unwrap();
+                let mul = shamir.mul(&mul, &y).unwrap();
+                tx.send(shamir.add(&mul, &x))
             });
         }
 
@@ -343,7 +344,7 @@ mod field_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = gsz::utils::combine_field_element(
+        let is_result = shamir::utils::combine_field_element(
             &results,
             &(1..=num_parties).collect_vec(),
             threshold,
@@ -354,13 +355,13 @@ mod field_share {
     }
 
     #[tokio::test]
-    async fn gsz_mul2_then_add() {
-        gsz_mul2_then_add_inner(3, 1).await;
-        gsz_mul2_then_add_inner(10, 4).await;
+    async fn shamir_mul2_then_add() {
+        shamir_mul2_then_add_inner(3, 1).await;
+        shamir_mul2_then_add_inner(10, 4).await;
     }
 
-    async fn gsz_mul_vec_bn_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_mul_vec_bn_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = [
             ark_bn254::Fr::from_str(
@@ -417,8 +418,8 @@ mod field_share {
             .unwrap(),
         ];
 
-        let x_shares = gsz::utils::share_field_elements(&x, threshold, num_parties, &mut rng);
-        let y_shares = gsz::utils::share_field_elements(&y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::utils::share_field_elements(&x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::utils::share_field_elements(&y, threshold, num_parties, &mut rng);
 
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
@@ -430,8 +431,8 @@ mod field_share {
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                let mul = gsz.mul_vec(&x, &y).unwrap();
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                let mul = shamir.mul_vec(&x, &y).unwrap();
                 tx.send(mul)
             });
         }
@@ -441,7 +442,7 @@ mod field_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = gsz::utils::combine_field_elements(
+        let is_result = shamir::utils::combine_field_elements(
             &results,
             &(1..=num_parties).collect_vec(),
             threshold,
@@ -452,13 +453,13 @@ mod field_share {
     }
 
     #[tokio::test]
-    async fn gsz_mul_vec_bn() {
-        gsz_mul_vec_bn_inner(3, 1).await;
-        gsz_mul_vec_bn_inner(10, 4).await;
+    async fn shamir_mul_vec_bn() {
+        shamir_mul_vec_bn_inner(3, 1).await;
+        shamir_mul_vec_bn_inner(10, 4).await;
     }
 
-    async fn gsz_mul_vec_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_mul_vec_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = (0..1)
             .map(|_| ark_bn254::Fr::from_str("2").unwrap())
@@ -472,8 +473,8 @@ mod field_share {
             should_result.push((x * y) * y);
         }
 
-        let x_shares = gsz::utils::share_field_elements(&x, threshold, num_parties, &mut rng);
-        let y_shares = gsz::utils::share_field_elements(&y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::utils::share_field_elements(&x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::utils::share_field_elements(&y, threshold, num_parties, &mut rng);
 
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
@@ -485,9 +486,9 @@ mod field_share {
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                let mul = gsz.mul_vec(&x, &y).unwrap();
-                let mul = gsz.mul_vec(&mul, &y).unwrap();
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                let mul = shamir.mul_vec(&x, &y).unwrap();
+                let mul = shamir.mul_vec(&mul, &y).unwrap();
                 tx.send(mul)
             });
         }
@@ -497,7 +498,7 @@ mod field_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = gsz::utils::combine_field_elements(
+        let is_result = shamir::utils::combine_field_elements(
             &results,
             &(1..=num_parties).collect_vec(),
             threshold,
@@ -508,16 +509,16 @@ mod field_share {
     }
 
     #[tokio::test]
-    async fn gsz_mul_vec() {
-        gsz_mul_vec_inner(3, 1).await;
-        gsz_mul_vec_inner(10, 4).await;
+    async fn shamir_mul_vec() {
+        shamir_mul_vec_inner(3, 1).await;
+        shamir_mul_vec_inner(10, 4).await;
     }
 
-    async fn gsz_neg_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_neg_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = gsz::utils::share_field_element(x, threshold, num_parties, &mut rng);
+        let x_shares = shamir::utils::share_field_element(x, threshold, num_parties, &mut rng);
         let should_result = -x;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -530,8 +531,8 @@ mod field_share {
 
         for (net, tx, x) in izip!(test_network.get_party_networks(), tx, x_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                tx.send(gsz.neg(&x))
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                tx.send(shamir.neg(&x))
             });
         }
 
@@ -540,7 +541,7 @@ mod field_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = gsz::utils::combine_field_element(
+        let is_result = shamir::utils::combine_field_element(
             &results,
             &(1..=num_parties).collect_vec(),
             threshold,
@@ -551,19 +552,19 @@ mod field_share {
     }
 
     #[tokio::test]
-    async fn gsz_neg() {
-        gsz_neg_inner(3, 1).await;
-        gsz_neg_inner(10, 4).await;
+    async fn shamir_neg() {
+        shamir_neg_inner(3, 1).await;
+        shamir_neg_inner(10, 4).await;
     }
 
-    async fn gsz_inv_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_inv_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let mut x = ark_bn254::Fr::rand(&mut rng);
         while x.is_zero() {
             x = ark_bn254::Fr::rand(&mut rng);
         }
-        let x_shares = gsz::utils::share_field_element(x, threshold, num_parties, &mut rng);
+        let x_shares = shamir::utils::share_field_element(x, threshold, num_parties, &mut rng);
         let should_result = x.inverse().unwrap();
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -576,8 +577,8 @@ mod field_share {
 
         for (net, tx, x) in izip!(test_network.get_party_networks(), tx, x_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                tx.send(gsz.inv(&x).unwrap())
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                tx.send(shamir.inv(&x).unwrap())
             });
         }
 
@@ -586,7 +587,7 @@ mod field_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = gsz::utils::combine_field_element(
+        let is_result = shamir::utils::combine_field_element(
             &results,
             &(1..=num_parties).collect_vec(),
             threshold,
@@ -597,32 +598,32 @@ mod field_share {
     }
 
     #[tokio::test]
-    async fn gsz_inv() {
-        gsz_inv_inner(3, 1).await;
-        gsz_inv_inner(10, 4).await;
+    async fn shamir_inv() {
+        shamir_inv_inner(3, 1).await;
+        shamir_inv_inner(10, 4).await;
     }
 }
 
 mod curve_share {
     use std::thread;
 
-    use crate::protocols::gsz::GSZTestNetwork;
+    use crate::protocols::shamir::ShamirTestNetwork;
     use ark_ff::UniformRand;
     use itertools::{izip, Itertools};
     use mpc_core::{
-        protocols::gsz::{self, GSZProtocol},
+        protocols::shamir::{self, ShamirProtocol},
         traits::EcMpcProtocol,
     };
     use rand::thread_rng;
     use tokio::sync::oneshot;
 
-    async fn gsz_add_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_add_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = gsz::utils::share_curve_point(x, threshold, num_parties, &mut rng);
-        let y_shares = gsz::utils::share_curve_point(y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::utils::share_curve_point(x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::utils::share_curve_point(y, threshold, num_parties, &mut rng);
         let should_result = x + y;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -635,8 +636,8 @@ mod curve_share {
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                tx.send(gsz.add_points(&x, &y))
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                tx.send(shamir.add_points(&x, &y))
             });
         }
 
@@ -645,26 +646,29 @@ mod curve_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result =
-            gsz::utils::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
-                .unwrap();
+        let is_result = shamir::utils::combine_curve_point(
+            &results,
+            &(1..=num_parties).collect_vec(),
+            threshold,
+        )
+        .unwrap();
 
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn gsz_add() {
-        gsz_add_inner(3, 1).await;
-        gsz_add_inner(10, 4).await;
+    async fn shamir_add() {
+        shamir_add_inner(3, 1).await;
+        shamir_add_inner(10, 4).await;
     }
 
-    async fn gsz_sub_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_sub_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = gsz::utils::share_curve_point(x, threshold, num_parties, &mut rng);
-        let y_shares = gsz::utils::share_curve_point(y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::utils::share_curve_point(x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::utils::share_curve_point(y, threshold, num_parties, &mut rng);
         let should_result = x - y;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -677,8 +681,8 @@ mod curve_share {
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                tx.send(gsz.sub_points(&x, &y))
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                tx.send(shamir.sub_points(&x, &y))
             });
         }
 
@@ -687,26 +691,29 @@ mod curve_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result =
-            gsz::utils::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
-                .unwrap();
+        let is_result = shamir::utils::combine_curve_point(
+            &results,
+            &(1..=num_parties).collect_vec(),
+            threshold,
+        )
+        .unwrap();
 
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn gsz_sub() {
-        gsz_sub_inner(3, 1).await;
-        gsz_sub_inner(10, 4).await;
+    async fn shamir_sub() {
+        shamir_sub_inner(3, 1).await;
+        shamir_sub_inner(10, 4).await;
     }
 
-    async fn gsz_scalar_mul_public_point_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_scalar_mul_public_point_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let public_point = ark_bn254::G1Projective::rand(&mut rng);
         let scalar = ark_bn254::Fr::rand(&mut rng);
         let scalar_shares =
-            gsz::utils::share_field_element(scalar, threshold, num_parties, &mut rng);
+            shamir::utils::share_field_element(scalar, threshold, num_parties, &mut rng);
         let should_result = public_point * scalar;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -719,8 +726,8 @@ mod curve_share {
 
         for (net, tx, scalar) in izip!(test_network.get_party_networks(), tx, scalar_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                tx.send(gsz.scalar_mul_public_point(&public_point, &scalar))
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                tx.send(shamir.scalar_mul_public_point(&public_point, &scalar))
             });
         }
 
@@ -729,25 +736,29 @@ mod curve_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result =
-            gsz::utils::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
-                .unwrap();
+        let is_result = shamir::utils::combine_curve_point(
+            &results,
+            &(1..=num_parties).collect_vec(),
+            threshold,
+        )
+        .unwrap();
 
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn gsz_scalar_mul_public_point() {
-        gsz_scalar_mul_public_point_inner(3, 1).await;
-        gsz_scalar_mul_public_point_inner(10, 4).await;
+    async fn shamir_scalar_mul_public_point() {
+        shamir_scalar_mul_public_point_inner(3, 1).await;
+        shamir_scalar_mul_public_point_inner(10, 4).await;
     }
 
-    async fn gsz_scalar_mul_public_scalar_inner(num_parties: usize, threshold: usize) {
-        let test_network = GSZTestNetwork::new(num_parties);
+    async fn shamir_scalar_mul_public_scalar_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let point = ark_bn254::G1Projective::rand(&mut rng);
         let public_scalar = ark_bn254::Fr::rand(&mut rng);
-        let point_shares = gsz::utils::share_curve_point(point, threshold, num_parties, &mut rng);
+        let point_shares =
+            shamir::utils::share_curve_point(point, threshold, num_parties, &mut rng);
         let should_result = point * public_scalar;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -760,8 +771,8 @@ mod curve_share {
 
         for (net, tx, point) in izip!(test_network.get_party_networks(), tx, point_shares) {
             thread::spawn(move || {
-                let mut gsz = GSZProtocol::new(threshold, net).unwrap();
-                tx.send(gsz.scalar_mul_public_scalar(&point, &public_scalar))
+                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                tx.send(shamir.scalar_mul_public_scalar(&point, &public_scalar))
             });
         }
 
@@ -770,16 +781,19 @@ mod curve_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result =
-            gsz::utils::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
-                .unwrap();
+        let is_result = shamir::utils::combine_curve_point(
+            &results,
+            &(1..=num_parties).collect_vec(),
+            threshold,
+        )
+        .unwrap();
 
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn gsz_scalar_mul_public_scalar() {
-        gsz_scalar_mul_public_scalar_inner(3, 1).await;
-        gsz_scalar_mul_public_scalar_inner(10, 4).await;
+    async fn shamir_scalar_mul_public_scalar() {
+        shamir_scalar_mul_public_scalar_inner(3, 1).await;
+        shamir_scalar_mul_public_scalar_inner(10, 4).await;
     }
 }

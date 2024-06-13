@@ -11,23 +11,23 @@ use ark_relations::r1cs::{
     SynthesisError, Variable,
 };
 use circom_types::r1cs::R1CS;
-use eyre::Result;
+use eyre::{bail, Result};
 use itertools::izip;
-use mpc_core::protocols::aby3::network::Aby3Network;
-use mpc_core::protocols::gsz::network::GSZNetwork;
-use mpc_core::protocols::gsz::GSZProtocol;
-use mpc_core::protocols::{aby3, gsz};
+use mpc_core::protocols::rep3::network::Rep3Network;
+use mpc_core::protocols::shamir::network::ShamirNetwork;
+use mpc_core::protocols::shamir::ShamirProtocol;
+use mpc_core::protocols::{rep3, shamir};
 use mpc_core::traits::{EcMpcProtocol, MSMProvider};
 use mpc_core::{
-    protocols::aby3::{network::Aby3MpcNet, Aby3Protocol},
+    protocols::rep3::{network::Rep3MpcNet, Rep3Protocol},
     traits::{FFTProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol},
 };
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-pub type Aby3CollaborativeGroth16<P> =
-    CollaborativeGroth16<Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet>, P>;
+pub type Rep3CollaborativeGroth16<P> =
+    CollaborativeGroth16<Rep3Protocol<<P as Pairing>::ScalarField, Rep3MpcNet>, P>;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
@@ -66,12 +66,16 @@ where
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
     )]
+    /// A map from variable names to the public field elements.
+    /// This is a BTreeMap because it implements Canonical(De)Serialize.
+    pub public_inputs: BTreeMap<String, Vec<P::ScalarField>>,
+    #[serde(
+        serialize_with = "crate::serde_compat::ark_se",
+        deserialize_with = "crate::serde_compat::ark_de"
+    )]
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub shared_inputs: BTreeMap<String, T::FieldShareVec>,
-    // TODO: what to do about multi-dimensional inputs?
-    // In the input json they are just arrays, but i guess they are interpreted as individual signals in circom
-    // What is the naming convention there @fnieddu?
 }
 
 impl<T, P: Pairing> Default for SharedInput<T, P>
@@ -80,8 +84,42 @@ where
 {
     fn default() -> Self {
         Self {
+            public_inputs: BTreeMap::new(),
             shared_inputs: BTreeMap::new(),
         }
+    }
+}
+
+impl<T, P> SharedInput<T, P>
+where
+    P: Pairing,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub fn merge(self, other: Self) -> Result<Self> {
+        let mut shared_inputs = self.shared_inputs;
+        let public_inputs = self.public_inputs;
+        for (key, value) in other.shared_inputs {
+            if shared_inputs.contains_key(&key) {
+                bail!("Input with name {} present in multiple input shares", key);
+            }
+            if public_inputs.contains_key(&key) || other.public_inputs.contains_key(&key) {
+                bail!("Input name is once in shared inputs and once in public inputs: \"{key}\"");
+            }
+            shared_inputs.insert(key, value);
+        }
+        for (key, value) in other.public_inputs {
+            if !public_inputs.contains_key(&key) {
+                bail!("Public input \"{key}\" must be present in all files");
+            }
+            if public_inputs.get(&key).expect("is there we checked") != &value {
+                bail!("Public input \"{key}\" must be same in all files");
+            }
+        }
+
+        Ok(Self {
+            shared_inputs,
+            public_inputs,
+        })
     }
 }
 
@@ -115,9 +153,9 @@ where
         &mut self,
         pk: &ProvingKey<P>,
         r1cs: &R1CS<P>,
-        public_inputs: &[P::ScalarField],
         private_witness: SharedWitness<T, P>,
     ) -> Result<Proof<P>> {
+        let public_inputs = &private_witness.public_inputs;
         let cs = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
         Self::generate_constraints(public_inputs, r1cs, cs.clone())?;
@@ -127,6 +165,27 @@ where
         let private_witness = &private_witness.witness;
         let h = self.witness_map_from_matrices(
             &matrices,
+            num_constraints,
+            num_inputs,
+            public_inputs,
+            private_witness,
+        )?;
+        let r = self.driver.rand()?;
+        let s = self.driver.rand()?;
+        self.create_proof_with_assignment(pk, r, s, &h, &public_inputs[1..], private_witness)
+    }
+    pub fn prove_with_matrices(
+        &mut self,
+        pk: &ProvingKey<P>,
+        matrices: &ConstraintMatrices<P::ScalarField>,
+        private_witness: SharedWitness<T, P>,
+    ) -> Result<Proof<P>> {
+        let num_inputs = matrices.num_instance_variables;
+        let num_constraints = matrices.num_constraints;
+        let public_inputs = &private_witness.public_inputs;
+        let private_witness = &private_witness.witness;
+        let h = self.witness_map_from_matrices(
+            matrices,
             num_constraints,
             num_inputs,
             public_inputs,
@@ -361,21 +420,21 @@ where
     }
 }
 
-impl<P: Pairing> Aby3CollaborativeGroth16<P> {
+impl<P: Pairing> Rep3CollaborativeGroth16<P> {
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
-        let mpc_net = Aby3MpcNet::new(config)?;
-        let driver = Aby3Protocol::<P::ScalarField, Aby3MpcNet>::new(mpc_net)?;
+        let mpc_net = Rep3MpcNet::new(config)?;
+        let driver = Rep3Protocol::<P::ScalarField, Rep3MpcNet>::new(mpc_net)?;
         Ok(CollaborativeGroth16::new(driver))
     }
 }
 
-impl<N: Aby3Network, P: Pairing> SharedWitness<Aby3Protocol<P::ScalarField, N>, P> {
-    pub fn share_aby3<R: Rng + CryptoRng>(
+impl<N: Rep3Network, P: Pairing> SharedWitness<Rep3Protocol<P::ScalarField, N>, P> {
+    pub fn share_rep3<R: Rng + CryptoRng>(
         witness: &[P::ScalarField],
         public_inputs: &[P::ScalarField],
         rng: &mut R,
     ) -> [Self; 3] {
-        let [share1, share2, share3] = aby3::utils::share_field_elements(witness, rng);
+        let [share1, share2, share3] = rep3::utils::share_field_elements(witness, rng);
         let witness1 = Self {
             public_inputs: public_inputs.to_vec(),
             witness: share1,
@@ -392,15 +451,15 @@ impl<N: Aby3Network, P: Pairing> SharedWitness<Aby3Protocol<P::ScalarField, N>, 
     }
 }
 
-impl<N: GSZNetwork, P: Pairing> SharedWitness<GSZProtocol<P::ScalarField, N>, P> {
-    pub fn share_gsz<R: Rng + CryptoRng>(
+impl<N: ShamirNetwork, P: Pairing> SharedWitness<ShamirProtocol<P::ScalarField, N>, P> {
+    pub fn share_shamir<R: Rng + CryptoRng>(
         witness: &[P::ScalarField],
         public_inputs: &[P::ScalarField],
         degree: usize,
         num_parties: usize,
         rng: &mut R,
     ) -> Vec<Self> {
-        let shares = gsz::utils::share_field_elements(witness, degree, num_parties, rng);
+        let shares = shamir::utils::share_field_elements(witness, degree, num_parties, rng);
         shares
             .into_iter()
             .map(|share| Self {
@@ -418,8 +477,8 @@ mod test {
     use ark_bn254::Bn254;
     use circom_types::{groth16::witness::Witness, r1cs::R1CS};
     use mpc_core::protocols::{
-        aby3::{network::Aby3MpcNet, Aby3Protocol},
-        gsz::{network::GSZMpcNet, GSZProtocol},
+        rep3::{network::Rep3MpcNet, Rep3Protocol},
+        shamir::{network::ShamirMpcNet, ShamirProtocol},
     };
     use rand::thread_rng;
 
@@ -427,14 +486,14 @@ mod test {
 
     #[ignore]
     #[test]
-    fn test_aby3() {
+    fn test_rep3() {
         let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
         let r1cs = R1CS::<ark_bn254::Bn254>::from_reader(r1cs_file).unwrap();
         let mut rng = thread_rng();
         let [s1, _, _] =
-            SharedWitness::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::share_aby3(
+            SharedWitness::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::share_rep3(
                 &witness.values[r1cs.num_inputs..],
                 &witness.values[..r1cs.num_inputs],
                 &mut rng,
@@ -442,13 +501,13 @@ mod test {
         println!("{}", serde_json::to_string(&s1).unwrap());
     }
 
-    fn test_gsz_inner(num_parties: usize, threshold: usize) {
+    fn test_shamir_inner(num_parties: usize, threshold: usize) {
         let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
         let r1cs = R1CS::<ark_bn254::Bn254>::from_reader(r1cs_file).unwrap();
         let mut rng = thread_rng();
-        let s1 = SharedWitness::<GSZProtocol<ark_bn254::Fr, GSZMpcNet>, Bn254>::share_gsz(
+        let s1 = SharedWitness::<ShamirProtocol<ark_bn254::Fr, ShamirMpcNet>, Bn254>::share_shamir(
             &witness.values[r1cs.num_inputs..],
             &witness.values[..r1cs.num_inputs],
             threshold,
@@ -460,7 +519,7 @@ mod test {
 
     #[ignore]
     #[test]
-    fn test_gsz() {
-        test_gsz_inner(3, 1);
+    fn test_shamir() {
+        test_shamir_inner(3, 1);
     }
 }

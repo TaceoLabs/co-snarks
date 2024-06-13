@@ -1,13 +1,13 @@
-use super::Aby3PrimeFieldShare;
+use super::Rep3PrimeFieldShare;
 use ark_ec::CurveGroup;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct Aby3PointShare<C: CurveGroup> {
+pub struct Rep3PointShare<C: CurveGroup> {
     pub(crate) a: C,
     pub(crate) b: C,
 }
-impl<C: CurveGroup> Aby3PointShare<C> {
+impl<C: CurveGroup> Rep3PointShare<C> {
     pub fn new(a: C, b: C) -> Self {
         Self { a, b }
     }
@@ -17,7 +17,7 @@ impl<C: CurveGroup> Aby3PointShare<C> {
     }
 }
 
-impl<C: CurveGroup> std::ops::Add for Aby3PointShare<C> {
+impl<C: CurveGroup> std::ops::Add for Rep3PointShare<C> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -28,7 +28,7 @@ impl<C: CurveGroup> std::ops::Add for Aby3PointShare<C> {
     }
 }
 
-impl<C: CurveGroup> std::ops::Add<&Aby3PointShare<C>> for Aby3PointShare<C> {
+impl<C: CurveGroup> std::ops::Add<&Rep3PointShare<C>> for Rep3PointShare<C> {
     type Output = Self;
 
     fn add(self, rhs: &Self) -> Self::Output {
@@ -39,25 +39,25 @@ impl<C: CurveGroup> std::ops::Add<&Aby3PointShare<C>> for Aby3PointShare<C> {
     }
 }
 
-impl<C: CurveGroup> std::ops::Add<&Aby3PointShare<C>> for &'_ Aby3PointShare<C> {
-    type Output = Aby3PointShare<C>;
+impl<C: CurveGroup> std::ops::Add<&Rep3PointShare<C>> for &'_ Rep3PointShare<C> {
+    type Output = Rep3PointShare<C>;
 
-    fn add(self, rhs: &Aby3PointShare<C>) -> Self::Output {
-        Aby3PointShare::<C> {
+    fn add(self, rhs: &Rep3PointShare<C>) -> Self::Output {
+        Rep3PointShare::<C> {
             a: self.a + rhs.a,
             b: self.b + rhs.b,
         }
     }
 }
 
-impl<C: CurveGroup> std::ops::AddAssign<&Aby3PointShare<C>> for Aby3PointShare<C> {
+impl<C: CurveGroup> std::ops::AddAssign<&Rep3PointShare<C>> for Rep3PointShare<C> {
     fn add_assign(&mut self, rhs: &Self) {
         self.a += rhs.a;
         self.b += rhs.b;
     }
 }
 
-impl<C: CurveGroup> std::ops::Sub for Aby3PointShare<C> {
+impl<C: CurveGroup> std::ops::Sub for Rep3PointShare<C> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -68,7 +68,7 @@ impl<C: CurveGroup> std::ops::Sub for Aby3PointShare<C> {
     }
 }
 
-impl<C: CurveGroup> std::ops::Sub<&Aby3PointShare<C>> for Aby3PointShare<C> {
+impl<C: CurveGroup> std::ops::Sub<&Rep3PointShare<C>> for Rep3PointShare<C> {
     type Output = Self;
 
     fn sub(self, rhs: &Self) -> Self::Output {
@@ -78,26 +78,26 @@ impl<C: CurveGroup> std::ops::Sub<&Aby3PointShare<C>> for Aby3PointShare<C> {
         }
     }
 }
-impl<C: CurveGroup> std::ops::Sub<&Aby3PointShare<C>> for &'_ Aby3PointShare<C> {
-    type Output = Aby3PointShare<C>;
+impl<C: CurveGroup> std::ops::Sub<&Rep3PointShare<C>> for &'_ Rep3PointShare<C> {
+    type Output = Rep3PointShare<C>;
 
-    fn sub(self, rhs: &Aby3PointShare<C>) -> Self::Output {
-        Aby3PointShare::<C> {
+    fn sub(self, rhs: &Rep3PointShare<C>) -> Self::Output {
+        Rep3PointShare::<C> {
             a: self.a - rhs.a,
             b: self.b - rhs.b,
         }
     }
 }
 
-impl<C: CurveGroup> std::ops::SubAssign<&Aby3PointShare<C>> for Aby3PointShare<C> {
+impl<C: CurveGroup> std::ops::SubAssign<&Rep3PointShare<C>> for Rep3PointShare<C> {
     fn sub_assign(&mut self, rhs: &Self) {
         self.a -= rhs.a;
         self.b -= rhs.b;
     }
 }
 
-impl<C: CurveGroup> std::ops::Mul<&C::ScalarField> for &'_ Aby3PointShare<C> {
-    type Output = Aby3PointShare<C>;
+impl<C: CurveGroup> std::ops::Mul<&C::ScalarField> for &'_ Rep3PointShare<C> {
+    type Output = Rep3PointShare<C>;
 
     fn mul(self, scalar: &C::ScalarField) -> Self::Output {
         Self::Output {
@@ -107,11 +107,11 @@ impl<C: CurveGroup> std::ops::Mul<&C::ScalarField> for &'_ Aby3PointShare<C> {
     }
 }
 
-impl<C: CurveGroup> std::ops::Mul<&Aby3PointShare<C>> for &'_ Aby3PrimeFieldShare<C::ScalarField> {
+impl<C: CurveGroup> std::ops::Mul<&Rep3PointShare<C>> for &'_ Rep3PrimeFieldShare<C::ScalarField> {
     type Output = C;
 
     // Local part of mul only
-    fn mul(self, rhs: &Aby3PointShare<C>) -> Self::Output {
+    fn mul(self, rhs: &Rep3PointShare<C>) -> Self::Output {
         rhs.a * self.a + rhs.b * self.a + rhs.a * self.b
     }
 }

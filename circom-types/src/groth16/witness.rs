@@ -30,7 +30,7 @@ pub enum WitnessParserError {
     WrongHeader(#[from] InvalidHeaderError),
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Witness<F> {
     pub values: Vec<F>,
 }

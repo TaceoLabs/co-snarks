@@ -12,10 +12,10 @@ use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
 use mpc_core::protocols::plain::PlainDriver;
 use mpc_core::{
-    protocols::aby3::{
-        network::{Aby3MpcNet, Aby3Network},
-        witness_extension_impl::Aby3VmType,
-        Aby3Protocol,
+    protocols::rep3::{
+        network::{Rep3MpcNet, Rep3Network},
+        witness_extension_impl::Rep3VmType,
+        Rep3Protocol,
     },
     to_usize,
     traits::CircomWitnessExtensionProtocol,
@@ -35,8 +35,8 @@ pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::Sca
 }
 
 pub type PlainWitnessExtension<P> = WitnessExtension<P, PlainDriver<<P as Pairing>::ScalarField>>;
-pub type Aby3WitnessExtension<P, N> =
-    WitnessExtension<P, Aby3Protocol<<P as Pairing>::ScalarField, N>>;
+pub type Rep3WitnessExtension<P, N> =
+    WitnessExtension<P, Rep3Protocol<<P as Pairing>::ScalarField, N>>;
 type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Rc<CodeBlock>, Vec<(T, Vec<T>)>);
 
 #[derive(Default, Clone)]
@@ -774,13 +774,13 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
 }
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExtension<P, C> {
-    fn post_processing(mut self) -> Result<SharedWitness<C, P>> {
+    fn post_processing(mut self, amount_public_inputs: usize) -> Result<SharedWitness<C, P>> {
         // TODO: capacities
         let mut public_inputs = Vec::new();
         let mut witness = Vec::new();
         for (count, idx) in self.signal_to_witness.into_iter().enumerate() {
             // the +1 here is for the constant 1 which always is at position 0.
-            if count < self.main_outputs + 1 {
+            if count < self.main_outputs + amount_public_inputs + 1 {
                 public_inputs.push(self.driver.vm_open(self.ctx.signals[idx].clone())?);
             } else {
                 witness.push(self.driver.vm_to_share(self.ctx.signals[idx].clone()));
@@ -792,23 +792,31 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
         })
     }
 
-    fn set_input_signals(&mut self, input_signals: SharedInput<C, P>) -> Result<()> {
+    fn set_input_signals(&mut self, mut input_signals: SharedInput<C, P>) -> Result<usize> {
+        let mut amount_public_inputs = 0;
         for (name, offset, size) in self.main_input_list.iter() {
-            let inputs = input_signals
-                .shared_inputs
-                .get(name)
-                .cloned()
-                .ok_or(eyre!("Cannot find signal \"{name}\" in provided input"))?;
-            let mut counter = 0;
-            for input in inputs.into_iter() {
-                self.ctx.signals[offset + counter] = C::VmType::from(input);
-                counter += 1;
+            let input_signals =
+                if let Some(public_values) = input_signals.public_inputs.remove(name) {
+                    amount_public_inputs += public_values.len();
+                    public_values.into_iter().map(C::VmType::from).collect_vec()
+                } else {
+                    input_signals
+                        .shared_inputs
+                        .remove(name)
+                        .ok_or(eyre!("Cannot find signal \"{name}\" in provided input"))?
+                        .into_iter()
+                        .map(C::VmType::from)
+                        .collect_vec()
+                };
+            if input_signals.len() != *size {
+                bail!(
+                    "for input \"{name}\" expected {size} signals, got {}",
+                    input_signals.len()
+                );
             }
-            if counter != *size {
-                bail!("for input \"{name}\" expected {size} signals, got {counter}");
-            }
+            self.ctx.signals[*offset..*offset + *size].clone_from_slice(input_signals.as_slice());
         }
-        Ok(())
+        Ok(amount_public_inputs)
     }
 
     fn set_flat_input_signals(&mut self, input_signals: Vec<C::VmType>) {
@@ -831,15 +839,19 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
         main_component.run(&mut self.driver, &mut self.ctx)?;
         Ok(())
     }
-    pub fn run_with_flat(mut self, input_signals: Vec<C::VmType>) -> Result<SharedWitness<C, P>> {
+    pub fn run_with_flat(
+        mut self,
+        input_signals: Vec<C::VmType>,
+        amount_public_inputs: usize,
+    ) -> Result<SharedWitness<C, P>> {
         self.set_flat_input_signals(input_signals);
         self.call_main_component()?;
-        self.post_processing()
+        self.post_processing(amount_public_inputs)
     }
     pub fn run(mut self, input_signals: SharedInput<C, P>) -> Result<SharedWitness<C, P>> {
-        self.set_input_signals(input_signals)?;
+        let amount_public_inputs = self.set_input_signals(input_signals)?;
         self.call_main_component()?;
-        self.post_processing()
+        self.post_processing(amount_public_inputs)
     }
 }
 
@@ -866,19 +878,19 @@ impl<P: Pairing> PlainWitnessExtension<P> {
     }
 }
 
-impl<P: Pairing, N: Aby3Network> Aby3WitnessExtension<P, N> {
+impl<P: Pairing, N: Rep3Network> Rep3WitnessExtension<P, N> {
     pub(crate) fn from_network(
         parser: CollaborativeCircomCompilerParsed<P>,
         network: N,
-        mpc_accelerator: MpcAccelerator<P, Aby3Protocol<P::ScalarField, N>>,
+        mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, N>>,
     ) -> Result<Self> {
-        let driver = Aby3Protocol::new(network)?;
-        let mut signals = vec![Aby3VmType::default(); parser.amount_signals];
-        signals[0] = Aby3VmType::Public(P::ScalarField::one());
+        let driver = Rep3Protocol::new(network)?;
+        let mut signals = vec![Rep3VmType::default(); parser.amount_signals];
+        signals[0] = Rep3VmType::Public(P::ScalarField::one());
         let constant_table = parser
             .constant_table
             .into_iter()
-            .map(Aby3VmType::Public)
+            .map(Rep3VmType::Public)
             .collect_vec();
         Ok(Self {
             driver,
@@ -899,12 +911,12 @@ impl<P: Pairing, N: Aby3Network> Aby3WitnessExtension<P, N> {
     }
 }
 
-impl<P: Pairing> Aby3WitnessExtension<P, Aby3MpcNet> {
+impl<P: Pairing> Rep3WitnessExtension<P, Rep3MpcNet> {
     pub(crate) fn new(
         parser: CollaborativeCircomCompilerParsed<P>,
         config: NetworkConfig,
-        mpc_accelerator: MpcAccelerator<P, Aby3Protocol<P::ScalarField, Aby3MpcNet>>,
+        mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, Rep3MpcNet>>,
     ) -> Result<Self> {
-        Self::from_network(parser, Aby3MpcNet::new(config)?, mpc_accelerator)
+        Self::from_network(parser, Rep3MpcNet::new(config)?, mpc_accelerator)
     }
 }

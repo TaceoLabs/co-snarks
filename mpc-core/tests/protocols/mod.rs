@@ -1,2 +1,3 @@
-mod aby3;
-mod gsz;
+mod bridges;
+mod rep3;
+mod shamir;

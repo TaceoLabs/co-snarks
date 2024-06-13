@@ -37,7 +37,7 @@ mod tests {
                         .parse()
                         .unwrap()
                         .to_plain_vm()
-                        .run_with_flat(inp.inputs[i].to_owned())
+                        .run_with_flat(inp.inputs[i].to_owned(), 0)
                         .unwrap();
                     assert_eq!(convert_witness(is_witness), inp.witnesses[i].values);
                 }

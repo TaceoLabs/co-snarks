@@ -1,16 +1,16 @@
 use crate::traits::PrimeFieldMpcProtocol;
 
-use super::{id::PartyID, network::Aby3Network, Aby3PrimeFieldShare, Aby3Protocol, IoResult};
+use super::{id::PartyID, network::Rep3Network, IoResult, Rep3PrimeFieldShare, Rep3Protocol};
 use ark_ff::{One, PrimeField, Zero};
 use num_bigint::BigUint;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct Aby3BigUintShare {
+pub struct Rep3BigUintShare {
     pub(crate) a: BigUint,
     pub(crate) b: BigUint,
 }
 
-impl Aby3BigUintShare {
+impl Rep3BigUintShare {
     pub(crate) fn new(a: BigUint, b: BigUint) -> Self {
         Self { a, b }
     }
@@ -19,7 +19,7 @@ impl Aby3BigUintShare {
         self.a
     }
 
-    pub(crate) fn xor_with_public(&self, a: &BigUint, id: PartyID) -> Aby3BigUintShare {
+    pub(crate) fn xor_with_public(&self, a: &BigUint, id: PartyID) -> Rep3BigUintShare {
         let mut res = self.to_owned();
         match id {
             PartyID::ID0 => res.a ^= a,
@@ -30,8 +30,8 @@ impl Aby3BigUintShare {
     }
 }
 
-impl std::ops::BitXor for &Aby3BigUintShare {
-    type Output = Aby3BigUintShare;
+impl std::ops::BitXor for &Rep3BigUintShare {
+    type Output = Rep3BigUintShare;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
         Self::Output {
@@ -41,8 +41,8 @@ impl std::ops::BitXor for &Aby3BigUintShare {
     }
 }
 
-impl std::ops::BitXor<&BigUint> for &Aby3BigUintShare {
-    type Output = Aby3BigUintShare;
+impl std::ops::BitXor<&BigUint> for &Rep3BigUintShare {
+    type Output = Rep3BigUintShare;
 
     fn bitxor(self, rhs: &BigUint) -> Self::Output {
         Self::Output {
@@ -52,21 +52,21 @@ impl std::ops::BitXor<&BigUint> for &Aby3BigUintShare {
     }
 }
 
-impl std::ops::BitXorAssign<&Self> for Aby3BigUintShare {
+impl std::ops::BitXorAssign<&Self> for Rep3BigUintShare {
     fn bitxor_assign(&mut self, rhs: &Self) {
         self.a ^= &rhs.a;
         self.b ^= &rhs.b;
     }
 }
 
-impl std::ops::BitXorAssign for Aby3BigUintShare {
+impl std::ops::BitXorAssign for Rep3BigUintShare {
     fn bitxor_assign(&mut self, rhs: Self) {
         self.a ^= rhs.a;
         self.b ^= rhs.b;
     }
 }
 
-impl std::ops::BitAnd for Aby3BigUintShare {
+impl std::ops::BitAnd for Rep3BigUintShare {
     type Output = BigUint;
 
     // Local part of AND only
@@ -75,25 +75,25 @@ impl std::ops::BitAnd for Aby3BigUintShare {
     }
 }
 
-impl std::ops::BitAndAssign<&BigUint> for Aby3BigUintShare {
+impl std::ops::BitAndAssign<&BigUint> for Rep3BigUintShare {
     fn bitand_assign(&mut self, rhs: &BigUint) {
         self.a &= rhs;
         self.b &= rhs;
     }
 }
 
-impl std::ops::BitAnd<&BigUint> for &Aby3BigUintShare {
-    type Output = Aby3BigUintShare;
+impl std::ops::BitAnd<&BigUint> for &Rep3BigUintShare {
+    type Output = Rep3BigUintShare;
 
     fn bitand(self, rhs: &BigUint) -> Self::Output {
-        Aby3BigUintShare {
+        Rep3BigUintShare {
             a: &self.a & rhs,
             b: &self.b & rhs,
         }
     }
 }
 
-impl std::ops::BitAnd<&Self> for Aby3BigUintShare {
+impl std::ops::BitAnd<&Self> for Rep3BigUintShare {
     type Output = BigUint;
 
     // Local part of AND only
@@ -102,36 +102,36 @@ impl std::ops::BitAnd<&Self> for Aby3BigUintShare {
     }
 }
 
-impl std::ops::ShlAssign<usize> for Aby3BigUintShare {
+impl std::ops::ShlAssign<usize> for Rep3BigUintShare {
     fn shl_assign(&mut self, rhs: usize) {
         self.a <<= rhs;
         self.b <<= rhs;
     }
 }
 
-impl std::ops::Shl<usize> for Aby3BigUintShare {
+impl std::ops::Shl<usize> for Rep3BigUintShare {
     type Output = Self;
 
     fn shl(self, rhs: usize) -> Self::Output {
-        Aby3BigUintShare {
+        Rep3BigUintShare {
             a: &self.a << rhs,
             b: &self.b << rhs,
         }
     }
 }
 
-impl std::ops::Shr<usize> for &Aby3BigUintShare {
-    type Output = Aby3BigUintShare;
+impl std::ops::Shr<usize> for &Rep3BigUintShare {
+    type Output = Rep3BigUintShare;
 
     fn shr(self, rhs: usize) -> Self::Output {
-        Aby3BigUintShare {
+        Rep3BigUintShare {
             a: &self.a >> rhs,
             b: &self.b >> rhs,
         }
     }
 }
 
-impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
+impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
     const BITLEN: usize = F::MODULUS_BIT_SIZE as usize;
 
     fn ceil_log2(x: usize) -> usize {
@@ -146,10 +146,10 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     pub(crate) fn and(
         &mut self,
-        a: Aby3BigUintShare,
-        b: Aby3BigUintShare,
+        a: Rep3BigUintShare,
+        b: Rep3BigUintShare,
         bitlen: usize,
-    ) -> IoResult<Aby3BigUintShare> {
+    ) -> IoResult<Rep3BigUintShare> {
         debug_assert!(a.a.bits() <= bitlen as u64);
         debug_assert!(b.a.bits() <= bitlen as u64);
         let (mut mask, mask_b) = self.rngs.rand.random_biguint(bitlen);
@@ -157,7 +157,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let local_a = (a & b) ^ mask;
         self.network.send_next(local_a.to_owned())?;
         let local_b = self.network.recv_prev()?;
-        Ok(Aby3BigUintShare {
+        Ok(Rep3BigUintShare {
             a: local_a,
             b: local_b,
         })
@@ -165,11 +165,11 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     fn and_twice(
         &mut self,
-        a: Aby3BigUintShare,
-        b1: Aby3BigUintShare,
-        b2: Aby3BigUintShare,
+        a: Rep3BigUintShare,
+        b1: Rep3BigUintShare,
+        b2: Rep3BigUintShare,
         bitlen: usize,
-    ) -> IoResult<(Aby3BigUintShare, Aby3BigUintShare)> {
+    ) -> IoResult<(Rep3BigUintShare, Rep3BigUintShare)> {
         debug_assert!(a.a.bits() <= bitlen as u64);
         debug_assert!(b1.a.bits() <= bitlen as u64);
         debug_assert!(b2.a.bits() <= bitlen as u64);
@@ -186,11 +186,11 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let local_b1 = self.network.recv_prev()?;
         let local_b2 = self.network.recv_prev()?;
 
-        let r1 = Aby3BigUintShare {
+        let r1 = Rep3BigUintShare {
             a: local_a1,
             b: local_b1,
         };
-        let r2 = Aby3BigUintShare {
+        let r2 = Rep3BigUintShare {
             a: local_a2,
             b: local_b2,
         };
@@ -200,9 +200,9 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     fn low_depth_binary_add(
         &mut self,
-        x1: Aby3BigUintShare,
-        x2: Aby3BigUintShare,
-    ) -> IoResult<Aby3BigUintShare> {
+        x1: Rep3BigUintShare,
+        x2: Rep3BigUintShare,
+    ) -> IoResult<Rep3BigUintShare> {
         // Add x1 + x2 via a packed Kogge-Stone adder
         let p = &x1 ^ &x2;
         let g = self.and(x1, x2, Self::BITLEN)?;
@@ -212,9 +212,9 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     // Calculates 2^k + x1 - x2
     fn low_depth_binary_sub(
         &mut self,
-        x1: Aby3BigUintShare,
-        x2: Aby3BigUintShare,
-    ) -> IoResult<Aby3BigUintShare> {
+        x1: Rep3BigUintShare,
+        x2: Rep3BigUintShare,
+    ) -> IoResult<Rep3BigUintShare> {
         // Let x2' = be the bit_not of x2
         // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
         // This is equivalent to x1 - x2 = x1 + two's complement of x2
@@ -235,9 +235,9 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     // Calculates 2^k + x1 - x2
     fn low_depth_binary_sub_by_const(
         &mut self,
-        x1: Aby3BigUintShare,
+        x1: Rep3BigUintShare,
         x2: BigUint,
-    ) -> IoResult<Aby3BigUintShare> {
+    ) -> IoResult<Rep3BigUintShare> {
         // two's complement
         let x2_ = (BigUint::from(1u64) << Self::BITLEN) - x2;
 
@@ -253,8 +253,8 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     fn low_depth_binary_sub_from_const(
         &mut self,
         x1: BigUint,
-        x2: Aby3BigUintShare,
-    ) -> IoResult<Aby3BigUintShare> {
+        x2: Rep3BigUintShare,
+    ) -> IoResult<Rep3BigUintShare> {
         // Let x2' = be the bit_not of x2
         // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
         // This is equivalent to x1 - x2 = x1 + two's complement of x2
@@ -272,7 +272,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(res)
     }
 
-    fn low_depth_binary_sub_p(&mut self, x: &Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
+    fn low_depth_binary_sub_p(&mut self, x: &Rep3BigUintShare) -> IoResult<Rep3BigUintShare> {
         let p_ = (BigUint::from(1u64) << (Self::BITLEN + 1)) - F::MODULUS.into();
 
         // Add x1 + p_ via a packed Kogge-Stone adder
@@ -283,10 +283,10 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     fn kogge_stone_inner(
         &mut self,
-        mut p: Aby3BigUintShare,
-        mut g: Aby3BigUintShare,
+        mut p: Rep3BigUintShare,
+        mut g: Rep3BigUintShare,
         bit_len: usize,
-    ) -> IoResult<Aby3BigUintShare> {
+    ) -> IoResult<Rep3BigUintShare> {
         let d = Self::ceil_log2(bit_len);
         let s_ = p.to_owned();
 
@@ -312,10 +312,10 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     fn cmux(
         &mut self,
-        c: Aby3BigUintShare,
-        x_t: Aby3BigUintShare,
-        x_f: Aby3BigUintShare,
-    ) -> IoResult<Aby3BigUintShare> {
+        c: Rep3BigUintShare,
+        x_t: Rep3BigUintShare,
+        x_f: Rep3BigUintShare,
+    ) -> IoResult<Rep3BigUintShare> {
         let mut xor = x_t;
         xor ^= &x_f;
         let mut and = self.and(c, xor, Self::BITLEN)?;
@@ -323,7 +323,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(and)
     }
 
-    fn low_depth_sub_p_cmux(&mut self, mut x: Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
+    fn low_depth_sub_p_cmux(&mut self, mut x: Rep3BigUintShare) -> IoResult<Rep3BigUintShare> {
         let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
         let x_msb = &x >> Self::BITLEN;
         x &= &mask;
@@ -345,7 +345,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             BigUint::zero()
         };
         let ov_b = if ov_b == 1 { mask } else { BigUint::zero() };
-        let ov = Aby3BigUintShare::new(ov_a, ov_b);
+        let ov = Rep3BigUintShare::new(ov_a, ov_b);
 
         // one big multiplexer
         let res = self.cmux(ov, y, x)?;
@@ -354,16 +354,16 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     fn low_depth_binary_add_mod_p(
         &mut self,
-        x1: Aby3BigUintShare,
-        x2: Aby3BigUintShare,
-    ) -> IoResult<Aby3BigUintShare> {
+        x1: Rep3BigUintShare,
+        x2: Rep3BigUintShare,
+    ) -> IoResult<Rep3BigUintShare> {
         let x = self.low_depth_binary_add(x1, x2)?;
         self.low_depth_sub_p_cmux(x)
     }
 
-    pub fn a2b(&mut self, x: &Aby3PrimeFieldShare<F>) -> IoResult<Aby3BigUintShare> {
-        let mut x01 = Aby3BigUintShare::default();
-        let mut x2 = Aby3BigUintShare::default();
+    pub fn a2b(&mut self, x: &Rep3PrimeFieldShare<F>) -> IoResult<Rep3BigUintShare> {
+        let mut x01 = Rep3BigUintShare::default();
+        let mut x2 = Rep3BigUintShare::default();
 
         let (mut r, r2) = self.rngs.rand.random_biguint(Self::BITLEN);
         r ^= r2;
@@ -393,9 +393,9 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     pub fn unsigned_ge(
         &mut self,
-        x: Aby3PrimeFieldShare<F>,
-        y: Aby3PrimeFieldShare<F>,
-    ) -> IoResult<Aby3BigUintShare> {
+        x: Rep3PrimeFieldShare<F>,
+        y: Rep3PrimeFieldShare<F>,
+    ) -> IoResult<Rep3BigUintShare> {
         let a_bits = self.a2b(&x)?;
         let b_bits = self.a2b(&y)?;
         let diff = self.low_depth_binary_sub(a_bits, b_bits)?;
@@ -406,8 +406,8 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     pub fn unsigned_ge_const_lhs(
         &mut self,
         x: F,
-        y: Aby3PrimeFieldShare<F>,
-    ) -> IoResult<Aby3BigUintShare> {
+        y: Rep3PrimeFieldShare<F>,
+    ) -> IoResult<Rep3BigUintShare> {
         let a_bigint = x.into();
         let b_bits = self.a2b(&y)?;
         let diff = self.low_depth_binary_sub_from_const(a_bigint, b_bits)?;
@@ -417,9 +417,9 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     pub fn unsigned_ge_const_rhs(
         &mut self,
-        x: Aby3PrimeFieldShare<F>,
+        x: Rep3PrimeFieldShare<F>,
         y: F,
-    ) -> IoResult<Aby3BigUintShare> {
+    ) -> IoResult<Rep3BigUintShare> {
         let a_bits = self.a2b(&x)?;
         let b_bigint = y.into();
         let diff = self.low_depth_binary_sub_by_const(a_bits, b_bigint)?;
@@ -429,9 +429,9 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     // Keep in mind: Only works if input is actually a binary sharing of a valid field element
     // If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
-    pub fn b2a(&mut self, x: Aby3BigUintShare) -> IoResult<Aby3PrimeFieldShare<F>> {
-        let mut y = Aby3BigUintShare::default();
-        let mut res = Aby3PrimeFieldShare::default();
+    pub fn b2a(&mut self, x: Rep3BigUintShare) -> IoResult<Rep3PrimeFieldShare<F>> {
+        let mut y = Rep3BigUintShare::default();
+        let mut res = Rep3PrimeFieldShare::default();
 
         let (mut r, r2) = self.rngs.rand.random_biguint(Self::BITLEN);
         r ^= r2;
@@ -486,7 +486,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(res)
     }
 
-    pub fn is_zero(&mut self, x: Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
+    pub fn is_zero(&mut self, x: Rep3BigUintShare) -> IoResult<Rep3BigUintShare> {
         let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
 
         // negate
@@ -512,13 +512,13 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(x)
     }
 
-    pub fn bit_inject(&mut self, x: Aby3BigUintShare) -> IoResult<Aby3PrimeFieldShare<F>> {
+    pub fn bit_inject(&mut self, x: Rep3BigUintShare) -> IoResult<Rep3PrimeFieldShare<F>> {
         // standard bitinject
         assert!(x.a.bits() <= 1);
 
-        let mut b0 = Aby3PrimeFieldShare::default();
-        let mut b1 = Aby3PrimeFieldShare::default();
-        let mut b2 = Aby3PrimeFieldShare::default();
+        let mut b0 = Rep3PrimeFieldShare::default();
+        let mut b1 = Rep3PrimeFieldShare::default();
+        let mut b2 = Rep3PrimeFieldShare::default();
 
         match self.network.get_id() {
             PartyID::ID0 => {
@@ -542,9 +542,9 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     fn arithmetic_xor(
         &mut self,
-        x: Aby3PrimeFieldShare<F>,
-        y: Aby3PrimeFieldShare<F>,
-    ) -> IoResult<Aby3PrimeFieldShare<F>> {
+        x: Rep3PrimeFieldShare<F>,
+        y: Rep3PrimeFieldShare<F>,
+    ) -> IoResult<Rep3PrimeFieldShare<F>> {
         let d = self.mul(&x, &y)?;
         let d = self.add(&d, &d);
         let e = self.add(&x, &y);
@@ -553,7 +553,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn open_bit_share(&mut self, a: &Aby3BigUintShare) -> IoResult<BigUint> {
+    pub(crate) fn open_bit_share(&mut self, a: &Rep3BigUintShare) -> IoResult<BigUint> {
         self.network.send_next(a.b.clone())?;
         let c = self.network.recv_prev::<BigUint>()?;
         Ok(&a.a ^ &a.b ^ c)

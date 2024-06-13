@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod gsz_tests {
+mod shamir_tests {
     use ark_bn254::Bn254;
     use ark_groth16::{prepare_verifying_key, Groth16};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -13,7 +13,7 @@ mod gsz_tests {
         groth16::{CollaborativeGroth16, SharedWitness},
     };
     use itertools::izip;
-    use mpc_core::protocols::gsz::{network::GSZNetwork, GSZProtocol};
+    use mpc_core::protocols::shamir::{network::ShamirNetwork, ShamirProtocol};
     use rand::thread_rng;
     use std::{cmp::Ordering, collections::HashMap, fs::File, thread};
     use tokio::sync::{
@@ -22,13 +22,13 @@ mod gsz_tests {
     };
 
     //todo remove me and put me in common test crate
-    pub struct GSZTestNetwork {
+    pub struct ShamirTestNetwork {
         num_parties: usize,
         sender: HashMap<(usize, usize), UnboundedSender<Bytes>>,
         receiver: HashMap<(usize, usize), UnboundedReceiver<Bytes>>,
     }
 
-    impl GSZTestNetwork {
+    impl ShamirTestNetwork {
         pub fn new(num_parties: usize) -> Self {
             // AT Most 1 message is buffered before they are read so this should be fine
             let mut sender = HashMap::with_capacity(num_parties * (num_parties - 1));
@@ -93,7 +93,7 @@ mod gsz_tests {
         recv: Vec<UnboundedReceiver<Bytes>>,
     }
 
-    impl GSZNetwork for PartyTestNetwork {
+    impl ShamirNetwork for PartyTestNetwork {
         fn get_id(&self) -> usize {
             self.id
         }
@@ -197,7 +197,7 @@ mod gsz_tests {
             let send_data = Bytes::from(ser_data);
 
             // Send
-            for s in 1..=num {
+            for s in 1..num {
                 let mut other_id = (self.id + s) % self.num_parties;
                 match other_id.cmp(&self.id) {
                     Ordering::Greater => other_id -= 1,
@@ -211,7 +211,8 @@ mod gsz_tests {
 
             // Receive
             let mut res = Vec::with_capacity(num);
-            for r in 1..=num {
+            res.push(data.to_owned());
+            for r in 1..num {
                 let mut other_id = (self.id + self.num_parties - r) % self.num_parties;
                 match other_id.cmp(&self.id) {
                     Ordering::Greater => other_id -= 1,
@@ -241,13 +242,17 @@ mod gsz_tests {
         let r1cs = vec![r1cs1.clone(); num_parties];
         let circuit = Circuit::new(r1cs1.clone(), witness);
         let (public_inputs1, witness) = circuit.get_wire_mapping();
-        let public_inputs = vec![public_inputs1.clone(); num_parties];
         let inputs = circuit.public_inputs();
         let mut rng = thread_rng();
-        let witness_share =
-            SharedWitness::share_gsz(&witness, &public_inputs1, threshold, num_parties, &mut rng);
+        let witness_share = SharedWitness::share_shamir(
+            &witness,
+            &public_inputs1,
+            threshold,
+            num_parties,
+            &mut rng,
+        );
 
-        let test_network = GSZTestNetwork::new(num_parties);
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
@@ -256,22 +261,21 @@ mod gsz_tests {
             rx.push(r);
         }
 
-        for (net, tx, x, r1cs, pk, ins) in izip!(
+        for (net, tx, x, r1cs, pk) in izip!(
             test_network.get_party_networks(),
             tx,
             witness_share,
             r1cs,
             pk,
-            public_inputs
         ) {
             thread::spawn(move || {
-                let gsz =
-                    GSZProtocol::<ark_bn254::Fr, PartyTestNetwork>::new(threshold, net).unwrap();
+                let shamir =
+                    ShamirProtocol::<ark_bn254::Fr, PartyTestNetwork>::new(threshold, net).unwrap();
                 let mut prover = CollaborativeGroth16::<
-                    GSZProtocol<ark_bn254::Fr, PartyTestNetwork>,
+                    ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
-                >::new(gsz);
-                tx.send(prover.prove(&pk, &r1cs, &ins, x).unwrap())
+                >::new(shamir);
+                tx.send(prover.prove(&pk, &r1cs, x).unwrap())
             });
         }
         let mut results = Vec::with_capacity(num_parties);
@@ -289,9 +293,70 @@ mod gsz_tests {
         assert!(verified);
     }
 
+    async fn e2e_poseidon_bn254_with_zkey_matrices_inner(num_parties: usize, threshold: usize) {
+        let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
+        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let (pk1, matrices) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
+        let pk = vec![pk1.clone(); num_parties];
+        let num_inputs = matrices.num_instance_variables;
+        let pvk = prepare_verifying_key(&pk1.vk);
+        let mut rng = thread_rng();
+
+        let witness_share = SharedWitness::share_shamir(
+            &witness.values[num_inputs..],
+            &witness.values[..num_inputs],
+            threshold,
+            num_parties,
+            &mut rng,
+        );
+
+        let test_network = ShamirTestNetwork::new(num_parties);
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = oneshot::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x, pk) in izip!(test_network.get_party_networks(), tx, witness_share, pk) {
+            let matrices = matrices.clone();
+            thread::spawn(move || {
+                let shamir =
+                    ShamirProtocol::<ark_bn254::Fr, PartyTestNetwork>::new(threshold, net).unwrap();
+                let mut prover = CollaborativeGroth16::<
+                    ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>,
+                    Bn254,
+                >::new(shamir);
+                tx.send(prover.prove_with_matrices(&pk, &matrices, x).unwrap())
+            });
+        }
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.await.unwrap());
+        }
+        let result1 = results.pop().unwrap();
+        for r in results {
+            assert_eq!(result1, r);
+        }
+        let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
+        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
+        let inputs = witness.values[1..num_inputs].to_vec();
+        let verified =
+            Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
+        assert!(verified);
+    }
+
     #[tokio::test]
     async fn e2e_poseidon_bn254() {
         e2e_poseidon_bn254_inner(3, 1).await;
         e2e_poseidon_bn254_inner(10, 4).await;
+    }
+
+    #[tokio::test]
+    async fn e2e_poseidon_bn254_with_zkey_matrices() {
+        e2e_poseidon_bn254_with_zkey_matrices_inner(3, 1).await;
+        e2e_poseidon_bn254_with_zkey_matrices_inner(10, 4).await;
     }
 }
