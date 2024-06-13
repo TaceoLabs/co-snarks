@@ -756,13 +756,13 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
 }
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExtension<P, C> {
-    fn post_processing(mut self) -> Result<SharedWitness<C, P>> {
+    fn post_processing(mut self, amount_public_inputs: usize) -> Result<SharedWitness<C, P>> {
         // TODO: capacities
         let mut public_inputs = Vec::new();
         let mut witness = Vec::new();
         for (count, idx) in self.signal_to_witness.into_iter().enumerate() {
             // the +1 here is for the constant 1 which always is at position 0.
-            if count < self.main_outputs + 1 {
+            if count < self.main_outputs + amount_public_inputs + 1 {
                 public_inputs.push(self.driver.vm_open(self.ctx.signals[idx].clone())?);
             } else {
                 witness.push(self.driver.vm_to_share(self.ctx.signals[idx].clone()));
@@ -774,23 +774,31 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
         })
     }
 
-    fn set_input_signals(&mut self, input_signals: SharedInput<C, P>) -> Result<()> {
+    fn set_input_signals(&mut self, mut input_signals: SharedInput<C, P>) -> Result<usize> {
+        let mut amount_public_inputs = 0;
         for (name, offset, size) in self.main_input_list.iter() {
-            let inputs = input_signals
-                .shared_inputs
-                .get(name)
-                .cloned()
-                .ok_or(eyre!("Cannot find signal \"{name}\" in provided input"))?;
-            let mut counter = 0;
-            for input in inputs.into_iter() {
-                self.ctx.signals[offset + counter] = C::VmType::from(input);
-                counter += 1;
+            let input_signals =
+                if let Some(public_values) = input_signals.public_inputs.remove(name) {
+                    amount_public_inputs += public_values.len();
+                    public_values.into_iter().map(C::VmType::from).collect_vec()
+                } else {
+                    input_signals
+                        .shared_inputs
+                        .remove(name)
+                        .ok_or(eyre!("Cannot find signal \"{name}\" in provided input"))?
+                        .into_iter()
+                        .map(C::VmType::from)
+                        .collect_vec()
+                };
+            if input_signals.len() != *size {
+                bail!(
+                    "for input \"{name}\" expected {size} signals, got {}",
+                    input_signals.len()
+                );
             }
-            if counter != *size {
-                bail!("for input \"{name}\" expected {size} signals, got {counter}");
-            }
+            self.ctx.signals[*offset..*offset + *size].clone_from_slice(input_signals.as_slice());
         }
-        Ok(())
+        Ok(amount_public_inputs)
     }
 
     fn set_flat_input_signals(&mut self, input_signals: Vec<C::VmType>) {
@@ -813,15 +821,19 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
         main_component.run(&mut self.driver, &mut self.ctx)?;
         Ok(())
     }
-    pub fn run_with_flat(mut self, input_signals: Vec<C::VmType>) -> Result<SharedWitness<C, P>> {
+    pub fn run_with_flat(
+        mut self,
+        input_signals: Vec<C::VmType>,
+        amount_public_inputs: usize,
+    ) -> Result<SharedWitness<C, P>> {
         self.set_flat_input_signals(input_signals);
         self.call_main_component()?;
-        self.post_processing()
+        self.post_processing(amount_public_inputs)
     }
     pub fn run(mut self, input_signals: SharedInput<C, P>) -> Result<SharedWitness<C, P>> {
-        self.set_input_signals(input_signals)?;
+        let amount_public_inputs = self.set_input_signals(input_signals)?;
         self.call_main_component()?;
-        self.post_processing()
+        self.post_processing(amount_public_inputs)
     }
 }
 

@@ -505,6 +505,11 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         }
     }
 
+    pub fn get_public_inputs(self) -> Result<Vec<String>> {
+        let program_archive = self.get_program_archive()?;
+        Ok(program_archive.public_inputs)
+    }
+
     pub fn parse(mut self) -> Result<CollaborativeCircomCompilerParsed<P>> {
         let program_archive = self.get_program_archive()?;
         let circuit = self.build_circuit(program_archive)?;

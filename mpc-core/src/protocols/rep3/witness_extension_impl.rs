@@ -544,10 +544,7 @@ impl<F: PrimeField> Rep3VmType<F> {
 
     fn to_index<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> Result<F> {
         match a {
-            Rep3VmType::Public(a) => {
-                let mut plain = PlainDriver::default();
-                plain.vm_open(a)
-            }
+            Rep3VmType::Public(a) => Ok(a),
             Rep3VmType::Shared(a) => {
                 tracing::warn!("Opening shared value that is coerced to an index!");
                 Ok(party.open(&a)?)
@@ -560,6 +557,12 @@ impl<F: PrimeField> Rep3VmType<F> {
 impl<F: PrimeField> From<Rep3PrimeFieldShare<F>> for Rep3VmType<F> {
     fn from(value: Rep3PrimeFieldShare<F>) -> Self {
         Rep3VmType::Shared(value)
+    }
+}
+
+impl<F: PrimeField> From<F> for Rep3VmType<F> {
+    fn from(value: F) -> Self {
+        Rep3VmType::Public(value)
     }
 }
 

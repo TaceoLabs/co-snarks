@@ -279,7 +279,7 @@ mod rep3_tests {
                             .unwrap()
                             .to_rep3_vm_with_network(net)
                             .unwrap();
-                        tx.send(witness_extension.run_with_flat(input).unwrap())
+                        tx.send(witness_extension.run_with_flat(input, 0).unwrap())
                             .unwrap()
                     });
                 }

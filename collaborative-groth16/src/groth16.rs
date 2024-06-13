@@ -11,7 +11,7 @@ use ark_relations::r1cs::{
     SynthesisError, Variable,
 };
 use circom_types::r1cs::R1CS;
-use eyre::Result;
+use eyre::{bail, Result};
 use itertools::izip;
 use mpc_core::protocols::rep3::network::Rep3Network;
 use mpc_core::protocols::shamir::network::ShamirNetwork;
@@ -66,12 +66,16 @@ where
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
     )]
+    /// A map from variable names to the public field elements.
+    /// This is a BTreeMap because it implements Canonical(De)Serialize.
+    pub public_inputs: BTreeMap<String, Vec<P::ScalarField>>,
+    #[serde(
+        serialize_with = "crate::serde_compat::ark_se",
+        deserialize_with = "crate::serde_compat::ark_de"
+    )]
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub shared_inputs: BTreeMap<String, T::FieldShareVec>,
-    // TODO: what to do about multi-dimensional inputs?
-    // In the input json they are just arrays, but i guess they are interpreted as individual signals in circom
-    // What is the naming convention there @fnieddu?
 }
 
 impl<T, P: Pairing> Default for SharedInput<T, P>
@@ -80,6 +84,7 @@ where
 {
     fn default() -> Self {
         Self {
+            public_inputs: BTreeMap::new(),
             shared_inputs: BTreeMap::new(),
         }
     }
@@ -92,16 +97,29 @@ where
 {
     pub fn merge(self, other: Self) -> Result<Self> {
         let mut shared_inputs = self.shared_inputs;
+        let public_inputs = self.public_inputs;
         for (key, value) in other.shared_inputs {
             if shared_inputs.contains_key(&key) {
-                return Err(eyre::eyre!(
-                    "Input with name {} present in multiple input shares",
-                    key
-                ));
+                bail!("Input with name {} present in multiple input shares", key);
+            }
+            if public_inputs.contains_key(&key) || other.public_inputs.contains_key(&key) {
+                bail!("Input name is once in shared inputs and once in public inputs: \"{key}\"");
             }
             shared_inputs.insert(key, value);
         }
-        Ok(Self { shared_inputs })
+        for (key, value) in other.public_inputs {
+            if !public_inputs.contains_key(&key) {
+                bail!("Public input \"{key}\" must be present in all files");
+            }
+            if public_inputs.get(&key).expect("is there we checked") != &value {
+                bail!("Public input \"{key}\" must be same in all files");
+            }
+        }
+
+        Ok(Self {
+            shared_inputs,
+            public_inputs,
+        })
     }
 }
 
