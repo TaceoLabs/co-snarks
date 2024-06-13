@@ -4,7 +4,7 @@ use ark_poly::EvaluationDomain;
 use eyre::Report;
 use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
-use rngs::{Aby3CorrelatedRng, Aby3Rand, Aby3RandBitComp};
+use rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp};
 use std::{marker::PhantomData, thread, time::Duration};
 
 use crate::{
@@ -13,11 +13,11 @@ use crate::{
     },
     RngType,
 };
-pub use fieldshare::Aby3PrimeFieldShare;
+pub use fieldshare::Rep3PrimeFieldShare;
 
 use self::{
-    fieldshare::Aby3PrimeFieldShareVec, id::PartyID, network::Aby3Network,
-    pointshare::Aby3PointShare,
+    fieldshare::Rep3PrimeFieldShareVec, id::PartyID, network::Rep3Network,
+    pointshare::Rep3PointShare,
 };
 
 pub mod a2b;
@@ -37,50 +37,50 @@ pub mod utils {
     use rand::{CryptoRng, Rng};
 
     use super::{
-        a2b::Aby3BigUintShare, fieldshare::Aby3PrimeFieldShareVec, pointshare::Aby3PointShare,
-        witness_extension_impl::Aby3VmType, Aby3PrimeFieldShare,
+        a2b::Rep3BigUintShare, fieldshare::Rep3PrimeFieldShareVec, pointshare::Rep3PointShare,
+        witness_extension_impl::Rep3VmType, Rep3PrimeFieldShare,
     };
 
     pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
         val: F,
         rng: &mut R,
-    ) -> [Aby3PrimeFieldShare<F>; 3] {
+    ) -> [Rep3PrimeFieldShare<F>; 3] {
         let a = F::rand(rng);
         let b = F::rand(rng);
         let c = val - a - b;
-        let share1 = Aby3PrimeFieldShare::new(a, c);
-        let share2 = Aby3PrimeFieldShare::new(b, a);
-        let share3 = Aby3PrimeFieldShare::new(c, b);
+        let share1 = Rep3PrimeFieldShare::new(a, c);
+        let share2 = Rep3PrimeFieldShare::new(b, a);
+        let share3 = Rep3PrimeFieldShare::new(c, b);
         [share1, share2, share3]
     }
 
     pub fn xor_share_biguint<F: PrimeField, R: Rng + CryptoRng>(
         val: F,
         rng: &mut R,
-    ) -> [Aby3BigUintShare; 3] {
+    ) -> [Rep3BigUintShare; 3] {
         let val: BigUint = val.into();
         let limbsize = (F::MODULUS_BIT_SIZE + 31) / 32;
         let a = BigUint::new((0..limbsize).map(|_| rng.gen()).collect());
         let b = BigUint::new((0..limbsize).map(|_| rng.gen()).collect());
         let c = val ^ &a ^ &b;
-        let share1 = Aby3BigUintShare::new(a.to_owned(), c.to_owned());
-        let share2 = Aby3BigUintShare::new(b.to_owned(), a);
-        let share3 = Aby3BigUintShare::new(c, b);
+        let share1 = Rep3BigUintShare::new(a.to_owned(), c.to_owned());
+        let share2 = Rep3BigUintShare::new(b.to_owned(), a);
+        let share3 = Rep3BigUintShare::new(c, b);
         [share1, share2, share3]
     }
 
     pub fn combine_field_element<F: PrimeField>(
-        share1: Aby3PrimeFieldShare<F>,
-        share2: Aby3PrimeFieldShare<F>,
-        share3: Aby3PrimeFieldShare<F>,
+        share1: Rep3PrimeFieldShare<F>,
+        share2: Rep3PrimeFieldShare<F>,
+        share3: Rep3PrimeFieldShare<F>,
     ) -> F {
         share1.a + share2.a + share3.a
     }
 
     pub fn xor_combine_biguint(
-        share1: Aby3BigUintShare,
-        share2: Aby3BigUintShare,
-        share3: Aby3BigUintShare,
+        share1: Rep3BigUintShare,
+        share2: Rep3BigUintShare,
+        share3: Rep3BigUintShare,
     ) -> BigUint {
         share1.get_a() ^ share2.get_a() ^ share3.get_a()
     }
@@ -88,15 +88,15 @@ pub mod utils {
     pub fn share_field_elements_for_vm<F: PrimeField, R: Rng + CryptoRng>(
         vals: &[F],
         rng: &mut R,
-    ) -> [Vec<Aby3VmType<F>>; 3] {
+    ) -> [Vec<Rep3VmType<F>>; 3] {
         let mut shares1 = Vec::with_capacity(vals.len());
         let mut shares2 = Vec::with_capacity(vals.len());
         let mut shares3 = Vec::with_capacity(vals.len());
         for val in vals {
             let [share1, share2, share3] = share_field_element(*val, rng);
-            shares1.push(Aby3VmType::Shared(share1));
-            shares2.push(Aby3VmType::Shared(share2));
-            shares3.push(Aby3VmType::Shared(share3));
+            shares1.push(Rep3VmType::Shared(share1));
+            shares2.push(Rep3VmType::Shared(share2));
+            shares3.push(Rep3VmType::Shared(share3));
         }
         [shares1, shares2, shares3]
     }
@@ -104,7 +104,7 @@ pub mod utils {
     pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
         vals: &[F],
         rng: &mut R,
-    ) -> [Aby3PrimeFieldShareVec<F>; 3] {
+    ) -> [Rep3PrimeFieldShareVec<F>; 3] {
         let mut shares1a = Vec::with_capacity(vals.len());
         let mut shares1b = Vec::with_capacity(vals.len());
         let mut shares2a = Vec::with_capacity(vals.len());
@@ -123,16 +123,16 @@ pub mod utils {
             shares3b.push(b);
         }
         [
-            Aby3PrimeFieldShareVec::new(shares1a, shares1b),
-            Aby3PrimeFieldShareVec::new(shares2a, shares2b),
-            Aby3PrimeFieldShareVec::new(shares3a, shares3b),
+            Rep3PrimeFieldShareVec::new(shares1a, shares1b),
+            Rep3PrimeFieldShareVec::new(shares2a, shares2b),
+            Rep3PrimeFieldShareVec::new(shares3a, shares3b),
         ]
     }
 
     pub fn combine_field_elements<F: PrimeField>(
-        share1: Aby3PrimeFieldShareVec<F>,
-        share2: Aby3PrimeFieldShareVec<F>,
-        share3: Aby3PrimeFieldShareVec<F>,
+        share1: Rep3PrimeFieldShareVec<F>,
+        share2: Rep3PrimeFieldShareVec<F>,
+        share3: Rep3PrimeFieldShareVec<F>,
     ) -> Vec<F> {
         debug_assert_eq!(share1.len(), share2.len());
         debug_assert_eq!(share2.len(), share3.len());
@@ -161,45 +161,45 @@ pub mod utils {
     pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
         val: C,
         rng: &mut R,
-    ) -> [Aby3PointShare<C>; 3] {
+    ) -> [Rep3PointShare<C>; 3] {
         let a = C::rand(rng);
         let b = C::rand(rng);
         let c = val - a - b;
-        let share1 = Aby3PointShare::new(a, c);
-        let share2 = Aby3PointShare::new(b, a);
-        let share3 = Aby3PointShare::new(c, b);
+        let share1 = Rep3PointShare::new(a, c);
+        let share2 = Rep3PointShare::new(b, a);
+        let share3 = Rep3PointShare::new(c, b);
         [share1, share2, share3]
     }
 
     pub fn combine_curve_point<C: CurveGroup>(
-        share1: Aby3PointShare<C>,
-        share2: Aby3PointShare<C>,
-        share3: Aby3PointShare<C>,
+        share1: Rep3PointShare<C>,
+        share2: Rep3PointShare<C>,
+        share3: Rep3PointShare<C>,
     ) -> C {
         share1.a + share2.a + share3.a
     }
 }
 
 #[derive(Debug)]
-pub struct Aby3Protocol<F: PrimeField, N: Aby3Network> {
-    rngs: Aby3CorrelatedRng,
+pub struct Rep3Protocol<F: PrimeField, N: Rep3Network> {
+    rngs: Rep3CorrelatedRng,
     network: N,
     field: PhantomData<F>,
 }
 
-impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
-    fn setup_prf(network: &mut N) -> Result<Aby3Rand, Report> {
+impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
+    fn setup_prf(network: &mut N) -> Result<Rep3Rand, Report> {
         let seed1: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
         network.send_next(seed1)?;
         let seed2: [u8; crate::SEED_SIZE] = network.recv_prev()?;
 
-        Ok(Aby3Rand::new(seed1, seed2))
+        Ok(Rep3Rand::new(seed1, seed2))
     }
 
     fn setup_bitcomp(
         network: &mut N,
-        rands: &mut Aby3Rand,
-    ) -> Result<(Aby3RandBitComp, Aby3RandBitComp), Report> {
+        rands: &mut Rep3Rand,
+    ) -> Result<(Rep3RandBitComp, Rep3RandBitComp), Report> {
         let (k1a, k1c) = rands.random_seeds();
         let (k2a, k2c) = rands.random_seeds();
 
@@ -207,23 +207,23 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             PartyID::ID0 => {
                 network.send_next(k1c)?;
                 let k2b: [u8; crate::SEED_SIZE] = network.recv_prev()?;
-                let bitcomp1 = Aby3RandBitComp::new_2keys(k1a, k1c);
-                let bitcomp2 = Aby3RandBitComp::new_3keys(k2a, k2b, k2c);
+                let bitcomp1 = Rep3RandBitComp::new_2keys(k1a, k1c);
+                let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
             PartyID::ID1 => {
                 network.send_next((k1c, k2c))?;
                 let k1b: [u8; crate::SEED_SIZE] = network.recv_prev()?;
-                let bitcomp1 = Aby3RandBitComp::new_3keys(k1a, k1b, k1c);
-                let bitcomp2 = Aby3RandBitComp::new_2keys(k2a, k2c);
+                let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
+                let bitcomp2 = Rep3RandBitComp::new_2keys(k2a, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
             PartyID::ID2 => {
                 network.send_next(k2c)?;
                 let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) =
                     network.recv_prev()?;
-                let bitcomp1 = Aby3RandBitComp::new_3keys(k1a, k1b, k1c);
-                let bitcomp2 = Aby3RandBitComp::new_3keys(k2a, k2b, k2c);
+                let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
+                let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
         }
@@ -232,7 +232,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     pub fn new(mut network: N) -> Result<Self, Report> {
         let mut rand = Self::setup_prf(&mut network)?;
         let bitcomps = Self::setup_bitcomp(&mut network, &mut rand)?;
-        let rngs = Aby3CorrelatedRng::new(rand, bitcomps.0, bitcomps.1);
+        let rngs = Rep3CorrelatedRng::new(rand, bitcomps.0, bitcomps.1);
 
         Ok(Self {
             network,
@@ -242,9 +242,9 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     }
 }
 
-impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F, N> {
-    type FieldShare = Aby3PrimeFieldShare<F>;
-    type FieldShareVec = Aby3PrimeFieldShareVec<F>;
+impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F, N> {
+    type FieldShare = Rep3PrimeFieldShare<F>;
+    type FieldShareVec = Rep3PrimeFieldShareVec<F>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
         a + b
@@ -309,9 +309,9 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
 
     fn promote_to_trivial_share(&self, public_value: F) -> Self::FieldShare {
         match self.network.get_id() {
-            PartyID::ID0 => Aby3PrimeFieldShare::new(public_value, F::zero()),
-            PartyID::ID1 => Aby3PrimeFieldShare::new(F::zero(), public_value),
-            PartyID::ID2 => Aby3PrimeFieldShare::default(),
+            PartyID::ID0 => Rep3PrimeFieldShare::new(public_value, F::zero()),
+            PartyID::ID1 => Rep3PrimeFieldShare::new(F::zero(), public_value),
+            PartyID::ID2 => Rep3PrimeFieldShare::default(),
         }
     }
 
@@ -321,9 +321,9 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         //therefore id1 and id2 needs the share
         for val in public_values {
             let share = match self.network.get_id() {
-                PartyID::ID0 => Aby3PrimeFieldShare::new(*val, F::zero()),
-                PartyID::ID1 => Aby3PrimeFieldShare::new(F::zero(), *val),
-                PartyID::ID2 => Aby3PrimeFieldShare::default(),
+                PartyID::ID0 => Rep3PrimeFieldShare::new(*val, F::zero()),
+                PartyID::ID1 => Rep3PrimeFieldShare::new(F::zero(), *val),
+                PartyID::ID2 => Rep3PrimeFieldShare::default(),
             };
             vec.push(share);
         }
@@ -376,7 +376,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
         public_inputs: &[F],
         private_witness: &Self::FieldShareVec,
     ) -> Self::FieldShare {
-        let mut acc = Aby3PrimeFieldShare::default();
+        let mut acc = Rep3PrimeFieldShare::default();
         for (coeff, index) in lhs {
             if index < &public_inputs.len() {
                 let val = public_inputs[*index];
@@ -421,7 +421,7 @@ impl<F: PrimeField, N: Aby3Network> PrimeFieldMpcProtocol<F> for Aby3Protocol<F,
     }
 }
 
-impl<F: PrimeField> Default for Aby3PrimeFieldShare<F> {
+impl<F: PrimeField> Default for Rep3PrimeFieldShare<F> {
     fn default() -> Self {
         Self {
             a: F::zero(),
@@ -430,8 +430,8 @@ impl<F: PrimeField> Default for Aby3PrimeFieldShare<F> {
     }
 }
 
-impl<C: CurveGroup, N: Aby3Network> EcMpcProtocol<C> for Aby3Protocol<C::ScalarField, N> {
-    type PointShare = Aby3PointShare<C>;
+impl<C: CurveGroup, N: Rep3Network> EcMpcProtocol<C> for Rep3Protocol<C::ScalarField, N> {
+    type PointShare = Rep3PointShare<C>;
 
     fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
         a + b
@@ -517,7 +517,7 @@ impl<C: CurveGroup, N: Aby3Network> EcMpcProtocol<C> for Aby3Protocol<C::ScalarF
     }
 }
 
-impl<P: Pairing, N: Aby3Network> PairingEcMpcProtocol<P> for Aby3Protocol<P::ScalarField, N> {
+impl<P: Pairing, N: Rep3Network> PairingEcMpcProtocol<P> for Rep3Protocol<P::ScalarField, N> {
     fn open_two_points(
         &mut self,
         a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
@@ -533,7 +533,7 @@ impl<P: Pairing, N: Aby3Network> PairingEcMpcProtocol<P> for Aby3Protocol<P::Sca
     }
 }
 
-impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
+impl<F: PrimeField, N: Rep3Network> FFTProvider<F> for Rep3Protocol<F, N> {
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
         data: Self::FieldShareVec,
@@ -569,7 +569,7 @@ impl<F: PrimeField, N: Aby3Network> FFTProvider<F> for Aby3Protocol<F, N> {
     }
 }
 
-impl<C: CurveGroup, N: Aby3Network> MSMProvider<C> for Aby3Protocol<C::ScalarField, N> {
+impl<C: CurveGroup, N: Rep3Network> MSMProvider<C> for Rep3Protocol<C::ScalarField, N> {
     fn msm_public_points(
         &mut self,
         points: &[C::Affine],

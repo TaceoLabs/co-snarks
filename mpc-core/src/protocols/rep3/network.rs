@@ -5,7 +5,7 @@ use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
 
 use super::id::PartyID;
 
-pub trait Aby3Network {
+pub trait Rep3Network {
     fn get_id(&self) -> PartyID;
 
     fn send<F: CanonicalSerialize>(&mut self, target: PartyID, data: F) -> std::io::Result<()> {
@@ -44,7 +44,7 @@ pub trait Aby3Network {
 }
 
 #[derive(Debug)]
-pub struct Aby3MpcNet {
+pub struct Rep3MpcNet {
     id: PartyID,
     runtime: tokio::runtime::Runtime,
     net_handler: MpcNetworkHandler,
@@ -52,10 +52,10 @@ pub struct Aby3MpcNet {
     chan_prev: ChannelHandle<Bytes, BytesMut>,
 }
 
-impl Aby3MpcNet {
+impl Rep3MpcNet {
     pub fn new(config: NetworkConfig) -> Result<Self, Report> {
         if config.parties.len() != 3 {
-            bail!("ABY3 protocol requires exactly 3 parties")
+            bail!("REP3 protocol requires exactly 3 parties")
         }
         let id = PartyID::try_from(config.my_id)?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -137,7 +137,7 @@ impl Aby3MpcNet {
     }
 }
 
-impl Aby3Network for Aby3MpcNet {
+impl Rep3Network for Rep3MpcNet {
     fn get_id(&self) -> PartyID {
         self.id
     }

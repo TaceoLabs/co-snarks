@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod aby3_tests {
+mod rep3_tests {
 
     use ark_bn254::Bn254;
     use ark_groth16::{prepare_verifying_key, Groth16};
@@ -13,7 +13,7 @@ mod aby3_tests {
         circuit::Circuit,
         groth16::{CollaborativeGroth16, SharedWitness},
     };
-    use mpc_core::protocols::aby3::{id::PartyID, network::Aby3Network, Aby3Protocol};
+    use mpc_core::protocols::rep3::{id::PartyID, network::Rep3Network, Rep3Protocol};
     use rand::thread_rng;
     use std::{fs::File, thread};
     use tokio::sync::{
@@ -38,7 +38,7 @@ mod aby3_tests {
     }
     #[derive(Debug)]
     //todo remove me and put me in common test crate
-    pub struct Aby3TestNetwork {
+    pub struct Rep3TestNetwork {
         p1_p2_sender: UnboundedSender<Bytes>,
         p1_p3_sender: UnboundedSender<Bytes>,
         p2_p3_sender: UnboundedSender<Bytes>,
@@ -58,13 +58,13 @@ mod aby3_tests {
         witnesses: Vec<Witness<ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>>>,
     }
 
-    impl Default for Aby3TestNetwork {
+    impl Default for Rep3TestNetwork {
         fn default() -> Self {
             Self::new()
         }
     }
 
-    impl Aby3TestNetwork {
+    impl Rep3TestNetwork {
         pub fn new() -> Self {
             // AT Most 1 message is buffered before they are read so this should be fine
             let p1_p2 = mpsc::unbounded_channel();
@@ -131,7 +131,7 @@ mod aby3_tests {
         _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
     }
 
-    impl Aby3Network for PartyTestNetwork {
+    impl Rep3Network for PartyTestNetwork {
         fn get_id(&self) -> PartyID {
             self.id
         }
@@ -222,8 +222,8 @@ mod aby3_tests {
         let inputs = circuit.public_inputs();
         let mut rng = thread_rng();
         let [witness_share1, witness_share2, witness_share3] =
-            SharedWitness::share_aby3(&witness, &public_inputs1, &mut rng);
-        let test_network = Aby3TestNetwork::default();
+            SharedWitness::share_rep3(&witness, &public_inputs1, &mut rng);
+        let test_network = Rep3TestNetwork::default();
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         let (tx3, rx3) = oneshot::channel();
@@ -237,11 +237,11 @@ mod aby3_tests {
             .zip([public_inputs1, public_inputs2, public_inputs3].into_iter())
         {
             thread::spawn(move || {
-                let aby3 = Aby3Protocol::<ark_bn254::Fr, PartyTestNetwork>::new(net).unwrap();
+                let rep3 = Rep3Protocol::<ark_bn254::Fr, PartyTestNetwork>::new(net).unwrap();
                 let mut prover = CollaborativeGroth16::<
-                    Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>,
+                    Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
-                >::new(aby3);
+                >::new(rep3);
                 tx.send(prover.prove(&pk, &r1cs, &ins, x).unwrap())
             });
         }
@@ -263,16 +263,16 @@ mod aby3_tests {
         use circom_mpc_compiler::CompilerBuilder;
         use circom_types::groth16::witness::Witness;
         use itertools::izip;
-        use mpc_core::protocols::aby3::{self};
+        use mpc_core::protocols::rep3::{self};
         use rand::thread_rng;
         use std::fs;
         use std::str::FromStr;
         use std::{fs::File, thread};
         use tokio::sync::oneshot;
         fn combine_field_elements_for_vm(
-            a: SharedWitness<Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
-            b: SharedWitness<Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
-            c: SharedWitness<Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
+            a: SharedWitness<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
+            b: SharedWitness<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
+            c: SharedWitness<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
         ) -> Vec<ark_bn254::Fr> {
             let mut res = Vec::with_capacity(a.public_inputs.len() + a.witness.len());
             for (a, b, c) in izip!(a.public_inputs, b.public_inputs, c.public_inputs) {
@@ -280,7 +280,7 @@ mod aby3_tests {
                 assert_eq!(b, c);
                 res.push(a);
             }
-            res.extend(aby3::utils::combine_field_elements(
+            res.extend(rep3::utils::combine_field_elements(
                 a.witness, b.witness, c.witness,
             ));
             res
@@ -330,8 +330,8 @@ mod aby3_tests {
             ($file: expr, $input: expr) => {{
                 //install_tracing();
                 let mut rng = thread_rng();
-                let inputs = aby3::utils::share_field_elements_for_vm($input, &mut rng);
-                let test_network = Aby3TestNetwork::default();
+                let inputs = rep3::utils::share_field_elements_for_vm($input, &mut rng);
+                let test_network = Rep3TestNetwork::default();
                 let (tx1, rx1) = oneshot::channel();
                 let (tx2, rx2) = oneshot::channel();
                 let (tx3, rx3) = oneshot::channel();
@@ -345,7 +345,7 @@ mod aby3_tests {
                             .build()
                             .parse()
                             .unwrap()
-                            .to_aby3_vm_with_network(net)
+                            .to_rep3_vm_with_network(net)
                             .unwrap();
                         tx.send(witness_extension.run_with_flat(input).unwrap())
                             .unwrap()
@@ -358,7 +358,7 @@ mod aby3_tests {
             }};
         }
 
-        macro_rules! witness_extension_test_aby3 {
+        macro_rules! witness_extension_test_rep3 {
             ($name: ident) => {
                 #[tokio::test]
                 async fn $name() {
@@ -386,65 +386,65 @@ mod aby3_tests {
             };
         }
 
-        witness_extension_test_aby3!(aliascheck_test);
-        witness_extension_test_aby3!(babyadd_tester);
-        witness_extension_test_aby3!(babycheck_test);
-        witness_extension_test_aby3!(babypbk_test);
-        witness_extension_test_aby3!(binsub_test);
-        witness_extension_test_aby3!(binsum_test);
-        witness_extension_test_aby3!(constants_test);
-        witness_extension_test_aby3!(control_flow);
-        //witness_extension_test_aby3!(eddsa_test);
-        witness_extension_test_aby3!(eddsa_verify);
-        witness_extension_test_aby3!(eddsamimc_test);
-        witness_extension_test_aby3!(eddsaposeidon_test);
-        witness_extension_test_aby3!(edwards2montgomery);
-        witness_extension_test_aby3!(escalarmul_test);
-        witness_extension_test_aby3!(escalarmul_test_min);
-        witness_extension_test_aby3!(escalarmulany_test);
-        witness_extension_test_aby3!(escalarmulfix_test);
-        witness_extension_test_aby3!(escalarmulw4table);
-        witness_extension_test_aby3!(escalarmulw4table_test);
-        witness_extension_test_aby3!(escalarmulw4table_test3);
-        witness_extension_test_aby3!(functions);
-        witness_extension_test_aby3!(greatereqthan);
-        witness_extension_test_aby3!(greaterthan);
-        witness_extension_test_aby3!(isequal);
-        witness_extension_test_aby3!(iszero);
-        witness_extension_test_aby3!(lesseqthan);
-        witness_extension_test_aby3!(lessthan);
-        witness_extension_test_aby3!(mimc_hasher);
-        witness_extension_test_aby3!(mimc_sponge_hash_test);
-        witness_extension_test_aby3!(mimc_sponge_test);
-        witness_extension_test_aby3!(mimc_test);
-        witness_extension_test_aby3!(montgomery2edwards);
-        witness_extension_test_aby3!(montgomeryadd);
-        witness_extension_test_aby3!(montgomerydouble);
-        witness_extension_test_aby3!(multiplier16);
-        witness_extension_test_aby3!(multiplier2);
-        witness_extension_test_aby3!(mux1_1);
-        witness_extension_test_aby3!(mux2_1);
-        witness_extension_test_aby3!(mux3_1);
-        witness_extension_test_aby3!(mux4_1);
-        witness_extension_test_aby3!(pedersen2_test);
-        witness_extension_test_aby3!(pedersen_hasher);
-        witness_extension_test_aby3!(pedersen_test);
-        //witness_extension_test_aby3!(pointbits_loopback);
-        witness_extension_test_aby3!(poseidon3_test);
-        witness_extension_test_aby3!(poseidon6_test);
-        witness_extension_test_aby3!(poseidon_hasher1);
-        witness_extension_test_aby3!(poseidon_hasher16);
-        witness_extension_test_aby3!(poseidon_hasher2);
-        witness_extension_test_aby3!(poseidonex_test);
-        witness_extension_test_aby3!(sha256_2_test);
-        witness_extension_test_aby3!(sha256_test448);
-        witness_extension_test_aby3!(sha256_test512);
-        witness_extension_test_aby3!(shared_control_flow);
-        witness_extension_test_aby3!(shared_control_flow_arrays);
-        witness_extension_test_aby3!(sign_test);
-        witness_extension_test_aby3!(smtprocessor10_test);
-        witness_extension_test_aby3!(smtverifier10_test);
-        witness_extension_test_aby3!(sum_test);
+        witness_extension_test_rep3!(aliascheck_test);
+        witness_extension_test_rep3!(babyadd_tester);
+        witness_extension_test_rep3!(babycheck_test);
+        witness_extension_test_rep3!(babypbk_test);
+        witness_extension_test_rep3!(binsub_test);
+        witness_extension_test_rep3!(binsum_test);
+        witness_extension_test_rep3!(constants_test);
+        witness_extension_test_rep3!(control_flow);
+        //witness_extension_test_rep3!(eddsa_test);
+        witness_extension_test_rep3!(eddsa_verify);
+        witness_extension_test_rep3!(eddsamimc_test);
+        witness_extension_test_rep3!(eddsaposeidon_test);
+        witness_extension_test_rep3!(edwards2montgomery);
+        witness_extension_test_rep3!(escalarmul_test);
+        witness_extension_test_rep3!(escalarmul_test_min);
+        witness_extension_test_rep3!(escalarmulany_test);
+        witness_extension_test_rep3!(escalarmulfix_test);
+        witness_extension_test_rep3!(escalarmulw4table);
+        witness_extension_test_rep3!(escalarmulw4table_test);
+        witness_extension_test_rep3!(escalarmulw4table_test3);
+        witness_extension_test_rep3!(functions);
+        witness_extension_test_rep3!(greatereqthan);
+        witness_extension_test_rep3!(greaterthan);
+        witness_extension_test_rep3!(isequal);
+        witness_extension_test_rep3!(iszero);
+        witness_extension_test_rep3!(lesseqthan);
+        witness_extension_test_rep3!(lessthan);
+        witness_extension_test_rep3!(mimc_hasher);
+        witness_extension_test_rep3!(mimc_sponge_hash_test);
+        witness_extension_test_rep3!(mimc_sponge_test);
+        witness_extension_test_rep3!(mimc_test);
+        witness_extension_test_rep3!(montgomery2edwards);
+        witness_extension_test_rep3!(montgomeryadd);
+        witness_extension_test_rep3!(montgomerydouble);
+        witness_extension_test_rep3!(multiplier16);
+        witness_extension_test_rep3!(multiplier2);
+        witness_extension_test_rep3!(mux1_1);
+        witness_extension_test_rep3!(mux2_1);
+        witness_extension_test_rep3!(mux3_1);
+        witness_extension_test_rep3!(mux4_1);
+        witness_extension_test_rep3!(pedersen2_test);
+        witness_extension_test_rep3!(pedersen_hasher);
+        witness_extension_test_rep3!(pedersen_test);
+        //witness_extension_test_rep3!(pointbits_loopback);
+        witness_extension_test_rep3!(poseidon3_test);
+        witness_extension_test_rep3!(poseidon6_test);
+        witness_extension_test_rep3!(poseidon_hasher1);
+        witness_extension_test_rep3!(poseidon_hasher16);
+        witness_extension_test_rep3!(poseidon_hasher2);
+        witness_extension_test_rep3!(poseidonex_test);
+        witness_extension_test_rep3!(sha256_2_test);
+        witness_extension_test_rep3!(sha256_test448);
+        witness_extension_test_rep3!(sha256_test512);
+        witness_extension_test_rep3!(shared_control_flow);
+        witness_extension_test_rep3!(shared_control_flow_arrays);
+        witness_extension_test_rep3!(sign_test);
+        witness_extension_test_rep3!(smtprocessor10_test);
+        witness_extension_test_rep3!(smtverifier10_test);
+        witness_extension_test_rep3!(sum_test);
 
         // witness_extension_test!(multiplier2, "multiplier2", ["3", "11"]);
         // witness_extension_test!(

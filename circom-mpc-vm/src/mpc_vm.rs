@@ -11,10 +11,10 @@ use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
 use mpc_core::protocols::plain::PlainDriver;
 use mpc_core::{
-    protocols::aby3::{
-        network::{Aby3MpcNet, Aby3Network},
-        witness_extension_impl::Aby3VmType,
-        Aby3Protocol,
+    protocols::rep3::{
+        network::{Rep3MpcNet, Rep3Network},
+        witness_extension_impl::Rep3VmType,
+        Rep3Protocol,
     },
     to_usize,
     traits::CircomWitnessExtensionProtocol,
@@ -34,8 +34,8 @@ pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::Sca
 }
 
 pub type PlainWitnessExtension<P> = WitnessExtension<P, PlainDriver>;
-pub type Aby3WitnessExtension<P, N> =
-    WitnessExtension<P, Aby3Protocol<<P as Pairing>::ScalarField, N>>;
+pub type Rep3WitnessExtension<P, N> =
+    WitnessExtension<P, Rep3Protocol<<P as Pairing>::ScalarField, N>>;
 type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Rc<CodeBlock>, Vec<(T, Vec<T>)>);
 
 #[derive(Default, Clone)]
@@ -847,18 +847,18 @@ impl<P: Pairing> PlainWitnessExtension<P> {
     }
 }
 
-impl<P: Pairing, N: Aby3Network> Aby3WitnessExtension<P, N> {
+impl<P: Pairing, N: Rep3Network> Rep3WitnessExtension<P, N> {
     pub(crate) fn from_network(
         parser: CollaborativeCircomCompilerParsed<P>,
         network: N,
     ) -> Result<Self> {
-        let driver = Aby3Protocol::new(network)?;
-        let mut signals = vec![Aby3VmType::default(); parser.amount_signals];
-        signals[0] = Aby3VmType::Public(P::ScalarField::one());
+        let driver = Rep3Protocol::new(network)?;
+        let mut signals = vec![Rep3VmType::default(); parser.amount_signals];
+        signals[0] = Rep3VmType::Public(P::ScalarField::one());
         let constant_table = parser
             .constant_table
             .into_iter()
-            .map(Aby3VmType::Public)
+            .map(Rep3VmType::Public)
             .collect_vec();
         Ok(Self {
             driver,
@@ -878,11 +878,11 @@ impl<P: Pairing, N: Aby3Network> Aby3WitnessExtension<P, N> {
     }
 }
 
-impl<P: Pairing> Aby3WitnessExtension<P, Aby3MpcNet> {
+impl<P: Pairing> Rep3WitnessExtension<P, Rep3MpcNet> {
     pub(crate) fn new(
         parser: CollaborativeCircomCompilerParsed<P>,
         config: NetworkConfig,
     ) -> Result<Self> {
-        Self::from_network(parser, Aby3MpcNet::new(config)?)
+        Self::from_network(parser, Rep3MpcNet::new(config)?)
     }
 }

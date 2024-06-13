@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod aby3_tests {
+mod rep3_tests {
 
     use ark_bn254::Bn254;
     use ark_groth16::{prepare_verifying_key, Groth16};
@@ -13,7 +13,7 @@ mod aby3_tests {
         circuit::Circuit,
         groth16::{CollaborativeGroth16, SharedWitness},
     };
-    use mpc_core::protocols::aby3::{id::PartyID, network::Aby3Network, Aby3Protocol};
+    use mpc_core::protocols::rep3::{id::PartyID, network::Rep3Network, Rep3Protocol};
     use rand::thread_rng;
     use std::{fs::File, thread};
     use tokio::sync::{
@@ -22,7 +22,7 @@ mod aby3_tests {
     };
 
     //todo remove me and put me in common test crate
-    pub struct Aby3TestNetwork {
+    pub struct Rep3TestNetwork {
         p1_p2_sender: UnboundedSender<Bytes>,
         p1_p3_sender: UnboundedSender<Bytes>,
         p2_p3_sender: UnboundedSender<Bytes>,
@@ -37,13 +37,13 @@ mod aby3_tests {
         p3_p2_receiver: UnboundedReceiver<Bytes>,
     }
 
-    impl Default for Aby3TestNetwork {
+    impl Default for Rep3TestNetwork {
         fn default() -> Self {
             Self::new()
         }
     }
 
-    impl Aby3TestNetwork {
+    impl Rep3TestNetwork {
         pub fn new() -> Self {
             // AT Most 1 message is buffered before they are read so this should be fine
             let p1_p2 = mpsc::unbounded_channel();
@@ -111,7 +111,7 @@ mod aby3_tests {
         _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
     }
 
-    impl Aby3Network for PartyTestNetwork {
+    impl Rep3Network for PartyTestNetwork {
         fn get_id(&self) -> PartyID {
             self.id
         }
@@ -202,8 +202,8 @@ mod aby3_tests {
         let inputs = circuit.public_inputs();
         let mut rng = thread_rng();
         let [witness_share1, witness_share2, witness_share3] =
-            SharedWitness::share_aby3(&witness, &public_inputs1, &mut rng);
-        let test_network = Aby3TestNetwork::default();
+            SharedWitness::share_rep3(&witness, &public_inputs1, &mut rng);
+        let test_network = Rep3TestNetwork::default();
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         let (tx3, rx3) = oneshot::channel();
@@ -217,11 +217,11 @@ mod aby3_tests {
             .zip([public_inputs1, public_inputs2, public_inputs3].into_iter())
         {
             thread::spawn(move || {
-                let aby3 = Aby3Protocol::<ark_bn254::Fr, PartyTestNetwork>::new(net).unwrap();
+                let rep3 = Rep3Protocol::<ark_bn254::Fr, PartyTestNetwork>::new(net).unwrap();
                 let mut prover = CollaborativeGroth16::<
-                    Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>,
+                    Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
-                >::new(aby3);
+                >::new(rep3);
                 tx.send(prover.prove(&pk, &r1cs, &ins, x).unwrap())
             });
         }
@@ -243,16 +243,16 @@ mod aby3_tests {
         use circom_mpc_compiler::CompilerBuilder;
         use circom_types::groth16::witness::Witness;
         use itertools::izip;
-        use mpc_core::protocols::aby3;
+        use mpc_core::protocols::rep3;
         use rand::thread_rng;
         use std::str::FromStr;
         use std::{fs::File, thread};
         use tokio::sync::oneshot;
 
         fn combine_field_elements_for_vm(
-            a: SharedWitness<Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
-            b: SharedWitness<Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
-            c: SharedWitness<Aby3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
+            a: SharedWitness<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
+            b: SharedWitness<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
+            c: SharedWitness<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
         ) -> Vec<ark_bn254::Fr> {
             let mut res = Vec::with_capacity(a.public_inputs.len() + a.witness.len());
             for (a, b, c) in izip!(a.public_inputs, b.public_inputs, c.public_inputs) {
@@ -260,7 +260,7 @@ mod aby3_tests {
                 assert_eq!(b, c);
                 res.push(a);
             }
-            res.extend(aby3::utils::combine_field_elements(
+            res.extend(rep3::utils::combine_field_elements(
                 a.witness, b.witness, c.witness,
             ));
             res
@@ -269,8 +269,8 @@ mod aby3_tests {
         macro_rules! run_test {
             ($file: expr, $input: expr) => {{
                 let mut rng = thread_rng();
-                let inputs = aby3::utils::share_field_elements_for_vm($input, &mut rng);
-                let test_network = Aby3TestNetwork::default();
+                let inputs = rep3::utils::share_field_elements_for_vm($input, &mut rng);
+                let test_network = Rep3TestNetwork::default();
                 let (tx1, rx1) = oneshot::channel();
                 let (tx2, rx2) = oneshot::channel();
                 let (tx3, rx3) = oneshot::channel();
@@ -284,7 +284,7 @@ mod aby3_tests {
                             .build()
                             .parse()
                             .unwrap()
-                            .to_aby3_vm_with_network(net)
+                            .to_rep3_vm_with_network(net)
                             .unwrap();
                         tx.send(witness_extension.run_with_flat(input).unwrap())
                             .unwrap()
