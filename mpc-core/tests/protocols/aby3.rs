@@ -136,9 +136,10 @@ mod field_share {
     use crate::protocols::aby3::Aby3TestNetwork;
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
+    use mpc_core::protocols::aby3::witness_extension_impl::Aby3VmType;
     use mpc_core::protocols::aby3::Aby3PrimeFieldShare;
     use mpc_core::protocols::aby3::{self, fieldshare::Aby3PrimeFieldShareVec, Aby3Protocol};
-    use mpc_core::traits::PrimeFieldMpcProtocol;
+    use mpc_core::traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol};
     use rand::thread_rng;
     use std::{collections::HashSet, thread};
     use tokio::sync::oneshot;
@@ -496,6 +497,54 @@ mod field_share {
         let is_result = aby3::utils::combine_field_element(result1, result2, result3);
         assert!(is_result == x_ || is_result == -x_);
     }
+    macro_rules! bool_op_test {
+        ($name: ident, $op: tt) => {
+            #[tokio::test]
+            async fn $name() {
+                let constant_number = ark_bn254::Fr::from_str("50").unwrap();
+                for i in -1..=1 {
+                    let compare = constant_number + ark_bn254::Fr::from(i);
+                    let test_network = Aby3TestNetwork::default();
+                    let mut rng = thread_rng();
+                    let x_shares = aby3::utils::share_field_element(constant_number, &mut rng);
+                    let should_result = ark_bn254::Fr::from(constant_number < compare);
+                    let (tx1, rx1) = oneshot::channel();
+                    let (tx2, rx2) = oneshot::channel();
+                    let (tx3, rx3) = oneshot::channel();
+                    for ((net, tx), (x, y)) in test_network
+                        .get_party_networks()
+                        .into_iter()
+                        .zip([tx1, tx2, tx3])
+                        .zip(
+                            x_shares
+                                .into_iter()
+                                .zip(vec![Aby3VmType::Public(compare); 3]),
+                        )
+                    {
+                        thread::spawn(move || {
+                            let mut aby3 = Aby3Protocol::new(net).unwrap();
+                            let test = Aby3VmType::Shared(x);
+                            tx.send(aby3.vm_lt(test, y).unwrap())
+                        });
+                    }
+                    let result1 = rx1.await.unwrap();
+                    let result2 = rx2.await.unwrap();
+                    let result3 = rx3.await.unwrap();
+                    match (result1, result2, result3) {
+                        (Aby3VmType::Shared(a), Aby3VmType::Shared(b), Aby3VmType::Shared(c)) => {
+                            let is_result = aby3::utils::combine_field_element(a, b, c);
+                            assert_eq!(is_result, should_result);
+                        }
+                        _ => panic!("must be shared"),
+                    }
+                }
+            }
+        };
+    }
+    bool_op_test!(vm_lt, <);
+    bool_op_test!(vm_le, <=);
+    bool_op_test!(vm_gt, >);
+    bool_op_test!(vm_ge, >=);
 
     #[tokio::test]
     async fn aby3_a2b_zero() {
@@ -623,12 +672,9 @@ mod field_share {
 
 mod curve_share {
     use ark_std::UniformRand;
-    use std::{result, thread};
+    use std::thread;
 
-    use mpc_core::{
-        protocols::aby3::{self, witness_extension_impl::Aby3VmType, Aby3Protocol},
-        traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
-    };
+    use mpc_core::protocols::aby3::{self, Aby3Protocol};
     use rand::thread_rng;
     use tokio::sync::oneshot;
 
@@ -751,43 +797,5 @@ mod curve_share {
         let result3 = rx3.await.unwrap();
         let is_result = aby3::utils::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
-    }
-
-    use std::str::FromStr;
-
-    #[tokio::test]
-    async fn aby3_lt() {
-        let test_network = Aby3TestNetwork::default();
-        let mut rng = thread_rng();
-        let x = ark_bn254::Fr::from_str("50").unwrap();
-        let y = ark_bn254::Fr::from_str("51").unwrap();
-        let x_shares = aby3::utils::share_field_element(x, &mut rng);
-        //let y_shares = aby3::utils::share_field_element(y, &mut rng);
-        let should_result = ark_bn254::Fr::from(x < y);
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
-        for ((net, tx), (x, y)) in test_network
-            .get_party_networks()
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter().zip(vec![Aby3VmType::Public(y); 3]))
-        {
-            thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                let test = Aby3VmType::Shared(x);
-                tx.send(aby3.vm_lt(test, y).unwrap())
-            });
-        }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
-        match (result1, result2, result3) {
-            (Aby3VmType::Shared(a), Aby3VmType::Shared(b), Aby3VmType::Shared(c)) => {
-                let is_result = aby3::utils::combine_field_element(a, b, c);
-                assert_eq!(is_result, should_result);
-            }
-            _ => panic!("must be shared"),
-        }
     }
 }
