@@ -1,25 +1,12 @@
 #[cfg(test)]
 mod rep3_tests {
 
-    use ark_bn254::Bn254;
-    use ark_groth16::{prepare_verifying_key, Groth16};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use bytes::Bytes;
-    use circom_types::{
-        groth16::{proof::JsonProof, witness::Witness, zkey::ZKey},
-        r1cs::R1CS,
-    };
-    use collaborative_groth16::{
-        circuit::Circuit,
-        groth16::{CollaborativeGroth16, SharedWitness},
-    };
+    use circom_types::groth16::witness::Witness;
+    use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::rep3::{id::PartyID, network::Rep3Network, Rep3Protocol};
-    use rand::thread_rng;
-    use std::{fs::File, thread};
-    use tokio::sync::{
-        mpsc::{self, UnboundedReceiver, UnboundedSender},
-        oneshot,
-    };
+    use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
     #[allow(dead_code)]
     fn install_tracing() {
@@ -200,61 +187,6 @@ mod rep3_tests {
         fn recv_prev_many<F: CanonicalDeserialize>(&mut self) -> std::io::Result<Vec<F>> {
             self.recv_many(self.get_id().prev_id())
         }
-    }
-
-    #[tokio::test]
-    async fn e2e_proof_poseidon_bn254() {
-        let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
-        let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
-        let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let (pk1, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
-        let pk2 = pk1.clone();
-        let pk3 = pk1.clone();
-        let pvk = prepare_verifying_key(&pk1.vk);
-        let r1cs1 = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
-        let r1cs2 = r1cs1.clone();
-        let r1cs3 = r1cs1.clone();
-        let circuit = Circuit::new(r1cs1.clone(), witness);
-        let (public_inputs1, witness) = circuit.get_wire_mapping();
-        let public_inputs2 = public_inputs1.clone();
-        let public_inputs3 = public_inputs1.clone();
-        let inputs = circuit.public_inputs();
-        let mut rng = thread_rng();
-        let [witness_share1, witness_share2, witness_share3] =
-            SharedWitness::share_rep3(&witness, &public_inputs1, &mut rng);
-        let test_network = Rep3TestNetwork::default();
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
-        for (((((net, tx), x), r1cs), pk), ins) in test_network
-            .get_party_networks()
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip([witness_share1, witness_share2, witness_share3].into_iter())
-            .zip([r1cs1, r1cs2, r1cs3].into_iter())
-            .zip([pk1, pk2, pk3].into_iter())
-            .zip([public_inputs1, public_inputs2, public_inputs3].into_iter())
-        {
-            thread::spawn(move || {
-                let rep3 = Rep3Protocol::<ark_bn254::Fr, PartyTestNetwork>::new(net).unwrap();
-                let mut prover = CollaborativeGroth16::<
-                    Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>,
-                    Bn254,
-                >::new(rep3);
-                tx.send(prover.prove(&pk, &r1cs, &ins, x).unwrap())
-            });
-        }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
-        assert_eq!(result1, result2);
-        assert_eq!(result2, result3);
-        let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
-        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
-        let verified =
-            Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
-        assert!(verified);
     }
 
     mod witness_extension {

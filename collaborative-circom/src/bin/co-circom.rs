@@ -333,7 +333,7 @@ fn main() -> color_eyre::Result<ExitCode> {
                 CollaborativeGroth16::<Rep3Protocol<ark_bn254::Fr, _>, Bn254>::new(protocol);
 
             // execute prover in MPC
-            let proof = prover.prove_with_matrices(&pk, &matrices, &public_input, witness_share)?;
+            let proof = prover.prove_with_matrices(&pk, &matrices, witness_share)?;
 
             // write result to output file
             if let Some(out) = out {

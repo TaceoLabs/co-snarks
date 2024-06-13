@@ -115,9 +115,9 @@ where
         &mut self,
         pk: &ProvingKey<P>,
         r1cs: &R1CS<P>,
-        public_inputs: &[P::ScalarField],
         private_witness: SharedWitness<T, P>,
     ) -> Result<Proof<P>> {
+        let public_inputs = &private_witness.public_inputs;
         let cs = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
         Self::generate_constraints(public_inputs, r1cs, cs.clone())?;
@@ -140,11 +140,11 @@ where
         &mut self,
         pk: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
-        public_inputs: &[P::ScalarField],
         private_witness: SharedWitness<T, P>,
     ) -> Result<Proof<P>> {
         let num_inputs = matrices.num_instance_variables;
         let num_constraints = matrices.num_constraints;
+        let public_inputs = &private_witness.public_inputs;
         let private_witness = &private_witness.witness;
         let h = self.witness_map_from_matrices(
             &matrices,

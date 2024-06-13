@@ -241,7 +241,6 @@ mod shamir_tests {
         let r1cs = vec![r1cs1.clone(); num_parties];
         let circuit = Circuit::new(r1cs1.clone(), witness);
         let (public_inputs1, witness) = circuit.get_wire_mapping();
-        let public_inputs = vec![public_inputs1.clone(); num_parties];
         let inputs = circuit.public_inputs();
         let mut rng = thread_rng();
         let witness_share = SharedWitness::share_shamir(
@@ -261,13 +260,12 @@ mod shamir_tests {
             rx.push(r);
         }
 
-        for (net, tx, x, r1cs, pk, ins) in izip!(
+        for (net, tx, x, r1cs, pk) in izip!(
             test_network.get_party_networks(),
             tx,
             witness_share,
             r1cs,
             pk,
-            public_inputs
         ) {
             thread::spawn(move || {
                 let shamir =
@@ -276,7 +274,7 @@ mod shamir_tests {
                     ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
                 >::new(shamir);
-                tx.send(prover.prove(&pk, &r1cs, &ins, x).unwrap())
+                tx.send(prover.prove(&pk, &r1cs, x).unwrap())
             });
         }
         let mut results = Vec::with_capacity(num_parties);
@@ -294,9 +292,70 @@ mod shamir_tests {
         assert!(verified);
     }
 
+    async fn e2e_poseidon_bn254_with_zkey_matrices_inner(num_parties: usize, threshold: usize) {
+        let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
+        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let (pk1, matrices) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
+        let pk = vec![pk1.clone(); num_parties];
+        let num_inputs = matrices.num_instance_variables;
+        let pvk = prepare_verifying_key(&pk1.vk);
+        let mut rng = thread_rng();
+
+        let witness_share = SharedWitness::share_shamir(
+            &witness.values[num_inputs..],
+            &witness.values[..num_inputs],
+            threshold,
+            num_parties,
+            &mut rng,
+        );
+
+        let test_network = ShamirTestNetwork::new(num_parties);
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = oneshot::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x, pk) in izip!(test_network.get_party_networks(), tx, witness_share, pk) {
+            let matrices = matrices.clone();
+            thread::spawn(move || {
+                let shamir =
+                    ShamirProtocol::<ark_bn254::Fr, PartyTestNetwork>::new(threshold, net).unwrap();
+                let mut prover = CollaborativeGroth16::<
+                    ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>,
+                    Bn254,
+                >::new(shamir);
+                tx.send(prover.prove_with_matrices(&pk, &matrices, x).unwrap())
+            });
+        }
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.await.unwrap());
+        }
+        let result1 = results.pop().unwrap();
+        for r in results {
+            assert_eq!(result1, r);
+        }
+        let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
+        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
+        let inputs = witness.values[1..num_inputs].to_vec();
+        let verified =
+            Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
+        assert!(verified);
+    }
+
     #[tokio::test]
     async fn e2e_poseidon_bn254() {
         e2e_poseidon_bn254_inner(3, 1).await;
         e2e_poseidon_bn254_inner(10, 4).await;
+    }
+
+    #[tokio::test]
+    async fn e2e_poseidon_bn254_with_zkey_matrices() {
+        e2e_poseidon_bn254_with_zkey_matrices_inner(3, 1).await;
+        e2e_poseidon_bn254_with_zkey_matrices_inner(10, 4).await;
     }
 }
