@@ -216,30 +216,15 @@ impl<F: PrimeField> Aby3VmType<F> {
             (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
                 let a = PlainDriver::val(a);
                 let b = val(b, party);
-                // TODO: handle overflow
-                let neg_b = party.neg(&b);
-                let check = party.add_with_public(&a, &neg_b);
-                // TODO: refactor out this bit extraction block as it is the same for all cases below
-                let bits = party.a2b(&check)?;
-                let bit = Aby3BigUintShare {
-                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                };
+                let bit = party.unsigned_lt_const_lhs(a, b)?;
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
                 let a = val(a, party);
                 let b = PlainDriver::val(b);
-                // TODO: handle overflow
-                let check = party.add_with_public(&-b, &a);
-                let bits = party.a2b(&check)?;
-                let bit = Aby3BigUintShare {
-                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                };
+                let bit = party.unsigned_lt_const_rhs(a, b)?;
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
-            // TODO It is better to directly built the LT circuit on a_bits and b_bits. Due to val we can do an unsigned comparison of the elements over Z_2^k, where 2^k is the smallest power of 2 that is larger than the modulus
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 let a = val(a, party);
                 let b = val(b, party);
