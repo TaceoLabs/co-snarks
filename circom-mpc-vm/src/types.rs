@@ -2,13 +2,13 @@ use std::{collections::HashMap, rc::Rc};
 
 use ark_ec::pairing::Pairing;
 use mpc_core::protocols::{
-    aby3::network::{Aby3MpcNet, Aby3Network},
     plain::PlainDriver,
+    rep3::network::{Rep3MpcNet, Rep3Network},
 };
 use mpc_net::config::NetworkConfig;
 
 use crate::{
-    mpc_vm::{Aby3WitnessExtension, PlainWitnessExtension, WitnessExtension},
+    mpc_vm::{PlainWitnessExtension, Rep3WitnessExtension, WitnessExtension},
     op_codes::CodeBlock,
 };
 use eyre::Result;
@@ -109,17 +109,17 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         PlainWitnessExtension::new(self)
     }
 
-    pub fn to_aby3_vm(
+    pub fn to_rep3_vm(
         self,
         network_config: NetworkConfig,
-    ) -> Result<Aby3WitnessExtension<P, Aby3MpcNet>> {
-        Aby3WitnessExtension::new(self, network_config)
+    ) -> Result<Rep3WitnessExtension<P, Rep3MpcNet>> {
+        Rep3WitnessExtension::new(self, network_config)
     }
 
-    pub fn to_aby3_vm_with_network<N: Aby3Network>(
+    pub fn to_rep3_vm_with_network<N: Rep3Network>(
         self,
         network: N,
-    ) -> Result<Aby3WitnessExtension<P, N>> {
-        Aby3WitnessExtension::from_network(self, network)
+    ) -> Result<Rep3WitnessExtension<P, N>> {
+        Rep3WitnessExtension::from_network(self, network)
     }
 }

@@ -13,21 +13,21 @@ use ark_relations::r1cs::{
 use circom_types::r1cs::R1CS;
 use eyre::Result;
 use itertools::izip;
-use mpc_core::protocols::aby3::network::Aby3Network;
 use mpc_core::protocols::gsz::network::GSZNetwork;
 use mpc_core::protocols::gsz::GSZProtocol;
-use mpc_core::protocols::{aby3, gsz};
+use mpc_core::protocols::rep3::network::Rep3Network;
+use mpc_core::protocols::{gsz, rep3};
 use mpc_core::traits::{EcMpcProtocol, MSMProvider};
 use mpc_core::{
-    protocols::aby3::{network::Aby3MpcNet, Aby3Protocol},
+    protocols::rep3::{network::Rep3MpcNet, Rep3Protocol},
     traits::{FFTProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol},
 };
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-pub type Aby3CollaborativeGroth16<P> =
-    CollaborativeGroth16<Aby3Protocol<<P as Pairing>::ScalarField, Aby3MpcNet>, P>;
+pub type Rep3CollaborativeGroth16<P> =
+    CollaborativeGroth16<Rep3Protocol<<P as Pairing>::ScalarField, Rep3MpcNet>, P>;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
@@ -361,21 +361,21 @@ where
     }
 }
 
-impl<P: Pairing> Aby3CollaborativeGroth16<P> {
+impl<P: Pairing> Rep3CollaborativeGroth16<P> {
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
-        let mpc_net = Aby3MpcNet::new(config)?;
-        let driver = Aby3Protocol::<P::ScalarField, Aby3MpcNet>::new(mpc_net)?;
+        let mpc_net = Rep3MpcNet::new(config)?;
+        let driver = Rep3Protocol::<P::ScalarField, Rep3MpcNet>::new(mpc_net)?;
         Ok(CollaborativeGroth16::new(driver))
     }
 }
 
-impl<N: Aby3Network, P: Pairing> SharedWitness<Aby3Protocol<P::ScalarField, N>, P> {
-    pub fn share_aby3<R: Rng + CryptoRng>(
+impl<N: Rep3Network, P: Pairing> SharedWitness<Rep3Protocol<P::ScalarField, N>, P> {
+    pub fn share_rep3<R: Rng + CryptoRng>(
         witness: &[P::ScalarField],
         public_inputs: &[P::ScalarField],
         rng: &mut R,
     ) -> [Self; 3] {
-        let [share1, share2, share3] = aby3::utils::share_field_elements(witness, rng);
+        let [share1, share2, share3] = rep3::utils::share_field_elements(witness, rng);
         let witness1 = Self {
             public_inputs: public_inputs.to_vec(),
             witness: share1,
@@ -418,8 +418,8 @@ mod test {
     use ark_bn254::Bn254;
     use circom_types::{groth16::witness::Witness, r1cs::R1CS};
     use mpc_core::protocols::{
-        aby3::{network::Aby3MpcNet, Aby3Protocol},
         gsz::{network::GSZMpcNet, GSZProtocol},
+        rep3::{network::Rep3MpcNet, Rep3Protocol},
     };
     use rand::thread_rng;
 
@@ -427,14 +427,14 @@ mod test {
 
     #[ignore]
     #[test]
-    fn test_aby3() {
+    fn test_rep3() {
         let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
         let r1cs = R1CS::<ark_bn254::Bn254>::from_reader(r1cs_file).unwrap();
         let mut rng = thread_rng();
         let [s1, _, _] =
-            SharedWitness::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::share_aby3(
+            SharedWitness::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::share_rep3(
                 &witness.values[r1cs.num_inputs..],
                 &witness.values[..r1cs.num_inputs],
                 &mut rng,

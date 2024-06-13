@@ -18,7 +18,7 @@ use clap::{Parser, Subcommand};
 use collaborative_circom::file_utils;
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
 use color_eyre::eyre::{eyre, Context};
-use mpc_core::protocols::aby3::{self, network::Aby3MpcNet, Aby3Protocol};
+use mpc_core::protocols::rep3::{self, network::Rep3MpcNet, Rep3Protocol};
 use mpc_net::config::NetworkConfig;
 
 fn install_tracing() {
@@ -160,7 +160,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 
             // create witness shares
             let shares =
-                SharedWitness::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::share_aby3(
+                SharedWitness::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::share_rep3(
                     &witness.values[r1cs.num_inputs..],
                     &witness.values[..r1cs.num_inputs],
                     &mut rng,
@@ -202,9 +202,9 @@ fn main() -> color_eyre::Result<ExitCode> {
 
             // create input shares
             let mut shares = [
-                SharedInput::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::default(),
-                SharedInput::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::default(),
-                SharedInput::<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254>::default(),
+                SharedInput::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::default(),
+                SharedInput::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::default(),
+                SharedInput::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::default(),
             ];
 
             let mut rng = rand::thread_rng();
@@ -216,7 +216,7 @@ fn main() -> color_eyre::Result<ExitCode> {
                 };
 
                 let [share0, share1, share2] =
-                    aby3::utils::share_field_elements(&parsed_vals, &mut rng);
+                    rep3::utils::share_field_elements(&parsed_vals, &mut rng);
                 shares[0].shared_inputs.insert(name.clone(), share0);
                 shares[1].shared_inputs.insert(name.clone(), share1);
                 shares[2].shared_inputs.insert(name.clone(), share2);
@@ -254,7 +254,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             // parse input shares
             let input_share_file =
                 BufReader::new(File::open(&input).context("while opening input share file")?);
-            let input_share: SharedInput<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254> =
+            let input_share: SharedInput<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254> =
                 bincode::deserialize_from(input_share_file)
                     .context("trying to parse input share file")?;
 
@@ -275,15 +275,15 @@ fn main() -> color_eyre::Result<ExitCode> {
                 toml::from_str(&config).context("while parsing network config")?;
 
             // connect to network
-            let net = Aby3MpcNet::new(config).context("while connecting to network")?;
+            let net = Rep3MpcNet::new(config).context("while connecting to network")?;
 
             // init MPC protocol
-            let aby3_vm = parsed_circom_circuit
-                .to_aby3_vm_with_network(net)
+            let rep3_vm = parsed_circom_circuit
+                .to_rep3_vm_with_network(net)
                 .context("while constructing MPC VM")?;
 
             // execute witness generation in MPC
-            let result_witness_share = aby3_vm
+            let result_witness_share = rep3_vm
                 .run(input_share)
                 .context("while running witness generation")?;
 
@@ -310,7 +310,7 @@ fn main() -> color_eyre::Result<ExitCode> {
                 BufReader::new(File::open(witness).context("trying to open witness share file")?);
 
             // TODO: how to best allow for different MPC protocols here
-            let witness_share: SharedWitness<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254> =
+            let witness_share: SharedWitness<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254> =
                 bincode::deserialize_from(witness_file)
                     .context("trying to parse witness share file")?;
 
@@ -333,12 +333,12 @@ fn main() -> color_eyre::Result<ExitCode> {
             let config: NetworkConfig = toml::from_str(&config)?;
 
             // connect to network
-            let net = Aby3MpcNet::new(config)?;
+            let net = Rep3MpcNet::new(config)?;
 
             // init MPC protocol
-            let protocol = Aby3Protocol::<ark_bn254::Fr, _>::new(net)?;
+            let protocol = Rep3Protocol::<ark_bn254::Fr, _>::new(net)?;
             let mut prover =
-                CollaborativeGroth16::<Aby3Protocol<ark_bn254::Fr, _>, Bn254>::new(protocol);
+                CollaborativeGroth16::<Rep3Protocol<ark_bn254::Fr, _>, Bn254>::new(protocol);
 
             // execute prover in MPC
             let proof = prover.prove(&pk, &r1cs, &public_input, witness_share)?;
@@ -383,7 +383,7 @@ fn main() -> color_eyre::Result<ExitCode> {
                 File::open(&public_inputs).context("while opening public inputs file")?,
             );
             // TODO: real parsing of public inputs file
-            let witness_share: SharedWitness<Aby3Protocol<ark_bn254::Fr, Aby3MpcNet>, Bn254> =
+            let witness_share: SharedWitness<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254> =
                 bincode::deserialize_from(public_inputs_file)
                     .context("trying to parse witness share file")?;
             // skip 1 atm

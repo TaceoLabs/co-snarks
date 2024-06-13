@@ -1,10 +1,10 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
-use mpc_core::protocols::aby3::id::PartyID;
-use mpc_core::protocols::aby3::network::Aby3Network;
+use mpc_core::protocols::rep3::id::PartyID;
+use mpc_core::protocols::rep3::network::Rep3Network;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-pub struct Aby3TestNetwork {
+pub struct Rep3TestNetwork {
     p1_p2_sender: UnboundedSender<Bytes>,
     p1_p3_sender: UnboundedSender<Bytes>,
     p2_p3_sender: UnboundedSender<Bytes>,
@@ -19,13 +19,13 @@ pub struct Aby3TestNetwork {
     p3_p2_receiver: UnboundedReceiver<Bytes>,
 }
 
-impl Default for Aby3TestNetwork {
+impl Default for Rep3TestNetwork {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Aby3TestNetwork {
+impl Rep3TestNetwork {
     pub fn new() -> Self {
         // AT Most 1 message is buffered before they are read so this should be fine
         let p1_p2 = mpsc::unbounded_channel();
@@ -93,7 +93,7 @@ pub struct PartyTestNetwork {
     _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
 }
 
-impl Aby3Network for PartyTestNetwork {
+impl Rep3Network for PartyTestNetwork {
     fn get_id(&self) -> PartyID {
         self.id
     }
@@ -133,24 +133,24 @@ impl Aby3Network for PartyTestNetwork {
     }
 }
 mod field_share {
-    use crate::protocols::aby3::Aby3TestNetwork;
+    use crate::protocols::rep3::Rep3TestNetwork;
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
-    use mpc_core::protocols::aby3::Aby3PrimeFieldShare;
-    use mpc_core::protocols::aby3::{self, fieldshare::Aby3PrimeFieldShareVec, Aby3Protocol};
+    use mpc_core::protocols::rep3::Rep3PrimeFieldShare;
+    use mpc_core::protocols::rep3::{self, fieldshare::Rep3PrimeFieldShareVec, Rep3Protocol};
     use mpc_core::traits::PrimeFieldMpcProtocol;
     use rand::thread_rng;
     use std::{collections::HashSet, thread};
     use tokio::sync::oneshot;
 
     #[tokio::test]
-    async fn aby3_add() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_add() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = aby3::utils::share_field_element(x, &mut rng);
-        let y_shares = aby3::utils::share_field_element(y, &mut rng);
+        let x_shares = rep3::utils::share_field_element(x, &mut rng);
+        let y_shares = rep3::utils::share_field_element(y, &mut rng);
         let should_result = x + y;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -162,25 +162,25 @@ mod field_share {
             .zip(x_shares.into_iter().zip(y_shares))
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.add(&x, &y))
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.add(&x, &y))
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        let is_result = rep3::utils::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn aby3_sub() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_sub() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = aby3::utils::share_field_element(x, &mut rng);
-        let y_shares = aby3::utils::share_field_element(y, &mut rng);
+        let x_shares = rep3::utils::share_field_element(x, &mut rng);
+        let y_shares = rep3::utils::share_field_element(y, &mut rng);
         let should_result = x - y;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -192,24 +192,24 @@ mod field_share {
             .zip(x_shares.into_iter().zip(y_shares))
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.sub(&x, &y))
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.sub(&x, &y))
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        let is_result = rep3::utils::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
     #[tokio::test]
-    async fn aby3_mul2_then_add() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_mul2_then_add() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = aby3::utils::share_field_element(x, &mut rng);
-        let y_shares = aby3::utils::share_field_element(y, &mut rng);
+        let x_shares = rep3::utils::share_field_element(x, &mut rng);
+        let y_shares = rep3::utils::share_field_element(y, &mut rng);
         let should_result = ((x * y) * y) + x;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -221,23 +221,23 @@ mod field_share {
             .zip(x_shares.into_iter().zip(y_shares))
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                let mul = aby3.mul(&x, &y).unwrap();
-                let mul = aby3.mul(&mul, &y).unwrap();
-                tx.send(aby3.add(&mul, &x))
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                let mul = rep3.mul(&x, &y).unwrap();
+                let mul = rep3.mul(&mul, &y).unwrap();
+                tx.send(rep3.add(&mul, &x))
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        let is_result = rep3::utils::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     use std::str::FromStr;
     #[tokio::test]
-    async fn aby3_mul_vec_bn() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_mul_vec_bn() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = [
             ark_bn254::Fr::from_str(
@@ -300,8 +300,8 @@ mod field_share {
         let mut y_shares2 = vec![];
         let mut y_shares3 = vec![];
         for (x, y) in x.iter().zip(y.iter()) {
-            let [x1, x2, x3] = aby3::utils::share_field_element(*x, &mut rng);
-            let [y1, y2, y3] = aby3::utils::share_field_element(*y, &mut rng);
+            let [x1, x2, x3] = rep3::utils::share_field_element(*x, &mut rng);
+            let [y1, y2, y3] = rep3::utils::share_field_element(*y, &mut rng);
             x_shares1.push(x1);
             x_shares2.push(x2);
             x_shares3.push(x3);
@@ -319,35 +319,35 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(
                 [
-                    Aby3PrimeFieldShareVec::from(x_shares1),
-                    Aby3PrimeFieldShareVec::from(x_shares2),
-                    Aby3PrimeFieldShareVec::from(x_shares3),
+                    Rep3PrimeFieldShareVec::from(x_shares1),
+                    Rep3PrimeFieldShareVec::from(x_shares2),
+                    Rep3PrimeFieldShareVec::from(x_shares3),
                 ]
                 .into_iter()
                 .zip([
-                    Aby3PrimeFieldShareVec::from(y_shares1),
-                    Aby3PrimeFieldShareVec::from(y_shares2),
-                    Aby3PrimeFieldShareVec::from(y_shares3),
+                    Rep3PrimeFieldShareVec::from(y_shares1),
+                    Rep3PrimeFieldShareVec::from(y_shares2),
+                    Rep3PrimeFieldShareVec::from(y_shares3),
                 ]),
             )
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
 
-                let mul = aby3.mul_vec(&x, &y).unwrap();
+                let mul = rep3.mul_vec(&x, &y).unwrap();
                 tx.send(mul)
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_field_elements(result1, result2, result3);
+        let is_result = rep3::utils::combine_field_elements(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn aby3_mul_vec() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_mul_vec() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = (0..1)
             .map(|_| ark_bn254::Fr::from_str("2").unwrap())
@@ -363,8 +363,8 @@ mod field_share {
         let mut y_shares3 = vec![];
         let mut should_result = vec![];
         for (x, y) in x.iter().zip(y.iter()) {
-            let [x1, x2, x3] = aby3::utils::share_field_element(*x, &mut rng);
-            let [y1, y2, y3] = aby3::utils::share_field_element(*y, &mut rng);
+            let [x1, x2, x3] = rep3::utils::share_field_element(*x, &mut rng);
+            let [y1, y2, y3] = rep3::utils::share_field_element(*y, &mut rng);
             x_shares1.push(x1);
             x_shares2.push(x2);
             x_shares3.push(x3);
@@ -383,39 +383,39 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(
                 [
-                    Aby3PrimeFieldShareVec::from(x_shares1),
-                    Aby3PrimeFieldShareVec::from(x_shares2),
-                    Aby3PrimeFieldShareVec::from(x_shares3),
+                    Rep3PrimeFieldShareVec::from(x_shares1),
+                    Rep3PrimeFieldShareVec::from(x_shares2),
+                    Rep3PrimeFieldShareVec::from(x_shares3),
                 ]
                 .into_iter()
                 .zip([
-                    Aby3PrimeFieldShareVec::from(y_shares1),
-                    Aby3PrimeFieldShareVec::from(y_shares2),
-                    Aby3PrimeFieldShareVec::from(y_shares3),
+                    Rep3PrimeFieldShareVec::from(y_shares1),
+                    Rep3PrimeFieldShareVec::from(y_shares2),
+                    Rep3PrimeFieldShareVec::from(y_shares3),
                 ]),
             )
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
 
-                let mul = aby3.mul_vec(&x, &y).unwrap();
-                let mul = aby3.mul_vec(&mul, &y).unwrap();
+                let mul = rep3.mul_vec(&x, &y).unwrap();
+                let mul = rep3.mul_vec(&mul, &y).unwrap();
                 tx.send(mul)
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_field_elements(result1, result2, result3);
+        let is_result = rep3::utils::combine_field_elements(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn aby3_neg() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_neg() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = aby3::utils::share_field_element(x, &mut rng);
+        let x_shares = rep3::utils::share_field_element(x, &mut rng);
         let should_result = -x;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -427,26 +427,26 @@ mod field_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.neg(&x))
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.neg(&x))
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        let is_result = rep3::utils::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn aby3_inv() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_inv() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let mut x = ark_bn254::Fr::rand(&mut rng);
         while x.is_zero() {
             x = ark_bn254::Fr::rand(&mut rng);
         }
-        let x_shares = aby3::utils::share_field_element(x, &mut rng);
+        let x_shares = rep3::utils::share_field_element(x, &mut rng);
         let should_result = x.inverse().unwrap();
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -458,23 +458,23 @@ mod field_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.inv(&x).unwrap())
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.inv(&x).unwrap())
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        let is_result = rep3::utils::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn aby3_a2b_zero() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_a2b_zero() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::zero();
-        let x_shares = aby3::utils::share_field_element(x, &mut rng);
+        let x_shares = rep3::utils::share_field_element(x, &mut rng);
 
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -486,14 +486,14 @@ mod field_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.a2b(&x).unwrap())
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.a2b(&x).unwrap())
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::xor_combine_biguint(result1, result2, result3);
+        let is_result = rep3::utils::xor_combine_biguint(result1, result2, result3);
 
         let should_result = x.into();
         assert_eq!(is_result, should_result);
@@ -501,11 +501,11 @@ mod field_share {
         assert_eq!(is_result_f, x);
     }
     #[tokio::test]
-    async fn aby3_a2b() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_a2b() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = aby3::utils::share_field_element(x, &mut rng);
+        let x_shares = rep3::utils::share_field_element(x, &mut rng);
 
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -517,14 +517,14 @@ mod field_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.a2b(&x).unwrap())
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.a2b(&x).unwrap())
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::xor_combine_biguint(result1, result2, result3);
+        let is_result = rep3::utils::xor_combine_biguint(result1, result2, result3);
 
         let should_result = x.into();
         assert_eq!(is_result, should_result);
@@ -533,11 +533,11 @@ mod field_share {
     }
 
     #[tokio::test]
-    async fn aby3_b2a() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_b2a() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = aby3::utils::xor_share_biguint(x, &mut rng);
+        let x_shares = rep3::utils::xor_share_biguint(x, &mut rng);
 
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -549,20 +549,20 @@ mod field_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.b2a(x).unwrap())
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.b2a(x).unwrap())
             });
         }
-        let result1: Aby3PrimeFieldShare<ark_bn254::Fr> = rx1.await.unwrap();
+        let result1: Rep3PrimeFieldShare<ark_bn254::Fr> = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        let is_result = rep3::utils::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, x);
     }
 
     #[tokio::test]
-    async fn aby3_random() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_random() {
+        let test_network = Rep3TestNetwork::default();
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         let (tx3, rx3) = oneshot::channel();
@@ -572,8 +572,8 @@ mod field_share {
             .zip([tx1, tx2, tx3])
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::<ark_bn254::Fr, _>::new(net).unwrap();
-                tx.send((0..10).map(|_| aby3.rand().unwrap()).collect::<Vec<_>>())
+                let mut rep3 = Rep3Protocol::<ark_bn254::Fr, _>::new(net).unwrap();
+                tx.send((0..10).map(|_| rep3.rand().unwrap()).collect::<Vec<_>>())
             });
         }
         let result1 = rx1.await.unwrap();
@@ -597,21 +597,21 @@ mod curve_share {
     use ark_std::UniformRand;
     use std::thread;
 
-    use mpc_core::protocols::aby3::{self, Aby3Protocol};
+    use mpc_core::protocols::rep3::{self, Rep3Protocol};
     use rand::thread_rng;
     use tokio::sync::oneshot;
 
-    use crate::protocols::aby3::Aby3TestNetwork;
+    use crate::protocols::rep3::Rep3TestNetwork;
     use mpc_core::traits::EcMpcProtocol;
 
     #[tokio::test]
-    async fn aby3_add() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_add() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = aby3::utils::share_curve_point(x, &mut rng);
-        let y_shares = aby3::utils::share_curve_point(y, &mut rng);
+        let x_shares = rep3::utils::share_curve_point(x, &mut rng);
+        let y_shares = rep3::utils::share_curve_point(y, &mut rng);
         let should_result = x + y;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -623,25 +623,25 @@ mod curve_share {
             .zip(x_shares.into_iter().zip(y_shares))
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.add_points(&x, &y))
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.add_points(&x, &y))
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_curve_point(result1, result2, result3);
+        let is_result = rep3::utils::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn aby3_sub() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_sub() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = aby3::utils::share_curve_point(x, &mut rng);
-        let y_shares = aby3::utils::share_curve_point(y, &mut rng);
+        let x_shares = rep3::utils::share_curve_point(x, &mut rng);
+        let y_shares = rep3::utils::share_curve_point(y, &mut rng);
         let should_result = x - y;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -653,24 +653,24 @@ mod curve_share {
             .zip(x_shares.into_iter().zip(y_shares))
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.sub_points(&x, &y))
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.sub_points(&x, &y))
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_curve_point(result1, result2, result3);
+        let is_result = rep3::utils::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn aby3_scalar_mul_public_point() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_scalar_mul_public_point() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let public_point = ark_bn254::G1Projective::rand(&mut rng);
         let scalar = ark_bn254::Fr::rand(&mut rng);
-        let scalar_shares = aby3::utils::share_field_element(scalar, &mut rng);
+        let scalar_shares = rep3::utils::share_field_element(scalar, &mut rng);
         let should_result = public_point * scalar;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -682,24 +682,24 @@ mod curve_share {
             .zip(scalar_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.scalar_mul_public_point(&public_point, &scalar))
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.scalar_mul_public_point(&public_point, &scalar))
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_curve_point(result1, result2, result3);
+        let is_result = rep3::utils::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[tokio::test]
-    async fn aby3_scalar_mul_public_scalar() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_scalar_mul_public_scalar() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let point = ark_bn254::G1Projective::rand(&mut rng);
         let public_scalar = ark_bn254::Fr::rand(&mut rng);
-        let point_shares = aby3::utils::share_curve_point(point, &mut rng);
+        let point_shares = rep3::utils::share_curve_point(point, &mut rng);
         let should_result = point * public_scalar;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -711,14 +711,14 @@ mod curve_share {
             .zip(point_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.scalar_mul_public_scalar(&point, &public_scalar))
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.scalar_mul_public_scalar(&point, &public_scalar))
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_curve_point(result1, result2, result3);
+        let is_result = rep3::utils::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 }

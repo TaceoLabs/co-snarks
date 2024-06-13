@@ -23,16 +23,16 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 [[test]]
-name = "e2e_aby3"
-path = "e2e_tests/aby3.rs"
+name = "e2e_rep3"
+path = "e2e_tests/rep3.rs"
 
 [[test]]
 name = "e2e_gsz"
 path = "e2e_tests/gsz.rs"
 
 [[test]]
-name = "wtns_ext_aby3"
-path = "witness-extension_test/aby3.rs"
+name = "wtns_ext_rep3"
+path = "witness-extension_test/rep3.rs"
 
 [[test]]
 name = "wtns_ext_plain_vm"
