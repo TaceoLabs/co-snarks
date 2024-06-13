@@ -185,6 +185,36 @@ impl<F: PrimeField> Aby3VmType<F> {
         Ok(res)
     }
 
+    fn sqrt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Result<Self> {
+        match a {
+            Aby3VmType::Public(a) => {
+                let mut plain = PlainDriver::default();
+                // Aby3VmType::Public(plain.vm_sqrt(a))
+                todo!()
+            }
+            Aby3VmType::Shared(a) => {
+                let mut sqrt = party.sqrt(&a)?;
+                // Correction to give the result closest to 0
+                // I.e., sqrt - 2 * is_neg * sqrt
+                let is_neg = if let Aby3VmType::Shared(x) = Self::lt(
+                    party,
+                    Aby3VmType::Shared(sqrt.to_owned()),
+                    Aby3VmType::Public(F::zero()),
+                )? {
+                    x
+                } else {
+                    unreachable!()
+                };
+                let mul = party.mul(&sqrt, &is_neg)?;
+                sqrt -= &mul;
+                sqrt -= &mul;
+
+                Ok(Aby3VmType::Shared(sqrt))
+            }
+            _ => todo!("BitShared sqrt not yet implemented"),
+        }
+    }
+
     fn modulo<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
