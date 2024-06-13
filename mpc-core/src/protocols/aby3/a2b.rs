@@ -181,7 +181,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok((r1, r2))
     }
 
-    fn low_depth_binary_add_2(
+    fn low_depth_binary_add(
         &mut self,
         x1: Aby3BigUintShare,
         x2: Aby3BigUintShare,
@@ -189,6 +189,62 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // Add x1 + x2 via a packed Kogge-Stone adder
         let p = &x1 ^ &x2;
         let g = self.and(x1, x2)?;
+        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
+    }
+
+    fn low_depth_binary_sub(
+        &mut self,
+        x1: Aby3BigUintShare,
+        mut x2: Aby3BigUintShare,
+    ) -> IoResult<Aby3BigUintShare> {
+        // Let x2' = be the bit_not of x2
+        // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
+        // This is equivalent to x1 - x2 = x1 + two's complement of x2
+        let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
+        // bitnot of x2
+        x2.a ^= &mask;
+        x2.b ^= &mask;
+        // Now start the Kogge-Stone adder
+        let p = &x1 ^ &x2;
+        let mut g = self.and(x1.to_owned(), x2.to_owned())?;
+        // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
+        g ^= &p & &BigUint::one();
+
+        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
+    }
+
+    fn low_depth_binary_sub_by_const(
+        &mut self,
+        x1: Aby3BigUintShare,
+        x2: BigUint,
+    ) -> IoResult<Aby3BigUintShare> {
+        // two's complement
+        let x2_ = (BigUint::from(1u64) << Self::BITLEN) - x2;
+
+        // Add x1 + x2_ via a packed Kogge-Stone adder
+        let p = x1.xor_with_public(&x2_, self.network.get_id());
+        let g = &x1 & &x2_;
+        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
+    }
+
+    fn low_depth_binary_sub_from_const(
+        &mut self,
+        x1: BigUint,
+        mut x2: Aby3BigUintShare,
+    ) -> IoResult<Aby3BigUintShare> {
+        // Let x2' = be the bit_not of x2
+        // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
+        // This is equivalent to x1 - x2 = x1 + two's complement of x2
+        let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
+        // bitnot of x2
+        x2.a ^= &mask;
+        x2.b ^= &mask;
+        // Now start the Kogge-Stone adder
+        let p = x2.xor_with_public(&x1, self.network.get_id());
+        let mut g = &x2 & &x1;
+        // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
+        g ^= &p & &BigUint::one();
+
         self.kogge_stone_inner(p, g, Self::BITLEN + 1)
     }
 
@@ -245,7 +301,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     fn low_depth_sub_p_cmux(&mut self, mut x: Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
         let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
-        let x_msb = &x >> (Self::BITLEN);
+        let x_msb = &x >> Self::BITLEN;
         x &= &mask;
         let mut y = self.low_depth_binary_sub_p(&x)?;
         let y_msb = &y >> (Self::BITLEN + 1);
@@ -272,12 +328,12 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(res)
     }
 
-    fn low_depth_binary_add_2_mod_p(
+    fn low_depth_binary_add_mod_p(
         &mut self,
         x1: Aby3BigUintShare,
         x2: Aby3BigUintShare,
     ) -> IoResult<Aby3BigUintShare> {
-        let x = self.low_depth_binary_add_2(x1, x2)?;
+        let x = self.low_depth_binary_add(x1, x2)?;
         self.low_depth_sub_p_cmux(x)
     }
 
@@ -308,7 +364,43 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let local_b = self.network.recv_prev()?;
         x01.b = local_b;
 
-        self.low_depth_binary_add_2_mod_p(x01, x2)
+        self.low_depth_binary_add_mod_p(x01, x2)
+    }
+
+    pub fn unsigned_lt(
+        &mut self,
+        x: Aby3PrimeFieldShare<F>,
+        y: Aby3PrimeFieldShare<F>,
+    ) -> IoResult<Aby3BigUintShare> {
+        let a_bits = self.a2b(&x)?;
+        let b_bits = self.a2b(&y)?;
+        let diff = self.low_depth_binary_sub(a_bits, b_bits)?;
+
+        Ok(&diff >> Self::BITLEN)
+    }
+
+    pub fn unsigned_lt_const_lhs(
+        &mut self,
+        x: F,
+        y: Aby3PrimeFieldShare<F>,
+    ) -> IoResult<Aby3BigUintShare> {
+        let a_bigint = x.into();
+        let b_bits = self.a2b(&y)?;
+        let diff = self.low_depth_binary_sub_from_const(a_bigint, b_bits)?;
+
+        Ok(&diff >> Self::BITLEN)
+    }
+
+    pub fn unsigned_lt_const_rhs(
+        &mut self,
+        x: Aby3PrimeFieldShare<F>,
+        y: F,
+    ) -> IoResult<Aby3BigUintShare> {
+        let a_bits = self.a2b(&x)?;
+        let b_bigint = y.into();
+        let diff = self.low_depth_binary_sub_by_const(a_bits, b_bigint)?;
+
+        Ok(&diff >> Self::BITLEN)
     }
 
     // Keep in mind: Only works if input is actually a binary sharing of a valid field element
@@ -351,7 +443,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let local_b = self.network.recv_prev()?;
         y.b = local_b;
 
-        let z = self.low_depth_binary_add_2_mod_p(x, y)?;
+        let z = self.low_depth_binary_add_mod_p(x, y)?;
 
         match self.network.get_id() {
             PartyID::ID0 => {
