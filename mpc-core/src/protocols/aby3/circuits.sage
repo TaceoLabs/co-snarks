@@ -139,10 +139,10 @@ def kogge_sub(a, b):
         g[i] = s_[i] ^^ g[i]
     return g
 
-def kogge_lt(a, b):
+def kogge_ge(a, b):
     length = len(a)
     res = kogge_sub(a, b)
-    return res[length] == 0
+    return res[length] == 1
 
 for i in range(2^10):
     val1 = rand()
@@ -173,6 +173,6 @@ for i in range(2^10):
     assert(res == res2_)
 
     # Comparison
-    res = val1 < val2
-    res2 = kogge_lt(to_bits(val1), to_bits(val2))
+    res = val1 >= val2
+    res2 = kogge_ge(to_bits(val1), to_bits(val2))
     assert(res == res2)

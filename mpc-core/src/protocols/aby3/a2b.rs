@@ -203,15 +203,14 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     fn low_depth_binary_sub(
         &mut self,
         x1: Aby3BigUintShare,
-        mut x2: Aby3BigUintShare,
+        x2: Aby3BigUintShare,
     ) -> IoResult<Aby3BigUintShare> {
         // Let x2' = be the bit_not of x2
         // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
         // This is equivalent to x1 - x2 = x1 + two's complement of x2
         let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
         // bitnot of x2
-        x2.a ^= &mask;
-        x2.b ^= &mask;
+        let x2 = x2.xor_with_public(&mask, self.network.get_id());
         // Now start the Kogge-Stone adder
         let p = &x1 ^ &x2;
         let mut g = self.and(x1.to_owned(), x2.to_owned(), Self::BITLEN)?;
@@ -244,15 +243,14 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     fn low_depth_binary_sub_from_const(
         &mut self,
         x1: BigUint,
-        mut x2: Aby3BigUintShare,
+        x2: Aby3BigUintShare,
     ) -> IoResult<Aby3BigUintShare> {
         // Let x2' = be the bit_not of x2
         // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
         // This is equivalent to x1 - x2 = x1 + two's complement of x2
         let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
         // bitnot of x2
-        x2.a ^= &mask;
-        x2.b ^= &mask;
+        let x2 = x2.xor_with_public(&mask, self.network.get_id());
         // Now start the Kogge-Stone adder
         let p = x2.xor_with_public(&x1, self.network.get_id());
         let mut g = &x2 & &x1;
