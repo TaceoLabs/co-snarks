@@ -138,8 +138,11 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         &mut self,
         a: Aby3BigUintShare,
         b: Aby3BigUintShare,
+        bitlen: usize,
     ) -> IoResult<Aby3BigUintShare> {
-        let (mut mask, mask_b) = self.rngs.rand.random_biguint::<F>();
+        debug_assert!(a.a.bits() <= bitlen as u64);
+        debug_assert!(b.a.bits() <= bitlen as u64);
+        let (mut mask, mask_b) = self.rngs.rand.random_biguint(bitlen);
         mask ^= mask_b;
         let local_a = (a & b) ^ mask;
         self.network.send_next(local_a.to_owned())?;
@@ -155,11 +158,15 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         a: Aby3BigUintShare,
         b1: Aby3BigUintShare,
         b2: Aby3BigUintShare,
+        bitlen: usize,
     ) -> IoResult<(Aby3BigUintShare, Aby3BigUintShare)> {
-        let (mut mask1, mask_b) = self.rngs.rand.random_biguint::<F>();
+        debug_assert!(a.a.bits() <= bitlen as u64);
+        debug_assert!(b1.a.bits() <= bitlen as u64);
+        debug_assert!(b2.a.bits() <= bitlen as u64);
+        let (mut mask1, mask_b) = self.rngs.rand.random_biguint(bitlen);
         mask1 ^= mask_b;
 
-        let (mut mask2, mask_b) = self.rngs.rand.random_biguint::<F>();
+        let (mut mask2, mask_b) = self.rngs.rand.random_biguint(bitlen);
         mask2 ^= mask_b;
 
         let local_a1 = (b1 & &a) ^ mask1;
@@ -188,7 +195,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     ) -> IoResult<Aby3BigUintShare> {
         // Add x1 + x2 via a packed Kogge-Stone adder
         let p = &x1 ^ &x2;
-        let g = self.and(x1, x2)?;
+        let g = self.and(x1, x2, Self::BITLEN)?;
         self.kogge_stone_inner(p, g, Self::BITLEN + 1)
     }
 
@@ -207,7 +214,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         x2.b ^= &mask;
         // Now start the Kogge-Stone adder
         let p = &x1 ^ &x2;
-        let mut g = self.and(x1.to_owned(), x2.to_owned())?;
+        let mut g = self.and(x1.to_owned(), x2.to_owned(), Self::BITLEN)?;
         // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
         g ^= &p & &BigUint::one();
 
@@ -286,7 +293,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
             // TODO: Make and more communication efficient, ATM we send the full element for each level, even though they reduce in size
             // maybe just input the mask into AND?
-            let (r1, r2) = self.and_twice(p_shift, g_, p_)?;
+            let (r1, r2) = self.and_twice(p_shift, g_, p_, bit_len - shift)?;
             p = r2 << shift;
             g ^= r1 << shift;
         }
@@ -303,7 +310,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     ) -> IoResult<Aby3BigUintShare> {
         let mut xor = x_t;
         xor ^= &x_f;
-        let mut and = self.and(c, xor)?;
+        let mut and = self.and(c, xor, Self::BITLEN)?;
         and ^= x_f;
         Ok(and)
     }
@@ -317,11 +324,11 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         y &= &mask;
 
         // Spread the ov share to the whole biguint
-        let ov_a = (x_msb.a.iter_u64_digits().next().unwrap()
-            ^ y_msb.a.iter_u64_digits().next().unwrap())
+        let ov_a = (x_msb.a.iter_u64_digits().next().unwrap_or_default()
+            ^ y_msb.a.iter_u64_digits().next().unwrap_or_default())
             & 1;
-        let ov_b = (x_msb.b.iter_u64_digits().next().unwrap()
-            ^ y_msb.b.iter_u64_digits().next().unwrap())
+        let ov_b = (x_msb.b.iter_u64_digits().next().unwrap_or_default()
+            ^ y_msb.b.iter_u64_digits().next().unwrap_or_default())
             & 1;
 
         let ov_a = if ov_a == 1 {
@@ -350,7 +357,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let mut x01 = Aby3BigUintShare::default();
         let mut x2 = Aby3BigUintShare::default();
 
-        let (mut r, r2) = self.rngs.rand.random_biguint::<F>();
+        let (mut r, r2) = self.rngs.rand.random_biguint(Self::BITLEN);
         r ^= r2;
 
         match self.network.get_id() {
@@ -418,7 +425,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let mut y = Aby3BigUintShare::default();
         let mut res = Aby3PrimeFieldShare::default();
 
-        let (mut r, r2) = self.rngs.rand.random_biguint::<F>();
+        let (mut r, r2) = self.rngs.rand.random_biguint(Self::BITLEN);
         r ^= r2;
 
         match self.network.get_id() {
@@ -490,7 +497,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
             }
             len /= 2;
             let y = &x >> len;
-            x = self.and(x, y)?;
+            x = self.and(x, y, len)?;
         }
         // extract LSB
         let x = &x & &BigUint::one();

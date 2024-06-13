@@ -1,6 +1,6 @@
 use crate::RngType;
 use ark_ec::CurveGroup;
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
 use rand::{Rng, SeedableRng};
 
@@ -56,11 +56,12 @@ impl Aby3Rand {
         (a, b)
     }
 
-    pub fn random_biguint<F: PrimeField>(&mut self) -> (BigUint, BigUint) {
-        let limbsize = (F::MODULUS_BIT_SIZE + 31) / 32;
+    pub fn random_biguint(&mut self, bitlen: usize) -> (BigUint, BigUint) {
+        let limbsize = (bitlen + 31) / 32;
         let a = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
         let b = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
-        (a, b)
+        let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
+        (a & &mask, b & mask)
     }
 
     pub fn random_seeds(&mut self) -> ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) {

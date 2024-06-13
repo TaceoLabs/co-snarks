@@ -477,7 +477,7 @@ impl<F: PrimeField> Aby3VmType<F> {
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
-                let bit_shares = party.and(a_bits, b_bits)?;
+                let bit_shares = party.and(a_bits, b_bits, F::MODULUS_BIT_SIZE as usize)?;
                 let res = party.b2a(bit_shares)?;
                 Aby3VmType::Shared(res)
             }
@@ -520,7 +520,7 @@ impl<F: PrimeField> Aby3VmType<F> {
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
                 let mut xor = &a_bits ^ &b_bits;
-                let and = party.and(a_bits, b_bits)?;
+                let and = party.and(a_bits, b_bits, F::MODULUS_BIT_SIZE as usize)?;
                 xor ^= &and;
                 let res = party.b2a(xor)?;
                 Aby3VmType::Shared(res)

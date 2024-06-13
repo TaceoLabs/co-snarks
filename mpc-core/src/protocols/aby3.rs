@@ -32,7 +32,7 @@ type IoResult<T> = std::io::Result<T>;
 
 pub mod utils {
     use ark_ec::CurveGroup;
-    use ark_ff::PrimeField;
+    use ark_ff::{One, PrimeField};
     use num_bigint::BigUint;
     use rand::{CryptoRng, Rng};
 
@@ -60,8 +60,10 @@ pub mod utils {
     ) -> [Aby3BigUintShare; 3] {
         let val: BigUint = val.into();
         let limbsize = (F::MODULUS_BIT_SIZE + 31) / 32;
-        let a = BigUint::new((0..limbsize).map(|_| rng.gen()).collect());
-        let b = BigUint::new((0..limbsize).map(|_| rng.gen()).collect());
+        let mask = (BigUint::from(1u32) << F::MODULUS_BIT_SIZE) - BigUint::one();
+        let a = BigUint::new((0..limbsize).map(|_| rng.gen()).collect()) & &mask;
+        let b = BigUint::new((0..limbsize).map(|_| rng.gen()).collect()) & mask;
+
         let c = val ^ &a ^ &b;
         let share1 = Aby3BigUintShare::new(a.to_owned(), c.to_owned());
         let share2 = Aby3BigUintShare::new(b.to_owned(), a);

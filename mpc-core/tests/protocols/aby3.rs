@@ -498,6 +498,7 @@ mod field_share {
         let is_result = aby3::utils::combine_field_element(result1, result2, result3);
         assert!(is_result == x_ || is_result == -x_);
     }
+
     macro_rules! bool_op_test {
         ($name: ident, $op: tt) => {
             #[tokio::test]
