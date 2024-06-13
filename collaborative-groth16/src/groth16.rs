@@ -66,6 +66,13 @@ where
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
     )]
+    /// A map from variable names to the public field elements.
+    /// This is a BTreeMap because it implements Canonical(De)Serialize.
+    pub public_inputs: BTreeMap<String, Vec<P::ScalarField>>,
+    #[serde(
+        serialize_with = "crate::serde_compat::ark_se",
+        deserialize_with = "crate::serde_compat::ark_de"
+    )]
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub shared_inputs: BTreeMap<String, T::FieldShareVec>,
@@ -77,6 +84,7 @@ where
 {
     fn default() -> Self {
         Self {
+            public_inputs: BTreeMap::new(),
             shared_inputs: BTreeMap::new(),
         }
     }
@@ -137,7 +145,6 @@ where
         let public_inputs = &private_witness.public_inputs;
         let cs = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
-        tracing::info!("public inputs len: {}", public_inputs.len());
         Self::generate_constraints(public_inputs, r1cs, cs.clone())?;
         let matrices = cs.to_matrices().unwrap();
         let num_inputs = cs.num_instance_variables();

@@ -65,6 +65,12 @@ enum Commands {
         /// The path to the input JSON file
         #[arg(long)]
         input: PathBuf,
+        /// The path to the circuit file
+        #[arg(long)]
+        circuit: String,
+        /// The path to Circom library files
+        #[arg(long)]
+        link_library: Vec<String>,
         /// The MPC protocol to be used
         #[arg(long)]
         protocol: String, // TODO: which datatype? an enum?
@@ -196,11 +202,22 @@ fn main() -> color_eyre::Result<ExitCode> {
         }
         Commands::SplitInput {
             input,
+            circuit,
+            link_library,
             protocol: _,
             out_dir,
         } => {
             file_utils::check_file_exists(&input)?;
+            let circuit_path = PathBuf::from(&circuit);
+            file_utils::check_file_exists(&circuit_path)?;
             file_utils::check_dir_exists(&out_dir)?;
+
+            //get the public inputs if any from parser
+            let mut builder = CompilerBuilder::<Bn254>::new(circuit);
+            for lib in link_library {
+                builder = builder.link_library(lib);
+            }
+            let public_inputs = builder.build().get_public_inputs()?;
 
             // read the input file
             let input_file =
@@ -226,12 +243,21 @@ fn main() -> color_eyre::Result<ExitCode> {
                 } else {
                     vec![parse_field(&val)?]
                 };
-
-                let [share0, share1, share2] =
-                    rep3::utils::share_field_elements(&parsed_vals, &mut rng);
-                shares[0].shared_inputs.insert(name.clone(), share0);
-                shares[1].shared_inputs.insert(name.clone(), share1);
-                shares[2].shared_inputs.insert(name.clone(), share2);
+                if public_inputs.contains(&name) {
+                    shares[0]
+                        .public_inputs
+                        .insert(name.clone(), parsed_vals.clone());
+                    shares[1]
+                        .public_inputs
+                        .insert(name.clone(), parsed_vals.clone());
+                    shares[2].public_inputs.insert(name.clone(), parsed_vals);
+                } else {
+                    let [share0, share1, share2] =
+                        rep3::utils::share_field_elements(&parsed_vals, &mut rng);
+                    shares[0].shared_inputs.insert(name.clone(), share0);
+                    shares[1].shared_inputs.insert(name.clone(), share1);
+                    shares[2].shared_inputs.insert(name.clone(), share2);
+                }
             }
 
             // write out the shares to the output directory
