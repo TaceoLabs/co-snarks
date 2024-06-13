@@ -181,7 +181,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok((r1, r2))
     }
 
-    fn low_depth_binary_add_2(
+    fn low_depth_binary_add(
         &mut self,
         x1: Aby3BigUintShare,
         x2: Aby3BigUintShare,
@@ -189,6 +189,29 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // Add x1 + x2 via a packed Kogge-Stone adder
         let p = &x1 ^ &x2;
         let g = self.and(x1, x2)?;
+        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
+    }
+
+    fn low_depth_binary_sub(
+        &mut self,
+        x1: Aby3BigUintShare,
+        mut x2: Aby3BigUintShare,
+    ) -> IoResult<Aby3BigUintShare> {
+        // Let x2' = be the bit_not of x2
+        // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
+        // This is equivalent to x1 - x2 = x1 + two's complement of x2
+        let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
+        // bitnot of x2
+        x2.a ^= &mask;
+        x2.b ^= &mask;
+        // Now start the Kogge-Stone adder
+        let p = &x1 ^ &x2;
+        let mut g = self.and(x1.to_owned(), x2.to_owned())?;
+        // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g
+        x2 ^= x1;
+        x2 &= &BigUint::one();
+        g ^= x2;
+
         self.kogge_stone_inner(p, g, Self::BITLEN + 1)
     }
 
@@ -272,12 +295,12 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(res)
     }
 
-    fn low_depth_binary_add_2_mod_p(
+    fn low_depth_binary_add_mod_p(
         &mut self,
         x1: Aby3BigUintShare,
         x2: Aby3BigUintShare,
     ) -> IoResult<Aby3BigUintShare> {
-        let x = self.low_depth_binary_add_2(x1, x2)?;
+        let x = self.low_depth_binary_add(x1, x2)?;
         self.low_depth_sub_p_cmux(x)
     }
 
@@ -308,7 +331,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let local_b = self.network.recv_prev()?;
         x01.b = local_b;
 
-        self.low_depth_binary_add_2_mod_p(x01, x2)
+        self.low_depth_binary_add_mod_p(x01, x2)
     }
 
     // Keep in mind: Only works if input is actually a binary sharing of a valid field element
@@ -351,7 +374,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let local_b = self.network.recv_prev()?;
         y.b = local_b;
 
-        let z = self.low_depth_binary_add_2_mod_p(x, y)?;
+        let z = self.low_depth_binary_add_mod_p(x, y)?;
 
         match self.network.get_id() {
             PartyID::ID0 => {
