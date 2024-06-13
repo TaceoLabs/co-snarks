@@ -2,7 +2,8 @@ from sage.all import *
 import random
 
 P = 0x2523648240000001BA344D80000000086121000000000013A700000000000013
-assert(254 == len(P.bits()))
+P_LEN = len(P.bits())
+assert(254 == P_LEN)
 
 
 def rand():
@@ -97,10 +98,57 @@ def kogge_sub_p(a):
     ov = sub[new_len] ^^ a[new_len]
     return (sub[:new_len], ov)
 
+def kogge_sub(a, b):
+    length = len(a)
+    assert(length == len(b))
+
+    # two's complement of b:
+    # invert each bit and set cin to 1
+    for i in range(length):
+        b[i] = b[i] ^^ 1
+
+    p = []
+    g = []
+    for i in range(length):
+        p.append(a[i] ^^ b[i])
+        g.append(a[i] & b[i])
+    s_ = p.copy()
+    # cin = 1:
+    g[0] = g[0] ^^ p[0]
+
+    d = int(floor(log(length, 2)))
+
+    for i in range(0, d):
+        shift = 1 << i
+
+        p_ = p[:-shift].copy()
+        g_ = g[:-shift].copy()
+
+        p_shift = shift_right(p, shift)
+
+        for j in range(shift):
+            p[j] = 0
+        for j in range(0, len(p_)):
+            g_[j] = g_[j] & p_shift[j]
+            p[j + shift] = p_[j] & p_shift[j]
+            g[j + shift] = g[j + shift] ^^ g_[j]
+
+    # cin = 1
+    g = [1] + g[:]
+    for i in range(length):
+        g[i] = s_[i] ^^ g[i]
+    return g
+
+def kogge_lt(a, b):
+    length = len(a)
+    res = kogge_sub(a, b)
+    return res[length] == 0
 
 for i in range(2^10):
     val1 = rand()
     val2 = rand()
+
+    # Addition
     res = val1 + val2
     res2 = kogge_add_2(to_bits(val1), to_bits(val2))
     res2_ = from_bits(res2)
@@ -117,3 +165,14 @@ for i in range(2^10):
         assert(from_bits(sub) == res - P)
     else:
         assert(ov == 0)
+
+    # Subtraction
+    res = (1 << P_LEN) + val1 - val2
+    res2 = kogge_sub(to_bits(val1), to_bits(val2))
+    res2_ = from_bits(res2)
+    assert(res == res2_)
+
+    # Comparison
+    res = val1 < val2
+    res2 = kogge_lt(to_bits(val1), to_bits(val2))
+    assert(res == res2)
