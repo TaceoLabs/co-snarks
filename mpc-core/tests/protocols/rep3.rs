@@ -136,17 +136,12 @@ mod field_share {
     use crate::protocols::rep3::Rep3TestNetwork;
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
-<<<<<<< HEAD:mpc-core/tests/protocols/aby3.rs
     use itertools::izip;
-    use mpc_core::protocols::aby3::witness_extension_impl::Aby3VmType;
-    use mpc_core::protocols::aby3::Aby3PrimeFieldShare;
-    use mpc_core::protocols::aby3::{self, fieldshare::Aby3PrimeFieldShareVec, Aby3Protocol};
-    use mpc_core::traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol};
-=======
+    use mpc_core::protocols::rep3::witness_extension_impl::Rep3VmType;
     use mpc_core::protocols::rep3::Rep3PrimeFieldShare;
     use mpc_core::protocols::rep3::{self, fieldshare::Rep3PrimeFieldShareVec, Rep3Protocol};
+    use mpc_core::traits::CircomWitnessExtensionProtocol;
     use mpc_core::traits::PrimeFieldMpcProtocol;
->>>>>>> main:mpc-core/tests/protocols/rep3.rs
     use rand::thread_rng;
     use std::{collections::HashSet, thread};
     use tokio::sync::oneshot;
@@ -478,13 +473,12 @@ mod field_share {
     }
 
     #[tokio::test]
-<<<<<<< HEAD:mpc-core/tests/protocols/aby3.rs
-    async fn aby3_sqrt() {
-        let test_network = Aby3TestNetwork::default();
+    async fn rep3_sqrt() {
+        let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x_ = ark_bn254::Fr::rand(&mut rng);
         let x = x_.square(); // Guarantees a square root exists
-        let x_shares = aby3::utils::share_field_element(x, &mut rng);
+        let x_shares = rep3::utils::share_field_element(x, &mut rng);
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         let (tx3, rx3) = oneshot::channel();
@@ -495,14 +489,14 @@ mod field_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut aby3 = Aby3Protocol::new(net).unwrap();
-                tx.send(aby3.sqrt(&x).unwrap())
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.sqrt(&x).unwrap())
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        let is_result = rep3::utils::combine_field_element(result1, result2, result3);
         assert!(is_result == x_ || is_result == -x_);
     }
 
@@ -513,10 +507,10 @@ mod field_share {
                 let constant_number = ark_bn254::Fr::from_str("50").unwrap();
                 for i in -1..=1 {
                     let compare = constant_number + ark_bn254::Fr::from(i);
-                    let test_network = Aby3TestNetwork::default();
+                    let test_network = Rep3TestNetwork::default();
                     let mut rng = thread_rng();
-                    let x_shares = aby3::utils::share_field_element(constant_number, &mut rng);
-                    let y_shares = aby3::utils::share_field_element(compare, &mut rng);
+                    let x_shares = rep3::utils::share_field_element(constant_number, &mut rng);
+                    let y_shares = rep3::utils::share_field_element(compare, &mut rng);
                     let should_result = ark_bn254::Fr::from(constant_number $op compare);
                     let (tx1, rx1) = oneshot::channel();
                     let (tx2, rx2) = oneshot::channel();
@@ -526,18 +520,18 @@ mod field_share {
                         [tx1, tx2, tx3],
                         x_shares,
                         y_shares,
-                        vec![Aby3VmType::Public(constant_number); 3],
-                        vec![Aby3VmType::Public(compare); 3]
+                        vec![Rep3VmType::Public(constant_number); 3],
+                        vec![Rep3VmType::Public(compare); 3]
                     ) {
                         thread::spawn(move || {
-                            let mut aby3 = Aby3Protocol::new(net).unwrap();
-                            let x = Aby3VmType::Shared(x_share);
-                            let y = Aby3VmType::Shared(y_share);
+                            let mut rep3 = Rep3Protocol::new(net).unwrap();
+                            let x = Rep3VmType::Shared(x_share);
+                            let y = Rep3VmType::Shared(y_share);
 
-                            let shared_compare = aby3.$name(x.clone(), y.clone()).unwrap();
-                            let rhs_const = aby3.$name(x, y_pub.clone()).unwrap();
-                            let lhs_const = aby3.$name(x_pub.clone(), y).unwrap();
-                            let both_const = aby3.$name(x_pub, y_pub).unwrap();
+                            let shared_compare = rep3.$name(x.clone(), y.clone()).unwrap();
+                            let rhs_const = rep3.$name(x, y_pub.clone()).unwrap();
+                            let lhs_const = rep3.$name(x_pub.clone(), y).unwrap();
+                            let both_const = rep3.$name(x_pub, y_pub).unwrap();
                             tx.send([both_const, shared_compare, rhs_const, lhs_const])
                         });
                     }
@@ -547,18 +541,18 @@ mod field_share {
                     for (result1, result2, result3) in izip!(results1, results2, results3) {
                         match (result1, result2, result3) {
                             (
-                                Aby3VmType::Shared(a),
-                                Aby3VmType::Shared(b),
-                                Aby3VmType::Shared(c),
+                                Rep3VmType::Shared(a),
+                                Rep3VmType::Shared(b),
+                                Rep3VmType::Shared(c),
                             ) => {
-                                let is_result = aby3::utils::combine_field_element(a, b, c);
+                                let is_result = rep3::utils::combine_field_element(a, b, c);
                                 println!("{constant_number} {} {compare} = {is_result}", stringify!($op));
                                 assert_eq!(is_result, should_result);
                             }
                             (
-                                Aby3VmType::Public(a),
-                                Aby3VmType::Public(b),
-                                Aby3VmType::Public(c),
+                                Rep3VmType::Public(a),
+                                Rep3VmType::Public(b),
+                                Rep3VmType::Public(c),
                             ) => {
                                 assert_eq!(a, b);
                                 assert_eq!(b, c);
@@ -578,12 +572,8 @@ mod field_share {
     bool_op_test!(vm_ge, >=);
 
     #[tokio::test]
-    async fn aby3_a2b_zero() {
-        let test_network = Aby3TestNetwork::default();
-=======
     async fn rep3_a2b_zero() {
         let test_network = Rep3TestNetwork::default();
->>>>>>> main:mpc-core/tests/protocols/rep3.rs
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::zero();
         let x_shares = rep3::utils::share_field_element(x, &mut rng);
