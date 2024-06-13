@@ -85,6 +85,26 @@ where
     }
 }
 
+impl<T, P> SharedInput<T, P>
+where
+    P: Pairing,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub fn merge(self, other: Self) -> Result<Self> {
+        let mut shared_inputs = self.shared_inputs;
+        for (key, value) in other.shared_inputs {
+            if shared_inputs.contains_key(&key) {
+                return Err(eyre::eyre!(
+                    "Input with name {} present in multiple input shares",
+                    key
+                ));
+            }
+            shared_inputs.insert(key, value);
+        }
+        Ok(Self { shared_inputs })
+    }
+}
+
 pub struct CollaborativeGroth16<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>

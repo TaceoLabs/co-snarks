@@ -72,6 +72,18 @@ enum Commands {
         #[arg(long)]
         out_dir: PathBuf,
     },
+    /// Merge multiple shared inputs received from multiple parties into a single one
+    MergeInputShares {
+        /// The path to the input JSON file
+        #[arg(long)]
+        inputs: Vec<PathBuf>,
+        /// The MPC protocol to be used
+        #[arg(long)]
+        protocol: String, // TODO: which datatype? an enum?
+        /// The output file where the merged input share is written to
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Evaluates the extended witness generation for the specified circuit and input share in MPC
     GenerateWitness {
         /// The path to the input share file
@@ -237,6 +249,41 @@ fn main() -> color_eyre::Result<ExitCode> {
                 tracing::info!("Wrote input share {} to file {}", i, path.display());
             }
             tracing::info!("Split input into shares successfully")
+        }
+        Commands::MergeInputShares {
+            inputs,
+            protocol: _,
+            out,
+        } => {
+            if inputs.len() < 2 {
+                return Err(eyre!("Need at least two input shares to merge"));
+            }
+            for input in &inputs {
+                file_utils::check_file_exists(input)?;
+            }
+            let mut input_shares = inputs
+                .iter()
+                .map(|input| {
+                    let input_share_file = BufReader::new(
+                        File::open(input).context("while opening input share file")?,
+                    );
+                    let input_share: SharedInput<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254> =
+                        bincode::deserialize_from(input_share_file)
+                            .context("trying to parse input share file")?;
+                    color_eyre::Result::<_>::Ok(input_share)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            dbg!(&input_shares);
+            let start = input_shares.pop().expect("we have at least two inputs");
+            let merged = input_shares.into_iter().try_fold(start, |a, b| {
+                a.merge(b).context("while merging input shares")
+            })?;
+
+            let out_file =
+                BufWriter::new(File::create(&out).context("while creating output file")?);
+            bincode::serialize_into(out_file, &merged)
+                .context("while serializing witness share")?;
+            tracing::info!("Wrote merged input share to file {}", out.display());
         }
         Commands::GenerateWitness {
             input,
