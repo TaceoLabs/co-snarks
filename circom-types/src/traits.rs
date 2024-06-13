@@ -48,6 +48,10 @@ mod $mod_name {
                     buf.as_slice(),
                 )?))
             }
+            #[inline]
+            fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self> {
+                Ok(Self::new_unchecked(Self::from_reader_unchecked(reader)?.into_bigint()))
+            }
         }
         impl CircomArkworksPrimeFieldBridge for Fq {
             const SERIALIZED_BYTE_SIZE: usize = $field_size;
@@ -65,6 +69,10 @@ mod $mod_name {
                 Ok(Self::new_unchecked(BigInt::deserialize_uncompressed(
                     buf.as_slice(),
                 )?))
+            }
+            #[inline]
+            fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self> {
+                Ok(Self::new_unchecked(Self::from_reader_unchecked(reader)?.into_bigint()))
             }
         }
 
@@ -504,11 +512,13 @@ where
 
 pub trait CircomArkworksPrimeFieldBridge: PrimeField {
     const SERIALIZED_BYTE_SIZE: usize;
-    //deserializes field elements and performs montgomery reduction
+    /// Deserializes field elements and performs montgomery reduction
     fn from_reader(reader: impl Read) -> IoResult<Self>;
-    //deserializes field elements that are already in montgomery
-    //from. DOES NOT perform montgomery reduction
+    /// deserializes field elements that are already in montgomery
+    /// form. DOES NOT perform montgomery reduction
     fn from_reader_unchecked(reader: impl Read) -> IoResult<Self>;
+    /// deserializes field elements that are multiplied by R^2 already (elements in zkey are of this form)
+    fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self>;
 }
 
 impl_bn256!();

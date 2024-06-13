@@ -226,7 +226,7 @@ where
             let constraint: u32 = self.reader.read_u32::<LittleEndian>()?;
             let signal: u32 = self.reader.read_u32::<LittleEndian>()?;
 
-            let value = P::ScalarField::from_reader(&mut self.reader)?;
+            let value = P::ScalarField::from_reader_unchecked_for_zkey(&mut self.reader)?;
             max_constraint_index = std::cmp::max(max_constraint_index, constraint);
             matrices[matrix as usize][constraint as usize].push((value, signal as usize));
         }
