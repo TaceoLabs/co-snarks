@@ -1,2 +1,2 @@
-mod gsz;
 mod rep3;
+mod shamir;

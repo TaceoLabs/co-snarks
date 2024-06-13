@@ -4,7 +4,7 @@ use eyre::{bail, eyre, Report};
 use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
 use std::collections::HashMap;
 
-pub trait GSZNetwork {
+pub trait ShamirNetwork {
     fn get_id(&self) -> usize;
     fn get_num_parties(&self) -> usize;
 
@@ -43,7 +43,7 @@ pub trait GSZNetwork {
     ) -> std::io::Result<Vec<F>>;
 }
 
-pub struct GSZMpcNet {
+pub struct ShamirMpcNet {
     id: usize, // 0 <= id < num_parties
     num_parties: usize,
     runtime: tokio::runtime::Runtime,
@@ -51,12 +51,12 @@ pub struct GSZMpcNet {
     channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
 }
 
-impl GSZMpcNet {
+impl ShamirMpcNet {
     pub fn new(config: NetworkConfig) -> Result<Self, Report> {
         let num_parties = config.parties.len();
 
         if config.parties.len() <= 2 {
-            bail!("GSZ protocol requires at least 3 parties")
+            bail!("Shamir protocol requires at least 3 parties")
         }
         let id = config.my_id;
         if id >= num_parties {
@@ -145,7 +145,7 @@ impl GSZMpcNet {
     }
 }
 
-impl GSZNetwork for GSZMpcNet {
+impl ShamirNetwork for ShamirMpcNet {
     fn get_id(&self) -> usize {
         self.id
     }

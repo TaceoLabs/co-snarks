@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod gsz_tests {
+mod shamir_tests {
     use ark_bn254::Bn254;
     use ark_groth16::{prepare_verifying_key, Groth16};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -13,7 +13,7 @@ mod gsz_tests {
         groth16::{CollaborativeGroth16, SharedWitness},
     };
     use itertools::izip;
-    use mpc_core::protocols::gsz::{network::GSZNetwork, GSZProtocol};
+    use mpc_core::protocols::shamir::{network::ShamirNetwork, ShamirProtocol};
     use rand::thread_rng;
     use std::{cmp::Ordering, collections::HashMap, fs::File, thread};
     use tokio::sync::{
@@ -22,13 +22,13 @@ mod gsz_tests {
     };
 
     //todo remove me and put me in common test crate
-    pub struct GSZTestNetwork {
+    pub struct ShamirTestNetwork {
         num_parties: usize,
         sender: HashMap<(usize, usize), UnboundedSender<Bytes>>,
         receiver: HashMap<(usize, usize), UnboundedReceiver<Bytes>>,
     }
 
-    impl GSZTestNetwork {
+    impl ShamirTestNetwork {
         pub fn new(num_parties: usize) -> Self {
             // AT Most 1 message is buffered before they are read so this should be fine
             let mut sender = HashMap::with_capacity(num_parties * (num_parties - 1));
@@ -93,7 +93,7 @@ mod gsz_tests {
         recv: Vec<UnboundedReceiver<Bytes>>,
     }
 
-    impl GSZNetwork for PartyTestNetwork {
+    impl ShamirNetwork for PartyTestNetwork {
         fn get_id(&self) -> usize {
             self.id
         }
@@ -244,10 +244,15 @@ mod gsz_tests {
         let public_inputs = vec![public_inputs1.clone(); num_parties];
         let inputs = circuit.public_inputs();
         let mut rng = thread_rng();
-        let witness_share =
-            SharedWitness::share_gsz(&witness, &public_inputs1, threshold, num_parties, &mut rng);
+        let witness_share = SharedWitness::share_shamir(
+            &witness,
+            &public_inputs1,
+            threshold,
+            num_parties,
+            &mut rng,
+        );
 
-        let test_network = GSZTestNetwork::new(num_parties);
+        let test_network = ShamirTestNetwork::new(num_parties);
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
@@ -265,12 +270,12 @@ mod gsz_tests {
             public_inputs
         ) {
             thread::spawn(move || {
-                let gsz =
-                    GSZProtocol::<ark_bn254::Fr, PartyTestNetwork>::new(threshold, net).unwrap();
+                let shamir =
+                    ShamirProtocol::<ark_bn254::Fr, PartyTestNetwork>::new(threshold, net).unwrap();
                 let mut prover = CollaborativeGroth16::<
-                    GSZProtocol<ark_bn254::Fr, PartyTestNetwork>,
+                    ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
-                >::new(gsz);
+                >::new(shamir);
                 tx.send(prover.prove(&pk, &r1cs, &ins, x).unwrap())
             });
         }
