@@ -192,6 +192,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         self.kogge_stone_inner(p, g, Self::BITLEN + 1)
     }
 
+    // Calculates 2^k + x1 - x2
     fn low_depth_binary_sub(
         &mut self,
         x1: Aby3BigUintShare,
@@ -210,9 +211,12 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
         g ^= &p & &BigUint::one();
 
-        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
+        let res = self.kogge_stone_inner(p, g, Self::BITLEN + 1)?;
+        let res = res.xor_with_public(&BigUint::one(), self.network.get_id()); // cin=1
+        Ok(res)
     }
 
+    // Calculates 2^k + x1 - x2
     fn low_depth_binary_sub_by_const(
         &mut self,
         x1: Aby3BigUintShare,
@@ -224,9 +228,12 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // Add x1 + x2_ via a packed Kogge-Stone adder
         let p = x1.xor_with_public(&x2_, self.network.get_id());
         let g = &x1 & &x2_;
-        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
+
+        let res = self.kogge_stone_inner(p, g, Self::BITLEN + 1)?;
+        Ok(res)
     }
 
+    // Calculates 2^k + x1 - x2
     fn low_depth_binary_sub_from_const(
         &mut self,
         x1: BigUint,
@@ -245,7 +252,9 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
         g ^= &p & &BigUint::one();
 
-        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
+        let res = self.kogge_stone_inner(p, g, Self::BITLEN + 1)?;
+        let res = res.xor_with_public(&BigUint::one(), self.network.get_id()); // cin=1
+        Ok(res)
     }
 
     fn low_depth_binary_sub_p(&mut self, x: &Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
@@ -367,7 +376,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         self.low_depth_binary_add_mod_p(x01, x2)
     }
 
-    pub fn unsigned_lt(
+    pub fn unsigned_ge(
         &mut self,
         x: Aby3PrimeFieldShare<F>,
         y: Aby3PrimeFieldShare<F>,
@@ -379,7 +388,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
     }
 
-    pub fn unsigned_lt_const_lhs(
+    pub fn unsigned_ge_const_lhs(
         &mut self,
         x: F,
         y: Aby3PrimeFieldShare<F>,
@@ -391,7 +400,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
     }
 
-    pub fn unsigned_lt_const_rhs(
+    pub fn unsigned_ge_const_rhs(
         &mut self,
         x: Aby3PrimeFieldShare<F>,
         y: F,

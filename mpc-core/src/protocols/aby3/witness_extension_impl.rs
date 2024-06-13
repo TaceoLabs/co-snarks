@@ -237,48 +237,48 @@ impl<F: PrimeField> Aby3VmType<F> {
     }
 
     fn lt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        // a < b is equivalent to !(a >= b)
+        let ge = Aby3VmType::ge(party, a, b)?;
+        party.vm_bool_not(ge)
+    }
+
+    fn le<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        // a <= b is equivalent to b >= a
+        Aby3VmType::ge(party, b, a)
+    }
+
+    fn gt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        // a > b is equivalent to !(a <= b)
+        let le = Aby3VmType::le(party, a, b)?;
+        party.vm_bool_not(le)
+    }
+
+    fn ge<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let mut plain = PlainDriver::default();
         match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
-                Ok(Aby3VmType::Public(plain.vm_lt(a, b)?))
+                Ok(Aby3VmType::Public(plain.vm_ge(a, b)?))
             }
             (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
                 let a = plain.val(a);
                 let b = val(b, party);
-                let bit = party.unsigned_lt_const_lhs(a, b)?;
+                let bit = party.unsigned_ge_const_lhs(a, b)?;
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
                 let a = val(a, party);
                 let b = plain.val(b);
-                let bit = party.unsigned_lt_const_rhs(a, b)?;
+                let bit = party.unsigned_ge_const_rhs(a, b)?;
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 let a = val(a, party);
                 let b = val(b, party);
-                let bit = party.unsigned_lt(a, b)?;
+                let bit = party.unsigned_ge(a, b)?;
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
-            (_, _) => todo!("BitShared LT not implemented"),
+            (_, _) => todo!("BitShared GE not implemented"),
         }
-    }
-
-    fn le<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
-        // a <= b is equivalent to !(a > b)
-        let gt = Aby3VmType::gt(party, a, b)?;
-        party.vm_bool_not(gt)
-    }
-
-    fn gt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
-        // a > b is equivalent to b < a
-        Aby3VmType::lt(party, b, a)
-    }
-
-    fn ge<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
-        // a >= b is equivalent to !(a < b)
-        let lt = Aby3VmType::lt(party, a, b)?;
-        party.vm_bool_not(lt)
     }
 
     fn eq<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
