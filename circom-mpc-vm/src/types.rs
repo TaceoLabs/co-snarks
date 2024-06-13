@@ -109,7 +109,7 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
 }
 
 //TODO: Add another builder step here?
-//ParserCompiler -> into Rep3/GSZ -> build
+//ParserCompiler -> into Rep3/Shamir -> build
 impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
     pub fn to_plain_vm(self) -> WitnessExtension<P, PlainDriver<P::ScalarField>> {
         PlainWitnessExtension::new(self)
@@ -119,10 +119,10 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         self,
         network_config: NetworkConfig,
     ) -> Result<Rep3WitnessExtension<P, Rep3MpcNet>> {
-        self.to_aby3_vm_with_accelerator(network_config, MpcAccelerator::full_mpc_accelerator())
+        self.to_rep3_vm_with_accelerator(network_config, MpcAccelerator::full_mpc_accelerator())
     }
 
-    pub fn to_aby3_vm_with_accelerator(
+    pub fn to_rep3_vm_with_accelerator(
         self,
         network_config: NetworkConfig,
         mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, Rep3MpcNet>>,
@@ -137,7 +137,7 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         Rep3WitnessExtension::from_network(self, network, MpcAccelerator::full_mpc_accelerator())
     }
 
-    pub fn to_aby3_vm_with_network_with_accelerator<N: Rep3Network>(
+    pub fn to_rep3_vm_with_network_with_accelerator<N: Rep3Network>(
         self,
         network: N,
         mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, N>>,
