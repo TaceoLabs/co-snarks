@@ -2,9 +2,9 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use rand::Rng;
 
-pub(crate) struct Shamir {}
+pub(crate) struct ShamirCore {}
 
-impl Shamir {
+impl ShamirCore {
     pub(crate) fn share<F: PrimeField, R: Rng>(
         secret: F,
         num_shares: usize,
@@ -128,18 +128,18 @@ mod shamir_test {
 
         for _ in 0..TESTRUNS {
             let secret = F::rand(&mut rng);
-            let shares = Shamir::share(secret, NUM_PARTIES, DEGREE, &mut rng);
+            let shares = ShamirCore::share(secret, NUM_PARTIES, DEGREE, &mut rng);
 
             // Test first D+1 shares
-            let lagrange = Shamir::lagrange(DEGREE + 1);
-            let reconstructed = Shamir::reconstruct(&shares[..=DEGREE], &lagrange);
+            let lagrange = ShamirCore::lagrange(DEGREE + 1);
+            let reconstructed = ShamirCore::reconstruct(&shares[..=DEGREE], &lagrange);
             assert_eq!(secret, reconstructed);
 
             // Test random D+1 shares
             let parties = (1..=NUM_PARTIES).choose_multiple(&mut rng, DEGREE + 1);
             let shares = parties.iter().map(|&i| shares[i - 1]).collect::<Vec<_>>();
-            let lagrange = Shamir::lagrange_from_coeff(&parties);
-            let reconstructed = Shamir::reconstruct(&shares, &lagrange);
+            let lagrange = ShamirCore::lagrange_from_coeff(&parties);
+            let reconstructed = ShamirCore::reconstruct(&shares, &lagrange);
             assert_eq!(secret, reconstructed);
         }
     }
@@ -149,18 +149,18 @@ mod shamir_test {
 
         for _ in 0..TESTRUNS {
             let secret = C::rand(&mut rng);
-            let shares = Shamir::share_point(secret, NUM_PARTIES, DEGREE, &mut rng);
+            let shares = ShamirCore::share_point(secret, NUM_PARTIES, DEGREE, &mut rng);
 
             // Test first D+1 shares
-            let lagrange = Shamir::lagrange(DEGREE + 1);
-            let reconstructed = Shamir::reconstruct_point(&shares[..=DEGREE], &lagrange);
+            let lagrange = ShamirCore::lagrange(DEGREE + 1);
+            let reconstructed = ShamirCore::reconstruct_point(&shares[..=DEGREE], &lagrange);
             assert_eq!(secret, reconstructed);
 
             // Test random D+1 shares
             let parties = (1..=NUM_PARTIES).choose_multiple(&mut rng, DEGREE + 1);
             let shares = parties.iter().map(|&i| shares[i - 1]).collect::<Vec<_>>();
-            let lagrange = Shamir::lagrange_from_coeff(&parties);
-            let reconstructed = Shamir::reconstruct_point(&shares, &lagrange);
+            let lagrange = ShamirCore::lagrange_from_coeff(&parties);
+            let reconstructed = ShamirCore::reconstruct_point(&shares, &lagrange);
             assert_eq!(secret, reconstructed);
         }
     }
@@ -170,7 +170,7 @@ mod shamir_test {
 
         for _ in 0..TESTRUNS {
             let secret = C::ScalarField::rand(&mut rng);
-            let shares = Shamir::share(secret, NUM_PARTIES, DEGREE, &mut rng);
+            let shares = ShamirCore::share(secret, NUM_PARTIES, DEGREE, &mut rng);
 
             // To point
             let secret = C::generator().mul(secret);
@@ -180,15 +180,15 @@ mod shamir_test {
                 .collect::<Vec<_>>();
 
             // Test first D+1 shares
-            let lagrange = Shamir::lagrange(DEGREE + 1);
-            let reconstructed = Shamir::reconstruct_point(&shares[..=DEGREE], &lagrange);
+            let lagrange = ShamirCore::lagrange(DEGREE + 1);
+            let reconstructed = ShamirCore::reconstruct_point(&shares[..=DEGREE], &lagrange);
             assert_eq!(secret, reconstructed);
 
             // Test random D+1 shares
             let parties = (1..=NUM_PARTIES).choose_multiple(&mut rng, DEGREE + 1);
             let shares = parties.iter().map(|&i| shares[i - 1]).collect::<Vec<_>>();
-            let lagrange = Shamir::lagrange_from_coeff(&parties);
-            let reconstructed = Shamir::reconstruct_point(&shares, &lagrange);
+            let lagrange = ShamirCore::lagrange_from_coeff(&parties);
+            let reconstructed = ShamirCore::reconstruct_point(&shares, &lagrange);
             assert_eq!(secret, reconstructed);
         }
     }

@@ -27,8 +27,8 @@ name = "e2e_rep3"
 path = "e2e_tests/rep3.rs"
 
 [[test]]
-name = "e2e_gsz"
-path = "e2e_tests/gsz.rs"
+name = "e2e_shamir"
+path = "e2e_tests/shamir.rs"
 
 [[test]]
 name = "wtns_ext_rep3"
