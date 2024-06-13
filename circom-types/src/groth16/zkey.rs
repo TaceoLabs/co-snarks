@@ -521,7 +521,6 @@ mod tests {
 
     #[test]
     fn test_can_deser_bn254_mult2_key() {
-        //I AM BROKEN FIX MEEEEEEEEEEEE
         let zkey = File::open("../test_vectors/bn254/multiplier2/multiplier2.zkey").unwrap();
         let (pk, matrices) = ZKey::<Bn254>::from_reader(zkey).unwrap().split();
         let beta_g1 = test_utils::to_g1_bn254!(
@@ -638,18 +637,12 @@ mod tests {
 
         let a = vec![vec![(
             ark_bn254::Fr::from_str(
-                "20943306190690066775594741490987529540057597548686591419080411327502682591834",
+                "21888242871839275222246405745257275088548364400416034343698204186575808495616",
             )
             .unwrap(),
             2,
         )]];
-        let b = vec![vec![(
-            ark_bn254::Fr::from_str(
-                "944936681149208446651664254269745548490766851729442924617792859073125903783",
-            )
-            .unwrap(),
-            3,
-        )]];
+        let b = vec![vec![(ark_bn254::Fr::from_str("1").unwrap(), 3)]];
         assert_eq!(2, matrices.num_instance_variables);
         assert_eq!(3, matrices.num_witness_variables);
         assert_eq!(1, matrices.num_constraints);
