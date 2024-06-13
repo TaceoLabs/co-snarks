@@ -11,7 +11,7 @@ use ark_relations::r1cs::{
     SynthesisError, Variable,
 };
 use circom_types::r1cs::R1CS;
-use eyre::Result;
+use eyre::{bail, Result};
 use itertools::izip;
 use mpc_core::protocols::rep3::network::Rep3Network;
 use mpc_core::protocols::shamir::network::ShamirNetwork;
@@ -97,16 +97,29 @@ where
 {
     pub fn merge(self, other: Self) -> Result<Self> {
         let mut shared_inputs = self.shared_inputs;
+        let public_inputs = self.public_inputs;
         for (key, value) in other.shared_inputs {
             if shared_inputs.contains_key(&key) {
-                return Err(eyre::eyre!(
-                    "Input with name {} present in multiple input shares",
-                    key
-                ));
+                bail!("Input with name {} present in multiple input shares", key);
+            }
+            if public_inputs.contains_key(&key) || other.public_inputs.contains_key(&key) {
+                bail!("Input name is once in shared inputs and once in public inputs: \"{key}\"");
             }
             shared_inputs.insert(key, value);
         }
-        Ok(Self { shared_inputs })
+        for (key, value) in other.public_inputs {
+            if !public_inputs.contains_key(&key) {
+                bail!("Public input \"{key}\" must be present in all files");
+            }
+            if public_inputs.get(&key).expect("is there we checked") != &value {
+                bail!("Public input \"{key}\" must be same in all files");
+            }
+        }
+
+        Ok(Self {
+            shared_inputs,
+            public_inputs,
+        })
     }
 }
 
