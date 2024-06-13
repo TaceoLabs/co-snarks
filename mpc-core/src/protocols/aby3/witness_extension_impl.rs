@@ -243,11 +243,8 @@ impl<F: PrimeField> Aby3VmType<F> {
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 let a = val(a, party);
                 let b = val(b, party);
-
-                let a_bits = party.a2b(&a)?;
-                let b_bits = party.a2b(&b)?;
-                todo!("unsigned binary lt circuit")
-                // Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
+                let bit = party.unsigned_lt(a, b)?;
+                Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
             (_, _) => todo!("BitShared LT not implemented"),
         }

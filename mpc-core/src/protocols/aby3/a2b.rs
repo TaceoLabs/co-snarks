@@ -268,7 +268,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
 
     fn low_depth_sub_p_cmux(&mut self, mut x: Aby3BigUintShare) -> IoResult<Aby3BigUintShare> {
         let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
-        let x_msb = &x >> (Self::BITLEN);
+        let x_msb = &x >> Self::BITLEN;
         x &= &mask;
         let mut y = self.low_depth_binary_sub_p(&x)?;
         let y_msb = &y >> (Self::BITLEN + 1);
@@ -332,6 +332,18 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         x01.b = local_b;
 
         self.low_depth_binary_add_mod_p(x01, x2)
+    }
+
+    pub fn unsigned_lt(
+        &mut self,
+        x: Aby3PrimeFieldShare<F>,
+        y: Aby3PrimeFieldShare<F>,
+    ) -> IoResult<Aby3BigUintShare> {
+        let a_bits = self.a2b(&x)?;
+        let b_bits = self.a2b(&y)?;
+        let diff = self.low_depth_binary_sub(a_bits, b_bits)?;
+
+        Ok(&diff >> Self::BITLEN)
     }
 
     // Keep in mind: Only works if input is actually a binary sharing of a valid field element
