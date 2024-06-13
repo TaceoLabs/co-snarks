@@ -69,9 +69,6 @@ where
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub shared_inputs: BTreeMap<String, T::FieldShareVec>,
-    // TODO: what to do about multi-dimensional inputs?
-    // In the input json they are just arrays, but i guess they are interpreted as individual signals in circom
-    // What is the naming convention there @fnieddu?
 }
 
 impl<T, P: Pairing> Default for SharedInput<T, P>
@@ -140,6 +137,7 @@ where
         let public_inputs = &private_witness.public_inputs;
         let cs = ConstraintSystem::new_ref();
         cs.set_optimization_goal(OptimizationGoal::Constraints);
+        tracing::info!("public inputs len: {}", public_inputs.len());
         Self::generate_constraints(public_inputs, r1cs, cs.clone())?;
         let matrices = cs.to_matrices().unwrap();
         let num_inputs = cs.num_instance_variables();

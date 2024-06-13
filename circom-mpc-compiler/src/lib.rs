@@ -15,7 +15,10 @@ use circom_mpc_vm::{
     op_codes::{CodeBlock, MpcOpCode},
     types::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl},
 };
-use circom_program_structure::{error_definition::Report, program_archive::ProgramArchive};
+use circom_program_structure::{
+    error_definition::Report,
+    program_archive::{self, ProgramArchive},
+};
 use circom_type_analysis::check_types;
 use eyre::eyre;
 use eyre::{bail, Result};
@@ -107,7 +110,10 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         }
     }
 
-    fn build_circuit(&self, program_archive: ProgramArchive) -> Result<CircomCircuit> {
+    fn build_circuit(
+        &self,
+        program_archive: ProgramArchive,
+    ) -> Result<(CircomCircuit, Vec<String>)> {
         let build_config = BuildConfig {
             no_rounds: usize::MAX, //simplification_style. Use default from their lib
             flag_json_sub: false,
@@ -120,13 +126,17 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             inspect_constraints: false,
             prime: "bn128".to_owned(),
         };
+        let public_inputs = program_archive.public_inputs.clone();
         let (_, vcp) = circom_constraint_generation::build_circuit(program_archive, build_config)
             .map_err(|_| eyre!("cannot build vcp"))?;
         let flags = CompilationFlags {
             main_inputs_log: false,
             wat_flag: false,
         };
-        Ok(CircomCircuit::build(vcp, flags, &self.version))
+        Ok((
+            CircomCircuit::build(vcp, flags, &self.version),
+            public_inputs,
+        ))
     }
 
     fn emit_store_opcodes(
@@ -507,7 +517,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
 
     pub fn parse(mut self) -> Result<CollaborativeCircomCompilerParsed<P>> {
         let program_archive = self.get_program_archive()?;
-        let circuit = self.build_circuit(program_archive)?;
+        let (circuit, public_inputs) = self.build_circuit(program_archive)?;
         let constant_table = circuit
             .c_producer
             .get_field_constant_list()
