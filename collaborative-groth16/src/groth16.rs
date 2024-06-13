@@ -136,6 +136,27 @@ where
         let s = self.driver.rand()?;
         self.create_proof_with_assignment(pk, r, s, &h, &public_inputs[1..], private_witness)
     }
+    pub fn prove_with_matrices(
+        &mut self,
+        pk: &ProvingKey<P>,
+        matrices: &ConstraintMatrices<P::ScalarField>,
+        public_inputs: &[P::ScalarField],
+        private_witness: SharedWitness<T, P>,
+    ) -> Result<Proof<P>> {
+        let num_inputs = matrices.num_instance_variables;
+        let num_constraints = matrices.num_constraints;
+        let private_witness = &private_witness.witness;
+        let h = self.witness_map_from_matrices(
+            &matrices,
+            num_constraints,
+            num_inputs,
+            public_inputs,
+            private_witness,
+        )?;
+        let r = self.driver.rand()?;
+        let s = self.driver.rand()?;
+        self.create_proof_with_assignment(pk, r, s, &h, &public_inputs[1..], private_witness)
+    }
 
     fn witness_map_from_matrices(
         &mut self,
