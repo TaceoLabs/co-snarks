@@ -35,7 +35,7 @@ pub trait ShamirNetwork {
         data: F,
     ) -> std::io::Result<Vec<F>>;
 
-    // sends data to the next num parties and receives from the previous num
+    // sends data to the next num parties and receives from the previous num (including myself)
     fn broadcast_next<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
         &mut self,
         data: F,
@@ -44,11 +44,11 @@ pub trait ShamirNetwork {
 }
 
 pub struct ShamirMpcNet {
-    id: usize, // 0 <= id < num_parties
-    num_parties: usize,
-    runtime: tokio::runtime::Runtime,
-    net_handler: MpcNetworkHandler,
-    channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
+    pub(crate) id: usize, // 0 <= id < num_parties
+    pub(crate) num_parties: usize,
+    pub(crate) runtime: tokio::runtime::Runtime,
+    pub(crate) net_handler: MpcNetworkHandler,
+    pub(crate) channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
 }
 
 impl ShamirMpcNet {
@@ -222,23 +222,20 @@ impl ShamirNetwork for ShamirMpcNet {
         let send_data = Bytes::from(ser_data);
 
         // Send
-        for s in 1..=num {
+        for s in 1..num {
             let other_id = (self.id + s) % self.num_parties;
-            if other_id != self.id {
-                self.send_bytes(other_id, send_data.to_owned())?;
-            }
+            // if other_id != self.id {
+            self.send_bytes(other_id, send_data.to_owned())?;
+            // }
         }
 
         // Receive
         let mut res = Vec::with_capacity(num);
-        for r in 1..=num {
+        res.push(data);
+        for r in 1..num {
             let other_id = (self.id + self.num_parties - r) % self.num_parties;
-            if other_id != self.id {
-                let data = self.recv(other_id)?;
-                res.push(data);
-            } else {
-                res.push(data.to_owned());
-            }
+            let data = self.recv(other_id)?;
+            res.push(data);
         }
 
         Ok(res)

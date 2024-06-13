@@ -85,12 +85,12 @@ impl Rep3TestNetwork {
 
 #[derive(Debug)]
 pub struct PartyTestNetwork {
-    id: PartyID,
-    send_prev: UnboundedSender<Bytes>,
-    send_next: UnboundedSender<Bytes>,
-    recv_prev: UnboundedReceiver<Bytes>,
-    recv_next: UnboundedReceiver<Bytes>,
-    _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
+    pub(crate) id: PartyID,
+    pub(crate) send_prev: UnboundedSender<Bytes>,
+    pub(crate) send_next: UnboundedSender<Bytes>,
+    pub(crate) recv_prev: UnboundedReceiver<Bytes>,
+    pub(crate) recv_next: UnboundedReceiver<Bytes>,
+    pub(crate) _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
 }
 
 impl Rep3Network for PartyTestNetwork {

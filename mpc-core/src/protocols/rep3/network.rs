@@ -45,11 +45,11 @@ pub trait Rep3Network {
 
 #[derive(Debug)]
 pub struct Rep3MpcNet {
-    id: PartyID,
-    runtime: tokio::runtime::Runtime,
-    net_handler: MpcNetworkHandler,
-    chan_next: ChannelHandle<Bytes, BytesMut>,
-    chan_prev: ChannelHandle<Bytes, BytesMut>,
+    pub(crate) id: PartyID,
+    pub(crate) runtime: tokio::runtime::Runtime,
+    pub(crate) net_handler: MpcNetworkHandler,
+    pub(crate) chan_next: ChannelHandle<Bytes, BytesMut>,
+    pub(crate) chan_prev: ChannelHandle<Bytes, BytesMut>,
 }
 
 impl Rep3MpcNet {
