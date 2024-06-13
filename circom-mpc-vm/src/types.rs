@@ -3,11 +3,15 @@ use std::{collections::HashMap, rc::Rc};
 use ark_ec::pairing::Pairing;
 use mpc_core::protocols::{
     plain::PlainDriver,
-    rep3::network::{Rep3MpcNet, Rep3Network},
+    rep3::{
+        network::{Rep3MpcNet, Rep3Network},
+        Rep3Protocol,
+    },
 };
 use mpc_net::config::NetworkConfig;
 
 use crate::{
+    accelerator::MpcAccelerator,
     mpc_vm::{PlainWitnessExtension, Rep3WitnessExtension, WitnessExtension},
     op_codes::CodeBlock,
 };
@@ -104,8 +108,10 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
     }
 }
 
+//TODO: Add another builder step here?
+//ParserCompiler -> into Rep3/Shamir -> build
 impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
-    pub fn to_plain_vm(self) -> WitnessExtension<P, PlainDriver> {
+    pub fn to_plain_vm(self) -> WitnessExtension<P, PlainDriver<P::ScalarField>> {
         PlainWitnessExtension::new(self)
     }
 
@@ -113,13 +119,29 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         self,
         network_config: NetworkConfig,
     ) -> Result<Rep3WitnessExtension<P, Rep3MpcNet>> {
-        Rep3WitnessExtension::new(self, network_config)
+        self.to_rep3_vm_with_accelerator(network_config, MpcAccelerator::full_mpc_accelerator())
+    }
+
+    pub fn to_rep3_vm_with_accelerator(
+        self,
+        network_config: NetworkConfig,
+        mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, Rep3MpcNet>>,
+    ) -> Result<Rep3WitnessExtension<P, Rep3MpcNet>> {
+        Rep3WitnessExtension::new(self, network_config, mpc_accelerator)
     }
 
     pub fn to_rep3_vm_with_network<N: Rep3Network>(
         self,
         network: N,
     ) -> Result<Rep3WitnessExtension<P, N>> {
-        Rep3WitnessExtension::from_network(self, network)
+        Rep3WitnessExtension::from_network(self, network, MpcAccelerator::full_mpc_accelerator())
+    }
+
+    pub fn to_rep3_vm_with_network_with_accelerator<N: Rep3Network>(
+        self,
+        network: N,
+        mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, N>>,
+    ) -> Result<Rep3WitnessExtension<P, N>> {
+        Rep3WitnessExtension::from_network(self, network, mpc_accelerator)
     }
 }

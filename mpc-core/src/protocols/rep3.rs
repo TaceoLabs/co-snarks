@@ -32,7 +32,7 @@ type IoResult<T> = std::io::Result<T>;
 
 pub mod utils {
     use ark_ec::CurveGroup;
-    use ark_ff::PrimeField;
+    use ark_ff::{One, PrimeField};
     use num_bigint::BigUint;
     use rand::{CryptoRng, Rng};
 
@@ -60,8 +60,10 @@ pub mod utils {
     ) -> [Rep3BigUintShare; 3] {
         let val: BigUint = val.into();
         let limbsize = (F::MODULUS_BIT_SIZE + 31) / 32;
-        let a = BigUint::new((0..limbsize).map(|_| rng.gen()).collect());
-        let b = BigUint::new((0..limbsize).map(|_| rng.gen()).collect());
+        let mask = (BigUint::from(1u32) << F::MODULUS_BIT_SIZE) - BigUint::one();
+        let a = BigUint::new((0..limbsize).map(|_| rng.gen()).collect()) & &mask;
+        let b = BigUint::new((0..limbsize).map(|_| rng.gen()).collect()) & mask;
+
         let c = val ^ &a ^ &b;
         let share1 = Rep3BigUintShare::new(a.to_owned(), c.to_owned());
         let share2 = Rep3BigUintShare::new(b.to_owned(), a);
@@ -239,6 +241,55 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
             rngs,
             field: PhantomData,
         })
+    }
+
+    // This algorithm produces a sqrt of a. It is not guaranteed to be the positive or negative square root (if interpreted as signed field element).
+    pub fn sqrt(&mut self, a: &Rep3PrimeFieldShare<F>) -> IoResult<Rep3PrimeFieldShare<F>> {
+        let r_squ = self.rand()?;
+        let r_inv = self.rand()?;
+
+        let rr = self.mul(&r_squ, &r_squ)?;
+
+        // parallel mul of rr with a and r_squ with r_inv
+        let lhs = Rep3PrimeFieldShareVec::new(vec![rr.a, r_squ.a], vec![rr.b, r_squ.b]);
+        let rhs = Rep3PrimeFieldShareVec::new(vec![a.a, r_inv.a], vec![a.b, r_inv.b]);
+        let mul = self.mul_vec(&lhs, &rhs)?;
+
+        // Open mul
+        self.network.send_next(mul.b.to_owned())?;
+        let c = self.network.recv_prev::<Vec<F>>()?;
+        if c.len() != 2 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of square root in MPC: invalid number of elements received",
+            ));
+        }
+        let y_sq = (mul.a[0] + mul.b[0] + c[0]).sqrt();
+        let y_inv = mul.a[1] + mul.b[1] + c[1];
+
+        // postprocess the square and inverse
+        let y_sq = match y_sq {
+            Some(y) => y,
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "During execution of square root in MPC: cannot compute square root",
+                ));
+            }
+        };
+
+        if y_inv.is_zero() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of square root in MPC: cannot compute inverse of zero",
+            ));
+        }
+        let y_inv = y_inv.inverse().unwrap();
+
+        let r_squ_inv = r_inv * y_inv;
+        let a_sqrt = r_squ_inv * y_sq;
+
+        Ok(a_sqrt)
     }
 }
 

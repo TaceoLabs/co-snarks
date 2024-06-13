@@ -136,8 +136,11 @@ mod field_share {
     use crate::protocols::rep3::Rep3TestNetwork;
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
+    use itertools::izip;
+    use mpc_core::protocols::rep3::witness_extension_impl::Rep3VmType;
     use mpc_core::protocols::rep3::Rep3PrimeFieldShare;
     use mpc_core::protocols::rep3::{self, fieldshare::Rep3PrimeFieldShareVec, Rep3Protocol};
+    use mpc_core::traits::CircomWitnessExtensionProtocol;
     use mpc_core::traits::PrimeFieldMpcProtocol;
     use rand::thread_rng;
     use std::{collections::HashSet, thread};
@@ -468,6 +471,105 @@ mod field_share {
         let is_result = rep3::utils::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
+
+    #[tokio::test]
+    async fn rep3_sqrt() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x_ = ark_bn254::Fr::rand(&mut rng);
+        let x = x_.square(); // Guarantees a square root exists
+        let x_shares = rep3::utils::share_field_element(x, &mut rng);
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+        let (tx3, rx3) = oneshot::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut rep3 = Rep3Protocol::new(net).unwrap();
+                tx.send(rep3.sqrt(&x).unwrap())
+            });
+        }
+        let result1 = rx1.await.unwrap();
+        let result2 = rx2.await.unwrap();
+        let result3 = rx3.await.unwrap();
+        let is_result = rep3::utils::combine_field_element(result1, result2, result3);
+        assert!(is_result == x_ || is_result == -x_);
+    }
+
+    macro_rules! bool_op_test {
+        ($name: ident, $op: tt) => {
+            #[tokio::test]
+            async fn $name() {
+                let constant_number = ark_bn254::Fr::from_str("50").unwrap();
+                for i in -1..=1 {
+                    let compare = constant_number + ark_bn254::Fr::from(i);
+                    let test_network = Rep3TestNetwork::default();
+                    let mut rng = thread_rng();
+                    let x_shares = rep3::utils::share_field_element(constant_number, &mut rng);
+                    let y_shares = rep3::utils::share_field_element(compare, &mut rng);
+                    let should_result = ark_bn254::Fr::from(constant_number $op compare);
+                    let (tx1, rx1) = oneshot::channel();
+                    let (tx2, rx2) = oneshot::channel();
+                    let (tx3, rx3) = oneshot::channel();
+                    for (net, tx, x_share, y_share, x_pub, y_pub) in izip!(
+                        test_network.get_party_networks(),
+                        [tx1, tx2, tx3],
+                        x_shares,
+                        y_shares,
+                        vec![Rep3VmType::Public(constant_number); 3],
+                        vec![Rep3VmType::Public(compare); 3]
+                    ) {
+                        thread::spawn(move || {
+                            let mut rep3 = Rep3Protocol::new(net).unwrap();
+                            let x = Rep3VmType::Shared(x_share);
+                            let y = Rep3VmType::Shared(y_share);
+
+                            let shared_compare = rep3.$name(x.clone(), y.clone()).unwrap();
+                            let rhs_const = rep3.$name(x, y_pub.clone()).unwrap();
+                            let lhs_const = rep3.$name(x_pub.clone(), y).unwrap();
+                            let both_const = rep3.$name(x_pub, y_pub).unwrap();
+                            tx.send([both_const, shared_compare, rhs_const, lhs_const])
+                        });
+                    }
+                    let results1 = rx1.await.unwrap();
+                    let results2 = rx2.await.unwrap();
+                    let results3 = rx3.await.unwrap();
+                    for (result1, result2, result3) in izip!(results1, results2, results3) {
+                        match (result1, result2, result3) {
+                            (
+                                Rep3VmType::Shared(a),
+                                Rep3VmType::Shared(b),
+                                Rep3VmType::Shared(c),
+                            ) => {
+                                let is_result = rep3::utils::combine_field_element(a, b, c);
+                                println!("{constant_number} {} {compare} = {is_result}", stringify!($op));
+                                assert_eq!(is_result, should_result);
+                            }
+                            (
+                                Rep3VmType::Public(a),
+                                Rep3VmType::Public(b),
+                                Rep3VmType::Public(c),
+                            ) => {
+                                assert_eq!(a, b);
+                                assert_eq!(b, c);
+                                println!("{constant_number} {} {compare} = {a}", stringify!($op));
+                                assert_eq!(a, should_result);
+                            }
+                            _ => panic!("must be shared"),
+                        }
+                    }
+                }
+            }
+        };
+    }
+    bool_op_test!(vm_lt, <);
+    bool_op_test!(vm_le, <=);
+    bool_op_test!(vm_gt, >);
+    bool_op_test!(vm_ge, >=);
 
     #[tokio::test]
     async fn rep3_a2b_zero() {

@@ -185,6 +185,35 @@ impl<F: PrimeField> Rep3VmType<F> {
         Ok(res)
     }
 
+    fn sqrt<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> Result<Self> {
+        match a {
+            Rep3VmType::Public(a) => {
+                let mut plain = PlainDriver::default();
+                Ok(Rep3VmType::Public(plain.vm_sqrt(a)?))
+            }
+            Rep3VmType::Shared(a) => {
+                let sqrt = party.sqrt(&a)?;
+                // Correction to give the result closest to 0
+                // I.e., 2 * is_pos * sqrt - sqrt
+                let is_pos = if let Rep3VmType::Shared(x) = Self::ge(
+                    party,
+                    Rep3VmType::Shared(sqrt.to_owned()),
+                    Rep3VmType::Public(F::zero()),
+                )? {
+                    x
+                } else {
+                    unreachable!()
+                };
+                let mut mul = party.mul(&sqrt, &is_pos)?;
+                mul.double();
+                mul -= &sqrt;
+
+                Ok(Rep3VmType::Shared(mul))
+            }
+            _ => todo!("BitShared sqrt not yet implemented"),
+        }
+    }
+
     fn modulo<N: Rep3Network>(_party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
@@ -208,68 +237,48 @@ impl<F: PrimeField> Rep3VmType<F> {
     }
 
     fn lt<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        // a < b is equivalent to !(a >= b)
+        let ge = Rep3VmType::ge(party, a, b)?;
+        party.vm_bool_not(ge)
+    }
+
+    fn le<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        // a <= b is equivalent to b >= a
+        Rep3VmType::ge(party, b, a)
+    }
+
+    fn gt<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        // a > b is equivalent to !(a <= b)
+        let le = Rep3VmType::le(party, a, b)?;
+        party.vm_bool_not(le)
+    }
+
+    fn ge<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+        let mut plain = PlainDriver::default();
         match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
-                let mut plain = PlainDriver::default();
-                Ok(Rep3VmType::Public(plain.vm_lt(a, b)?))
+                Ok(Rep3VmType::Public(plain.vm_ge(a, b)?))
             }
             (Rep3VmType::Public(a), Rep3VmType::Shared(b)) => {
-                let a = PlainDriver::val(a);
+                let a = plain.val(a);
                 let b = val(b, party);
-                // TODO: handle overflow
-                let neg_b = party.neg(&b);
-                let check = party.add_with_public(&a, &neg_b);
-                // TODO: refactor out this bit extraction block as it is the same for all cases below
-                let bits = party.a2b(&check)?;
-                let bit = Rep3BigUintShare {
-                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                };
+                let bit = party.unsigned_ge_const_lhs(a, b)?;
                 Ok(Rep3VmType::Shared(party.bit_inject(bit)?))
             }
             (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => {
                 let a = val(a, party);
-                let b = PlainDriver::val(b);
-                // TODO: handle overflow
-                let check = party.add_with_public(&-b, &a);
-                let bits = party.a2b(&check)?;
-                let bit = Rep3BigUintShare {
-                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                };
+                let b = plain.val(b);
+                let bit = party.unsigned_ge_const_rhs(a, b)?;
                 Ok(Rep3VmType::Shared(party.bit_inject(bit)?))
             }
             (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
                 let a = val(a, party);
                 let b = val(b, party);
-                // TODO: handle overflow
-                let check = party.sub(&a, &b);
-                let bits = party.a2b(&check)?;
-                let bit = Rep3BigUintShare {
-                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                };
+                let bit = party.unsigned_ge(a, b)?;
                 Ok(Rep3VmType::Shared(party.bit_inject(bit)?))
             }
-            (_, _) => todo!("Shared LT not implemented"),
+            (_, _) => todo!("BitShared GE not implemented"),
         }
-    }
-
-    fn le<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
-        // a <= b is equivalent to !(a > b)
-        let gt = Rep3VmType::gt(party, a, b)?;
-        party.vm_bool_not(gt)
-    }
-
-    fn gt<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
-        // a > b is equivalent to b < a
-        Rep3VmType::lt(party, b, a)
-    }
-
-    fn ge<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
-        // a >= b is equivalent to !(a < b)
-        let lt = Rep3VmType::lt(party, a, b)?;
-        party.vm_bool_not(lt)
     }
 
     fn eq<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
@@ -468,7 +477,7 @@ impl<F: PrimeField> Rep3VmType<F> {
             (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
-                let bit_shares = party.and(a_bits, b_bits)?;
+                let bit_shares = party.and(a_bits, b_bits, F::MODULUS_BIT_SIZE as usize)?;
                 let res = party.b2a(bit_shares)?;
                 Rep3VmType::Shared(res)
             }
@@ -511,7 +520,7 @@ impl<F: PrimeField> Rep3VmType<F> {
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
                 let mut xor = &a_bits ^ &b_bits;
-                let and = party.and(a_bits, b_bits)?;
+                let and = party.and(a_bits, b_bits, F::MODULUS_BIT_SIZE as usize)?;
                 xor ^= &and;
                 let res = party.b2a(xor)?;
                 Rep3VmType::Shared(res)
@@ -588,6 +597,10 @@ impl<F: PrimeField, N: Rep3Network> CircomWitnessExtensionProtocol<F> for Rep3Pr
 
     fn vm_pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::pow(self, a, b)
+    }
+
+    fn vm_sqrt(&mut self, a: Self::VmType) -> Result<Self::VmType> {
+        Self::VmType::sqrt(self, a)
     }
 
     fn vm_mod(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {

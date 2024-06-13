@@ -326,7 +326,7 @@ mod rep3_tests {
         witness_extension_test_rep3!(binsum_test);
         witness_extension_test_rep3!(constants_test);
         witness_extension_test_rep3!(control_flow);
-        //witness_extension_test_rep3!(eddsa_test);
+        witness_extension_test_rep3!(eddsa_test);
         witness_extension_test_rep3!(eddsa_verify);
         witness_extension_test_rep3!(eddsamimc_test);
         witness_extension_test_rep3!(eddsaposeidon_test);
@@ -361,7 +361,7 @@ mod rep3_tests {
         witness_extension_test_rep3!(pedersen2_test);
         witness_extension_test_rep3!(pedersen_hasher);
         witness_extension_test_rep3!(pedersen_test);
-        //witness_extension_test_rep3!(pointbits_loopback);
+        witness_extension_test_rep3!(pointbits_loopback);
         witness_extension_test_rep3!(poseidon3_test);
         witness_extension_test_rep3!(poseidon6_test);
         witness_extension_test_rep3!(poseidon_hasher1);
@@ -374,65 +374,9 @@ mod rep3_tests {
         witness_extension_test_rep3!(shared_control_flow);
         witness_extension_test_rep3!(shared_control_flow_arrays);
         witness_extension_test_rep3!(sign_test);
+        witness_extension_test_rep3!(sqrt_test);
         witness_extension_test_rep3!(smtprocessor10_test);
         witness_extension_test_rep3!(smtverifier10_test);
         witness_extension_test_rep3!(sum_test);
-
-        // witness_extension_test!(multiplier2, "multiplier2", ["3", "11"]);
-        // witness_extension_test!(
-        //     multiplier16,
-        //     "multiplier16",
-        //     [
-        //         "5", "10", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14",
-        //         "15",
-        //     ]
-        // );
-        // witness_extension_test!(control_flow, "control_flow", ["1"]);
-        // witness_extension_test!(mimc, "mimc_hasher", ["1", "2", "3", "4"], "mimc");
-        // witness_extension_test!(
-        //     poseidon1,
-        //     "poseidon_hasher1",
-        //     ["5"],
-        //     "poseidon",
-        //     "poseidon1"
-        // );
-        // witness_extension_test!(
-        //     poseidon2,
-        //     "poseidon_hasher2",
-        //     ["0", "1"],
-        //     "poseidon",
-        //     "poseidon2"
-        // );
-        // witness_extension_test!(
-        //     poseidon16,
-        //     "poseidon_hasher16",
-        //     (0..16).map(|i| i.to_string()).collect::<Vec<_>>(),
-        //     "poseidon",
-        //     "poseidon16"
-        // );
-        //TODO The following tests do not work atm because we need some logic
-        //in the MPC driver
-        /*
-        witness_extension_test!(functions, "functions", ["5"]);
-        witness_extension_test!(
-            bin_sum,
-            "binsum_caller",
-            ["1", "0", "1", "1", "0", "0", "1", "1", "0", "1", "0", "1",]
-        );
-        witness_extension_test!(pedersen, "pedersen_hasher", ["5"], "pedersen");
-        witness_extension_test!(
-            eddsa_verify,
-            "eddsa_verify",
-            [
-                "1",
-                "13277427435165878497778222415993513565335242147425444199013288855685581939618",
-                "13622229784656158136036771217484571176836296686641868549125388198837476602820",
-                "2010143491207902444122668013146870263468969134090678646686512037244361350365",
-                "11220723668893468001994760120794694848178115379170651044669708829805665054484",
-                "2367470421002446880004241260470975644531657398480773647535134774673409612366",
-                "1234",
-            ],
-            "eddsa"
-        );*/
     }
 }

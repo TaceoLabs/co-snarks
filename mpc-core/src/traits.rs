@@ -74,6 +74,7 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
 
     fn vm_pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
     fn vm_mod(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn vm_sqrt(&mut self, a: Self::VmType) -> Result<Self::VmType>;
 
     fn vm_neg(&mut self, a: Self::VmType) -> Self::VmType;
 

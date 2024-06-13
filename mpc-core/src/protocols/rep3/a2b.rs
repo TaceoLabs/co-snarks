@@ -134,12 +134,25 @@ impl std::ops::Shr<usize> for &Rep3BigUintShare {
 impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
     const BITLEN: usize = F::MODULUS_BIT_SIZE as usize;
 
+    fn ceil_log2(x: usize) -> usize {
+        let mut y = 0;
+        let mut x = x - 1;
+        while x > 0 {
+            x >>= 1;
+            y += 1;
+        }
+        y
+    }
+
     pub(crate) fn and(
         &mut self,
         a: Rep3BigUintShare,
         b: Rep3BigUintShare,
+        bitlen: usize,
     ) -> IoResult<Rep3BigUintShare> {
-        let (mut mask, mask_b) = self.rngs.rand.random_biguint::<F>();
+        debug_assert!(a.a.bits() <= bitlen as u64);
+        debug_assert!(b.a.bits() <= bitlen as u64);
+        let (mut mask, mask_b) = self.rngs.rand.random_biguint(bitlen);
         mask ^= mask_b;
         let local_a = (a & b) ^ mask;
         self.network.send_next(local_a.to_owned())?;
@@ -155,11 +168,15 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         a: Rep3BigUintShare,
         b1: Rep3BigUintShare,
         b2: Rep3BigUintShare,
+        bitlen: usize,
     ) -> IoResult<(Rep3BigUintShare, Rep3BigUintShare)> {
-        let (mut mask1, mask_b) = self.rngs.rand.random_biguint::<F>();
+        debug_assert!(a.a.bits() <= bitlen as u64);
+        debug_assert!(b1.a.bits() <= bitlen as u64);
+        debug_assert!(b2.a.bits() <= bitlen as u64);
+        let (mut mask1, mask_b) = self.rngs.rand.random_biguint(bitlen);
         mask1 ^= mask_b;
 
-        let (mut mask2, mask_b) = self.rngs.rand.random_biguint::<F>();
+        let (mut mask2, mask_b) = self.rngs.rand.random_biguint(bitlen);
         mask2 ^= mask_b;
 
         let local_a1 = (b1 & &a) ^ mask1;
@@ -181,15 +198,78 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         Ok((r1, r2))
     }
 
-    fn low_depth_binary_add_2(
+    fn low_depth_binary_add(
         &mut self,
         x1: Rep3BigUintShare,
         x2: Rep3BigUintShare,
     ) -> IoResult<Rep3BigUintShare> {
         // Add x1 + x2 via a packed Kogge-Stone adder
         let p = &x1 ^ &x2;
-        let g = self.and(x1, x2)?;
-        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
+        let g = self.and(x1, x2, Self::BITLEN)?;
+        self.kogge_stone_inner(p, g, Self::BITLEN)
+    }
+
+    // Calculates 2^k + x1 - x2
+    fn low_depth_binary_sub(
+        &mut self,
+        x1: Rep3BigUintShare,
+        x2: Rep3BigUintShare,
+    ) -> IoResult<Rep3BigUintShare> {
+        // Let x2' = be the bit_not of x2
+        // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
+        // This is equivalent to x1 - x2 = x1 + two's complement of x2
+        let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
+        // bitnot of x2
+        let x2 = x2.xor_with_public(&mask, self.network.get_id());
+        // Now start the Kogge-Stone adder
+        let p = &x1 ^ &x2;
+        let mut g = self.and(x1.to_owned(), x2.to_owned(), Self::BITLEN)?;
+        // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
+        g ^= &p & &BigUint::one();
+
+        let res = self.kogge_stone_inner(p, g, Self::BITLEN)?;
+        let res = res.xor_with_public(&BigUint::one(), self.network.get_id()); // cin=1
+        Ok(res)
+    }
+
+    // Calculates 2^k + x1 - x2
+    fn low_depth_binary_sub_by_const(
+        &mut self,
+        x1: Rep3BigUintShare,
+        x2: BigUint,
+    ) -> IoResult<Rep3BigUintShare> {
+        // two's complement
+        let x2_ = (BigUint::from(1u64) << Self::BITLEN) - x2;
+
+        // Add x1 + x2_ via a packed Kogge-Stone adder
+        let p = x1.xor_with_public(&x2_, self.network.get_id());
+        let g = &x1 & &x2_;
+
+        let res = self.kogge_stone_inner(p, g, Self::BITLEN)?;
+        Ok(res)
+    }
+
+    // Calculates 2^k + x1 - x2
+    fn low_depth_binary_sub_from_const(
+        &mut self,
+        x1: BigUint,
+        x2: Rep3BigUintShare,
+    ) -> IoResult<Rep3BigUintShare> {
+        // Let x2' = be the bit_not of x2
+        // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
+        // This is equivalent to x1 - x2 = x1 + two's complement of x2
+        let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
+        // bitnot of x2
+        let x2 = x2.xor_with_public(&mask, self.network.get_id());
+        // Now start the Kogge-Stone adder
+        let p = x2.xor_with_public(&x1, self.network.get_id());
+        let mut g = &x2 & &x1;
+        // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
+        g ^= &p & &BigUint::one();
+
+        let res = self.kogge_stone_inner(p, g, Self::BITLEN)?;
+        let res = res.xor_with_public(&BigUint::one(), self.network.get_id()); // cin=1
+        Ok(res)
     }
 
     fn low_depth_binary_sub_p(&mut self, x: &Rep3BigUintShare) -> IoResult<Rep3BigUintShare> {
@@ -198,7 +278,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         // Add x1 + p_ via a packed Kogge-Stone adder
         let p = x.xor_with_public(&p_, self.network.get_id());
         let g = x & &p_;
-        self.kogge_stone_inner(p, g, Self::BITLEN + 2)
+        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
     }
 
     fn kogge_stone_inner(
@@ -207,7 +287,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         mut g: Rep3BigUintShare,
         bit_len: usize,
     ) -> IoResult<Rep3BigUintShare> {
-        let d = usize::ilog2(bit_len);
+        let d = Self::ceil_log2(bit_len);
         let s_ = p.to_owned();
 
         for i in 0..d {
@@ -221,7 +301,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
 
             // TODO: Make and more communication efficient, ATM we send the full element for each level, even though they reduce in size
             // maybe just input the mask into AND?
-            let (r1, r2) = self.and_twice(p_shift, g_, p_)?;
+            let (r1, r2) = self.and_twice(p_shift, g_, p_, bit_len - shift)?;
             p = r2 << shift;
             g ^= r1 << shift;
         }
@@ -238,25 +318,25 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
     ) -> IoResult<Rep3BigUintShare> {
         let mut xor = x_t;
         xor ^= &x_f;
-        let mut and = self.and(c, xor)?;
+        let mut and = self.and(c, xor, Self::BITLEN)?;
         and ^= x_f;
         Ok(and)
     }
 
     fn low_depth_sub_p_cmux(&mut self, mut x: Rep3BigUintShare) -> IoResult<Rep3BigUintShare> {
         let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
-        let x_msb = &x >> (Self::BITLEN);
+        let x_msb = &x >> Self::BITLEN;
         x &= &mask;
         let mut y = self.low_depth_binary_sub_p(&x)?;
         let y_msb = &y >> (Self::BITLEN + 1);
         y &= &mask;
 
         // Spread the ov share to the whole biguint
-        let ov_a = (x_msb.a.iter_u64_digits().next().unwrap()
-            ^ y_msb.a.iter_u64_digits().next().unwrap())
+        let ov_a = (x_msb.a.iter_u64_digits().next().unwrap_or_default()
+            ^ y_msb.a.iter_u64_digits().next().unwrap_or_default())
             & 1;
-        let ov_b = (x_msb.b.iter_u64_digits().next().unwrap()
-            ^ y_msb.b.iter_u64_digits().next().unwrap())
+        let ov_b = (x_msb.b.iter_u64_digits().next().unwrap_or_default()
+            ^ y_msb.b.iter_u64_digits().next().unwrap_or_default())
             & 1;
 
         let ov_a = if ov_a == 1 {
@@ -272,12 +352,12 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         Ok(res)
     }
 
-    fn low_depth_binary_add_2_mod_p(
+    fn low_depth_binary_add_mod_p(
         &mut self,
         x1: Rep3BigUintShare,
         x2: Rep3BigUintShare,
     ) -> IoResult<Rep3BigUintShare> {
-        let x = self.low_depth_binary_add_2(x1, x2)?;
+        let x = self.low_depth_binary_add(x1, x2)?;
         self.low_depth_sub_p_cmux(x)
     }
 
@@ -285,7 +365,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         let mut x01 = Rep3BigUintShare::default();
         let mut x2 = Rep3BigUintShare::default();
 
-        let (mut r, r2) = self.rngs.rand.random_biguint::<F>();
+        let (mut r, r2) = self.rngs.rand.random_biguint(Self::BITLEN);
         r ^= r2;
 
         match self.network.get_id() {
@@ -308,7 +388,43 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         let local_b = self.network.recv_prev()?;
         x01.b = local_b;
 
-        self.low_depth_binary_add_2_mod_p(x01, x2)
+        self.low_depth_binary_add_mod_p(x01, x2)
+    }
+
+    pub fn unsigned_ge(
+        &mut self,
+        x: Rep3PrimeFieldShare<F>,
+        y: Rep3PrimeFieldShare<F>,
+    ) -> IoResult<Rep3BigUintShare> {
+        let a_bits = self.a2b(&x)?;
+        let b_bits = self.a2b(&y)?;
+        let diff = self.low_depth_binary_sub(a_bits, b_bits)?;
+
+        Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
+    }
+
+    pub fn unsigned_ge_const_lhs(
+        &mut self,
+        x: F,
+        y: Rep3PrimeFieldShare<F>,
+    ) -> IoResult<Rep3BigUintShare> {
+        let a_bigint = x.into();
+        let b_bits = self.a2b(&y)?;
+        let diff = self.low_depth_binary_sub_from_const(a_bigint, b_bits)?;
+
+        Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
+    }
+
+    pub fn unsigned_ge_const_rhs(
+        &mut self,
+        x: Rep3PrimeFieldShare<F>,
+        y: F,
+    ) -> IoResult<Rep3BigUintShare> {
+        let a_bits = self.a2b(&x)?;
+        let b_bigint = y.into();
+        let diff = self.low_depth_binary_sub_by_const(a_bits, b_bigint)?;
+
+        Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
     }
 
     // Keep in mind: Only works if input is actually a binary sharing of a valid field element
@@ -317,7 +433,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         let mut y = Rep3BigUintShare::default();
         let mut res = Rep3PrimeFieldShare::default();
 
-        let (mut r, r2) = self.rngs.rand.random_biguint::<F>();
+        let (mut r, r2) = self.rngs.rand.random_biguint(Self::BITLEN);
         r ^= r2;
 
         match self.network.get_id() {
@@ -351,7 +467,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         let local_b = self.network.recv_prev()?;
         y.b = local_b;
 
-        let z = self.low_depth_binary_add_2_mod_p(x, y)?;
+        let z = self.low_depth_binary_add_mod_p(x, y)?;
 
         match self.network.get_id() {
             PartyID::ID0 => {
@@ -389,7 +505,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
             }
             len /= 2;
             let y = &x >> len;
-            x = self.and(x, y)?;
+            x = self.and(x, y, len)?;
         }
         // extract LSB
         let x = &x & &BigUint::one();
