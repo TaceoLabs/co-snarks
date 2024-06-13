@@ -73,6 +73,13 @@ impl<F: PrimeField> std::ops::Sub<&Aby3PrimeFieldShare<F>> for Aby3PrimeFieldSha
     }
 }
 
+impl<F: PrimeField> std::ops::SubAssign<&Aby3PrimeFieldShare<F>> for Aby3PrimeFieldShare<F> {
+    fn sub_assign(&mut self, rhs: &Self) {
+        self.a -= rhs.a;
+        self.b -= rhs.b;
+    }
+}
+
 impl<F: PrimeField> std::ops::Sub<&Aby3PrimeFieldShare<F>> for &'_ Aby3PrimeFieldShare<F> {
     type Output = Aby3PrimeFieldShare<F>;
 

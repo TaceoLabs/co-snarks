@@ -185,6 +185,36 @@ impl<F: PrimeField> Aby3VmType<F> {
         Ok(res)
     }
 
+    fn sqrt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Result<Self> {
+        match a {
+            Aby3VmType::Public(a) => {
+                //let mut plain = PlainDriver::default();
+                // Aby3VmType::Public(plain.vm_sqrt(a))
+                todo!()
+            }
+            Aby3VmType::Shared(a) => {
+                let mut sqrt = party.sqrt(&a)?;
+                // Correction to give the result closest to 0
+                // I.e., sqrt - 2 * is_neg * sqrt
+                let is_neg = if let Aby3VmType::Shared(x) = Self::lt(
+                    party,
+                    Aby3VmType::Shared(sqrt.to_owned()),
+                    Aby3VmType::Public(F::zero()),
+                )? {
+                    x
+                } else {
+                    unreachable!()
+                };
+                let mul = party.mul(&sqrt, &is_neg)?;
+                sqrt -= &mul;
+                sqrt -= &mul;
+
+                Ok(Aby3VmType::Shared(sqrt))
+            }
+            _ => todo!("BitShared sqrt not yet implemented"),
+        }
+    }
+
     fn modulo<N: Aby3Network>(_party: &mut Aby3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
         let res = match (a, b) {
             (Aby3VmType::Public(a), Aby3VmType::Public(b)) => {
@@ -216,42 +246,22 @@ impl<F: PrimeField> Aby3VmType<F> {
             (Aby3VmType::Public(a), Aby3VmType::Shared(b)) => {
                 let a = plain.val(a);
                 let b = val(b, party);
-                // TODO: handle overflow
-                let neg_b = party.neg(&b);
-                let check = party.add_with_public(&a, &neg_b);
-                // TODO: refactor out this bit extraction block as it is the same for all cases below
-                let bits = party.a2b(&check)?;
-                let bit = Aby3BigUintShare {
-                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                };
+                let bit = party.unsigned_lt_const_lhs(a, b)?;
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Public(b)) => {
                 let a = val(a, party);
                 let b = plain.val(b);
-                // TODO: handle overflow
-                let check = party.add_with_public(&-b, &a);
-                let bits = party.a2b(&check)?;
-                let bit = Aby3BigUintShare {
-                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                };
+                let bit = party.unsigned_lt_const_rhs(a, b)?;
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
             (Aby3VmType::Shared(a), Aby3VmType::Shared(b)) => {
                 let a = val(a, party);
                 let b = val(b, party);
-                // TODO: handle overflow
-                let check = party.sub(&a, &b);
-                let bits = party.a2b(&check)?;
-                let bit = Aby3BigUintShare {
-                    a: (bits.a >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                    b: (bits.b >> (F::MODULUS_BIT_SIZE - 1)) & BigUint::one(),
-                };
+                let bit = party.unsigned_lt(a, b)?;
                 Ok(Aby3VmType::Shared(party.bit_inject(bit)?))
             }
-            (_, _) => todo!("Shared LT not implemented"),
+            (_, _) => todo!("BitShared LT not implemented"),
         }
     }
 

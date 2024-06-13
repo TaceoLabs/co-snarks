@@ -470,6 +470,34 @@ mod field_share {
     }
 
     #[tokio::test]
+    async fn aby3_sqrt() {
+        let test_network = Aby3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x_ = ark_bn254::Fr::rand(&mut rng);
+        let x = x_.square(); // Guarantees a square root exists
+        let x_shares = aby3::utils::share_field_element(x, &mut rng);
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+        let (tx3, rx3) = oneshot::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut aby3 = Aby3Protocol::new(net).unwrap();
+                tx.send(aby3.sqrt(&x).unwrap())
+            });
+        }
+        let result1 = rx1.await.unwrap();
+        let result2 = rx2.await.unwrap();
+        let result3 = rx3.await.unwrap();
+        let is_result = aby3::utils::combine_field_element(result1, result2, result3);
+        assert!(is_result == x_ || is_result == -x_);
+    }
+
+    #[tokio::test]
     async fn aby3_a2b_zero() {
         let test_network = Aby3TestNetwork::default();
         let mut rng = thread_rng();
