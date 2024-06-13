@@ -394,7 +394,7 @@ mod aby3_tests {
         witness_extension_test_aby3!(binsum_test);
         witness_extension_test_aby3!(constants_test);
         witness_extension_test_aby3!(control_flow);
-        //witness_extension_test_aby3!(eddsa_test);
+        witness_extension_test_aby3!(eddsa_test);
         witness_extension_test_aby3!(eddsa_verify);
         witness_extension_test_aby3!(eddsamimc_test);
         witness_extension_test_aby3!(eddsaposeidon_test);
@@ -429,7 +429,7 @@ mod aby3_tests {
         witness_extension_test_aby3!(pedersen2_test);
         witness_extension_test_aby3!(pedersen_hasher);
         witness_extension_test_aby3!(pedersen_test);
-        //witness_extension_test_aby3!(pointbits_loopback);
+        witness_extension_test_aby3!(pointbits_loopback);
         witness_extension_test_aby3!(poseidon3_test);
         witness_extension_test_aby3!(poseidon6_test);
         witness_extension_test_aby3!(poseidon_hasher1);

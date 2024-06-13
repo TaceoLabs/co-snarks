@@ -188,9 +188,8 @@ impl<F: PrimeField> Aby3VmType<F> {
     fn sqrt<N: Aby3Network>(party: &mut Aby3Protocol<F, N>, a: Self) -> Result<Self> {
         match a {
             Aby3VmType::Public(a) => {
-                //let mut plain = PlainDriver::default();
-                // Aby3VmType::Public(plain.vm_sqrt(a))
-                todo!()
+                let mut plain = PlainDriver::default();
+                Ok(Aby3VmType::Public(plain.vm_sqrt(a)?))
             }
             Aby3VmType::Shared(a) => {
                 let mut sqrt = party.sqrt(&a)?;
@@ -597,6 +596,10 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
         Self::VmType::pow(self, a, b)
     }
 
+    fn vm_sqrt(&mut self, a: Self::VmType) -> Result<Self::VmType> {
+        Self::VmType::sqrt(self, a)
+    }
+
     fn vm_mod(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Self::VmType::modulo(self, a, b)
     }
@@ -716,10 +719,6 @@ impl<F: PrimeField, N: Aby3Network> CircomWitnessExtensionProtocol<F> for Aby3Pr
 
     fn public_one(&self) -> Self::VmType {
         Aby3VmType::Public(F::one())
-    }
-
-    fn vm_sqrt(&mut self, _a: Self::VmType) -> Result<Self::VmType> {
-        todo!()
     }
 }
 

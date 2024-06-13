@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::collections::HashMap;
 
 use ark_ec::pairing::Pairing;
 use eyre::bail;
