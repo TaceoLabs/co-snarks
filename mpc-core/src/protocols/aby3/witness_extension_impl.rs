@@ -192,10 +192,10 @@ impl<F: PrimeField> Aby3VmType<F> {
                 Ok(Aby3VmType::Public(plain.vm_sqrt(a)?))
             }
             Aby3VmType::Shared(a) => {
-                let mut sqrt = party.sqrt(&a)?;
+                let sqrt = party.sqrt(&a)?;
                 // Correction to give the result closest to 0
-                // I.e., sqrt - 2 * is_neg * sqrt
-                let is_neg = if let Aby3VmType::Shared(x) = Self::lt(
+                // I.e., 2 * is_pos * sqrt - sqrt
+                let is_pos = if let Aby3VmType::Shared(x) = Self::ge(
                     party,
                     Aby3VmType::Shared(sqrt.to_owned()),
                     Aby3VmType::Public(F::zero()),
@@ -204,11 +204,11 @@ impl<F: PrimeField> Aby3VmType<F> {
                 } else {
                     unreachable!()
                 };
-                let mul = party.mul(&sqrt, &is_neg)?;
-                sqrt -= &mul;
-                sqrt -= &mul;
+                let mut mul = party.mul(&sqrt, &is_pos)?;
+                mul.double();
+                mul -= &sqrt;
 
-                Ok(Aby3VmType::Shared(sqrt))
+                Ok(Aby3VmType::Shared(mul))
             }
             _ => todo!("BitShared sqrt not yet implemented"),
         }

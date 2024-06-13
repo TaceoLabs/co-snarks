@@ -16,6 +16,11 @@ impl<F: PrimeField> Aby3PrimeFieldShare<F> {
     pub fn ab(self) -> (F, F) {
         (self.a, self.b)
     }
+
+    pub(crate) fn double(&mut self) {
+        self.a.double_in_place();
+        self.b.double_in_place();
+    }
 }
 
 impl<F: PrimeField> std::ops::Add for Aby3PrimeFieldShare<F> {
@@ -48,6 +53,13 @@ impl<F: PrimeField> std::ops::Add<&Aby3PrimeFieldShare<F>> for &'_ Aby3PrimeFiel
             a: self.a + rhs.a,
             b: self.b + rhs.b,
         }
+    }
+}
+
+impl<F: PrimeField> std::ops::AddAssign<&Aby3PrimeFieldShare<F>> for Aby3PrimeFieldShare<F> {
+    fn add_assign(&mut self, rhs: &Self) {
+        self.a += rhs.a;
+        self.b += rhs.b;
     }
 }
 
