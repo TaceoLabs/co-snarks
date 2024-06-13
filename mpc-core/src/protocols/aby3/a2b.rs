@@ -134,6 +134,16 @@ impl std::ops::Shr<usize> for &Aby3BigUintShare {
 impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
     const BITLEN: usize = F::MODULUS_BIT_SIZE as usize;
 
+    fn ceil_log2(x: usize) -> usize {
+        let mut y = 0;
+        let mut x = x - 1;
+        while x > 0 {
+            x >>= 1;
+            y += 1;
+        }
+        y
+    }
+
     pub(crate) fn and(
         &mut self,
         a: Aby3BigUintShare,
@@ -196,7 +206,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // Add x1 + x2 via a packed Kogge-Stone adder
         let p = &x1 ^ &x2;
         let g = self.and(x1, x2, Self::BITLEN)?;
-        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
+        self.kogge_stone_inner(p, g, Self::BITLEN)
     }
 
     // Calculates 2^k + x1 - x2
@@ -217,7 +227,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
         g ^= &p & &BigUint::one();
 
-        let res = self.kogge_stone_inner(p, g, Self::BITLEN + 1)?;
+        let res = self.kogge_stone_inner(p, g, Self::BITLEN)?;
         let res = res.xor_with_public(&BigUint::one(), self.network.get_id()); // cin=1
         Ok(res)
     }
@@ -235,7 +245,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let p = x1.xor_with_public(&x2_, self.network.get_id());
         let g = &x1 & &x2_;
 
-        let res = self.kogge_stone_inner(p, g, Self::BITLEN + 1)?;
+        let res = self.kogge_stone_inner(p, g, Self::BITLEN)?;
         Ok(res)
     }
 
@@ -257,7 +267,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
         g ^= &p & &BigUint::one();
 
-        let res = self.kogge_stone_inner(p, g, Self::BITLEN + 1)?;
+        let res = self.kogge_stone_inner(p, g, Self::BITLEN)?;
         let res = res.xor_with_public(&BigUint::one(), self.network.get_id()); // cin=1
         Ok(res)
     }
@@ -268,7 +278,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         // Add x1 + p_ via a packed Kogge-Stone adder
         let p = x.xor_with_public(&p_, self.network.get_id());
         let g = x & &p_;
-        self.kogge_stone_inner(p, g, Self::BITLEN + 2)
+        self.kogge_stone_inner(p, g, Self::BITLEN + 1)
     }
 
     fn kogge_stone_inner(
@@ -277,7 +287,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         mut g: Aby3BigUintShare,
         bit_len: usize,
     ) -> IoResult<Aby3BigUintShare> {
-        let d = usize::ilog2(bit_len);
+        let d = Self::ceil_log2(bit_len);
         let s_ = p.to_owned();
 
         for i in 0..d {

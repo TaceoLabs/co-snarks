@@ -33,7 +33,7 @@ def kogge_add_2(a, b):
         g.append(a[i] & b[i])
     s_ = p.copy()
 
-    d = int(floor(log(length, 2)))
+    d = int(ceil(log(length, 2)))
 
     for i in range(0, d):
         shift = 1 << i
@@ -63,7 +63,7 @@ def kogge_add_2_v2(a, b):
         g.append(a[i] & b[i])
     s_ = p.copy()
 
-    d = int(floor(log(length, 2)))
+    d = int(ceil(log(length, 2)))
 
     for i in range(0, d):
         shift = 1 << i
@@ -116,7 +116,7 @@ def kogge_sub(a, b):
     # cin = 1:
     g[0] = g[0] ^^ p[0]
 
-    d = int(floor(log(length, 2)))
+    d = int(ceil(log(length, 2)))
 
     for i in range(0, d):
         shift = 1 << i
@@ -145,6 +145,8 @@ def kogge_ge(a, b):
     return res[length] == 1
 
 for i in range(2^10):
+    # val1 = i
+    # val2 = i
     val1 = rand()
     val2 = rand()
 
