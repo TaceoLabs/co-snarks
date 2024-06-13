@@ -848,7 +848,7 @@ impl<P: Pairing> PlainWitnessExtension<P> {
         let mut signals = vec![P::ScalarField::default(); parser.amount_signals];
         signals[0] = P::ScalarField::one();
         Self {
-            driver: PlainDriver::new(),
+            driver: PlainDriver::default(),
             signal_to_witness: parser.signal_to_witness,
             main: parser.main,
             ctx: WitnessExtensionCtx::new(

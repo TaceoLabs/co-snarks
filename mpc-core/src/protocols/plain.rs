@@ -45,7 +45,6 @@ macro_rules! to_bigint {
         a
     }};
 }
-#[derive(Default)]
 pub struct PlainDriver<F: PrimeField> {
     negative_one: F,
 }
@@ -57,10 +56,6 @@ impl<F: PrimeField> PlainDriver<F> {
     /// While this could be done easier by just comparing the numbers as BigInt, we do it this way because this is easier to replicate in MPC later.
     #[inline(always)]
     pub(crate) fn val(&self, z: F) -> F {
-        //let modulus = to_bigint!(F::MODULUS);
-        //let one = BigUint::one();
-        //let two = BigUint::from(2u64);
-        //let p_half_plus_one = F::from(modulus / two + one);
         z - self.negative_one
     }
 
@@ -68,8 +63,10 @@ impl<F: PrimeField> PlainDriver<F> {
     pub(crate) fn is_negative(&self, x: F) -> bool {
         x >= self.negative_one
     }
+}
 
-    pub fn new() -> Self {
+impl<F: PrimeField> Default for PlainDriver<F> {
+    fn default() -> Self {
         let modulus = to_bigint!(F::MODULUS);
         let one = BigUint::one();
         let two = BigUint::from(2u64);
