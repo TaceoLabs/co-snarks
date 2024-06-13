@@ -136,6 +136,7 @@ mod field_share {
     use crate::protocols::aby3::Aby3TestNetwork;
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
+    use itertools::izip;
     use mpc_core::protocols::aby3::witness_extension_impl::Aby3VmType;
     use mpc_core::protocols::aby3::Aby3PrimeFieldShare;
     use mpc_core::protocols::aby3::{self, fieldshare::Aby3PrimeFieldShareVec, Aby3Protocol};
@@ -507,35 +508,57 @@ mod field_share {
                     let test_network = Aby3TestNetwork::default();
                     let mut rng = thread_rng();
                     let x_shares = aby3::utils::share_field_element(constant_number, &mut rng);
-                    let should_result = ark_bn254::Fr::from(constant_number < compare);
+                    let y_shares = aby3::utils::share_field_element(compare, &mut rng);
+                    let should_result = ark_bn254::Fr::from(constant_number $op compare);
                     let (tx1, rx1) = oneshot::channel();
                     let (tx2, rx2) = oneshot::channel();
                     let (tx3, rx3) = oneshot::channel();
-                    for ((net, tx), (x, y)) in test_network
-                        .get_party_networks()
-                        .into_iter()
-                        .zip([tx1, tx2, tx3])
-                        .zip(
-                            x_shares
-                                .into_iter()
-                                .zip(vec![Aby3VmType::Public(compare); 3]),
-                        )
-                    {
+                    for (net, tx, x_share, y_share, x_pub, y_pub) in izip!(
+                        test_network.get_party_networks(),
+                        [tx1, tx2, tx3],
+                        x_shares,
+                        y_shares,
+                        vec![Aby3VmType::Public(constant_number); 3],
+                        vec![Aby3VmType::Public(compare); 3]
+                    ) {
                         thread::spawn(move || {
                             let mut aby3 = Aby3Protocol::new(net).unwrap();
-                            let test = Aby3VmType::Shared(x);
-                            tx.send(aby3.vm_lt(test, y).unwrap())
+                            let x = Aby3VmType::Shared(x_share);
+                            let y = Aby3VmType::Shared(y_share);
+
+                            let shared_compare = aby3.$name(x.clone(), y.clone()).unwrap();
+                            let rhs_const = aby3.$name(x, y_pub.clone()).unwrap();
+                            let lhs_const = aby3.$name(x_pub.clone(), y).unwrap();
+                            let both_const = aby3.$name(x_pub, y_pub).unwrap();
+                            tx.send([both_const, shared_compare, rhs_const, lhs_const])
                         });
                     }
-                    let result1 = rx1.await.unwrap();
-                    let result2 = rx2.await.unwrap();
-                    let result3 = rx3.await.unwrap();
-                    match (result1, result2, result3) {
-                        (Aby3VmType::Shared(a), Aby3VmType::Shared(b), Aby3VmType::Shared(c)) => {
-                            let is_result = aby3::utils::combine_field_element(a, b, c);
-                            assert_eq!(is_result, should_result);
+                    let results1 = rx1.await.unwrap();
+                    let results2 = rx2.await.unwrap();
+                    let results3 = rx3.await.unwrap();
+                    for (result1, result2, result3) in izip!(results1, results2, results3) {
+                        match (result1, result2, result3) {
+                            (
+                                Aby3VmType::Shared(a),
+                                Aby3VmType::Shared(b),
+                                Aby3VmType::Shared(c),
+                            ) => {
+                                let is_result = aby3::utils::combine_field_element(a, b, c);
+                                println!("{constant_number} {} {compare} = {is_result}", stringify!($op));
+                                assert_eq!(is_result, should_result);
+                            }
+                            (
+                                Aby3VmType::Public(a),
+                                Aby3VmType::Public(b),
+                                Aby3VmType::Public(c),
+                            ) => {
+                                assert_eq!(a, b);
+                                assert_eq!(b, c);
+                                println!("{constant_number} {} {compare} = {a}", stringify!($op));
+                                assert_eq!(a, should_result);
+                            }
+                            _ => panic!("must be shared"),
                         }
-                        _ => panic!("must be shared"),
                     }
                 }
             }
