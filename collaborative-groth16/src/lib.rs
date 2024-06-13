@@ -47,6 +47,34 @@ mod tests {
     }
 
     #[test]
+    fn create_proof_and_verify_bn254_using_zkey_matrices() {
+        let zkey_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
+        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let (pk, matrices) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
+        let mut rng = thread_rng();
+        let r = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
+        let s = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
+        let proof = Groth16::<Bn254, CircomReduction>::create_proof_with_reduction_and_matrices(
+            &pk,
+            r,
+            s,
+            &matrices,
+            matrices.num_instance_variables,
+            matrices.num_constraints,
+            &witness.values,
+        )
+        .expect("proof generation works");
+        let public_inputs = &witness.values[1..matrices.num_instance_variables];
+        let pvk = prepare_verifying_key(&pk.vk);
+        let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(proof)).unwrap();
+        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
+        let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), public_inputs)
+            .expect("can verify");
+        assert!(verified);
+    }
+
+    #[test]
     fn verify_circom_proof_bn254() {
         let vk_string =
             fs::read_to_string("../test_vectors/bn254/multiplier2/verification_key.json").unwrap();
