@@ -147,7 +147,7 @@ where
         let public_inputs = &private_witness.public_inputs;
         let private_witness = &private_witness.witness;
         let h = self.witness_map_from_matrices(
-            &matrices,
+            matrices,
             num_constraints,
             num_inputs,
             public_inputs,
