@@ -376,7 +376,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let b_bits = self.a2b(&y)?;
         let diff = self.low_depth_binary_sub(a_bits, b_bits)?;
 
-        Ok(&diff >> Self::BITLEN)
+        Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
     }
 
     pub fn unsigned_lt_const_lhs(
@@ -388,7 +388,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let b_bits = self.a2b(&y)?;
         let diff = self.low_depth_binary_sub_from_const(a_bigint, b_bits)?;
 
-        Ok(&diff >> Self::BITLEN)
+        Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
     }
 
     pub fn unsigned_lt_const_rhs(
@@ -400,7 +400,7 @@ impl<F: PrimeField, N: Aby3Network> Aby3Protocol<F, N> {
         let b_bigint = y.into();
         let diff = self.low_depth_binary_sub_by_const(a_bits, b_bigint)?;
 
-        Ok(&diff >> Self::BITLEN)
+        Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
     }
 
     // Keep in mind: Only works if input is actually a binary sharing of a valid field element
