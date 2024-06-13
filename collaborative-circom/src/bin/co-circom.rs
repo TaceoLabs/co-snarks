@@ -113,6 +113,9 @@ enum Commands {
         /// The output file where the final proof is written to. If not passed, this party will not write the proof to a file.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
+        #[arg(long)]
+        public_input: Option<PathBuf>,
     },
     /// Verification of a Circom proof.
     Verify {
@@ -122,9 +125,9 @@ enum Commands {
         /// The path to the verification key file
         #[arg(long)]
         vk: PathBuf,
-        /// The path to the public inputs file
+        /// The path to the public input JSON file
         #[arg(long)]
-        public_inputs: PathBuf,
+        public_input: PathBuf,
     },
 }
 
@@ -299,6 +302,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             protocol: _,
             config,
             out,
+            public_input: public_input_filename,
         } => {
             file_utils::check_file_exists(&witness)?;
             file_utils::check_file_exists(&r1cs)?;
@@ -315,7 +319,6 @@ fn main() -> color_eyre::Result<ExitCode> {
                     .context("trying to parse witness share file")?;
 
             // parse public inputs
-            // TODO: decision: ATM 1 is still in the public inputs, should we remove it?
             let public_input = witness_share.public_inputs.clone();
 
             // parse Circom r1cs file
@@ -346,23 +349,41 @@ fn main() -> color_eyre::Result<ExitCode> {
             // write result to output file
             if let Some(out) = out {
                 let out_file = BufWriter::new(
-                    std::fs::File::create(&out).context("while opening output file")?,
+                    std::fs::File::create(&out).context("while creating output file")?,
                 );
 
                 serde_json::to_writer(out_file, &JsonProof::<Bn254>::from(proof))
                     .context("while serializing proof to JSON file")?;
                 tracing::info!("Wrote proof to file {}", out.display());
             }
+            // write public input to output file
+            if let Some(public_input_filename) = public_input_filename {
+                let public_input_as_strings = public_input
+                    .iter()
+                    .skip(1) // we skip the constant 1 at position 0
+                    .map(|f| f.to_string())
+                    .collect::<Vec<String>>();
+                let public_input_file = BufWriter::new(
+                    std::fs::File::create(&public_input_filename)
+                        .context("while creating public input file")?,
+                );
+                serde_json::to_writer(public_input_file, &public_input_as_strings)
+                    .context("while writing out public inputs to JSON file")?;
+                tracing::info!(
+                    "Wrote public inputs to file {}",
+                    public_input_filename.display()
+                );
+            }
             tracing::info!("Proof generation finished successfully")
         }
         Commands::Verify {
             proof,
             vk,
-            public_inputs,
+            public_input,
         } => {
             file_utils::check_file_exists(&proof)?;
             file_utils::check_file_exists(&vk)?;
-            file_utils::check_file_exists(&public_inputs)?;
+            file_utils::check_file_exists(&public_input)?;
 
             // parse Circom proof file
             let proof_file =
@@ -380,17 +401,22 @@ fn main() -> color_eyre::Result<ExitCode> {
 
             // parse public inputs
             let public_inputs_file = BufReader::new(
-                File::open(&public_inputs).context("while opening public inputs file")?,
+                File::open(&public_input).context("while opening public inputs file")?,
             );
-            // TODO: real parsing of public inputs file
-            let witness_share: SharedWitness<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254> =
-                bincode::deserialize_from(public_inputs_file)
-                    .context("trying to parse witness share file")?;
+            let public_inputs_as_strings: Vec<String> = serde_json::from_reader(public_inputs_file)
+                .context("while parsing public inputs, expect them to be array of stringified field elements")?;
             // skip 1 atm
-            let public_inputs = &witness_share.public_inputs[1..];
+            let public_inputs = public_inputs_as_strings
+                .into_iter()
+                .map(|s| {
+                    s.parse::<ark_bn254::Fr>()
+                        .map_err(|_| eyre!("could not parse as field element: {}", s))
+                })
+                .collect::<Result<Vec<ark_bn254::Fr>, _>>()
+                .context("while converting public input strings to field elements")?;
 
             // verify proof
-            if Groth16::<Bn254>::verify_proof(&vk, &proof, public_inputs)
+            if Groth16::<Bn254>::verify_proof(&vk, &proof, &public_inputs)
                 .context("while verifying proof")?
             {
                 tracing::info!("Proof verified successfully");
