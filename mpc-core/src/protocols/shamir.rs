@@ -183,7 +183,7 @@ pub mod utils {
 pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
     threshold: usize, // degree of the polynomial
     open_lagrange_t: Vec<F>,
-    open_lagrange_2t: Vec<F>,
+    pub(crate) open_lagrange_2t: Vec<F>,
     mul_lagrange_2t: Vec<F>,
     rng_buffer: ShamirRng<F>,
     network: N,
@@ -205,12 +205,12 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         // We send in circles, so we need to receive from the last parties
         let id = network.get_id();
         let open_lagrange_t = ShamirCore::lagrange_from_coeff(
-            &(1..=threshold + 1)
+            &(0..threshold + 1)
                 .map(|i| (id + num_parties - i) % num_parties + 1)
                 .collect::<Vec<_>>(),
         );
         let open_lagrange_2t = ShamirCore::lagrange_from_coeff(
-            &(1..=2 * threshold + 1)
+            &(0..2 * threshold + 1)
                 .map(|i| (id + num_parties - i) % num_parties + 1)
                 .collect::<Vec<_>>(),
         );
@@ -245,38 +245,13 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         let res = ShamirCore::reconstruct(&rcv, &self.open_lagrange_2t);
         Ok(res)
     }
-}
 
-impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtocol<F, N> {
-    type FieldShare = ShamirPrimeFieldShare<F>;
-    type FieldShareVec = ShamirPrimeFieldShareVec<F>;
-
-    fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
-        a + b
-    }
-
-    fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
-        a - b
-    }
-
-    fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
-        b + a
-    }
-
-    fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec) {
-        for (a, b) in izip!(a.a.iter_mut(), &b.a) {
-            *a -= b;
-        }
-    }
-
-    fn mul(
+    pub(crate) fn degree_reduce(
         &mut self,
-        a: &Self::FieldShare,
-        b: &Self::FieldShare,
-    ) -> std::io::Result<Self::FieldShare> {
+        mut input: F,
+    ) -> std::io::Result<<Self as PrimeFieldMpcProtocol<F>>::FieldShare> {
         let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network)?;
-
-        let mul = a.a * b.a + r_2t;
+        input += r_2t;
 
         let my_id = self.network.get_id();
         let my_share = if my_id == Self::KING_ID {
@@ -284,7 +259,7 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
             let mut acc = F::zero();
             for (other_id, lagrange) in self.mul_lagrange_2t.iter().enumerate() {
                 if other_id == Self::KING_ID {
-                    acc += mul * lagrange;
+                    acc += input * lagrange;
                 } else {
                     let r = self.network.recv::<F>(other_id)?;
                     acc += r * lagrange;
@@ -311,77 +286,43 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         } else {
             if my_id <= self.threshold * 2 {
                 // Only send if my items are required
-                self.network.send(Self::KING_ID, mul)?;
+                self.network.send(Self::KING_ID, input)?;
             }
             self.network.recv(Self::KING_ID)?
         };
 
-        Ok(Self::FieldShare::new(my_share - r_t))
+        Ok(<Self as PrimeFieldMpcProtocol<F>>::FieldShare::new(
+            my_share - r_t,
+        ))
     }
 
-    fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
-        b * a
-    }
-
-    fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare> {
-        let r = self.rand()?;
-        let y = self.mul_open(a, &r)?;
-        if y.is_zero() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Cannot invert zero",
-            ));
-        }
-        let y_inv = y.inverse().unwrap();
-        Ok(r * y_inv)
-    }
-
-    fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
-        -a
-    }
-
-    fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
-        let (r, _) = self.rng_buffer.get_pair(&mut self.network)?;
-        Ok(Self::FieldShare::new(r))
-    }
-
-    fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F> {
-        let rcv = self.network.broadcast_next(a.a, self.threshold + 1)?;
-        let res = ShamirCore::reconstruct(&rcv, &self.open_lagrange_t);
-        Ok(res)
-    }
-
-    fn mul_vec(
+    pub(crate) fn degree_reduce_vec(
         &mut self,
-        a: &Self::FieldShareVec,
-        b: &Self::FieldShareVec,
-    ) -> std::io::Result<Self::FieldShareVec> {
-        let len = a.len();
-        debug_assert_eq!(len, b.len());
+        mut inputs: Vec<F>,
+    ) -> std::io::Result<<Self as PrimeFieldMpcProtocol<F>>::FieldShareVec> {
+        let len = inputs.len();
         let mut r_ts = Vec::with_capacity(len);
-        let mut muls = Vec::with_capacity(len);
 
-        for (a, b) in izip!(a.a.iter(), b.a.iter()) {
+        for inp in inputs.iter_mut() {
             let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network)?;
-            let mul = *a * b + r_2t;
-            muls.push(mul);
+            *inp += r_2t;
             r_ts.push(r_t);
         }
+
         let my_id = self.network.get_id();
         let mut my_shares = if my_id == Self::KING_ID {
             // Accumulate the result
             let mut acc = vec![F::zero(); len];
             for (other_id, lagrange) in self.mul_lagrange_2t.iter().enumerate() {
                 if other_id == Self::KING_ID {
-                    for (acc, muls) in izip!(&mut acc, &muls) {
+                    for (acc, muls) in izip!(&mut acc, &inputs) {
                         *acc += *muls * lagrange;
                     }
                 } else {
                     let r = self.network.recv_many::<F>(other_id)?;
                     if r.len() != len {
                         return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            "Invalid number of elements received",
+                            std::io::ErrorKind::InvalidData,"During execution of degree_reduce_vec in MPC: Invalid number of elements received",
                         ));
                     }
                     for (acc, muls) in izip!(&mut acc, r) {
@@ -420,13 +361,12 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         } else {
             if my_id <= self.threshold * 2 {
                 // Only send if my items are required
-                self.network.send_many(Self::KING_ID, &muls)?;
+                self.network.send_many(Self::KING_ID, &inputs)?;
             }
             let r = self.network.recv_many::<F>(Self::KING_ID)?;
             if r.len() != len {
                 return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid number of elements received",
+                    std::io::ErrorKind::InvalidData,"During execution of degree_reduce_vec in MPC: Invalid number of elements received",
                 ));
             }
             r
@@ -435,7 +375,143 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         for (share, r) in izip!(&mut my_shares, r_ts) {
             *share -= r;
         }
-        Ok(Self::FieldShareVec::new(my_shares))
+        Ok(<Self as PrimeFieldMpcProtocol<F>>::FieldShareVec::new(
+            my_shares,
+        ))
+    }
+
+    pub(crate) fn degree_reduce_point<C>(
+        &mut self,
+        mut input: C,
+    ) -> std::io::Result<ShamirPointShare<C>>
+    where
+        C: CurveGroup + std::ops::Mul<F, Output = C> + for<'a> std::ops::Mul<&'a F, Output = C>,
+    {
+        let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network)?;
+        let r_t = C::generator().mul(r_t);
+        let r_2t = C::generator().mul(r_2t);
+
+        input += r_2t;
+        let my_id = self.network.get_id();
+
+        let my_share = if my_id == Self::KING_ID {
+            // Accumulate the result
+            let mut acc = C::zero();
+            for (other_id, lagrange) in self.mul_lagrange_2t.iter().enumerate() {
+                if other_id == Self::KING_ID {
+                    acc += input * lagrange;
+                } else {
+                    let r = self.network.recv::<C>(other_id)?;
+                    acc += r * lagrange;
+                }
+            }
+            // So far parties who do not require sending, do not send, so no receive here
+
+            // Send fresh shares
+            let shares = ShamirCore::share_point(
+                acc,
+                self.network.get_num_parties(),
+                self.threshold,
+                &mut self.rng_buffer.rng,
+            );
+            let mut my_share = C::default();
+            for (other_id, share) in shares.into_iter().enumerate() {
+                if my_id == other_id {
+                    my_share = share;
+                } else {
+                    self.network.send(other_id, share)?;
+                }
+            }
+            my_share
+        } else {
+            if my_id <= self.threshold * 2 {
+                // Only send if my items are required
+                self.network.send(Self::KING_ID, input)?;
+            }
+            self.network.recv(Self::KING_ID)?
+        };
+
+        Ok(ShamirPointShare::new(my_share - r_t))
+    }
+}
+
+impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtocol<F, N> {
+    type FieldShare = ShamirPrimeFieldShare<F>;
+    type FieldShareVec = ShamirPrimeFieldShareVec<F>;
+
+    fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
+        a + b
+    }
+
+    fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
+        a - b
+    }
+
+    fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
+        b + a
+    }
+
+    fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec) {
+        for (a, b) in izip!(a.a.iter_mut(), &b.a) {
+            *a -= b;
+        }
+    }
+
+    fn mul(
+        &mut self,
+        a: &Self::FieldShare,
+        b: &Self::FieldShare,
+    ) -> std::io::Result<Self::FieldShare> {
+        let mul = a.a * b.a;
+        self.degree_reduce(mul)
+    }
+
+    fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
+        b * a
+    }
+
+    fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare> {
+        let r = self.rand()?;
+        let y = self.mul_open(a, &r)?;
+        if y.is_zero() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of inverse in MPC: cannot compute inverse of zero",
+            ));
+        }
+        let y_inv = y.inverse().unwrap();
+        Ok(r * y_inv)
+    }
+
+    fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
+        -a
+    }
+
+    fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
+        let (r, _) = self.rng_buffer.get_pair(&mut self.network)?;
+        Ok(Self::FieldShare::new(r))
+    }
+
+    fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F> {
+        let rcv = self.network.broadcast_next(a.a, self.threshold + 1)?;
+        let res = ShamirCore::reconstruct(&rcv, &self.open_lagrange_t);
+        Ok(res)
+    }
+
+    fn mul_vec(
+        &mut self,
+        a: &Self::FieldShareVec,
+        b: &Self::FieldShareVec,
+    ) -> std::io::Result<Self::FieldShareVec> {
+        let len = a.len();
+        debug_assert_eq!(len, b.len());
+        let mut muls = Vec::with_capacity(len);
+
+        for (a, b) in izip!(a.a.iter(), b.a.iter()) {
+            let mul = *a * b;
+            muls.push(mul);
+        }
+        self.degree_reduce_vec(muls)
     }
 
     fn promote_to_trivial_share(&self, public_value: F) -> Self::FieldShare {
@@ -560,51 +636,8 @@ impl<C: CurveGroup, N: ShamirNetwork> EcMpcProtocol<C> for ShamirProtocol<C::Sca
         a: &Self::PointShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::PointShare> {
-        let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network)?;
-        let r_t = C::generator().mul(r_t);
-        let r_2t = C::generator().mul(r_2t);
-
-        let mul = (b * a).a + r_2t;
-        let my_id = self.network.get_id();
-
-        let my_share = if my_id == Self::KING_ID {
-            // Accumulate the result
-            let mut acc = C::zero();
-            for (other_id, lagrange) in self.mul_lagrange_2t.iter().enumerate() {
-                if other_id == Self::KING_ID {
-                    acc += mul * lagrange;
-                } else {
-                    let r = self.network.recv::<C>(other_id)?;
-                    acc += r * lagrange;
-                }
-            }
-            // So far parties who do not require sending, do not send, so no receive here
-
-            // Send fresh shares
-            let shares = ShamirCore::share_point(
-                acc,
-                self.network.get_num_parties(),
-                self.threshold,
-                &mut self.rng_buffer.rng,
-            );
-            let mut my_share = C::default();
-            for (other_id, share) in shares.into_iter().enumerate() {
-                if my_id == other_id {
-                    my_share = share;
-                } else {
-                    self.network.send(other_id, share)?;
-                }
-            }
-            my_share
-        } else {
-            if my_id <= self.threshold * 2 {
-                // Only send if my items are required
-                self.network.send(Self::KING_ID, mul)?;
-            }
-            self.network.recv(Self::KING_ID)?
-        };
-
-        Ok(Self::PointShare::new(my_share - r_t))
+        let mul = (b * a).a;
+        self.degree_reduce_point(mul)
     }
 
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
@@ -773,7 +806,7 @@ impl<F: PrimeField> ShamirRng<F> {
                 if r.len() != 2 * amount {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "Invalid number of elements received",
+                        "During execution of buffer_triples in MPC: Invalid number of elements received",
                     ));
                 }
                 for (des_r, des_r2, src) in izip!(&mut rcv_rt, &mut rcv_r2t, r.chunks_exact(2)) {

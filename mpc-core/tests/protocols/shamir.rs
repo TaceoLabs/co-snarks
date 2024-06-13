@@ -70,10 +70,10 @@ impl ShamirTestNetwork {
 
 #[derive(Debug)]
 pub struct PartyTestNetwork {
-    id: usize,
-    num_parties: usize,
-    send: Vec<UnboundedSender<Bytes>>,
-    recv: Vec<UnboundedReceiver<Bytes>>,
+    pub(crate) id: usize,
+    pub(crate) num_parties: usize,
+    pub(crate) send: Vec<UnboundedSender<Bytes>>,
+    pub(crate) recv: Vec<UnboundedReceiver<Bytes>>,
 }
 
 impl ShamirNetwork for PartyTestNetwork {
@@ -177,7 +177,7 @@ impl ShamirNetwork for PartyTestNetwork {
         let send_data = Bytes::from(ser_data);
 
         // Send
-        for s in 1..=num {
+        for s in 1..num {
             let mut other_id = (self.id + s) % self.num_parties;
             match other_id.cmp(&self.id) {
                 Ordering::Greater => other_id -= 1,
@@ -191,7 +191,8 @@ impl ShamirNetwork for PartyTestNetwork {
 
         // Receive
         let mut res = Vec::with_capacity(num);
-        for r in 1..=num {
+        res.push(data.to_owned());
+        for r in 1..num {
             let mut other_id = (self.id + self.num_parties - r) % self.num_parties;
             match other_id.cmp(&self.id) {
                 Ordering::Greater => other_id -= 1,

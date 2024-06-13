@@ -197,7 +197,7 @@ mod shamir_tests {
             let send_data = Bytes::from(ser_data);
 
             // Send
-            for s in 1..=num {
+            for s in 1..num {
                 let mut other_id = (self.id + s) % self.num_parties;
                 match other_id.cmp(&self.id) {
                     Ordering::Greater => other_id -= 1,
@@ -211,7 +211,8 @@ mod shamir_tests {
 
             // Receive
             let mut res = Vec::with_capacity(num);
-            for r in 1..=num {
+            res.push(data.to_owned());
+            for r in 1..num {
                 let mut other_id = (self.id + self.num_parties - r) % self.num_parties;
                 match other_id.cmp(&self.id) {
                     Ordering::Greater => other_id -= 1,

@@ -183,7 +183,7 @@ pub mod utils {
 #[derive(Debug)]
 pub struct Rep3Protocol<F: PrimeField, N: Rep3Network> {
     rngs: Rep3CorrelatedRng,
-    network: N,
+    pub(crate) network: N,
     field: PhantomData<F>,
 }
 
@@ -346,7 +346,7 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         if local_b.len() != local_a.len() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "Invalid number of elements received",
+                "During execution of mul_vec in MPC: Invalid number of elements received",
             ));
         }
         Ok(Self::FieldShareVec::new(local_a, local_b))
