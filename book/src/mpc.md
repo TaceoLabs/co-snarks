@@ -90,7 +90,7 @@ $$
 
 In replicated sharing over rings $\mathbb Z_{2^k}$ (e.g., ABY3), arithmetic to binary conversion of a share $[x]$ is implemented by first locally splitting the shares to valid binary sharings, i.e., $[x_1]^B = (x_1, 0, 0)$, $[x_2]^B = (0, x_2, 0)$, and $[x_3]^B = (0, 0, x_3)$ and combining them in MPC using binary addition circuits. Then $[x]^B = \text{BinAdd}(\text{BinAdd}([x_1]^B, [x_2]^B), [x_3]^B)$ is a valid binary sharing of $x$. This approach works because binary addition circuits implicitly perform modular reductions mod $2^k$.
 
-Thus, in $\mathbb F_p$ we have to include the mod $p$ reductions manually in the circuit. For improved performance, we use the following protocols:
+Thus, in $\mathbb F_p$ we have to include the mod $p$ reductions manually in the circuit. For improved performance, we use the following protocol to translate $[x]$:
 
 * $P_i$ samples $r_i$ to be a new random binary share of 0
 * Set $[x_3]^B = (0, 0, x_3)$
@@ -102,9 +102,32 @@ Thus, in $\mathbb F_p$ we have to include the mod $p$ reductions manually in the
 * The parties compute the subtraction of $[t_1]^B - p$ inside a binary circuit to get $[t_2]^B$.
 * The $k+1$ bit of $[t_2]^B$ indicates an overflow of the subtraction. If an overflow occurs, the result should be the first $k$ bits of $[t_1]^B$, otherwise the first $k$ bits of $[t_2]^B$. This if statement can be computed with a CMUX gate.
 
+#### Binary to Arithmetic Conversion
+
+For the binary to arithmetic conversion, the general strategy for replicated sharing is the following. We sample random binary shares $[x'_2]^B$ and $[x'_3]^B$ using the special correlated randomness, such that $P_3$ gets both values in addition to it's shares, while $P_1$ and $P_2$ get $x'_3$ and $x'_2$ in clear respectively. Then we compute a binary circuit to add $[x_1]^B = \text{BinAdd}(\text{BinAdd}([x]^B, [x'_2]^B), [x'_3]^B)$. Finally, we open $[x_1]^B$ to $P_1$ and $P_2$. The arithmetic shares then are $[x] = (x_1, -x'_2, -x'_3)$.
+
+To account for modular reductions in finite fields, we follow a similar strategy as for the arithmetic to binary conversion to translate $[x]^B$:
+
+* $P_i$ samples $r_i$ to be a new random binary share of 0
+* $P_1$ samples $x'_3$ using RNG2 and sets x_3 = -x'_3;
+* $P_2$ samples $x'_2$ using RNG1 and sets x_2 = -x'_2;
+* $P_3$ samples $x'_2$ using RNG1 and $x'_3$ using RNG2, sets x_2 = -x'_2, x_3 = -x'_3, and t = (x'_2 + x'_3 mod p) ^ r_3;
+  * It follows that $(r_1, t, r_3)$ is a valid binary sharing of $(x'_2 + x'_3 \mod p)$
+* $P_i$ sends its share of $(r_1, t, r_3)$ to $P_{i+1}
+  * Each party now has a valid binary replicated sharing $[x'_{2,3}]^B$ of $(x'_2 + x'_3 \mod p)$
+* The parties compute a binary adder circuit of $k=\lceil \log_2(p)\rceil$ bits to sum up $[x]^B$ and $[x'_{2,3}]^B$ to get a $[t_1]^B$ with $k+1$ bits (including overflow bit).
+* The parties compute the subtraction of $[t_1]^B - p$ inside a binary circuit to get $[t_2]^B$.
+* The $k+1$ bit of $[t_2]^B$ indicates an overflow of the subtraction. If an overflow occurs, $[x_1]^B$ should be the first $k$ bits of $[t_1]^B$, otherwise the first $k$ bits of $[t_2]^B$. This if statement can be computed with a CMUX gate.
+* We open $[x_1]^B$ to $P_1$ and $P_2$
+* The final sharing is $[x] = (x_1, x_2, x_3)$ and each party has (only) access to the shares it requires for the replication.
+
+#### Bit Injection
+
+To translate a single shared bit $[x]^B$ to a arithmetic sharing, we perform share splitting and create valid arithmetic shares of the shares: $[x_1] = (x_1, 0, 0)$, $[x_2] = (0, x_2, 0)$, and $[x_3] = (0, 0, x_3)$. Then, we combine the shares by calculating arithmetic XORs: $[x] = \text{AXor}(\text{AXor}([x_1], [x_2]), [x_3])$, where $\text{AXor}(a, b) = a + b - 2 \cdot a \cdot b$.
+
 <TODO>
 
-#### Binary to Arithmetic Conversion
+#### Binary Addition Circuits
 
 <TODO>
 
@@ -164,7 +187,7 @@ Shamir and Rep3 are both linear secret sharing schemes which provide semi-honest
 
 ## Witness Extension
 
-<TODO: b2a, a2b, bridges, comparisons (i.e., all circuits)>
+<TODO: bridges>
 
 [1] [https://eprint.iacr.org/2018/403.pdf](https://eprint.iacr.org/2018/403.pdf)\
 [2] [https://web.mit.edu/6.857/OldStuff/Fall03/ref/Shamir-HowToShareASecret.pdf](https://web.mit.edu/6.857/OldStuff/Fall03/ref/Shamir-HowToShareASecret.pdf)\
