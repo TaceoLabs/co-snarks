@@ -1,5 +1,17 @@
 # generate-witness
 
+The aim of the `generate-witness` command is to generate a secret-shared witness file in MPC using secret shares of the input.
+
+## Example
+
+```bash
+co-circom generate-witness --input test_vectors/poseidon/input.json.0.shared --circuit test_vectors/poseidon/circuit.circom --link-library test_vectors/poseidon/lib --protocol REP3 --config configs/party1.toml --out test_vectors/poseidon/witness.wtns.0.shared
+```
+
+The above command takes a shared input file `input.json.0.shared` for the circuit `circuit.circom` with required circom library files in `test_vectors/poseidon/lib`  with the [network config](./network-config.md) and outputs the witness share to `test_vectors/poseidon/witness.wtns.0.shared`.
+
+## Reference
+
 ```txt
 $ co-circom generate-witness --help
 Evaluates the extended witness generation for the specified circuit and input share in MPC
