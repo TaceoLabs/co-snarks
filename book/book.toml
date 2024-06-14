@@ -5,5 +5,6 @@ multilingual = false
 src = "src"
 title = "Collaborative Circom"
 
-[output.html]
-mathjax-support = true
+
+[preprocessor.katex]
+after = ["links"]

@@ -6,5 +6,6 @@ Quickstart:
 
 ```bash
 cargo install mdbook
+cargo install mdbook-katex
 mdbook serve
 ```
