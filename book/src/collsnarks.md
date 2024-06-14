@@ -32,6 +32,13 @@ This paper[^9] is a followup to zkSaaS which replaces the used SNARK with GKR[^1
 [^9]: [https://eprint.iacr.org/2024/143.pdf](https://eprint.iacr.org/2024/143.pdf)
 [^10]: GKR: [https://dl.acm.org/doi/10.1145/2699436](https://dl.acm.org/doi/10.1145/2699436)
 
+## Scalable Collaborative zk-SNARK and Its Application to Efficient Proof Outsourcing
+
+This paper[^14] is essentially an update version of "Scalable Collaborative zk-SNARK: Fully Distributed Proof Generation and Malicious Security", which includes semi-honest protocols for collaborative HyperPlonk[^15], additional optimization, and new experiments.
+
+[^14]: [https://eprint.iacr.org/2024/940.pdf](https://eprint.iacr.org/2024/940.pdf)
+[^15]: HyperPlonk: [https://eprint.iacr.org/2022/1355.pdf]https://eprint.iacr.org/2022/1355.pdf)
+
 ## Confidential and Verifiable Machine Learning Delegations on the Cloud
 
 This paper[^11] implements GKR in MPC using the well-known MP-SPDZ[^12] library. It focuses on efficient matrix multiplications, bit provides a generic construction as well.
