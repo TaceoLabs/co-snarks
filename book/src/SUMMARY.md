@@ -8,6 +8,13 @@
   - [Computing a ZKP in MPC](./proving.md)
   - [Computing the extended witness in MPC](./witness.md)
   - [Collecting input from multiple parties](./multiple_inputs.md)
+- [co-circom CLI](./co-circom.md)
+  - [split-input](./split-input.md)
+  - [merge-input-shares](./merge-input-shares.md)
+  - [split-witness](./split-witness.md)
+  - [generate-witness](./generate-witness.md)
+  - [generate-proof](./generate-proof.md)
+  - [Network Config File](./network-config.md)
 
 # Further Information
 
