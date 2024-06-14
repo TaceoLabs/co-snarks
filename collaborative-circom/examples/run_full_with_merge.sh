@@ -1,8 +1,8 @@
 EXAMPLE_NAME=multiplier2
 
 # split inputs into shares
-cargo run --release --bin co-circom -- split-input --input test_vectors/$EXAMPLE_NAME/input0.json --protocol bla --out-dir test_vectors/$EXAMPLE_NAME
-cargo run --release --bin co-circom -- split-input --input test_vectors/$EXAMPLE_NAME/input1.json --protocol bla --out-dir test_vectors/$EXAMPLE_NAME
+cargo run --release --bin co-circom -- split-input --circuit test_vectors/$EXAMPLE_NAME/circuit.circom --link-library test_vectors/$EXAMPLE_NAME/lib --input test_vectors/$EXAMPLE_NAME/input0.json --protocol bla --out-dir test_vectors/$EXAMPLE_NAME
+cargo run --release --bin co-circom -- split-input --circuit test_vectors/$EXAMPLE_NAME/circuit.circom --link-library test_vectors/$EXAMPLE_NAME/lib --input test_vectors/$EXAMPLE_NAME/input1.json --protocol bla --out-dir test_vectors/$EXAMPLE_NAME
 # merge inputs into single input file
 cargo run --release --bin co-circom -- merge-input-shares --inputs test_vectors/$EXAMPLE_NAME/input0.json.0.shared --inputs test_vectors/$EXAMPLE_NAME/input1.json.0.shared --protocol bla --out test_vectors/$EXAMPLE_NAME/input.json.0.shared
 cargo run --release --bin co-circom -- merge-input-shares --inputs test_vectors/$EXAMPLE_NAME/input0.json.1.shared --inputs test_vectors/$EXAMPLE_NAME/input1.json.1.shared --protocol bla --out test_vectors/$EXAMPLE_NAME/input.json.1.shared

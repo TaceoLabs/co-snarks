@@ -217,6 +217,14 @@ mod rep3_tests {
             ));
             res
         }
+
+        fn read_field_element(s: &str) -> ark_bn254::Fr {
+            if let Some(striped) = s.strip_prefix('-') {
+                -ark_bn254::Fr::from_str(striped).unwrap()
+            } else {
+                ark_bn254::Fr::from_str(s).unwrap()
+            }
+        }
         pub fn from_test_name(fn_name: &str) -> TestInputs {
             let mut witnesses: Vec<
                 Witness<ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>>,
@@ -251,7 +259,7 @@ mod rep3_tests {
                     .as_array()
                     .unwrap()
                     .iter()
-                    .map(|s| ark_bn254::Fr::from_str(s.as_str().unwrap()).unwrap())
+                    .map(|s| read_field_element(s.as_str().unwrap()))
                     .collect::<Vec<_>>();
                 inputs.push(input);
                 i += 1
