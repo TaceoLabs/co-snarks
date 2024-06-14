@@ -37,4 +37,4 @@ This paper[^9] is a followup to zkSaaS which replaces the used SNARK with GKR[^1
 This paper[^11] implements GKR in MPC using the well-known MP-SPDZ[^12] library. It focuses on efficient matrix multiplications, bit provides a generic construction as well.
 
 [^11]: [https://eprint.iacr.org/2024/537.pdf](https://eprint.iacr.org/2024/537.pdf)
-[^12]: MP-SPDZ: [Github](https://github.com/data61/MP-SPDZ), [Paper](https://eprint.iacr.org/2020/521.pdf)
+[^12]: MP-SPDZ: [https://github.com/data61/MP-SPDZ](https://github.com/data61/MP-SPDZ), paper: [https://eprint.iacr.org/2020/521.pdf](https://eprint.iacr.org/2020/521.pdf)
