@@ -38,3 +38,9 @@ This paper[^11] implements GKR in MPC using the well-known MP-SPDZ[^12] library.
 
 [^11]: [https://eprint.iacr.org/2024/537.pdf](https://eprint.iacr.org/2024/537.pdf)
 [^12]: MP-SPDZ: [https://github.com/data61/MP-SPDZ](https://github.com/data61/MP-SPDZ), paper: [https://eprint.iacr.org/2020/521.pdf](https://eprint.iacr.org/2020/521.pdf)
+
+## How to prove any NP statement jointly? Efficient Distributed-prover Zero-Knowledge Protocols
+
+This paper[^13] provides new security notions for distributed prover zero knowledge (DPZK) and provides a generic compiler to realize distributed proof generation for any zero-knowledge proof system build from the interactive oracle proofs (IOP) paradigm.
+
+[^13]: [https://eprint.iacr.org/2021/1599.pdf](https://eprint.iacr.org/2021/1599.pdf)
