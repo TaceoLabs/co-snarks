@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-circom-v0.1.0...collaborative-circom-v0.1.1) (2024-06-14)
+
+
+### Bug Fixes
+
+* minor spelling ([e7f7178](https://github.com/TaceoLabs/collaborative-circom/commit/e7f7178b7e3c2605e0295a591eaa8b6e46499db1))
+
 ## [0.1.0](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-circom-v0.0.1...collaborative-circom-v0.1.0) (2024-06-14)
 
 
