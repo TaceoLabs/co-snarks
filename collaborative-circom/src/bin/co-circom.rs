@@ -498,8 +498,8 @@ fn parse_field(val: &serde_json::Value) -> color_eyre::Result<ark_bn254::Fr> {
             val
         )
     })?;
-    if let Some(striped) = s.strip_prefix('-') {
-        Ok(-striped
+    if let Some(stripped) = s.strip_prefix('-') {
+        Ok(-stripped
             .parse::<ark_bn254::Fr>()
             .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
             .context("while parsing field element")?)
