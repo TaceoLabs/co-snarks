@@ -15,7 +15,7 @@ use circom_types::{
     r1cs::R1CS,
 };
 use clap::{Parser, Subcommand};
-use collaborative_circom::file_utils;
+use collaborative_circom::{file_utils, MPCProtocol};
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
 use color_eyre::eyre::{eyre, Context};
 use mpc_core::protocols::rep3::{self, network::Rep3MpcNet, Rep3Protocol};
@@ -54,8 +54,8 @@ enum Commands {
         #[arg(long)]
         r1cs: PathBuf,
         /// The MPC protocol to be used
-        #[arg(long)]
-        protocol: String, // TODO: which datatype? an enum?
+        #[arg(long, value_enum)]
+        protocol: MPCProtocol,
         /// The path to the (existing) output directory
         #[arg(long)]
         out_dir: PathBuf,
@@ -72,8 +72,8 @@ enum Commands {
         #[arg(long)]
         link_library: Vec<String>,
         /// The MPC protocol to be used
-        #[arg(long)]
-        protocol: String, // TODO: which datatype? an enum?
+        #[arg(long, value_enum)]
+        protocol: MPCProtocol,
         /// The path to the (existing) output directory
         #[arg(long)]
         out_dir: PathBuf,
@@ -84,8 +84,8 @@ enum Commands {
         #[arg(long)]
         inputs: Vec<PathBuf>,
         /// The MPC protocol to be used
-        #[arg(long)]
-        protocol: String, // TODO: which datatype? an enum?
+        #[arg(long, value_enum)]
+        protocol: MPCProtocol,
         /// The output file where the merged input share is written to
         #[arg(long)]
         out: PathBuf,
@@ -102,8 +102,8 @@ enum Commands {
         #[arg(long)]
         link_library: Vec<String>,
         /// The MPC protocol to be used
-        #[arg(long)]
-        protocol: String, // TODO: which datatype? an enum?
+        #[arg(long, value_enum)]
+        protocol: MPCProtocol,
         /// The path to MPC network configuration file
         #[arg(long)]
         config: PathBuf,
@@ -120,8 +120,8 @@ enum Commands {
         #[arg(long)]
         zkey: PathBuf,
         /// The MPC protocol to be used
-        #[arg(long)]
-        protocol: String, // TODO: which datatype? an enum?
+        #[arg(long, value_enum)]
+        protocol: MPCProtocol,
         /// The path to MPC network configuration file
         #[arg(long)]
         config: PathBuf,
