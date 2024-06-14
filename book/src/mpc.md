@@ -2,8 +2,8 @@
 
 Currently, proof generation is supported with two different MPC protocols:
 
-* 3-Party replicated secret sharing (based on ABY3[^1]) with semi-honest security
-* N-Party Shamir secret sharing[^2] (based on DN07[^3]) with semi-honest security
+* 3-party replicated secret sharing (based on ABY3[^1]) with semi-honest security
+* N-party Shamir secret sharing[^2] (based on DN07[^3]) with semi-honest security
 
 ## Notation
 
@@ -164,7 +164,24 @@ Shamir secret sharing comes with a native multiplication protocol: $z_i = x_i\cd
 
 #### Rng Setup
 
-Since <TODO>
+For the degree reduction step after a multiplication we require degree-$t$ and degree-$2t$ sharings of the same random value $r$. We generate these values following the techniques proposed in DN07, to generate $t$ random pairs at once:
+
+* Each party $P_i$ generates a random value $s_i$ and shares it as degree-$t$ share $[s_i]_t$ and degree-$2t$ share $[s_i]_{2t}$ to the other parties.
+* After receiving the all shares, one sets $[\vec{s}]_t = ([s_1]_t, [s_2]_t, ..., [s_n]_t)^T$ and $[\vec{s}]_{2t} = ([s_1]_{2t}, [s_2]_{2t}, ..., [s_n]_{2t})^T$.
+* Calculate $([r_1]_t, [r_2]_t, ..., [r_t]_t)^T = M \cdot [\vec{s}]_t$ and $([r_1]_{2t}, [r_2]_{2t}, ..., [r_t]_{2t})^T = M \cdot [\vec{s}]_{2t}$, where $M\in\mathbb F_p^{t\times n}$ is a Vandermonde matrix.
+* The pairs $([r_i]_t, [r_i]_{2t})$ for $1\le i \le t$ are then valid random shares which can be used for resharing.
+
+For simplicity we use the following Vandermonde matrix:
+$$
+    M = \left(\begin{array}{ccccc}
+        1 & 1 & 1 & ... & 1 \\
+        1 & 2 & 3 & ... & n \\
+        1 & 2^2 & 3^2 & ... & n^2 \\
+        \vdots & \vdots & \vdots & \ddots & \vdots  \\
+        1 & 2^t & 3^t & ... & n^t \\
+    \end{array}\right)
+$$
+
 
 ### Reconstruction
 
