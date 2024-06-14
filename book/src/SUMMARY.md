@@ -14,6 +14,7 @@
   - [split-witness](./split-witness.md)
   - [generate-witness](./generate-witness.md)
   - [generate-proof](./generate-proof.md)
+  - [verify](./verify.md)
   - [Network Config File](./network-config.md)
 
 # Further Information
