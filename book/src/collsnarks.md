@@ -31,3 +31,10 @@ This paper[^9] is a followup to zkSaaS which replaces the used SNARK with GKR[^1
 
 [^9]: [https://eprint.iacr.org/2024/143.pdf](https://eprint.iacr.org/2024/143.pdf)
 [^10]: GKR: [https://dl.acm.org/doi/10.1145/2699436](https://dl.acm.org/doi/10.1145/2699436)
+
+## Confidential and Verifiable Machine Learning Delegations on the Cloud
+
+This paper[^11] implements GKR in MPC using the well-known MP-SPDZ[^12] library. It focuses on efficient matrix multiplications, bit provides a generic construction as well.
+
+[^11]: [https://eprint.iacr.org/2024/537.pdf](https://eprint.iacr.org/2024/537.pdf)
+[^12]: MP-SPDZ: [Github](https://github.com/data61/MP-SPDZ), [Paper](https://eprint.iacr.org/2020/521.pdf)
