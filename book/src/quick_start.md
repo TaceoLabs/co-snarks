@@ -19,14 +19,14 @@ template Multiplier2 () {
    // Constraints.  
    c <== a * b;  
 }
-component main(public [b]) = Multiplier2();
+component main{public [b]} = Multiplier2();
 ```
 
 This circuit proofs that we know two numbers that factor the output number c. We also reveal one of the numbers we used to factor c. This is not really impressive, but we stick to the classics for explanations! Copy the code and put in a file named `multiplier2.circom`.
 
 ## Compile the Circuit
 
-Before we can go the co-SNARKs part, we have to compile an `.r1cs` file with circom and a verification/proofing key with snarkjs. To compile the `.r1cs` file open your terminal (after installing circom) and type:
+For the very first step we have to compile an `.r1cs` file with circom and create a verification/proving key with snarkjs. To compile the `.r1cs` file open your terminal (after installing circom) and type:
 
 ```bash
 circom multiplier2.circom --r1cs
