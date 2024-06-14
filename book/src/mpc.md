@@ -7,7 +7,7 @@ Currently, proof generation is supported with two different MPC protocols:
 
 ## Notation
 
-With $[x]$ we denote that $x$ is additively secret shared amongst $n$ parties, such that $[x] = (x_1, x_2, ..., x_1)$ and $x = \sum_i^n x_i$. With $[x]^B$ we denote that $x$ is binary secret shared amongst $n$ parties, such that $[x]^B = (x_1, x_2, ..., x_1)$ and $x = x_1 \oplus x_2 \oplus ... \oplus x_n$. Furthermore, indices of shares are taken modulo the number of parties.
+With $[x]$ we denote that $x\in\mathbb F_p$ is additively secret shared amongst $n$ parties, such that $[x] = (x_1, x_2, ..., x_1)$ and $x = \sum_i^n x_i$. With $[x]^B$ we denote that $x\in\mathbb F_p$ is binary secret shared amongst $n$ parties, such that $[x]^B = (x_1, x_2, ..., x_1)$ and $x = x_1 \oplus x_2 \oplus ... \oplus x_n$. Furthermore, indices of shares are taken modulo the number of parties. Similar, for a group element $X\in\mathbb G$ in an additive Group $\mathbb G$ (e.g., elliptic curve groups) we denote by $[X]$ its secret sharing amongst $n$ parties, such that $[X] = (X_1, X_2, ..., X_1)$ and $X = \sum_i^n X_i$.
 
 ## 3-Party Replicated Sharing
 
@@ -107,11 +107,16 @@ Our implementation provides semi-honest security with honest majority. I.e., the
 
 ## MPC for group operations
 
-<TODO>
+So far, we only discussed MPC for field elements $\mathbb F_p$. However, one can easily extend it to MPC over Group elements $\mathbb G$. W.l.o.g. we will use the notation for additive groups $\mathbb G$ (e.g., elliptic curve groups). A secret share $[x]\in\mathbb F_p$ can be translated to a shared group element by $[X] = [x] \cdot G$, where $G$ is a generator of $\mathbb G$. Then, $[X] = (X_1, X_2, ..., X_n)$ is a valid additive share of $x\cdot G = \sum_i X_i$. Linear operations directly follow from the used linear secret sharing scheme: $[Z] = a \cdot [X] + b\cdot [Y] + C = (a\cdot [x] + b\cdot [y] + c)\cdot G$. Shared scalar multiplications also follow from the secret sharing scheme: $[Z] = [x] \cdot [Y] = [x] \cdot [y] \cdot G$.
 
 ## Shamir vs Rep3
 
-<TODO>
+Shamir and Rep3 are both linear secret sharing schemes which provide semi-honest security with honest-majority. However, they have some important differences.
+
+* Shamir can be instantiated with $n\ge 3$ parties, while Rep3 has a fixed size $n=3$
+* In Shamir, each share is just one field element $\in\mathbb F_p$, while in Rep3 each share is composed of two field elements.
+* In Shamir, the overhead on the CPU is significantly smaller compared to Rep3, where each operation is applied to two shares.
+* Rep3 allows efficient arithmetic-to-binary conversions.
 
 ## Witness Extension
 
