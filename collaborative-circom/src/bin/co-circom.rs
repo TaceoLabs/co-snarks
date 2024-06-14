@@ -299,7 +299,6 @@ fn main() -> color_eyre::Result<ExitCode> {
                     color_eyre::Result::<_>::Ok(input_share)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            dbg!(&input_shares);
             let start = input_shares.pop().expect("we have at least two inputs");
             let merged = input_shares.into_iter().try_fold(start, |a, b| {
                 a.merge(b).context("while merging input shares")
