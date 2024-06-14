@@ -18,6 +18,32 @@ $$
     P_3: (x_3, x_2)
 $$
 
+### Rng Setup
+
+Random values are required during many points of MPC executions. For cheaper randomness generation, correlated random number generators are set up before protocol execution.
+
+#### Random Values
+
+In order to create random shares $(r_i, r_{i-1})$, random additive shares of 0 $(r_i - r_{i-1})$, or random binary shares of 0 $(r_i \oplus r_{i-1})$ without interaction, Rep3 sets up a correlated random number generator during the setup phase. Each party $P_i$ chooses a seed $s_i$ and sends it to the next party $P_{i+1}$. Thus, each party has two seeds and can set up an RNG's, where two party are able to create the same random numbers:
+
+$$
+    P_1: (\text{RNG}_1, \text{RNG}_3)\\
+    P_2: (\text{RNG}_2, \text{RNG}_1)\\
+    P_3: (\text{RNG}_3, \text{RNG}_2)
+$$
+
+
+#### Binary To Arithmetic Conversion
+
+For the binary to arithmetic conversion, we need correlated randomness as well. The goal is to setup RNG's, such that:
+
+$$
+    P_1: (\text{RNG1}_1, \text{RNG1}_3), (\text{RNG2}_1, \text{RNG2}_2, \text{RNG2}_3)\\
+    P_1: (\text{RNG1}_1, \text{RNG1}_2, \text{RNG1}_3), (\text{RNG2}_2, \text{RNG2}_1)\\
+    P_3: (\text{RNG1}_1, \text{RNG1}_2, \text{RNG1}_3), (\text{RNG2}_1, \text{RNG2}_2, \text{RNG2}_3)
+$$
+In other words, $P_2$ and $P_3$ can use RNG1 create the same field element, while all parties can sample valid shares for it. Similar, $P_1$ and $P_3$ can use RNG2 to create the same field element, while all parties can sample valid shares for it. This setup can be achieved by sampling seeds from the already set up RNG for shared random values and resharing the seeds correctly.
+
 ### Supported operations
 
 #### Linear Operations
@@ -72,30 +98,6 @@ $$
 
 Reconstruction of a value is implemented as $P_i$ sending $z_{i-1}$ to $P_{i+1}$. Then each party has all shares.
 
-### Rng Setup
-
-#### Random Values
-
-In order to create random shares $(r_i, r_{i-1})$, random additive shares of 0 $(r_i - r_{i-1})$, or random binary shares of 0 $(r_i \oplus r_{i-1})$ without interaction, Rep3 sets up a correlated random number generator during the setup phase. Each party $P_i$ chooses a seed $s_i$ and sends it to the next party $P_{i+1}$. Thus, each party has two seeds and can set up an RNG's, where two party are able to create the same random numbers:
-
-$$
-    P_1: (\text{RNG}_1, \text{RNG}_3)\\
-    P_2: (\text{RNG}_2, \text{RNG}_1)\\
-    P_3: (\text{RNG}_3, \text{RNG}_2)
-$$
-
-
-#### Binary To Arithmetic Conversion
-
-For the binary to arithmetic conversion, we need correlated randomness as well. The goal is to setup RNG's, such that:
-
-$$
-    P_1: (\text{RNG1}_1, \text{RNG1}_3), (\text{RNG2}_1, \text{RNG2}_2, \text{RNG2}_3)\\
-    P_1: (\text{RNG1}_1, \text{RNG1}_2, \text{RNG1}_3), (\text{RNG2}_2, \text{RNG2}_1)\\
-    P_3: (\text{RNG1}_1, \text{RNG1}_2, \text{RNG1}_3), (\text{RNG2}_1, \text{RNG2}_2, \text{RNG2}_3)
-$$
-In other words, $P_2$ and $P_3$ can use RNG1 create the same field element, while all parties can sample valid shares for it. Similar, $P_1$ and $P_3$ can use RNG2 to create the same field element, while all parties can sample valid shares for it. This setup can be achieved by sampling seeds from the already set up RNG for shared random values and resharing the seeds correctly.
-
 ### Security
 
 Our implementation provides semi-honest security with honest majority. I.e., the scheme is secure if all parties follow the protocol honestly and no two servers collude.
@@ -106,6 +108,10 @@ Shamir secret sharing is a different way of instantiating a linear secret sharin
 The share of party $i$ then is $Q(i)$. In other words, $[x] = (x_1, x_2, ..., x_n)$, where $x_i=Q(i)$.
 
 Reconstruction then works via lagrange interpolation of any $t+1$ shares: $x = \sum_i^{t+1} \lambda_i x_i$, where $\lambda_i$ is the corresponding lagrange coefficient.
+
+### Rng Setup
+
+<TODO>
 
 ### Supported operations
 
@@ -121,13 +127,9 @@ Shamir's secret sharing allows, similar to additive sharing, to compute linear f
 
 Shamir secret sharing comes with a native multiplication protocol: $z_i = x_i\cdot y_i$ is a valid share of $[z] = [x] \cdot [y]$. However, $z_i$ is a point on a polynomial with degree $2t$. In other words, the degree doubles after a multiplication and twice as many parties ($2t+1$) are required to reconstruct the secret $z$. Thus, one needs to perform a degree reduction step in MPC for further computations. In DN07, this is done by sampling a random value, which is shared as a degree-$t$ ($[r]_t$) and degree-$2t$ ($[r]_{2t}$) polynomial. Then, the parties open $[z]_{2t} + [r]_{2t}$ to $P_1$, who reconstructs it to $z' =z+r$. Then. $P_1$ shares $z'$ as a fresh degree-$t$ share to all parties, who calculate $[z]_t = [z']_t - [r]_t$.
 
-#### Reconstruction
+### Reconstruction
 
 Reconstruction is currently implemented as $P_i$ sending its share $x_i$ to the next $t$ parties. Then, each party has $t+1$ shares to reconstruct the secret.
-
-### Rng Setup
-
-<TODO>
 
 ### Security
 
