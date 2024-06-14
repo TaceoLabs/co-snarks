@@ -189,9 +189,9 @@ Shamir and Rep3 are both linear secret sharing schemes which provide semi-honest
 
 ## Witness Extension
 
-Due to not having an efficient arithmetic to binary conversion, we do not have a witness extension implementation for Shamir sharing at the moment.
+Due to not having an efficient arithmetic to binary conversion, we do not have a witness extension implementation for Shamir sharing at the moment. However, we provide a bridge implementation, which translates Rep3 shares to 3-party Shamir shares (with threshold/poly-degree $t=1$).
 
-<TODO: bridges>
+This bridge works by first letting $P_i$ translate its first additive share $x_i$ to a Shamir share by dividing through the corresponding lagrange coefficient. This, however, creates a 3-party Shamir sharing with threshold/poly-degree $t=2$. Thus, we perform the same degree-reduction step, which is also required after a Shamir multiplication.
 
 [1] [https://eprint.iacr.org/2018/403.pdf](https://eprint.iacr.org/2018/403.pdf)\
 [2] [https://web.mit.edu/6.857/OldStuff/Fall03/ref/Shamir-HowToShareASecret.pdf](https://web.mit.edu/6.857/OldStuff/Fall03/ref/Shamir-HowToShareASecret.pdf)\
