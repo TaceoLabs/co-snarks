@@ -69,7 +69,7 @@ This command secret shares the private inputs (everything that is not explicitly
 
 Now we have to compute the extended witness. In a real-world setting you would have to send the input files from the previous step to the parties.
 
-For that we need another config file for every party, namely the network config (you can read an in-depth explanation about the config at [here](./network-config.md)). You can copy-paste the config from here and call it `party0.toml` for party0 and so on:
+To achieve that we need another config file for every party, namely the network config (you can read an in-depth explanation about the config at [here](./network-config.md)). You can copy-paste the config from here and call it `party0.toml` for party0 and so on:
 
 ```toml
 my_id = 0
@@ -91,7 +91,7 @@ cert_path = "data/cert2.der"
 
 You can download the TLS certificates from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/a37d24abcc1069e6e30b0e6638870bcd8834451a/collaborative-circom/examples/data) and put them under `data/`.
 
-We move the the `.toml` files to `configs/` and move on.
+We move the `.toml` files to `configs/` and execute the following command (for every party).
 
 ```bash
 $ co-circom generate-witness --input out/input.json.0.shared --circuit multiplier2.circom --protocol REP3 --config configs/party0.toml --out out/witness.wtns.0.shared
@@ -101,11 +101,11 @@ INFO co_circom: 365: Witness successfully written to out/witness.wtns.0.shared
 
 > For brevity we only showed the command for a the 0-th party. You have to call it for all three parties in parallel.
 
-After all three parties finished successfully, you will have three witness files in your `out/` folder. Each one of them contains a share of the extended witness.
+After all parties finished successfully, you will have three witness files in your `out/` folder. Each one of them contains a share of the extended witness.
 
 ## Prove the Circuit
 
-We need another MPC step to finally get our co-SNARK proof. We can reuse TLS certificates and the network config from the previous step. We also finally need the proving key from the very first step! In your terminal execute the following command:
+We need another MPC step to finally get our co-SNARK proof. We can reuse TLS certificates and the network config from the previous step. Also, we finally need the proving key from the very first step! In your terminal execute the following command:
 
 ```bash
 $ co-circom generate-proof --witness out/witness.wtns.0.shared --zkey multiplier2.zkey --protocol REP3 --config configs/party0.toml --out proof.0.json --public-input public_input.json
@@ -116,9 +116,9 @@ INFO co_circom: 438: Proof generation finished successfully
 
 > Again, for brevity, we only gave the command for party 0. You know the drill, all at the same time.
 
-The three proofs produced by the separate parties are equivalent and a valid Groth16 proof - Congratulations you did it 🎉
+The three proofs produced by the separate parties are equivalent and valid Groth16 proofs - Congratulations, you did it 🎉
 
-You will find another file, namely `public_input.json`. This file contains all public information necessary to verify the proof, which in our case means:
+You will find another file, namely `public_input.json`. This file contains all public information necessary to verify the proof, which, in our case, means:
 
 ```json
 ["33","11"]
