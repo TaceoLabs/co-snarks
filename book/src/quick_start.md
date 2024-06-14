@@ -1,8 +1,8 @@
 # Quick Start
 
-If you just want to get your hands dirty as fast as possible, here is a run-down on how to collaboratively prove the `Multiplier2` example from the [circom documentation](https://docs.circom.io/getting-started/installation/).
+If you just want to get your hands dirty as fast as possible, here is a run-down on how to collaboratively prove the `Multiplier2` example from the [Circom documentation](https://docs.circom.io/getting-started/installation/).
 
-First of all, here is the relevant circom file:
+First of all, here is the relevant Circom file:
 
 ```c++
 pragma circom 2.0.0;
@@ -26,17 +26,17 @@ This circuit proves that we know two numbers that factor the output number c. We
 
 ## Compile the Circuit
 
-In the first step, we compile an `.r1cs` file using Circom and create a verification/proving key using SnarkJS. To compile the `.r1cs` file open your terminal (after installing circom) and type:
+In the first step, we compile an `.r1cs` file using Circom and create a verification/proving key using SnarkJS. To compile the `.r1cs` file open your terminal (after installing Circom) and type:
 
 ```bash
 circom multiplier2.circom --r1cs
 ```
 
-You will find a file called `multiplier2.r1cs` in your working folder. To create the keys you can either follow the circom documentation, or download the two keys from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/main/collaborative-circom/examples/test_vectors/multiplier2), where we created the keys already (you will need `multiplier2.zkey` and `verification_key.json`).
+You will find a file called `multiplier2.r1cs` in your working folder. To create the keys you can either follow the Circom documentation, or download the two keys from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/main/collaborative-circom/examples/test_vectors/multiplier2), where we created the keys already (you will need `multiplier2.zkey` and `verification_key.json`).
 
 ## Split the Input
 
-Ok, after we finished the setup, we need to prepare the inputs for the witness extension. If you have read the circom documentation (or used circom in the past), you will remember a step between compiling the circuits and the actual proving. That is, the witness extension (or "computing the witness" as circom calls it).
+Ok, after we finished the setup, we need to prepare the inputs for the witness extension. If you have read the Circom documentation (or used Circom in the past), you will remember a step between compiling the circuits and the actual proving. That is, the witness extension (or "computing the witness" as Circom calls it).
 
 We prepare an input file and call it `input.json`:
 
@@ -44,7 +44,7 @@ We prepare an input file and call it `input.json`:
 {"a": "3", "b": "11"}
 ```
 
-> Remember that that `b` is a public input, as defined by our circuit.
+> Remember that `b` is a public input, as defined by our circuit.
 
 As we want to execute an MPC protocol, we have to split the input for the parties. At the moment we support 3 parties for the witness extension. To do that, execute the following command:
 
