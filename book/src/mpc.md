@@ -60,13 +60,41 @@ $$
     z_{i-1} = \text{SendReceive}(z_i)
 $$
 
+#### Arithmetic to Binary Conversion
+
+<TODO>
+
+#### Binary to Arithmetic Conversion
+
+<TODO>
+
 ### Reconstruction
 
 Reconstruction of a value is implemented as $P_i$ sending $z_{i-1}$ to $P_{i+1}$. Then each party has all shares.
 
 ### Rng Setup
 
-<TODO>
+#### Random Values
+
+In order to create random shares $(r_i, r_{i-1})$, random additive shares of 0 $(r_i - r_{i-1})$, or random binary shares of 0 $(r_i \oplus r_{i-1})$ without interaction, Rep3 sets up a correlated random number generator during the setup phase. Each party $P_i$ chooses a seed $s_i$ and sends it to the next party $P_{i+1}$. Thus, each party has two seeds and can set up an RNG's, where two party are able to create the same random numbers:
+
+$$
+    P_1: (\text{RNG}_1, \text{RNG}_3)\\
+    P_2: (\text{RNG}_2, \text{RNG}_1)\\
+    P_3: (\text{RNG}_3, \text{RNG}_2)
+$$
+
+
+#### Binary To Arithmetic Conversion
+
+For the binary to arithmetic conversion, we need correlated randomness as well. The goal is to setup RNG's, such that:
+
+$$
+    P_1: (\text{RNG1}_1, \text{RNG1}_3), (\text{RNG2}_1, \text{RNG2}_2, \text{RNG2}_3)\\
+    P_1: (\text{RNG1}_1, \text{RNG1}_2, \text{RNG1}_3), (\text{RNG2}_2, \text{RNG2}_1)\\
+    P_3: (\text{RNG1}_1, \text{RNG1}_2, \text{RNG1}_3), (\text{RNG2}_1, \text{RNG2}_2, \text{RNG2}_3)
+$$
+In other words, $P_2$ and $P_3$ can use RNG1 create the same field element, while all parties can sample valid shares for it. Similar, $P_1$ and $P_3$ can use RNG2 to create the same field element, while all parties can sample valid shares for it. This setup can be achieved by sampling seeds from the already set up RNG for shared random values and resharing the seeds correctly.
 
 ### Security
 
