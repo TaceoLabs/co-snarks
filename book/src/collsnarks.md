@@ -1,6 +1,6 @@
 # Collaborative SNARKs
 
-In this document we list some literature to collaborative SNARKs.
+In this document we list some literature for collaborative SNARKs.
 
 ## Experimenting with Collaborative zk-SNARKs: Zero-Knowledge Proofs for Distributed Secrets
 
@@ -24,3 +24,10 @@ This paper[^7] uses packed secret sharing (PSS)[^8], i.e., a variant of Shamir s
 
 [^7]: [https://eprint.iacr.org/2023/905.pdf](https://eprint.iacr.org/2023/905.pdf)
 [^8]: PSS: [https://dl.acm.org/doi/pdf/10.1145/129712.129780](https://dl.acm.org/doi/pdf/10.1145/129712.129780)
+
+## Scalable Collaborative zk-SNARK: Fully Distributed Proof Generation and Malicious Security
+
+This paper[^9] is a followup to zkSaaS which replaces the used SNARK with GKR[^10], which is better suited for PSS.
+
+[^9]: [https://eprint.iacr.org/2024/143.pdf](https://eprint.iacr.org/2024/143.pdf)
+[^10]: GKR: [https://dl.acm.org/doi/10.1145/2699436](https://dl.acm.org/doi/10.1145/2699436)
