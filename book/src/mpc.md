@@ -125,11 +125,13 @@ To account for modular reductions in finite fields, we follow a similar strategy
 
 To translate a single shared bit $[x]^B$ to a arithmetic sharing, we perform share splitting and create valid arithmetic shares of the shares: $[x_1] = (x_1, 0, 0)$, $[x_2] = (0, x_2, 0)$, and $[x_3] = (0, 0, x_3)$. Then, we combine the shares by calculating arithmetic XORs: $[x] = \text{AXor}(\text{AXor}([x_1], [x_2]), [x_3])$, where $\text{AXor}(a, b) = a + b - 2 \cdot a \cdot b$.
 
-<TODO>
-
 #### Binary Addition Circuits
 
-<TODO>
+As mentioned in the arithmetic to binary conversions, we need binary addition circuits. Since the bitlength of the used prime fields is large, we use depth-optimized carry-lookahead adders for the conversions. Currently, we have Kogge-Stone adders implemented, since this one can be computed efficiently using shifts and AND/XOR gates without extracting specific bits.
+
+The general structure of a Kogge-Stone adder to add two binary values $x, y$ is to first compute $p[i] = x[i] \oplus y[i]$ and $g[i] = x[i] \wedge y[i]$, where $x[i]$ is the $i$-th bit of $x$. Then, $p$ and $g$ are combined using a circuit with logarithmic depth (in the bitsize). This circuit is implemented in the `kogge_stone_inner` function.
+
+For binary subtraction circuits, we basically compute an addition circuit with the two's complement of $y$. Thus, we essentially compute $2^k + x - y$. If $y$ is public, the $2^k - y$ can directly be computed and the result is just fed into the Kogge-Stone adder. If $y$ is shared, we invert all $k$ bits and set the carry-in flag for the Kogge-Stone adder. This simulates two's complement calculation. The set carry-in flag has the following effects: First, $g[0]$ must additionally be XORed by $P[0]$. Finally, the LSB of the result of the Kogge-Stone circuit needs to be flipped
 
 ### Reconstruction
 
@@ -186,6 +188,8 @@ Shamir and Rep3 are both linear secret sharing schemes which provide semi-honest
 * Rep3 allows efficient arithmetic-to-binary conversions.
 
 ## Witness Extension
+
+Due to not having an efficient arithmetic to binary conversion, we do not have a witness extension implementation for Shamir sharing at the moment.
 
 <TODO: bridges>
 
