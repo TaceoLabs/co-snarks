@@ -48,6 +48,7 @@ $$
     z_{i-1} = \text{SendReceive}(z_i)
 $$
 
+The resharing, thereby, is simply implemented as $P_i$ sending $z_i$ to $P_{i+1}$.
 
 #### AND
 
@@ -58,6 +59,10 @@ $$
     z_i = (x_i \wedge y_i) \oplus (x_i \wedge y_{i-1}) \oplus (x_{i-1} \wedge y_i) \oplus r_i\\
     z_{i-1} = \text{SendReceive}(z_i)
 $$
+
+### Reconstruction
+
+Reconstruction of a value is implemented as $P_i$ sending $z_{i-1}$ to $P_{i+1}$. Then each party has all shares.
 
 ### Rng Setup
 
@@ -86,13 +91,19 @@ Shamir's secret sharing allows, similar to additive sharing, to compute linear f
 
 #### Multiplications
 
-<TODO>
+Shamir secret sharing comes with a native multiplication protocol: $z_i = x_i\cdot y_i$ is a valid share of $[z] = [x] \cdot [y]$. However, $z_i$ is a point on a polynomial with degree $2t$. In other words, the degree doubles after a multiplication and twice as many parties ($2t+1$) are required to reconstruct the secret $z$. Thus, one needs to perform a degree reduction step in MPC for further computations. In DN07, this is done by sampling a random value, which is shared as a degree-$t$ ($[r]_t$) and degree-$2t$ ($[r]_{2t}$) polynomial. Then, the parties open $[z]_{2t} + [r]_{2t}$ to $P_1$, who reconstructs it to $z' =z+r$. Then. $P_1$ shares $z'$ as a fresh degree-$t$ share to all parties, who calculate $[z]_t = [z']_t - [r]_t$.
+
+#### Reconstruction
+
+Reconstruction is currently implemented as $P_i$ sending its share $x_i$ to the next $t$ parties. Then, each party has $t+1$ shares to reconstruct the secret.
 
 ### Rng Setup
 
 <TODO>
 
 ### Security
+
+Our implementation provides semi-honest security with honest majority. I.e., the scheme is secure if all parties follow the protocol honestly and at most $t$ servers collude. $t$ can, thereby, be chosen to be $t\le \frac{n-1}{2}$.
 
 ## MPC for group operations
 
