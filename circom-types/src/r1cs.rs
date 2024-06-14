@@ -149,9 +149,6 @@ where
         let n_labels = reader.read_u64::<LittleEndian>()?;
         let n_constraints =
             usize::try_from(reader.read_u32::<LittleEndian>()?).expect("u32 fits into usize");
-        println!("i got pub in {n_pub_in}");
-        println!("i got prv in {n_prv_in}");
-        println!("i got pub out {n_prv_in}");
 
         let constraint_offset = sec_offsets.get(&constraint_type).ok_or_else(|| {
             Error::new(
