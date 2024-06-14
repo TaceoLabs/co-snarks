@@ -1,6 +1,6 @@
 # Quick Start
 
-If you just want to get your hands dirty as fast as possible, here is a run-down on how to collaboratively proof the `Multiplier2` example from the [circom documentation](https://docs.circom.io/getting-started/installation/).
+If you just want to get your hands dirty as fast as possible, here is a run-down on how to collaboratively prove the `Multiplier2` example from the [circom documentation](https://docs.circom.io/getting-started/installation/).
 
 First of all, here is the relevant circom file:
 
@@ -22,7 +22,7 @@ template Multiplier2 () {
 component main{public [b]} = Multiplier2();
 ```
 
-This circuit proofs that we know two numbers that factor the output number c. We also reveal one of the numbers we used to factor c. This is not really impressive, but we stick to the classics for explanations! Copy the code and put it in a file named `multiplier2.circom`.
+This circuit proves that we know two numbers that factor the output number c. We also reveal one of the numbers we used to factor c. This is not really impressive, but we stick to the classics for explanations! Copy the code and put it in a file named `multiplier2.circom`.
 
 ## Compile the Circuit
 
