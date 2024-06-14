@@ -197,7 +197,7 @@ So far, we only discussed MPC for field elements $\mathbb F_p$. However, one can
 
 Shamir and Rep3 are both linear secret sharing schemes which provide semi-honest security with honest-majority. However, they have some important differences.
 
-* Shamir can be instantiated with $n\ge 3$ parties, while Rep3 has a fixed number of parties $n=3$.
+* Shamir can be instantiated with $n\ge 3$ parties, while Rep3 is limited to $n=3$ parties.
 * In Shamir, each share is just one field element $\in\mathbb F_p$, while in Rep3 each share is composed of two field elements.
 * In Shamir, the overhead on the CPU is significantly smaller compared to Rep3, where each operation is applied to two shares.
 * Rep3 allows efficient arithmetic-to-binary conversions.
