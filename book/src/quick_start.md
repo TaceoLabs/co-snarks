@@ -22,11 +22,11 @@ template Multiplier2 () {
 component main{public [b]} = Multiplier2();
 ```
 
-This circuit proofs that we know two numbers that factor the output number c. We also reveal one of the numbers we used to factor c. This is not really impressive, but we stick to the classics for explanations! Copy the code and put in a file named `multiplier2.circom`.
+This circuit proofs that we know two numbers that factor the output number c. We also reveal one of the numbers we used to factor c. This is not really impressive, but we stick to the classics for explanations! Copy the code and put it in a file named `multiplier2.circom`.
 
 ## Compile the Circuit
 
-For the very first step we have to compile an `.r1cs` file with circom and create a verification/proving key with snarkjs. To compile the `.r1cs` file open your terminal (after installing circom) and type:
+In the first step, we compile an `.r1cs` file using Circom and create a verification/proving key using SnarkJS. To compile the `.r1cs` file open your terminal (after installing circom) and type:
 
 ```bash
 circom multiplier2.circom --r1cs
@@ -36,7 +36,7 @@ You will find a file called `multiplier2.r1cs` in your working folder. To create
 
 ## Split the Input
 
-Ok, after we finished the setup, we need to prepare the inputs for the witness extension. If you have read the circom documentation (or used circom in the past), you will remember a step between compiling the circuits and the actual proofing. That is, the witness extension (or "computing the witness" as circom calls it).
+Ok, after we finished the setup, we need to prepare the inputs for the witness extension. If you have read the circom documentation (or used circom in the past), you will remember a step between compiling the circuits and the actual proving. That is, the witness extension (or "computing the witness" as circom calls it).
 
 We prepare an input file and call it `input.json`:
 
