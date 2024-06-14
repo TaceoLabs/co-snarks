@@ -28,6 +28,5 @@
   - [MPC](./mpc.md)
   - [Zero Knowledge Proofs](./zkp.md)
   - [Collaborative SNARKs](./collsnarks.md)
-  - [Papers](./papers.md)
 
 [Contact](./contact.md)

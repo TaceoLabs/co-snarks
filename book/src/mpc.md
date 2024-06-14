@@ -32,7 +32,6 @@ $$
     P_3: (\text{RNG}_3, \text{RNG}_2)
 $$
 
-
 #### Binary To Arithmetic Conversion
 
 For the binary to arithmetic conversion, we need correlated randomness as well. The goal is to setup RNG's, such that:
@@ -181,7 +180,6 @@ $$
         1 & 2^t & 3^t & ... & n^t \\
     \end{array}\right)
 $$
-
 
 ### Reconstruction
 
