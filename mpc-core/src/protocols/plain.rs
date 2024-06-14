@@ -341,6 +341,9 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver<F> {
         Ok(F::from(lhs & rhs))
     }
 
+    fn vm_to_index(&mut self, a: Self::VmType) -> Result<usize> {
+        Ok(to_usize!(a))
+    }
     fn vm_open(&mut self, a: Self::VmType) -> Result<F> {
         Ok(a)
     }

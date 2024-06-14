@@ -17,12 +17,9 @@ use mpc_core::{
         witness_extension_impl::Rep3VmType,
         Rep3Protocol,
     },
-    to_usize,
     traits::CircomWitnessExtensionProtocol,
 };
 use mpc_net::config::NetworkConfig;
-use num_bigint::BigUint;
-use num_traits::ToPrimitive;
 use std::{collections::HashMap, rc::Rc};
 pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
     main: String,
@@ -587,10 +584,8 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     self.push_index(lhs * rhs);
                 }
                 op_codes::MpcOpCode::ToIndex => {
-                    //TODO what to do about that. This may leak some information
                     let signal = self.pop_field();
-                    // assert!(!protocol.is_shared(&signal)?, "ToIndex on shared value");
-                    self.push_index(to_usize!(protocol.vm_open(signal)?));
+                    self.push_index(protocol.vm_to_index(signal)?);
                 }
                 op_codes::MpcOpCode::Jump(jump_forward) => {
                     ip += jump_forward;

@@ -105,6 +105,7 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
     fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool>;
     fn is_shared(&mut self, a: &Self::VmType) -> Result<bool>;
 
+    fn vm_to_index(&mut self, a: Self::VmType) -> Result<usize>;
     fn vm_open(&mut self, a: Self::VmType) -> Result<F>;
 
     fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare;

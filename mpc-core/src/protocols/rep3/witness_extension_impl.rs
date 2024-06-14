@@ -1,12 +1,15 @@
 use super::{network::Rep3Network, Rep3PrimeFieldShare, Rep3Protocol};
 use crate::{
     protocols::{plain::PlainDriver, rep3::a2b::Rep3BigUintShare},
+    to_usize,
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
 };
 use ark_ff::{One, PrimeField};
-use eyre::{bail, Result};
+use eyre::{bail, eyre, Result};
 use num_bigint::BigUint;
 use num_traits::Zero;
+
+use num_traits::cast::ToPrimitive;
 
 #[derive(Clone)]
 pub enum Rep3VmType<F: PrimeField> {
@@ -551,14 +554,19 @@ impl<F: PrimeField> Rep3VmType<F> {
         }
     }
 
-    fn to_index<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> Result<F> {
+    fn open<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> Result<F> {
         match a {
             Rep3VmType::Public(a) => Ok(a),
-            Rep3VmType::Shared(a) => {
-                tracing::warn!("Opening shared value that is coerced to an index!");
-                Ok(party.open(&a)?)
-            }
-            _ => todo!("Shared to_index not implemented"),
+            Rep3VmType::Shared(a) => Ok(party.open(&a)?),
+            _ => todo!("BitShared open not implemented"),
+        }
+    }
+
+    fn to_index<N: Rep3Network>(_party: &mut Rep3Protocol<F, N>, a: Self) -> Result<usize> {
+        if let Rep3VmType::Public(a) = a {
+            Ok(to_usize!(a))
+        } else {
+            bail!("ToIndex called on shared value!")
         }
     }
 }
@@ -670,8 +678,12 @@ impl<F: PrimeField, N: Rep3Network> CircomWitnessExtensionProtocol<F> for Rep3Pr
         Self::VmType::is_zero(self, a)
     }
 
-    fn vm_open(&mut self, a: Self::VmType) -> Result<F> {
+    fn vm_to_index(&mut self, a: Self::VmType) -> Result<usize> {
         Self::VmType::to_index(self, a)
+    }
+
+    fn vm_open(&mut self, a: Self::VmType) -> Result<F> {
+        Self::VmType::open(self, a)
     }
 
     fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare {
