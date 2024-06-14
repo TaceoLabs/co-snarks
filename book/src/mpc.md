@@ -88,6 +88,20 @@ $$
 
 #### Arithmetic to Binary Conversion
 
+In replicated sharing over rings $\mathbb Z_{2^k}$ (e.g., ABY3), arithmetic to binary conversion of a share $[x]$ is implemented by first locally splitting the shares to valid binary sharings, i.e., $[x_1]^B = (x_1, 0, 0)$, $[x_2]^B = (0, x_2, 0)$, and $[x_3]^B = (0, 0, x_3)$ and combining them in MPC using binary addition circuits. Then $[x]^B = \text{BinAdd}(\text{BinAdd}([x_1]^B, [x_2]^B), [x_3]^B)$ is a valid binary sharing of $x$. This approach works because binary addition circuits implicitly perform modular reductions mod $2^k$.
+
+Thus, in $\mathbb F_p$ we have to include the mod $p$ reductions manually in the circuit. For improved performance, we use the following protocols:
+
+* $P_i$ samples $r_i$ to be a new random binary share of 0
+* Set $[x_3]^B = (0, 0, x_3)$
+* $P_2$ calculates $t = (x_1 + x_2 \mod p) ^r_2$
+  * It follows that $(r_1, t, r_3)$ is a valid binary sharing of $(x_1 + x_2 \mod p)$
+* $P_i$ sends its share of $(r_1, t, r_3)$ to $P_{i+1}
+  * Each party now has a valid binary replicated sharing $[x_{1,2}]^B$ of $(x_1 + x_2 \mod p)$
+* The parties compute a binary adder circuit of $k=\lceil \log_2(p)\rceil$ bits to get a $[t_1]^B$ with $k+1$ bits (including overflow bit).
+* The parties compute the subtraction of $[t_1]^B - p$ inside a binary circuit to get $[t_2]^B$.
+* The $k+1$ bit of $[t_2]^B$ indicates an overflow of the subtraction. If an overflow occurs, the result should be the first $k$ bits of $[t_1]^B$, otherwise the first $k$ bits of $[t_2]^B$. This if statement can be computed with a CMUX gate.
+
 <TODO>
 
 #### Binary to Arithmetic Conversion
