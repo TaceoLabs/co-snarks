@@ -37,7 +37,7 @@ This paper[^9] is a followup to zkSaaS which replaces the used SNARK with GKR[^1
 This paper[^14] is essentially an update version of "Scalable Collaborative zk-SNARK: Fully Distributed Proof Generation and Malicious Security", which includes semi-honest protocols for collaborative HyperPlonk[^15], additional optimization, and new experiments.
 
 [^14]: [https://eprint.iacr.org/2024/940.pdf](https://eprint.iacr.org/2024/940.pdf)
-[^15]: HyperPlonk: [https://eprint.iacr.org/2022/1355.pdf]https://eprint.iacr.org/2022/1355.pdf)
+[^15]: HyperPlonk: [https://eprint.iacr.org/2022/1355.pdf](https://eprint.iacr.org/2022/1355.pdf)
 
 ## Confidential and Verifiable Machine Learning Delegations on the Cloud
 
