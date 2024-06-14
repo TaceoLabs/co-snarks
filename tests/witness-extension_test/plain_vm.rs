@@ -21,6 +21,14 @@ mod tests {
         witness.public_inputs.extend(witness.witness);
         witness.public_inputs
     }
+
+    fn read_field_element(s: &str) -> ark_bn254::Fr {
+        if let Some(striped) = s.strip_prefix('-') {
+            -ark_bn254::Fr::from_str(striped).unwrap()
+        } else {
+            ark_bn254::Fr::from_str(s).unwrap()
+        }
+    }
     macro_rules! witness_extension_test_plain {
         ($name: ident) => {
             #[test]
@@ -87,7 +95,7 @@ mod tests {
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|s| ark_bn254::Fr::from_str(s.as_str().unwrap()).unwrap())
+                .map(|s| read_field_element(s.as_str().unwrap()))
                 .collect::<Vec<_>>();
             inputs.push(input);
             i += 1

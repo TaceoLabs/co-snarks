@@ -493,16 +493,22 @@ fn main() -> color_eyre::Result<ExitCode> {
 }
 
 fn parse_field(val: &serde_json::Value) -> color_eyre::Result<ark_bn254::Fr> {
-    val.as_str()
-        .ok_or_else(|| {
-            eyre!(
-                "expected input to be a field element string, got \"{}\"",
-                val
-            )
-        })?
-        .parse::<ark_bn254::Fr>()
-        .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
-        .context("while parsing field element")
+    let s = val.as_str().ok_or_else(|| {
+        eyre!(
+            "expected input to be a field element string, got \"{}\"",
+            val
+        )
+    })?;
+    if let Some(striped) = s.strip_prefix('-') {
+        Ok(-striped
+            .parse::<ark_bn254::Fr>()
+            .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
+            .context("while parsing field element")?)
+    } else {
+        s.parse::<ark_bn254::Fr>()
+            .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
+            .context("while parsing field element")
+    }
 }
 
 fn parse_array(val: &serde_json::Value) -> color_eyre::Result<Vec<ark_bn254::Fr>> {

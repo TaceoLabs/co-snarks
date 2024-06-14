@@ -7,4 +7,4 @@ template Multiplier2() {
     c <== a*b;
  }
 
- component main{public [a]} = Multiplier2();
+ component main{public [b]} = Multiplier2();
