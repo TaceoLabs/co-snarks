@@ -2,8 +2,8 @@
 
 Currently, proof generation is supported with two different MPC protocols:
 
-* 3-Party replicated secret sharing (based on ABY3 [1]) with semi-honest security
-* N-Party Shamir secret sharing [2] (based on DN07 [3]) with semi-honest security
+* 3-Party replicated secret sharing (based on ABY3[^1]) with semi-honest security
+* N-Party Shamir secret sharing[^2] (based on DN07[^3]) with semi-honest security
 
 ## Notation
 
@@ -193,6 +193,6 @@ Due to not having an efficient arithmetic to binary conversion, we do not have a
 
 This bridge works by first letting $P_i$ translate its first additive share $x_i$ to a Shamir share by dividing through the corresponding lagrange coefficient. This, however, creates a 3-party Shamir sharing with threshold/poly-degree $t=2$. Thus, we perform the same degree-reduction step, which is also required after a Shamir multiplication.
 
-[1] [https://eprint.iacr.org/2018/403.pdf](https://eprint.iacr.org/2018/403.pdf)\
-[2] [https://web.mit.edu/6.857/OldStuff/Fall03/ref/Shamir-HowToShareASecret.pdf](https://web.mit.edu/6.857/OldStuff/Fall03/ref/Shamir-HowToShareASecret.pdf)\
-[3] [https://iacr.org/archive/crypto2007/46220565/46220565.pdf](https://iacr.org/archive/crypto2007/46220565/46220565.pdf)
+[^1]: ABY3: [https://eprint.iacr.org/2018/403.pdf](https://eprint.iacr.org/2018/403.pdf)
+[^2]: Shamir: [https://web.mit.edu/6.857/OldStuff/Fall03/ref/Shamir-HowToShareASecret.pdf](https://web.mit.edu/6.857/OldStuff/Fall03/ref/Shamir-HowToShareASecret.pdf)
+[^3]: DN07: [https://iacr.org/archive/crypto2007/46220565/46220565.pdf](https://iacr.org/archive/crypto2007/46220565/46220565.pdf)
