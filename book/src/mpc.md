@@ -92,11 +92,11 @@ In replicated sharing over rings $\mathbb Z_{2^k}$ (e.g., ABY3), arithmetic to b
 
 Thus, in $\mathbb F_p$ we have to include the mod $p$ reductions manually in the circuit. For improved performance, we use the following protocol to translate $[x]$:
 
-* $P_i$ samples $r_i$ to be a new random binary share of 0
+* $P_i$ samples $r_i$ to be a new random binary share of $0$
 * Set $[x_3]^B = (0, 0, x_3)$
 * $P_2$ calculates $t = (x_1 + x_2 \mod p) ^r_2$
   * It follows that $(r_1, t, r_3)$ is a valid binary sharing of $(x_1 + x_2 \mod p)$
-* $P_i$ sends its share of $(r_1, t, r_3)$ to $P_{i+1}
+* $P_i$ sends its share of $(r_1, t, r_3)$ to $P_{i+1}$
   * Each party now has a valid binary replicated sharing $[x_{1,2}]^B$ of $(x_1 + x_2 \mod p)$
 * The parties compute a binary adder circuit of $k=\lceil \log_2(p)\rceil$ bits to get a $[t_1]^B$ with $k+1$ bits (including overflow bit).
 * The parties compute the subtraction of $[t_1]^B - p$ inside a binary circuit to get $[t_2]^B$.
@@ -108,12 +108,12 @@ For the binary to arithmetic conversion, the general strategy for replicated sha
 
 To account for modular reductions in finite fields, we follow a similar strategy as for the arithmetic to binary conversion to translate $[x]^B$:
 
-* $P_i$ samples $r_i$ to be a new random binary share of 0
-* $P_1$ samples $x'_3$ using RNG2 and sets x_3 = -x'_3;
-* $P_2$ samples $x'_2$ using RNG1 and sets x_2 = -x'_2;
-* $P_3$ samples $x'_2$ using RNG1 and $x'_3$ using RNG2, sets x_2 = -x'_2, x_3 = -x'_3, and t = (x'_2 + x'_3 mod p) ^ r_3;
+* $P_i$ samples $r_i$ to be a new random binary share of $0$
+* $P_1$ samples $x'_3$ using RNG2 and sets $x_3 = -x'_3$;
+* $P_2$ samples $x'_2$ using RNG1 and sets $x_2 = -x'_2$;
+* $P_3$ samples $x'_2$ using RNG1 and $x'_3$ using RNG2, sets $x_2 = -x'_2$, $x_3 = -x'_3$, and $t = (x'_2 + x'_3 \mod p) ^ r_3$;
   * It follows that $(r_1, t, r_3)$ is a valid binary sharing of $(x'_2 + x'_3 \mod p)$
-* $P_i$ sends its share of $(r_1, t, r_3)$ to $P_{i+1}
+* $P_i$ sends its share of $(r_1, t, r_3)$ to $P_{i+1}$
   * Each party now has a valid binary replicated sharing $[x'_{2,3}]^B$ of $(x'_2 + x'_3 \mod p)$
 * The parties compute a binary adder circuit of $k=\lceil \log_2(p)\rceil$ bits to sum up $[x]^B$ and $[x'_{2,3}]^B$ to get a $[t_1]^B$ with $k+1$ bits (including overflow bit).
 * The parties compute the subtraction of $[t_1]^B - p$ inside a binary circuit to get $[t_2]^B$.
@@ -131,7 +131,7 @@ As mentioned in the arithmetic to binary conversions, we need binary addition ci
 
 The general structure of a Kogge-Stone adder to add two binary values $x, y$ is to first compute $p[i] = x[i] \oplus y[i]$ and $g[i] = x[i] \wedge y[i]$, where $x[i]$ is the $i$-th bit of $x$. Then, $p$ and $g$ are combined using a circuit with logarithmic depth (in the bitsize). This circuit is implemented in the `kogge_stone_inner` function.
 
-For binary subtraction circuits, we basically compute an addition circuit with the two's complement of $y$. Thus, we essentially compute $2^k + x - y$. If $y$ is public, the $2^k - y$ can directly be computed and the result is just fed into the Kogge-Stone adder. If $y$ is shared, we invert all $k$ bits and set the carry-in flag for the Kogge-Stone adder. This simulates two's complement calculation. The set carry-in flag has the following effects: First, $g[0]$ must additionally be XORed by $P[0]$. Finally, the LSB of the result of the Kogge-Stone circuit needs to be flipped
+For binary subtraction circuits, we basically compute an addition circuit with the two's complement of $y$. Thus, we essentially compute $2^k + x - y$. If $y$ is public, the $2^k - y$ can directly be computed and the result is just fed into the Kogge-Stone adder. If $y$ is shared, we invert all $k$ bits and set the carry-in flag for the Kogge-Stone adder. This simulates two's complement calculation. The set carry-in flag has the following effects: First, $g[0]$ must additionally be XORed by $P[0]$. Finally, the LSB of the result of the Kogge-Stone circuit needs to be flipped.
 
 ### Reconstruction
 
