@@ -11,3 +11,16 @@ This is the first paper[^1] in this space. It experiments with the feasibility o
 [^3]: GSZ: [https://eprint.iacr.org/2020/189.pdf](https://eprint.iacr.org/2020/189.pdf)
 [^4]: Groth16: [https://eprint.iacr.org/2016/260.pdf](https://eprint.iacr.org/2016/260.pdf)
 [^5]: Plonk: [https://eprint.iacr.org/2019/953.pdf](https://eprint.iacr.org/2019/953.pdf)
+
+## EOS: efficient private delegation of zkSNARK provers
+
+This paper[^6] uses a delegator to speed up MPC computations and investigates using the SNARK as error-detecting computation to implement cheaper malicious security.
+
+[^6]: [https://dl.acm.org/doi/10.5555/3620237.3620598](https://dl.acm.org/doi/10.5555/3620237.3620598)
+
+## zkSaaS: Zero Knowledge SNARKs as a service
+
+This paper[^7] uses packed secret sharing (PSS)[^8], i.e., a variant of Shamir secret sharing where multiple secrets are embedded into the same sharing polynomial, to speed up MPC computation. However, they encounter some problems with FFTs, since they cannot be implemented with the SIMD semantics of PSS naively.
+
+[^7]: [https://eprint.iacr.org/2023/905.pdf](https://eprint.iacr.org/2023/905.pdf)
+[^8]: PSS: [https://dl.acm.org/doi/pdf/10.1145/129712.129780](https://dl.acm.org/doi/pdf/10.1145/129712.129780)
