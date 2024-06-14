@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-circom-v0.1.1...collaborative-circom-v0.1.2) (2024-06-14)
+
+
+### Bug Fixes
+
+* delete not needed impl ([f4dc747](https://github.com/TaceoLabs/collaborative-circom/commit/f4dc74770cd92531851b777dfaa1385b033b657c))
+
 ## [0.1.1](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-circom-v0.1.0...collaborative-circom-v0.1.1) (2024-06-14)
 
 
