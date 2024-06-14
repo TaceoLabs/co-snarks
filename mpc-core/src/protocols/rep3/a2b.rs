@@ -504,8 +504,9 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
                 x.b.set_bit(len as u64 - 1, true);
             }
             len /= 2;
+            let mask = (BigUint::from(1u64) << len) - BigUint::one();
             let y = &x >> len;
-            x = self.and(x, y, len)?;
+            x = self.and(&x & &mask, &y & &mask, len)?;
         }
         // extract LSB
         let x = &x & &BigUint::one();
