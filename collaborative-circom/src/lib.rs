@@ -1,7 +1,4 @@
-use std::str::FromStr;
-
 use clap::ValueEnum;
-use color_eyre::eyre::{eyre, Report};
 
 pub mod file_utils;
 
@@ -18,17 +15,6 @@ impl ValueEnum for MPCProtocol {
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         match self {
             MPCProtocol::REP3 => Some(clap::builder::PossibleValue::new("REP3")),
-        }
-    }
-}
-
-impl FromStr for MPCProtocol {
-    type Err = Report;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_uppercase().as_str() {
-            "REP3" => Ok(MPCProtocol::REP3),
-            _ => Err(eyre!("Unsupported MPC protocol: {}", s)),
         }
     }
 }
