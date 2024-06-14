@@ -148,10 +148,6 @@ The share of party $i$ then is $Q(i)$. In other words, $[x] = (x_1, x_2, ..., x_
 
 Reconstruction then works via lagrange interpolation of any $t+1$ shares: $x = \sum_i^{t+1} \lambda_i x_i$, where $\lambda_i$ is the corresponding lagrange coefficient.
 
-### Rng Setup
-
-<TODO>
-
 ### Supported operations
 
 #### Linear Operations
@@ -165,6 +161,10 @@ Shamir's secret sharing allows, similar to additive sharing, to compute linear f
 #### Multiplications
 
 Shamir secret sharing comes with a native multiplication protocol: $z_i = x_i\cdot y_i$ is a valid share of $[z] = [x] \cdot [y]$. However, $z_i$ is a point on a polynomial with degree $2t$. In other words, the degree doubles after a multiplication and twice as many parties ($2t+1$) are required to reconstruct the secret $z$. Thus, one needs to perform a degree reduction step in MPC for further computations. In DN07, this is done by sampling a random value, which is shared as a degree-$t$ ($[r]_t$) and degree-$2t$ ($[r]_{2t}$) polynomial. Then, the parties open $[z]_{2t} + [r]_{2t}$ to $P_1$, who reconstructs it to $z' =z+r$. Then. $P_1$ shares $z'$ as a fresh degree-$t$ share to all parties, who calculate $[z]_t = [z']_t - [r]_t$.
+
+#### Rng Setup
+
+Since <TODO>
 
 ### Reconstruction
 
