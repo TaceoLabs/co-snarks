@@ -6,22 +6,10 @@ permissions:
 on:
   push:
     tags:
-      - v[0-9]+.*
+      - collaborative-circom-v[0-9]+.*
 
 jobs:
-  create-release:
-    runs-on: [arc-runner-set]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: taiki-e/create-gh-release-action@v1
-        with:
-          # (optional) Path to changelog.
-          changelog: collaborative-circom/CHANGELOG.md
-          # (required) GitHub token for creating GitHub Releases.
-          token: ${{ secrets.GITHUB_TOKEN }}
-
   upload-assets:
-    needs: create-release
     runs-on: [arc-runner-set]
     steps:
       - uses: actions/checkout@v4
