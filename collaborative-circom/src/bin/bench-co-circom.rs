@@ -2,6 +2,7 @@ use clap::Parser;
 use color_eyre::eyre::{eyre, Context, Ok};
 use std::io::Write;
 use std::path::Path;
+use std::process::Stdio;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 use std::{
@@ -51,6 +52,15 @@ struct Cli {
     /// Benchmarks witness generation in addition to proof generation and verification
     #[arg(long, default_value = "false")]
     gen_wtns: bool,
+    /// Generates the zkey file and stores it in the path specified by --zkey in case that file does not exist yet. Use --pot-power to specify the power of tau to use.
+    #[arg(long, default_value = "false", requires("gen_wtns"))]
+    gen_zkey: bool,
+    /// Like --gen-zkey, but overwrites the zkey file if it already exists.
+    #[arg(long, default_value = "false", requires("gen_wtns"))]
+    gen_zkey_force: bool,
+    /// The power to use for the powers of tau ceremony (see https://docs.circom.io/getting-started/proving-circuits/#powers-of-tau)
+    #[arg(long, default_value = "12")]
+    pot_power: u16,
     /// Keep public input files (containing the computed outputs of the circuit)
     #[arg(long, default_value = "false")]
     keep_pub_inp: bool,
@@ -123,6 +133,21 @@ struct Cli {
     /// Intermediate output: Generate witness: The path to the generated witness file from circom (and for co-circom wtns files that expand to gen_wtns_file.party_id.shared)
     #[arg(long, default_value = "tmp_circom_generated.wtns")]
     gen_wtns_file: PathBuf,
+    /// Intermediate output: gen zkey: The path to the "pot12_0000.ptau" file (see https://docs.circom.io/getting-started/proving-circuits/#powers-of-tau)
+    #[arg(long, default_value = "tmp_pot_0000.ptau")]
+    pot_0000: PathBuf,
+    /// Intermediate output: gen zkey: The path to the "pot12_0001.ptau" file (see https://docs.circom.io/getting-started/proving-circuits/#powers-of-tau)
+    #[arg(long, default_value = "tmp_pot_0001.ptau")]
+    pot_0001: PathBuf,
+    /// Intermediate output: gen zkey: The path to the "pot12_final.ptau" file (see https://docs.circom.io/getting-started/proving-circuits/#phase-2)
+    #[arg(long, default_value = "tmp_pot_final.ptau")]
+    pot_final: PathBuf,
+    /// Intermediate output: gen zkey: The path to the "multiplier2_0000.zkey" file (see https://docs.circom.io/getting-started/proving-circuits/#phase-2)
+    #[arg(long, default_value = "tmp_circ_0000.zkey")]
+    circ_0000: PathBuf,
+    /// Intermediate output: pre gen zkey: The path to the generated r1cs file
+    #[arg(long, default_value = "tmp_generated_for_zkey_gen.r1cs")]
+    r1cs_gen: PathBuf,
 }
 
 // filenames for certificates and keys that must be present inside the data directory
@@ -176,6 +201,8 @@ struct Config {
     p2_toml: PathBuf,
     p3_toml: PathBuf,
     gen_wtns_file: PathBuf,
+    gen_zkey: bool,
+    gen_zkey_force: bool,
     generate_witness_js: Option<PathBuf>,
     witness_calculator_js: Option<PathBuf>,
     generate_witness_js_folder: Option<PathBuf>,
@@ -184,6 +211,13 @@ struct Config {
     gen_inp_shr_1: Option<PathBuf>,
     gen_inp_shr_2: Option<PathBuf>,
     gen_inp_shr_3: Option<PathBuf>,
+    pot_0000: PathBuf,
+    pot_0001: PathBuf,
+    pot_final: PathBuf,
+    circ_0000: PathBuf,
+    r1cs_gen: PathBuf,
+    r1cs_gen_path: PathBuf,
+    pot_power: u16,
 }
 
 impl From<Cli> for Config {
@@ -219,6 +253,19 @@ impl From<Cli> for Config {
                 .to_str()
                 .expect("witness file name is not valid UTF-8")
         });
+
+        let r1cs_gen_path = {
+            let tmp = &cli.r1cs_gen.parent().expect("r1cs_gen file has no parent");
+            if tmp
+                .to_str()
+                .expect("r1cs_gen file path is not valid utf-8")
+                .is_empty()
+            {
+                PathBuf::from(".")
+            } else {
+                PathBuf::from(tmp)
+            }
+        };
 
         let circom_path = {
             if let Some(circom) = &cli.circom {
@@ -390,6 +437,8 @@ impl From<Cli> for Config {
             p2_toml: cli.p2_toml,
             p3_toml: cli.p3_toml,
             gen_wtns_file: cli.gen_wtns_file,
+            gen_zkey: cli.gen_zkey || cli.gen_zkey_force,
+            gen_zkey_force: cli.gen_zkey_force,
             generate_witness_js,
             witness_calculator_js,
             generate_witness_js_folder,
@@ -398,6 +447,13 @@ impl From<Cli> for Config {
             gen_inp_shr_1,
             gen_inp_shr_2,
             gen_inp_shr_3,
+            pot_0000: cli.pot_0000,
+            pot_0001: cli.pot_0001,
+            pot_final: cli.pot_final,
+            circ_0000: cli.circ_0000,
+            r1cs_gen: cli.r1cs_gen,
+            r1cs_gen_path,
+            pot_power: cli.pot_power,
         }
     }
 }
@@ -893,7 +949,180 @@ fn bench_co_circom(conf: &Config) -> color_eyre::Result<BenchResult> {
     })
 }
 
+fn generate_r1cs_for_zkey_gen(conf: &Config) -> color_eyre::Result<()> {
+    tracing::trace!("Generating r1cs ..");
+    // to ensure proper naming of the output file, we copy the circom file to a new file with the name of the tmp r1cs file
+    std::fs::copy(
+        conf.circom.as_ref().expect("gen witness is true"),
+        &conf.r1cs_gen,
+    )
+    .context("during copying circom file to tmp r1cs file")?;
+    // circom circuit.circom --r1cs -o path
+    let out_circom = Command::new(&conf.circom_bin)
+        .arg(conf.r1cs_gen.as_path())
+        .arg("--r1cs")
+        .arg("-o")
+        .arg(conf.r1cs_gen_path.as_path())
+        .args(link_library_to_args(conf, "-l")?)
+        .output()
+        .context("during executing circom")?;
+    if !out_circom.status.success() {
+        tracing::error!(
+            "Failed during executing circom: \nstdout:\n{}\nstderr:\n{}",
+            std::str::from_utf8(&out_circom.stdout)?,
+            std::str::from_utf8(&out_circom.stderr)?
+        );
+        return Err(eyre!("Failed during executing circom"));
+    }
+    Ok(())
+}
+
+fn generate_zkey(conf: &Config) -> color_eyre::Result<()> {
+    if conf.zkey.is_file() && !conf.gen_zkey_force {
+        tracing::info!(
+            "zkey already exists, skipping generation .. (consider using --gen-zkey-force)"
+        );
+        return Ok(());
+    }
+    let now = Instant::now();
+    tracing::info!("Generating zkey ..");
+    generate_r1cs_for_zkey_gen(conf).context("during generating r1cs")?;
+    tracing::trace!("Phase 1: Starting \"snarkjs powersoftau new\" ..");
+    // snarkjs powersoftau new bn128 12 pot12_0000.ptau -v
+    let out_1 = Command::new(&conf.snarkjs_bin)
+        .arg("powersoftau")
+        .arg("new")
+        .arg("bn128")
+        .arg(conf.pot_power.to_string())
+        .arg(conf.pot_0000.as_path())
+        .arg("-v")
+        .output()
+        .context("during executing \"snarkjs powersoftau new\"")?;
+    if !out_1.status.success() {
+        tracing::error!(
+            "Failed on \"snarkjs powersoftau new\": \nstdout:\n{}\nstderr:\n{}",
+            std::str::from_utf8(&out_1.stdout)?,
+            std::str::from_utf8(&out_1.stderr)?
+        );
+        return Err(eyre!("Failed on \"snarkjs powersoftau new\""));
+    }
+    tracing::trace!("Phase 1: Starting \"snarkjs powersoftau contribute\" ..");
+    // snarkjs powersoftau contribute pot12_0000.ptau pot12_0001.ptau --name="First contribution" -v
+    let mut spawn_2 = Command::new(&conf.snarkjs_bin)
+        .arg("powersoftau")
+        .arg("contribute")
+        .arg(conf.pot_0000.as_path())
+        .arg(conf.pot_0001.as_path())
+        .arg("--name=\"First contribution\"")
+        .arg("-v")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("during executing \"snarkjs powersoftau contribute\"")?;
+    if let Some(mut stdin) = spawn_2.stdin.take() {
+        stdin
+            .write_all(b"nice randomness!\n")
+            .context("during writing to stdin")?;
+    } else {
+        spawn_2.kill().context("during killing process because failed to write to stdin during executing \"snarkjs powersoftau contribute\"")?;
+        return Err(eyre!(
+            "Failed to write to stdin during executing \"snarkjs powersoftau contribute\""
+        ));
+    }
+    let out_2 = spawn_2
+        .wait_with_output()
+        .context("during waiting for output of \"snarkjs powersoftau contribute\"")?;
+    if !out_2.status.success() {
+        tracing::error!(
+            "Failed on \"snarkjs powersoftau contribute\": \nstdout:\n{}\nstderr:\n{}",
+            std::str::from_utf8(&out_2.stdout)?,
+            std::str::from_utf8(&out_2.stderr)?
+        );
+        return Err(eyre!("Failed on \"snarkjs powersoftau contribute\""));
+    }
+    // Phase 2
+    tracing::trace!("Phase 2: Starting \"snarkjs powersoftau prepare phase2\" ..");
+    // snarkjs powersoftau prepare phase2 pot12_0001.ptau pot12_final.ptau -v
+    let out_3 = Command::new(&conf.snarkjs_bin)
+        .arg("powersoftau")
+        .arg("prepare")
+        .arg("phase2")
+        .arg(conf.pot_0001.as_path())
+        .arg(conf.pot_final.as_path())
+        .arg("-v")
+        .output()
+        .context("during executing \"snarkjs powersoftau prepare phase2\"")?;
+    if !out_3.status.success() {
+        tracing::error!(
+            "Failed on \"snarkjs powersoftau prepare phase2\": \nstdout:\n{}\nstderr:\n{}",
+            std::str::from_utf8(&out_3.stdout)?,
+            std::str::from_utf8(&out_3.stderr)?
+        );
+        return Err(eyre!("Failed on \"snarkjs powersoftau prepare phase2\""));
+    }
+    tracing::trace!("Phase 2: Starting \"snarkjs groth16 setup\" ..");
+    // snarkjs groth16 setup multiplier2.r1cs pot12_final.ptau multiplier2_0000.zkey
+    let out_4 = Command::new(&conf.snarkjs_bin)
+        .arg("groth16")
+        .arg("setup")
+        .arg(conf.r1cs_gen.as_path())
+        .arg(conf.pot_final.as_path())
+        .arg(conf.circ_0000.as_path())
+        .output()
+        .context("during executing \"snarkjs groth16 setup\"")?;
+    if !out_4.status.success() {
+        tracing::error!(
+            "Failed on \"snarkjs groth16 setup\": \nstdout:\n{}\nstderr:\n{}",
+            std::str::from_utf8(&out_4.stdout)?,
+            std::str::from_utf8(&out_4.stderr)?
+        );
+        return Err(eyre!("Failed on \"snarkjs groth16 setup\""));
+    }
+    tracing::trace!("Phase 2: Starting \"snarkjs zkey contribute\" ..");
+    // snarkjs zkey contribute multiplier2_0000.zkey multiplier2_0001.zkey --name="1st Contributor Name" -v
+    let mut spawn_5 = Command::new(&conf.snarkjs_bin)
+        .arg("zkey")
+        .arg("contribute")
+        .arg(conf.circ_0000.as_path())
+        .arg(conf.zkey.as_path())
+        .arg("--name=\"1st Contributor Name\"")
+        .arg("-v")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("during executing \"snarkjs zkey contribute\"")?;
+    if let Some(mut stdin) = spawn_5.stdin.take() {
+        stdin
+            .write_all(b"nice other randomness!\n")
+            .context("during writing to stdin")?;
+    } else {
+        spawn_5.kill().context("during killing process because failed to write to stdin during executing \"snarkjs zkey contribute\"")?;
+        return Err(eyre!(
+            "Failed to write to stdin during executing \"snarkjs zkey contribute\""
+        ));
+    }
+    let out_5 = spawn_5
+        .wait_with_output()
+        .context("during waiting for output of \"snarkjs zkey contribute\"")?;
+    if !out_5.status.success() {
+        tracing::error!(
+            "Failed on \"snarkjs zkey contribute\": \nstdout:\n{}\nstderr:\n{}",
+            std::str::from_utf8(&out_5.stdout)?,
+            std::str::from_utf8(&out_5.stderr)?
+        );
+        return Err(eyre!("Failed on \"snarkjs zkey contribute\""));
+    }
+    let zkey_time = now.elapsed();
+    tracing::info!(".. generating zkey took {:?}", zkey_time);
+    Ok(())
+}
+
 fn prepare(conf: &Config) -> color_eyre::Result<()> {
+    if conf.gen_zkey {
+        generate_zkey(conf).context("during generating zkey (consider using --pot-power <NUM> in case snarkjs complains about the ceremony not being large enough)")?;
+    }
     tracing::trace!("Exporting verification key ..");
     let out_snarkjs = Command::new("snarkjs")
         .arg("zkey")
@@ -961,7 +1190,9 @@ fn check_args(conf: &Config) -> color_eyre::Result<()> {
         check_file_exists(conf.r1cs.as_ref().expect("gen witness is true"))
             .context("checking existence of r1cs file")?;
     }
-    check_file_exists(&conf.zkey).context("checking existence of zkey file")?;
+    if !&conf.gen_zkey {
+        check_file_exists(&conf.zkey).context("checking existence of zkey file")?;
+    }
     check_dir_exists(&conf.data).context("checking existence of data directory")?;
     check_file_exists(&conf.p1_cert).context("checking existence of party 1 certificate")?;
     check_file_exists(&conf.p2_cert).context("checking existence of party 2 certificate")?;
@@ -1047,6 +1278,11 @@ fn cleanup(conf: &Config) -> color_eyre::Result<()> {
             std::fs::remove_dir(&generate_witness_js_folder)
                 .context("during removing circom_js directory for the circom witness generation")?;
         }
+        rm_file!(&conf.pot_0000);
+        rm_file!(&conf.pot_0001);
+        rm_file!(&conf.pot_final);
+        rm_file!(&conf.circ_0000);
+        rm_file!(&conf.r1cs_gen);
     }
     Ok(())
 }
