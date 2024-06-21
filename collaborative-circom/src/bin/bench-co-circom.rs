@@ -78,6 +78,9 @@ struct Cli {
     /// Keep intermediate output files
     #[arg(long, default_value = "false")]
     keep_artifacts: bool,
+    /// MPC protocol for co-circom
+    #[arg(long, default_value = "REP3")]
+    protocol: String,
     /// Intermediate output: The path to the verification key file
     #[arg(long, default_value = "tmp_verification_key.json")]
     vkey: PathBuf,
@@ -146,6 +149,7 @@ struct Config {
     p2_port: u16,
     p3_port: u16,
     keep_artifacts: bool,
+    protocol: String,
     vkey: PathBuf,
     pub_inp_sjs: PathBuf,
     proof_sjs: PathBuf,
@@ -358,6 +362,7 @@ impl From<Cli> for Config {
             p2_port: cli.p2_port,
             p3_port: cli.p3_port,
             keep_artifacts: cli.keep_artifacts,
+            protocol: cli.protocol,
             vkey: cli.vkey,
             pub_inp_sjs: cli.pub_inp_sjs,
             proof_sjs: cli.proof_sjs,
@@ -623,7 +628,7 @@ fn bench_co_circom_prover_one_party(
             .arg("--zkey")
             .arg(conf.zkey.as_path())
             .arg("--protocol")
-            .arg("not_required_yet")
+            .arg(&conf.protocol)
             .arg("--config")
             .arg(config_toml)
             .arg("--out")
@@ -714,7 +719,7 @@ fn bench_co_circom_gen_wtns_one_party(
             .arg("--circuit")
             .arg(conf.circom.as_ref().expect("gen witness is true").as_path())
             .arg("--protocol")
-            .arg("not_required_yet")
+            .arg(&conf.protocol)
             .arg("--config")
             .arg(config_toml)
             .arg("--out")
@@ -800,7 +805,7 @@ fn bench_co_circom(conf: &Config) -> color_eyre::Result<BenchResult> {
             .arg("--circuit")
             .arg(conf.circom.as_ref().expect("gen witness is true").as_path())
             .arg("--protocol")
-            .arg("not_required_yet")
+            .arg(&conf.protocol)
             .arg("--out-dir")
             .arg(".")
             .args(link_library_to_args(conf, "--link-library")?)
@@ -831,7 +836,7 @@ fn bench_co_circom(conf: &Config) -> color_eyre::Result<BenchResult> {
             .arg("--r1cs")
             .arg(conf.r1cs.as_ref().expect("gen witness is false").as_path())
             .arg("--protocol")
-            .arg("not_required_yet")
+            .arg(&conf.protocol)
             .arg("--out-dir")
             .arg(
                 conf.witness_path
