@@ -20,6 +20,7 @@ use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWi
 use color_eyre::eyre::{eyre, Context};
 use mpc_core::protocols::rep3::{self, network::Rep3MpcNet, Rep3Protocol};
 use mpc_net::config::NetworkConfig;
+use num_traits::identities::Zero;
 
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
@@ -422,7 +423,13 @@ fn main() -> color_eyre::Result<ExitCode> {
                 let public_input_as_strings = public_input
                     .iter()
                     .skip(1) // we skip the constant 1 at position 0
-                    .map(|f| f.to_string())
+                    .map(|f| {
+                        if f.is_zero() {
+                            "0".to_string()
+                        } else {
+                            f.to_string()
+                        }
+                    })
                     .collect::<Vec<String>>();
                 let public_input_file = BufWriter::new(
                     std::fs::File::create(&public_input_filename)
