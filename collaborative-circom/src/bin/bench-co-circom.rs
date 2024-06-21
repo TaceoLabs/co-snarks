@@ -51,6 +51,9 @@ struct Cli {
     /// Benchmarks witness generation in addition to proof generation and verification
     #[arg(long, default_value = "false")]
     gen_wtns: bool,
+    /// Keep public input files (containing the computed outputs of the circuit)
+    #[arg(long, default_value = "false")]
+    keep_pub_inp: bool,
     /// The path to the data directory containing the certificates and keys for the parties
     #[arg(long, default_value = "collaborative-circom/examples/data")]
     data: PathBuf,
@@ -149,6 +152,7 @@ struct Config {
     p2_port: u16,
     p3_port: u16,
     keep_artifacts: bool,
+    keep_pub_inp: bool,
     protocol: String,
     vkey: PathBuf,
     pub_inp_sjs: PathBuf,
@@ -362,6 +366,7 @@ impl From<Cli> for Config {
             p2_port: cli.p2_port,
             p3_port: cli.p3_port,
             keep_artifacts: cli.keep_artifacts,
+            keep_pub_inp: cli.keep_pub_inp,
             protocol: cli.protocol,
             vkey: cli.vkey,
             pub_inp_sjs: cli.pub_inp_sjs,
@@ -1013,17 +1018,19 @@ fn cleanup(conf: &Config) -> color_eyre::Result<()> {
         return Ok(());
     }
     rm_file!(&conf.vkey);
-    rm_file!(&conf.pub_inp_sjs);
     rm_file!(&conf.proof_sjs);
+    if !conf.keep_pub_inp {
+        rm_file!(&conf.pub_inp_sjs);
+        rm_file!(&conf.pub_inp_coc_1);
+        rm_file!(&conf.pub_inp_coc_2);
+        rm_file!(&conf.pub_inp_coc_3);
+    }
     rm_file!(&conf.wtns_shr_1);
     rm_file!(&conf.wtns_shr_2);
     rm_file!(&conf.wtns_shr_3);
     rm_file!(&conf.proof_coc_1);
     rm_file!(&conf.proof_coc_2);
     rm_file!(&conf.proof_coc_3);
-    rm_file!(&conf.pub_inp_coc_1);
-    rm_file!(&conf.pub_inp_coc_2);
-    rm_file!(&conf.pub_inp_coc_3);
     rm_file!(&conf.p1_toml);
     rm_file!(&conf.p2_toml);
     rm_file!(&conf.p3_toml);
