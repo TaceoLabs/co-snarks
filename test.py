@@ -56,8 +56,29 @@ def gen_commitments(guesses, addresses, rs):
         commitments.append(commitment)
     return commitments
 
+def gen_input_for_winner(guesses, addresses, rs, commitments, filename):
+    guesses_ = [str(guess) for guess in guesses]
+    addresses_ = [str(address) for address in addresses]
+    rs_ = [str(r) for r in rs]
+    commitments_ = [str(commitment) for commitment in commitments]
+    input = {
+        "guesses": guesses_,
+        "addresses": addresses_,
+        "rs": rs_,
+        "commitments": commitments_,
+    }
 
-def main():
+    with open(filename, 'w') as f:
+        json.dump(input, f)
+
+def get_winner(guesses, addresses, rs, commitments):
+    assert(len(guesses) == len(addresses))
+    assert(len(addresses) == len(rs))
+    assert(len(addresses) == len(commitments))
+
+    gen_input_for_winner(guesses, addresses, rs, commitments, Input)
+
+def simple_test():
     inputs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     addresses = [11234, 21234, 31234, 41234, 51234, 61234, 71234, 81234, 91234, 101234]
     rs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -73,6 +94,11 @@ def main():
                    17022984694292426943119506844957968103043396951112418133670821897099510063346]
     # commitments = gen_commitments(inputs, addresses, rs)
     # print(commitments)
+
+    get_winner(inputs, addresses, rs, commitments)
+
+def main():
+    simple_test()
 
 if __name__ == "__main__":
     main()
