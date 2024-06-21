@@ -13,17 +13,21 @@ Input = "input.json"
 WitnessOut = "tmp_public_input_snarkjs.json"
 
 
-def run_circom(circuit, input, lib, print_out=False):
-    args = ["cargo", "run", "--bin", "bench-co-circom", "--release", "--", "--gen-wtns", "--gen-zkey", "--zkey", "key.out", "--circom", circuit, "--input", input, "--co-circom-bin", "target/release/co-circom", "-l", lib, "--keep-pub-inp"]
+def run_circom(circuit, input, lib, key, print_out=False):
+    args = ["cargo", "run", "--bin", "bench-co-circom", "--release", "--", "--gen-wtns", "--gen-zkey", "--zkey", key, "--circom", circuit, "--input", input, "--co-circom-bin", "target/release/co-circom", "-l", lib, "--keep-pub-inp"]
 
     try:
         process = Popen(args, stdin=PIPE, stdout=PIPE, stderr=STDOUT)
         output = process.communicate(timeout=TIMEOUT)[0].decode("utf-8")
         if (process.returncode != 0):
             print("  Process did not return 0")
+            if print_out:
+                print("  Output: " + output)
             return None
     except Exception as ex:
         print("  Exception: " + str(ex))
+        if print_out:
+            print("  Output: " + output)
         return None
 
     if print_out:
@@ -51,7 +55,7 @@ def gen_commitments(guesses, addresses, rs):
 
     for i in range(len(guesses)):
         gen_input_for_guess(guesses[i], addresses[i], rs[i], Input)
-        run_circom(CommitScript, Input, Lib)
+        run_circom(CommitScript, Input, "key_commitment.out", Lib)
         commitment = read_commitment(WitnessOut)
         commitments.append(commitment)
     return commitments
@@ -62,14 +66,19 @@ def gen_input_for_winner(guesses, addresses, rs, commitments, filename):
     rs_ = [str(r) for r in rs]
     commitments_ = [str(commitment) for commitment in commitments]
     input = {
-        "guesses": guesses_,
-        "addresses": addresses_,
-        "rs": rs_,
+        "inp_guess": guesses_,
+        "inp_address": addresses_,
+        "inp_r": rs_,
         "commitments": commitments_,
     }
 
     with open(filename, 'w') as f:
         json.dump(input, f)
+
+def read_winner(filename):
+    with open(filename, 'r') as f:
+        data = json.load(f)
+    return (data[0], data[1])
 
 def get_winner(guesses, addresses, rs, commitments):
     assert(len(guesses) == len(addresses))
@@ -77,8 +86,14 @@ def get_winner(guesses, addresses, rs, commitments):
     assert(len(addresses) == len(commitments))
 
     gen_input_for_winner(guesses, addresses, rs, commitments, Input)
+    run_circom(WinnerScript, Input, Lib, "key_winner.out", True)
+    (guess, address) = read_winner(WitnessOut)
+    return (int(guess), int(address))
 
 def simple_test():
+    print("Running simple test")
+    winner_guess = 10
+    winner_address = 101234
     inputs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     addresses = [11234, 21234, 31234, 41234, 51234, 61234, 71234, 81234, 91234, 101234]
     rs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -95,7 +110,13 @@ def simple_test():
     # commitments = gen_commitments(inputs, addresses, rs)
     # print(commitments)
 
-    get_winner(inputs, addresses, rs, commitments)
+    (guess, address) = get_winner(inputs, addresses, rs, commitments)
+    print("Guess: " + str(guess))
+    print("Address: " + str(address))
+    if guess == winner_guess and address == winner_address:
+        print("Test passed")
+    else:
+        print("Test failed")
 
 def main():
     simple_test()
