@@ -169,7 +169,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             } => {
                 debug_assert!(!is_output);
                 self.handle_instruction(cmp_address);
-                self.emit_opcode(MpcOpCode::InputSubComp(mapped, signal_code));
+                self.emit_opcode(MpcOpCode::InputSubComp(mapped, signal_code, context_size));
             }
         }
     }
@@ -299,7 +299,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 input_information: _,
             } => {
                 self.handle_instruction(cmp_address);
-                self.emit_opcode(MpcOpCode::OutputSubComp(mapped, signal_code));
+                self.emit_opcode(MpcOpCode::OutputSubComp(mapped, signal_code, context_size));
             }
         }
     }
