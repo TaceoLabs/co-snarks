@@ -88,6 +88,12 @@ impl R1CSToQAP for CircomReduction {
 
         domain.ifft_in_place(&mut a);
         domain.ifft_in_place(&mut b);
+        if F::TRACE.to_string()
+            == *"12208678567578594777604504606729831043093128246378069236549469339647"
+        {
+            a = apply_inverse_permutation(a);
+            b = apply_inverse_permutation(b);
+        }
 
         /* old way of computing root of unity, does not work for bls12_381:
                 let root_of_unity = {
@@ -119,20 +125,35 @@ impl R1CSToQAP for CircomReduction {
         } else {
             roots[domain.log_size_of_group().to_usize().unwrap() + 1]
         };
-     
+
         D::distribute_powers_and_mul_by_const(&mut a, root_of_unity, F::one());
         D::distribute_powers_and_mul_by_const(&mut b, root_of_unity, F::one());
 
         domain.fft_in_place(&mut a);
         domain.fft_in_place(&mut b);
-
+        if F::TRACE.to_string()
+            == *"12208678567578594777604504606729831043093128246378069236549469339647"
+        {
+            a = apply_inverse_permutation(a);
+            b = apply_inverse_permutation(b);
+        }
         let mut ab = domain.mul_polynomials_in_evaluation_domain(&a, &b);
         drop(a);
         drop(b);
 
         domain.ifft_in_place(&mut c);
+        if F::TRACE.to_string()
+            == *"12208678567578594777604504606729831043093128246378069236549469339647"
+        {
+            c = apply_inverse_permutation(c);
+        }
         D::distribute_powers_and_mul_by_const(&mut c, root_of_unity, F::one());
         domain.fft_in_place(&mut c);
+        if F::TRACE.to_string()
+            == *"12208678567578594777604504606729831043093128246378069236549469339647"
+        {
+            c = apply_inverse_permutation(c);
+        }
 
         cfg_iter_mut!(ab)
             .zip(c)
@@ -157,4 +178,18 @@ impl R1CSToQAP for CircomReduction {
         domain.ifft_in_place(&mut scalars);
         Ok(cfg_into_iter!(scalars).skip(1).step_by(2).collect())
     }
+}
+
+// Arkworks FFT returns the vector of size n permuted like this: (0,n-3 mod n, n-2*3 mod n,...,n-3*i mod n,...)
+pub fn apply_inverse_permutation<F: PrimeField>(vec: Vec<F>) -> Vec<F> {
+    let n = vec.len();
+
+    let mut result = vec![Default::default(); n];
+
+    vec.iter().enumerate().for_each(|(i, &value)| {
+        let original_index = (n + n - 3 * i % n) % n;
+        result[original_index] = value;
+    });
+
+    result
 }
