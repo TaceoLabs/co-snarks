@@ -272,6 +272,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         .iter()
                         .cloned()
                         .for_each(|signal| {
+                            tracing::debug!("pushing signal {signal}");
                             self.push_field(signal);
                         });
                 }
@@ -387,31 +388,42 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         self.sub_components.push(component);
                     }
                 }
-                op_codes::MpcOpCode::OutputSubComp(mapped, signal_code) => {
+                op_codes::MpcOpCode::OutputSubComp(mapped, signal_code, amount) => {
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
                     let component = &mut self.sub_components[sub_comp_index];
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
-                    let result = ctx.signals[component.my_offset + index].clone();
-                    tracing::debug!("Loading output from {}: \"{}\"", component.symbol, result);
-                    self.push_field(result);
+                    let offset_in_component = component.my_offset + index;
+                    for ele in &ctx.signals[offset_in_component..offset_in_component + (*amount)] {
+                        self.push_field(ele.clone());
+                    }
                 }
-                op_codes::MpcOpCode::InputSubComp(mapped, signal_code) => {
+                op_codes::MpcOpCode::InputSubComp(mapped, signal_code, amount) => {
                     assert!(
                         !self.if_stack.is_shared(),
                         "Cannot be shared when providing inputs for sub component"
                     );
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
-                    let signal = self.pop_field();
+                    //we cannot borrow later therefore we need to pop from stack here and push later
+                    let mut input_signals = Vec::with_capacity(*amount);
+                    for _ in 0..*amount {
+                        input_signals.push(self.pop_field());
+                        tracing::debug!("poping {}", input_signals.last().unwrap());
+                    }
+
                     let component = &mut self.sub_components[sub_comp_index];
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
-                    ctx.signals[component.my_offset + index] = signal;
-                    component.provided_input_signals += 1;
+                    let offset_in_component = component.my_offset + index;
+                    ctx.signals[offset_in_component..offset_in_component + *amount]
+                        .clone_from_slice(&input_signals);
+                    component.provided_input_signals += amount;
+                    tracing::info!("provided: {}", component.provided_input_signals);
+                    tracing::info!("needs   : {}", component.input_signals);
                     if component.provided_input_signals == component.input_signals {
                         component.run(protocol, ctx)?;
                     }
@@ -843,6 +855,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
         self.call_main_component()?;
         self.post_processing(amount_public_inputs)
     }
+
     pub fn run(mut self, input_signals: SharedInput<C, P>) -> Result<SharedWitness<C, P>> {
         let amount_public_inputs = self.set_input_signals(input_signals)?;
         self.call_main_component()?;

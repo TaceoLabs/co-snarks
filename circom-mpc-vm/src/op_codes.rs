@@ -7,8 +7,8 @@ pub enum MpcOpCode {
     StoreSignals(usize),
     LoadVars(usize),
     StoreVars(usize),
-    OutputSubComp(bool, usize),
-    InputSubComp(bool, usize),
+    OutputSubComp(bool, usize, usize),
+    InputSubComp(bool, usize, usize),
     CreateCmp(String, usize, bool), //what else do we need?
     Call(String, usize),
     Return,
@@ -101,11 +101,11 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::Return => "RETURN_OP".to_owned(),
             MpcOpCode::ReturnFun => "RETURN_FUN_OP".to_owned(),
             MpcOpCode::ReturnSharedIfFun => "RETURN_SHARED_IF_FUN_OP".to_owned(),
-            MpcOpCode::OutputSubComp(mapped, signal_code) => {
-                format!("OUTPUT_SUB_COMP_OP {mapped} {signal_code}")
+            MpcOpCode::OutputSubComp(mapped, signal_code, amount) => {
+                format!("OUTPUT_SUB_COMP_OP {mapped} {signal_code} {amount}")
             }
-            MpcOpCode::InputSubComp(mapped, signal_code) => {
-                format!("INPUT_SUB_COMP_OP {mapped} {signal_code}")
+            MpcOpCode::InputSubComp(mapped, signal_code, amount) => {
+                format!("INPUT_SUB_COMP_OP {mapped} {signal_code} {amount}")
             }
             MpcOpCode::Log => "LOG".to_owned(),
             MpcOpCode::LogString(idx) => format!("LOG_STR {idx}"),
