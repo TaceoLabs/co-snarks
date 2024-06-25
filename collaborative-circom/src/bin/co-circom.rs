@@ -327,19 +327,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             // parse input shares
             let input_share_file =
                 BufReader::new(File::open(&input).context("while opening input share file")?);
-            let input_share: SharedInput<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254> =
-                bincode::deserialize_from(input_share_file)
-                    .context("trying to parse input share file")?;
-
-            // parse circuit file & put through our compiler
-            let mut builder = CompilerBuilder::<Bn254>::new(circuit);
-            for lib in link_library {
-                builder = builder.link_library(lib);
-            }
-            let parsed_circom_circuit = builder
-                .build()
-                .parse()
-                .context("while parsing circuit file")?;
+            let input_share = collaborative_circom::parse_shared_input(input_share_file)?;
 
             // parse network configuration
             let config =
@@ -347,19 +335,8 @@ fn main() -> color_eyre::Result<ExitCode> {
             let config: NetworkConfig =
                 toml::from_str(&config).context("while parsing network config")?;
 
-            // connect to network
-            let net = Rep3MpcNet::new(config).context("while connecting to network")?;
-
-            // init MPC protocol
-            let rep3_vm = parsed_circom_circuit
-                .to_rep3_vm_with_network(net)
-                .context("while constructing MPC VM")?;
-
-            // execute witness generation in MPC
-            let result_witness_share = rep3_vm
-                .run(input_share)
-                .context("while running witness generation")?;
-
+            let result_witness_share =
+                collaborative_circom::generate_witness(circuit, link_library, input_share, config)?;
             // write result to output file
             let out_file = BufWriter::new(std::fs::File::create(&out)?);
             bincode::serialize_into(out_file, &result_witness_share)?;
@@ -381,10 +358,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             let witness_file =
                 BufReader::new(File::open(witness).context("trying to open witness share file")?);
 
-            // TODO: how to best allow for different MPC protocols here
-            let witness_share: SharedWitness<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254> =
-                bincode::deserialize_from(witness_file)
-                    .context("trying to parse witness share file")?;
+            let witness_share = collaborative_circom::parse_witness_share(witness_file)?;
 
             // parse public inputs
             let public_input = witness_share.public_inputs.clone();
