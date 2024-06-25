@@ -90,6 +90,7 @@ struct Section {
     size: usize,
 }
 
+#[derive(Clone)]
 pub struct ZKey<P: Pairing> {
     pk: ProvingKey<P>,
     matrices: ConstraintMatrices<P::ScalarField>,
