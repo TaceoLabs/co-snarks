@@ -422,8 +422,6 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     ctx.signals[offset_in_component..offset_in_component + *amount]
                         .clone_from_slice(&input_signals);
                     component.provided_input_signals += amount;
-                    tracing::info!("provided: {}", component.provided_input_signals);
-                    tracing::info!("needs   : {}", component.input_signals);
                     if component.provided_input_signals == component.input_signals {
                         component.run(protocol, ctx)?;
                     }
