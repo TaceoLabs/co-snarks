@@ -95,6 +95,14 @@ where
     P: Pairing,
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
+    pub fn add_public_input(&mut self, key: String, elements: Vec<P::ScalarField>) {
+        self.public_inputs.insert(key, elements);
+    }
+
+    pub fn add_shared_input(&mut self, key: String, elements: T::FieldShareVec) {
+        self.shared_inputs.insert(key, elements);
+    }
+
     pub fn merge(self, other: Self) -> Result<Self> {
         let mut shared_inputs = self.shared_inputs;
         let public_inputs = self.public_inputs;
