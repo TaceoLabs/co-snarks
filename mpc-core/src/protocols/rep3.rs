@@ -584,7 +584,9 @@ impl<P: Pairing, N: Rep3Network> PairingEcMpcProtocol<P> for Rep3Protocol<P::Sca
     }
 }
 
-impl<F: PrimeField, N: Rep3Network> FFTProvider<F> for Rep3Protocol<F, N> {
+impl<F: PrimeField + crate::traits::FFTPostProcessing, N: Rep3Network> FFTProvider<F>
+    for Rep3Protocol<F, N>
+{
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
         data: Self::FieldShareVec,
@@ -617,6 +619,11 @@ impl<F: PrimeField, N: Rep3Network> FFTProvider<F> for Rep3Protocol<F, N> {
     ) {
         domain.ifft_in_place(&mut data.a);
         domain.ifft_in_place(&mut data.b);
+    }
+
+    fn fft_post_processing_share(data: &mut Self::FieldShareVec) {
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut data.a);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut data.b);
     }
 }
 

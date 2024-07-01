@@ -666,7 +666,9 @@ impl<P: Pairing, N: ShamirNetwork> PairingEcMpcProtocol<P> for ShamirProtocol<P:
     }
 }
 
-impl<F: PrimeField, N: ShamirNetwork> FFTProvider<F> for ShamirProtocol<F, N> {
+impl<F: PrimeField + crate::traits::FFTPostProcessing, N: ShamirNetwork> FFTProvider<F>
+    for ShamirProtocol<F, N>
+{
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
         data: Self::FieldShareVec,
@@ -695,6 +697,10 @@ impl<F: PrimeField, N: ShamirNetwork> FFTProvider<F> for ShamirProtocol<F, N> {
         domain: &D,
     ) {
         domain.ifft_in_place(&mut data.a);
+    }
+
+    fn fft_post_processing_share(data: &mut Self::FieldShareVec) {
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut data.a);
     }
 }
 

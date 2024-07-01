@@ -122,7 +122,7 @@ impl R1CSToQAP for CircomReduction {
         if F::TRACE.to_string()
             == *"12208678567578594777604504606729831043093128246378069236549469339647"
         {
-            a = F::apply_inverse_permutation(a);
+            a = apply_inverse_permutation(a);
             b = apply_inverse_permutation(b);
         }
 
@@ -181,45 +181,14 @@ impl R1CSToQAP for CircomReduction {
 }
 
 // Arkworks FFT returns the vector of size n permuted like this: (0,n-3 mod n, n-2*3 mod n,...,n-3*i mod n,...)
-// pub fn apply_inverse_permutation<F: PrimeField>(vec: Vec<F>) -> Vec<F> {
-//     let n = vec.len();
 
-//     let mut result = vec![Default::default(); n];
+fn apply_inverse_permutation<F: PrimeField>(vec: Vec<F>) -> Vec<F> {
+    let n = vec.len();
+    let mut result = vec.clone();
+    vec.iter().enumerate().for_each(|(i, &value)| {
+        let original_index = (n + n - 3 * i % n) % n;
+        result[original_index] = value;
+    });
 
-//     vec.iter().enumerate().for_each(|(i, &value)| {
-//         let original_index = (n + n - 3 * i % n) % n;
-//         result[original_index] = value;
-//     });
-
-//     result
-// }
-pub trait InversePermutation: PrimeField {
-    fn apply_inverse_permutation(vec: Vec<Self>) -> Vec<Self>
-    where
-        Self: Sized;
-}
-impl InversePermutation for ark_bn254::Fr {
-    fn apply_inverse_permutation(vec: Vec<Self>) -> Vec<Self>
-    where
-        Self: Sized,
-    {
-        vec
-    }
-}
-
-impl InversePermutation for ark_bls12_381::Fr {
-    fn apply_inverse_permutation(vec: Vec<Self>) -> Vec<Self>
-    where
-        Self: Sized,
-    {
-        let n = vec.len();
-        let mut result = vec![Default::default(); n];
-
-        vec.iter().enumerate().for_each(|(i, &value)| {
-            let original_index = (n + n - 2 * i % n) % n;
-            result[original_index] = value;
-        });
-
-        result
-    }
+    result
 }
