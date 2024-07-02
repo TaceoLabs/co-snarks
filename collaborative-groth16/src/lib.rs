@@ -20,7 +20,7 @@ mod tests {
     use rand::thread_rng;
     use std::fs::{self, File};
 
-    use crate::{circom_reduction::CircomReduction, circuit::Circuit};
+    use crate::{circom_reduction::tests::CircomReduction, circuit::Circuit};
 
     #[test]
     fn create_proof_and_verify_bn254() {
@@ -151,9 +151,35 @@ mod tests {
                 .expect("can verify");
         assert!(verified)
     }
+    #[test]
+    fn proof_circom_proof_bls12_381_using_zkey_matrices() {
+        let zkey_file = File::open("../test_vectors/bls12_381/multiplier2.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/bls12_381/witness.wtns").unwrap();
+        let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
+        let (pk, matrices) = ZKey::<Bls12_381>::from_reader(zkey_file).unwrap().split();
+        let mut rng = thread_rng();
+        let r = <Bls12_381 as Pairing>::ScalarField::rand(&mut rng);
+        let s = <Bls12_381 as Pairing>::ScalarField::rand(&mut rng);
+        let proof =
+            Groth16::<Bls12_381, CircomReduction>::create_proof_with_reduction_and_matrices(
+                &pk,
+                r,
+                s,
+                &matrices,
+                matrices.num_instance_variables,
+                matrices.num_constraints,
+                &witness.values,
+            )
+            .expect("proof generation works");
+        let public_inputs = &witness.values[1..matrices.num_instance_variables];
+        let pvk = prepare_verifying_key(&pk.vk);
+        let ser_proof = serde_json::to_string(&JsonProof::<Bls12_381>::from(proof)).unwrap();
+        let der_proof = serde_json::from_str::<JsonProof<Bls12_381>>(&ser_proof).unwrap();
+        let verified = Groth16::<Bls12_381>::verify_proof(&pvk, &der_proof.into(), public_inputs)
+            .expect("can verify");
+        assert!(verified);
+    }
 
-    //this does not work. See https://github.com/TaceoLabs/collaborative-circom/issues/10
-    #[ignore]
     #[test]
     fn proof_circom_proof_bls12_381() {
         let zkey_file = File::open("../test_vectors/bls12_381/multiplier2.zkey").unwrap();

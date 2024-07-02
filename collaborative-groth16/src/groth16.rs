@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-use std::marker::PhantomData;
-
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::{FftField, LegendreSymbol, PrimeField};
 use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::Result as R1CSResult;
@@ -24,8 +22,12 @@ use mpc_core::{
 };
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
+use num_traits::ToPrimitive;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::marker::PhantomData;
+
 pub type Rep3CollaborativeGroth16<P> =
     CollaborativeGroth16<Rep3Protocol<<P as Pairing>::ScalarField, Rep3MpcNet>, P>;
 
@@ -138,6 +140,7 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
@@ -150,6 +153,7 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub fn new(driver: T) -> Self {
         Self {
@@ -181,6 +185,37 @@ where
         let r = self.driver.rand()?;
         let s = self.driver.rand()?;
         self.create_proof_with_assignment(pk, r, s, &h, &public_inputs[1..], private_witness)
+    }
+
+    /* old way of computing root of unity, does not work for bls12_381:
+    let root_of_unity = {
+        let domain_size_double = 2 * domain_size;
+        let domain_double =
+            D::new(domain_size_double).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        domain_double.element(1)
+    };
+    new one is computed in the same way as in snarkjs (More precisely in ffjavascript/src/wasm_field1.js)
+    calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) also calculate smallest t (F::TRACE) s.t. p-1=2^s*t, s is the two_adicity
+    use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
+    then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
+    */
+    pub fn root_of_unity<F: PrimeField + FftField>(domain: &GeneralEvaluationDomain<F>) -> F {
+        let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
+        let mut q = F::one();
+        while q.legendre() != LegendreSymbol::QuadraticNonResidue {
+            q += F::one();
+        }
+        let z = q.pow(F::TRACE);
+        roots[0] = z;
+        for i in 1..roots.len() {
+            roots[i] = roots[i - 1].square();
+        }
+        roots.reverse();
+        if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
+            q.square()
+        } else {
+            roots[domain.log_size_of_group().to_usize().unwrap() + 1]
+        }
     }
     pub fn prove_with_matrices(
         &mut self,
@@ -232,15 +267,9 @@ where
 
         let mut b = FieldShareVec::<T, P>::from(b);
         let mut c = self.driver.mul_vec(&a, &b)?;
-
+        let root_of_unity = Self::root_of_unity(&domain);
         self.driver.ifft_in_place(&mut a, &domain);
         self.driver.ifft_in_place(&mut b, &domain);
-        let root_of_unity = {
-            let domain_size_double = 2 * domain_size;
-            let domain_double = GeneralEvaluationDomain::new(domain_size_double)
-                .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-            domain_double.element(1)
-        };
         self.driver.distribute_powers_and_mul_by_const(
             &mut a,
             root_of_unity,
@@ -265,6 +294,7 @@ where
             P::ScalarField::one(),
         );
         self.driver.fft_in_place(&mut c, &domain);
+
         self.driver.sub_assign_vec(&mut ab, &c);
         Ok(ab)
     }
@@ -428,7 +458,10 @@ where
     }
 }
 
-impl<P: Pairing> Rep3CollaborativeGroth16<P> {
+impl<P: Pairing> Rep3CollaborativeGroth16<P>
+where
+    <P as ark_ec::pairing::Pairing>::ScalarField: mpc_core::traits::FFTPostProcessing,
+{
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
         let mpc_net = Rep3MpcNet::new(config)?;
         let driver = Rep3Protocol::<P::ScalarField, Rep3MpcNet>::new(mpc_net)?;
