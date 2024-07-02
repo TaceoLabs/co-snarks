@@ -153,54 +153,52 @@ template BatcherOddEvenMergeSortWithId(nInputs, N) {
     signal input ids[nInputs];
     signal output sorted[nInputs];
     signal output sorted_id[nInputs];
-    sorted <== inputs;
-    sorted_id <== ids;
 
-//   var next_power = 1;
-//   var log_power = 0;
-//   while (next_power < nInputs) {
-//       next_power *= 2;
-//       log_power += 1;
-//   }
-//   // This is just an too large upper bound
-//   var COMPARISONS = next_power * log_power * log_power / 4;
-//   component compare_swap[COMPARISONS];
+    var next_power = 1;
+    var log_power = 0;
+    while (next_power < nInputs) {
+        next_power *= 2;
+        log_power += 1;
+    }
+    // This is just an too large upper bound
+    var COMPARISONS = next_power * log_power * log_power / 4;
+    component compare_swap[COMPARISONS];
 
-//   // initialization
-//   var state[nInputs];
-//   var state_id[nInputs];
-//   for (var i = 0; i < nInputs; i++) {
-//       state[i] = inputs[i];
-//       state_id[i] = ids[i];
-//   }
+    // initialization
+    var state[nInputs];
+    var state_id[nInputs];
+    for (var i = 0; i < nInputs; i++) {
+        state[i] = inputs[i];
+        state_id[i] = ids[i];
+    }
 
-//   var index = 0;
-//   for (var p = 1; p < nInputs; p *= 2) {
-//       for (var k = p; k > 0; k \= 2) {
-//            for (var j = k % p; j + k < nInputs; j += 2 * k) {
-//               var min = (k < nInputs - j - k) ? k : (nInputs - j - k);
-//               for (var i = 0; i < min; i++) {
-//                   if ((i + j) \ (2 * p) == (i + j + k) \ (2 * p)) {
-//                       compare_swap[index] = CompareSwapWithId(N);
-//                       compare_swap[index].a <== state[i + j];
-//                       compare_swap[index].b <== state[i + j + k];
-//                       compare_swap[index].a_id <== state_id[i + j];
-//                       compare_swap[index].b_id <== state_id[i + j + k];
-//                       state[i + j] = compare_swap[index].out_a;
-//                       state[i + j + k] = compare_swap[index].out_b;
-//                       state_id[i + j] = compare_swap[index].out_a_id;
-//                       state_id[i + j + k] = compare_swap[index].out_b_id;
-//                       index += 1;
-//                   }
-//               }
-//           }
-//       }
-//   }
+    var index = 0;
+    for (var p = 1; p < nInputs; p *= 2) {
+        for (var k = p; k > 0; k \= 2) {
+             for (var j = k % p; j + k < nInputs; j += 2 * k) {
+                var min = (k < nInputs - j - k) ? k : (nInputs - j - k);
+                for (var i = 0; i < min; i++) {
+                    if ((i + j) \ (2 * p) == (i + j + k) \ (2 * p)) {
+                        compare_swap[index] = CompareSwapWithId(N);
+                        compare_swap[index].a <== state[i + j];
+                        compare_swap[index].b <== state[i + j + k];
+                        compare_swap[index].a_id <== state_id[i + j];
+                        compare_swap[index].b_id <== state_id[i + j + k];
+                        state[i + j] = compare_swap[index].out_a;
+                        state[i + j + k] = compare_swap[index].out_b;
+                        state_id[i + j] = compare_swap[index].out_a_id;
+                        state_id[i + j + k] = compare_swap[index].out_b_id;
+                        index += 1;
+                    }
+                }
+            }
+        }
+    }
 
-//   for (var i = 0; i < nInputs; i++) {
-//       sorted[i] <== state[i];
-//       sorted_id[i] <== state_id[i];
-//   }
+    for (var i = 0; i < nInputs; i++) {
+        sorted[i] <== state[i];
+        sorted_id[i] <== state_id[i];
+    }
 }
 
 template InsertionSort(nInputs, N) {

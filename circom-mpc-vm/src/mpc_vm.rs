@@ -206,10 +206,6 @@ impl<T> FunctionCtx<T> {
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P, C> {
     fn init(templ_decl: &TemplateDecl, signal_offset: usize) -> Self {
-        println!(
-            "Creating {} with offset {}",
-            templ_decl.symbol, signal_offset
-        );
         Self {
             symbol: templ_decl.symbol.clone(),
             amount_vars: templ_decl.vars,
@@ -412,9 +408,9 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
                     //we cannot borrow later therefore we need to pop from stack here and push later
-                    let mut input_signals = Vec::with_capacity(*amount);
-                    for _ in 0..*amount {
-                        input_signals.push(self.pop_field());
+                    let mut input_signals = vec![C::VmType::default(); *amount];
+                    for i in 0..*amount {
+                        input_signals[*amount - i - 1] = self.pop_field();
                         tracing::debug!("poping {}", input_signals.last().unwrap());
                     }
 

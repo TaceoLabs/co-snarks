@@ -2,7 +2,7 @@ pragma circom 2.0.0;
 
 // From circuit folder: circom guessing-game/winner.circom --r1cs
 
-include "utils.circom";
+include "../libs/utils.circom";
 
 template Winner(nInputs, N) {
     signal input inp_address[nInputs];
