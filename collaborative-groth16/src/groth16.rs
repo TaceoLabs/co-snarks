@@ -270,8 +270,6 @@ where
         let root_of_unity = Self::root_of_unity(&domain);
         self.driver.ifft_in_place(&mut a, &domain);
         self.driver.ifft_in_place(&mut b, &domain);
-        T::fft_post_processing_share(&mut a);
-        T::fft_post_processing_share(&mut b);
         self.driver.distribute_powers_and_mul_by_const(
             &mut a,
             root_of_unity,
@@ -284,22 +282,18 @@ where
         );
         self.driver.fft_in_place(&mut a, &domain);
         self.driver.fft_in_place(&mut b, &domain);
-        T::fft_post_processing_share(&mut a);
-        T::fft_post_processing_share(&mut b);
         //this can be in-place so that we do not have to allocate memory
         let mut ab = self.driver.mul_vec(&a, &b)?;
         std::mem::drop(a);
         std::mem::drop(b);
 
         self.driver.ifft_in_place(&mut c, &domain);
-        T::fft_post_processing_share(&mut c);
         self.driver.distribute_powers_and_mul_by_const(
             &mut c,
             root_of_unity,
             P::ScalarField::one(),
         );
         self.driver.fft_in_place(&mut c, &domain);
-        T::fft_post_processing_share(&mut c);
 
         self.driver.sub_assign_vec(&mut ab, &c);
         Ok(ab)

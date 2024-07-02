@@ -3,8 +3,8 @@ use core::fmt;
 use ark_ec::{pairing::Pairing, CurveGroup};
 use eyre::Result;
 
-use ark_bls12_381::Fr as Bls12_381;
-use ark_bn254::Fr as Bn254;
+use ark_bls12_381::Fr as Bls12_381_ScalarField;
+use ark_bn254::Fr as Bn254_ScalarField;
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -164,7 +164,6 @@ pub trait FFTProvider<F: PrimeField + FFTPostProcessing>: PrimeFieldMpcProtocol<
         domain: &D,
     ) -> Self::FieldShareVec;
     fn ifft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D);
-    fn fft_post_processing_share(data: &mut Self::FieldShareVec);
 }
 
 pub trait MSMProvider<C: CurveGroup>: EcMpcProtocol<C> {
@@ -174,12 +173,12 @@ pub trait MSMProvider<C: CurveGroup>: EcMpcProtocol<C> {
         scalars: &Self::FieldShareVec,
     ) -> Self::PointShare;
 }
-
+/// For BLS12-381, Arkworks FFT returns the vector of size n permuted like this (compared to snarkjs): (0,n-3 mod n, n-2*3 mod n,...,n-3*i mod n,...), so we need to rearrange it
 pub trait FFTPostProcessing: PrimeField {
-    fn fft_post_processing(vec: &mut Vec<Self>);
+    fn fft_post_processing(_vec: &mut Vec<Self>) {}
 }
 
-impl FFTPostProcessing for Bls12_381 {
+impl FFTPostProcessing for Bls12_381_ScalarField {
     fn fft_post_processing(vec: &mut Vec<Self>) {
         let n = vec.len();
         let mut temp = vec.clone();
@@ -190,6 +189,4 @@ impl FFTPostProcessing for Bls12_381 {
         vec.copy_from_slice(&temp);
     }
 }
-impl FFTPostProcessing for Bn254 {
-    fn fft_post_processing(_vec: &mut Vec<Self>) {}
-}
+impl FFTPostProcessing for Bn254_ScalarField {}

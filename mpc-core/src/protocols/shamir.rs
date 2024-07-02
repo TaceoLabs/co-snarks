@@ -674,12 +674,14 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing, N: ShamirNetwork> FFTProv
         data: Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        let a = domain.fft(&data.a);
+        let mut a = domain.fft(&data.a);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut a);
         Self::FieldShareVec::new(a)
     }
 
     fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D) {
         domain.fft_in_place(&mut data.a);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut data.a);
     }
 
     fn ifft<D: EvaluationDomain<F>>(
@@ -687,7 +689,8 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing, N: ShamirNetwork> FFTProv
         data: &Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        let a = domain.ifft(&data.a);
+        let mut a = domain.ifft(&data.a);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut a);
         Self::FieldShareVec::new(a)
     }
 
@@ -697,9 +700,6 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing, N: ShamirNetwork> FFTProv
         domain: &D,
     ) {
         domain.ifft_in_place(&mut data.a);
-    }
-
-    fn fft_post_processing_share(data: &mut Self::FieldShareVec) {
         crate::traits::FFTPostProcessing::fft_post_processing(&mut data.a);
     }
 }

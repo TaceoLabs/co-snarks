@@ -20,7 +20,7 @@ mod tests {
     use rand::thread_rng;
     use std::fs::{self, File};
 
-    use crate::{circom_reduction::CircomReduction, circuit::Circuit};
+    use crate::{circom_reduction::tests::CircomReduction, circuit::Circuit};
 
     #[test]
     fn create_proof_and_verify_bn254() {
@@ -179,7 +179,7 @@ mod tests {
             .expect("can verify");
         assert!(verified);
     }
-    //this does not work. See https://github.com/TaceoLabs/collaborative-circom/issues/10
+
     #[test]
     fn proof_circom_proof_bls12_381() {
         let zkey_file = File::open("../test_vectors/bls12_381/multiplier2.zkey").unwrap();

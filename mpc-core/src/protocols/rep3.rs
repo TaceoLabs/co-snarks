@@ -592,14 +592,18 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing, N: Rep3Network> FFTProvid
         data: Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        let a = domain.fft(&data.a);
-        let b = domain.fft(&data.b);
+        let mut a = domain.fft(&data.a);
+        let mut b = domain.fft(&data.b);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut a);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut b);
         Self::FieldShareVec::new(a, b)
     }
 
     fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D) {
         domain.fft_in_place(&mut data.a);
         domain.fft_in_place(&mut data.b);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut data.a);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut data.b);
     }
 
     fn ifft<D: EvaluationDomain<F>>(
@@ -607,8 +611,10 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing, N: Rep3Network> FFTProvid
         data: &Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        let a = domain.ifft(&data.a);
-        let b = domain.ifft(&data.b);
+        let mut a = domain.ifft(&data.a);
+        let mut b = domain.ifft(&data.b);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut a);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut b);
         Self::FieldShareVec::new(a, b)
     }
 
@@ -619,9 +625,6 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing, N: Rep3Network> FFTProvid
     ) {
         domain.ifft_in_place(&mut data.a);
         domain.ifft_in_place(&mut data.b);
-    }
-
-    fn fft_post_processing_share(data: &mut Self::FieldShareVec) {
         crate::traits::FFTPostProcessing::fft_post_processing(&mut data.a);
         crate::traits::FFTPostProcessing::fft_post_processing(&mut data.b);
     }
