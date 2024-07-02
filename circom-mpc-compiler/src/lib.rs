@@ -34,8 +34,6 @@ pub struct CollaborativeCircomCompiler<P: Pairing> {
     file: String,
     version: String,
     link_libraries: Vec<PathBuf>,
-    templ_to_size: HashMap<String, usize>,
-    current_offset: usize,
     phantom_data: PhantomData<P>,
     pub(crate) fun_decls: HashMap<String, FunDecl>,
     pub(crate) templ_decls: HashMap<String, TemplateDecl>,
@@ -70,8 +68,6 @@ impl<P: Pairing> CompilerBuilder<P> {
             file: self.file,
             version: self.version,
             link_libraries: self.link_libraries,
-            current_offset: 0,
-            templ_to_size: HashMap::new(),
             current_code_block: vec![],
             fun_decls: HashMap::new(),
             templ_decls: HashMap::new(),
@@ -305,9 +301,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     }
 
     fn handle_create_cmp_bucket(&mut self, create_cmp_bucket: &CreateCmpBucket) {
-        if create_cmp_bucket.defined_positions.len() != create_cmp_bucket.number_of_cmp {
-            todo!("In what case does this happen?");
-        }
         self.emit_opcode(MpcOpCode::PushIndex(create_cmp_bucket.signal_offset));
         self.emit_opcode(MpcOpCode::PushIndex(create_cmp_bucket.signal_offset_jump));
         self.emit_opcode(MpcOpCode::CreateCmp(
@@ -315,7 +308,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             create_cmp_bucket.number_of_cmp,
             create_cmp_bucket.has_inputs,
         ));
-        self.current_offset += self.templ_to_size.get(&create_cmp_bucket.symbol).unwrap();
     }
 
     fn handle_loop_bucket(&mut self, loop_bucket: &LoopBucket) {
@@ -550,13 +542,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             // self.debug_code_block();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
             new_code_block.push(MpcOpCode::Return);
-            //store our current offset
-            let signal_size = templ.number_of_inputs
-                + templ.number_of_outputs
-                + templ.number_of_intermediates
-                + self.current_offset;
-            self.current_offset = 0;
-            self.templ_to_size.insert(templ.header.clone(), signal_size);
             //check if we need mapping for store bucket
             let mappings = if let Some(mappings) = circuit.c_producer.io_map.get(&templ.id) {
                 mappings.iter().map(|m| m.offset).collect_vec()

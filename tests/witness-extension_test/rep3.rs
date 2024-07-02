@@ -387,5 +387,6 @@ mod rep3_tests {
         witness_extension_test_rep3!(smtverifier10_test);
         witness_extension_test_rep3!(sum_test);
         witness_extension_test_rep3!(winner);
+        witness_extension_test_rep3!(bitonic_sort);
     }
 }

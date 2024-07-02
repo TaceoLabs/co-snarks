@@ -165,4 +165,5 @@ mod tests {
     witness_extension_test_plain!(smtverifier10_test);
     witness_extension_test_plain!(sum_test);
     witness_extension_test_plain!(winner);
+    witness_extension_test_plain!(bitonic_sort);
 }

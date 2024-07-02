@@ -8,6 +8,7 @@ include "mux1.circom";
 template CheckRange(MIN, MAX, N) {
     signal input inp;
 
+    assert(MIN >= 0);
     assert(MIN < MAX);
     assert(N > 0);
     assert((1 << N) > MAX);
@@ -34,6 +35,170 @@ template Commit2() {
     poseidon.inputs[1] <== input1;
     poseidon.inputs[2] <== r;
     c <== poseidon.out;
+}
+
+// Swaps if a > b
+template CompareSwapWithId(N) {
+    signal input a;
+    signal input b;
+    signal input a_id;
+    signal input b_id;
+    signal output out_a;
+    signal output out_b;
+    signal output out_a_id;
+    signal output out_b_id;
+
+    component gt = GreaterThan(N);
+    gt.in[0] <== a;
+    gt.in[1] <== b;
+    var cmp = gt.out;
+
+    component mux1 = Mux1();
+    mux1.c[0] <== a; // false
+    mux1.c[1] <== b; // true
+    mux1.s <== cmp;
+    out_a <== mux1.out;
+
+    component mux2 = Mux1();
+    mux2.c[0] <== b; // false
+    mux2.c[1] <== a; // true
+    mux2.s <== cmp;
+    out_b <== mux2.out;
+
+    component mux3 = Mux1();
+    mux3.c[0] <== a_id; // false
+    mux3.c[1] <== b_id; // true
+    mux3.s <== cmp;
+    out_a_id <== mux3.out;
+
+    component mux4 = Mux1();
+    mux4.c[0] <== b_id; // false
+    mux4.c[1] <== a_id; // true
+    mux4.s <== cmp;
+    out_b_id <== mux4.out;
+}
+
+// Swaps if a > b
+template CompareSwap(N) {
+    signal input a;
+    signal input b;
+    signal output out_a;
+    signal output out_b;
+
+    component gt = GreaterThan(N);
+    gt.in[0] <== a;
+    gt.in[1] <== b;
+    var cmp = gt.out;
+
+    component mux1 = Mux1();
+    mux1.c[0] <== a; // false
+    mux1.c[1] <== b; // true
+    mux1.s <== cmp;
+    out_a <== mux1.out;
+
+    component mux2 = Mux1();
+    mux2.c[0] <== b; // false
+    mux2.c[1] <== a; // true
+    mux2.s <== cmp;
+    out_b <== mux2.out;
+}
+
+template BatcherOddEvenMergeSort(nInputs, N) {
+    signal input inputs[nInputs];
+    signal output sorted[nInputs];
+
+    var next_power = 1;
+    var log_power = 0;
+    while (next_power < nInputs) {
+        next_power *= 2;
+        log_power += 1;
+    }
+    // This is just an too large upper bound
+    var COMPARISONS = next_power * log_power * log_power / 4;
+    component compare_swap[COMPARISONS];
+
+
+    // initialization
+    var state[nInputs];
+    for (var i = 0; i < nInputs; i++) {
+        state[i] = inputs[i];
+    }
+
+    var index = 0;
+    for (var p = 1; p < nInputs; p *= 2) {
+        for (var k = p; k > 0; k \= 2) {
+            for (var j = k % p; j + k < nInputs; j += 2 * k) {
+                var min = (k < nInputs - j - k) ? k : (nInputs - j - k);
+                for (var i = 0; i < min; i++) {
+                    if ((i + j) \ (2 * p) == (i + j + k) \ (2 * p)) {
+                        compare_swap[index] = CompareSwap(N);
+                        compare_swap[index].a <== state[i + j];
+                        compare_swap[index].b <== state[i + j + k];
+                        state[i + j] = compare_swap[index].out_a;
+                        state[i + j + k] = compare_swap[index].out_b;
+                        index += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    for (var i = 0; i < nInputs; i++) {
+        sorted[i] <== state[i];
+    }
+}
+
+template BatcherOddEvenMergeSortWithId(nInputs, N) {
+    signal input inputs[nInputs];
+    signal input ids[nInputs];
+    signal output sorted[nInputs];
+    signal output sorted_id[nInputs];
+
+    var next_power = 1;
+    var log_power = 0;
+    while (next_power < nInputs) {
+        next_power *= 2;
+        log_power += 1;
+    }
+    // This is just an too large upper bound
+    var COMPARISONS = next_power * log_power * log_power / 4;
+    component compare_swap[COMPARISONS];
+
+    // initialization
+    var state[nInputs];
+    var state_id[nInputs];
+    for (var i = 0; i < nInputs; i++) {
+        state[i] = inputs[i];
+        state_id[i] = ids[i];
+    }
+
+    var index = 0;
+    for (var p = 1; p < nInputs; p *= 2) {
+        for (var k = p; k > 0; k \= 2) {
+             for (var j = k % p; j + k < nInputs; j += 2 * k) {
+                var min = (k < nInputs - j - k) ? k : (nInputs - j - k);
+                for (var i = 0; i < min; i++) {
+                    if ((i + j) \ (2 * p) == (i + j + k) \ (2 * p)) {
+                        compare_swap[index] = CompareSwapWithId(N);
+                        compare_swap[index].a <== state[i + j];
+                        compare_swap[index].b <== state[i + j + k];
+                        compare_swap[index].a_id <== state_id[i + j];
+                        compare_swap[index].b_id <== state_id[i + j + k];
+                        state[i + j] = compare_swap[index].out_a;
+                        state[i + j + k] = compare_swap[index].out_b;
+                        state_id[i + j] = compare_swap[index].out_a_id;
+                        state_id[i + j + k] = compare_swap[index].out_b_id;
+                        index += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    for (var i = 0; i < nInputs; i++) {
+        sorted[i] <== state[i];
+        sorted_id[i] <== state_id[i];
+    }
 }
 
 template InsertionSort(nInputs, N) {
@@ -168,7 +333,7 @@ template UniqueHighestVal(nInputs, N) {
 
     // Sort
     var sorted[nInputs];
-    component sort = InsertionSort(nInputs, N);
+    component sort = BatcherOddEvenMergeSort(nInputs, N);
     sort.inputs <== inputs;
     sorted = sort.sorted;
 
@@ -232,7 +397,7 @@ template UniqueHighestValWithId(nInputs, N) {
     // Sort
     var sorted[nInputs];
     var sorted_id[nInputs];
-    component sort = InsertionSortWithID(nInputs, N);
+    component sort = BatcherOddEvenMergeSortWithId(nInputs, N);
     sort.inputs <== inputs;
     sort.ids <== ids;
     sorted = sort.sorted;
@@ -299,4 +464,3 @@ template UniqueHighestValWithId(nInputs, N) {
     outp <== max;
     outp_id <== max_id;
 }
-
