@@ -206,6 +206,10 @@ impl<T> FunctionCtx<T> {
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P, C> {
     fn init(templ_decl: &TemplateDecl, signal_offset: usize) -> Self {
+        println!(
+            "Creating {} with offset {}",
+            templ_decl.symbol, signal_offset
+        );
         Self {
             symbol: templ_decl.symbol.clone(),
             amount_vars: templ_decl.vars,
