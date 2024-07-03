@@ -1,3 +1,4 @@
+use super::id::PartyID;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;
@@ -20,6 +21,14 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
     pub(crate) fn double(&mut self) {
         self.a.double_in_place();
         self.b.double_in_place();
+    }
+
+    pub fn promote_from_trivial(val: &F, id: PartyID) -> Self {
+        match id {
+            PartyID::ID0 => Rep3PrimeFieldShare::new(*val, F::zero()),
+            PartyID::ID1 => Rep3PrimeFieldShare::new(F::zero(), *val),
+            PartyID::ID2 => Rep3PrimeFieldShare::default(),
+        }
     }
 }
 
@@ -196,6 +205,28 @@ impl<F: PrimeField> Rep3PrimeFieldShareVec<F> {
     pub fn len(&self) -> usize {
         debug_assert_eq!(self.a.len(), self.b.len());
         self.a.len()
+    }
+
+    pub fn promote_from_trivial(val: &[F], id: PartyID) -> Self {
+        let len = val.len();
+
+        match id {
+            PartyID::ID0 => {
+                let a = val.to_vec();
+                let b = vec![F::zero(); len];
+                Self { a, b }
+            }
+            PartyID::ID1 => {
+                let a = vec![F::zero(); len];
+                let b = val.to_vec();
+                Self { a, b }
+            }
+            PartyID::ID2 => {
+                let a = vec![F::zero(); len];
+                let b = vec![F::zero(); len];
+                Self { a, b }
+            }
+        }
     }
 }
 

@@ -359,26 +359,11 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
     }
 
     fn promote_to_trivial_share(&self, public_value: F) -> Self::FieldShare {
-        match self.network.get_id() {
-            PartyID::ID0 => Rep3PrimeFieldShare::new(public_value, F::zero()),
-            PartyID::ID1 => Rep3PrimeFieldShare::new(F::zero(), public_value),
-            PartyID::ID2 => Rep3PrimeFieldShare::default(),
-        }
+        Self::FieldShare::promote_from_trivial(&public_value, self.network.get_id())
     }
 
     fn promote_to_trivial_shares(&self, public_values: &[F]) -> Self::FieldShareVec {
-        let mut vec = Vec::with_capacity(public_values.len());
-        //additive share1 gets the value everyone else zero
-        //therefore id1 and id2 needs the share
-        for val in public_values {
-            let share = match self.network.get_id() {
-                PartyID::ID0 => Rep3PrimeFieldShare::new(*val, F::zero()),
-                PartyID::ID1 => Rep3PrimeFieldShare::new(F::zero(), *val),
-                PartyID::ID2 => Rep3PrimeFieldShare::default(),
-            };
-            vec.push(share);
-        }
-        Self::FieldShareVec::from(vec)
+        Self::FieldShareVec::promote_from_trivial(public_values, self.network.get_id())
     }
 
     fn mul_vec(
