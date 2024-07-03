@@ -165,6 +165,26 @@ impl<F: PrimeField> From<Matrix<F>> for OurMatrix<F> {
     }
 }
 
+impl<P: Pairing> From<OurZKey<P>> for ZKey<P> {
+    fn from(value: OurZKey<P>) -> Self {
+        Self {
+            pk: value.pk,
+            matrices: ConstraintMatrices {
+                num_instance_variables: value.matrices.num_instance_variables,
+                num_witness_variables: value.matrices.num_witness_variables,
+                num_constraints: value.matrices.num_constraints,
+                a_num_non_zero: value.matrices.a_num_non_zero,
+                b_num_non_zero: value.matrices.b_num_non_zero,
+                c_num_non_zero: value.matrices.c_num_non_zero,
+
+                a: value.matrices.a.inner,
+                b: value.matrices.b.inner,
+                c: value.matrices.c.inner,
+            },
+        }
+    }
+}
+
 impl<P: Pairing + CircomArkworksPairingBridge> ZKey<P>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
