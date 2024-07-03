@@ -187,7 +187,9 @@ impl MpcNetworkHandler {
     pub async fn get_byte_channels(
         &mut self,
     ) -> std::io::Result<HashMap<usize, BytesChannel<RecvStream, SendStream>>> {
-        self.get_custom_channels(LengthDelimitedCodec::new()).await
+        let mut codec = LengthDelimitedCodec::new();
+        codec.set_max_frame_length(1_000_000_000);
+        self.get_custom_channels(codec).await
     }
 
     pub async fn get_serde_bincode_channels<M: Serialize + DeserializeOwned + 'static>(
