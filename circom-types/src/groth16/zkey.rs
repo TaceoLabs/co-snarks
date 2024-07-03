@@ -54,8 +54,8 @@
 //!  Contributions(10)
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use ark_relations::r1cs::ConstraintMatrices;
-use ark_serialize::{CanonicalDeserialize, SerializationError};
+use ark_relations::r1cs::{ConstraintMatrices, Matrix};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::log2;
 use byteorder::{LittleEndian, ReadBytesExt};
 use thiserror::Error;
@@ -71,7 +71,7 @@ use ark_groth16::{ProvingKey, VerifyingKey};
 use crate::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 
 use crate::reader_utils;
-type Result<T> = std::result::Result<T, ZKeyParserError>;
+type OurResult<T> = std::result::Result<T, ZKeyParserError>;
 
 #[derive(Debug, Error)]
 pub enum ZKeyParserError {
@@ -96,12 +96,81 @@ pub struct ZKey<P: Pairing> {
     matrices: ConstraintMatrices<P::ScalarField>,
 }
 
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+pub struct OurMatrix<F: CanonicalSerialize + CanonicalDeserialize> {
+    inner: Vec<Vec<(F, usize)>>,
+}
+
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+pub struct OurConstraintMatrices<F: PrimeField> {
+    /// The number of variables that are "public instances" to the constraint
+    /// system.
+    pub num_instance_variables: usize,
+    /// The number of variables that are "private witnesses" to the constraint
+    /// system.
+    pub num_witness_variables: usize,
+    /// The number of constraints in the constraint system.
+    pub num_constraints: usize,
+    /// The number of non_zero entries in the A matrix.
+    pub a_num_non_zero: usize,
+    /// The number of non_zero entries in the B matrix.
+    pub b_num_non_zero: usize,
+    /// The number of non_zero entries in the C matrix.
+    pub c_num_non_zero: usize,
+
+    /// The A constraint matrix. This is empty when
+    /// `self.mode == SynthesisMode::Prove { construct_matrices = false }`.
+    pub a: OurMatrix<F>,
+    /// The B constraint matrix. This is empty when
+    /// `self.mode == SynthesisMode::Prove { construct_matrices = false }`.
+    pub b: OurMatrix<F>,
+    /// The C constraint matrix. This is empty when
+    /// `self.mode == SynthesisMode::Prove { construct_matrices = false }`.
+    pub c: OurMatrix<F>,
+}
+
+#[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
+pub struct OurZKey<P: Pairing> {
+    pk: ProvingKey<P>,
+    matrices: OurConstraintMatrices<P::ScalarField>,
+}
+
+impl<P: Pairing> From<ZKey<P>> for OurZKey<P> {
+    fn from(zkey: ZKey<P>) -> Self {
+        Self {
+            pk: zkey.pk,
+            matrices: OurConstraintMatrices::from(zkey.matrices),
+        }
+    }
+}
+
+impl<F: PrimeField> From<ConstraintMatrices<F>> for OurConstraintMatrices<F> {
+    fn from(value: ConstraintMatrices<F>) -> Self {
+        Self {
+            num_instance_variables: value.num_instance_variables,
+            num_witness_variables: value.num_witness_variables,
+            num_constraints: value.num_constraints,
+            a_num_non_zero: value.a_num_non_zero,
+            b_num_non_zero: value.b_num_non_zero,
+            c_num_non_zero: value.c_num_non_zero,
+            a: OurMatrix::from(value.a),
+            b: OurMatrix::from(value.b),
+            c: OurMatrix::from(value.c),
+        }
+    }
+}
+impl<F: PrimeField> From<Matrix<F>> for OurMatrix<F> {
+    fn from(value: Matrix<F>) -> Self {
+        Self { inner: value }
+    }
+}
+
 impl<P: Pairing + CircomArkworksPairingBridge> ZKey<P>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    pub fn from_reader<R: Read + Seek>(mut reader: R) -> Result<Self> {
+    pub fn from_reader<R: Read + Seek>(mut reader: R) -> OurResult<Self> {
         let mut binfile = BinFile::<_, P>::new(&mut reader)?;
         let pk = binfile.proving_key()?;
         let matrices = binfile.matrices()?;
@@ -110,6 +179,10 @@ where
 
     pub fn split(self) -> (ProvingKey<P>, ConstraintMatrices<P::ScalarField>) {
         (self.pk, self.matrices)
+    }
+
+    pub fn to_our_zkey(self) -> OurZKey<P> {
+        OurZKey::from(self)
     }
 }
 
@@ -133,7 +206,7 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    fn new(reader: &'a mut R) -> Result<Self> {
+    fn new(reader: &'a mut R) -> OurResult<Self> {
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic)?;
 
@@ -164,7 +237,7 @@ where
         })
     }
 
-    fn proving_key(&mut self) -> Result<ProvingKey<P>> {
+    fn proving_key(&mut self) -> OurResult<ProvingKey<P>> {
         let header = self.groth_header()?;
         let ic = self.ic(header.n_public)?;
 
@@ -200,19 +273,19 @@ where
         self.sections.get(&id).unwrap()[0].clone()
     }
 
-    fn groth_header(&mut self) -> Result<HeaderGroth<P>> {
+    fn groth_header(&mut self) -> OurResult<HeaderGroth<P>> {
         let section = self.get_section(2);
         let header = HeaderGroth::new(&mut self.reader, &section)?;
         Ok(header)
     }
 
-    fn ic(&mut self, n_public: usize) -> Result<Vec<P::G1Affine>> {
+    fn ic(&mut self, n_public: usize) -> OurResult<Vec<P::G1Affine>> {
         // the range is non-inclusive so we do +1 to get all inputs
         self.g1_section(n_public + 1, 3)
     }
 
     /// Returns the [`ConstraintMatrices`] corresponding to the zkey
-    pub fn matrices(&mut self) -> Result<ConstraintMatrices<P::ScalarField>> {
+    pub fn matrices(&mut self) -> OurResult<ConstraintMatrices<P::ScalarField>> {
         let header = self.groth_header()?;
 
         let section = self.get_section(4);
@@ -259,33 +332,33 @@ where
         Ok(matrices)
     }
 
-    fn a_query(&mut self, n_vars: usize) -> Result<Vec<P::G1Affine>> {
+    fn a_query(&mut self, n_vars: usize) -> OurResult<Vec<P::G1Affine>> {
         self.g1_section(n_vars, 5)
     }
 
-    fn b_g1_query(&mut self, n_vars: usize) -> Result<Vec<P::G1Affine>> {
+    fn b_g1_query(&mut self, n_vars: usize) -> OurResult<Vec<P::G1Affine>> {
         self.g1_section(n_vars, 6)
     }
 
-    fn b_g2_query(&mut self, n_vars: usize) -> Result<Vec<P::G2Affine>> {
+    fn b_g2_query(&mut self, n_vars: usize) -> OurResult<Vec<P::G2Affine>> {
         self.g2_section(n_vars, 7)
     }
 
-    fn l_query(&mut self, n_vars: usize) -> Result<Vec<P::G1Affine>> {
+    fn l_query(&mut self, n_vars: usize) -> OurResult<Vec<P::G1Affine>> {
         self.g1_section(n_vars, 8)
     }
 
-    fn h_query(&mut self, n_vars: usize) -> Result<Vec<P::G1Affine>> {
+    fn h_query(&mut self, n_vars: usize) -> OurResult<Vec<P::G1Affine>> {
         self.g1_section(n_vars, 9)
     }
 
-    fn g1_section(&mut self, num: usize, section_id: usize) -> Result<Vec<P::G1Affine>> {
+    fn g1_section(&mut self, num: usize, section_id: usize) -> OurResult<Vec<P::G1Affine>> {
         let section = self.get_section(section_id as u32);
         self.reader.seek(SeekFrom::Start(section.position))?;
         Ok(reader_utils::read_g1_vector::<P, _>(&mut self.reader, num)?)
     }
 
-    fn g2_section(&mut self, num: usize, section_id: usize) -> Result<Vec<P::G2Affine>> {
+    fn g2_section(&mut self, num: usize, section_id: usize) -> OurResult<Vec<P::G2Affine>> {
         let section = self.get_section(section_id as u32);
         self.reader.seek(SeekFrom::Start(section.position))?;
         Ok(reader_utils::read_g2_vector::<P, _>(&mut self.reader, num)?)
@@ -307,7 +380,7 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    fn new<R: Read>(mut reader: R) -> Result<Self> {
+    fn new<R: Read>(mut reader: R) -> OurResult<Self> {
         let alpha_g1 = P::g1_from_reader(&mut reader)?;
         let beta_g1 = P::g1_from_reader(&mut reader)?;
         let beta_g2 = P::g2_from_reader(&mut reader)?;
@@ -348,12 +421,12 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    fn new<R: Read + Seek>(reader: &mut R, section: &Section) -> Result<Self> {
+    fn new<R: Read + Seek>(reader: &mut R, section: &Section) -> OurResult<Self> {
         reader.seek(SeekFrom::Start(section.position))?;
         Self::read(reader)
     }
 
-    fn read<R: Read>(mut reader: &mut R) -> Result<Self> {
+    fn read<R: Read>(mut reader: &mut R) -> OurResult<Self> {
         // TODO: Impl From<u32> in Arkworks
         let n8q: u32 = u32::deserialize_uncompressed(&mut reader)?;
         //modulos of BaseField
