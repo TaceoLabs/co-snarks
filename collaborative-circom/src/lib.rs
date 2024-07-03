@@ -9,6 +9,7 @@ use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWi
 use color_eyre::eyre::Context;
 use mpc_core::protocols::rep3::{network::Rep3MpcNet, Rep3Protocol};
 use mpc_net::config::NetworkConfig;
+use tracing::instrument;
 
 pub mod file_utils;
 
@@ -89,11 +90,16 @@ pub fn prove_with_matrices(
     zkey: ZKey<Bn254>,
 ) -> color_eyre::Result<Proof<Bn254>> {
     let (pk, matrices) = zkey.split();
+    tracing::info!("establishing network....");
     // connect to network
     let net = Rep3MpcNet::new(config)?;
+    tracing::info!("done!");
     // init MPC protocol
+    tracing::info!("building protocol...");
     let protocol = Rep3Protocol::<ark_bn254::Fr, _>::new(net)?;
+    tracing::info!("done!");
     let mut prover = CollaborativeGroth16::<Rep3Protocol<ark_bn254::Fr, _>, Bn254>::new(protocol);
+    tracing::info!("starting prover...");
     // execute prover in MPC
     prover.prove_with_matrices(&pk, &matrices, witness_share)
 }
