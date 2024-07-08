@@ -8,8 +8,8 @@
 [![crates.io](https://img.shields.io/badge/crates.io-v0.1.0-blue)](https://crates.io/)
 
 **coCircom** is a tool for building **coSNARKs**, a new technology that enables
-multiple distrusting parties to collaboratively compute a **zero-knowledge proof**
-(ZKP). It leverages the existing domain-specific language
+multiple distrusting parties to collaboratively compute a **zero-knowledge
+proof** (ZKP). It leverages the existing domain-specific language
 [circom](https://github.com/iden3/circom) to define arithmetic circuits. With
 coCircom, all existing circom circuits can be promoted to coSNARKs without any
 modification to the original circuit.
@@ -36,8 +36,8 @@ for other coSNARKs:
 - **mpc-core**: Implementation of MPC protocols.
 - **mpc-net**: Network library for MPC protocols.
 
-The binary `collaborative-circom` is a CLI tool that uses the libraries to build
-a coSNARK.
+The binary `co-circom` is a CLI tool that uses the libraries to build a coSNARK
+(source found in the **collaborative-circom** folder).
 
 ## Installation
 
@@ -73,6 +73,8 @@ git clone https://github.com/TaceoLabs/collaborative-circom.github
 ```bash
 cd collaborative-circom && cargo build --release
 ```
+
+3. You can find the binary in the `target/release` directory.
 
 ## Documentation
 
@@ -125,7 +127,7 @@ For the following steps, we call the ZKey file `adder.zkey`.
 This step involves handling inputs from either a single party or multiple
 distrusting parties.
 
-#### Single Party Input
+#### Input from a Single Party
 
 If the input comes from a single party, we simply split (secret-share) the
 input. Assume we have a file named `input.json` with the following content:
@@ -142,11 +144,12 @@ To split the input, use the following command:
 ```bash
 mkdir out && ./co-circom split-input --circuit adder.circom --input input.json --protocol REP3 --out-dir out/
 ```
+This command will generate secret-shared inputs in the `out` directory, creating separate files for each party. These files will be named `input.json.0.shared`, `input.json.1.shared`, and `input.json.2.shared`, corresponding to the shares for each respective party.
 
-This command will generate secret-shared inputs in the `out` directory, one for
-each party.
+**Note**: In practice, it is crucial that each party has exclusive access to their respective file. Sharing these files across parties compromises the security of the shared witness.
 
-#### Multiple Party Input
+
+#### Input from Multiple Parties
 
 When the input comes from multiple parties, each party first secret-shares their
 respective inputs locally. For example, consider two input files: `input0.json`:
@@ -201,6 +204,7 @@ All parties execute the following command (provided here for the first party):
 until all nodes have finished, so you will likely need three separate terminals
 ;)
 
+
 ### Step 5: Generate the Proof
 
 Next, we generate the proof. Each computing node executes the following command:
@@ -222,8 +226,8 @@ for using coCircom:
 
 **Note**: The `verification_key.json` was generated in Step 2.
 
-For more examples, please refer to the 
-[examples folder](/collaborative-circom/examples/). You'll find bash scripts 
+For more examples, please refer to the
+[examples folder](/collaborative-circom/examples/). You'll find bash scripts
 there that demonstrate all the necessary steps.
 
 ## License
