@@ -3,6 +3,7 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;
 
+/// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Rep3PrimeFieldShare<F: PrimeField> {
     pub(crate) a: F,
@@ -10,10 +11,12 @@ pub struct Rep3PrimeFieldShare<F: PrimeField> {
 }
 
 impl<F: PrimeField> Rep3PrimeFieldShare<F> {
+    /// Constructs the type from two additive shares.
     pub fn new(a: F, b: F) -> Self {
         Self { a, b }
     }
 
+    /// Unwraps the type into two additive shares.
     pub fn ab(self) -> (F, F) {
         (self.a, self.b)
     }
@@ -23,6 +26,7 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
         self.b.double_in_place();
     }
 
+    /// Promotes a field element to a replicated share, by setting the additive share of the party with id=0 and leaving all other shares to be 0. Thus, the replicated shares of party 0 and party 1 are set.
     pub fn promote_from_trivial(val: &F, id: PartyID) -> Self {
         match id {
             PartyID::ID0 => Rep3PrimeFieldShare::new(*val, F::zero()),

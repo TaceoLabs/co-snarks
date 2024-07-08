@@ -11,6 +11,7 @@ pub enum PartyID {
     ID2 = 2,
 }
 
+/// Implements an Error message for when the MPC protocols are started with invalid party IDs. This happens if the provided ID is not 0, 1, or 2.
 #[derive(Debug)]
 pub struct InvalidPartyId(usize);
 
