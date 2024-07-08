@@ -1,3 +1,7 @@
+//! # Shamir Shared Field Elements
+//!
+//! This module contains the implementation of Shamir-shared field elements.
+
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;

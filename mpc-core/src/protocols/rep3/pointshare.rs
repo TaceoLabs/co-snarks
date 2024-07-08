@@ -1,3 +1,7 @@
+//! # Rep3 Shared Curve Points
+//!
+//! This module contains the implementation of rep3-shared curve points.
+
 use super::Rep3PrimeFieldShare;
 use ark_ec::CurveGroup;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};

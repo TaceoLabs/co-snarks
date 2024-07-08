@@ -1,3 +1,7 @@
+//! # Shamir Shared Curve Points
+//!
+//! This module contains the implementation of Shamir-shared curve points.
+
 use std::mem::ManuallyDrop;
 
 use ark_ec::CurveGroup;

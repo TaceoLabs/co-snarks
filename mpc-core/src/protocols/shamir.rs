@@ -27,6 +27,7 @@ pub mod network;
 pub mod pointshare;
 pub(crate) mod shamir_core;
 
+/// # Shamir Utils
 /// This module contains utility functions to work with Shamir secret sharing. I.e., it contains code to share field elements and curve points, as well as code to reconstruct the secret-shares.
 pub mod utils {
     use self::{

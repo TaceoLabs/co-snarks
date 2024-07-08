@@ -1,3 +1,7 @@
+//! Rep3 Network
+//!
+//! This module contains the trait for specifying a network interface for the Rep3 MPC protocol. It also contains an implementation of the trait using the [mpc_net] crate.
+
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};

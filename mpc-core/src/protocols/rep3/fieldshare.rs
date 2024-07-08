@@ -1,3 +1,7 @@
+//! # Rep3 Shared Field Elements
+//!
+//! This module contains the implementation of rep3-shared field elements.
+
 use super::id::PartyID;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};

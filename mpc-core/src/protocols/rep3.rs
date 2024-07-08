@@ -36,6 +36,7 @@ pub mod witness_extension_impl;
 
 type IoResult<T> = std::io::Result<T>;
 
+/// # Rep3 Utils
 /// This module contains utility functions to work with replicated secret sharing. I.e., it contains code to share field elements and curve points, as well as code to reconstruct the secret-shares.
 pub mod utils {
     use ark_ec::CurveGroup;
