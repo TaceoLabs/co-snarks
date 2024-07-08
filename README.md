@@ -222,6 +222,10 @@ for using coCircom:
 
 **Note**: The `verification_key.json` was generated in Step 2.
 
+For more examples, please refer to the 
+[examples folder](/collaborative-circom/examples/). You'll find bash scripts 
+there that demonstrate all the necessary steps.
+
 ## License
 
 This project is licensed under either the [MIT License](LICENSE-MIT) or the
