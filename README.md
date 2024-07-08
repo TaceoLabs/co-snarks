@@ -177,7 +177,7 @@ shares. All computing nodes execute the following command (provided here for the
 first party):
 
 ```bash
-mkdir out0 && ./co-circom merge-input-shares --inputs out/input0.json.0.shared --inputs out/input1.json.0.shared --protocol REP3 --out out0/input.json.0.shared
+mkdir out && ./co-circom merge-input-shares --inputs out/input0.json.0.shared --inputs out/input1.json.0.shared --protocol REP3 --out out/input.json.0.shared
 ```
 
 ### Step 4: Extended Witness Generation
@@ -194,7 +194,7 @@ configuration instructions.
 All parties execute the following command (provided here for the first party):
 
 ```bash
-./co-circom generate-witness --input out/input.json.0.shared --circuit adder.circom --protocol REP3 --config configs/party1.toml --out out0/witness.wtns.0.shared
+./co-circom generate-witness --input out/input.json.0.shared --circuit adder.circom --protocol REP3 --config configs/party1.toml --out out/witness.wtns.0.shared
 ```
 
 **Note**: You need to execute three nodes in parallel. This command will block
