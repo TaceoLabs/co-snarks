@@ -177,7 +177,7 @@ shares. All computing nodes execute the following command (provided here for the
 first party):
 
 ```bash
-mkdir out && ./co-circom merge-input-shares --inputs out/input0.json.0.shared --inputs out/input1.json.0.shared --protocol REP3 --out out/input.json.0.shared
+./co-circom merge-input-shares --inputs out/input0.json.0.shared --inputs out/input1.json.0.shared --protocol REP3 --out out/input.json.0.shared
 ```
 
 ### Step 4: Extended Witness Generation
