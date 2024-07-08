@@ -4,6 +4,7 @@ use eyre::{bail, eyre, Report};
 use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
 use std::collections::HashMap;
 
+/// This trait defines the network interface for the Shamir protocol.
 pub trait ShamirNetwork {
     fn get_id(&self) -> usize;
     fn get_num_parties(&self) -> usize;
