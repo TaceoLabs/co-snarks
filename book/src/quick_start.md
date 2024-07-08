@@ -1,5 +1,8 @@
 # Quick Start
 
+Collaborative Circom is an implementation of [collaborative SNARKs](./collsnarks.md), with a focus on the [Circom](https://circom.io) framework.
+In contrast to traditional SNARKs, which are run by a single prover, collaborative SNARKs are executed using a [multiparty computation protocol](./mpc.md).
+
 If you just want to get your hands dirty as fast as possible, here is a run-down on how to collaboratively prove the `Multiplier2` example from the [Circom documentation](https://docs.circom.io/getting-started/installation/).
 
 First of all, here is the relevant Circom file:
