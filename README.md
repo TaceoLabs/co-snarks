@@ -194,7 +194,7 @@ configuration instructions.
 All parties execute the following command (provided here for the first party):
 
 ```bash
-mkdir out0 && ./co-circom generate-witness --input out/input.json.0.shared --circuit adder.circom --protocol REP3 --config configs/party1.toml --out out0/witness.wtns.0.shared
+./co-circom generate-witness --input out/input.json.0.shared --circuit adder.circom --protocol REP3 --config configs/party1.toml --out out0/witness.wtns.0.shared
 ```
 
 **Note**: You need to execute three nodes in parallel. This command will block
@@ -206,7 +206,7 @@ until all nodes have finished, so you will likely need three separate terminals
 Next, we generate the proof. Each computing node executes the following command:
 
 ```bash
-./co-circom generate-proof --witness out0/witness.wtns.0.shared --zkey adder.zkey --protocol REP3 --config configs/party1.toml --out proof.0.json --public-input public_input.0.json
+./co-circom generate-proof --witness out/witness.wtns.0.shared --zkey adder.zkey --protocol REP3 --config configs/party1.toml --out proof.0.json --public-input public_input.0.json
 ```
 
 Remember to execute this command on all three nodes.
