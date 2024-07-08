@@ -210,27 +210,53 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
     }
 }
 
+/// A trait encompassing basic operations for MPC protocols over elliptic curves.
 pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
+    /// The type of a share of a elliptic curve point.
     type PointShare: CanonicalDeserialize + CanonicalDeserialize + Clone + Sync;
+
+    /// Add two shared points: [C] = [A] + [B]
     fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
+
+    /// Subtract the shared point B from the shared point A: [C] = [A] - [B]
     fn sub_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
+
+    /// Add a shared point B in place to the shared point A: [A] += [B]
     fn add_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare);
+
+    /// Subtract a shared point B in place from the shared point A: [A] -= [B]
     fn sub_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare);
+
+    /// Add a public point B to the shared point A in place: [A] += B
     fn add_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C);
+
+    /// Subtract a public point B from the shared point A in place: [A] -= B
     fn sub_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C);
+
+    /// Add a public affine point B to the shared point A in place: [A] += B
     fn add_assign_points_public_affine(&mut self, a: &mut Self::PointShare, b: &C::Affine);
+
+    /// Subtract a public affine point B from the shared point A in place: [A] -= B
     fn sub_assign_points_public_affine(&mut self, a: &mut Self::PointShare, b: &C::Affine);
+
+    /// Multiplies a public point B to the shared point A in place: [A] *= B
     fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare;
+
+    /// Multiplies a public share b to the shared point A: [A] *= b
     fn scalar_mul_public_scalar(
         &mut self,
         a: &Self::PointShare,
         b: &C::ScalarField,
     ) -> Self::PointShare;
+
+    /// Multiplies a share b to the shared point A: [A] *= [b]. Requires network communication.
     fn scalar_mul(
         &mut self,
         a: &Self::PointShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::PointShare>;
+
+    /// Reconstructs a shared point: A = Open([A]).
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C>;
 }
 
