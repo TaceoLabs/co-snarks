@@ -6,18 +6,25 @@ use std::collections::HashMap;
 
 /// This trait defines the network interface for the Shamir protocol.
 pub trait ShamirNetwork {
+    /// Returns the id of the party. The id is in the range 0 <= id < num_parties
     fn get_id(&self) -> usize;
+
+    /// Returns the number of parties participating in the MPC protocol.
     fn get_num_parties(&self) -> usize;
 
+    /// Sends data to the target party. This function has a default implementation for calling [ShamirNetwork::send_many].
     fn send<F: CanonicalSerialize>(&mut self, target: usize, data: F) -> std::io::Result<()> {
         self.send_many(target, &[data])
     }
+
+    /// Sends a vector of data to the target party.
     fn send_many<F: CanonicalSerialize>(
         &mut self,
         target: usize,
         data: &[F],
     ) -> std::io::Result<()>;
 
+    /// Receives data from the party with the given id. This function has a default implementation for calling [ShamirNetwork::recv_many] and checking for the correct length of 1.
     fn recv<F: CanonicalDeserialize>(&mut self, from: usize) -> std::io::Result<F> {
         let mut res = self.recv_many(from)?;
         if res.len() != 1 {
@@ -29,14 +36,17 @@ pub trait ShamirNetwork {
             Ok(res.pop().unwrap())
         }
     }
+
+    /// Receives a vector of data from the party with the given id.
     fn recv_many<F: CanonicalDeserialize>(&mut self, from: usize) -> std::io::Result<Vec<F>>;
 
+    /// Sends data to all parties and receives data from all other parties. The result is a vector where the data from party i is at index i, including my own data.
     fn broadcast<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
         &mut self,
         data: F,
     ) -> std::io::Result<Vec<F>>;
 
-    // sends data to the next num parties and receives from the previous num (including myself)
+    /// Sends data to the next num - 1 parties and receives from the previous num -1 parties. Thus, the result is a vector of length num, where the data from party my_id + num_partes - i mod num_parties is at index i, including my own data.
     fn broadcast_next<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
         &mut self,
         data: F,
