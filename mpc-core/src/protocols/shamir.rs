@@ -27,6 +27,7 @@ pub mod network;
 pub mod pointshare;
 pub(crate) mod shamir_core;
 
+/// This module contains utility functions to work with Shamir secret sharing. I.e., it contains code to share field elements and curve points, as well as code to reconstruct the secret-shares.
 pub mod utils {
     use self::{
         fieldshare::{ShamirPrimeFieldShare, ShamirPrimeFieldShareVec},
@@ -184,6 +185,7 @@ pub mod utils {
     }
 }
 
+/// This struct handles the Shamir MPC protocol, including proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], and [MSMProvider] traits.
 pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
     threshold: usize, // degree of the polynomial
     open_lagrange_t: Vec<F>,
@@ -197,6 +199,7 @@ pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
 impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     const KING_ID: usize = 0;
 
+    /// Constructs the Shamir protocol from an established network. It also requires to specify the threshold t, which defines the maximum tolerated number of corrupted parties. The threshold t is thus equivalent to the degree of the sharing polynomials.
     pub fn new(threshold: usize, network: N) -> Result<Self, Report> {
         let num_parties = network.get_num_parties();
 
@@ -233,11 +236,12 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         })
     }
 
-    // Generates amount * (self.threshold + 1) random double shares
+    /// This function generates and stores `amount * (threshold + 1)` doubly shared random values, which are required to evaluate the multiplication of two secret shares. Each multiplication consumes one of these preprocessed values.
     pub fn preprocess(&mut self, amount: usize) -> std::io::Result<()> {
         self.rng_buffer.buffer_triples(&mut self.network, amount)
     }
 
+    /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
     // multiply followed by a opening, thus, no reshare required
     pub fn mul_open(
         &mut self,

@@ -52,7 +52,7 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::FieldShare>;
 
-    /// Multiply a share b by a public value a: c = a * b.
+    /// Multiply a share b by a public value a: c = a * \[b\].
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
 
     /// Computes the inverse of a shared value: \[b\] = \[a\] ^ -1. Requires network communication.

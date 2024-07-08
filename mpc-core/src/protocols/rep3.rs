@@ -11,6 +11,8 @@ use rand::{Rng, SeedableRng};
 use rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp};
 use std::{marker::PhantomData, thread, time::Duration};
 
+#[cfg(doc)]
+use crate::traits::CircomWitnessExtensionProtocol;
 use crate::{
     traits::{
         EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
@@ -34,6 +36,7 @@ pub mod witness_extension_impl;
 
 type IoResult<T> = std::io::Result<T>;
 
+/// This module contains utility functions to work with replicated secret sharing. I.e., it contains code to share field elements and curve points, as well as code to reconstruct the secret-shares.
 pub mod utils {
     use ark_ec::CurveGroup;
     use ark_ff::{One, PrimeField};
@@ -186,6 +189,7 @@ pub mod utils {
     }
 }
 
+/// This struct handles the full Rep3 MPC protocol, including witness extension and proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], [MSMProvider], and [CircomWitnessExtensionProtocol] traits.
 #[derive(Debug)]
 pub struct Rep3Protocol<F: PrimeField, N: Rep3Network> {
     rngs: Rep3CorrelatedRng,
@@ -235,6 +239,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         }
     }
 
+    /// Constructs the Rep3 protocol from an established network.
     pub fn new(mut network: N) -> Result<Self, Report> {
         let mut rand = Self::setup_prf(&mut network)?;
         let bitcomps = Self::setup_bitcomp(&mut network, &mut rand)?;
