@@ -1,0 +1,10 @@
+[book]
+authors = ["TACEO GmbH"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Collaborative Circom"
+
+
+[preprocessor.katex]
+after = ["links"]
