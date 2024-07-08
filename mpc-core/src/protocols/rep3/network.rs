@@ -59,6 +59,7 @@ pub trait Rep3Network {
     }
 }
 
+/// This struct can be used to facilitate network communication for the REP3 MPC protocol.
 #[derive(Debug)]
 pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
@@ -69,6 +70,7 @@ pub struct Rep3MpcNet {
 }
 
 impl Rep3MpcNet {
+    /// Takes a [NetworkConfig] struct and constructs the network interface. The network needs to contain exactly 3 parties with ids 0, 1, and 2.
     pub fn new(config: NetworkConfig) -> Result<Self, Report> {
         if config.parties.len() != 3 {
             bail!("REP3 protocol requires exactly 3 parties")
@@ -103,6 +105,8 @@ impl Rep3MpcNet {
             chan_prev,
         })
     }
+
+    /// Shuts down the network interface.
     pub fn shutdown(self) {
         let Self {
             id: _,
@@ -117,6 +121,8 @@ impl Rep3MpcNet {
             net_handler.shutdown().await;
         });
     }
+
+    /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: PartyID, data: Bytes) -> std::io::Result<()> {
         if target == self.id.next_id() {
             std::mem::drop(self.chan_next.blocking_send(data));
@@ -132,6 +138,7 @@ impl Rep3MpcNet {
         }
     }
 
+    /// Receives bytes over the network from the party with the given id.
     pub fn recv_bytes(&mut self, from: PartyID) -> std::io::Result<BytesMut> {
         let data = if from == self.id.prev_id() {
             self.chan_prev.blocking_recv().blocking_recv()
