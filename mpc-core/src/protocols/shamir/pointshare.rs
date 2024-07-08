@@ -5,16 +5,19 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 use super::fieldshare::ShamirPrimeFieldShare;
 
+/// This type represents a Shamir-shared EC point. Since a Shamir-share of a point is a point, this is a wrapper over a point.
 #[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 #[repr(transparent)]
 pub struct ShamirPointShare<C: CurveGroup> {
     pub(crate) a: C,
 }
 impl<C: CurveGroup> ShamirPointShare<C> {
+    /// Wraps the point into a ShamirPointShare
     pub fn new(a: C) -> Self {
         Self { a }
     }
 
+    /// Unwraps a ShamirPointShare into a point
     pub fn inner(self) -> C {
         self.a
     }
