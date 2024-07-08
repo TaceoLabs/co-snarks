@@ -1,3 +1,6 @@
+//! # MPC Traits
+//! Contains the traits which need to be implemented by the MPC protocols.
+
 use core::fmt;
 
 use ark_ec::{pairing::Pairing, CurveGroup};
@@ -11,12 +14,15 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
+    /// The type of a share of a field element.
     type FieldShare: Default
         + std::fmt::Debug
         + Clone
         + CanonicalSerialize
         + CanonicalDeserialize
         + Sync;
+
+    /// The type of a vector of shared field elements.
     type FieldShareVec: From<Vec<Self::FieldShare>>
         + Clone
         + CanonicalSerialize
@@ -26,34 +32,65 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         + IntoIterator<Item = Self::FieldShare>
         + Sync;
 
+    /// Add two shares: [c] = [a] + [b]
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
+
+    /// Subtract the share b from the share a: [c] = [a] - [b]
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
+
+    /// Add a public value a to the share b: [c] = a + [b]
     fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
+
+    /// Elementwise subtraction of two vectors of shares in place: [a_i] -= [b_i]
     fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec);
+
+    /// Multiply two shares: [c] = [a] * [b]. Requires network communication.
     fn mul(
         &mut self,
         a: &Self::FieldShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::FieldShare>;
+
+    /// Multiply a share b by a public value a: c = a * b.
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
+
+    /// Computes the inverse of a shared value: [b] = [a] ^ -1. Requires network communication.
     fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare>;
+
+    /// Negates a shared value: [b] = -[a].
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
+
+    /// Generate a share of a random value. The value is thereby unknown to anyone.
     fn rand(&mut self) -> std::io::Result<Self::FieldShare>;
+
+    /// Reconstructs a shared value: a = Open([a]).
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F>;
+
+    /// Elementwise multiplication of two vectors of shares: [c_i] = [a_i] * [b_i].
     fn mul_vec(
         &mut self,
         a: &Self::FieldShareVec,
         b: &Self::FieldShareVec,
     ) -> std::io::Result<Self::FieldShareVec>;
+
+    /// Transforms a public value into a shared value: [a] = a.
     fn promote_to_trivial_share(&self, public_values: F) -> Self::FieldShare;
+
+    /// Elementwise transformation of a vector of public values into a vector of shared values: [a_i] = a_i.
     fn promote_to_trivial_shares(&self, public_values: &[F]) -> Self::FieldShareVec;
+
+    /// Computes the [coeffs_i] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     fn distribute_powers_and_mul_by_const(&mut self, coeffs: &mut Self::FieldShareVec, g: F, c: F);
+
+    /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs[i] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint(
         &mut self,
         lhs: &[(F, usize)],
         public_inputs: &[F],
         private_witness: &Self::FieldShareVec,
     ) -> Self::FieldShare;
+
+    /// Clones the slice src[src_offset..src_offset + len] to dst[dst_offset..dst_offset + len], where src and dst consist of shared values.
     fn clone_from_slice(
         &self,
         dst: &mut Self::FieldShareVec,
@@ -63,6 +100,7 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         len: usize,
     );
 
+    /// Prints the shared values-
     fn print(&self, to_print: &Self::FieldShareVec);
 }
 
