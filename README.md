@@ -187,7 +187,7 @@ obtained from the previous step. Additionally, computing nodes require
 networking configuration files and TLS key material. Examples of these
 configurations can be found in the
 [configs](/collaborative-circom/examples/configs) and key materials in the
-[keys](/collaborative-circom/examples/keys) directory. Refer to our
+[keys](/collaborative-circom/examples/data) directory. Refer to our
 [documentation](https://docs.taceo.io/network-config.html) for detailed
 configuration instructions.
 
