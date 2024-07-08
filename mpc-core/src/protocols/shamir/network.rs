@@ -54,6 +54,7 @@ pub trait ShamirNetwork {
     ) -> std::io::Result<Vec<F>>;
 }
 
+/// This struct can be used to facilitate network communication for the Shamir MPC protocol.
 pub struct ShamirMpcNet {
     pub(crate) id: usize, // 0 <= id < num_parties
     pub(crate) num_parties: usize,
@@ -63,6 +64,7 @@ pub struct ShamirMpcNet {
 }
 
 impl ShamirMpcNet {
+    /// Takes a [NetworkConfig] struct and constructs the network interface. The network needs to contain at least 3 parties and all ids need to be in the range of 0 <= id < num_parties.
     pub fn new(config: NetworkConfig) -> Result<Self, Report> {
         let num_parties = config.parties.len();
 
@@ -107,6 +109,7 @@ impl ShamirMpcNet {
         })
     }
 
+    /// Shuts down the network interface.
     pub fn shutdown(self) {
         let Self {
             id: _,
@@ -123,6 +126,7 @@ impl ShamirMpcNet {
         });
     }
 
+    /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: usize, data: Bytes) -> std::io::Result<()> {
         if let Some(chan) = self.channels.get_mut(&target) {
             std::mem::drop(chan.blocking_send(data));
@@ -135,6 +139,7 @@ impl ShamirMpcNet {
         }
     }
 
+    /// Receives bytes over the network from the party with the given id.
     pub fn recv_bytes(&mut self, from: usize) -> std::io::Result<BytesMut> {
         let data = if let Some(chan) = self.channels.get_mut(&from) {
             chan.blocking_recv().blocking_recv()
