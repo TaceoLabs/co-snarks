@@ -1,6 +1,17 @@
-[Overview](./overview.md)
+# Introduction
 
-# User Guide
+[Overview](./overview.md)
+[MPC Primer](./mpc-primer.md)
+[Collaborative SNRAKs Primer](./collabSNARKs-primer.md)
+
+# Use Cases
+
+- [DeFi](./use-case-defi.md)
+- [AI](./use-case-ai.md)
+- [Data Ownership](./use-case-data-ownership.md)
+- [Gaming](./use-case-gaming.md)
+
+# Getting Started
 
 - [Quick Start](./quick_start.md)
 - [Installation](./install.md)
