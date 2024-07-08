@@ -1,4 +1,11 @@
 # coCircom
+[![X (formerly Twitter) Follow](https://img.shields.io/badge/X-%23000000.svg?style=for-the-badge&logo=X&logoColor=white)](https://twitter.com/TACEO_IO)
+[![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/collaborativeSNARK)
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://t.me/collaborativeSNARK)
+
+[![docs.io](https://img.shields.io/badge/coCircom-docs-green)](https://docs.taceo.io/)
+[![crates.io](https://img.shields.io/badge/crates.io-v0.1.0-blue)](https://crates.io/)
+
 
 coCircom is a tool for building coSNARKs, a new technology that enables multiple
 distrusting parties to collaboratively compute a zero-knowledge proof (ZKP). It
@@ -64,6 +71,8 @@ git clone https://github.com/TaceoLabs/collaborative-circom.github
 ```bash
 cd collaborative-circom && cargo build --release
 ```
+## Documentation 
+You can find the documentation of coCircom [here](https://docs.taceo.io/).
 
 ## CLI Usage
 
@@ -136,8 +145,8 @@ each party.
 #### Multiple Party Input
 
 When the input comes from multiple parties, each party first secret-shares their
-respective inputs locally. For example, consider two input files: 
-`input0.json`:
+respective inputs locally. For example, consider two input files: `input0.json`:
+
 ```json
 {
   "a": "3"
@@ -145,6 +154,7 @@ respective inputs locally. For example, consider two input files:
 ```
 
 `input1.json`:
+
 ```json
 {
   "b": "4"
@@ -171,8 +181,9 @@ mkdir out0 && ./co-circom merge-input-shares --inputs out/input0.json.0.shared -
 To generate the witness, we execute the circuit with the secret-shared input
 obtained from the previous step. Additionally, computing nodes require
 networking configuration files and TLS key material. Examples of these
-configurations can be found in the `configs` directory and `key` materials in
-the keys directory. Refer to our
+configurations can be found in the
+[configs](/collaborative-circom/examples/configs) and key materials in the
+[keys](/collaborative-circom/examples/keys) directory. Refer to our
 [documentation](https://docs.taceo.io/network-config.html) for detailed
 configuration instructions.
 
