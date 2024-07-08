@@ -10,6 +10,7 @@ use num_traits::cast::ToPrimitive;
 use rand::SeedableRng;
 use tracing;
 
+/// Transforms a field element into an usize if possible.
 #[macro_export]
 macro_rules! to_usize {
     ($field: expr) => {{
@@ -45,6 +46,8 @@ macro_rules! to_bigint {
         a
     }};
 }
+
+/// The PlainDriver implements implements the MPC traits without MPC. In other words, it implements `PrimeFieldMpcProtocol`, `CircomWitnessExtensionProtocol` and can thus be used by the VM to evaluate functions on public values, as well as for testing MPC circuits.
 pub struct PlainDriver<F: PrimeField> {
     negative_one: F,
 }

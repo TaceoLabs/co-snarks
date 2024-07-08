@@ -1,4 +1,5 @@
 //! # MPC Traits
+//!
 //! Contains the traits which need to be implemented by the MPC protocols.
 
 use core::fmt;
