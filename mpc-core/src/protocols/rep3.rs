@@ -48,6 +48,7 @@ pub mod utils {
         witness_extension_impl::Rep3VmType, Rep3PrimeFieldShare,
     };
 
+    /// Secret shares a field element using replicated secret sharing and the provided random number generator. The field element is split into three additive shares, where each party holds two. The outputs are of type [Rep3PrimeFieldShare].
     pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
         val: F,
         rng: &mut R,
@@ -61,6 +62,7 @@ pub mod utils {
         [share1, share2, share3]
     }
 
+    /// Secret shares a field element using replicated secret sharing and the provided random number generator. The field element is split into three binary shares, where each party holds two. The outputs are of type [Rep3BigUintShare].
     pub fn xor_share_biguint<F: PrimeField, R: Rng + CryptoRng>(
         val: F,
         rng: &mut R,
@@ -78,6 +80,7 @@ pub mod utils {
         [share1, share2, share3]
     }
 
+    /// Reconstructs a field element from its arithmetic replicated shares.
     pub fn combine_field_element<F: PrimeField>(
         share1: Rep3PrimeFieldShare<F>,
         share2: Rep3PrimeFieldShare<F>,
@@ -86,6 +89,7 @@ pub mod utils {
         share1.a + share2.a + share3.a
     }
 
+    /// Reconstructs a value (represented as [BigUint]) from its binary replicated shares. Since binary operations can lead to results >= p, the result is not guaranteed to be a valid field element.
     pub fn xor_combine_biguint(
         share1: Rep3BigUintShare,
         share2: Rep3BigUintShare,
@@ -94,6 +98,7 @@ pub mod utils {
         share1.get_a() ^ share2.get_a() ^ share3.get_a()
     }
 
+    /// Secret shares a vector of field element using replicated secret sharing and the provided random number generator. The field elements are split into three additive shares each, where each party holds two. The outputs are of type [Rep3VmType].
     pub fn share_field_elements_for_vm<F: PrimeField, R: Rng + CryptoRng>(
         vals: &[F],
         rng: &mut R,
@@ -110,6 +115,7 @@ pub mod utils {
         [shares1, shares2, shares3]
     }
 
+    /// Secret shares a vector of field element using replicated secret sharing and the provided random number generator. The field elements are split into three additive shares each, where each party holds two. The outputs are of type [Rep3PrimeFieldShareVec].
     pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
         vals: &[F],
         rng: &mut R,
@@ -138,6 +144,7 @@ pub mod utils {
         ]
     }
 
+    /// Reconstructs a vector of field elements from its arithmetic replicated shares.
     pub fn combine_field_elements<F: PrimeField>(
         share1: Rep3PrimeFieldShareVec<F>,
         share2: Rep3PrimeFieldShareVec<F>,
@@ -167,6 +174,7 @@ pub mod utils {
         a_result
     }
 
+    /// Secret shares a curve point using replicated secret sharing and the provided random number generator. The point is split into three additive shares, where each party holds two. The outputs are of type [Rep3PointShare].
     pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
         val: C,
         rng: &mut R,
@@ -180,6 +188,7 @@ pub mod utils {
         [share1, share2, share3]
     }
 
+    /// Reconstructs a curve point from its arithmetic replicated shares.
     pub fn combine_curve_point<C: CurveGroup>(
         share1: Rep3PointShare<C>,
         share2: Rep3PointShare<C>,
@@ -252,7 +261,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         })
     }
 
-    // This algorithm produces a sqrt of a. It is not guaranteed to be the positive or negative square root (if interpreted as signed field element).
+    /// This algorithm produces asqrt of a shared value. Thereby, no guarantee is given on whether the result is the positive or negative square root (when interpreted as signed field element). This function requires network interaction.
     pub fn sqrt(&mut self, a: &Rep3PrimeFieldShare<F>) -> IoResult<Rep3PrimeFieldShare<F>> {
         let r_squ = self.rand()?;
         let r_inv = self.rand()?;
