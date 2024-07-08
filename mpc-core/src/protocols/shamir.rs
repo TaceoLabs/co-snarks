@@ -41,6 +41,7 @@ pub mod utils {
     use itertools::izip;
     use rand::{CryptoRng, Rng};
 
+    /// Secret shares a field element using Shamir secret sharing and the provided random number generator. The field element is split into num_parties shares, where each party holds just one. The outputs are of type [ShamirPrimeFieldShare].
     pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
         val: F,
         degree: usize,
@@ -79,6 +80,7 @@ pub mod utils {
         Ok(rec)
     }
 
+    /// Secret shares a vector of field element using Shamir secret sharing and the provided random number generator. The field elements are split into num_parties shares each, where each party holds just one. The outputs are of type [ShamirPrimeFieldShareVec].
     pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
         vals: &[F],
         degree: usize,
@@ -146,6 +148,7 @@ pub mod utils {
         Ok(result)
     }
 
+    /// Secret shares a curve point using Shamir secret sharing and the provided random number generator. The point is split into num_parties shares, where each party holds just one. The outputs are of type [ShamirPointShare].
     pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
         val: C,
         degree: usize,
