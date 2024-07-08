@@ -11,7 +11,7 @@
 multiple distrusting parties to collaboratively compute a **zero-knowledge proof**
 (ZKP). It leverages the existing domain-specific language
 [circom](https://github.com/iden3/circom) to define arithmetic circuits. With
-coCircom, all existing Circom circuits can be promoted to coSNARKs without any
+coCircom, all existing circom circuits can be promoted to coSNARKs without any
 modification to the original circuit.
 
 Additionally, coCircom is fully compatible with the **Groth16** backend of
