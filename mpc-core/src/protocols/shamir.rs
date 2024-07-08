@@ -41,7 +41,7 @@ pub mod utils {
     use itertools::izip;
     use rand::{CryptoRng, Rng};
 
-    /// Secret shares a field element using Shamir secret sharing and the provided random number generator. The field element is split into num_parties shares, where each party holds just one. The outputs are of type [ShamirPrimeFieldShare].
+    /// Secret shares a field element using Shamir secret sharing and the provided random number generator. The field element is split into num_parties shares, where each party holds just one. The outputs are of type [ShamirPrimeFieldShare]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
     pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
         val: F,
         degree: usize,
@@ -53,6 +53,7 @@ pub mod utils {
         ShamirPrimeFieldShare::convert_vec_rev(shares)
     }
 
+    /// Reconstructs a field element from its Shamir shares and lagrange coefficients. Thereby at least `degree` + 1 shares need to be present.
     pub fn combine_field_element<F: PrimeField>(
         shares: &[ShamirPrimeFieldShare<F>],
         coeffs: &[usize],
@@ -80,7 +81,7 @@ pub mod utils {
         Ok(rec)
     }
 
-    /// Secret shares a vector of field element using Shamir secret sharing and the provided random number generator. The field elements are split into num_parties shares each, where each party holds just one. The outputs are of type [ShamirPrimeFieldShareVec].
+    /// Secret shares a vector of field element using Shamir secret sharing and the provided random number generator. The field elements are split into num_parties shares each, where each party holds just one. The outputs are of type [ShamirPrimeFieldShareVec]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
     pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
         vals: &[F],
         degree: usize,
@@ -102,6 +103,7 @@ pub mod utils {
         result
     }
 
+    /// Reconstructs a vector of field elements from its Shamir shares and lagrange coefficients. The input is structured as one [ShamirPrimeFieldShareVec] per party. Thus, shares\[i\]\[j\] represents the j-th share of party i. Thereby at least `degree` + 1 shares need to be present per field element (i.e., i > degree).
     pub fn combine_field_elements<F: PrimeField>(
         shares: &[ShamirPrimeFieldShareVec<F>],
         coeffs: &[usize],
@@ -148,7 +150,7 @@ pub mod utils {
         Ok(result)
     }
 
-    /// Secret shares a curve point using Shamir secret sharing and the provided random number generator. The point is split into num_parties shares, where each party holds just one. The outputs are of type [ShamirPointShare].
+    /// Secret shares a curve point using Shamir secret sharing and the provided random number generator. The point is split into num_parties shares, where each party holds just one. The outputs are of type [ShamirPointShare]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
     pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
         val: C,
         degree: usize,
@@ -160,6 +162,7 @@ pub mod utils {
         ShamirPointShare::convert_vec_rev(shares)
     }
 
+    /// Reconstructs a curve point from its Shamir shares and lagrange coefficients. Thereby at least `degree` + 1 shares need to be present.
     pub fn combine_curve_point<C: CurveGroup>(
         shares: &[ShamirPointShare<C>],
         coeffs: &[usize],
