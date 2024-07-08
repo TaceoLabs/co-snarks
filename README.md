@@ -57,7 +57,7 @@ a coSNARK.
 3. Make the binary executable (if necessary):
 
 ```bash
-chmod +x collaborative-circom
+chmod +x co-circom
 ```
 
 ### Install from Source:
