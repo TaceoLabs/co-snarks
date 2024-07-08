@@ -116,7 +116,7 @@ circom adder.circom --r1cs
 Next, we need to perform the Groth16 setup using circom and snarkjs. Refer to
 the
 [circom documentation](https://docs.circom.io/getting-started/proving-circuits/)
-for detailed instructions up to the "generate proof" section.
+for detailed instructions up to the "Generating a Proof" section.
 
 For the following steps, we call the ZKey file `adder.zkey`.
 
