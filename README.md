@@ -208,15 +208,15 @@ for using coCircom:
 
 ## License
 
-This project is licensed under either the [MIT License](LICENSE) or the
-[Apache](LICENSE), at your choice.
+This project is licensed under either the [MIT License](LICENSE-MIT) or the
+[Apache](LICENSE-APACHE), at your choice.
 
 Individual sub-libraries within this project have different licenses, reflecting
 their dependencies on
 [circom](https://github.com/iden3/circom?tab=GPL-3.0-1-ov-file).
 
-- **collaborative-circom**: Licensed under GPL-3.0.
-- **circom-mpc-compiler**: Licensed under GPL-3.0.
+- **collaborative-circom**: Licensed under [GPL-3.0](LICENSE-GPL).
+- **circom-mpc-compiler**: Licensed under [GPL-3.0](LICENSE-GPL).
 
 ## Disclaimer
 
