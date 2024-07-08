@@ -1,3 +1,7 @@
+//! Rep3 Party ID
+//!
+//! This module contains the abstraction to handle Rep3 party IDs.
+
 use std::error::Error;
 
 /// An enum representing the party ID

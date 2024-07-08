@@ -1,3 +1,7 @@
+//! # Rep3 Witness Extension
+//!
+//! This module contains the type used by the MPC-VM during witness extension and handles all required MPC implementations.
+
 use super::{network::Rep3Network, Rep3PrimeFieldShare, Rep3Protocol};
 use crate::{
     protocols::{plain::PlainDriver, rep3::a2b::Rep3BigUintShare},
