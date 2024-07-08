@@ -260,7 +260,9 @@ pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C>;
 }
 
+/// A trait representing some MPC operations for pairing based  elliptic curves.
 pub trait PairingEcMpcProtocol<P: Pairing>: EcMpcProtocol<P::G1> + EcMpcProtocol<P::G2> {
+    /// Opens two points a, b, where a is from G1 and b is from G2.
     fn open_two_points(
         &mut self,
         a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
@@ -268,30 +270,42 @@ pub trait PairingEcMpcProtocol<P: Pairing>: EcMpcProtocol<P::G1> + EcMpcProtocol
     ) -> std::io::Result<(P::G1, P::G2)>;
 }
 
+/// A trait representing the application of the Fast Fourier Transform (FFT) in MPC.
 pub trait FFTProvider<F: PrimeField + FFTPostProcessing>: PrimeFieldMpcProtocol<F> {
+    /// Computes the FFT of a vector of shared field elements.
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
         data: Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec;
+
+    /// Computes the FFT of a vector of shared field elements in place.
     fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D);
+
+    /// Computes the inverse FFT of a vector of shared field elements.
     fn ifft<D: EvaluationDomain<F>>(
         &mut self,
         data: &Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec;
+
+    /// Computes the inverse FFT of a vector of shared field elements in place.
     fn ifft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D);
 }
 
+/// A trait representing the application of the multi-scalar multiplication (MSM) in MPC.
 pub trait MSMProvider<C: CurveGroup>: EcMpcProtocol<C> {
+    /// Computes tha mutli-scalar product of a vector of shared values and a vector of public points. In other words, it computes sum_i=0^n-1 [scalars[i]] * points[i].
     fn msm_public_points(
         &mut self,
         points: &[C::Affine],
         scalars: &Self::FieldShareVec,
     ) -> Self::PointShare;
 }
-/// For BLS12-381, Arkworks FFT returns the vector of size n permuted like this (compared to snarkjs): (0,n-3 mod n, n-2*3 mod n,...,n-3*i mod n,...), so we need to rearrange it
+
+/// Implements a custom post-processor for FFT operations. This is required since for BLS12-381, Arkworks FFT returns the vector of size n permuted like this (compared to snarkjs): (0, n - 3 mod n, n - 2 * 3 mod n, ... ,n - 3 * i mod n,...), so we need to rearrange it.
 pub trait FFTPostProcessing: PrimeField {
+    /// Allows to specify a function which gets called after each fft/ifft. Per default this function does nothing. However, for BLS12-381, the function needs to rearrange the vector.
     fn fft_post_processing(_vec: &mut Vec<Self>) {}
 }
 
