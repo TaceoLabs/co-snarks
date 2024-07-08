@@ -136,15 +136,16 @@ each party.
 #### Multiple Party Input
 
 When the input comes from multiple parties, each party first secret-shares their
-respective inputs locally. For example, consider two input files: `input0.json`
-and `input1.json`.
-
+respective inputs locally. For example, consider two input files: 
+`input0.json`:
 ```json
-// input0.json
 {
   "a": "3"
 }
-// input1.json
+```
+
+`input1.json`:
+```json
 {
   "b": "4"
 }
