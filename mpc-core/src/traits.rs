@@ -33,19 +33,19 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         + IntoIterator<Item = Self::FieldShare>
         + Sync;
 
-    /// Add two shares: [c] = [a] + [b]
+    /// Add two shares: \[c\] = \[a\] + \[b\]
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
 
-    /// Subtract the share b from the share a: [c] = [a] - [b]
+    /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
 
-    /// Add a public value a to the share b: [c] = a + [b]
+    /// Add a public value a to the share b: \[c\] = a + \[b\]
     fn add_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
 
-    /// Elementwise subtraction of two vectors of shares in place: [a_i] -= [b_i]
+    /// Elementwise subtraction of two vectors of shares in place: \[a_i\] -= \[b_i\]
     fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec);
 
-    /// Multiply two shares: [c] = [a] * [b]. Requires network communication.
+    /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
     fn mul(
         &mut self,
         a: &Self::FieldShare,
@@ -55,35 +55,35 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     /// Multiply a share b by a public value a: c = a * b.
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
 
-    /// Computes the inverse of a shared value: [b] = [a] ^ -1. Requires network communication.
+    /// Computes the inverse of a shared value: \[b\] = \[a\] ^ -1. Requires network communication.
     fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare>;
 
-    /// Negates a shared value: [b] = -[a].
+    /// Negates a shared value: \[b\] = -\[a\].
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
 
     /// Generate a share of a random value. The value is thereby unknown to anyone.
     fn rand(&mut self) -> std::io::Result<Self::FieldShare>;
 
-    /// Reconstructs a shared value: a = Open([a]).
+    /// Reconstructs a shared value: a = Open(\[a\]).
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F>;
 
-    /// Elementwise multiplication of two vectors of shares: [c_i] = [a_i] * [b_i].
+    /// Elementwise multiplication of two vectors of shares: \[c_i\] = \[a_i\] * \[b_i\].
     fn mul_vec(
         &mut self,
         a: &Self::FieldShareVec,
         b: &Self::FieldShareVec,
     ) -> std::io::Result<Self::FieldShareVec>;
 
-    /// Transforms a public value into a shared value: [a] = a.
+    /// Transforms a public value into a shared value: \[a\] = a.
     fn promote_to_trivial_share(&self, public_values: F) -> Self::FieldShare;
 
-    /// Elementwise transformation of a vector of public values into a vector of shared values: [a_i] = a_i.
+    /// Elementwise transformation of a vector of public values into a vector of shared values: \[a_i\] = a_i.
     fn promote_to_trivial_shares(&self, public_values: &[F]) -> Self::FieldShareVec;
 
-    /// Computes the [coeffs_i] *= c * g^i for the coefficients in 0 <= i < coeff.len()
+    /// Computes the \[coeffs_i\] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     fn distribute_powers_and_mul_by_const(&mut self, coeffs: &mut Self::FieldShareVec, g: F, c: F);
 
-    /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs[i] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
+    /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint(
         &mut self,
         lhs: &[(F, usize)],
@@ -216,48 +216,48 @@ pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
     /// The type of a share of a elliptic curve point.
     type PointShare: CanonicalDeserialize + CanonicalDeserialize + Clone + Sync;
 
-    /// Add two shared points: [C] = [A] + [B]
+    /// Add two shared points: \[C\] = \[A\] + \[B\]
     fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
 
-    /// Subtract the shared point B from the shared point A: [C] = [A] - [B]
+    /// Subtract the shared point B from the shared point A: \[C\] = \[A\] - \[B\]
     fn sub_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
 
-    /// Add a shared point B in place to the shared point A: [A] += [B]
+    /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
     fn add_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare);
 
-    /// Subtract a shared point B in place from the shared point A: [A] -= [B]
+    /// Subtract a shared point B in place from the shared point A: \[A\] -= \[B\]
     fn sub_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare);
 
-    /// Add a public point B to the shared point A in place: [A] += B
+    /// Add a public point B to the shared point A in place: \[A\] += B
     fn add_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C);
 
-    /// Subtract a public point B from the shared point A in place: [A] -= B
+    /// Subtract a public point B from the shared point A in place: \[A\] -= B
     fn sub_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C);
 
-    /// Add a public affine point B to the shared point A in place: [A] += B
+    /// Add a public affine point B to the shared point A in place: \[A\] += B
     fn add_assign_points_public_affine(&mut self, a: &mut Self::PointShare, b: &C::Affine);
 
-    /// Subtract a public affine point B from the shared point A in place: [A] -= B
+    /// Subtract a public affine point B from the shared point A in place: \[A\] -= B
     fn sub_assign_points_public_affine(&mut self, a: &mut Self::PointShare, b: &C::Affine);
 
-    /// Multiplies a public point B to the shared point A in place: [A] *= B
+    /// Multiplies a public point B to the shared point A in place: \[A\] *= B
     fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare;
 
-    /// Multiplies a public share b to the shared point A: [A] *= b
+    /// Multiplies a public share b to the shared point A: \[A\] *= b
     fn scalar_mul_public_scalar(
         &mut self,
         a: &Self::PointShare,
         b: &C::ScalarField,
     ) -> Self::PointShare;
 
-    /// Multiplies a share b to the shared point A: [A] *= [b]. Requires network communication.
+    /// Multiplies a share b to the shared point A: \[A\] *= \[b\]. Requires network communication.
     fn scalar_mul(
         &mut self,
         a: &Self::PointShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::PointShare>;
 
-    /// Reconstructs a shared point: A = Open([A]).
+    /// Reconstructs a shared point: A = Open(\[A\]).
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C>;
 }
 
@@ -296,7 +296,7 @@ pub trait FFTProvider<F: PrimeField + FFTPostProcessing>: PrimeFieldMpcProtocol<
 
 /// A trait representing the application of the multi-scalar multiplication (MSM) in MPC.
 pub trait MSMProvider<C: CurveGroup>: EcMpcProtocol<C> {
-    /// Computes tha mutli-scalar product of a vector of shared values and a vector of public points. In other words, it computes sum_i=0^n-1 [scalars[i]] * points[i].
+    /// Computes tha mutli-scalar product of a vector of shared values and a vector of public points. In other words, it computes sum_i=0^n-1 [scalars\[i\]] * points\[i\].
     fn msm_public_points(
         &mut self,
         points: &[C::Affine],

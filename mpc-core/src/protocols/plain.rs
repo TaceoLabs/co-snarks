@@ -1,3 +1,7 @@
+//! # Plain Protocol
+//!
+//! This module contains the reference implementation without MPC. It will be used by the VM for computing on public values and can be used to test MPC circuits.
+
 use crate::{
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
     RngType,
@@ -47,7 +51,7 @@ macro_rules! to_bigint {
     }};
 }
 
-/// The PlainDriver implements implements the MPC traits without MPC. In other words, it implements `PrimeFieldMpcProtocol`, `CircomWitnessExtensionProtocol` and can thus be used by the VM to evaluate functions on public values, as well as for testing MPC circuits.
+/// The PlainDriver implements implements the MPC traits without MPC. In other words, it implements [PrimeFieldMpcProtocol], [CircomWitnessExtensionProtocol] and can thus be used by the VM to evaluate functions on public values, as well as for testing MPC circuits.
 pub struct PlainDriver<F: PrimeField> {
     negative_one: F,
 }

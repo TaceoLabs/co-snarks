@@ -1,3 +1,7 @@
+//! # Rep3 Protocol
+//!
+//! This module contains an implementation of semi-honest 3-party [replicated secret sharing](https://eprint.iacr.org/2018/403.pdf).
+
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;

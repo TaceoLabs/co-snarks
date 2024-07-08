@@ -1,3 +1,7 @@
+//! # Shamir Protocol
+//!
+//! This module contains an implementation of semi-honest n-party [Shamir secret sharing](https://www.iacr.org/archive/crypto2007/46220565/46220565.pdf).
+
 use self::{
     fieldshare::{ShamirPrimeFieldShare, ShamirPrimeFieldShareVec},
     network::ShamirNetwork,
