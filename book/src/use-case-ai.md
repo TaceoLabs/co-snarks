@@ -7,4 +7,3 @@ A premise for zk-powered ML inference is:  the one who runs the actual computati
 In cases where users send prompts to the ML model, which shouldn’t be shared with anyone additional encryption techniques need to be added to zk. With co-SNARKS user inputs can be fully shielded from AI service providers, while not restricting them in offering their services.
 
 In general, zk proof generation is hardware intense and often requires specialized equipment. ZK cloud providers or proof markets offer proof computations as a service. As a side effect, all data needs to be shared with the prover, which could leak proprietary IP, like model weights.co-SNARKS could mitigate this issue by splitting up the sensitive data (e.g. model weights) in secret shares and distribute them among the MPC network
-
