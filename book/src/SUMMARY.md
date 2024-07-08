@@ -2,7 +2,7 @@
 
 [Overview](./overview.md)
 [MPC Primer](./mpc-primer.md)
-[Collaborative SNRAKs Primer](./collabSNARKs-primer.md)
+[Collaborative SNARKs Primer](./collabSNARKs-primer.md)
 
 # Use Cases
 
