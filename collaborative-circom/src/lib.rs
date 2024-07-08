@@ -9,7 +9,6 @@ use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWi
 use color_eyre::eyre::Context;
 use mpc_core::protocols::rep3::{network::Rep3MpcNet, Rep3Protocol};
 use mpc_net::config::NetworkConfig;
-use tracing::instrument;
 
 pub mod file_utils;
 
