@@ -52,7 +52,7 @@ a coSNARK.
 
 1. You can find the latest release
    [here](https://github.com/TaceoLabs/collaborative-circom/releases/latest).
-2. Download the binary for your machine.
+2. Download the binary for your operating system.
 
 3. Make the binary executable (if necessary):
 
