@@ -3,6 +3,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;
 use std::mem::ManuallyDrop;
 
+/// This type represents a Shamir-shared value. Since a Shamir-share of a field element is a field element, this is a wrapper over a field element.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 #[repr(transparent)]
 pub struct ShamirPrimeFieldShare<F: PrimeField> {
@@ -10,10 +11,12 @@ pub struct ShamirPrimeFieldShare<F: PrimeField> {
 }
 
 impl<F: PrimeField> ShamirPrimeFieldShare<F> {
+    /// Wraps the field element into a ShamirPrimeFieldShare
     pub fn new(a: F) -> Self {
         Self { a }
     }
 
+    /// Unwraps a ShamirPrimeFieldShare into a field element
     pub fn inner(self) -> F {
         self.a
     }
@@ -141,24 +144,29 @@ impl<F: PrimeField> std::ops::Neg for &ShamirPrimeFieldShare<F> {
     }
 }
 
+/// This type represents a vector of Shamir-shared values. Since a Shamir-share of a field element is a field element, this is a wrapper over a vector of field elements.
 #[derive(Debug, Clone, Default, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct ShamirPrimeFieldShareVec<F: PrimeField> {
     pub(crate) a: Vec<F>,
 }
 
 impl<F: PrimeField> ShamirPrimeFieldShareVec<F> {
+    /// Wraps the vector into a ShamirPrimeFieldShareVec
     pub fn new(a: Vec<F>) -> Self {
         Self { a }
     }
 
+    /// Unwraps a ShamirPrimeFieldShareVec into a vector
     pub fn get_inner(self) -> Vec<F> {
         self.a
     }
 
+    /// Checks whether the wrapped vector is empty.
     pub fn is_empty(&self) -> bool {
         self.a.is_empty()
     }
 
+    /// Returns the length of the wrapped vector.
     pub fn len(&self) -> usize {
         self.a.len()
     }
