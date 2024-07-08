@@ -11,10 +11,14 @@ use num_traits::Zero;
 
 use num_traits::cast::ToPrimitive;
 
+/// This type represents the basic type of the MPC-VM. Thus, it can represent either public or shared values.
 #[derive(Clone)]
 pub enum Rep3VmType<F: PrimeField> {
+    /// Represents a publicly known value
     Public(F),
+    /// Represents a secret-shared value
     Shared(Rep3PrimeFieldShare<F>),
+    /// Represents a secret-shared binary value. This type is currently not utilized
     BitShared,
 }
 
