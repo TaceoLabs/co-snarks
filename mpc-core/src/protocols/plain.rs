@@ -15,13 +15,13 @@ use rand::SeedableRng;
 use tracing;
 
 /// Transforms a field element into an usize if possible.
-#[macro_export]
 macro_rules! to_usize {
     ($field: expr) => {{
         let a: BigUint = $field.into();
         usize::try_from(a.to_u64().ok_or(eyre!("Cannot convert var into u64"))?)?
     }};
 }
+pub(crate) use to_usize;
 
 macro_rules! bool_comp_op {
     ($driver: expr, $lhs: expr, $op: tt, $rhs: expr) => {{
@@ -386,5 +386,3 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver<F> {
         F::one()
     }
 }
-
-pub use to_usize;

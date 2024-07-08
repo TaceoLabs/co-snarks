@@ -4,8 +4,10 @@
 
 use super::{network::Rep3Network, Rep3PrimeFieldShare, Rep3Protocol};
 use crate::{
-    protocols::{plain::PlainDriver, rep3::a2b::Rep3BigUintShare},
-    to_usize,
+    protocols::{
+        plain::{to_usize, PlainDriver},
+        rep3::a2b::Rep3BigUintShare,
+    },
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
 };
 use ark_ff::{One, PrimeField};

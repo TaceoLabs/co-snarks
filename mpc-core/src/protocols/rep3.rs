@@ -19,6 +19,7 @@ use crate::{
     },
     RngType,
 };
+pub use a2b::Rep3BigUintShare;
 pub use fieldshare::Rep3PrimeFieldShare;
 
 use self::{
