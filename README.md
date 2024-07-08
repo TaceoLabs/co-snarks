@@ -5,7 +5,7 @@
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/gWZW2TANpk)
 
 [![docs.io](https://img.shields.io/badge/coCircom-docs-green)](https://docs.taceo.io/)
-[![crates.io](https://img.shields.io/badge/crates.io-v0.1.0-blue)](https://crates.io/)
+<!--[![crates.io](https://img.shields.io/badge/crates.io-v0.1.0-blue)](https://crates.io/)-->
 
 **coCircom** is a tool for building **coSNARKs**, a new technology that enables
 multiple distrusting parties to collaboratively compute a **zero-knowledge
