@@ -494,6 +494,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         Ok(res)
     }
 
+    /// Computes a binary circuit to check whether the replicated binary-shared input x is zero or not. The output is a binary sharing of one bit.
     pub fn is_zero(&mut self, x: Rep3BigUintShare) -> IoResult<Rep3BigUintShare> {
         let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
 
@@ -521,6 +522,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         Ok(x)
     }
 
+    /// Translates one shared bit into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
     pub fn bit_inject(&mut self, x: Rep3BigUintShare) -> IoResult<Rep3PrimeFieldShare<F>> {
         // standard bitinject
         assert!(x.a.bits() <= 1);
