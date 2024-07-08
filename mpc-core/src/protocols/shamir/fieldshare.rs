@@ -206,37 +206,37 @@ impl<F: PrimeField> IntoIterator for ShamirPrimeFieldShareVec<F> {
 
 // Conversions
 impl<F: PrimeField> ShamirPrimeFieldShare<F> {
-    /// Transforms a slice of ShamirPrimeFieldShare<F> to a slice of F
-    /// Safe because ShamirPrimeFieldShare has repr(transparent)
+    /// Transforms a slice of `ShamirPrimeFieldShare<F>` to a slice of `F`
+    // Safe because ShamirPrimeFieldShare has repr(transparent)
     pub fn convert_slice(vec: &[Self]) -> &[F] {
         // SAFETY: ShamirPrimeFieldShare has repr(transparent)
         unsafe { &*(vec as *const [Self] as *const [F]) }
     }
 
-    /// Transforms a vector of ShamirPrimeFieldShare<F> to a vector of F
-    /// Safe because ShamirPrimeFieldShare has repr(transparent)
+    /// Transforms a vector of `ShamirPrimeFieldShare<F>` to a vector of `F`
+    // Safe because ShamirPrimeFieldShare has repr(transparent)
     pub fn convert_vec(vec: Vec<Self>) -> Vec<F> {
         let me = ManuallyDrop::new(vec);
         // SAFETY: ShamirPrimeFieldShare has repr(transparent)
         unsafe { Vec::from_raw_parts(me.as_ptr() as *mut F, me.len(), me.capacity()) }
     }
 
-    /// Transforms a slice of F to a slice of ShamirPrimeFieldShare<F>
-    /// Safe because ShamirPrimeFieldShare has repr(transparent)
+    /// Transforms a slice of `F` to a slice of `ShamirPrimeFieldShare<F>`
+    // Safe because ShamirPrimeFieldShare has repr(transparent)
     pub fn convert_slice_rev(vec: &[F]) -> &[Self] {
         // SAFETY: ShamirPrimeFieldShare has repr(transparent)
         unsafe { &*(vec as *const [F] as *const [Self]) }
     }
 
-    /// Transforms a vector of F to a vector of ShamirPrimeFieldShare<F>
-    /// Safe because ShamirPrimeFieldShare has repr(transparent)
+    /// Transforms a vector of `F` to a vector of `ShamirPrimeFieldShare<F>`
+    // Safe because ShamirPrimeFieldShare has repr(transparent)
     pub fn convert_vec_rev(vec: Vec<F>) -> Vec<Self> {
         let me = ManuallyDrop::new(vec);
         // SAFETY: ShamirPrimeFieldShare has repr(transparent)
         unsafe { Vec::from_raw_parts(me.as_ptr() as *mut Self, me.len(), me.capacity()) }
     }
 
-    /// Transforms a ShamirPrimeFieldShare<F> to F
+    /// Transforms a `ShamirPrimeFieldShare<F>` to `F`
     pub fn convert(self) -> F {
         self.a
     }
