@@ -16,7 +16,7 @@ modification to the original circuit.
 
 Additionally, coCircom is fully compatible with the **Groth16** backend of
 [snarkjs](https://github.com/iden3/snarkjs), the native proofing system for
-Circom. Proofs built with coCircom can be verified using snarkjs, and vice
+circom. Proofs built with coCircom can be verified using snarkjs, and vice
 versa.
 
 The project is built with pure Rust and consists of multiple libraries:
@@ -104,7 +104,7 @@ will use a replicated secret sharing scheme with 3 parties for all steps
 
 ### Step 1: Generate the R1CS File
 
-First, we need to generate the R1CS file from the Circom file. We use Circom for
+First, we need to generate the R1CS file from the circom file. We use circom for
 this step:
 
 ```bash
@@ -113,7 +113,7 @@ circom adder.circom --r1cs
 
 ### Step 2: Perform Groth16 Setup
 
-Next, we need to perform the Groth16 setup using Circom and snarkjs. Refer to
+Next, we need to perform the Groth16 setup using circom and snarkjs. Refer to
 the
 [circom documentation](https://docs.circom.io/getting-started/proving-circuits/)
 for detailed instructions up to the "generate proof" section.
