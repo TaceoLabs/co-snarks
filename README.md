@@ -194,7 +194,7 @@ configuration instructions.
 All parties execute the following command (provided here for the first party):
 
 ```bash
-./co-circom generate-witness --input out0/input.json.0.shared --circuit adder.circom --protocol REP3 --config configs/party1.toml --out out0/witness.wtns.0.shared
+mkdir out0 && ./co-circom generate-witness --input out/input.json.0.shared --circuit adder.circom --protocol REP3 --config configs/party1.toml --out out0/witness.wtns.0.shared
 ```
 
 **Note**: You need to execute three nodes in parallel. This command will block
