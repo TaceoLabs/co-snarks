@@ -1,4 +1,5 @@
 # coCircom
+
 [![X (formerly Twitter) Follow](https://img.shields.io/badge/X-%23000000.svg?style=for-the-badge&logo=X&logoColor=white)](https://twitter.com/TACEO_IO)
 [![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/collaborativeSNARK)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/gWZW2TANpk)
@@ -6,10 +7,9 @@
 [![docs.io](https://img.shields.io/badge/coCircom-docs-green)](https://docs.taceo.io/)
 [![crates.io](https://img.shields.io/badge/crates.io-v0.1.0-blue)](https://crates.io/)
 
-
-coCircom is a tool for building coSNARKs, a new technology that enables multiple
-distrusting parties to collaboratively compute a zero-knowledge proof (ZKP). It
-leverages the existing domain-specific language
+coCircom is a tool for building **coSNARKs**, a new technology that enables
+multiple distrusting parties to collaboratively compute a zero-knowledge proof
+(ZKP). It leverages the existing domain-specific language
 [circom](https://github.com/iden3/circom) to define arithmetic circuits. With
 coCircom, all existing Circom circuits can be promoted to coSNARKs without any
 modification to the original circuit.
@@ -50,8 +50,10 @@ a coSNARK.
 
 ### Download Binary from Release
 
-1. You can find the latest release TODO I NEED LINK.
-2. Download the binary for your operation system.
+1. You can find the latest release
+   [here](https://github.com/TaceoLabs/collaborative-circom/releases/latest).
+2. Download the binary for your machine.
+
 3. Make the binary executable (if necessary):
 
 ```bash
@@ -71,7 +73,9 @@ git clone https://github.com/TaceoLabs/collaborative-circom.github
 ```bash
 cd collaborative-circom && cargo build --release
 ```
-## Documentation 
+
+## Documentation
+
 You can find the documentation of coCircom [here](https://docs.taceo.io/).
 
 ## CLI Usage
