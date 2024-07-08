@@ -7,14 +7,14 @@
 [![docs.io](https://img.shields.io/badge/coCircom-docs-green)](https://docs.taceo.io/)
 [![crates.io](https://img.shields.io/badge/crates.io-v0.1.0-blue)](https://crates.io/)
 
-coCircom is a tool for building **coSNARKs**, a new technology that enables
-multiple distrusting parties to collaboratively compute a zero-knowledge proof
+**coCircom** is a tool for building **coSNARKs**, a new technology that enables
+multiple distrusting parties to collaboratively compute a **zero-knowledge proof**
 (ZKP). It leverages the existing domain-specific language
 [circom](https://github.com/iden3/circom) to define arithmetic circuits. With
 coCircom, all existing Circom circuits can be promoted to coSNARKs without any
 modification to the original circuit.
 
-Additionally, coCircom is fully compatible with the Groth16 backend of
+Additionally, coCircom is fully compatible with the **Groth16** backend of
 [snarkjs](https://github.com/iden3/snarkjs), the native proofing system for
 Circom. Proofs built with coCircom can be verified using snarkjs, and vice
 versa.
