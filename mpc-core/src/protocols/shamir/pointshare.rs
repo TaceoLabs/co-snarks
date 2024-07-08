@@ -100,12 +100,14 @@ impl<C: CurveGroup> std::ops::Mul<&ShamirPointShare<C>>
 
 // Conversions
 impl<C: CurveGroup> ShamirPointShare<C> {
+    /// Transforms a slice of ShamirPointShare<C> to a slice of C
     /// Safe because ShamirPointShare has repr(transparent)
     pub fn convert_slice(vec: &[Self]) -> &[C] {
         // SAFETY: ShamirPointShare has repr(transparent)
         unsafe { &*(vec as *const [Self] as *const [C]) }
     }
 
+    /// Transforms a vector of ShamirPointShare<C> to a vector of C
     /// Safe because ShamirPointShare has repr(transparent)
     pub fn convert_vec(vec: Vec<Self>) -> Vec<C> {
         let me = ManuallyDrop::new(vec);
@@ -113,12 +115,14 @@ impl<C: CurveGroup> ShamirPointShare<C> {
         unsafe { Vec::from_raw_parts(me.as_ptr() as *mut C, me.len(), me.capacity()) }
     }
 
+    /// Transforms a slice of C to a slice of ShamirPointShare<C>
     /// Safe because ShamirPointShare has repr(transparent)
     pub fn convert_slice_rev(vec: &[C]) -> &[Self] {
         // SAFETY: ShamirPointShare has repr(transparent)
         unsafe { &*(vec as *const [C] as *const [Self]) }
     }
 
+    /// Transforms a vector of C to a vector of ShamirPointShare<C>
     /// Safe because ShamirPointShare has repr(transparent)
     pub fn convert_vec_rev(vec: Vec<C>) -> Vec<Self> {
         let me = ManuallyDrop::new(vec);
@@ -126,6 +130,7 @@ impl<C: CurveGroup> ShamirPointShare<C> {
         unsafe { Vec::from_raw_parts(me.as_ptr() as *mut Self, me.len(), me.capacity()) }
     }
 
+    /// Transforms a ShamirPointShare<C> to C
     pub fn convert(self) -> C {
         self.a
     }
