@@ -1,3 +1,7 @@
+//! # Plain Protocol
+//!
+//! This module contains the reference implementation without MPC. It will be used by the VM for computing on public values and can be used to test MPC circuits.
+
 use crate::{
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
     RngType,
@@ -10,13 +14,14 @@ use num_traits::cast::ToPrimitive;
 use rand::SeedableRng;
 use tracing;
 
-#[macro_export]
+/// Transforms a field element into an usize if possible.
 macro_rules! to_usize {
     ($field: expr) => {{
         let a: BigUint = $field.into();
         usize::try_from(a.to_u64().ok_or(eyre!("Cannot convert var into u64"))?)?
     }};
 }
+pub(crate) use to_usize;
 
 macro_rules! bool_comp_op {
     ($driver: expr, $lhs: expr, $op: tt, $rhs: expr) => {{
@@ -45,6 +50,8 @@ macro_rules! to_bigint {
         a
     }};
 }
+
+/// The PlainDriver implements implements the MPC traits without MPC. In other words, it implements [PrimeFieldMpcProtocol], [CircomWitnessExtensionProtocol] and can thus be used by the VM to evaluate functions on public values, as well as for testing MPC circuits.
 pub struct PlainDriver<F: PrimeField> {
     negative_one: F,
 }
@@ -379,5 +386,3 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver<F> {
         F::one()
     }
 }
-
-pub use to_usize;

@@ -1,3 +1,7 @@
+//! # Shamir Protocol
+//!
+//! This module contains an implementation of semi-honest n-party [Shamir secret sharing](https://www.iacr.org/archive/crypto2007/46220565/46220565.pdf).
+
 use self::{
     fieldshare::{ShamirPrimeFieldShare, ShamirPrimeFieldShareVec},
     network::ShamirNetwork,
@@ -23,6 +27,8 @@ pub mod network;
 pub mod pointshare;
 pub(crate) mod shamir_core;
 
+/// # Shamir Utils
+/// This module contains utility functions to work with Shamir secret sharing. I.e., it contains code to share field elements and curve points, as well as code to reconstruct the secret-shares.
 pub mod utils {
     use self::{
         fieldshare::{ShamirPrimeFieldShare, ShamirPrimeFieldShareVec},
@@ -36,6 +42,7 @@ pub mod utils {
     use itertools::izip;
     use rand::{CryptoRng, Rng};
 
+    /// Secret shares a field element using Shamir secret sharing and the provided random number generator. The field element is split into num_parties shares, where each party holds just one. The outputs are of type [ShamirPrimeFieldShare]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
     pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
         val: F,
         degree: usize,
@@ -47,6 +54,7 @@ pub mod utils {
         ShamirPrimeFieldShare::convert_vec_rev(shares)
     }
 
+    /// Reconstructs a field element from its Shamir shares and lagrange coefficients. Thereby at least `degree` + 1 shares need to be present.
     pub fn combine_field_element<F: PrimeField>(
         shares: &[ShamirPrimeFieldShare<F>],
         coeffs: &[usize],
@@ -74,6 +82,7 @@ pub mod utils {
         Ok(rec)
     }
 
+    /// Secret shares a vector of field element using Shamir secret sharing and the provided random number generator. The field elements are split into num_parties shares each, where each party holds just one. The outputs are of type [ShamirPrimeFieldShareVec]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
     pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
         vals: &[F],
         degree: usize,
@@ -95,6 +104,7 @@ pub mod utils {
         result
     }
 
+    /// Reconstructs a vector of field elements from its Shamir shares and lagrange coefficients. The input is structured as one [ShamirPrimeFieldShareVec] per party. Thus, shares\[i\]\[j\] represents the j-th share of party i. Thereby at least `degree` + 1 shares need to be present per field element (i.e., i > degree).
     pub fn combine_field_elements<F: PrimeField>(
         shares: &[ShamirPrimeFieldShareVec<F>],
         coeffs: &[usize],
@@ -141,6 +151,7 @@ pub mod utils {
         Ok(result)
     }
 
+    /// Secret shares a curve point using Shamir secret sharing and the provided random number generator. The point is split into num_parties shares, where each party holds just one. The outputs are of type [ShamirPointShare]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
     pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
         val: C,
         degree: usize,
@@ -152,6 +163,7 @@ pub mod utils {
         ShamirPointShare::convert_vec_rev(shares)
     }
 
+    /// Reconstructs a curve point from its Shamir shares and lagrange coefficients. Thereby at least `degree` + 1 shares need to be present.
     pub fn combine_curve_point<C: CurveGroup>(
         shares: &[ShamirPointShare<C>],
         coeffs: &[usize],
@@ -180,6 +192,7 @@ pub mod utils {
     }
 }
 
+/// This struct handles the Shamir MPC protocol, including proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], and [MSMProvider] traits.
 pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
     threshold: usize, // degree of the polynomial
     open_lagrange_t: Vec<F>,
@@ -193,6 +206,7 @@ pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
 impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     const KING_ID: usize = 0;
 
+    /// Constructs the Shamir protocol from an established network. It also requires to specify the threshold t, which defines the maximum tolerated number of corrupted parties. The threshold t is thus equivalent to the degree of the sharing polynomials.
     pub fn new(threshold: usize, network: N) -> Result<Self, Report> {
         let num_parties = network.get_num_parties();
 
@@ -229,11 +243,12 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         })
     }
 
-    // Generates amount * (self.threshold + 1) random double shares
+    /// This function generates and stores `amount * (threshold + 1)` doubly shared random values, which are required to evaluate the multiplication of two secret shares. Each multiplication consumes one of these preprocessed values.
     pub fn preprocess(&mut self, amount: usize) -> std::io::Result<()> {
         self.rng_buffer.buffer_triples(&mut self.network, amount)
     }
 
+    /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
     // multiply followed by a opening, thus, no reshare required
     pub fn mul_open(
         &mut self,

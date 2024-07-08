@@ -1,3 +1,7 @@
+//! # Network bridges
+//!
+//! This module contains code to translate networks used for different MPC protocols into each other.
+
 use std::collections::HashMap;
 
 use crate::protocols::{
@@ -5,7 +9,9 @@ use crate::protocols::{
     shamir::network::{ShamirMpcNet, ShamirNetwork},
 };
 
+/// This trait represents the possibility to transform a network implementation of the [Rep3Network] trait (used for 3-party replicated secret sharing) into a 3-party network implementation of the [ShamirNetwork] trait (used for 3-party Shamir secret sharing).
 pub trait RepToShamirNetwork<N: ShamirNetwork>: Rep3Network {
+    /// Translates the network into a 3-party Shamir network.
     fn to_shamir_net(self) -> N;
 }
 

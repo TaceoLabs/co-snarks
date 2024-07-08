@@ -1,3 +1,7 @@
+//! Rep3 Party ID
+//!
+//! This module contains the abstraction to handle Rep3 party IDs.
+
 use std::error::Error;
 
 /// An enum representing the party ID
@@ -11,6 +15,7 @@ pub enum PartyID {
     ID2 = 2,
 }
 
+/// Implements an Error message for when the MPC protocols are started with invalid party IDs. This happens if the provided ID is not 0, 1, or 2.
 #[derive(Debug)]
 pub struct InvalidPartyId(usize);
 

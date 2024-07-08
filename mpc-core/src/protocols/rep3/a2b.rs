@@ -4,6 +4,7 @@ use super::{id::PartyID, network::Rep3Network, IoResult, Rep3PrimeFieldShare, Re
 use ark_ff::{One, PrimeField, Zero};
 use num_bigint::BigUint;
 
+/// This type represents a packed vector of replicated shared bits. Each additively shared vector is represented as [BigUint]. Thus, this type contains two [BigUint]s.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Rep3BigUintShare {
     pub(crate) a: BigUint,
@@ -15,6 +16,7 @@ impl Rep3BigUintShare {
         Self { a, b }
     }
 
+    /// Unwrap the type into the first additve shared bitvector.
     pub fn get_a(self) -> BigUint {
         self.a
     }
@@ -361,6 +363,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         self.low_depth_sub_p_cmux(x)
     }
 
+    /// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
     pub fn a2b(&mut self, x: &Rep3PrimeFieldShare<F>) -> IoResult<Rep3BigUintShare> {
         let mut x01 = Rep3BigUintShare::default();
         let mut x2 = Rep3BigUintShare::default();
@@ -391,6 +394,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         self.low_depth_binary_add_mod_p(x01, x2)
     }
 
+    /// Computes a binary circuit to compare two shared values \[x\] > \[y\]. Thus, the inputs x and y are transformed from arithmetic to binary sharings using [Rep3Protocol::a2b] first. The output is a binary sharing of one bit.
     pub fn unsigned_ge(
         &mut self,
         x: Rep3PrimeFieldShare<F>,
@@ -403,6 +407,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
     }
 
+    /// Computes a binary circuit to compare the shared value y to the public value x, i.e., x > \[y\]. Thus, the input y is transformed from arithmetic to binary sharings using [Rep3Protocol::a2b] first. The output is a binary sharing of one bit.
     pub fn unsigned_ge_const_lhs(
         &mut self,
         x: F,
@@ -415,6 +420,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
     }
 
+    /// Computes a binary circuit to compare the shared value x to the public value y, i.e., \[x\] > y. Thus, the input x is transformed from arithmetic to binary sharings using [Rep3Protocol::a2b] first. The output is a binary sharing of one bit.
     pub fn unsigned_ge_const_rhs(
         &mut self,
         x: Rep3PrimeFieldShare<F>,
@@ -427,7 +433,9 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         Ok(&(&diff >> Self::BITLEN) & &BigUint::one())
     }
 
-    // Keep in mind: Only works if input is actually a binary sharing of a valid field element
+    /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
+
+    // Keep in mind: Only works if the input is actually a binary sharing of a valid field element
     // If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
     pub fn b2a(&mut self, x: Rep3BigUintShare) -> IoResult<Rep3PrimeFieldShare<F>> {
         let mut y = Rep3BigUintShare::default();
@@ -486,6 +494,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         Ok(res)
     }
 
+    /// Computes a binary circuit to check whether the replicated binary-shared input x is zero or not. The output is a binary sharing of one bit.
     pub fn is_zero(&mut self, x: Rep3BigUintShare) -> IoResult<Rep3BigUintShare> {
         let mask = (BigUint::from(1u64) << Self::BITLEN) - BigUint::one();
 
@@ -513,6 +522,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         Ok(x)
     }
 
+    /// Translates one shared bit into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
     pub fn bit_inject(&mut self, x: Rep3BigUintShare) -> IoResult<Rep3PrimeFieldShare<F>> {
         // standard bitinject
         assert!(x.a.bits() <= 1);

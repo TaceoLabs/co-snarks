@@ -1,8 +1,13 @@
+//! # Rep3 Shared Field Elements
+//!
+//! This module contains the implementation of rep3-shared field elements.
+
 use super::id::PartyID;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;
 
+/// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Rep3PrimeFieldShare<F: PrimeField> {
     pub(crate) a: F,
@@ -10,10 +15,12 @@ pub struct Rep3PrimeFieldShare<F: PrimeField> {
 }
 
 impl<F: PrimeField> Rep3PrimeFieldShare<F> {
+    /// Constructs the type from two additive shares.
     pub fn new(a: F, b: F) -> Self {
         Self { a, b }
     }
 
+    /// Unwraps the type into two additive shares.
     pub fn ab(self) -> (F, F) {
         (self.a, self.b)
     }
@@ -23,6 +30,7 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
         self.b.double_in_place();
     }
 
+    /// Promotes a public field element to a replicated share by setting the additive share of the party with id=0 and leaving all other shares to be 0. Thus, the replicated shares of party 0 and party 1 are set.
     pub fn promote_from_trivial(val: &F, id: PartyID) -> Self {
         match id {
             PartyID::ID0 => Rep3PrimeFieldShare::new(*val, F::zero()),
@@ -182,6 +190,7 @@ impl<F: PrimeField> std::ops::Neg for &Rep3PrimeFieldShare<F> {
     }
 }
 
+/// This type represents a vector of replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two vectors of field elements.
 #[derive(Debug, Clone, Default, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Rep3PrimeFieldShareVec<F: PrimeField> {
     pub(crate) a: Vec<F>,
@@ -189,24 +198,29 @@ pub struct Rep3PrimeFieldShareVec<F: PrimeField> {
 }
 
 impl<F: PrimeField> Rep3PrimeFieldShareVec<F> {
+    /// Constructs the type from two vectors of additive shares.
     pub fn new(a: Vec<F>, b: Vec<F>) -> Self {
         Self { a, b }
     }
 
+    /// Unwraps the type into two vectors of additive shares.
     pub fn get_ab(self) -> (Vec<F>, Vec<F>) {
         (self.a, self.b)
     }
 
+    /// Checks whether the wrapped vectors are empty.
     pub fn is_empty(&self) -> bool {
         debug_assert_eq!(self.a.is_empty(), self.b.is_empty());
         self.a.is_empty()
     }
 
+    /// Returns the length of the wrapped vectors.
     pub fn len(&self) -> usize {
         debug_assert_eq!(self.a.len(), self.b.len());
         self.a.len()
     }
 
+    /// Promotes a vector of public field elements to a vector of replicated shares by setting the additive shares of the party with id=0 and leaving all other shares to be 0. Thus, the replicated shares of party 0 and party 1 are set.
     pub fn promote_from_trivial(val: &[F], id: PartyID) -> Self {
         let len = val.len();
 

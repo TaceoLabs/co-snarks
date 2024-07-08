@@ -1,3 +1,7 @@
+//! # Shamir Shared Curve Points
+//!
+//! This module contains the implementation of Shamir-shared curve points.
+
 use std::mem::ManuallyDrop;
 
 use ark_ec::CurveGroup;
@@ -5,16 +9,19 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 use super::fieldshare::ShamirPrimeFieldShare;
 
+/// This type represents a Shamir-shared EC point. Since a Shamir-share of a point is a point, this is a wrapper over a point.
 #[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 #[repr(transparent)]
 pub struct ShamirPointShare<C: CurveGroup> {
     pub(crate) a: C,
 }
 impl<C: CurveGroup> ShamirPointShare<C> {
+    /// Wraps the point into a ShamirPointShare
     pub fn new(a: C) -> Self {
         Self { a }
     }
 
+    /// Unwraps a ShamirPointShare into a point
     pub fn inner(self) -> C {
         self.a
     }
@@ -100,32 +107,37 @@ impl<C: CurveGroup> std::ops::Mul<&ShamirPointShare<C>>
 
 // Conversions
 impl<C: CurveGroup> ShamirPointShare<C> {
-    /// Safe because ShamirPointShare has repr(transparent)
+    /// Transforms a slice of `ShamirPointShare<C>` to a slice of `C`
+    // Safe because ShamirPointShare has repr(transparent)
     pub fn convert_slice(vec: &[Self]) -> &[C] {
         // SAFETY: ShamirPointShare has repr(transparent)
         unsafe { &*(vec as *const [Self] as *const [C]) }
     }
 
-    /// Safe because ShamirPointShare has repr(transparent)
+    /// Transforms a vector of `ShamirPointShare<C>` to a vector of `C`
+    // Safe because ShamirPointShare has repr(transparent)
     pub fn convert_vec(vec: Vec<Self>) -> Vec<C> {
         let me = ManuallyDrop::new(vec);
         // SAFETY: ShamirPointShare has repr(transparent)
         unsafe { Vec::from_raw_parts(me.as_ptr() as *mut C, me.len(), me.capacity()) }
     }
 
-    /// Safe because ShamirPointShare has repr(transparent)
+    /// Transforms a slice of `C` to a slice of `ShamirPointShare<C>`
+    // Safe because ShamirPointShare has repr(transparent)
     pub fn convert_slice_rev(vec: &[C]) -> &[Self] {
         // SAFETY: ShamirPointShare has repr(transparent)
         unsafe { &*(vec as *const [C] as *const [Self]) }
     }
 
-    /// Safe because ShamirPointShare has repr(transparent)
+    /// Transforms a vector of `C` to a vector of `ShamirPointShare<C>`
+    // Safe because ShamirPointShare has repr(transparent)
     pub fn convert_vec_rev(vec: Vec<C>) -> Vec<Self> {
         let me = ManuallyDrop::new(vec);
         // SAFETY: ShamirPointShare has repr(transparent)
         unsafe { Vec::from_raw_parts(me.as_ptr() as *mut Self, me.len(), me.capacity()) }
     }
 
+    /// Transforms a `ShamirPointShare<C>` to `C`
     pub fn convert(self) -> C {
         self.a
     }

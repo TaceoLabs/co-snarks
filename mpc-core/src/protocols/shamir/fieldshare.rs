@@ -1,8 +1,13 @@
+//! # Shamir Shared Field Elements
+//!
+//! This module contains the implementation of Shamir-shared field elements.
+
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;
 use std::mem::ManuallyDrop;
 
+/// This type represents a Shamir-shared value. Since a Shamir-share of a field element is a field element, this is a wrapper over a field element.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 #[repr(transparent)]
 pub struct ShamirPrimeFieldShare<F: PrimeField> {
@@ -10,10 +15,12 @@ pub struct ShamirPrimeFieldShare<F: PrimeField> {
 }
 
 impl<F: PrimeField> ShamirPrimeFieldShare<F> {
+    /// Wraps the field element into a ShamirPrimeFieldShare
     pub fn new(a: F) -> Self {
         Self { a }
     }
 
+    /// Unwraps a ShamirPrimeFieldShare into a field element
     pub fn inner(self) -> F {
         self.a
     }
@@ -141,24 +148,29 @@ impl<F: PrimeField> std::ops::Neg for &ShamirPrimeFieldShare<F> {
     }
 }
 
+/// This type represents a vector of Shamir-shared values. Since a Shamir-share of a field element is a field element, this is a wrapper over a vector of field elements.
 #[derive(Debug, Clone, Default, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct ShamirPrimeFieldShareVec<F: PrimeField> {
     pub(crate) a: Vec<F>,
 }
 
 impl<F: PrimeField> ShamirPrimeFieldShareVec<F> {
+    /// Wraps the vector into a ShamirPrimeFieldShareVec
     pub fn new(a: Vec<F>) -> Self {
         Self { a }
     }
 
+    /// Unwraps a ShamirPrimeFieldShareVec into a vector
     pub fn get_inner(self) -> Vec<F> {
         self.a
     }
 
+    /// Checks whether the wrapped vector is empty.
     pub fn is_empty(&self) -> bool {
         self.a.is_empty()
     }
 
+    /// Returns the length of the wrapped vector.
     pub fn len(&self) -> usize {
         self.a.len()
     }
@@ -198,32 +210,37 @@ impl<F: PrimeField> IntoIterator for ShamirPrimeFieldShareVec<F> {
 
 // Conversions
 impl<F: PrimeField> ShamirPrimeFieldShare<F> {
-    /// Safe because ShamirPrimeFieldShare has repr(transparent)
+    /// Transforms a slice of `ShamirPrimeFieldShare<F>` to a slice of `F`
+    // Safe because ShamirPrimeFieldShare has repr(transparent)
     pub fn convert_slice(vec: &[Self]) -> &[F] {
         // SAFETY: ShamirPrimeFieldShare has repr(transparent)
         unsafe { &*(vec as *const [Self] as *const [F]) }
     }
 
-    /// Safe because ShamirPrimeFieldShare has repr(transparent)
+    /// Transforms a vector of `ShamirPrimeFieldShare<F>` to a vector of `F`
+    // Safe because ShamirPrimeFieldShare has repr(transparent)
     pub fn convert_vec(vec: Vec<Self>) -> Vec<F> {
         let me = ManuallyDrop::new(vec);
         // SAFETY: ShamirPrimeFieldShare has repr(transparent)
         unsafe { Vec::from_raw_parts(me.as_ptr() as *mut F, me.len(), me.capacity()) }
     }
 
-    /// Safe because ShamirPrimeFieldShare has repr(transparent)
+    /// Transforms a slice of `F` to a slice of `ShamirPrimeFieldShare<F>`
+    // Safe because ShamirPrimeFieldShare has repr(transparent)
     pub fn convert_slice_rev(vec: &[F]) -> &[Self] {
         // SAFETY: ShamirPrimeFieldShare has repr(transparent)
         unsafe { &*(vec as *const [F] as *const [Self]) }
     }
 
-    /// Safe because ShamirPrimeFieldShare has repr(transparent)
+    /// Transforms a vector of `F` to a vector of `ShamirPrimeFieldShare<F>`
+    // Safe because ShamirPrimeFieldShare has repr(transparent)
     pub fn convert_vec_rev(vec: Vec<F>) -> Vec<Self> {
         let me = ManuallyDrop::new(vec);
         // SAFETY: ShamirPrimeFieldShare has repr(transparent)
         unsafe { Vec::from_raw_parts(me.as_ptr() as *mut Self, me.len(), me.capacity()) }
     }
 
+    /// Transforms a `ShamirPrimeFieldShare<F>` to `F`
     pub fn convert(self) -> F {
         self.a
     }

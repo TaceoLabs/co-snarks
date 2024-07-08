@@ -1,3 +1,7 @@
+//! Rep3 Network
+//!
+//! This module contains the trait for specifying a network interface for the Rep3 MPC protocol. It also contains an implementation of the trait using the [mpc_net] crate.
+
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
@@ -5,24 +9,34 @@ use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
 
 use super::id::PartyID;
 
+/// This trait defines the network interface for the REP3 protocol.
 pub trait Rep3Network {
+    /// Returns the id of the party. The id is in the range 0 <= id < 3
     fn get_id(&self) -> PartyID;
 
+    /// Sends data to the target party. This function has a default implementation for calling [Rep3Network::send_many].
     fn send<F: CanonicalSerialize>(&mut self, target: PartyID, data: F) -> std::io::Result<()> {
         self.send_many(target, &[data])
     }
+
+    /// Sends a vector of data to the target party.
     fn send_many<F: CanonicalSerialize>(
         &mut self,
         target: PartyID,
         data: &[F],
     ) -> std::io::Result<()>;
+
+    /// Sends data to the party with id = next_id (i.e., my_id + 1 mod 3). This function has a default implementation for calling [Rep3Network::send] with the next_id.
     fn send_next<F: CanonicalSerialize>(&mut self, data: F) -> std::io::Result<()> {
         self.send(self.get_id().next_id(), data)
     }
+
+    /// Sends a vector data to the party with id = next_id (i.e., my_id + 1 mod 3). This function has a default implementation for calling [Rep3Network::send_many] with the next_id.
     fn send_next_many<F: CanonicalSerialize>(&mut self, data: &[F]) -> std::io::Result<()> {
         self.send_many(self.get_id().next_id(), data)
     }
 
+    /// Receives data from the party with the given id. This function has a default implementation for calling [Rep3Network::recv_many] and checking for the correct length of 1.
     fn recv<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<F> {
         let mut res = self.recv_many(from)?;
         if res.len() != 1 {
@@ -34,15 +48,22 @@ pub trait Rep3Network {
             Ok(res.pop().unwrap())
         }
     }
+
+    /// Receives a vector of data from the party with the given id.
     fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>>;
+
+    /// Receives data from the party with the id = prev_id (i.e., my_id + 2 mod 3). This function has a default implementation for calling [Rep3Network::recv] with the prev_id.
     fn recv_prev<F: CanonicalDeserialize>(&mut self) -> std::io::Result<F> {
         self.recv(self.get_id().prev_id())
     }
+
+    /// Receives a vector of data from the party with the id = prev_id (i.e., my_id + 2 mod 3). This function has a default implementation for calling [Rep3Network::recv_many] with the prev_id.
     fn recv_prev_many<F: CanonicalDeserialize>(&mut self) -> std::io::Result<Vec<F>> {
         self.recv_many(self.get_id().prev_id())
     }
 }
 
+/// This struct can be used to facilitate network communication for the REP3 MPC protocol.
 #[derive(Debug)]
 pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
@@ -53,6 +74,7 @@ pub struct Rep3MpcNet {
 }
 
 impl Rep3MpcNet {
+    /// Takes a [NetworkConfig] struct and constructs the network interface. The network needs to contain exactly 3 parties with ids 0, 1, and 2.
     pub fn new(config: NetworkConfig) -> Result<Self, Report> {
         if config.parties.len() != 3 {
             bail!("REP3 protocol requires exactly 3 parties")
@@ -87,6 +109,8 @@ impl Rep3MpcNet {
             chan_prev,
         })
     }
+
+    /// Shuts down the network interface.
     pub fn shutdown(self) {
         let Self {
             id: _,
@@ -101,6 +125,8 @@ impl Rep3MpcNet {
             net_handler.shutdown().await;
         });
     }
+
+    /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: PartyID, data: Bytes) -> std::io::Result<()> {
         if target == self.id.next_id() {
             std::mem::drop(self.chan_next.blocking_send(data));
@@ -116,6 +142,7 @@ impl Rep3MpcNet {
         }
     }
 
+    /// Receives bytes over the network from the party with the given id.
     pub fn recv_bytes(&mut self, from: PartyID) -> std::io::Result<BytesMut> {
         let data = if from == self.id.prev_id() {
             self.chan_prev.blocking_recv().blocking_recv()

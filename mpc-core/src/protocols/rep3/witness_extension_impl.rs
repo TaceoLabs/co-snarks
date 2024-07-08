@@ -1,7 +1,13 @@
+//! # Rep3 Witness Extension
+//!
+//! This module contains the type used by the MPC-VM during witness extension and handles all required MPC implementations.
+
 use super::{network::Rep3Network, Rep3PrimeFieldShare, Rep3Protocol};
 use crate::{
-    protocols::{plain::PlainDriver, rep3::a2b::Rep3BigUintShare},
-    to_usize,
+    protocols::{
+        plain::{to_usize, PlainDriver},
+        rep3::a2b::Rep3BigUintShare,
+    },
     traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
 };
 use ark_ff::{One, PrimeField};
@@ -11,10 +17,14 @@ use num_traits::Zero;
 
 use num_traits::cast::ToPrimitive;
 
+/// This type represents the basic type of the MPC-VM. Thus, it can represent either public or shared values.
 #[derive(Clone)]
 pub enum Rep3VmType<F: PrimeField> {
+    /// Represents a publicly known value
     Public(F),
+    /// Represents a secret-shared value
     Shared(Rep3PrimeFieldShare<F>),
+    /// Represents a secret-shared binary value. This type is currently not utilized
     BitShared,
 }
 
