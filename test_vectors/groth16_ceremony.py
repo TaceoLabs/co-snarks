@@ -41,6 +41,12 @@ def add_entropy(name):
     print("Adding entropy (this can take some time)...")
     return run_command(["snarkjs", "zkey", "contribute", f"{name}.0.zkey", f"{name}.zkey", "--name=\"1st Contributor Name\""], entropy)
 
+def export_verification_key(name):
+    print("===============================")
+    print("Exporting verification key...")
+    return run_command(["snarkjs", "zkey", "export", "verificationkey", f"{name}.zkey", "verification_key.json"])
+
+
 def cleanup(size, name):
     print("===============================")
     print("Cleaning up...")
@@ -68,6 +74,7 @@ def main():
     get_pot(size)
     create_zkey(size, name);
     add_entropy(name);
+    export_verification_key(name);
     cleanup(size, name);
 
 
