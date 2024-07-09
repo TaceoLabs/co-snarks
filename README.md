@@ -54,7 +54,11 @@ The binary `co-circom` is a CLI tool that uses the libraries to build a coSNARK
    [here](https://github.com/TaceoLabs/collaborative-circom/releases/latest).
 2. Download the binary for your operating system.
 
-3. Make the binary executable (if necessary):
+3. Extract the binary from the archive
+```bash
+tar xf co-circom-YOUR_ARCHITECTURE.tar.gz
+```
+4. Make the binary executable (if necessary):
 
 ```bash
 chmod +x co-circom
