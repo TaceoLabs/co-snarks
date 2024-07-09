@@ -1,3 +1,4 @@
+//! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, LegendreSymbol, PrimeField};
@@ -28,6 +29,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
+/// A type alias for a [CollaborativeGroth16] protocol using replicated secret sharing.
 pub type Rep3CollaborativeGroth16<P> =
     CollaborativeGroth16<Rep3Protocol<<P as Pairing>::ScalarField, Rep3MpcNet>, P>;
 
@@ -39,6 +41,7 @@ type CurveFieldShareVec<T, C> = <T as PrimeFieldMpcProtocol<
 >>::FieldShareVec;
 
 // TODO: maybe move this type to some other crate, as this is the only used type from this crate for many dependencies
+/// A shared witness for a Groth16 proof.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedWitness<T, P: Pairing>
 where
@@ -59,6 +62,7 @@ where
     pub witness: FieldShareVec<T, P>,
 }
 
+/// A shared input for a collaborative Circom-Groth16 witness extension.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedInput<T, P: Pairing>
 where
@@ -97,14 +101,17 @@ where
     P: Pairing,
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
+    /// Adds a public input with a given name to the [SharedInput].
     pub fn add_public_input(&mut self, key: String, elements: Vec<P::ScalarField>) {
         self.public_inputs.insert(key, elements);
     }
 
+    /// Adds a shared input with a given name to the [SharedInput].
     pub fn add_shared_input(&mut self, key: String, elements: T::FieldShareVec) {
         self.shared_inputs.insert(key, elements);
     }
 
+    /// Merges two [SharedInput]s into one, performing basic sanity checks.
     pub fn merge(self, other: Self) -> Result<Self> {
         let mut shared_inputs = self.shared_inputs;
         let public_inputs = self.public_inputs;
@@ -133,6 +140,7 @@ where
     }
 }
 
+/// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CollaborativeGroth16<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -155,12 +163,15 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
+    /// Creates a new [CollaborativeGroth16] protocol with a given MPC driver.
     pub fn new(driver: T) -> Self {
         Self {
             driver,
             phantom_data: PhantomData,
         }
     }
+    /// Execute the Groth16 prover using the internal MPC driver.
+    /// This version re-calculates the constraint matrices from the [R1CS].
     pub fn prove(
         &mut self,
         pk: &ProvingKey<P>,
@@ -199,7 +210,7 @@ where
     use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
     then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
     */
-    pub fn root_of_unity<F: PrimeField + FftField>(domain: &GeneralEvaluationDomain<F>) -> F {
+    fn root_of_unity<F: PrimeField + FftField>(domain: &GeneralEvaluationDomain<F>) -> F {
         let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
         let mut q = F::one();
         while q.legendre() != LegendreSymbol::QuadraticNonResidue {
@@ -217,6 +228,8 @@ where
             roots[domain.log_size_of_group().to_usize().unwrap() + 1]
         }
     }
+    /// Execute the Groth16 prover using the internal MPC driver.
+    /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     pub fn prove_with_matrices(
         &mut self,
         pk: &ProvingKey<P>,
@@ -373,7 +386,7 @@ where
         res
     }
 
-    pub fn create_proof_with_assignment(
+    fn create_proof_with_assignment(
         &mut self,
         pk: &ProvingKey<P>,
         r: FieldShare<T, P>,
@@ -466,6 +479,8 @@ where
         })
     }
 
+    /// Verify a Groth16 proof.
+    /// This method is a wrapper around the [Groth16::verify_proof] method and does not use MPC.
     pub fn verify(
         &self,
         pvk: &PreparedVerifyingKey<P>,
@@ -480,6 +495,7 @@ impl<P: Pairing> Rep3CollaborativeGroth16<P>
 where
     <P as ark_ec::pairing::Pairing>::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
+    /// Create a new [Rep3CollaborativeGroth16] protocol with a given network configuration.
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
         let mpc_net = Rep3MpcNet::new(config)?;
         let driver = Rep3Protocol::<P::ScalarField, Rep3MpcNet>::new(mpc_net)?;
@@ -488,6 +504,7 @@ where
 }
 
 impl<N: Rep3Network, P: Pairing> SharedWitness<Rep3Protocol<P::ScalarField, N>, P> {
+    /// Shares a given witness and public input vector using the Rep3 protocol.
     pub fn share_rep3<R: Rng + CryptoRng>(
         witness: &[P::ScalarField],
         public_inputs: &[P::ScalarField],
@@ -511,6 +528,7 @@ impl<N: Rep3Network, P: Pairing> SharedWitness<Rep3Protocol<P::ScalarField, N>, 
 }
 
 impl<N: ShamirNetwork, P: Pairing> SharedWitness<ShamirProtocol<P::ScalarField, N>, P> {
+    /// Shares a given witness and public input vector using the Shamir protocol.
     pub fn share_shamir<R: Rng + CryptoRng>(
         witness: &[P::ScalarField],
         public_inputs: &[P::ScalarField],

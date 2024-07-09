@@ -1,4 +1,7 @@
-pub mod circom_reduction;
+//! A library for creating and verifying Groth16 proofs in a collaborative fashion using MPC.
+#![warn(missing_docs)]
+#[cfg(test)]
+mod circom_reduction;
 pub mod circuit;
 pub mod groth16;
 mod serde_compat;
@@ -20,7 +23,7 @@ mod tests {
     use rand::thread_rng;
     use std::fs::{self, File};
 
-    use crate::{circom_reduction::tests::CircomReduction, circuit::Circuit};
+    use crate::{circom_reduction::CircomReduction, circuit::Circuit};
 
     #[test]
     fn create_proof_and_verify_bn254() {
