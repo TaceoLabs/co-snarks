@@ -1,3 +1,4 @@
+//! Data structures and helpers for the network configuration.
 use color_eyre::eyre;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -6,9 +7,12 @@ use std::{
     path::PathBuf,
 };
 
+/// A network address wrapper.
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Address {
+    /// The hostname of the address, will be DNS resolved. This hostname is also checked to be contained in the certificate for the party.
     pub hostname: String,
+    /// The port of the address.
     pub port: u16,
 }
 
@@ -44,22 +48,32 @@ impl<'de> Deserialize<'de> for Address {
     }
 }
 
+/// A party in the network.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct NetworkParty {
+    /// The id of the party, 0-based indexing.
     pub id: usize,
+    /// The DNS name of the party.
     pub dns_name: Address,
+    /// The path to the public certificate of the party.
     pub cert_path: PathBuf,
 }
 
+/// The network configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct NetworkConfig {
+    /// The list of parties in the network.
     pub parties: Vec<NetworkParty>,
+    /// Our own id in the network.
     pub my_id: usize,
+    /// The [SocketAddr] we bind to.
     pub bind_addr: SocketAddr,
+    /// The path to our private key file.
     pub key_path: PathBuf,
 }
 
 impl NetworkConfig {
+    /// Basic sanity checks for the configuration.
     pub fn check_config(&self) -> eyre::Result<()> {
         // sanity check config
         // 1. check that my_id is in the list of parties

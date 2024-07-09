@@ -1,3 +1,5 @@
+//! A simple networking layer for MPC protocols.
+#![warn(missing_docs)]
 use std::{
     collections::{BTreeMap, HashMap},
     io,
@@ -25,11 +27,11 @@ use serde::{de::DeserializeOwned, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
 
-pub mod codecs;
-
 pub mod channel;
+pub mod codecs;
 pub mod config;
 
+/// A network handler for MPC protocols.
 #[derive(Debug)]
 pub struct MpcNetworkHandler {
     // this is a btreemap because we rely on iteration order
@@ -39,6 +41,7 @@ pub struct MpcNetworkHandler {
 }
 
 impl MpcNetworkHandler {
+    /// Tries to establish a connection to other parties in the network based on the provided [NetworkConfig].
     pub async fn establish(config: NetworkConfig) -> Result<Self, Report> {
         config.check_config()?;
         // a client socket, let the OS pick the port
@@ -164,6 +167,7 @@ impl MpcNetworkHandler {
         })
     }
 
+    /// Returns the number of sent and received bytes.
     pub fn get_send_receive(&self, i: usize) -> std::io::Result<(u64, u64)> {
         let conn = self
             .connections
@@ -173,6 +177,7 @@ impl MpcNetworkHandler {
         Ok((stats.udp_tx.bytes, stats.udp_rx.bytes))
     }
 
+    /// Prints the connection statistics.
     pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
         for (i, conn) in &self.connections {
             let stats = conn.stats();
@@ -184,6 +189,8 @@ impl MpcNetworkHandler {
         }
         Ok(())
     }
+
+    /// Sets up a new [BytesChannel] between each party. The resulting map maps the id of the party to its respective [BytesChannel].
     pub async fn get_byte_channels(
         &mut self,
     ) -> std::io::Result<HashMap<usize, BytesChannel<RecvStream, SendStream>>> {
@@ -192,6 +199,7 @@ impl MpcNetworkHandler {
         self.get_custom_channels(codec).await
     }
 
+    /// Set up a new [Channel] using [BincodeCodec] between each party. The resulting map maps the id of the party to its respective [Channel].
     pub async fn get_serde_bincode_channels<M: Serialize + DeserializeOwned + 'static>(
         &mut self,
     ) -> std::io::Result<HashMap<usize, Channel<RecvStream, SendStream, BincodeCodec<M>>>> {
@@ -199,6 +207,7 @@ impl MpcNetworkHandler {
         self.get_custom_channels(bincodec).await
     }
 
+    /// Set up a new [Channel] using the provided codec between each party. The resulting map maps the id of the party to its respective [Channel].
     pub async fn get_custom_channels<
         MSend,
         MRecv,

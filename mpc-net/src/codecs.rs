@@ -1,9 +1,11 @@
+//! Codecs for serializing and deserializing messages over the network.
 use std::io;
 
 use bytes::{Buf, BufMut, BytesMut};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
 
+/// A codec that serializes and deserializes messages using [bincode].
 #[derive(Default, Debug)]
 pub struct BincodeCodec<M: Serialize + DeserializeOwned> {
     inner: LengthDelimitedCodec,
@@ -20,6 +22,7 @@ impl<M: Serialize + DeserializeOwned> Clone for BincodeCodec<M> {
 }
 
 impl<M: Serialize + DeserializeOwned> BincodeCodec<M> {
+    /// Creates a new [BincodeCodec].
     pub fn new() -> Self {
         Self {
             inner: LengthDelimitedCodec::new(),
