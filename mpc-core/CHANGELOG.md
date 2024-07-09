@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-core-v0.1.0...mpc-core-v0.2.0) (2024-07-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* clean up visibility of interfaces and add docs
+
+### Features
+
+* expose promot_from_trivial for Rep3 ([b329a42](https://github.com/TaceoLabs/collaborative-circom/commit/b329a427031d4e787addbf37902c710ba0132ccf))
+
+
+### Bug Fixes
+
+* implement optional post-processing permutation for FFTs and correct root of unity calculation to match circom output ([5ab3292](https://github.com/TaceoLabs/collaborative-circom/commit/5ab329294959c85ea6e0823cbe651ba6efa747f8))
+
+
+### Code Refactoring
+
+* clean up visibility of interfaces and add docs ([8a4f085](https://github.com/TaceoLabs/collaborative-circom/commit/8a4f08582a950d11f88e1de8fb6c4e28279b2891))
+
 ## [0.1.0](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-core-v0.0.1...mpc-core-v0.1.0) (2024-06-14)
 
 

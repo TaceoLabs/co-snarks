@@ -1,9 +1,10 @@
 {
-  "circom-mpc-compiler": "0.1.0",
-  "circom-mpc-vm": "0.1.0",
-  "circom-types": "0.1.0",
-  "collaborative-circom": "0.1.2",
-  "collaborative-groth16": "0.1.0",
-  "mpc-core": "0.1.0",
-  "mpc-net": "0.1.0"
+  "circom-mpc-compiler": "0.2.0",
+  "circom-mpc-vm": "0.1.1",
+  "circom-types": "0.2.0",
+  "collaborative-circom": "0.2.0",
+  "collaborative-groth16": "0.2.0",
+  "mpc-core": "0.2.0",
+  "mpc-net": "0.1.1",
+  "tests": "0.1.1"
 }

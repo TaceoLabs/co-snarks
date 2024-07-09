@@ -1,6 +1,6 @@
 [package]
 name = "mpc-net"
-version = "0.1.0"
+version = "0.1.1"
 exclude = ["data"]
 publish.workspace = true
 authors.workspace = true

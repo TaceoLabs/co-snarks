@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.1](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-vm-v0.1.0...circom-mpc-vm-v0.1.1) (2024-07-09)
+
+
+### Bug Fixes
+
+* correct order input array for sub_comp and naively creates all components even if not necessary ([6d40a94](https://github.com/TaceoLabs/collaborative-circom/commit/6d40a9465b5351f0d30ac9f19c2ee61f09ccdbbb))
+* vector in/outputs for sub component ([#90](https://github.com/TaceoLabs/collaborative-circom/issues/90)) ([f148375](https://github.com/TaceoLabs/collaborative-circom/commit/f148375c3ca8674f1ecd08bb30c1e6bcf2dbb4a9))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * collaborative-groth16 bumped from 0.1.0 to 0.2.0
+    * mpc-core bumped from 0.1.0 to 0.2.0
+
 ## [0.1.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-vm-v0.0.1...circom-mpc-vm-v0.1.0) (2024-06-14)
 
 
