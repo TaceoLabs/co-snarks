@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-groth16-v0.1.0...collaborative-groth16-v0.2.0) (2024-07-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* document collaborative-groth16
+
+### Features
+
+* added a lot tracings ([c4f24d1](https://github.com/TaceoLabs/collaborative-circom/commit/c4f24d15f0c7af0560fbffe4a4aaedda2fa515e8))
+* added interfaces to add values to SharedInput ([abe8db7](https://github.com/TaceoLabs/collaborative-circom/commit/abe8db75911eea82fc00e8a981bfe093e0e0b3d4))
+
+
+### Bug Fixes
+
+* implement optional post-processing permutation for FFTs and correct root of unity calculation to match circom output ([5ab3292](https://github.com/TaceoLabs/collaborative-circom/commit/5ab329294959c85ea6e0823cbe651ba6efa747f8))
+
+
+### Documentation
+
+* document collaborative-groth16 ([56b873c](https://github.com/TaceoLabs/collaborative-circom/commit/56b873c6c60032dea27ee5640418b7e92bf837ec))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.1.0 to 0.2.0
+    * mpc-core bumped from 0.1.0 to 0.2.0
+    * mpc-net bumped from 0.1.0 to 0.1.1
+
 ## [0.1.0](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-groth16-v0.0.1...collaborative-groth16-v0.1.0) (2024-06-14)
 
 

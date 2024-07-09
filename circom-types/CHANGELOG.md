@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-types-v0.1.0...circom-types-v0.2.0) (2024-07-09)
+
+
+### Features
+
+* build own zkey that can ser/de ([5a9d055](https://github.com/TaceoLabs/collaborative-circom/commit/5a9d0555f196f4d3537623b6aa056476a466926c))
+* can swap between ourzkey and old ([f1fcae2](https://github.com/TaceoLabs/collaborative-circom/commit/f1fcae2a7894aca5cec812c19dc2f4c5e1f5f8d6))
+
 ## [0.1.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-types-v0.0.1...circom-types-v0.1.0) (2024-06-14)
 
 

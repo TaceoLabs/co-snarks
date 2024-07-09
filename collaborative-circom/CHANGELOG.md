@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-circom-v0.1.2...collaborative-circom-v0.2.0) (2024-07-09)
+
+
+### Features
+
+* added a lot tracings ([c4f24d1](https://github.com/TaceoLabs/collaborative-circom/commit/c4f24d15f0c7af0560fbffe4a4aaedda2fa515e8))
+* added kyc example ([8b45982](https://github.com/TaceoLabs/collaborative-circom/commit/8b4598239fec55f4a4f6d87dfe12ea4aca19fddb))
+
+
+### Bug Fixes
+
+* now writes 0 instead of empty string when public inputs is zero ([eca6676](https://github.com/TaceoLabs/collaborative-circom/commit/eca667608774484733925632358dedd6608d318b))
+* pushed input.json for kyc ([be46bc2](https://github.com/TaceoLabs/collaborative-circom/commit/be46bc28c3ff28a135754a72664ba5732b413345))
+* pushed ver_key.json for kyc ([96d745d](https://github.com/TaceoLabs/collaborative-circom/commit/96d745df27894b81b391c36d957e0b2ab66b16d1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.1.0 to 0.2.0
+    * circom-mpc-compiler bumped from 0.1.0 to 0.2.0
+    * collaborative-groth16 bumped from 0.1.0 to 0.2.0
+    * mpc-core bumped from 0.1.0 to 0.2.0
+
 ## [0.1.2](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-circom-v0.1.1...collaborative-circom-v0.1.2) (2024-06-14)
 
 

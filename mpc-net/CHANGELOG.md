@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-net-v0.1.0...mpc-net-v0.1.1) (2024-07-09)
+
+
+### Bug Fixes
+
+* allow frames of 1GB per default ([57b09af](https://github.com/TaceoLabs/collaborative-circom/commit/57b09afd8b858dfd803c8f0bbb51a47d549fa8e7))
+
 ## [0.1.0](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-net-v0.0.1...mpc-net-v0.1.0) (2024-06-14)
 
 
