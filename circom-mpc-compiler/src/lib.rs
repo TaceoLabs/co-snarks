@@ -50,11 +50,6 @@ impl<P: Pairing> CompilerBuilder<P> {
         }
     }
 
-    pub fn link_libraries(mut self, link_libraries: Vec<PathBuf>) -> Self {
-        self.link_libraries = link_libraries;
-        self
-    }
-
     pub fn link_library<S>(mut self, link_library: S) -> Self
     where
         PathBuf: From<S>,
