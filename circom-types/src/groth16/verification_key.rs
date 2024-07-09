@@ -1,3 +1,4 @@
+//! This module defines the [`JsonVerificationKey`] struct that implements de/serialization using [`serde`] and the [`From`] trait for the [`ark_groth16::PreparedVerifyingKey`] type.
 use std::marker::PhantomData;
 
 use ark_ec::pairing::Pairing;
@@ -13,35 +14,44 @@ use serde::{
 use crate::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use core::ops::Neg;
 
+/// Represents a verification key in JSON format that was created by circom. Supports de/serialization using [`serde`] and the [`From`] trait for the [`ark_groth16::PreparedVerifyingKey`] type.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JsonVerificationKey<P: Pairing + CircomArkworksPairingBridge>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    /// The protocol used to generate the proof (always `"groth16"`)
     pub protocol: String,
+    /// The number of public inputs
     #[serde(rename = "nPublic")]
     pub n_public: usize,
+    /// The element α of the verification key ∈ G1
     #[serde(rename = "vk_alpha_1")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     alpha_1: P::G1Affine,
+    /// The element β of the verification key ∈ G2
     #[serde(rename = "vk_beta_2")]
     #[serde(serialize_with = "P::serialize_g2::<_>")]
     #[serde(deserialize_with = "P::deserialize_g2_element::<_>")]
     beta_2: P::G2Affine,
+    /// The γ of the verification key ∈ G2
     #[serde(rename = "vk_gamma_2")]
     #[serde(serialize_with = "P::serialize_g2::<_>")]
     #[serde(deserialize_with = "P::deserialize_g2_element::<_>")]
     gamma_2: P::G2Affine,
+    /// The element δ of the verification key ∈ G2
     #[serde(rename = "vk_delta_2")]
     #[serde(serialize_with = "P::serialize_g2::<_>")]
     #[serde(deserialize_with = "P::deserialize_g2_element::<_>")]
     delta_2: P::G2Affine,
+    /// The pairing of α and β of the verification key ∈ Gt
     #[serde(rename = "vk_alphabeta_12")]
     #[serde(serialize_with = "P::serialize_gt::<_>")]
     #[serde(deserialize_with = "P::deserialize_gt_element::<_>")]
     alpha_beta_gt: P::TargetField,
+    /// Referred to as `gamma_abc_g1` in [`ark_groth16::data_structures::VerifyingKey`] and is used to bind the public inputs to the proof
     #[serde(rename = "IC")]
     #[serde(serialize_with = "serialize_g1_sequence::<_,P>")]
     #[serde(deserialize_with = "deserialize_g1_sequence::<_,P>")]
@@ -183,6 +193,7 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    /// Converts the [`JsonVerificationKey`] into a [`PreparedVerifyingKey`].
     pub fn prepare_verifying_key(self) -> PreparedVerifyingKey<P> {
         PreparedVerifyingKey::<P>::from(self)
     }

@@ -24,7 +24,8 @@
 //IN CONNECTION WITH THE SOFTWARE O THE USE OR OTHER
 //DEALINGS IN THE SOFTWARE.R
 
-//!Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/circom/r1cs_reader.rs>
+//! This module provides the [`R1CS`] type which implements [`R1CS::from_reader`] for parsing the R1CS file format used by circom.
+//! Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/circom/r1cs_reader.rs>
 use ark_ff::PrimeField;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{Error, ErrorKind};
@@ -46,34 +47,51 @@ const MAX_VERSION: u32 = 1;
 type Result<T> = std::result::Result<T, R1CSParserError>;
 
 //TODO maybe write something better that is not so convoluted to access
-pub type Constraints<P> = (ConstraintVec<P>, ConstraintVec<P>, ConstraintVec<P>);
-pub type ConstraintVec<P> = Vec<(usize, <P as Pairing>::ScalarField)>;
+pub(crate) type Constraints<P> = (ConstraintVec<P>, ConstraintVec<P>, ConstraintVec<P>);
+pub(crate) type ConstraintVec<P> = Vec<(usize, <P as Pairing>::ScalarField)>;
 
+/// Error type describing errors during parsing R1CS files
 #[derive(Debug, Error)]
 pub enum R1CSParserError {
+    /// Error during serialization
     #[error(transparent)]
     SerializationError(#[from] SerializationError),
+    /// Error during IO operations (reading/opening file, etc.)
     #[error(transparent)]
     IoError(#[from] std::io::Error),
+    /// Error describing that the version of the file is not supported for parsing
     #[error("Max supported version is {0}, but got {1}")]
     VersionNotSupported(u32, u32),
+    /// Error during reading circom file header
     #[error(transparent)]
     WrongHeader(#[from] InvalidHeaderError),
+    /// Error describing that the ScalarField from curve does not match in witness file
     #[error("ScalarField from curve does not match in witness file")]
     WrongScalarField,
 }
 
+/// Struct representing a R1CS file produced by circom that implements [`R1CS::from_reader`] for parsing the R1CS file format used by circom.
 #[derive(Clone, Debug)]
 pub struct R1CS<P: Pairing> {
+    /// Number of public inputs
     pub num_inputs: usize,
+    /// Number of auxiliary variables
     pub num_aux: usize,
+    /// Number of variables
     pub num_variables: usize,
+    /// Constraints
     pub constraints: Vec<Constraints<P>>,
+    /// Mapping from wire to label
     pub wire_mapping: Vec<usize>,
+    /// Number of public outputs
     pub n_pub_out: u32,
+    /// Number of public inputs
     pub n_pub_in: u32,
+    /// Number of private inputs
     pub n_prv_in: u32,
+    /// Number of labels
     pub n_labels: u64,
+    /// Number of constraints
     pub n_constraints: usize,
 }
 
@@ -82,6 +100,7 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    /// Parses an [`R1CS`] file from a reader and returns [`R1CSParserError`] on failure
     pub fn from_reader<R: Read + Seek>(mut reader: R) -> Result<Self> {
         reader_utils::read_header(&mut reader, R1CS_HEADER)?;
         let version = reader.read_u32::<LittleEndian>()?;

@@ -1,3 +1,4 @@
+//! This module defines the [`JsonProof`] struct that implements de/serialization using [`serde`] and the [`From`] trait for the [`ark_groth16::Proof`] type.
 use crate::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
@@ -5,22 +6,29 @@ use ark_ec::pairing::Pairing;
 use ark_groth16::Proof;
 use serde::{Deserialize, Serialize};
 
+/// Represents a Groth16 proof in JSON format that was created by circom. Supports de/serialization using [`serde`].
+/// Implements the [`From`] trait for the [`ark_groth16::Proof`] type and allows bidirectional conversion between them.
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JsonProof<P: Pairing + CircomArkworksPairingBridge>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    /// Proof element A (or 1) in G1
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub pi_a: P::G1Affine,
+    /// Proof element B (or 2) in G2
     #[serde(serialize_with = "P::serialize_g2::<_>")]
     #[serde(deserialize_with = "P::deserialize_g2_element::<_>")]
     pub pi_b: P::G2Affine,
+    /// Proof element C (or 3) in G1
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub pi_c: P::G1Affine,
+    /// The protocol used to generate the proof (always `"groth16"`)
     pub protocol: String,
+    /// The curve used to generate the proof
     pub curve: String,
 }
 

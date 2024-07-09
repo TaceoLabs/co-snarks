@@ -1,11 +1,14 @@
+//! This module defines the [`JsonPublicInput`] struct that allows loading public inputs from JSON files via [`serde::Deserialize`] and [`serde::Serialize`].
 use std::{marker::PhantomData, str::FromStr};
 
 use ark_ff::PrimeField;
 use serde::ser::SerializeSeq;
 use serde::{de, Serialize};
 
+/// Represents a public input for a Groth16 proof. Implements [`serde::Deserialize`] and [`serde::Serialize`] for loading/storing public inputs from/to JSON formats defined by circom.
 #[derive(Debug, PartialEq, Eq)]
 pub struct JsonPublicInput<F: PrimeField + FromStr> {
+    /// The values of the public input.
     pub values: Vec<F>,
 }
 
