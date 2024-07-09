@@ -1,0 +1,26 @@
+name: Release
+
+permissions:
+  contents: write
+
+on:
+  release:
+    types:
+      - released
+
+jobs:
+  upload-assets:
+    if: startsWith(github.event.release.tag_name, 'collaborative-circom-v')
+    runs-on: [arc-runner-set]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
+          # Note that glob pattern is not supported yet.
+          bin: co-circom
+          # (required) GitHub token for uploading assets to GitHub Releases.
+          token: ${{ secrets.GITHUB_TOKEN }}

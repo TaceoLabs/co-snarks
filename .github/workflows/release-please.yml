@@ -9,13 +9,5 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
-      - uses: taiki-e/upload-rust-binary-action@v1
-        if: ${{ steps.release.outputs.release_created && startsWith(steps.release.outputs.tag_name, 'collaborative-circom-v') }} 
         with:
-          # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
-          # Note that glob pattern is not supported yet.
-          bin: co-circom
-          # (required) GitHub token for uploading assets to GitHub Releases.
-          token: ${{ secrets.GITHUB_TOKEN }}
-          # release tag
-          ref: ${{ steps.release.outputs.tag_name }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}  
