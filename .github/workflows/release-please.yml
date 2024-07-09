@@ -7,6 +7,7 @@ jobs:
   release-please:
     runs-on: [arc-runner-set]
     steps:
-      - uses: google-github-actions/release-please-action@v4
+      - uses: googleapis/release-please-action@v4
+        id: release
         with:
-          command: manifest
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}  
