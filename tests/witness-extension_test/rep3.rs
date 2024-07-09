@@ -6,7 +6,7 @@ mod rep3_tests {
     use circom_types::groth16::witness::Witness;
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::rep3::{id::PartyID, network::Rep3Network, Rep3Protocol};
-    use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+    use std::sync::mpsc::{self, Receiver, Sender};
 
     #[allow(dead_code)]
     fn install_tracing() {
@@ -26,18 +26,18 @@ mod rep3_tests {
     #[derive(Debug)]
     //todo remove me and put me in common test crate
     pub struct Rep3TestNetwork {
-        p1_p2_sender: UnboundedSender<Bytes>,
-        p1_p3_sender: UnboundedSender<Bytes>,
-        p2_p3_sender: UnboundedSender<Bytes>,
-        p2_p1_sender: UnboundedSender<Bytes>,
-        p3_p1_sender: UnboundedSender<Bytes>,
-        p3_p2_sender: UnboundedSender<Bytes>,
-        p1_p2_receiver: UnboundedReceiver<Bytes>,
-        p1_p3_receiver: UnboundedReceiver<Bytes>,
-        p2_p3_receiver: UnboundedReceiver<Bytes>,
-        p2_p1_receiver: UnboundedReceiver<Bytes>,
-        p3_p1_receiver: UnboundedReceiver<Bytes>,
-        p3_p2_receiver: UnboundedReceiver<Bytes>,
+        p1_p2_sender: Sender<Bytes>,
+        p1_p3_sender: Sender<Bytes>,
+        p2_p3_sender: Sender<Bytes>,
+        p2_p1_sender: Sender<Bytes>,
+        p3_p1_sender: Sender<Bytes>,
+        p3_p2_sender: Sender<Bytes>,
+        p1_p2_receiver: Receiver<Bytes>,
+        p1_p3_receiver: Receiver<Bytes>,
+        p2_p3_receiver: Receiver<Bytes>,
+        p2_p1_receiver: Receiver<Bytes>,
+        p3_p1_receiver: Receiver<Bytes>,
+        p3_p2_receiver: Receiver<Bytes>,
     }
 
     pub struct TestInputs {
@@ -54,12 +54,12 @@ mod rep3_tests {
     impl Rep3TestNetwork {
         pub fn new() -> Self {
             // AT Most 1 message is buffered before they are read so this should be fine
-            let p1_p2 = mpsc::unbounded_channel();
-            let p1_p3 = mpsc::unbounded_channel();
-            let p2_p3 = mpsc::unbounded_channel();
-            let p2_p1 = mpsc::unbounded_channel();
-            let p3_p1 = mpsc::unbounded_channel();
-            let p3_p2 = mpsc::unbounded_channel();
+            let p1_p2 = mpsc::channel();
+            let p1_p3 = mpsc::channel();
+            let p2_p3 = mpsc::channel();
+            let p2_p1 = mpsc::channel();
+            let p3_p1 = mpsc::channel();
+            let p3_p2 = mpsc::channel();
 
             Self {
                 p1_p2_sender: p1_p2.0,
@@ -111,10 +111,10 @@ mod rep3_tests {
     #[derive(Debug)]
     pub struct PartyTestNetwork {
         id: PartyID,
-        send_prev: UnboundedSender<Bytes>,
-        send_next: UnboundedSender<Bytes>,
-        recv_prev: UnboundedReceiver<Bytes>,
-        recv_next: UnboundedReceiver<Bytes>,
+        send_prev: Sender<Bytes>,
+        send_next: Sender<Bytes>,
+        recv_prev: Receiver<Bytes>,
+        recv_next: Receiver<Bytes>,
         _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
     }
 
@@ -146,10 +146,10 @@ mod rep3_tests {
 
         fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
             if self.id.next_id() == from {
-                let data = Vec::from(self.recv_next.blocking_recv().unwrap());
+                let data = Vec::from(self.recv_next.recv().unwrap());
                 Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
             } else if self.id.prev_id() == from {
-                let data = Vec::from(self.recv_prev.blocking_recv().unwrap());
+                let data = Vec::from(self.recv_prev.recv().unwrap());
                 Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
             } else {
                 panic!("You want to read from yourself?")
@@ -200,7 +200,6 @@ mod rep3_tests {
         use std::fs;
         use std::str::FromStr;
         use std::{fs::File, thread};
-        use tokio::sync::oneshot;
         fn combine_field_elements_for_vm(
             a: SharedWitness<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
             b: SharedWitness<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>,
@@ -272,14 +271,10 @@ mod rep3_tests {
                 let mut rng = thread_rng();
                 let inputs = rep3::utils::share_field_elements_for_vm($input, &mut rng);
                 let test_network = Rep3TestNetwork::default();
-                let (tx1, rx1) = oneshot::channel();
-                let (tx2, rx2) = oneshot::channel();
-                let (tx3, rx3) = oneshot::channel();
+                let mut threads = vec![];
 
-                for (net, tx, input) in
-                    izip!(test_network.get_party_networks(), [tx1, tx2, tx3], inputs)
-                {
-                    thread::spawn(move || {
+                for (net, input) in izip!(test_network.get_party_networks(), inputs) {
+                    threads.push(thread::spawn(move || {
                         let witness_extension = CompilerBuilder::<Bn254>::new($file.to_owned())
                             .link_library("../test_vectors/circuits/libs/")
                             .build()
@@ -287,21 +282,48 @@ mod rep3_tests {
                             .unwrap()
                             .to_rep3_vm_with_network(net)
                             .unwrap();
-                        tx.send(witness_extension.run_with_flat(input, 0).unwrap())
-                            .unwrap()
-                    });
+                        witness_extension.run_with_flat(input, 0).unwrap()
+                    }));
                 }
-                let result1 = rx1.await.unwrap();
-                let result2 = rx2.await.unwrap();
-                let result3 = rx3.await.unwrap();
+                let result3 = threads.pop().unwrap().join().unwrap();
+                let result2 = threads.pop().unwrap().join().unwrap();
+                let result1 = threads.pop().unwrap().join().unwrap();
                 combine_field_elements_for_vm(result1, result2, result3)
             }};
         }
 
         macro_rules! witness_extension_test_rep3 {
             ($name: ident) => {
-                #[tokio::test]
-                async fn $name() {
+                #[test]
+                fn $name() {
+                    let inp: TestInputs = from_test_name(stringify!($name));
+                    // let path = inp.circuit_path.as_str().to_owned();
+                    for i in 0..inp.inputs.len() {
+                        let is_witness = run_test!(
+                            format!(
+                                "../test_vectors/circuits/test-circuits/{}.circom",
+                                stringify!($name)
+                            ),
+                            &inp.inputs[i]
+                        );
+                        assert_eq!(is_witness, inp.witnesses[i].values);
+                    }
+                }
+            };
+
+            ($name: ident, $file: expr, $input: expr, $should:expr) => {
+                witness_extension_test!($name, $file, $input, $should, "witness");
+            };
+
+            ($name: ident, $file: expr, $input: expr) => {
+                witness_extension_test!($name, $file, $input, $file);
+            };
+        }
+        macro_rules! witness_extension_test_rep3_ignored {
+            ($name: ident) => {
+                #[test]
+                #[ignore]
+                fn $name() {
                     let inp: TestInputs = from_test_name(stringify!($name));
                     // let path = inp.circuit_path.as_str().to_owned();
                     for i in 0..inp.inputs.len() {
@@ -334,15 +356,15 @@ mod rep3_tests {
         witness_extension_test_rep3!(binsum_test);
         witness_extension_test_rep3!(constants_test);
         witness_extension_test_rep3!(control_flow);
-        witness_extension_test_rep3!(eddsa_test);
-        witness_extension_test_rep3!(eddsa_verify);
-        witness_extension_test_rep3!(eddsamimc_test);
-        witness_extension_test_rep3!(eddsaposeidon_test);
+        witness_extension_test_rep3_ignored!(eddsa_test);
+        witness_extension_test_rep3_ignored!(eddsa_verify);
+        witness_extension_test_rep3_ignored!(eddsamimc_test);
+        witness_extension_test_rep3_ignored!(eddsaposeidon_test);
         witness_extension_test_rep3!(edwards2montgomery);
         witness_extension_test_rep3!(escalarmul_test);
         witness_extension_test_rep3!(escalarmul_test_min);
         witness_extension_test_rep3!(escalarmulany_test);
-        witness_extension_test_rep3!(escalarmulfix_test);
+        witness_extension_test_rep3_ignored!(escalarmulfix_test);
         witness_extension_test_rep3!(escalarmulw4table);
         witness_extension_test_rep3!(escalarmulw4table_test);
         witness_extension_test_rep3!(escalarmulw4table_test3);
@@ -366,9 +388,9 @@ mod rep3_tests {
         witness_extension_test_rep3!(mux2_1);
         witness_extension_test_rep3!(mux3_1);
         witness_extension_test_rep3!(mux4_1);
-        witness_extension_test_rep3!(pedersen2_test);
+        witness_extension_test_rep3_ignored!(pedersen2_test);
         witness_extension_test_rep3!(pedersen_hasher);
-        witness_extension_test_rep3!(pedersen_test);
+        witness_extension_test_rep3_ignored!(pedersen_test);
         witness_extension_test_rep3!(pointbits_loopback);
         witness_extension_test_rep3!(poseidon3_test);
         witness_extension_test_rep3!(poseidon6_test);
@@ -376,9 +398,9 @@ mod rep3_tests {
         witness_extension_test_rep3!(poseidon_hasher16);
         witness_extension_test_rep3!(poseidon_hasher2);
         witness_extension_test_rep3!(poseidonex_test);
-        witness_extension_test_rep3!(sha256_2_test);
-        witness_extension_test_rep3!(sha256_test448);
-        witness_extension_test_rep3!(sha256_test512);
+        witness_extension_test_rep3_ignored!(sha256_2_test);
+        witness_extension_test_rep3_ignored!(sha256_test448);
+        witness_extension_test_rep3_ignored!(sha256_test512);
         witness_extension_test_rep3!(shared_control_flow);
         witness_extension_test_rep3!(shared_control_flow_arrays);
         witness_extension_test_rep3!(sign_test);

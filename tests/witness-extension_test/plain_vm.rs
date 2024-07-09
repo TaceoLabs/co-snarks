@@ -4,7 +4,7 @@ pub struct TestInputs {
     witnesses: Vec<Witness<ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>>>,
 }
 #[cfg(test)]
-mod tests {
+mod plain_tests {
     use crate::TestInputs;
     use ark_bn254::Bn254;
     use circom_mpc_compiler::CompilerBuilder;

@@ -15,26 +15,23 @@ mod rep3_tests {
     };
     use mpc_core::protocols::rep3::{id::PartyID, network::Rep3Network, Rep3Protocol};
     use rand::thread_rng;
+    use std::sync::mpsc::{self, Receiver, Sender};
     use std::{fs::File, thread};
-    use tokio::sync::{
-        mpsc::{self, UnboundedReceiver, UnboundedSender},
-        oneshot,
-    };
 
     //todo remove me and put me in common test crate
     pub struct Rep3TestNetwork {
-        p1_p2_sender: UnboundedSender<Bytes>,
-        p1_p3_sender: UnboundedSender<Bytes>,
-        p2_p3_sender: UnboundedSender<Bytes>,
-        p2_p1_sender: UnboundedSender<Bytes>,
-        p3_p1_sender: UnboundedSender<Bytes>,
-        p3_p2_sender: UnboundedSender<Bytes>,
-        p1_p2_receiver: UnboundedReceiver<Bytes>,
-        p1_p3_receiver: UnboundedReceiver<Bytes>,
-        p2_p3_receiver: UnboundedReceiver<Bytes>,
-        p2_p1_receiver: UnboundedReceiver<Bytes>,
-        p3_p1_receiver: UnboundedReceiver<Bytes>,
-        p3_p2_receiver: UnboundedReceiver<Bytes>,
+        p1_p2_sender: Sender<Bytes>,
+        p1_p3_sender: Sender<Bytes>,
+        p2_p3_sender: Sender<Bytes>,
+        p2_p1_sender: Sender<Bytes>,
+        p3_p1_sender: Sender<Bytes>,
+        p3_p2_sender: Sender<Bytes>,
+        p1_p2_receiver: Receiver<Bytes>,
+        p1_p3_receiver: Receiver<Bytes>,
+        p2_p3_receiver: Receiver<Bytes>,
+        p2_p1_receiver: Receiver<Bytes>,
+        p3_p1_receiver: Receiver<Bytes>,
+        p3_p2_receiver: Receiver<Bytes>,
     }
 
     impl Default for Rep3TestNetwork {
@@ -46,12 +43,12 @@ mod rep3_tests {
     impl Rep3TestNetwork {
         pub fn new() -> Self {
             // AT Most 1 message is buffered before they are read so this should be fine
-            let p1_p2 = mpsc::unbounded_channel();
-            let p1_p3 = mpsc::unbounded_channel();
-            let p2_p3 = mpsc::unbounded_channel();
-            let p2_p1 = mpsc::unbounded_channel();
-            let p3_p1 = mpsc::unbounded_channel();
-            let p3_p2 = mpsc::unbounded_channel();
+            let p1_p2 = mpsc::channel();
+            let p1_p3 = mpsc::channel();
+            let p2_p3 = mpsc::channel();
+            let p2_p1 = mpsc::channel();
+            let p3_p1 = mpsc::channel();
+            let p3_p2 = mpsc::channel();
 
             Self {
                 p1_p2_sender: p1_p2.0,
@@ -104,10 +101,10 @@ mod rep3_tests {
     #[derive(Debug)]
     pub struct PartyTestNetwork {
         id: PartyID,
-        send_prev: UnboundedSender<Bytes>,
-        send_next: UnboundedSender<Bytes>,
-        recv_prev: UnboundedReceiver<Bytes>,
-        recv_next: UnboundedReceiver<Bytes>,
+        send_prev: Sender<Bytes>,
+        send_next: Sender<Bytes>,
+        recv_prev: Receiver<Bytes>,
+        recv_next: Receiver<Bytes>,
         _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
     }
 
@@ -139,10 +136,10 @@ mod rep3_tests {
 
         fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
             if self.id.next_id() == from {
-                let data = Vec::from(self.recv_next.blocking_recv().unwrap());
+                let data = Vec::from(self.recv_next.recv().unwrap());
                 Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
             } else if self.id.prev_id() == from {
-                let data = Vec::from(self.recv_prev.blocking_recv().unwrap());
+                let data = Vec::from(self.recv_prev.recv().unwrap());
                 Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
             } else {
                 panic!("You want to read from yourself?")
@@ -182,8 +179,8 @@ mod rep3_tests {
         }
     }
 
-    #[tokio::test]
-    async fn e2e_proof_poseidon_bn254() {
+    #[test]
+    fn e2e_proof_poseidon_bn254() {
         let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
         let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
         let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
@@ -202,29 +199,26 @@ mod rep3_tests {
         let [witness_share1, witness_share2, witness_share3] =
             SharedWitness::share_rep3(&witness, &public_inputs1, &mut rng);
         let test_network = Rep3TestNetwork::default();
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
-        for ((((net, tx), x), r1cs), pk) in test_network
+        let mut threads = vec![];
+        for (((net, x), r1cs), pk) in test_network
             .get_party_networks()
             .into_iter()
-            .zip([tx1, tx2, tx3])
             .zip([witness_share1, witness_share2, witness_share3].into_iter())
             .zip([r1cs1, r1cs2, r1cs3].into_iter())
             .zip([pk1, pk2, pk3].into_iter())
         {
-            thread::spawn(move || {
+            threads.push(thread::spawn(move || {
                 let rep3 = Rep3Protocol::<ark_bn254::Fr, PartyTestNetwork>::new(net).unwrap();
                 let mut prover = CollaborativeGroth16::<
                     Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
                 >::new(rep3);
-                tx.send(prover.prove(&pk, &r1cs, x).unwrap())
-            });
+                prover.prove(&pk, &r1cs, x).unwrap()
+            }));
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result3 = threads.pop().unwrap().join().unwrap();
+        let result2 = threads.pop().unwrap().join().unwrap();
+        let result1 = threads.pop().unwrap().join().unwrap();
         assert_eq!(result1, result2);
         assert_eq!(result2, result3);
         let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
@@ -234,8 +228,8 @@ mod rep3_tests {
         assert!(verified);
     }
 
-    #[tokio::test]
-    async fn e2e_proof_poseidon_bn254_with_zkey_matrices() {
+    #[test]
+    fn e2e_proof_poseidon_bn254_with_zkey_matrices() {
         let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
         let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
@@ -251,29 +245,26 @@ mod rep3_tests {
             &mut rng,
         );
         let test_network = Rep3TestNetwork::default();
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
-        for ((((net, tx), x), mat), pk) in test_network
+        let mut threads = vec![];
+        for (((net, x), mat), pk) in test_network
             .get_party_networks()
             .into_iter()
-            .zip([tx1, tx2, tx3])
             .zip([witness_share1, witness_share2, witness_share3].into_iter())
             .zip([matrices.clone(), matrices.clone(), matrices].into_iter())
             .zip([pk1, pk2, pk3].into_iter())
         {
-            thread::spawn(move || {
+            threads.push(thread::spawn(move || {
                 let rep3 = Rep3Protocol::<ark_bn254::Fr, PartyTestNetwork>::new(net).unwrap();
                 let mut prover = CollaborativeGroth16::<
                     Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
                 >::new(rep3);
-                tx.send(prover.prove_with_matrices(&pk, &mat, x).unwrap())
-            });
+                prover.prove_with_matrices(&pk, &mat, x).unwrap()
+            }));
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result3 = threads.pop().unwrap().join().unwrap();
+        let result2 = threads.pop().unwrap().join().unwrap();
+        let result1 = threads.pop().unwrap().join().unwrap();
         assert_eq!(result1, result2);
         assert_eq!(result2, result3);
         let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();

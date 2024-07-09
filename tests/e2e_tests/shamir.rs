@@ -15,17 +15,14 @@ mod shamir_tests {
     use itertools::izip;
     use mpc_core::protocols::shamir::{network::ShamirNetwork, ShamirProtocol};
     use rand::thread_rng;
+    use std::sync::mpsc::{self, Receiver, Sender};
     use std::{cmp::Ordering, collections::HashMap, fs::File, thread};
-    use tokio::sync::{
-        mpsc::{self, UnboundedReceiver, UnboundedSender},
-        oneshot,
-    };
 
     //todo remove me and put me in common test crate
     pub struct ShamirTestNetwork {
         num_parties: usize,
-        sender: HashMap<(usize, usize), UnboundedSender<Bytes>>,
-        receiver: HashMap<(usize, usize), UnboundedReceiver<Bytes>>,
+        sender: HashMap<(usize, usize), Sender<Bytes>>,
+        receiver: HashMap<(usize, usize), Receiver<Bytes>>,
     }
 
     impl ShamirTestNetwork {
@@ -39,7 +36,7 @@ mod shamir_tests {
                     if receiver_id >= sender_id {
                         receiver_id += 1;
                     }
-                    let (s, r) = mpsc::unbounded_channel();
+                    let (s, r) = mpsc::channel();
                     sender.insert((sender_id, receiver_id), s);
                     receiver.insert((sender_id, receiver_id), r);
                 }
@@ -89,8 +86,8 @@ mod shamir_tests {
     pub struct PartyTestNetwork {
         id: usize,
         num_parties: usize,
-        send: Vec<UnboundedSender<Bytes>>,
-        recv: Vec<UnboundedReceiver<Bytes>>,
+        send: Vec<Sender<Bytes>>,
+        recv: Vec<Receiver<Bytes>>,
     }
 
     impl ShamirNetwork for PartyTestNetwork {
@@ -143,7 +140,7 @@ mod shamir_tests {
                 // to get index for the Vec
                 from -= 1;
             }
-            let data = Vec::from(self.recv[from].blocking_recv().unwrap());
+            let data = Vec::from(self.recv[from].recv().unwrap());
             Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         }
 
@@ -172,7 +169,7 @@ mod shamir_tests {
                     res.push(data.to_owned());
                 }
 
-                let data = Vec::from(recv.blocking_recv().unwrap());
+                let data = Vec::from(recv.recv().unwrap());
                 res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
             }
             if self.id == self.num_parties - 1 {
@@ -222,7 +219,7 @@ mod shamir_tests {
                         continue;
                     }
                 }
-                let data = Vec::from(self.recv[other_id].blocking_recv().unwrap());
+                let data = Vec::from(self.recv[other_id].recv().unwrap());
                 res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
             }
 
@@ -230,7 +227,7 @@ mod shamir_tests {
         }
     }
 
-    async fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
+    fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
         let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
         let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
         let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
@@ -253,34 +250,23 @@ mod shamir_tests {
         );
 
         let test_network = ShamirTestNetwork::new(num_parties);
-        let mut tx = Vec::with_capacity(num_parties);
-        let mut rx = Vec::with_capacity(num_parties);
-        for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
-            tx.push(t);
-            rx.push(r);
-        }
+        let mut threads = vec![];
 
-        for (net, tx, x, r1cs, pk) in izip!(
-            test_network.get_party_networks(),
-            tx,
-            witness_share,
-            r1cs,
-            pk,
-        ) {
-            thread::spawn(move || {
+        for (net, x, r1cs, pk) in izip!(test_network.get_party_networks(), witness_share, r1cs, pk,)
+        {
+            threads.push(thread::spawn(move || {
                 let shamir =
                     ShamirProtocol::<ark_bn254::Fr, PartyTestNetwork>::new(threshold, net).unwrap();
                 let mut prover = CollaborativeGroth16::<
                     ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
                 >::new(shamir);
-                tx.send(prover.prove(&pk, &r1cs, x).unwrap())
-            });
+                prover.prove(&pk, &r1cs, x).unwrap()
+            }));
         }
         let mut results = Vec::with_capacity(num_parties);
-        for r in rx {
-            results.push(r.await.unwrap());
+        for r in threads {
+            results.push(r.join().unwrap());
         }
         let result1 = results.pop().unwrap();
         for r in results {
@@ -293,7 +279,7 @@ mod shamir_tests {
         assert!(verified);
     }
 
-    async fn e2e_poseidon_bn254_with_zkey_matrices_inner(num_parties: usize, threshold: usize) {
+    fn e2e_poseidon_bn254_with_zkey_matrices_inner(num_parties: usize, threshold: usize) {
         let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
         let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
@@ -312,29 +298,23 @@ mod shamir_tests {
         );
 
         let test_network = ShamirTestNetwork::new(num_parties);
-        let mut tx = Vec::with_capacity(num_parties);
-        let mut rx = Vec::with_capacity(num_parties);
-        for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
-            tx.push(t);
-            rx.push(r);
-        }
+        let mut threads = vec![];
 
-        for (net, tx, x, pk) in izip!(test_network.get_party_networks(), tx, witness_share, pk) {
+        for (net, x, pk) in izip!(test_network.get_party_networks(), witness_share, pk) {
             let matrices = matrices.clone();
-            thread::spawn(move || {
+            threads.push(thread::spawn(move || {
                 let shamir =
                     ShamirProtocol::<ark_bn254::Fr, PartyTestNetwork>::new(threshold, net).unwrap();
                 let mut prover = CollaborativeGroth16::<
                     ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>,
                     Bn254,
                 >::new(shamir);
-                tx.send(prover.prove_with_matrices(&pk, &matrices, x).unwrap())
-            });
+                prover.prove_with_matrices(&pk, &matrices, x).unwrap()
+            }));
         }
         let mut results = Vec::with_capacity(num_parties);
-        for r in rx {
-            results.push(r.await.unwrap());
+        for r in threads {
+            results.push(r.join().unwrap());
         }
         let result1 = results.pop().unwrap();
         for r in results {
@@ -348,15 +328,15 @@ mod shamir_tests {
         assert!(verified);
     }
 
-    #[tokio::test]
-    async fn e2e_poseidon_bn254() {
-        e2e_poseidon_bn254_inner(3, 1).await;
-        e2e_poseidon_bn254_inner(10, 4).await;
+    #[test]
+    fn e2e_poseidon_bn254() {
+        e2e_poseidon_bn254_inner(3, 1);
+        e2e_poseidon_bn254_inner(10, 4);
     }
 
-    #[tokio::test]
-    async fn e2e_poseidon_bn254_with_zkey_matrices() {
-        e2e_poseidon_bn254_with_zkey_matrices_inner(3, 1).await;
-        e2e_poseidon_bn254_with_zkey_matrices_inner(10, 4).await;
+    #[test]
+    fn e2e_poseidon_bn254_with_zkey_matrices() {
+        e2e_poseidon_bn254_with_zkey_matrices_inner(3, 1);
+        e2e_poseidon_bn254_with_zkey_matrices_inner(10, 4);
     }
 }

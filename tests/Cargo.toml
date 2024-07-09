@@ -16,7 +16,6 @@ circom-mpc-compiler = { version = "0.1.0", path = "../circom-mpc-compiler" }
 circom-types = { version = "0.1.0", path = "../circom-types" }
 itertools = { workspace = true }
 mpc-core = { version = "0.1.0", path = "../mpc-core" }
-tokio = { workspace = true }
 bytes = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
