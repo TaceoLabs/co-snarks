@@ -39,7 +39,7 @@ def add_entropy(name):
     print("Type your entropy> ", end="", flush=True)
     entropy = sys.stdin.readline().strip()
     print("Adding entropy (this can take some time)...")
-    return run_command(["snarkjs", "zkey", "contribute", f"{name}.0.zkey", f"{name}.1.zkey", "--name=\"1st Contributor Name\""], entropy)
+    return run_command(["snarkjs", "zkey", "contribute", f"{name}.0.zkey", f"{name}.zkey", "--name=\"1st Contributor Name\""], entropy)
 
 def cleanup(size, name):
     print("===============================")
