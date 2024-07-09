@@ -1,3 +1,4 @@
+//! A channel abstraction for sending and receiving messages.
 use futures::{Sink, SinkExt, Stream, StreamExt};
 use std::{collections::VecDeque, io, marker::Unpin, pin::Pin};
 use tokio::{
@@ -6,17 +7,21 @@ use tokio::{
 };
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
+/// A read end of the channel, just a type alias for [`FramedRead`].
 pub type ReadChannel<T, D> = FramedRead<T, D>;
+/// A write end of the channel, just a type alias for [`FramedWrite`].
 pub type WriteChannel<T, E> = FramedWrite<T, E>;
 
 const READ_BUFFER_SIZE: usize = 16;
 
+/// A channel that uses a [`Encoder`] and [`Decoder`] to send and receive messages.
 #[derive(Debug)]
 pub struct Channel<R, W, C> {
     read_conn: ReadChannel<R, C>,
     write_conn: WriteChannel<W, C>,
 }
 
+/// A channel that uses a [`LengthDelimitedCodec`] to send and receive messages.
 pub type BytesChannel<R, W> = Channel<R, W, LengthDelimitedCodec>;
 
 impl<R, W, C> Channel<R, W, C> {
@@ -38,6 +43,7 @@ impl<R, W, C> Channel<R, W, C> {
         (self.write_conn, self.read_conn)
     }
 
+    /// Closes the channel, flushing the write buffer and checking that there is no unread data.
     pub async fn close<MSend>(self) -> Result<(), io::Error>
     where
         C: Encoder<MSend, Error = std::io::Error> + Decoder<Error = std::io::Error>,
@@ -124,6 +130,7 @@ struct ReadJob<MRecv> {
     ret: oneshot::Sender<Result<MRecv, io::Error>>,
 }
 
+/// A handle to a channel that allows sending and receiving messages.
 #[derive(Debug)]
 pub struct ChannelHandle<MSend, MRecv> {
     write_job_queue: mpsc::Sender<WriteJob<MSend>>,
@@ -189,6 +196,7 @@ where
         buffer.push_back(read_result);
     }
 
+    /// Create a new [`ChannelHandle`] from a [`Channel`]. This spawns a new tokio task that handles the read and write jobs so they can happen concurrently.
     pub fn manage<R, W, C>(chan: Channel<R, W, C>) -> ChannelHandle<MSend, MRecv>
     where
         C: 'static,
@@ -244,6 +252,7 @@ where
         }
     }
 
+    /// Instructs the channel to send a message. Returns a [oneshot::Receiver] that will return the result of the send operation.
     pub async fn send(&mut self, data: MSend) -> oneshot::Receiver<Result<(), io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = WriteJob { data, ret };
@@ -261,6 +270,7 @@ where
         recv
     }
 
+    /// Instructs the channel to receive a message. Returns a [oneshot::Receiver] that will return the result of the receive operation.
     pub async fn recv(&mut self) -> oneshot::Receiver<Result<MRecv, io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = ReadJob { ret };
@@ -277,6 +287,8 @@ where
         }
         recv
     }
+
+    /// A blocking version of [ChannelHandle::send]. This will block until the send operation is complete.
     pub fn blocking_send(&mut self, data: MSend) -> oneshot::Receiver<Result<(), io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = WriteJob { data, ret };
@@ -294,6 +306,7 @@ where
         recv
     }
 
+    /// A blocking version of [ChannelHandle::recv]. This will block until the receive operation is complete.
     pub fn blocking_recv(&mut self) -> oneshot::Receiver<Result<MRecv, io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = ReadJob { ret };
