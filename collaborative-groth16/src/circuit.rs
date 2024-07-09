@@ -24,6 +24,7 @@
 //IN CONNECTION WITH THE SOFTWARE O THE USE OR OTHER
 //DEALINGS IN THE SOFTWARE.R
 
+//! Utilities for working with circuits in the R1CS format.
 //! Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/circom/circuit.rs>
 
 use ark_ec::pairing::Pairing;
@@ -33,15 +34,18 @@ use ark_relations::r1cs::{
 use circom_types::{groth16::witness::Witness, r1cs::R1CS};
 use num_traits::identities::One;
 
+/// An R1CS circuit with an associated witness.
 pub struct Circuit<P: Pairing> {
     r1cs: R1CS<P>,
     witness: Witness<P::ScalarField>,
 }
 impl<P: Pairing> Circuit<P> {
+    /// Create a [Circuit] from a [R1CS] and a [Witness].
     pub fn new(r1cs: R1CS<P>, witness: Witness<P::ScalarField>) -> Self {
         Self { r1cs, witness }
     }
 
+    /// Get the public inputs of the circuit.
     pub fn public_inputs(&self) -> Vec<P::ScalarField> {
         //self.r1cs.wire_mapping[1..self.r1cs.num_inputs]
         //    .iter()
@@ -50,6 +54,7 @@ impl<P: Pairing> Circuit<P> {
         self.witness.values[1..self.r1cs.num_inputs].to_vec()
     }
 
+    /// Get the secret witnesses of the circuit.
     pub fn witnesses(&self) -> Vec<P::ScalarField> {
         //       self.r1cs.wire_mapping[self.r1cs.num_inputs..]
         //           .iter()
@@ -58,6 +63,7 @@ impl<P: Pairing> Circuit<P> {
         self.witness.values[self.r1cs.num_inputs..].to_vec()
     }
 
+    /// Get the wire mapping of the circuit.
     pub fn get_wire_mapping(&self) -> (Vec<P::ScalarField>, Vec<P::ScalarField>) {
         let mut public_inputs = Vec::with_capacity(self.r1cs.num_inputs + 1);
         public_inputs.push(P::ScalarField::one());
