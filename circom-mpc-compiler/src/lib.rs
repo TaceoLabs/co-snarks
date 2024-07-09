@@ -1,3 +1,39 @@
+#![warn(missing_docs)]
+//! This crate defines a [`Compiler`](CollaborativeCircomCompiler), which compiles `.circom` files into proprietary bytecode for the [`circom MPC-VM`](circom_mpc_vm).
+//!
+//! The MPC-VM then executes the bytecode and performs the [witness extension](https://docs.circom.io/getting-started/computing-the-witness/) in MPC (Multiparty Computation). This crate provides a [`CompilerBuilder`] for convenient construction of the [`CollaborativeCircomCompiler`].
+//!
+//! The compiler and the VM are generic over a [`Pairing`](https://docs.rs/ark-ec/latest/ark_ec/pairing/trait.Pairing.html). Currently, we support the curves `bn254` and `bls12-381`.
+//!
+//! # Examples
+//!
+//! To instantiate the [`CollaborativeCircomCompiler`], first create a [`CompilerBuilder`]. In this example, we use the curve `bn254` and link external libraries such as those
+//!  from [`circomlib`](https://github.com/iden3/circomlib/).
+//!
+//! Finally, we build the compiler and parse the circuit:
+//!
+//! ```
+//! # use circom_mpc_compiler::CompilerBuilder;
+//! # use ark_bn254::Bn254;
+//! # let circuit_file = "".to_owned();
+//!
+//! let link_library = vec!["link/to/lib/"];
+//! // Instantiate the compiler with the circuit file
+//! let mut builder = CompilerBuilder::<Bn254>::new(circuit_file);
+//!
+//! // Link external circom libraries
+//! for lib in link_library {
+//!     builder = builder.link_library(lib);
+//! }
+//!
+//! // Build the compiler and parse
+//! let parsed_circom_circuit = builder
+//!     .build()
+//!     .parse();
+//! ```
+//!
+//! The [`parse()`](CollaborativeCircomCompiler::parse) method consumes the compiler and returns an instance of [`CollaborativeCircomCompilerParsed`].
+//! Refer to its documentation to learn how to create an MPC-VM for the witness extension.
 use ark_ec::pairing::Pairing;
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags},
@@ -24,12 +60,42 @@ use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 const DEFAULT_VERSION: &str = "2.0.0";
 
+/// A builder to create a [`CollaborativeCircomCompiler`].
+///
+/// This builder allows configuring the compiler with options such as linking external libraries.
+/// For future releases, additional flags defined by [circom](https://docs.circom.io/getting-started/compilation-options/)
+/// will be supported.
+///
+/// # Examples
+///
+/// ```
+/// # use circom_mpc_compiler::CompilerBuilder;
+/// # use ark_bn254::Bn254;
+/// # let circuit_file = "".to_owned();
+///
+/// let link_library = vec!["link/to/lib/"];
+/// // Create a new compiler builder for the Bn254 curve
+/// let mut builder = CompilerBuilder::<Bn254>::new(circuit_file);
+///
+/// // Link external circom libraries
+/// for lib in link_library {
+///     builder = builder.link_library(lib);
+/// }
+///
+/// // Build the compiler
+/// let compiler = builder.build();
+/// ```
+
 pub struct CompilerBuilder<P: Pairing> {
     file: String,
     version: String,
     link_libraries: Vec<PathBuf>,
     phantom_data: PhantomData<P>,
 }
+
+/// The constructed compiler.
+///
+/// See [`CompilerBuilder`] on how to create the compiler.
 pub struct CollaborativeCircomCompiler<P: Pairing> {
     file: String,
     version: String,
@@ -41,6 +107,13 @@ pub struct CollaborativeCircomCompiler<P: Pairing> {
 }
 
 impl<P: Pairing> CompilerBuilder<P> {
+    /// Creates a new instance of the [`CompilerBuilder`].
+    ///
+    /// Initializes the builder with no linked libraries and defaults to using circom version "2.0.0".
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - The path to the circom file.
     pub fn new(file: String) -> Self {
         Self {
             file,
@@ -50,6 +123,27 @@ impl<P: Pairing> CompilerBuilder<P> {
         }
     }
 
+    /// Adds a folder to link during compilation. Call this method multiple times to add multiple folders.
+    ///
+    /// # Arguments
+    ///
+    /// * `link_library` - Something that implements `From<PathBuf>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::path::PathBuf;
+    /// # use circom_mpc_compiler::CompilerBuilder;
+    /// # use ark_bn254::Bn254;
+    ///
+    /// let mut builder = CompilerBuilder::<Bn254>::new("/path/to/your/circom/file.circom".to_owned());
+    ///
+    /// // Add multiple libraries to link during compilation
+    /// builder = builder.link_library(PathBuf::from("/path/to/library1"));
+    /// builder = builder.link_library(PathBuf::from("/path/to/library2"));
+    ///
+    /// // Continue building the compiler...
+    /// ```
     pub fn link_library<S>(mut self, link_library: S) -> Self
     where
         PathBuf: From<S>,
@@ -58,6 +152,7 @@ impl<P: Pairing> CompilerBuilder<P> {
         self
     }
 
+    /// Consumes the builder and creates a new [CollaborativeCircomCompiler].
     pub fn build(self) -> CollaborativeCircomCompiler<P> {
         CollaborativeCircomCompiler {
             file: self.file,
@@ -492,11 +587,31 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         }
     }
 
+    /// Consumes the [`CollaborativeCircomCompiler`] and returns a `Result<Vec<String>>`
+    /// containing all public inputs from the provided .circom file.
+    ///
+    /// This method is useful when secret-sharing the input.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` where:
+    ///
+    /// - `Ok(inputs)` contains a vector of public inputs as strings.
+    /// - `Err(err)` indicates an error occurred during parsing or compilation.
     pub fn get_public_inputs(self) -> Result<Vec<String>> {
         let program_archive = self.get_program_archive()?;
         Ok(program_archive.public_inputs)
     }
 
+    /// Consumes the [`CollaborativeCircomCompiler`] and returns a `Result` of [`CollaborativeCircomCompilerParsed`].
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` where:
+    ///
+    /// - `Ok(parsed)` contains the parsed compiler, which can be used to construct the MPC-VM.
+    ///   Refer to its [documentation](CollaborativeCircomCompilerParsed) for usage details.
+    /// - `Err(err)` indicates an error occurred during parsing or compilation.
     pub fn parse(mut self) -> Result<CollaborativeCircomCompilerParsed<P>> {
         let program_archive = self.get_program_archive()?;
         let circuit = self.build_circuit(program_archive)?;
