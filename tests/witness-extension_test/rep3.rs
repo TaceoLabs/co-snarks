@@ -282,7 +282,10 @@ mod rep3_tests {
                             .unwrap()
                             .to_rep3_vm_with_network(net)
                             .unwrap();
-                        witness_extension.run_with_flat(input, 0).unwrap()
+                        witness_extension
+                            .run_with_flat(input, 0)
+                            .unwrap()
+                            .into_shared_witness()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();
