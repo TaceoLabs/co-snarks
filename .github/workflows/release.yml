@@ -11,7 +11,7 @@ on:
 jobs:
   upload-assets:
     if: startsWith(github.event.release.tag_name, 'collaborative-circom-v')
-    runs-on: [arc-runner-set]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
