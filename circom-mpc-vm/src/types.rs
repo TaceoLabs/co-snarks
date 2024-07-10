@@ -118,15 +118,7 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         self,
         network_config: NetworkConfig,
     ) -> Result<Rep3WitnessExtension<P, Rep3MpcNet>> {
-        self.to_rep3_vm_with_accelerator(network_config, MpcAccelerator::full_mpc_accelerator())
-    }
-
-    pub fn to_rep3_vm_with_accelerator(
-        self,
-        network_config: NetworkConfig,
-        mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, Rep3MpcNet>>,
-    ) -> Result<Rep3WitnessExtension<P, Rep3MpcNet>> {
-        Rep3WitnessExtension::new(self, network_config, mpc_accelerator)
+        Rep3WitnessExtension::new(self, network_config, MpcAccelerator::full_mpc_accelerator())
     }
 
     pub fn to_rep3_vm_with_network<N: Rep3Network>(
@@ -134,13 +126,5 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         network: N,
     ) -> Result<Rep3WitnessExtension<P, N>> {
         Rep3WitnessExtension::from_network(self, network, MpcAccelerator::full_mpc_accelerator())
-    }
-
-    pub fn to_rep3_vm_with_network_with_accelerator<N: Rep3Network>(
-        self,
-        network: N,
-        mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, N>>,
-    ) -> Result<Rep3WitnessExtension<P, N>> {
-        Rep3WitnessExtension::from_network(self, network, mpc_accelerator)
     }
 }
