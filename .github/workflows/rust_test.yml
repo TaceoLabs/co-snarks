@@ -24,6 +24,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - run: sudo apt-get install lld
       - name: Test with default features
         run: cargo test --workspace --profile ci-dev
       # - name: Test with all features
