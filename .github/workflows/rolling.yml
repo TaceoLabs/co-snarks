@@ -17,7 +17,7 @@ on:
 jobs:
   # https://twitter.com/mycoliza/status/1571295690063753218
   nightly-test:
-    runs-on: [arc-runner-set]
+    runs-on: ubuntu-latest
     name: Nightly tests
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
         run: cargo test --locked --all-features --all-targets
   # https://twitter.com/alcuadrado/status/1571291687837732873
   update:
-    runs-on: [arc-runner-set]
+    runs-on: ubuntu-latest
     name: ubuntu / beta / updated
     # There's no point running this if no Cargo.lock was checked in in the
     # first place, since we'd just redo what happened in the regular test job.
@@ -55,7 +55,7 @@ jobs:
           RUSTFLAGS: -D deprecated
   nightly-lints:
     name: Nightly lints
-    runs-on: [arc-runner-set]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master

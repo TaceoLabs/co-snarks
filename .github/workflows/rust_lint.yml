@@ -17,7 +17,7 @@ env:
 jobs:
   lint:
     name: Lint
-    runs-on: [arc-runner-set]
+    runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: "-D warnings"
     steps:
