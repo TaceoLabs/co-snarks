@@ -308,6 +308,11 @@ impl<F: PrimeField> Rep3VmType<F> {
                 let eq = party.sub(&a, &b);
                 is_zero(party, eq)
             }
+            (Rep3VmType::BitShared(a), Rep3VmType::BitShared(b)) => {
+                let eq = &a ^ &b;
+                let eq = party.is_zero(eq)?;
+                Ok(Rep3VmType::Shared(party.bit_inject(eq)?))
+            }
             (_, _) => todo!("Shared EQ not implemented"),
         }
     }
@@ -791,8 +796,7 @@ fn bit_and_public<N: Rep3Network, F: PrimeField>(
         a: bit_shares.a & &b_bits,
         b: bit_shares.b & b_bits,
     };
-    let res = party.b2a(bit_share)?;
-    Ok(Rep3VmType::Shared(res))
+    Ok(Rep3VmType::BitShared(bit_share))
 }
 
 fn bit_xor_public<N: Rep3Network, F: PrimeField>(
@@ -825,8 +829,7 @@ fn bit_or_public<N: Rep3Network, F: PrimeField>(
     bit_shares &= &b_bits;
     bit_shares ^= &xor;
 
-    let res = party.b2a(bit_shares)?;
-    Ok(Rep3VmType::Shared(res))
+    Ok(Rep3VmType::BitShared(bit_shares))
 }
 
 fn eq_public<N: Rep3Network, F: PrimeField>(
