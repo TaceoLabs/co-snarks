@@ -363,7 +363,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         continue;
                     }
                 }
-                op_codes::MpcOpCode::CreateCmp(symbol, amount, _has_inputs) => {
+                op_codes::MpcOpCode::CreateCmp(symbol, amount) => {
                     let new_components = {
                         let offset_jump = self.pop_index();
                         let relative_offset = self.pop_index();

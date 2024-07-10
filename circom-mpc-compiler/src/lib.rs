@@ -396,7 +396,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         self.emit_opcode(MpcOpCode::CreateCmp(
             create_cmp_bucket.symbol.clone(),
             create_cmp_bucket.number_of_cmp,
-            create_cmp_bucket.has_inputs,
         ));
     }
 
