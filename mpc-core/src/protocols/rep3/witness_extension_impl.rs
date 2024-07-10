@@ -725,7 +725,10 @@ impl<F: PrimeField, N: Rep3Network> CircomWitnessExtensionProtocol<F> for Rep3Pr
                 let neg_a = self.neg(&a);
                 Ok(Rep3VmType::Shared(self.add_with_public(&F::one(), &neg_a)))
             }
-            Rep3VmType::BitShared(_) => todo!("BitShared not yet implemented"),
+            Rep3VmType::BitShared(a) => {
+                let neg_a = a.xor_with_public(&BigUint::one(), self.network.get_id());
+                Ok(Rep3VmType::BitShared(neg_a))
+            }
         }
     }
 
