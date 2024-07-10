@@ -33,6 +33,20 @@ cargo build --release
 
 You can find the `co-circom` binary under `target/release/`.
 
-## Download the Binary
+## Download Binary from Release
 
-TODO
+1. You can find the latest release
+   [here](https://github.com/TaceoLabs/collaborative-circom/releases/latest).
+2. Download the binary for your operating system.
+
+3. Extract the binary from the archive
+
+    ```bash
+    tar xf co-circom-YOUR_ARCHITECTURE.tar.gz
+    ```
+
+4. Make the binary executable (if necessary):
+
+    ```bash
+    chmod +x co-circom
+    ```
