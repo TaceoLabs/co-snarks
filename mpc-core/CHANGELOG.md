@@ -1,5 +1,7 @@
 # Changelog
 
+
+
 ## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-core-v0.1.0...mpc-core-v0.2.0) (2024-07-09)
 
 

@@ -1,6 +1,6 @@
 [package]
 name = "tests"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 publish = false
 license = "GPL-3.0" # due to circom-mpc-compiler dep
@@ -11,11 +11,11 @@ ark-groth16 = { workspace = true }
 ark-ec = { workspace = true }
 ark-serialize = { workspace = true }
 ark-ff = { workspace = true }
-collaborative-groth16 = { version = "0.2.0", path = "../collaborative-groth16" }
-circom-mpc-compiler = { version = "0.2.0", path = "../circom-mpc-compiler" }
-circom-types = { version = "0.2.0", path = "../circom-types" }
+collaborative-groth16 = { version = "0.2.1", path = "../collaborative-groth16" }
+circom-mpc-compiler = { version = "0.3.0", path = "../circom-mpc-compiler" }
+circom-types = { version = "0.3.0", path = "../circom-types" }
 itertools = { workspace = true }
-mpc-core = { version = "0.2.0", path = "../mpc-core" }
+mpc-core = { version = "0.2.1", path = "../mpc-core" }
 bytes = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }

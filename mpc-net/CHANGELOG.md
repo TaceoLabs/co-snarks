@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-net-v0.1.1...mpc-net-v0.1.2) (2024-07-10)
+
+
+### Bug Fixes
+
+* better handling of ipv4 and ipv6 in networking ([#119](https://github.com/TaceoLabs/collaborative-circom/issues/119)) ([090227d](https://github.com/TaceoLabs/collaborative-circom/commit/090227d372215e9459c06777064b04ec4865bdb6))
+
 ## [0.1.1](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-net-v0.1.0...mpc-net-v0.1.1) (2024-07-09)
 
 

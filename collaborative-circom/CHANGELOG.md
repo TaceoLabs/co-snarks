@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.1](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-circom-v0.2.0...collaborative-circom-v0.2.1) (2024-07-10)
+
+
+### Bug Fixes
+
+* better handling of ipv4 and ipv6 in networking ([#119](https://github.com/TaceoLabs/collaborative-circom/issues/119)) ([090227d](https://github.com/TaceoLabs/collaborative-circom/commit/090227d372215e9459c06777064b04ec4865bdb6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.2.0 to 0.3.0
+    * circom-mpc-compiler bumped from 0.2.0 to 0.3.0
+    * collaborative-groth16 bumped from 0.2.0 to 0.2.1
+    * mpc-core bumped from 0.2.0 to 0.2.1
+
 ## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-circom-v0.1.2...collaborative-circom-v0.2.0) (2024-07-09)
 
 

@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-compiler-v0.2.0...circom-mpc-compiler-v0.3.0) (2024-07-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* has_inputs element for CreateCmp opcode
+
+### Code Refactoring
+
+* has_inputs element for CreateCmp opcode ([3c88182](https://github.com/TaceoLabs/collaborative-circom/commit/3c8818205e60b765ffa70b0ddc59c939569209e6))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-vm bumped from 0.1.1 to 0.2.0
+  * dev-dependencies
+    * circom-types bumped from 0.2.0 to 0.3.0
+    * collaborative-groth16 bumped from 0.2.0 to 0.2.1
+    * mpc-core bumped from 0.2.0 to 0.2.1
+
 ## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-compiler-v0.1.0...circom-mpc-compiler-v0.2.0) (2024-07-09)
 
 
