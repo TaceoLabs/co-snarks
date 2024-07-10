@@ -1,3 +1,5 @@
+//! This module defines the [`Witness`] struct that implements deserialization of circom witness files via [`Witness::from_reader`].
+
 use std::io;
 
 use ark_serialize::{Read, SerializationError};
@@ -14,28 +16,38 @@ const WITNESS_HEADER: &str = "wtns";
 const MAX_VERSION: u32 = 2;
 const N_SECTIONS: u32 = 2;
 
+/// Error type describing errors during parsing witness files
 #[derive(Debug, Error)]
 pub enum WitnessParserError {
+    /// Error during IO operations (reading/opening file, etc.)
     #[error(transparent)]
     IoError(#[from] io::Error),
+    /// Error during serialization
     #[error(transparent)]
     SerializationError(#[from] SerializationError),
+    /// Error describing that the version of the file is not supported for parsing
     #[error("Max supported version is {0}, but got {1}")]
     VersionNotSupported(u32, u32),
+    /// Error describing that the number of sections in the file is invalid
     #[error("Wrong number of sections is {0}, but got {1}")]
     InvalidSectionNumber(u32, u32),
+    /// Error describing that the ScalarField from curve does not match in witness file
     #[error("ScalarField from curve does not match in witness file")]
     WrongScalarField,
+    /// Error during reading circom file header
     #[error(transparent)]
     WrongHeader(#[from] InvalidHeaderError),
 }
 
+/// Represents a witness in the format defined by circom. Implements [`Witness::from_reader`] to deserialize a witness from a reader.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Witness<F> {
+    /// The values of the witness as [`CircomArkworksPrimeFieldBridge`] elements
     pub values: Vec<F>,
 }
 
 impl<F: CircomArkworksPrimeFieldBridge> Witness<F> {
+    /// Deserializes a [`Witness`] from a reader.
     pub fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
         reader_utils::read_header(&mut reader, WITNESS_HEADER)?;
         let version = reader.read_u32::<LittleEndian>()?;

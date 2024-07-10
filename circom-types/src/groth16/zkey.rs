@@ -24,34 +24,8 @@
 //IN CONNECTION WITH THE SOFTWARE O THE USE OR OTHER
 //DEALINGS IN THE SOFTWARE.R
 
-//!Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/zkey.rs>
-//! ZKey Parsing
-//!
-//! Each ZKey file is broken into sections:
-//!  Header(1)
-//!       Prover Type 1 Groth
-//!  HeaderGroth(2)
-//!       n8q
-//!       q
-//!       n8r
-//!       r
-//!       NVars
-//!       NPub
-//!       DomainSize  (multiple of 2
-//!       alpha1
-//!       beta1
-//!       delta1
-//!       beta2
-//!       gamma2
-//!       delta2
-//!  IC(3)
-//!  Coefs(4)
-//!  PointsA(5)
-//!  PointsB1(6)
-//!  PointsB2(7)
-//!  PointsC(8)
-//!  PointsH(9)
-//!  Contributions(10)
+//! This module defines the [`ZKey`] struct that implements deserialization of circom zkey files via [`ZKey::from_reader`].
+//! Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/zkey.rs>
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_relations::r1cs::{ConstraintMatrices, Matrix};
@@ -73,12 +47,16 @@ use crate::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge}
 use crate::reader_utils;
 type OurResult<T> = std::result::Result<T, ZKeyParserError>;
 
+/// Error type describing errors during parsing zkey files
 #[derive(Debug, Error)]
 pub enum ZKeyParserError {
+    /// Error during serialization
     #[error(transparent)]
     SerializationError(#[from] SerializationError),
+    /// Error describing that an invalid modulus was found in the header for the chosen curve
     #[error("invalid modulus found in header for chosen curve")]
     InvalidGroth16Header,
+    /// Error during IO operations (reading/opening file, etc.)
     #[error(transparent)]
     IoError(#[from] std::io::Error),
 }
@@ -90,6 +68,7 @@ struct Section {
     size: usize,
 }
 
+/// Represents a zkey in the format defined by circom. Implements [`ZKey::from_reader`] to deserialize a zkey from a reader.
 #[derive(Clone)]
 pub struct ZKey<P: Pairing> {
     pk: ProvingKey<P>,
@@ -97,12 +76,12 @@ pub struct ZKey<P: Pairing> {
 }
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
-pub struct OurMatrix<F: CanonicalSerialize + CanonicalDeserialize> {
+pub(crate) struct OurMatrix<F: CanonicalSerialize + CanonicalDeserialize> {
     inner: Vec<Vec<(F, usize)>>,
 }
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
-pub struct OurConstraintMatrices<F: PrimeField> {
+pub(crate) struct OurConstraintMatrices<F: PrimeField> {
     /// The number of variables that are "public instances" to the constraint
     /// system.
     pub num_instance_variables: usize,
@@ -130,7 +109,7 @@ pub struct OurConstraintMatrices<F: PrimeField> {
 }
 
 #[derive(Debug, CanonicalSerialize, CanonicalDeserialize)]
-pub struct OurZKey<P: Pairing> {
+pub(crate) struct OurZKey<P: Pairing> {
     pk: ProvingKey<P>,
     matrices: OurConstraintMatrices<P::ScalarField>,
 }
@@ -190,6 +169,7 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    /// Deserializes a [`ZKey`] from a reader.
     pub fn from_reader<R: Read + Seek>(mut reader: R) -> OurResult<Self> {
         let mut binfile = BinFile::<_, P>::new(&mut reader)?;
         let pk = binfile.proving_key()?;
@@ -197,12 +177,9 @@ where
         Ok(Self { pk, matrices })
     }
 
+    /// Splits the zkey into its [`ProvingKey`] and [`ConstraintMatrices`] components
     pub fn split(self) -> (ProvingKey<P>, ConstraintMatrices<P::ScalarField>) {
         (self.pk, self.matrices)
-    }
-
-    pub fn to_our_zkey(self) -> OurZKey<P> {
-        OurZKey::from(self)
     }
 }
 
@@ -386,7 +363,7 @@ where
 }
 
 #[derive(Default, Clone, Debug)]
-pub struct ZVerifyingKey<P: Pairing> {
+pub(crate) struct ZVerifyingKey<P: Pairing> {
     alpha_g1: P::G1Affine,
     beta_g1: P::G1Affine,
     beta_g2: P::G2Affine,

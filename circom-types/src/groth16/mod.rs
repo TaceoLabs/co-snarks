@@ -1,3 +1,4 @@
+//! This module defines types related to Groth16 used in circom and utilities to read these types from files.
 pub mod proof;
 pub mod public_input;
 pub mod verification_key;

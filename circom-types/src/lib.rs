@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+//! This crate defines types used in circom and utilities to read these types from files.
 pub mod groth16;
 pub mod r1cs;
 pub mod traits;
@@ -12,12 +14,16 @@ pub(crate) mod reader_utils {
 
     use crate::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 
+    /// Error type describing errors during reading circom file headers
     #[derive(Debug, Error)]
     pub enum InvalidHeaderError {
+        /// Error during IO operations (reading/opening file, etc.)
         #[error(transparent)]
         IoError(#[from] std::io::Error),
+        /// File header is not valid UTF-8
         #[error(transparent)]
         Utf8Error(#[from] Utf8Error),
+        /// File header does not match the expected header
         #[error("Wrong header. Expected {0} but got {1}")]
         WrongHeader(String, String),
     }

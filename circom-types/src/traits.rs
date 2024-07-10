@@ -1,3 +1,4 @@
+//! This module contains traits for serializing and deserializing field elements and curve points into and from circom files to arkworks representation.
 use std::io::Read;
 use std::marker::PhantomData;
 
@@ -83,7 +84,7 @@ mod $mod_name {
             const G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize = $field_size * 2 * 2;
             const GT_SERIALIZED_BYTE_SIZE_COMPRESSED: usize = 0;
             const GT_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize = 0;
-            //Circom deserializes its field elements in montgomery form
+            //Circom serializes its field elements in montgomery form
             //therefore we use Fq::from_reader_unchecked
             fn g1_from_reader(mut reader: impl Read) -> IoResult<Self::G1Affine> {
                 let mut buf = [0u8; Self::G1_SERIALIZED_BYTE_SIZE_UNCOMPRESSED];
@@ -137,10 +138,6 @@ mod $mod_name {
                     return Err(SerializationError::InvalidData);
                 }
                 Ok(p)
-            }
-
-            fn gt_from_reader(_reader: impl Read) -> IoResult<Self::G2Affine> {
-                todo!()
             }
 
             fn g1_from_strings_projective(x: &str, y: &str, z: &str) -> IoResult<Self::G1Affine> {
@@ -457,21 +454,31 @@ where
     }
 }
 
+/// Bridge trait to serialize and deserialize pairings contained in circom files into and from [`ark_ec::pairing::Pairing`] representation
 pub trait CircomArkworksPairingBridge: Pairing
 where
     Self::BaseField: CircomArkworksPrimeFieldBridge,
     Self::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    /// Size of compressed element of G1 in bytes
     const G1_SERIALIZED_BYTE_SIZE_COMPRESSED: usize;
+    /// Size of uncompressed element of G1 in bytes
     const G1_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize;
+    /// Size of compressed element of G2 in bytes
     const G2_SERIALIZED_BYTE_SIZE_COMPRESSED: usize;
+    /// Size of uncompressed element of G2 in bytes
     const G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize;
+    /// Size of compressed element of Gt in bytes
     const GT_SERIALIZED_BYTE_SIZE_COMPRESSED: usize;
+    /// Size of uncompressed element of Gt in bytes
     const GT_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize;
+    /// Deserializes element of G1 from reader where the element is already in montgomery form (no montgomery reduction performed)
     fn g1_from_reader(reader: impl Read) -> IoResult<Self::G1Affine>;
+    /// Deserializes element of G2 from reader where the element is already in montgomery form (no montgomery reduction performed)
     fn g2_from_reader(reader: impl Read) -> IoResult<Self::G2Affine>;
-    fn gt_from_reader(reader: impl Read) -> IoResult<Self::G2Affine>;
+    /// Deserializes element of G1 from strings representing projective coordinates
     fn g1_from_strings_projective(x: &str, y: &str, z: &str) -> IoResult<Self::G1Affine>;
+    /// Deserializes element of G2 from strings representing projective coordinates
     fn g2_from_strings_projective(
         x0: &str,
         x1: &str,
@@ -480,23 +487,25 @@ where
         z0: &str,
         z1: &str,
     ) -> IoResult<Self::G2Affine>;
-
+    /// Deserializes element of G1 using deserializer
     fn deserialize_g1_element<'de, D>(deserializer: D) -> Result<Self::G1Affine, D::Error>
     where
         D: de::Deserializer<'de>,
     {
         deserializer.deserialize_seq(G1Visitor::<Self>::new())
     }
+    /// Deserializes element of G2 using deserializer
     fn deserialize_g2_element<'de, D>(deserializer: D) -> Result<Self::G2Affine, D::Error>
     where
         D: de::Deserializer<'de>,
     {
         deserializer.deserialize_seq(G2Visitor::<Self>::new())
     }
+    /// Deserializes element of Gt using deserializer
     fn deserialize_gt_element<'de, D>(deserializer: D) -> Result<Self::TargetField, D::Error>
     where
         D: de::Deserializer<'de>;
-
+    /// Serializes element of G1 using serializer
     fn serialize_g1<S: Serializer>(p: &Self::G1Affine, ser: S) -> Result<S::Ok, S::Error> {
         let strings = Self::g1_to_strings_projective(p);
         let mut seq = ser.serialize_seq(Some(strings.len())).unwrap();
@@ -505,12 +514,17 @@ where
         }
         seq.end()
     }
+    /// Serializes element of G1 into a vec of strings
     fn g1_to_strings_projective(p: &Self::G1Affine) -> Vec<String>;
+    /// Serializes element of G2 using serializer
     fn serialize_g2<S: Serializer>(p: &Self::G2Affine, ser: S) -> Result<S::Ok, S::Error>;
+    /// Serializes element of Gt using serializer
     fn serialize_gt<S: Serializer>(p: &Self::TargetField, ser: S) -> Result<S::Ok, S::Error>;
 }
 
+/// Bridge trait to deserialize field elements contained in circom files into [`ark_ff::PrimeField`] representation
 pub trait CircomArkworksPrimeFieldBridge: PrimeField {
+    /// Size of serialized field element in bytes
     const SERIALIZED_BYTE_SIZE: usize;
     /// Deserializes field elements and performs montgomery reduction
     fn from_reader(reader: impl Read) -> IoResult<Self>;
