@@ -136,7 +136,7 @@ pub fn generate_witness_rep3<P: Pairing>(
     let result_witness_share = rep3_vm
         .run(input_share)
         .context("while running witness generation")?;
-    Ok(result_witness_share)
+    Ok(result_witness_share.into_shared_witness())
 }
 
 /// Invoke the MPC proof generation process. It will return a [Proof] if successful.

@@ -76,6 +76,12 @@ impl FunDecl {
     }
 }
 
+/// A type that stores the name of an output signal and maps it to
+/// the respective offset in the witness.
+///
+/// String -> (offset, size)
+pub type OutputMapping = HashMap<String, (usize, usize)>;
+
 pub(crate) type InputList = Vec<(String, usize, usize)>;
 
 /// The state of the compiler after it parsed the circom file.
@@ -93,6 +99,7 @@ pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
     pub(crate) main_inputs: usize,
     pub(crate) main_outputs: usize,
     pub(crate) main_input_list: InputList,
+    pub(crate) output_mapping: OutputMapping,
 }
 
 impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
@@ -110,6 +117,7 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         main_inputs: usize,
         main_outputs: usize,
         main_input_list: InputList,
+        output_mapping: OutputMapping,
     ) -> Self {
         Self {
             main,
@@ -122,6 +130,7 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
             main_inputs,
             main_outputs,
             main_input_list,
+            output_mapping,
         }
     }
 }

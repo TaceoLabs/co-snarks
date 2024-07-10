@@ -36,7 +36,7 @@
 //! Refer to its documentation to learn how to create an MPC-VM for the witness extension.
 use ark_ec::pairing::Pairing;
 use circom_compiler::{
-    compiler_interface::{Circuit as CircomCircuit, CompilationFlags},
+    compiler_interface::{Circuit as CircomCircuit, CompilationFlags, VCP},
     intermediate_representation::{
         ir_interface::{
             AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket, CreateCmpBucket,
@@ -49,9 +49,11 @@ use circom_compiler::{
 use circom_constraint_generation::BuildConfig;
 use circom_mpc_vm::{
     op_codes::{CodeBlock, MpcOpCode},
-    types::{CollaborativeCircomCompilerParsed, FunDecl, TemplateDecl},
+    types::{CollaborativeCircomCompilerParsed, FunDecl, OutputMapping, TemplateDecl},
 };
-use circom_program_structure::{error_definition::Report, program_archive::ProgramArchive};
+use circom_program_structure::{
+    ast::SignalType, error_definition::Report, program_archive::ProgramArchive,
+};
 use circom_type_analysis::check_types;
 use eyre::eyre;
 use eyre::{bail, Result};
@@ -193,7 +195,22 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         }
     }
 
-    fn build_circuit(&self, program_archive: ProgramArchive) -> Result<CircomCircuit> {
+    fn get_output_mapping(&self, vcp: &VCP) -> OutputMapping {
+        let mut output_mappings = HashMap::new();
+        let initial_node = vcp.get_main_id();
+        let main = &vcp.templates[initial_node];
+        for s in &main.signals {
+            if s.xtype == SignalType::Output {
+                output_mappings.insert(s.name.clone(), (s.dag_local_id, s.size()));
+            }
+        }
+        output_mappings
+    }
+
+    fn build_circuit(
+        &self,
+        program_archive: ProgramArchive,
+    ) -> Result<(CircomCircuit, OutputMapping)> {
         let build_config = BuildConfig {
             no_rounds: usize::MAX, //simplification_style. Use default from their lib
             flag_json_sub: false,
@@ -208,11 +225,16 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         };
         let (_, vcp) = circom_constraint_generation::build_circuit(program_archive, build_config)
             .map_err(|_| eyre!("cannot build vcp"))?;
+        let output_mapping = self.get_output_mapping(&vcp);
+
         let flags = CompilationFlags {
             main_inputs_log: false,
             wat_flag: false,
         };
-        Ok(CircomCircuit::build(vcp, flags, &self.version))
+        Ok((
+            CircomCircuit::build(vcp, flags, &self.version),
+            output_mapping,
+        ))
     }
 
     fn emit_store_opcodes(
@@ -613,7 +635,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
     /// - `Err(err)` indicates an error occurred during parsing or compilation.
     pub fn parse(mut self) -> Result<CollaborativeCircomCompilerParsed<P>> {
         let program_archive = self.get_program_archive()?;
-        let circuit = self.build_circuit(program_archive)?;
+        let (circuit, output_mapping) = self.build_circuit(program_archive)?;
         let constant_table = circuit
             .c_producer
             .get_field_constant_list()
@@ -648,7 +670,6 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
                 self.handle_instruction(inst);
             });
             let mut new_code_block = CodeBlock::default();
-            // self.debug_code_block();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
             new_code_block.push(MpcOpCode::Return);
             //check if we need mapping for store bucket
@@ -681,6 +702,57 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             circuit.c_producer.number_of_main_inputs,
             circuit.c_producer.number_of_main_outputs,
             circuit.c_producer.main_input_list.clone(),
+            output_mapping,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ark_bn254::Bn254;
+
+    use crate::CompilerBuilder;
+    use std::str::FromStr;
+    macro_rules! to_field_vec {
+        ($vec: expr) => {
+            $vec.into_iter()
+                .map(|s| ark_bn254::Fr::from_str(s).unwrap())
+                .collect::<Vec<_>>()
+        };
+    }
+    #[test]
+    fn test_get_output_from_finalized_witness() {
+        let builder = CompilerBuilder::<Bn254>::new(
+            "../test_vectors/circuits/test-circuits/bitonic_sort.circom".to_owned(),
+        );
+
+        let plain_vm = builder.build().parse().unwrap().to_plain_vm();
+        let finalized_witness = plain_vm
+            .run_with_flat(
+                to_field_vec!(vec![
+                    "883", "521", "889", "768", "948", "35", "647", "221", "248", "427", "338",
+                    "189", "462", "748", "135", "159", "530", "787", "389", "594",
+                ]),
+                0,
+            )
+            .unwrap();
+
+        let out = finalized_witness.get_output("out").unwrap();
+        let out_ids = finalized_witness.get_output("out_ids").unwrap();
+        assert_eq!(
+            out,
+            to_field_vec!(vec![
+                "35", "221", "248", "427", "521", "647", "768", "883", "889", "948"
+            ]),
+        );
+        assert_eq!(
+            out_ids,
+            to_field_vec!(vec![
+                "159", "787", "389", "594", "189", "530", "748", "338", "462", "135"
+            ]),
+        );
+        assert!(finalized_witness
+            .get_output("SomeThingThatIsNotAnOutput")
+            .is_none());
     }
 }

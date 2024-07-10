@@ -46,7 +46,8 @@ mod plain_tests {
                         .unwrap()
                         .to_plain_vm()
                         .run_with_flat(inp.inputs[i].to_owned(), 0)
-                        .unwrap();
+                        .unwrap()
+                        .into_shared_witness();
                     assert_eq!(convert_witness(is_witness), inp.witnesses[i].values);
                 }
             }
