@@ -3,10 +3,7 @@ use std::{collections::HashMap, rc::Rc};
 use ark_ec::pairing::Pairing;
 use mpc_core::protocols::{
     plain::PlainDriver,
-    rep3::{
-        network::{Rep3MpcNet, Rep3Network},
-        Rep3Protocol,
-    },
+    rep3::network::{Rep3MpcNet, Rep3Network},
 };
 use mpc_net::config::NetworkConfig;
 
@@ -17,6 +14,13 @@ use crate::{
 };
 use eyre::Result;
 
+/// A template declaration.
+///
+/// Stores all necessary information to create a component, including the [`CodeBlock`],
+/// the number of input signals, sub-components, and vars.
+///
+/// > **Warning**: Users should usually not interact directly with this struct. It is only public because the
+/// > compiler requires these declarations, and the compiler is a separate crate due to licensing constraints.
 #[derive(Clone)]
 pub struct TemplateDecl {
     pub(crate) symbol: String,
@@ -28,6 +32,7 @@ pub struct TemplateDecl {
 }
 
 impl TemplateDecl {
+    /// Creates a new template declaration. Only the MPC-compiler should use this method!
     pub fn new(
         symbol: String,
         input_signals: usize,
@@ -47,6 +52,13 @@ impl TemplateDecl {
     }
 }
 
+/// An unconstrained function declaration.
+///
+/// Stores all necessary information to call the function, including the [`CodeBlock`],
+/// the number of params, and vars.
+///
+/// > **Warning**: Users should usually not interact directly with this struct. It is only public because the
+/// > compiler requires these declarations, and the compiler is a separate crate due to licensing constraints.
 pub struct FunDecl {
     pub(crate) num_params: usize,
     pub(crate) vars: usize,
@@ -54,6 +66,7 @@ pub struct FunDecl {
 }
 
 impl FunDecl {
+    /// Creates a new function declaration. Only the MPC-compiler should use this method!
     pub fn new(num_params: usize, vars: usize, body: CodeBlock) -> Self {
         Self {
             num_params,
@@ -65,6 +78,10 @@ impl FunDecl {
 
 pub(crate) type InputList = Vec<(String, usize, usize)>;
 
+/// The state of the compiler after it parsed the circom file.
+///
+/// The struct provides certain methods to consume it and create an
+/// [MPC-VM](WitnessExtension).
 pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
     pub(crate) main: String,
     pub(crate) amount_signals: usize,
@@ -79,6 +96,8 @@ pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
 }
 
 impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
+    /// > **Warning**: DO NOT CALL THIS DIRECTLY! This struct is intended for internal use by the compiler crate
+    /// > and should not be instantiated directly. It is publicly visible due to requirements imposed by licensing constraints.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         main: String,
@@ -110,10 +129,25 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
 //TODO: Add another builder step here?
 //ParserCompiler -> into Rep3/Shamir -> build
 impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
+    /// Consumes `self` and constructs an instance of [`PlainWitnessExtension`].
+    ///
+    /// The plain witness extension allows local execution of the witness extension without
+    /// using MPC. Be cautious when using this method, as the resulting
+    /// witness and input will not be protected. Do not share sensitive data when using this feature.
+    ///
+    /// This method is primarily intended for testing purposes.
     pub fn to_plain_vm(self) -> WitnessExtension<P, PlainDriver<P::ScalarField>> {
         PlainWitnessExtension::new(self)
     }
 
+    /// Consumes `self` and a [`NetworkConfig`], and constructs an instance of [`Rep3WitnessExtension`].
+    ///
+    /// # Arguments
+    /// - `network_config`: A network configuration specifying how to connect to the other two parties.
+    ///
+    /// # Returns
+    /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
+    /// - `Err(err)`: An error indicating a failure, such as inability to connect to the other parties.
     pub fn to_rep3_vm(
         self,
         network_config: NetworkConfig,
@@ -121,6 +155,14 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
         Rep3WitnessExtension::new(self, network_config, MpcAccelerator::full_mpc_accelerator())
     }
 
+    /// Consumes `self` and an already established [`Rep3Network`], and constructs an instance of [`Rep3WitnessExtension`].
+    ///
+    /// # Arguments
+    /// - `network`: Am already established [`Rep3Network`].
+    ///
+    /// # Returns
+    /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
+    /// - `Err(err)`: An error indicating a failure.
     pub fn to_rep3_vm_with_network<N: Rep3Network>(
         self,
         network: N,
