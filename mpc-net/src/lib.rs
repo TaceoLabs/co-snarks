@@ -44,8 +44,6 @@ impl MpcNetworkHandler {
     /// Tries to establish a connection to other parties in the network based on the provided [NetworkConfig].
     pub async fn establish(config: NetworkConfig) -> Result<Self, Report> {
         config.check_config()?;
-        // a client socket, let the OS pick the port
-        let local_client_socket = SocketAddr::from(([0, 0, 0, 0], 0));
         let certs: HashMap<usize, CertificateDer> = config
             .parties
             .iter()
@@ -99,8 +97,6 @@ impl MpcNetworkHandler {
             }
             if party.id < config.my_id {
                 // connect to party, we are client
-                let endpoint = quinn::Endpoint::client(local_client_socket)
-                    .with_context(|| format!("creating client endpoint to party {}", party.id))?;
 
                 let party_addresses: Vec<SocketAddr> = party
                     .dns_name
@@ -110,11 +106,15 @@ impl MpcNetworkHandler {
                 if party_addresses.is_empty() {
                     return Err(eyre::eyre!("could not resolve DNS name {}", party.dns_name));
                 }
-                // try to use IPv4 if possible
-                let party_addr = match party_addresses.iter().find(|x| x.is_ipv4()) {
-                    Some(addr) => *addr,
-                    None => party_addresses[0],
+                let party_addr = party_addresses[0];
+                let local_client_socket: SocketAddr = match party_addr {
+                    SocketAddr::V4(_) => {
+                        "0.0.0.0:0".parse().expect("hardcoded IP address is valid")
+                    }
+                    SocketAddr::V6(_) => "[::]:0".parse().expect("hardcoded IP address is valid"),
                 };
+                let endpoint = quinn::Endpoint::client(local_client_socket)
+                    .with_context(|| format!("creating client endpoint to party {}", party.id))?;
                 let conn = endpoint
                     .connect_with(client_config.clone(), party_addr, &party.dns_name.hostname)
                     .with_context(|| {
