@@ -355,8 +355,8 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver<F> {
         Ok(a)
     }
 
-    fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare {
-        a
+    fn vm_to_share(&mut self, a: Self::VmType) -> Result<Self::FieldShare> {
+        Ok(a)
     }
 
     fn is_shared(&mut self, _: &Self::VmType) -> Result<bool> {

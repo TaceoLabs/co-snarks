@@ -24,8 +24,8 @@ pub enum Rep3VmType<F: PrimeField> {
     Public(F),
     /// Represents a secret-shared value
     Shared(Rep3PrimeFieldShare<F>),
-    /// Represents a secret-shared binary value. This type is currently not utilized
-    BitShared,
+    /// Represents a secret-shared binary value.
+    BitShared(Rep3BigUintShare),
 }
 
 impl<F: PrimeField> From<Rep3VmType<F>> for Rep3PrimeFieldShare<F> {
@@ -48,7 +48,7 @@ impl<F: PrimeField> std::fmt::Debug for Rep3VmType<F> {
         match self {
             Self::Public(arg0) => f.debug_tuple("Public").field(arg0).finish(),
             Self::Shared(arg0) => f.debug_tuple("Shared").field(arg0).finish(),
-            Self::BitShared => write!(f, "BitShared"),
+            Self::BitShared(arg0) => f.debug_tuple("BitShared").field(arg0).finish(),
         }
     }
 }
@@ -58,9 +58,11 @@ impl<F: PrimeField> std::fmt::Display for Rep3VmType<F> {
         match self {
             Rep3VmType::Public(field) => f.write_str(&format!("PUBLIC ({field})")),
             Rep3VmType::Shared(share) => {
-                f.write_str(&format!("SHARED (a: {}, b: {})", share.a, share.b))
+                f.write_fmt(format_args!("SHARED (a: {}, b: {})", share.a, share.b))
             }
-            Rep3VmType::BitShared => f.write_str("BIT_SHARED (TODO)"),
+            Rep3VmType::BitShared(share) => {
+                f.write_fmt(format_args!("BIT_SHARED (a: {}, b: {})", share.a, share.b))
+            }
         }
     }
 }
@@ -696,17 +698,17 @@ impl<F: PrimeField, N: Rep3Network> CircomWitnessExtensionProtocol<F> for Rep3Pr
         Self::VmType::open(self, a)
     }
 
-    fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare {
-        match a {
+    fn vm_to_share(&mut self, a: Self::VmType) -> Result<Self::FieldShare> {
+        Ok(match a {
             Rep3VmType::Public(a) => self.promote_to_trivial_share(a),
             Rep3VmType::Shared(share) => share,
-            Rep3VmType::BitShared => todo!("BitShared not yet implemented"),
-        }
+            Rep3VmType::BitShared(share) => self.b2a(share)?,
+        })
     }
 
     fn is_shared(&mut self, a: &Self::VmType) -> Result<bool> {
         match a {
-            Rep3VmType::Shared(_) | Rep3VmType::BitShared => Ok(true),
+            Rep3VmType::Shared(_) | Rep3VmType::BitShared(_) => Ok(true),
             Rep3VmType::Public(_) => Ok(false),
         }
     }
@@ -723,7 +725,7 @@ impl<F: PrimeField, N: Rep3Network> CircomWitnessExtensionProtocol<F> for Rep3Pr
                 let neg_a = self.neg(&a);
                 Ok(Rep3VmType::Shared(self.add_with_public(&F::one(), &neg_a)))
             }
-            Rep3VmType::BitShared => todo!("BitShared not yet implemented"),
+            Rep3VmType::BitShared(_) => todo!("BitShared not yet implemented"),
         }
     }
 

@@ -200,7 +200,7 @@ pub trait CircomWitnessExtensionProtocol<F: PrimeField>: PrimeFieldMpcProtocol<F
     fn vm_open(&mut self, a: Self::VmType) -> Result<F>;
 
     /// Transforms a VM-type into a secret-shared value.
-    fn vm_to_share(&self, a: Self::VmType) -> Self::FieldShare;
+    fn vm_to_share(&mut self, a: Self::VmType) -> Result<Self::FieldShare>;
 
     /// Returns F::one() as a VM-type.
     fn public_one(&self) -> Self::VmType;

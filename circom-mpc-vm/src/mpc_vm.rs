@@ -786,7 +786,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
             if count < self.main_outputs + amount_public_inputs + 1 {
                 public_inputs.push(self.driver.vm_open(self.ctx.signals[idx].clone())?);
             } else {
-                witness.push(self.driver.vm_to_share(self.ctx.signals[idx].clone()));
+                witness.push(self.driver.vm_to_share(self.ctx.signals[idx].clone())?);
             }
         }
         Ok(SharedWitness {
