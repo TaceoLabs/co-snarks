@@ -28,7 +28,6 @@ pub struct TemplateDecl {
 }
 
 impl TemplateDecl {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         symbol: String,
         input_signals: usize,
@@ -64,7 +63,7 @@ impl FunDecl {
     }
 }
 
-pub type InputList = Vec<(String, usize, usize)>;
+pub(crate) type InputList = Vec<(String, usize, usize)>;
 
 pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
     pub(crate) main: String,
