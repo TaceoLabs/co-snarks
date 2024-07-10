@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-vm-v0.1.1...circom-mpc-vm-v0.2.0) (2024-07-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* removed constructor with MPC-accelerator for WitnessExtension
+* has_inputs element for CreateCmp opcode
+* removed unnecessary jump opcode
+* removed pub visibility for InputList ([#109](https://github.com/TaceoLabs/collaborative-circom/issues/109))
+
+### Code Refactoring
+
+* has_inputs element for CreateCmp opcode ([3c88182](https://github.com/TaceoLabs/collaborative-circom/commit/3c8818205e60b765ffa70b0ddc59c939569209e6))
+* removed constructor with MPC-accelerator for WitnessExtension ([f9b60c8](https://github.com/TaceoLabs/collaborative-circom/commit/f9b60c897a20dad43948de610e01212c8548c99e))
+* removed pub visibility for InputList ([#109](https://github.com/TaceoLabs/collaborative-circom/issues/109)) ([b2e5d93](https://github.com/TaceoLabs/collaborative-circom/commit/b2e5d93139f52e85f12ba2ffb4c42162b2f4b050))
+* removed unnecessary jump opcode ([870047d](https://github.com/TaceoLabs/collaborative-circom/commit/870047dfc1ad623af9c28c7a53495f11a70a9e7a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * collaborative-groth16 bumped from 0.2.0 to 0.2.1
+    * mpc-core bumped from 0.2.0 to 0.2.1
+
 ## [0.1.1](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-vm-v0.1.0...circom-mpc-vm-v0.1.1) (2024-07-09)
 
 

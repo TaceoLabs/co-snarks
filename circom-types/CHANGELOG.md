@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-types-v0.2.0...circom-types-v0.3.0) (2024-07-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove internal structs from public crate interface, removed unused code ([#120](https://github.com/TaceoLabs/collaborative-circom/issues/120))
+
+### Code Refactoring
+
+* remove internal structs from public crate interface, removed unused code ([#120](https://github.com/TaceoLabs/collaborative-circom/issues/120)) ([f5cabe6](https://github.com/TaceoLabs/collaborative-circom/commit/f5cabe679ef24cebe5e109a5bac9ba63401596b2))
+
 ## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-types-v0.1.0...circom-types-v0.2.0) (2024-07-09)
 
 
