@@ -513,11 +513,25 @@ impl<F: PrimeField> Rep3VmType<F> {
                 // TODO: semantics of overflows in bit XOR?
                 let a_bits = party.a2b(&a)?;
                 let b_bits = party.a2b(&b)?;
-                let b = &a_bits ^ &b_bits;
-                let res = party.b2a(b)?;
-                Rep3VmType::Shared(res)
+                let c = &a_bits ^ &b_bits;
+                Rep3VmType::BitShared(c)
             }
-            (_, _) => todo!("BitShared bit_xor not implemented"),
+            (Rep3VmType::BitShared(a), Rep3VmType::BitShared(b)) => {
+                let c = &a ^ &b;
+                Rep3VmType::BitShared(c)
+            }
+            (Rep3VmType::BitShared(a), Rep3VmType::Public(b))
+            | (Rep3VmType::Public(b), Rep3VmType::BitShared(a)) => {
+                let b = b.into_bigint().into();
+                let c = a.xor_with_public(&b, party.network.get_id());
+                Rep3VmType::BitShared(c)
+            }
+            (Rep3VmType::BitShared(a), Rep3VmType::Shared(b))
+            | (Rep3VmType::Shared(b), Rep3VmType::BitShared(a)) => {
+                let b_bits = party.a2b(&b)?;
+                let c = &a ^ &b_bits;
+                Rep3VmType::BitShared(c)
+            }
         };
         Ok(res)
     }
@@ -793,8 +807,7 @@ fn bit_xor_public<N: Rep3Network, F: PrimeField>(
     let b_bits: BigUint = b.into_bigint().into();
     let bit_shares = party.a2b(&a)?;
     let bit_share = bit_shares.xor_with_public(&b_bits, party.network.get_id());
-    let res = party.b2a(bit_share)?;
-    Ok(Rep3VmType::Shared(res))
+    Ok(Rep3VmType::BitShared(bit_share))
 }
 
 fn bit_or_public<N: Rep3Network, F: PrimeField>(
