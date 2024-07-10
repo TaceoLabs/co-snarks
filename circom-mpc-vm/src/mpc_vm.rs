@@ -21,6 +21,14 @@ use mpc_core::{
 };
 use mpc_net::config::NetworkConfig;
 use std::{collections::HashMap, rc::Rc};
+
+/// The MPC-VM that performs the witness extension.
+///
+/// This struct can only be instantiated by constructing it with a [`CollaborativeCircomCompilerParsed`].
+/// There are two main functions of interest:
+///
+/// - [`run()`](WitnessExtension::run): Executes the witness extension.
+/// - [`run_with_flat()`](WitnessExtension::run_with_flat): Executes the witness extension with flattened inputs.
 pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
     main: String,
     ctx: WitnessExtensionCtx<P, C>,
@@ -31,9 +39,17 @@ pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::Sca
     driver: C,
 }
 
+/// Shorthand type for an instance of the MPC-VM that runs locally on a single machine without MPC.
+///
+/// This type is mostly used for testing purposes, so use with care in production environments.
 pub type PlainWitnessExtension<P> = WitnessExtension<P, PlainDriver<<P as Pairing>::ScalarField>>;
+
+/// Shorthand type for the MPC-VM instantiated with the [`Rep3Protocol`].
+///
+/// This is the only supported protocol at the moment.
 pub type Rep3WitnessExtension<P, N> =
     WitnessExtension<P, Rep3Protocol<<P as Pairing>::ScalarField, N>>;
+
 type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Rc<CodeBlock>, Vec<(T, Vec<T>)>);
 
 #[derive(Default, Clone)]
@@ -837,18 +853,55 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
         main_component.run(&mut self.driver, &mut self.ctx)?;
         Ok(())
     }
+
+    /// Starts the execution of the MPC-VM with the provided [SharedInput] and consumes `self`.
+    ///
+    /// Use this method over [`run_with_flat()`](WitnessExtension::run) when ever possible.
+    /// # Arguments
+    ///
+    /// * `input_signals` - The [SharedInput] distributed over the parties.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok([SharedWitness])` - The secret-shared witness, distributed over the parties.
+    /// * `Err([eyre::Result])` - An error result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
+    pub fn run(mut self, input_signals: SharedInput<C, P>) -> Result<SharedWitness<C, P>> {
+        let amount_public_inputs = self.set_input_signals(input_signals)?;
+        self.call_main_component()?;
+        self.post_processing(amount_public_inputs)
+    }
+
+    /// Starts the execution of the MPC-VM with the provided input signals and consumes `self`.
+    ///
+    /// > **Warning:** The input signals are copied as provided, element by element, into the internal signals `Vec`.
+    /// This means there is no mapping done between the names given in the circom file and the elements.
+    /// Use this only if you are absolutely sure which signal corresponds to which index.
+    ///
+    /// Use [`run()`](WitnessExtension::run) whenever possible.
+    ///
+    /// # Arguments
+    ///
+    /// * `input_signals` - A `Vec` of [`CircomWitnessExtensionProtocol::VmType`].
+    /// * `amount_public_inputs` - The amount of public inputs, necessary for later building the [`SharedWitness`].
+    ///
+    /// # Returns
+    ///
+    /// * `Ok([SharedWitness])` - The secret-shared witness, distributed over the parties.
+    /// * `Err([eyre::Result])` - An error result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     pub fn run_with_flat(
         mut self,
         input_signals: Vec<C::VmType>,
         amount_public_inputs: usize,
     ) -> Result<SharedWitness<C, P>> {
         self.set_flat_input_signals(input_signals);
-        self.call_main_component()?;
-        self.post_processing(amount_public_inputs)
-    }
-
-    pub fn run(mut self, input_signals: SharedInput<C, P>) -> Result<SharedWitness<C, P>> {
-        let amount_public_inputs = self.set_input_signals(input_signals)?;
         self.call_main_component()?;
         self.post_processing(amount_public_inputs)
     }
