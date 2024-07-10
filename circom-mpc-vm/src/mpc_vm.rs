@@ -595,11 +595,6 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     let signal = self.pop_field();
                     self.push_index(protocol.vm_to_index(signal)?);
                 }
-                op_codes::MpcOpCode::Jump(jump_forward) => {
-                    ip += jump_forward;
-                    continue;
-                }
-
                 op_codes::MpcOpCode::JumpBack(jump_backward) => {
                     ip -= jump_backward;
                     continue;
