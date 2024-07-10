@@ -30,3 +30,15 @@ jobs:
         run: cargo test --workspace --profile ci-dev
       # - name: Test with all features
       #   run: cargo test --workspace --all-features
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - run: sudo apt-get install lld
+      - uses: Swatinem/rust-cache@v2
+      - name: Build all targets with default features
+        run: cargo build --release --all-targets
