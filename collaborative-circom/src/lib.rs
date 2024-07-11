@@ -2,14 +2,20 @@
 //! This crate provides a binary and associated helper library for running collaborative SNARK proofs.
 use std::{io::Read, path::PathBuf};
 
-use ark_bn254::Bn254;
+use ark_ec::pairing::Pairing;
 use ark_groth16::Proof;
 use circom_mpc_compiler::CompilerBuilder;
-use circom_types::groth16::zkey::ZKey;
+use circom_types::{
+    groth16::zkey::ZKey,
+    traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
+};
 use clap::ValueEnum;
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
 use color_eyre::eyre::Context;
-use mpc_core::protocols::rep3::{network::Rep3MpcNet, Rep3Protocol};
+use mpc_core::{
+    protocols::rep3::{network::Rep3MpcNet, Rep3Protocol},
+    traits::{FFTPostProcessing, PrimeFieldMpcProtocol},
+};
 use mpc_net::config::NetworkConfig;
 
 /// A module for file utility functions.
@@ -21,16 +27,20 @@ pub enum MPCProtocol {
     /// A protocol based on the Replicated Secret Sharing Scheme for 3 parties.
     /// For more information see <https://eprint.iacr.org/2018/403.pdf>.
     REP3,
+    /// A protocol based on Shamir Secret Sharing Scheme for n parties.
+    /// For more information see <https://iacr.org/archive/crypto2007/46220565/46220565.pdf>.
+    SHAMIR,
 }
 
 impl ValueEnum for MPCProtocol {
     fn value_variants<'a>() -> &'a [Self] {
-        &[MPCProtocol::REP3]
+        &[MPCProtocol::REP3, MPCProtocol::SHAMIR]
     }
 
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         match self {
             MPCProtocol::REP3 => Some(clap::builder::PossibleValue::new("REP3")),
+            MPCProtocol::SHAMIR => Some(clap::builder::PossibleValue::new("SHAMIR")),
         }
     }
 }
@@ -39,21 +49,22 @@ impl std::fmt::Display for MPCProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MPCProtocol::REP3 => write!(f, "REP3"),
+            MPCProtocol::SHAMIR => write!(f, "SHAMIR"),
         }
     }
 }
 
 /// Try to parse a [SharedWitness] from a [Read]er.
-pub fn parse_witness_share<R: Read>(
+pub fn parse_witness_share<R: Read, P: Pairing, T: PrimeFieldMpcProtocol<P::ScalarField>>(
     reader: R,
-) -> color_eyre::Result<SharedWitness<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>> {
+) -> color_eyre::Result<SharedWitness<T, P>> {
     bincode::deserialize_from(reader).context("trying to parse witness share file")
 }
 
 /// Try to parse a [SharedInput] from a [Read]er.
-pub fn parse_shared_input<R: Read>(
+pub fn parse_shared_input<R: Read, P: Pairing, T: PrimeFieldMpcProtocol<P::ScalarField>>(
     reader: R,
-) -> color_eyre::Result<SharedInput<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>> {
+) -> color_eyre::Result<SharedInput<T, P>> {
     bincode::deserialize_from(reader).context("trying to parse input share file")
 }
 
@@ -63,17 +74,17 @@ pub fn parse_shared_input<R: Read>(
 /// 2. Compile the circuit to MPC VM bytecode.
 /// 3. Set up a network connection to the MPC network.
 /// 4. Execute the bytecode on the MPC VM to generate the witness.
-pub fn generate_witness(
+pub fn generate_witness_rep3<P: Pairing>(
     circuit: String,
     link_library: Vec<String>,
-    input_share: SharedInput<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>,
+    input_share: SharedInput<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>,
     config: NetworkConfig,
-) -> color_eyre::Result<SharedWitness<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>> {
+) -> color_eyre::Result<SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>> {
     let circuit_path = PathBuf::from(&circuit);
     file_utils::check_file_exists(&circuit_path)?;
 
     // parse circuit file & put through our compiler
-    let mut builder = CompilerBuilder::<Bn254>::new(circuit);
+    let mut builder = CompilerBuilder::<P>::new(circuit);
     for lib in link_library {
         builder = builder.link_library(lib);
     }
@@ -102,11 +113,15 @@ pub fn generate_witness(
 /// 1. Construct a [Rep3Protocol] from the network configuration.
 /// 2. Construct a [CollaborativeGroth16] prover from the protocol.
 /// 3. Execute the proof in MPC
-pub fn prove_with_matrices(
-    witness_share: SharedWitness<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>,
+pub fn prove_with_matrices_rep3<P: Pairing + CircomArkworksPairingBridge>(
+    witness_share: SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>,
     config: NetworkConfig,
-    zkey: ZKey<Bn254>,
-) -> color_eyre::Result<Proof<Bn254>> {
+    zkey: ZKey<P>,
+) -> color_eyre::Result<Proof<P>>
+where
+    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+{
     let (pk, matrices) = zkey.split();
     tracing::info!("establishing network....");
     // connect to network
@@ -114,9 +129,9 @@ pub fn prove_with_matrices(
     tracing::info!("done!");
     // init MPC protocol
     tracing::info!("building protocol...");
-    let protocol = Rep3Protocol::<ark_bn254::Fr, _>::new(net)?;
+    let protocol = Rep3Protocol::<P::ScalarField, _>::new(net)?;
     tracing::info!("done!");
-    let mut prover = CollaborativeGroth16::<Rep3Protocol<ark_bn254::Fr, _>, Bn254>::new(protocol);
+    let mut prover = CollaborativeGroth16::<Rep3Protocol<P::ScalarField, _>, P>::new(protocol);
     tracing::info!("starting prover...");
     // execute prover in MPC
     prover.prove_with_matrices(&pk, &matrices, witness_share)

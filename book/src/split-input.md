@@ -24,7 +24,7 @@ Options:
       --input <INPUT>                The path to the input JSON file
       --circuit <CIRCUIT>            The path to the circuit file
       --link-library <LINK_LIBRARY>  The path to Circom library files
-      --protocol <PROTOCOL>          The MPC protocol to be used [possible values: REP3]
+      --protocol <PROTOCOL>          The MPC protocol to be used [possible values: REP3, SHAMIR]
       --out-dir <OUT_DIR>            The path to the (existing) output directory
   -h, --help                         Print help
 ```
