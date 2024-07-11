@@ -14,7 +14,7 @@ use circom_types::{
     },
     r1cs::R1CS,
 };
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 use collaborative_circom::{file_utils, MPCProtocol};
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
 use color_eyre::eyre::{eyre, Context};
@@ -132,6 +132,8 @@ enum Commands {
         /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
         #[arg(long)]
         public_input: Option<PathBuf>,
+        #[arg(long,action=ArgAction::SetTrue)]
+        shamir: bool,
     },
     /// Verification of a Circom proof.
     Verify {
@@ -349,6 +351,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             config,
             out,
             public_input: public_input_filename,
+            shamir,
         } => {
             file_utils::check_file_exists(&witness)?;
             file_utils::check_file_exists(&zkey)?;
@@ -375,12 +378,28 @@ fn main() -> color_eyre::Result<ExitCode> {
             let net = Rep3MpcNet::new(config)?;
 
             // init MPC protocol
-            let protocol = Rep3Protocol::<ark_bn254::Fr, _>::new(net)?;
-            let mut prover =
-                CollaborativeGroth16::<Rep3Protocol<ark_bn254::Fr, _>, Bn254>::new(protocol);
+            let protocol = Rep3Protocol::new(net)?;
 
-            // execute prover in MPC
-            let proof = prover.prove_with_matrices(&pk, &matrices, witness_share)?;
+            let proof = if shamir {
+                tracing::info!("Switching to Shamir secret sharing");
+                let mut protocol = protocol.get_shamir_protocol()?;
+
+                // Translate witness to shamir shares
+                let shamir_witness_share = SharedWitness {
+                    public_inputs: witness_share.public_inputs,
+                    witness: protocol.translate_primefield_repshare_vec(witness_share.witness)?,
+                };
+
+                let mut prover = CollaborativeGroth16::new(protocol);
+
+                // execute prover in MPC
+                prover.prove_with_matrices(&pk, &matrices, shamir_witness_share)?
+            } else {
+                let mut prover = CollaborativeGroth16::new(protocol);
+
+                // execute prover in MPC
+                prover.prove_with_matrices(&pk, &matrices, witness_share)?
+            };
 
             // write result to output file
             if let Some(out) = out {
@@ -392,6 +411,7 @@ fn main() -> color_eyre::Result<ExitCode> {
                     .context("while serializing proof to JSON file")?;
                 tracing::info!("Wrote proof to file {}", out.display());
             }
+
             // write public input to output file
             if let Some(public_input_filename) = public_input_filename {
                 let public_input_as_strings = public_input
