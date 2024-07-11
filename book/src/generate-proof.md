@@ -25,5 +25,6 @@ Options:
       --config <CONFIG>              The path to MPC network configuration file
       --out <OUT>                    The output file where the final proof is written to. If not passed, this party will not write the proof to a file
       --public-input <PUBLIC_INPUT>  The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file
+      --shamir                       Optional: Translate witness from REP3 to Shamir and use Shamir during proof generation
   -h, --help                         Print help
 ```

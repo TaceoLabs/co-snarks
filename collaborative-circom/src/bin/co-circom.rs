@@ -132,6 +132,7 @@ enum Commands {
         /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
         #[arg(long)]
         public_input: Option<PathBuf>,
+        /// Optional: Translate witness from REP3 to Shamir and use Shamir during proof generation
         #[arg(long,action=ArgAction::SetTrue)]
         shamir: bool,
     },
