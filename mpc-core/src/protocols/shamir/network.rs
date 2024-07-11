@@ -218,8 +218,10 @@ impl ShamirNetwork for ShamirMpcNet {
         let mut res = Vec::with_capacity(self.num_parties);
         for other_id in 0..self.num_parties {
             if other_id != self.id {
-                let data = self.recv(other_id)?;
-                res.push(data);
+                let data = self.recv_bytes(other_id)?;
+                let deser = F::deserialize_uncompressed(&data[..])
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+                res.push(deser);
             } else {
                 res.push(data.to_owned());
             }
@@ -254,8 +256,10 @@ impl ShamirNetwork for ShamirMpcNet {
         res.push(data);
         for r in 1..num {
             let other_id = (self.id + self.num_parties - r) % self.num_parties;
-            let data = self.recv(other_id)?;
-            res.push(data);
+            let data = self.recv_bytes(other_id)?;
+            let deser = F::deserialize_uncompressed(&data[..])
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            res.push(deser);
         }
 
         Ok(res)

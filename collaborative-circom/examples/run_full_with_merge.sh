@@ -15,5 +15,5 @@ cargo run --release --bin co-circom -- generate-witness --input test_vectors/$EX
 cargo run --release --bin co-circom -- generate-proof --witness test_vectors/$EXAMPLE_NAME/witness.wtns.0.shared --zkey test_vectors/$EXAMPLE_NAME/$EXAMPLE_NAME.zkey --protocol REP3 --config configs/party1.toml --out proof.0.json --public-input public_input.json &
 cargo run --release --bin co-circom -- generate-proof --witness test_vectors/$EXAMPLE_NAME/witness.wtns.1.shared --zkey test_vectors/$EXAMPLE_NAME/$EXAMPLE_NAME.zkey --protocol REP3 --config configs/party2.toml --out proof.1.json &
 cargo run --release --bin co-circom -- generate-proof --witness test_vectors/$EXAMPLE_NAME/witness.wtns.2.shared --zkey test_vectors/$EXAMPLE_NAME/$EXAMPLE_NAME.zkey --protocol REP3 --config configs/party3.toml --out proof.2.json
-# # verify proof
-cargo run --release --bin co-circom -- verify --proof proof.0.json --vk test_vectors/$EXAMPLE_NAME/verification_key.json --public-input public_input.json 
+# verify proof
+cargo run --release --bin co-circom -- verify --proof proof.0.json --vk test_vectors/$EXAMPLE_NAME/verification_key.json --public-input public_input.json

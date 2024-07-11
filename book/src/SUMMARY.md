@@ -24,6 +24,7 @@
   - [merge-input-shares](./merge-input-shares.md)
   - [split-witness](./split-witness.md)
   - [generate-witness](./generate-witness.md)
+  - [translate-witness](./translate-witness.md)
   - [generate-proof](./generate-proof.md)
   - [verify](./verify.md)
   - [Network Config File](./network-config.md)

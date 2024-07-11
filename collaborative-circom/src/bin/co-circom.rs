@@ -6,6 +6,8 @@ use std::{
 };
 
 use ark_bn254::Bn254;
+use ark_ec::pairing::Pairing;
+use ark_ff::PrimeField;
 use ark_groth16::{Groth16, Proof};
 use circom_mpc_compiler::CompilerBuilder;
 use circom_types::{
@@ -13,12 +15,19 @@ use circom_types::{
         proof::JsonProof, verification_key::JsonVerificationKey, witness::Witness, zkey::ZKey,
     },
     r1cs::R1CS,
+    traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
 use clap::{Parser, Subcommand};
 use collaborative_circom::{file_utils, MPCProtocol};
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
 use color_eyre::eyre::{eyre, Context};
-use mpc_core::protocols::rep3::{self, network::Rep3MpcNet, Rep3Protocol};
+use mpc_core::{
+    protocols::{
+        rep3::{self, network::Rep3MpcNet, Rep3Protocol},
+        shamir::{network::ShamirMpcNet, ShamirProtocol},
+    },
+    traits::{FFTPostProcessing, PrimeFieldMpcProtocol},
+};
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::Zero;
 
@@ -60,6 +69,12 @@ enum Commands {
         /// The path to the (existing) output directory
         #[arg(long)]
         out_dir: PathBuf,
+        /// The threshold of tolerated colluding parties
+        #[arg(short, long, default_value_t = 1)]
+        threshold: usize,
+        /// The number of parties
+        #[arg(short, long, default_value_t = 3)]
+        num_parties: usize,
     },
     /// Splits a JSON input file into secret shares for use in MPC
     SplitInput {
@@ -112,6 +127,24 @@ enum Commands {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Translates the witness generated with one MPC protocol to a witness for a different one
+    TranslateWitness {
+        /// The path to the witness share file
+        #[arg(long)]
+        witness: PathBuf,
+        /// The MPC protocol that was used for the witness generation
+        #[arg(long, value_enum)]
+        src_protocol: MPCProtocol,
+        /// The MPC protocol to be used for the proof generation
+        #[arg(long, value_enum)]
+        target_protocol: MPCProtocol,
+        /// The path to MPC network configuration file
+        #[arg(long)]
+        config: PathBuf,
+        /// The output file where the final witness share is written to
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Evaluates the prover algorithm for the specified circuit and witness share in MPC
     GenerateProof {
         /// The path to the witness share file
@@ -132,6 +165,9 @@ enum Commands {
         /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
         #[arg(long)]
         public_input: Option<PathBuf>,
+        /// The threshold of tolerated colluding parties
+        #[arg(short, long, default_value_t = 1)]
+        threshold: usize,
     },
     /// Verification of a Circom proof.
     Verify {
@@ -151,53 +187,101 @@ fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
     let args = Cli::parse();
 
+    // So far only BN254 is supported
+    main_function::<Bn254>(args)
+}
+
+fn main_function<P: Pairing + CircomArkworksPairingBridge>(
+    args: Cli,
+) -> color_eyre::Result<ExitCode>
+where
+    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    JsonProof<P>: From<Proof<P>>,
+    Proof<P>: From<JsonProof<P>>,
+{
     match args.command {
         Commands::SplitWitness {
             witness: witness_path,
             r1cs,
-            protocol: _,
+            protocol,
             out_dir,
+            threshold: t,
+            num_parties: n,
         } => {
             file_utils::check_file_exists(&witness_path)?;
             file_utils::check_file_exists(&r1cs)?;
             file_utils::check_dir_exists(&out_dir)?;
 
-            // TODO: make generic over curve/protocol
-
             // read the Circom witness file
             let witness_file =
                 BufReader::new(File::open(&witness_path).context("while opening witness file")?);
-            let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file)
+            let witness = Witness::<P::ScalarField>::from_reader(witness_file)
                 .context("while parsing witness file")?;
 
             // read the Circom r1cs file
             let r1cs_file = BufReader::new(File::open(&r1cs).context("while opening r1cs file")?);
-            let r1cs = R1CS::<ark_bn254::Bn254>::from_reader(r1cs_file)
-                .context("while parsing r1cs file")?;
+            let r1cs = R1CS::<P>::from_reader(r1cs_file).context("while parsing r1cs file")?;
 
             let mut rng = rand::thread_rng();
 
-            // create witness shares
-            let shares =
-                SharedWitness::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::share_rep3(
-                    &witness.values[r1cs.num_inputs..],
-                    &witness.values[..r1cs.num_inputs],
-                    &mut rng,
-                );
+            match protocol {
+                MPCProtocol::REP3 => {
+                    if t != 1 {
+                        return Err(eyre!("REP3 only allows the threshold to be 1"));
+                    }
+                    if n != 3 {
+                        return Err(eyre!("REP3 only allows the number of parties to be 3"));
+                    }
+                    // create witness shares
+                    let shares =
+                        SharedWitness::<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>::share_rep3(
+                            &witness.values[r1cs.num_inputs..],
+                            &witness.values[..r1cs.num_inputs],
+                            &mut rng,
+                        );
 
-            // write out the shares to the output directory
-            let base_name = witness_path
-                .file_name()
-                .expect("we have a file name")
-                .to_str()
-                .ok_or(eyre!("witness file name is not valid UTF-8"))?;
-            for (i, share) in shares.iter().enumerate() {
-                let path = out_dir.join(format!("{}.{}.shared", base_name, i));
-                let out_file =
-                    BufWriter::new(File::create(&path).context("while creating output file")?);
-                bincode::serialize_into(out_file, share)
-                    .context("while serializing witness share")?;
-                tracing::info!("Wrote witness share {} to file {}", i, path.display());
+                    // write out the shares to the output directory
+                    let base_name = witness_path
+                        .file_name()
+                        .expect("we have a file name")
+                        .to_str()
+                        .ok_or(eyre!("witness file name is not valid UTF-8"))?;
+                    for (i, share) in shares.iter().enumerate() {
+                        let path = out_dir.join(format!("{}.{}.shared", base_name, i));
+                        let out_file = BufWriter::new(
+                            File::create(&path).context("while creating output file")?,
+                        );
+                        bincode::serialize_into(out_file, share)
+                            .context("while serializing witness share")?;
+                        tracing::info!("Wrote witness share {} to file {}", i, path.display());
+                    }
+                }
+                MPCProtocol::SHAMIR => {
+                    // create witness shares
+                    let shares =
+                        SharedWitness::<ShamirProtocol<P::ScalarField, ShamirMpcNet>, P>::share_shamir(
+                            &witness.values[r1cs.num_inputs..],
+                            &witness.values[..r1cs.num_inputs],t,n,
+                            &mut rng,
+                        );
+
+                    // write out the shares to the output directory
+                    let base_name = witness_path
+                        .file_name()
+                        .expect("we have a file name")
+                        .to_str()
+                        .ok_or(eyre!("witness file name is not valid UTF-8"))?;
+                    for (i, share) in shares.iter().enumerate() {
+                        let path = out_dir.join(format!("{}.{}.shared", base_name, i));
+                        let out_file = BufWriter::new(
+                            File::create(&path).context("while creating output file")?,
+                        );
+                        bincode::serialize_into(out_file, share)
+                            .context("while serializing witness share")?;
+                        tracing::info!("Wrote witness share {} to file {}", i, path.display());
+                    }
+                }
             }
             tracing::info!("Split witness into shares successfully")
         }
@@ -205,16 +289,21 @@ fn main() -> color_eyre::Result<ExitCode> {
             input,
             circuit,
             link_library,
-            protocol: _,
+            protocol,
             out_dir,
         } => {
+            if protocol != MPCProtocol::REP3 {
+                return Err(eyre!(
+                    "Only REP3 protocol is supported for splitting inputs"
+                ));
+            }
             file_utils::check_file_exists(&input)?;
             let circuit_path = PathBuf::from(&circuit);
             file_utils::check_file_exists(&circuit_path)?;
             file_utils::check_dir_exists(&out_dir)?;
 
             //get the public inputs if any from parser
-            let mut builder = CompilerBuilder::<Bn254>::new(circuit);
+            let mut builder = CompilerBuilder::<P>::new(circuit);
             for lib in link_library {
                 builder = builder.link_library(lib);
             }
@@ -227,14 +316,11 @@ fn main() -> color_eyre::Result<ExitCode> {
             let input_json: serde_json::Map<String, serde_json::Value> =
                 serde_json::from_reader(input_file).context("while parsing input file")?;
 
-            // construct relevant protocol
-            // TODO: make generic over curve/protocol
-
             // create input shares
             let mut shares = [
-                SharedInput::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::default(),
-                SharedInput::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::default(),
-                SharedInput::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::default(),
+                SharedInput::<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>::default(),
+                SharedInput::<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>::default(),
+                SharedInput::<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>::default(),
             ];
 
             let mut rng = rand::thread_rng();
@@ -279,7 +365,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         }
         Commands::MergeInputShares {
             inputs,
-            protocol: _,
+            protocol,
             out,
         } => {
             if inputs.len() < 2 {
@@ -288,37 +374,31 @@ fn main() -> color_eyre::Result<ExitCode> {
             for input in &inputs {
                 file_utils::check_file_exists(input)?;
             }
-            let mut input_shares = inputs
-                .iter()
-                .map(|input| {
-                    let input_share_file = BufReader::new(
-                        File::open(input).context("while opening input share file")?,
-                    );
-                    let input_share: SharedInput<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254> =
-                        bincode::deserialize_from(input_share_file)
-                            .context("trying to parse input share file")?;
-                    color_eyre::Result::<_>::Ok(input_share)
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let start = input_shares.pop().expect("we have at least two inputs");
-            let merged = input_shares.into_iter().try_fold(start, |a, b| {
-                a.merge(b).context("while merging input shares")
-            })?;
 
-            let out_file =
-                BufWriter::new(File::create(&out).context("while creating output file")?);
-            bincode::serialize_into(out_file, &merged)
-                .context("while serializing witness share")?;
-            tracing::info!("Wrote merged input share to file {}", out.display());
+            match protocol {
+                MPCProtocol::REP3 => {
+                    merge_input_shares::<P, Rep3Protocol<P::ScalarField, Rep3MpcNet>>(inputs, out)?;
+                }
+                MPCProtocol::SHAMIR => {
+                    merge_input_shares::<P, ShamirProtocol<P::ScalarField, ShamirMpcNet>>(
+                        inputs, out,
+                    )?;
+                }
+            }
         }
         Commands::GenerateWitness {
             input,
             circuit,
             link_library,
-            protocol: _,
+            protocol,
             config,
             out,
         } => {
+            if protocol != MPCProtocol::REP3 {
+                return Err(eyre!(
+                    "Only REP3 protocol is supported for merging input shares"
+                ));
+            }
             file_utils::check_file_exists(&input)?;
             let circuit_path = PathBuf::from(&circuit);
             file_utils::check_file_exists(&circuit_path)?;
@@ -335,37 +415,35 @@ fn main() -> color_eyre::Result<ExitCode> {
             let config: NetworkConfig =
                 toml::from_str(&config).context("while parsing network config")?;
 
-            let result_witness_share =
-                collaborative_circom::generate_witness(circuit, link_library, input_share, config)?;
+            let result_witness_share = collaborative_circom::generate_witness_rep3::<P>(
+                circuit,
+                link_library,
+                input_share,
+                config,
+            )?;
             // write result to output file
             let out_file = BufWriter::new(std::fs::File::create(&out)?);
             bincode::serialize_into(out_file, &result_witness_share)?;
             tracing::info!("Witness successfully written to {}", out.display());
         }
-        Commands::GenerateProof {
+        Commands::TranslateWitness {
             witness,
-            zkey,
-            protocol: _,
+            src_protocol,
+            target_protocol,
             config,
             out,
-            public_input: public_input_filename,
         } => {
+            if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
+                return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
+            }
             file_utils::check_file_exists(&witness)?;
-            file_utils::check_file_exists(&zkey)?;
             file_utils::check_file_exists(&config)?;
 
             // parse witness shares
             let witness_file =
                 BufReader::new(File::open(witness).context("trying to open witness share file")?);
-
-            let witness_share = collaborative_circom::parse_witness_share(witness_file)?;
-
-            // parse public inputs
-            let public_input = witness_share.public_inputs.clone();
-
-            // parse Circom zkey file
-            let zkey_file = File::open(zkey)?;
-            let (pk, matrices) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
+            let witness_share: SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P> =
+                collaborative_circom::parse_witness_share(witness_file)?;
 
             // parse network configuration
             let config = std::fs::read_to_string(config)?;
@@ -375,12 +453,88 @@ fn main() -> color_eyre::Result<ExitCode> {
             let net = Rep3MpcNet::new(config)?;
 
             // init MPC protocol
-            let protocol = Rep3Protocol::<ark_bn254::Fr, _>::new(net)?;
-            let mut prover =
-                CollaborativeGroth16::<Rep3Protocol<ark_bn254::Fr, _>, Bn254>::new(protocol);
+            let protocol = Rep3Protocol::new(net)?;
+            let mut protocol = protocol.get_shamir_protocol()?;
 
-            // execute prover in MPC
-            let proof = prover.prove_with_matrices(&pk, &matrices, witness_share)?;
+            // Translate witness to shamir shares
+            let shamir_witness_share: SharedWitness<
+                ShamirProtocol<P::ScalarField, ShamirMpcNet>,
+                P,
+            > = SharedWitness {
+                public_inputs: witness_share.public_inputs,
+                witness: protocol.translate_primefield_repshare_vec(witness_share.witness)?,
+            };
+            // write result to output file
+            let out_file = BufWriter::new(std::fs::File::create(&out)?);
+            bincode::serialize_into(out_file, &shamir_witness_share)?;
+            tracing::info!("Witness successfully written to {}", out.display());
+        }
+        Commands::GenerateProof {
+            witness,
+            zkey,
+            protocol,
+            config,
+            out,
+            public_input: public_input_filename,
+            threshold: t,
+        } => {
+            file_utils::check_file_exists(&witness)?;
+            file_utils::check_file_exists(&zkey)?;
+            file_utils::check_file_exists(&config)?;
+
+            // parse witness shares
+            let witness_file =
+                BufReader::new(File::open(witness).context("trying to open witness share file")?);
+
+            // parse Circom zkey file
+            let zkey_file = File::open(zkey)?;
+            let (pk, matrices) = ZKey::<P>::from_reader(zkey_file).unwrap().split();
+
+            // parse network configuration
+            let config = std::fs::read_to_string(config)?;
+            let config: NetworkConfig = toml::from_str(&config)?;
+
+            let (proof, public_input) = match protocol {
+                MPCProtocol::REP3 => {
+                    if t != 1 {
+                        return Err(eyre!("REP3 only allows the threshold to be 1"));
+                    }
+                    let witness_share = collaborative_circom::parse_witness_share(witness_file)?;
+
+                    // parse public inputs
+                    let public_input = witness_share.public_inputs.clone();
+
+                    // connect to network
+                    let net = Rep3MpcNet::new(config)?;
+
+                    // init MPC protocol
+                    let protocol = Rep3Protocol::new(net)?;
+
+                    let mut prover = CollaborativeGroth16::new(protocol);
+
+                    // execute prover in MPC
+                    let proof = prover.prove_with_matrices(&pk, &matrices, witness_share)?;
+                    (proof, public_input)
+                }
+                MPCProtocol::SHAMIR => {
+                    let witness_share = collaborative_circom::parse_witness_share(witness_file)?;
+
+                    // parse public inputs
+                    let public_input = witness_share.public_inputs.clone();
+
+                    // connect to network
+                    let net = ShamirMpcNet::new(config)?;
+
+                    // init MPC protocol
+                    let protocol = ShamirProtocol::new(t, net)?;
+
+                    let mut prover = CollaborativeGroth16::new(protocol);
+
+                    // execute prover in MPC
+                    let proof = prover.prove_with_matrices(&pk, &matrices, witness_share)?;
+                    (proof, public_input)
+                }
+            };
 
             // write result to output file
             if let Some(out) = out {
@@ -388,10 +542,11 @@ fn main() -> color_eyre::Result<ExitCode> {
                     std::fs::File::create(&out).context("while creating output file")?,
                 );
 
-                serde_json::to_writer(out_file, &JsonProof::<Bn254>::from(proof))
+                serde_json::to_writer(out_file, &JsonProof::<P>::from(proof))
                     .context("while serializing proof to JSON file")?;
                 tracing::info!("Wrote proof to file {}", out.display());
             }
+
             // write public input to output file
             if let Some(public_input_filename) = public_input_filename {
                 let public_input_as_strings = public_input
@@ -430,16 +585,16 @@ fn main() -> color_eyre::Result<ExitCode> {
             // parse Circom proof file
             let proof_file =
                 BufReader::new(File::open(&proof).context("while opening proof file")?);
-            let proof: JsonProof<Bn254> = serde_json::from_reader(proof_file)
+            let proof: JsonProof<P> = serde_json::from_reader(proof_file)
                 .context("while deserializing proof from file")?;
-            let proof = Proof::<Bn254>::from(proof);
+            let proof: Proof<P> = Proof::<P>::from(proof);
 
             // parse Circom verification key file
             let vk_file =
                 BufReader::new(File::open(&vk).context("while opening verification key file")?);
-            let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file)
+            let vk: JsonVerificationKey<P> = serde_json::from_reader(vk_file)
                 .context("while deserializing verification key from file")?;
-            let vk: ark_groth16::PreparedVerifyingKey<Bn254> = vk.into();
+            let vk: ark_groth16::PreparedVerifyingKey<P> = vk.into();
 
             // parse public inputs
             let public_inputs_file = BufReader::new(
@@ -451,14 +606,14 @@ fn main() -> color_eyre::Result<ExitCode> {
             let public_inputs = public_inputs_as_strings
                 .into_iter()
                 .map(|s| {
-                    s.parse::<ark_bn254::Fr>()
+                    s.parse::<P::ScalarField>()
                         .map_err(|_| eyre!("could not parse as field element: {}", s))
                 })
-                .collect::<Result<Vec<ark_bn254::Fr>, _>>()
+                .collect::<Result<Vec<P::ScalarField>, _>>()
                 .context("while converting public input strings to field elements")?;
 
             // verify proof
-            if Groth16::<Bn254>::verify_proof(&vk, &proof, &public_inputs)
+            if Groth16::<P>::verify_proof(&vk, &proof, &public_inputs)
                 .context("while verifying proof")?
             {
                 tracing::info!("Proof verified successfully");
@@ -472,7 +627,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn parse_field(val: &serde_json::Value) -> color_eyre::Result<ark_bn254::Fr> {
+fn parse_field<F: PrimeField>(val: &serde_json::Value) -> color_eyre::Result<F> {
     let s = val.as_str().ok_or_else(|| {
         eyre!(
             "expected input to be a field element string, got \"{}\"",
@@ -481,25 +636,50 @@ fn parse_field(val: &serde_json::Value) -> color_eyre::Result<ark_bn254::Fr> {
     })?;
     if let Some(stripped) = s.strip_prefix('-') {
         Ok(-stripped
-            .parse::<ark_bn254::Fr>()
+            .parse::<F>()
             .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
             .context("while parsing field element")?)
     } else {
-        s.parse::<ark_bn254::Fr>()
+        s.parse::<F>()
             .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
             .context("while parsing field element")
     }
 }
 
-fn parse_array(val: &serde_json::Value) -> color_eyre::Result<Vec<ark_bn254::Fr>> {
+fn parse_array<F: PrimeField>(val: &serde_json::Value) -> color_eyre::Result<Vec<F>> {
     let json_arr = val.as_array().expect("is an array");
     let mut field_elements = vec![];
     for ele in json_arr {
         if ele.is_array() {
-            field_elements.extend(parse_array(ele)?);
+            field_elements.extend(parse_array::<F>(ele)?);
         } else {
             field_elements.push(parse_field(ele)?);
         }
     }
     Ok(field_elements)
+}
+
+fn merge_input_shares<P: Pairing, T: PrimeFieldMpcProtocol<P::ScalarField>>(
+    inputs: Vec<PathBuf>,
+    out: PathBuf,
+) -> color_eyre::Result<()> {
+    let mut input_shares = inputs
+        .iter()
+        .map(|input| {
+            let input_share_file =
+                BufReader::new(File::open(input).context("while opening input share file")?);
+            let input_share: SharedInput<T, P> = bincode::deserialize_from(input_share_file)
+                .context("trying to parse input share file")?;
+            color_eyre::Result::<_>::Ok(input_share)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let start = input_shares.pop().expect("we have at least two inputs");
+    let merged = input_shares.into_iter().try_fold(start, |a, b| {
+        a.merge(b).context("while merging input shares")
+    })?;
+
+    let out_file = BufWriter::new(File::create(&out).context("while creating output file")?);
+    bincode::serialize_into(out_file, &merged).context("while serializing witness share")?;
+    tracing::info!("Wrote merged input share to file {}", out.display());
+    Ok(())
 }

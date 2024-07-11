@@ -8,6 +8,7 @@ Commands:
   split-input         Splits a JSON input file into secret shares for use in MPC
   merge-input-shares  Merge multiple shared inputs received from multiple parties into a single one
   generate-witness    Evaluates the extended witness generation for the specified circuit and input share in MPC
+  translate-witness   Translates the witness generated with one MPC protocol to a witness for a different one
   generate-proof      Evaluates the prover algorithm for the specified circuit and witness share in MPC
   verify              Verification of a Circom proof
   help                Print this message or the help of the given subcommand(s)

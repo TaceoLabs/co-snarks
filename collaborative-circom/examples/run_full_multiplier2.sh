@@ -8,5 +8,5 @@ cargo run --release --bin co-circom -- generate-witness --input test_vectors/mul
 cargo run --release --bin co-circom -- generate-proof --witness test_vectors/multiplier2/witness.wtns.0.shared --zkey test_vectors/multiplier2/multiplier2.zkey --protocol REP3 --config configs/party1.toml --out proof.0.json --public-input public_input.json &
 cargo run --release --bin co-circom -- generate-proof --witness test_vectors/multiplier2/witness.wtns.1.shared --zkey test_vectors/multiplier2/multiplier2.zkey --protocol REP3 --config configs/party2.toml --out proof.1.json &
 cargo run --release --bin co-circom -- generate-proof --witness test_vectors/multiplier2/witness.wtns.2.shared --zkey test_vectors/multiplier2/multiplier2.zkey --protocol REP3 --config configs/party3.toml --out proof.2.json
-# # verify proof
-cargo run --release --bin co-circom -- verify --proof proof.0.json --vk test_vectors/multiplier2/verification_key.json --public-input public_input.json 
+# verify proof
+cargo run --release --bin co-circom -- verify --proof proof.0.json --vk test_vectors/multiplier2/verification_key.json --public-input public_input.json
