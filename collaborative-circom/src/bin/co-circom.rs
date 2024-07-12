@@ -1,10 +1,4 @@
-use std::{
-    fs::File,
-    io::{BufReader, BufWriter},
-    path::PathBuf,
-    process::ExitCode,
-};
-
+use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
@@ -18,7 +12,7 @@ use circom_types::{
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
 use clap::{Parser, Subcommand};
-use collaborative_circom::{file_utils, MPCProtocol};
+use collaborative_circom::{file_utils, MPCCurve, MPCProtocol};
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
 use color_eyre::eyre::{eyre, Context};
 use mpc_core::{
@@ -30,6 +24,12 @@ use mpc_core::{
 };
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::Zero;
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter},
+    path::PathBuf,
+    process::ExitCode,
+};
 
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
@@ -66,6 +66,9 @@ enum Commands {
         /// The MPC protocol to be used
         #[arg(long, value_enum)]
         protocol: MPCProtocol,
+        /// The pairing friendly curve to be used
+        #[arg(long, value_enum)]
+        curve: MPCCurve,
         /// The path to the (existing) output directory
         #[arg(long)]
         out_dir: PathBuf,
@@ -90,6 +93,9 @@ enum Commands {
         /// The MPC protocol to be used
         #[arg(long, value_enum)]
         protocol: MPCProtocol,
+        /// The pairing friendly curve to be used
+        #[arg(long, value_enum)]
+        curve: MPCCurve,
         /// The path to the (existing) output directory
         #[arg(long)]
         out_dir: PathBuf,
@@ -102,6 +108,9 @@ enum Commands {
         /// The MPC protocol to be used
         #[arg(long, value_enum)]
         protocol: MPCProtocol,
+        /// The pairing friendly curve to be used
+        #[arg(long, value_enum)]
+        curve: MPCCurve,
         /// The output file where the merged input share is written to
         #[arg(long)]
         out: PathBuf,
@@ -120,6 +129,9 @@ enum Commands {
         /// The MPC protocol to be used
         #[arg(long, value_enum)]
         protocol: MPCProtocol,
+        /// The pairing friendly curve to be used
+        #[arg(long, value_enum)]
+        curve: MPCCurve,
         /// The path to MPC network configuration file
         #[arg(long)]
         config: PathBuf,
@@ -138,6 +150,9 @@ enum Commands {
         /// The MPC protocol to be used for the proof generation
         #[arg(long, value_enum)]
         target_protocol: MPCProtocol,
+        /// The pairing friendly curve to be used
+        #[arg(long, value_enum)]
+        curve: MPCCurve,
         /// The path to MPC network configuration file
         #[arg(long)]
         config: PathBuf,
@@ -156,6 +171,9 @@ enum Commands {
         /// The MPC protocol to be used
         #[arg(long, value_enum)]
         protocol: MPCProtocol,
+        /// The pairing friendly curve to be used
+        #[arg(long, value_enum)]
+        curve: MPCCurve,
         /// The path to MPC network configuration file
         #[arg(long)]
         config: PathBuf,
@@ -174,6 +192,9 @@ enum Commands {
         /// The path to the proof file
         #[arg(long)]
         proof: PathBuf,
+        /// The pairing friendly curve to be used
+        #[arg(long, value_enum)]
+        curve: MPCCurve,
         /// The path to the verification key file
         #[arg(long)]
         vk: PathBuf,
@@ -183,12 +204,28 @@ enum Commands {
     },
 }
 
+impl Commands {
+    fn get_curve(&self) -> MPCCurve {
+        match self {
+            Self::SplitWitness { curve, .. } => *curve,
+            Self::SplitInput { curve, .. } => *curve,
+            Self::MergeInputShares { curve, .. } => *curve,
+            Self::GenerateWitness { curve, .. } => *curve,
+            Self::TranslateWitness { curve, .. } => *curve,
+            Self::GenerateProof { curve, .. } => *curve,
+            Self::Verify { curve, .. } => *curve,
+        }
+    }
+}
+
 fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
     let args = Cli::parse();
 
-    // So far only BN254 is supported
-    main_function::<Bn254>(args)
+    match args.command.get_curve() {
+        MPCCurve::BN254 => main_function::<Bn254>(args),
+        MPCCurve::BLS12_381 => main_function::<Bls12_381>(args),
+    }
 }
 
 fn main_function<P: Pairing + CircomArkworksPairingBridge>(
@@ -205,6 +242,7 @@ where
             witness: witness_path,
             r1cs,
             protocol,
+            curve: _,
             out_dir,
             threshold: t,
             num_parties: n,
@@ -290,6 +328,7 @@ where
             circuit,
             link_library,
             protocol,
+            curve: _,
             out_dir,
         } => {
             if protocol != MPCProtocol::REP3 {
@@ -366,6 +405,7 @@ where
         Commands::MergeInputShares {
             inputs,
             protocol,
+            curve: _,
             out,
         } => {
             if inputs.len() < 2 {
@@ -391,6 +431,7 @@ where
             circuit,
             link_library,
             protocol,
+            curve: _,
             config,
             out,
         } => {
@@ -430,6 +471,7 @@ where
             witness,
             src_protocol,
             target_protocol,
+            curve: _,
             config,
             out,
         } => {
@@ -473,6 +515,7 @@ where
             witness,
             zkey,
             protocol,
+            curve: _,
             config,
             out,
             public_input: public_input_filename,
@@ -575,6 +618,7 @@ where
         }
         Commands::Verify {
             proof,
+            curve: _,
             vk,
             public_input,
         } => {

@@ -10,17 +10,17 @@ First of all, here is the relevant Circom file:
 ```c++
 pragma circom 2.0.0;
 
-/*This circuit template checks that c is the multiplication of a and b.*/  
+/*This circuit template checks that c is the multiplication of a and b.*/
 
-template Multiplier2 () {  
+template Multiplier2 () {
 
-   // Declaration of signals.  
-   signal input a;  
-   signal input b;  
-   signal output c;  
+   // Declaration of signals.
+   signal input a;
+   signal input b;
+   signal output c;
 
-   // Constraints.  
-   c <== a * b;  
+   // Constraints.
+   c <== a * b;
 }
 component main{public [b]} = Multiplier2();
 ```
@@ -54,7 +54,7 @@ As we want to execute an MPC protocol, we have to split the input for the partie
 ```bash
 $ mkdir out
 
-$ co-circom split-input --circuit multiplier2.circom --input input.json --protocol REP3 --out-dir out/
+$ co-circom split-input --circuit multiplier2.circom --input input.json --protocol REP3 --curve BN254 --out-dir out/
 INFO co_circom: 275: Wrote input share 0 to file out/input.json.0.shared
 INFO co_circom: 275: Wrote input share 1 to file out/input.json.1.shared
 INFO co_circom: 275: Wrote input share 2 to file out/input.json.2.shared
@@ -97,7 +97,7 @@ You can download the TLS certificates from our [GitHub](https://github.com/Taceo
 We move the `.toml` files to `configs/` and execute the following command (for every party).
 
 ```bash
-$ co-circom generate-witness --input out/input.json.0.shared --circuit multiplier2.circom --protocol REP3 --config configs/party0.toml --out out/witness.wtns.0.shared
+$ co-circom generate-witness --input out/input.json.0.shared --circuit multiplier2.circom --protocol REP3 --curve BN254 --config configs/party0.toml --out out/witness.wtns.0.shared
 
 INFO co_circom: 365: Witness successfully written to out/witness.wtns.0.shared
 ```
@@ -111,7 +111,7 @@ After all parties finished successfully, you will have three witness files in yo
 We need another MPC step to finally get our co-SNARK proof. We can reuse TLS certificates and the network config from the previous step. Also, we finally need the proving key from the very first step! In your terminal execute the following command:
 
 ```bash
-$ co-circom generate-proof --witness out/witness.wtns.0.shared --zkey multiplier2.zkey --protocol REP3 --config configs/party0.toml --out proof.0.json --public-input public_input.json
+$ co-circom generate-proof --witness out/witness.wtns.0.shared --zkey multiplier2.zkey --protocol REP3 --curve BN254 --config configs/party0.toml --out proof.0.json --public-input public_input.json
 
 INFO co_circom: 418: Wrote proof to file proof.0.json
 INFO co_circom: 438: Proof generation finished successfully
@@ -134,7 +134,7 @@ This is the factored number and the public input `b`.
 To verify we can either use snarkjs or the `co-circom` binary.
 
 ```bash
-$ co-circom verify --proof proof.0.json --vk verification_key.json --public-input public_input.json
+$ co-circom verify --proof proof.0.json --vk verification_key.json --public-input public_input.json --curve BN254
 co_circom: 483: Proof verified successfully
 
 $ snarkjs groth16 verify verification_key.json public_input.json proof.0.json

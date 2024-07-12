@@ -23,6 +23,37 @@ pub mod file_utils;
 
 /// An enum representing the MPC protocol to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MPCCurve {
+    /// The BN254 curve (called BN128 in circom).
+    BN254,
+    /// The BLS12_381 curve.
+    BLS12_381,
+}
+
+impl ValueEnum for MPCCurve {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[MPCCurve::BN254, MPCCurve::BLS12_381]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        match self {
+            MPCCurve::BN254 => Some(clap::builder::PossibleValue::new("BN254")),
+            MPCCurve::BLS12_381 => Some(clap::builder::PossibleValue::new("BLS12-381")),
+        }
+    }
+}
+
+impl std::fmt::Display for MPCCurve {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MPCCurve::BN254 => write!(f, "BN254"),
+            MPCCurve::BLS12_381 => write!(f, "BLS12-381"),
+        }
+    }
+}
+
+/// An enum representing the MPC protocol to use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MPCProtocol {
     /// A protocol based on the Replicated Secret Sharing Scheme for 3 parties.
     /// For more information see <https://eprint.iacr.org/2018/403.pdf>.
