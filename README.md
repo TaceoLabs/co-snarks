@@ -55,16 +55,18 @@ The binary `co-circom` is a CLI tool that uses the libraries to build a coSNARK
 2. Download the binary for your operating system.
 
 3. Extract the binary from the archive
+
 ```bash
 tar xf co-circom-YOUR_ARCHITECTURE.tar.gz
 ```
+
 4. Make the binary executable (if necessary):
 
 ```bash
 chmod +x co-circom
 ```
 
-### Install from Source:
+### Install from Source
 
 1. Clone the repository:
 
@@ -146,12 +148,12 @@ input. Assume we have a file named `input.json` with the following content:
 To split the input, use the following command:
 
 ```bash
-mkdir out && ./co-circom split-input --circuit adder.circom --input input.json --protocol REP3 --out-dir out/
+mkdir out && ./co-circom split-input --circuit adder.circom --input input.json --protocol REP3 --curve BN254 --out-dir out/
 ```
+
 This command will generate secret-shared inputs in the `out` directory, creating separate files for each party. These files will be named `input.json.0.shared`, `input.json.1.shared`, and `input.json.2.shared`, corresponding to the shares for each respective party.
 
 **Note**: In practice, it is crucial that each party has exclusive access to their respective file. Sharing these files across parties compromises the security of the shared witness.
-
 
 #### Input from Multiple Parties
 
@@ -176,7 +178,7 @@ In practice, these files would typically reside on different machines. Each
 party secret-shares their input individually:
 
 ```bash
-mkdir out && ./co-circom split-input --circuit adder.circom --input input0.json --protocol REP3 --out-dir out/
+mkdir out && ./co-circom split-input --circuit adder.circom --input input0.json --protocol REP3 --curve BN254 --out-dir out/
 ```
 
 The parties then send their shares to the computing nodes, which can merge the
@@ -184,7 +186,7 @@ shares. All computing nodes execute the following command (provided here for the
 first party):
 
 ```bash
-./co-circom merge-input-shares --inputs out/input0.json.0.shared --inputs out/input1.json.0.shared --protocol REP3 --out out/input.json.0.shared
+./co-circom merge-input-shares --inputs out/input0.json.0.shared --inputs out/input1.json.0.shared --protocol REP3 --curve BN254 --out out/input.json.0.shared
 ```
 
 ### Step 4: Extended Witness Generation
@@ -201,20 +203,19 @@ configuration instructions.
 All parties execute the following command (provided here for the first party):
 
 ```bash
-./co-circom generate-witness --input out/input.json.0.shared --circuit adder.circom --protocol REP3 --config configs/party1.toml --out out/witness.wtns.0.shared
+./co-circom generate-witness --input out/input.json.0.shared --circuit adder.circom --protocol REP3 --curve BN254 --config configs/party1.toml --out out/witness.wtns.0.shared
 ```
 
 **Note**: You need to execute three nodes in parallel. This command will block
 until all nodes have finished, so you will likely need three separate terminals
 ;)
 
-
 ### Step 5: Generate the Proof
 
 Next, we generate the proof. Each computing node executes the following command:
 
 ```bash
-./co-circom generate-proof --witness out/witness.wtns.0.shared --zkey adder.zkey --protocol REP3 --config configs/party1.toml --out proof.0.json --public-input public_input.0.json
+./co-circom generate-proof --witness out/witness.wtns.0.shared --zkey adder.zkey --protocol REP3 --curve BN254 --config configs/party1.toml --out proof.0.json --public-input public_input.0.json
 ```
 
 Remember to execute this command on all three nodes.
@@ -225,7 +226,7 @@ You can verify the proof using either coCircom or snarkjs. Here's the command
 for using coCircom:
 
 ```bash
-./co-circom verify --proof proof.0.json --vk verification_key.json --public-input public_input.0.json
+./co-circom verify --proof proof.0.json --vk verification_key.json --public-input public_input.0.json --curve BN254
 ```
 
 **Note**: The `verification_key.json` was generated in Step 2.
