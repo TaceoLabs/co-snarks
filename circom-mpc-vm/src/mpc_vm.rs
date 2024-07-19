@@ -1,4 +1,6 @@
-use crate::types::{CollaborativeCircomCompilerParsed, FunDecl, InputList, TemplateDecl};
+use crate::types::{
+    CollaborativeCircomCompilerParsed, FunDecl, InputList, OutputMapping, TemplateDecl,
+};
 
 use super::accelerator::MpcAccelerator;
 use super::{
@@ -36,6 +38,7 @@ pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::Sca
     main_inputs: usize,
     main_outputs: usize,
     main_input_list: InputList,
+    output_mapping: OutputMapping,
     driver: C,
 }
 
@@ -788,7 +791,10 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
 }
 
 impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExtension<P, C> {
-    fn post_processing(mut self, amount_public_inputs: usize) -> Result<SharedWitness<C, P>> {
+    fn post_processing(
+        mut self,
+        amount_public_inputs: usize,
+    ) -> Result<FinalizedWitnessExtension<P, C>> {
         // TODO: capacities
         let mut public_inputs = Vec::new();
         let mut witness = Vec::new();
@@ -800,9 +806,12 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
                 witness.push(self.driver.vm_to_share(self.ctx.signals[idx].clone()));
             }
         }
-        Ok(SharedWitness {
-            public_inputs,
-            witness: witness.into(),
+        Ok(FinalizedWitnessExtension {
+            shared_witness: SharedWitness {
+                public_inputs,
+                witness: witness.into(),
+            },
+            output_mapping: self.output_mapping,
         })
     }
 
@@ -869,7 +878,10 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
     /// # Panics
     ///
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
-    pub fn run(mut self, input_signals: SharedInput<C, P>) -> Result<SharedWitness<C, P>> {
+    pub fn run(
+        mut self,
+        input_signals: SharedInput<C, P>,
+    ) -> Result<FinalizedWitnessExtension<P, C>> {
         let amount_public_inputs = self.set_input_signals(input_signals)?;
         self.call_main_component()?;
         self.post_processing(amount_public_inputs)
@@ -890,7 +902,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
     ///
     /// # Returns
     ///
-    /// * `Ok([SharedWitness])` - The secret-shared witness, distributed over the parties.
+    /// * `Ok([FinalizedWitnessExtension])` - The secret-shared witness, distributed over the parties.
     /// * `Err([eyre::Result])` - An error result.
     ///
     /// # Panics
@@ -900,10 +912,68 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
         mut self,
         input_signals: Vec<C::VmType>,
         amount_public_inputs: usize,
-    ) -> Result<SharedWitness<C, P>> {
+    ) -> Result<FinalizedWitnessExtension<P, C>> {
         self.set_flat_input_signals(input_signals);
         self.call_main_component()?;
         self.post_processing(amount_public_inputs)
+    }
+}
+
+/// The result of the witness extension, storing the secret-shared witness.
+///
+/// This struct is a wrapper around the [`SharedWitness`] and an [`OutputMapping`]. It is useful
+/// for retrieving one of the outputs of the main component of the circom file.
+///
+/// If you want to retrieve the shared witness, call [`into_shared_witness()`](FinalizedWitnessExtension::into_shared_witness()).
+pub struct FinalizedWitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>>
+{
+    shared_witness: SharedWitness<C, P>,
+    output_mapping: OutputMapping,
+}
+
+impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>>
+    From<FinalizedWitnessExtension<P, C>> for SharedWitness<C, P>
+{
+    fn from(value: FinalizedWitnessExtension<P, C>) -> Self {
+        value.shared_witness
+    }
+}
+
+impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>>
+    FinalizedWitnessExtension<P, C>
+{
+    /// Consumes self and returns the [`SharedWitness`].
+    pub fn into_shared_witness(self) -> SharedWitness<C, P> {
+        self.shared_witness
+    }
+
+    /// Returns the signals associated with the provided name in the circom file.
+    ///
+    /// # Example
+    ///
+    /// Imagine the following code snippet:
+    /// ```c++
+    /// template Main() {
+    ///     signal input a;
+    ///     signal input b;
+    ///     signal output c;
+    ///     c <== a + b;
+    /// }
+    /// component main = Main();
+    /// ```
+    ///
+    /// Then you can retrieve the output `c` by calling this method.
+    ///
+    /// # Arguments
+    /// - `name`: The name of the signal to retrieve.
+    ///
+    /// # Returns
+    /// Returns an `Option<Vec<P::ScalarField>>` containing the signals associated with the requested output.
+    /// Returns `None` if the name is not known.
+    pub fn get_output(&self, name: &str) -> Option<Vec<P::ScalarField>> {
+        self.output_mapping.get(name).map(|(offset, amount)| {
+            self.shared_witness.public_inputs[*offset..*offset + *amount].to_vec()
+        })
     }
 }
 
@@ -926,6 +996,7 @@ impl<P: Pairing> PlainWitnessExtension<P> {
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
             main_input_list: parser.main_input_list,
+            output_mapping: parser.output_mapping,
         }
     }
 }
@@ -959,6 +1030,7 @@ impl<P: Pairing, N: Rep3Network> Rep3WitnessExtension<P, N> {
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
             main_input_list: parser.main_input_list,
+            output_mapping: parser.output_mapping,
         })
     }
 }

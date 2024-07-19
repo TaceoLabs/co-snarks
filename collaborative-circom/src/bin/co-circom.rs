@@ -23,7 +23,8 @@ use mpc_core::{
     traits::{FFTPostProcessing, PrimeFieldMpcProtocol},
 };
 use mpc_net::config::NetworkConfig;
-use num_traits::identities::Zero;
+use num_bigint::BigUint;
+use num_traits::{identities::Zero, Num};
 use std::{
     fs::File,
     io::{BufReader, BufWriter},
@@ -671,22 +672,40 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
-fn parse_field<F: PrimeField>(val: &serde_json::Value) -> color_eyre::Result<F> {
+fn parse_field<F>(val: &serde_json::Value) -> color_eyre::Result<F>
+where
+    F: std::str::FromStr + PrimeField,
+{
     let s = val.as_str().ok_or_else(|| {
         eyre!(
             "expected input to be a field element string, got \"{}\"",
             val
         )
     })?;
-    if let Some(stripped) = s.strip_prefix('-') {
-        Ok(-stripped
+    let (is_negative, stripped) = if let Some(stripped) = s.strip_prefix('-') {
+        (true, stripped)
+    } else {
+        (false, s)
+    };
+    let positive_value = if let Some(stripped) = stripped.strip_prefix("0x") {
+        let big_int = BigUint::from_str_radix(stripped, 16)
+            .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
+            .context("while parsing field element")?;
+        let big_int: F::BigInt = big_int
+            .try_into()
+            .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
+            .context("while parsing field element")?;
+        F::from(big_int)
+    } else {
+        stripped
             .parse::<F>()
             .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
-            .context("while parsing field element")?)
+            .context("while parsing field element")?
+    };
+    if is_negative {
+        Ok(-positive_value)
     } else {
-        s.parse::<F>()
-            .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
-            .context("while parsing field element")
+        Ok(positive_value)
     }
 }
 
