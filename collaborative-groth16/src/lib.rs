@@ -13,13 +13,11 @@ mod tests {
     use ark_ec::pairing::Pairing;
     use ark_ff::UniformRand;
     use ark_groth16::{prepare_verifying_key, Groth16};
-    use circom_types::{
-        groth16::{
-            proof::JsonProof, public_input::JsonPublicInput, verification_key::JsonVerificationKey,
-            witness::Witness, zkey::ZKey,
-        },
-        r1cs::R1CS,
+    use circom_types::groth16::{
+        proof::JsonProof, public_input::JsonPublicInput, verification_key::JsonVerificationKey,
+        witness::Witness, zkey::ZKey,
     };
+    use circom_types::r1cs::R1CS;
     use rand::thread_rng;
     use std::fs::{self, File};
 

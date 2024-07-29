@@ -5,10 +5,8 @@ mod rep3_tests {
     use ark_groth16::{prepare_verifying_key, Groth16};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use bytes::Bytes;
-    use circom_types::{
-        groth16::{proof::JsonProof, witness::Witness, zkey::ZKey},
-        r1cs::R1CS,
-    };
+    use circom_types::groth16::{proof::JsonProof, witness::Witness, zkey::ZKey};
+    use circom_types::r1cs::R1CS;
     use collaborative_groth16::{
         circuit::Circuit,
         groth16::{CollaborativeGroth16, SharedWitness},
