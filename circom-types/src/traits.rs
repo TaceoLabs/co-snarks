@@ -232,6 +232,9 @@ mod $mod_name {
                 seq.serialize_element(&b)?;
                 seq.end()
             }
+            fn serialize_fr<S: Serializer>(p: &Self::ScalarField, ser: S) -> Result<S::Ok, S::Error> {
+                ser.serialize_str(&p.to_string())
+                }
 
             fn deserialize_gt_element<'de, D>(
                 deserializer: D,
@@ -241,6 +244,7 @@ mod $mod_name {
             {
                 deserializer.deserialize_seq(TargetGroupVisitor::<Self>::new())
             }
+
         }
 
     impl<'de> de::Visitor<'de> for TargetGroupVisitor<$config> {
@@ -310,7 +314,43 @@ mod $mod_name {
 }
     };
 }
+struct FrVisitor<P: Pairing + CircomArkworksPairingBridge>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    phantom_data: PhantomData<P>,
+}
 
+impl<P: Pairing + CircomArkworksPairingBridge> FrVisitor<P>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    fn new() -> Self {
+        Self {
+            phantom_data: PhantomData,
+        }
+    }
+}
+
+impl<'de, P: Pairing + CircomArkworksPairingBridge> de::Visitor<'de> for FrVisitor<P>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    type Value = P::ScalarField;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("an element over a PrimeField as string with radix 10")
+    }
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        P::ScalarField::from_str(s).map_err(|_| de::Error::custom("invalid field element"))
+    }
+}
 struct G1Visitor<P: Pairing + CircomArkworksPairingBridge>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -505,6 +545,13 @@ where
     fn deserialize_gt_element<'de, D>(deserializer: D) -> Result<Self::TargetField, D::Error>
     where
         D: de::Deserializer<'de>;
+    /// Deserializes (single) element of Scalarfield using deserializer
+    fn deserialize_fr_element<'de, D>(deserializer: D) -> Result<Self::ScalarField, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(FrVisitor::<Self>::new())
+    }
     /// Serializes element of G1 using serializer
     fn serialize_g1<S: Serializer>(p: &Self::G1Affine, ser: S) -> Result<S::Ok, S::Error> {
         let strings = Self::g1_to_strings_projective(p);
@@ -520,6 +567,8 @@ where
     fn serialize_g2<S: Serializer>(p: &Self::G2Affine, ser: S) -> Result<S::Ok, S::Error>;
     /// Serializes element of Gt using serializer
     fn serialize_gt<S: Serializer>(p: &Self::TargetField, ser: S) -> Result<S::Ok, S::Error>;
+    /// Serializes (single) element of Scalarfield using serializer
+    fn serialize_fr<S: Serializer>(p: &Self::ScalarField, ser: S) -> Result<S::Ok, S::Error>;
 }
 
 /// Bridge trait to deserialize field elements contained in circom files into [`ark_ff::PrimeField`] representation

@@ -4,11 +4,11 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_groth16::{Groth16, Proof};
 use circom_mpc_compiler::CompilerBuilder;
+use circom_types::r1cs::R1CS;
 use circom_types::{
     groth16::{
         proof::JsonProof, verification_key::JsonVerificationKey, witness::Witness, zkey::ZKey,
     },
-    r1cs::R1CS,
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
 use clap::{Parser, Subcommand};

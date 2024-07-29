@@ -552,7 +552,8 @@ mod test {
     use std::fs::File;
 
     use ark_bn254::Bn254;
-    use circom_types::{groth16::witness::Witness, r1cs::R1CS};
+    use circom_types::groth16::witness::Witness;
+    use circom_types::r1cs::R1CS;
     use mpc_core::protocols::{
         rep3::{network::Rep3MpcNet, Rep3Protocol},
         shamir::{network::ShamirMpcNet, ShamirProtocol},

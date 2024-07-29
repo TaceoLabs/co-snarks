@@ -1,6 +1,8 @@
 #![warn(missing_docs)]
 //! This crate defines types used in circom and utilities to read these types from files.
+mod binfile;
 pub mod groth16;
+pub mod plonk;
 pub mod r1cs;
 pub mod traits;
 
