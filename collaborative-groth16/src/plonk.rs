@@ -2,6 +2,8 @@
 
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
+use ark_relations::r1cs::SynthesisError;
 use eyre::Result;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use std::marker::PhantomData;
@@ -63,6 +65,13 @@ where
         }
     }
 
+    fn blind_coefficients(
+        poly: &<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
+        coeff: &[<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShare],
+    ) {
+        // let res_len = poly.len() + coeff.len();
+    }
+
     fn compute_wire_polynomials(&mut self) -> Result<()> {
         let n8 = (P::ScalarField::MODULUS_BIT_SIZE + 7) / 8;
 
@@ -75,6 +84,26 @@ where
         for i in 0..num_constraints {
             // TODO read the buffers
         }
+
+        // TODO batch to montgomery in MPC?
+
+        let buffer_a = <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec::from(buffer_a);
+        let buffer_b = <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec::from(buffer_b);
+        let buffer_c = <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec::from(buffer_c);
+
+        // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
+        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let poly_a = self.driver.ifft(&buffer_a, &domain1);
+        let poly_b = self.driver.ifft(&buffer_b, &domain1);
+        let poly_c = self.driver.ifft(&buffer_c, &domain1);
+
+        // Compute extended evaluations of a(X), b(X) and c(X) polynomials
+        let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints * 4)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let eval_a = self.driver.fft(poly_a.to_owned(), &domain2);
+        let eval_b = self.driver.fft(poly_b.to_owned(), &domain2);
+        let eval_c = self.driver.fft(poly_c.to_owned(), &domain2);
 
         todo!();
         Ok(())
