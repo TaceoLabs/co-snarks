@@ -66,10 +66,15 @@ where
     }
 
     fn blind_coefficients(
+        &mut self,
         poly: &<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
         coeff: &[<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShare],
     ) {
-        // let res_len = poly.len() + coeff.len();
+        let mut res = poly.clone().into_iter().collect::<Vec<_>>();
+        for (p, c) in res.iter_mut().zip(coeff.iter()) {
+            *p = self.driver.sub(p, c);
+        }
+        res.extend_from_slice(coeff);
     }
 
     fn compute_wire_polynomials(&mut self) -> Result<()> {
