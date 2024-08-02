@@ -318,8 +318,11 @@ where
         zkey: &ZKey<P>,
         round1_out: &WirePolyOutput<T, P>,
     ) -> Result<FieldShareVec<T, P>> {
-        let mut num_arry = Vec::with_capacity(zkey.domain_size);
+        let mut num_arr = Vec::with_capacity(zkey.domain_size);
         let mut den_arr = Vec::with_capacity(zkey.domain_size);
+
+        num_arr.push(self.driver.promote_to_trivial_share(P::ScalarField::one()));
+        den_arr.push(self.driver.promote_to_trivial_share(P::ScalarField::one()));
 
         let mut w = self.driver.promote_to_trivial_share(P::ScalarField::one());
         for i in 0..zkey.domain_size {
@@ -334,22 +337,52 @@ where
             let n1 = self.driver.add(&a, &betaw);
             let n1 = self.driver.add_with_public(&challenges.gamma, &n1);
 
-            let n2 = self.driver.add(
-                &b,
-                &self.driver.mul_with_public(&zkey.verifying_key.k1, &betaw),
-            );
+            let tmp = self.driver.mul_with_public(&zkey.verifying_key.k1, &betaw);
+            let n2 = self.driver.add(&b, &tmp);
             let n2 = self.driver.add_with_public(&challenges.gamma, &n2);
 
-            let n3 = self.driver.add(
-                &c,
-                &self.driver.mul_with_public(&zkey.verifying_key.k2, &betaw),
-            );
+            let tmp = self.driver.mul_with_public(&zkey.verifying_key.k2, &betaw);
+            let n3 = self.driver.add(&c, &tmp);
             let n3 = self.driver.add_with_public(&challenges.gamma, &n3);
 
             let num = self.driver.mul(&n1, &n2)?;
-            let num = self.driver.mul(&num, &n3)?;
+            let mut num = self.driver.mul(&num, &n3)?;
 
             // denArr := (a + beta·sigma1 + gamma)(b + beta·sigma2 + gamma)(c + beta·sigma3 + gamma)
+            let d1 = self
+                .driver
+                .add_with_public(&(challenges.beta * zkey.s1_poly.evaluations[i * 4]), &a);
+            let d1 = self.driver.add_with_public(&challenges.gamma, &d1);
+
+            let d2 = self
+                .driver
+                .add_with_public(&(challenges.beta * zkey.s2_poly.evaluations[i * 4]), &b);
+            let d2 = self.driver.add_with_public(&challenges.gamma, &d2);
+
+            let d3 = self
+                .driver
+                .add_with_public(&(challenges.beta * zkey.s3_poly.evaluations[i * 4]), &c);
+            let d3 = self.driver.add_with_public(&challenges.gamma, &d3);
+
+            // TODO parallelize with num above
+            let den = self.driver.mul(&d1, &d2)?;
+            let mut den = self.driver.mul(&den, &d3)?;
+
+            // Multiply current num value with the previous one saved in num_arr/den_arr
+            if i != 0 {
+                // TODO parallelize
+                num = self.driver.mul(&num, &num_arr[i])?;
+                den = self.driver.mul(&den, &den_arr[i])?;
+            }
+
+            if i == zkey.domain_size - 1 {
+                num_arr[0] = num;
+                den_arr[0] = den;
+            } else {
+                num_arr.push(num);
+                den_arr.push(den);
+            }
+
             todo!()
         }
 

@@ -10,8 +10,6 @@ use serde::ser::SerializeSeq;
 use serde::{de, Serializer};
 use std::str::FromStr;
 
-use ark_ff::Field;
-
 type IoResult<T> = Result<T, SerializationError>;
 
 macro_rules! impl_bn256 {
