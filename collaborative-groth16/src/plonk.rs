@@ -4,13 +4,12 @@ use crate::groth16::CollaborativeGroth16;
 use crate::groth16::SharedWitness;
 use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
-use ark_ff::BigInt;
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
-use ark_serialize::CanonicalDeserialize;
 use ark_serialize::CanonicalSerialize;
+use circom_types::groth16::zkey;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
@@ -18,11 +17,9 @@ use eyre::Result;
 use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
-use num_bigint::BigUint;
 use num_traits::One;
-use sha3::digest::FixedOutputReset;
+use sha3::Digest;
 use sha3::Keccak256;
-use std::io::Cursor;
 use std::marker::PhantomData;
 use std::ops::MulAssign;
 
@@ -33,7 +30,7 @@ type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
 struct Transcript<D, P>
 where
-    D: FixedOutputReset,
+    D: Digest,
     P: Pairing,
 {
     digest: D,
@@ -51,7 +48,7 @@ impl<P: Pairing> Default for Keccak256Transcript<P> {
 
 impl<D, P> Transcript<D, P>
 where
-    D: FixedOutputReset,
+    D: Digest,
     P: Pairing + CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
@@ -88,11 +85,10 @@ where
     }
 
     fn get_challenge(&mut self) -> P::ScalarField {
-        P::ScalarField::from_be_bytes_mod_order(&self.digest.finalize_fixed_reset()).to_montgomery()
-    }
-
-    fn reset(&mut self) {
-        self.digest.reset();
+        let mut digest = D::new();
+        std::mem::swap(&mut self.digest, &mut digest);
+        let bytes = digest.finalize();
+        P::ScalarField::from_be_bytes_mod_order(&bytes).to_montgomery()
     }
 }
 
@@ -337,6 +333,64 @@ where
         Ok(outp)
     }
 
+    fn compute_t(
+        &mut self,
+        challenges: &Challenges<T, P>,
+        zkey: &ZKey<P>,
+        z_poly: &PolyEval<T, P>,
+        wire_poly: &WirePolyOutput<T, P>,
+    ) {
+        // TODO Check if this root_of_unity is the one we need
+        //TODO ALSO CACHE IT SO WE DO NOT NEED IT MULTIPLE TIMES
+        let num_constraints = zkey.n_constraints;
+        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
+            .unwrap();
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
+
+        let w = P::ScalarField::one();
+        for i in 0..zkey.domain_size * 4 {
+            //let a = zkey.
+            let a = T::index_sharevec(&wire_poly.poly_eval_a.eval, i);
+            let b = T::index_sharevec(&wire_poly.poly_eval_b.eval, i);
+            let c = T::index_sharevec(&wire_poly.poly_eval_c.eval, i);
+            let z = T::index_sharevec(&z_poly.eval, i);
+            //const zw = evaluations.Z.getEvaluation((zkey.domainSize * 4 + 4 + i) % (zkey.domainSize * 4));
+            let zw = T::index_sharevec(
+                &z_poly.eval,
+                (zkey.domain_size * 4 + 4 + i) % (zkey.domain_size * 4),
+            );
+
+            let qm = zkey.qm_poly.evaluations[i];
+            let ql = zkey.ql_poly.evaluations[i];
+            let qr = zkey.qr_poly.evaluations[i];
+            let qo = zkey.qo_poly.evaluations[i];
+            let qc = zkey.qc_poly.evaluations[i];
+            let s1 = zkey.s1_poly.evaluations[i];
+            let s2 = zkey.s2_poly.evaluations[i];
+            let s3 = zkey.s3_poly.evaluations[i];
+
+            let ap = self.driver.mul_with_public(&w, &challenges.b[0]);
+            let ap = self.driver.add(&challenges.b[1], &ap);
+
+            let bp = self.driver.mul_with_public(&w, &challenges.b[2]);
+            let bp = self.driver.add(&challenges.b[3], &bp);
+
+            let cp = self.driver.mul_with_public(&w, &challenges.b[4]);
+            let cp = self.driver.add(&challenges.b[5], &cp);
+
+            let w2 = w.square();
+            //const zp = Fr.add(Fr.add(Fr.mul(challenges.b[7], w2), Fr.mul(challenges.b[8], w)), challenges.b[9]);
+            let zp_lhs = self.driver.mul_with_public(&w2, &challenges.b[6]);
+            let zp_rhs = self.driver.mul_with_public(&w, &challenges.b[7]);
+            let zp = self.driver.add(&zp_lhs, &zp_rhs);
+            let zp = self.driver.add(&challenges.b[8], &zp);
+            let wW = w * root_of_unity;
+            let wW2 = wW.square();
+            let zWp = 
+        }
+    }
+
     fn compute_z(
         &mut self,
         challenges: &Challenges<T, P>,
@@ -457,7 +511,6 @@ where
         // STEP 2.1 - Compute permutation challenge beta and gamma \in F_p
 
         // Compute permutation challenge beta
-        transcript.reset();
         transcript.add_poly_commitment(zkey.verifying_key.qm);
         transcript.add_poly_commitment(zkey.verifying_key.ql);
         transcript.add_poly_commitment(zkey.verifying_key.qr);
@@ -478,7 +531,6 @@ where
         challenges.beta = transcript.get_challenge();
 
         // Compute permutation challenge gamma
-        transcript.reset();
         transcript.add_scalar(challenges.beta);
         challenges.gamma = transcript.get_challenge();
 
@@ -503,9 +555,10 @@ where
         challenges: &mut Challenges<T, P>,
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
+        z_poly: &PolyEval<T, P>,
+        wire_poly: &WirePolyOutput<T, P>,
     ) -> Result<()> {
         // STEP 3.1 - Compute evaluation challenge alpha ∈ F
-        transcript.reset();
         transcript.add_scalar(challenges.beta);
         transcript.add_scalar(challenges.gamma);
         transcript.add_poly_commitment(proof.commit_z.into());
@@ -514,8 +567,31 @@ where
         let alpha2 = challenges.alpha.square();
 
         // Compute quotient polynomial T(X)
+        let t = self.compute_t(challenges, zkey, z_poly, wire_poly);
 
         // Compute [T1]_1, [T2]_1, [T3]_1
+        // let commit_a = MSMProvider::<P::G1>::msm_public_points(
+        //     &mut self.driver,
+        //     &zkey.p_tau,
+        //     &outp.poly_eval_a.poly,
+        // );
+        // let commit_b = MSMProvider::<P::G1>::msm_public_points(
+        //     &mut self.driver,
+        //     &zkey.p_tau,
+        //     &outp.poly_eval_b.poly,
+        // );
+        // let commit_c = MSMProvider::<P::G1>::msm_public_points(
+        //     &mut self.driver,
+        //     &zkey.p_tau,
+        //     &outp.poly_eval_c.poly,
+        // );
+
+        // TODO parallelize
+        //   proof.commit_a = self.driver.open_point(&commit_a)?;
+        //   proof.commit_b = self.driver.open_point(&commit_b)?;
+        //   proof.commit_c = self.driver.open_point(&commit_c)?;
+
+        //   Ok(outp)
 
         todo!();
         Ok(())
