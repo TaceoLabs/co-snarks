@@ -200,6 +200,10 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         }
         println!("]");
     }
+
+    fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare {
+        sharevec[index]
+    }
 }
 
 impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver<F> {

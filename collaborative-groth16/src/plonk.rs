@@ -1,14 +1,19 @@
 //! A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
 
-use ark_ec::{pairing::Pairing, AffineRepr};
+use crate::groth16::SharedWitness;
+use ark_ec::pairing::Pairing;
+use ark_ec::AffineRepr;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
+use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use eyre::Result;
-use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
+use mpc_core::traits::{
+    EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+};
 use sha3::digest::FixedOutputReset;
 use sha3::Keccak256;
 use std::io::Cursor;
@@ -79,12 +84,50 @@ where
         P::ScalarField::from_reader_unchecked_for_zkey(Cursor::new(bytes)).unwrap()
     }
 }
+type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
+type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
+type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
+
+struct Proof<P: Pairing> {
+    commit_a: P::G1,
+    commit_b: P::G1,
+    commit_c: P::G1,
+    commit_z: P::G1,
+    commit_t1: P::G1,
+    commit_t2: P::G1,
+    commit_t3: P::G1,
+    eval_a: P::ScalarField,
+    eval_b: P::ScalarField,
+    eval_c: P::ScalarField,
+    eval_s1: P::ScalarField,
+    eval_s2: P::ScalarField,
+    eval_zw: P::ScalarField,
+    commit_wxi: P::G1,
+    commit_wxiw: P::G1,
+}
 
 struct Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     b: [T::FieldShare; 10],
+    alpha: P::ScalarField,
+    beta: P::ScalarField,
+    gamma: P::ScalarField,
+    x_i: P::ScalarField,
+    v: [P::ScalarField; 5],
+}
+
+struct WirePolyOutput<T, P: Pairing>
+where
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    poly_a: FieldShareVec<T, P>,
+    poly_b: FieldShareVec<T, P>,
+    poly_c: FieldShareVec<T, P>,
+    eval_a: FieldShareVec<T, P>,
+    eval_b: FieldShareVec<T, P>,
+    eval_c: FieldShareVec<T, P>,
 }
 
 impl<T, P: Pairing> Challenges<T, P>
@@ -94,6 +137,11 @@ where
     fn new() -> Self {
         Self {
             b: core::array::from_fn(|_| T::FieldShare::default()),
+            alpha: P::ScalarField::default(),
+            beta: P::ScalarField::default(),
+            gamma: P::ScalarField::default(),
+            x_i: P::ScalarField::default(),
+            v: core::array::from_fn(|_| P::ScalarField::default()),
         }
     }
 
@@ -139,9 +187,9 @@ where
 
     fn blind_coefficients(
         &mut self,
-        poly: &<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
-        coeff: &[<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShare],
-    ) -> Vec<<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShare> {
+        poly: &FieldShareVec<T, P>,
+        coeff: &[FieldShare<T, P>],
+    ) -> Vec<FieldShare<T, P>> {
         let mut res = poly.clone().into_iter().collect::<Vec<_>>();
         for (p, c) in res.iter_mut().zip(coeff.iter()) {
             *p = self.driver.sub(p, c);
@@ -150,24 +198,30 @@ where
         res
     }
 
-    fn compute_wire_polynomials(&mut self, challenges: &Challenges<T, P>) -> Result<()> {
+    fn compute_wire_polynomials(
+        &mut self,
+        challenges: &Challenges<T, P>,
+        zkey: &ZKey<P>,
+        private_witness: SharedWitness<T, P>,
+    ) -> Result<WirePolyOutput<T, P>> {
         let n8 = (P::ScalarField::MODULUS_BIT_SIZE + 7) / 8;
-
-        let num_constraints = 10; // TODO get num constraints from zkey once merged
+        let num_constraints = zkey.n_constraints;
 
         let mut buffer_a = Vec::with_capacity(num_constraints);
         let mut buffer_b = Vec::with_capacity(num_constraints);
         let mut buffer_c = Vec::with_capacity(num_constraints);
 
         for i in 0..num_constraints {
-            // TODO read the buffers
+            buffer_a.push(T::index_sharevec(&private_witness.witness, zkey.map_a[i]));
+            buffer_b.push(T::index_sharevec(&private_witness.witness, zkey.map_b[i]));
+            buffer_c.push(T::index_sharevec(&private_witness.witness, zkey.map_c[i]));
         }
 
         // TODO batch to montgomery in MPC?
 
-        let buffer_a = <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec::from(buffer_a);
-        let buffer_b = <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec::from(buffer_b);
-        let buffer_c = <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec::from(buffer_c);
+        let buffer_a = FieldShareVec::<T, P>::from(buffer_a);
+        let buffer_b = FieldShareVec::<T, P>::from(buffer_b);
+        let buffer_c = FieldShareVec::<T, P>::from(buffer_c);
 
         // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
         let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
@@ -187,20 +241,55 @@ where
         let poly_b = self.blind_coefficients(&poly_b, &challenges.b[2..4]);
         let poly_c = self.blind_coefficients(&poly_c, &challenges.b[4..6]);
 
-        // TODO check degree of the polynomials against domain size of zkey
-        // TODO return what is required
+        if poly_a.len() > zkey.domain_size + 2
+            || poly_b.len() > zkey.domain_size + 2
+            || poly_c.len() > zkey.domain_size + 2
+        {
+            return Err(SynthesisError::PolynomialDegreeTooLarge.into());
+        }
 
-        Ok(())
+        Ok(WirePolyOutput {
+            poly_a: poly_a.into(),
+            poly_b: poly_b.into(),
+            poly_c: poly_c.into(),
+            eval_a,
+            eval_b,
+            eval_c,
+        })
     }
 
-    fn round1(&mut self) -> Result<()> {
+    fn compute_t(&mut self) {}
+
+    fn round1(
+        &mut self,
+        challenges: &mut Challenges<T, P>,
+        proof: &mut Proof<P>,
+        zkey: &ZKey<P>,
+        private_witness: SharedWitness<T, P>,
+    ) -> Result<WirePolyOutput<T, P>> {
         // STEP 1.1 - Generate random blinding scalars (b0, ..., b10) \in F_p
-        let mut challenges = Box::new(Challenges::<T, P>::new());
         challenges.random_b(&mut self.driver)?;
 
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        self.compute_wire_polynomials(&challenges)?;
+        let outp = self.compute_wire_polynomials(challenges, zkey, private_witness)?;
 
+        // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
+        let commit_a =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &outp.poly_a);
+        let commit_b =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &outp.poly_b);
+        let commit_c =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &outp.poly_c);
+
+        // TODO parallelize
+        proof.commit_a = self.driver.open_point(&commit_a)?;
+        proof.commit_b = self.driver.open_point(&commit_b)?;
+        proof.commit_c = self.driver.open_point(&commit_c)?;
+
+        Ok(outp)
+    }
+
+    fn round3(&mut self) -> Result<()> {
         Ok(())
     }
 

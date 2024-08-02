@@ -475,6 +475,13 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         }
         println!("]");
     }
+
+    fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare {
+        Self::FieldShare {
+            a: sharevec.a[index],
+            b: sharevec.b[index],
+        }
+    }
 }
 
 impl<F: PrimeField> Default for Rep3PrimeFieldShare<F> {

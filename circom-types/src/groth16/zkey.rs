@@ -426,14 +426,14 @@ where
     fn read<R: Read>(mut reader: &mut R) -> OurResult<Self> {
         // TODO: Impl From<u32> in Arkworks
         let n8q: u32 = u32::deserialize_uncompressed(&mut reader)?;
-        //modulos of BaseField
+        //modulus of BaseField
         let q = <P::BaseField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
         let modulus = <P::BaseField as PrimeField>::MODULUS;
         if q != modulus {
             return Err(ZKeyParserError::InvalidGroth16Header);
         }
         let n8r: u32 = u32::deserialize_uncompressed(&mut reader)?;
-        //modulos of ScalarField
+        //modulus of ScalarField
         let r = <P::ScalarField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
         let modulus = <P::ScalarField as PrimeField>::MODULUS;
         assert_eq!(r, modulus);
