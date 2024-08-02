@@ -115,7 +115,9 @@ where
         let poly_b = self.blind_coefficients(&poly_b, &challenges.b[2..4]);
         let poly_c = self.blind_coefficients(&poly_c, &challenges.b[4..6]);
 
-        todo!();
+        // TODO check degree of the polynomials against domain size of zkey
+        // TODO return what is required
+
         Ok(())
     }
 
