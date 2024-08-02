@@ -164,18 +164,20 @@ where
         })
     }
 
+    fn compute_t(&mut self) {}
+
     fn round1(
         &mut self,
+        challenges: &mut Challenges<T, P>,
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
         private_witness: SharedWitness<T, P>,
     ) -> Result<WirePolyOutput<T, P>> {
         // STEP 1.1 - Generate random blinding scalars (b0, ..., b10) \in F_p
-        let mut challenges = Box::new(Challenges::<T, P>::new());
         challenges.random_b(&mut self.driver)?;
 
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        let outp = self.compute_wire_polynomials(&challenges, zkey, private_witness)?;
+        let outp = self.compute_wire_polynomials(challenges, zkey, private_witness)?;
 
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
         let commit_a =
@@ -191,5 +193,9 @@ where
         proof.commit_c = self.driver.open_point(&commit_c)?;
 
         Ok(outp)
+    }
+
+    fn round3(&mut self) -> Result<()> {
+        Ok(())
     }
 }
