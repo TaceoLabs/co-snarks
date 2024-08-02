@@ -7,7 +7,6 @@ use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
-use circom_types::groth16::public_input;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
@@ -15,6 +14,7 @@ use eyre::Result;
 use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
+use num_traits::One;
 use sha3::digest::FixedOutputReset;
 use sha3::Keccak256;
 use std::io::Cursor;
@@ -127,6 +127,9 @@ struct WirePolyOutput<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
+    buffer_a: FieldShareVec<T, P>,
+    buffer_b: FieldShareVec<T, P>,
+    buffer_c: FieldShareVec<T, P>,
     poly_a: FieldShareVec<T, P>,
     poly_b: FieldShareVec<T, P>,
     poly_c: FieldShareVec<T, P>,
@@ -268,6 +271,9 @@ where
         }
 
         Ok(WirePolyOutput {
+            buffer_a,
+            buffer_b,
+            buffer_c,
             poly_a: poly_a.into(),
             poly_b: poly_b.into(),
             poly_c: poly_c.into(),
@@ -306,7 +312,47 @@ where
         Ok(outp)
     }
 
-    fn compute_z(&mut self) -> Result<FieldShareVec<T, P>> {
+    fn compute_z(
+        &mut self,
+        challenges: &Challenges<T, P>,
+        zkey: &ZKey<P>,
+        round1_out: &WirePolyOutput<T, P>,
+    ) -> Result<FieldShareVec<T, P>> {
+        let mut num_arry = Vec::with_capacity(zkey.domain_size);
+        let mut den_arr = Vec::with_capacity(zkey.domain_size);
+
+        let mut w = self.driver.promote_to_trivial_share(P::ScalarField::one());
+        for i in 0..zkey.domain_size {
+            let a = T::index_sharevec(&round1_out.buffer_a, i);
+            let b = T::index_sharevec(&round1_out.buffer_a, i);
+            let c = T::index_sharevec(&round1_out.buffer_a, i);
+
+            // Z(X) := numArr / denArr
+            // numArr := (a + beta·ω + gamma)(b + beta·ω·k1 + gamma)(c + beta·ω·k2 + gamma)
+            let betaw = self.driver.mul_with_public(&challenges.beta, &w);
+
+            let n1 = self.driver.add(&a, &betaw);
+            let n1 = self.driver.add_with_public(&challenges.gamma, &n1);
+
+            let n2 = self.driver.add(
+                &b,
+                &self.driver.mul_with_public(&zkey.verifying_key.k1, &betaw),
+            );
+            let n2 = self.driver.add_with_public(&challenges.gamma, &n2);
+
+            let n3 = self.driver.add(
+                &c,
+                &self.driver.mul_with_public(&zkey.verifying_key.k2, &betaw),
+            );
+            let n3 = self.driver.add_with_public(&challenges.gamma, &n3);
+
+            let num = self.driver.mul(&n1, &n2)?;
+            let num = self.driver.mul(&num, &n3)?;
+
+            // denArr := (a + beta·sigma1 + gamma)(b + beta·sigma2 + gamma)(c + beta·sigma3 + gamma)
+            todo!()
+        }
+
         todo!()
     }
 
@@ -317,6 +363,7 @@ where
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
+        round1_out: &WirePolyOutput<T, P>,
     ) -> Result<()>
     where
         P: Pairing + CircomArkworksPairingBridge,
@@ -352,7 +399,7 @@ where
         challenges.gamma = transcript.get_challenge();
 
         // STEP 2.2 - Compute permutation polynomial z(X)
-        let poly_z = self.compute_z()?;
+        let poly_z = self.compute_z(challenges, zkey, round1_out)?;
 
         // STEP 2.3 - Compute permutation [z]_1
         let commit_z =
