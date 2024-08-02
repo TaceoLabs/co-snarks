@@ -29,6 +29,18 @@ where
     b: [T::FieldShare; 10],
 }
 
+struct WirePolyOutput<T, P: Pairing>
+where
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    poly_a: FieldShareVec<T, P>,
+    poly_b: FieldShareVec<T, P>,
+    poly_c: FieldShareVec<T, P>,
+    eval_a: FieldShareVec<T, P>,
+    eval_b: FieldShareVec<T, P>,
+    eval_c: FieldShareVec<T, P>,
+}
+
 impl<T, P: Pairing> Challenges<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -97,11 +109,7 @@ where
         challenges: &Challenges<T, P>,
         zkey: &ZKey<P>,
         private_witness: SharedWitness<T, P>,
-    ) -> Result<(
-        FieldShareVec<T, P>,
-        FieldShareVec<T, P>,
-        FieldShareVec<T, P>,
-    )> {
+    ) -> Result<WirePolyOutput<T, P>> {
         let n8 = (P::ScalarField::MODULUS_BIT_SIZE + 7) / 8;
         let num_constraints = zkey.n_constraints;
 
@@ -148,7 +156,14 @@ where
 
         // TODO return what is required
 
-        Ok((poly_a.into(), poly_b.into(), poly_c.into()))
+        Ok(WirePolyOutput {
+            poly_a: poly_a.into(),
+            poly_b: poly_b.into(),
+            poly_c: poly_c.into(),
+            eval_a,
+            eval_b,
+            eval_c,
+        })
     }
 
     fn round1(
@@ -156,28 +171,27 @@ where
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
         private_witness: SharedWitness<T, P>,
-    ) -> Result<()> {
+    ) -> Result<WirePolyOutput<T, P>> {
         // STEP 1.1 - Generate random blinding scalars (b0, ..., b10) \in F_p
         let mut challenges = Box::new(Challenges::<T, P>::new());
         challenges.random_b(&mut self.driver)?;
 
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        let (poly_a, poly_b, poly_c) =
-            self.compute_wire_polynomials(&challenges, zkey, private_witness)?;
+        let outp = self.compute_wire_polynomials(&challenges, zkey, private_witness)?;
 
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
         let commit_a =
-            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_a);
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &outp.poly_a);
         let commit_b =
-            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_b);
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &outp.poly_b);
         let commit_c =
-            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_c);
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &outp.poly_c);
 
         // TODO parallelize
         proof.commit_a = self.driver.open_point(&commit_a)?;
         proof.commit_b = self.driver.open_point(&commit_b)?;
         proof.commit_c = self.driver.open_point(&commit_c)?;
 
-        Ok(())
+        Ok(outp)
     }
 }
