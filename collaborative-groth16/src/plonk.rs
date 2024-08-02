@@ -7,7 +7,9 @@ use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use circom_types::plonk::ZKey;
 use eyre::Result;
-use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
+use mpc_core::traits::{
+    EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+};
 use std::marker::PhantomData;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
@@ -153,12 +155,12 @@ where
             self.compute_wire_polynomials(&challenges, zkey, private_witness)?;
 
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let commit_a: PointShare<T, P::G1Affine> =
-            self.driver.msm_public_points(&zkey.p_tau, &poly_a);
-        let commit_b: PointShare<T, P::G1Affine> =
-            self.driver.msm_public_points(&zkey.p_tau, &poly_b);
-        let commit_c: PointShare<T, P::G1Affine> =
-            self.driver.msm_public_points(&zkey.p_tau, &poly_c);
+        let commit_a =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_a);
+        let commit_b =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_b);
+        let commit_c =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_c);
 
         Ok(())
     }
