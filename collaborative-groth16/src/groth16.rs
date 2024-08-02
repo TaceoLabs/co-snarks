@@ -210,7 +210,9 @@ where
     use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
     then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
     */
-    fn root_of_unity<F: PrimeField + FftField>(domain: &GeneralEvaluationDomain<F>) -> F {
+    pub(crate) fn root_of_unity<F: PrimeField + FftField>(
+        domain: &GeneralEvaluationDomain<F>,
+    ) -> F {
         let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
         let mut q = F::one();
         while q.legendre() != LegendreSymbol::QuadraticNonResidue {
