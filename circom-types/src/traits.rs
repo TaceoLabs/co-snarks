@@ -66,6 +66,11 @@ mod $mod_name {
             fn lift_montgomery(self) -> Self {
                 self * *INVERSE_R_SCALAR
             }
+
+            #[inline]
+            fn to_montgomery(self) -> Self {
+                self * Fr::new_unchecked(Fr::R2)
+            }
         }
         impl CircomArkworksPrimeFieldBridge for Fq {
             const SERIALIZED_BYTE_SIZE: usize = $field_size;
@@ -92,6 +97,10 @@ mod $mod_name {
             #[inline]
             fn lift_montgomery(self) -> Self {
                 self * *INVERSE_R_BASE
+            }
+            #[inline]
+            fn to_montgomery(self) -> Self {
+                self * Fq::new_unchecked(Fq::R2)
             }
         }
 
@@ -602,6 +611,8 @@ pub trait CircomArkworksPrimeFieldBridge: PrimeField {
     fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self>;
     /// undos the montgomery reduction
     fn lift_montgomery(self) -> Self;
+    /// undos the montgomery reduction
+    fn to_montgomery(self) -> Self;
 }
 
 impl_bn256!();

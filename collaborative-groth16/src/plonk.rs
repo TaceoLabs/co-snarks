@@ -3,9 +3,11 @@
 use crate::groth16::SharedWitness;
 use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
+use ark_ff::BigInt;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
+use ark_serialize::CanonicalDeserialize;
 use ark_serialize::CanonicalSerialize;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
@@ -14,6 +16,7 @@ use eyre::Result;
 use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
+use num_bigint::BigUint;
 use num_traits::One;
 use sha3::digest::FixedOutputReset;
 use sha3::Keccak256;
@@ -82,10 +85,7 @@ where
     }
 
     fn get_challenge(&mut self) -> P::ScalarField {
-        let bytes = self.digest.finalize_fixed_reset();
-        let bytes = bytes.to_vec();
-        println!("{bytes:?}");
-        P::ScalarField::from_reader_unchecked_for_zkey(Cursor::new(bytes)).unwrap()
+        P::ScalarField::from_be_bytes_mod_order(&self.digest.finalize_fixed_reset()).to_montgomery()
     }
 
     fn reset(&mut self) {
@@ -510,10 +510,13 @@ mod tests {
             )
             .unwrap(),
         );
-        let mut buf = vec![];
-        let test = transcript.get_challenge();
-        test.serialize_uncompressed(&mut buf).unwrap();
-        println!("{:?}", buf);
-        println!("{}", test);
+        let is_challenge = transcript.get_challenge();
+        assert_eq!(
+            ark_bn254::Fr::from_str(
+                "21571066717628871486594124342047303120063887347042301886903413955514057146987",
+            )
+            .unwrap(),
+            is_challenge
+        );
     }
 }
