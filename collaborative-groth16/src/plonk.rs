@@ -154,8 +154,6 @@ where
             return Err(SynthesisError::PolynomialDegreeTooLarge.into());
         }
 
-        // TODO return what is required
-
         Ok(WirePolyOutput {
             poly_a: poly_a.into(),
             poly_b: poly_b.into(),
