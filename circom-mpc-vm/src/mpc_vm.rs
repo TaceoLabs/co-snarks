@@ -890,8 +890,8 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
     /// Starts the execution of the MPC-VM with the provided input signals and consumes `self`.
     ///
     /// > **Warning:** The input signals are copied as provided, element by element, into the internal signals `Vec`.
-    /// This means there is no mapping done between the names given in the circom file and the elements.
-    /// Use this only if you are absolutely sure which signal corresponds to which index.
+    /// > This means there is no mapping done between the names given in the circom file and the elements.
+    /// > Use this only if you are absolutely sure which signal corresponds to which index.
     ///
     /// Use [`run()`](WitnessExtension::run) whenever possible.
     ///
