@@ -1,6 +1,7 @@
 //! This module contains traits for serializing and deserializing field elements and curve points into and from circom files to arkworks representation.
 use std::io::Read;
 use std::marker::PhantomData;
+use std::sync::LazyLock;
 
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::{PrimeField, Zero};
@@ -9,7 +10,10 @@ use serde::ser::SerializeSeq;
 use serde::{de, Serializer};
 use std::str::FromStr;
 
+use ark_ff::Field;
+
 type IoResult<T> = Result<T, SerializationError>;
+
 macro_rules! impl_bn256 {
     () => {
         impl_serde_for_curve!(bn254, Bn254, ark_bn254, "bn254", 32, 32);
@@ -26,10 +30,16 @@ macro_rules! impl_serde_for_curve {
     ($mod_name: ident, $config: ident, $curve: ident, $name: expr, $field_size: expr, $scalar_field_size: expr) => {
 
 mod $mod_name {
+
     use $curve::{$config, Fq, Fq2, Fr};
     use ark_ff::BigInt;
     use ark_serialize::{CanonicalDeserialize, SerializationError};
     use serde::ser::SerializeSeq;
+    use ark_ff::Field;
+    static INVERSE_R_BASE: LazyLock<Fq> =
+        LazyLock::new(|| Fq::from(Fq::R).inverse().unwrap());
+    static INVERSE_R_SCALAR: LazyLock<Fr> =
+        LazyLock::new(|| Fr::from(Fr::R).inverse().unwrap());
 
     use super::*;
         impl CircomArkworksPrimeFieldBridge for Fr {
@@ -53,6 +63,11 @@ mod $mod_name {
             fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self> {
                 Ok(Self::new_unchecked(Self::from_reader_unchecked(reader)?.into_bigint()))
             }
+
+            #[inline]
+            fn lift_montgomery(self) -> Self {
+                self * *INVERSE_R_SCALAR
+            }
         }
         impl CircomArkworksPrimeFieldBridge for Fq {
             const SERIALIZED_BYTE_SIZE: usize = $field_size;
@@ -74,6 +89,11 @@ mod $mod_name {
             #[inline]
             fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self> {
                 Ok(Self::new_unchecked(Self::from_reader_unchecked(reader)?.into_bigint()))
+            }
+
+            #[inline]
+            fn lift_montgomery(self) -> Self {
+                self * *INVERSE_R_BASE
             }
         }
 
@@ -582,6 +602,8 @@ pub trait CircomArkworksPrimeFieldBridge: PrimeField {
     fn from_reader_unchecked(reader: impl Read) -> IoResult<Self>;
     /// deserializes field elements that are multiplied by R^2 already (elements in zkey are of this form)
     fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self>;
+    /// undos the montgomery reduction
+    fn lift_montgomery(self) -> Self;
 }
 
 impl_bn256!();

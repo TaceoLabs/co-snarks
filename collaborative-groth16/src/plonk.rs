@@ -1,12 +1,84 @@
 //! A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
 
-use ark_ec::pairing::Pairing;
+use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
+use ark_serialize::CanonicalSerialize;
+use circom_types::traits::CircomArkworksPairingBridge;
+use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use eyre::Result;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
+use sha3::digest::FixedOutputReset;
+use sha3::Keccak256;
+use std::io::Cursor;
 use std::marker::PhantomData;
+
+type Keccak256Transcript<P> = Transcript<Keccak256, P>;
+
+struct Transcript<D, P>
+where
+    D: FixedOutputReset,
+    P: Pairing,
+{
+    digest: D,
+    phantom_data: PhantomData<P>,
+}
+
+impl<P: Pairing> Default for Keccak256Transcript<P> {
+    fn default() -> Self {
+        Self {
+            digest: Default::default(),
+            phantom_data: Default::default(),
+        }
+    }
+}
+
+impl<D, P> Transcript<D, P>
+where
+    D: FixedOutputReset,
+    P: Pairing + CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    fn add_scalar(&mut self, scalar: P::ScalarField) {
+        let mut buf = vec![];
+        scalar
+            .lift_montgomery()
+            .serialize_uncompressed(&mut buf)
+            .expect("Can Fr write into Vec<u8>");
+        buf.reverse();
+        self.digest.update(&buf);
+    }
+    fn add_poly_commitment(&mut self, point: P::G1Affine) {
+        let bits: usize = P::BaseField::MODULUS_BIT_SIZE
+            .try_into()
+            .expect("u32 fits into usize");
+        let mut buf = Vec::with_capacity(bits);
+        if let Some((x, y)) = point.xy() {
+            x.serialize_uncompressed(&mut buf)
+                .expect("Can Fq write into Vec<u8>");
+            buf.reverse();
+            self.digest.update(&buf);
+            buf.clear();
+            y.serialize_uncompressed(&mut buf)
+                .expect("Can Fq write into Vec<u8>");
+            buf.reverse();
+            self.digest.update(&buf);
+        } else {
+            // we are at infinity
+            buf.resize(((bits + 7) / 8) * 2, 0);
+            self.digest.update(&buf);
+        }
+    }
+
+    fn get_challenge(&mut self) -> P::ScalarField {
+        let bytes = self.digest.finalize_fixed_reset();
+        let bytes = bytes.to_vec();
+        println!("{bytes:?}");
+        P::ScalarField::from_reader_unchecked_for_zkey(Cursor::new(bytes)).unwrap()
+    }
+}
 
 struct Challenges<T, P: Pairing>
 where
@@ -26,7 +98,7 @@ where
     }
 
     fn random_b(&mut self, driver: &mut T) -> Result<()> {
-        for b in self.b.iter_mut() {
+        for mut b in self.b.iter_mut() {
             *b = driver.rand()?;
         }
 
@@ -130,5 +202,78 @@ where
         self.compute_wire_polynomials(&challenges)?;
 
         Ok(())
+    }
+
+    fn round2(&mut self) -> Result<()> {
+        todo!();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Keccak256Transcript;
+    use ark_bn254::Bn254;
+    use ark_ec::pairing::Pairing;
+    use std::str::FromStr;
+
+    //this is copied from circom-type/groth16/mod/test_utils. Maybe we can
+    //create a test-utils crate where we gather such definitions
+    macro_rules! to_g1_bn254 {
+        ($x: expr, $y: expr) => {
+            <ark_bn254::Bn254 as Pairing>::G1Affine::new(
+                ark_bn254::Fq::from_str($x).unwrap(),
+                ark_bn254::Fq::from_str($y).unwrap(),
+            )
+        };
+    }
+
+    macro_rules! to_g2_bn254 {
+        ({$x1: expr, $x2: expr}, {$y1: expr, $y2: expr}) => {
+            <ark_bn254::Bn254 as Pairing>::G2Affine::new(
+                ark_bn254::Fq2::new(
+                    ark_bn254::Fq::from_str($x1).unwrap(),
+                    ark_bn254::Fq::from_str($x2).unwrap(),
+                ),
+                ark_bn254::Fq2::new(
+                    ark_bn254::Fq::from_str($y1).unwrap(),
+                    ark_bn254::Fq::from_str($y2).unwrap(),
+                ),
+            )
+        };
+    }
+    use ark_serialize::CanonicalSerialize;
+    #[test]
+    fn test_keccak_transcript() {
+        let mut transcript = Keccak256Transcript::<Bn254>::default();
+        transcript.add_poly_commitment(to_g1_bn254!(
+            "20825949499069110345561489838956415747250622568151984013116057026259498945798",
+            "4633888776580597789536778273539625207986785465104156818397550354894072332743"
+        ));
+        transcript.add_poly_commitment(to_g1_bn254!(
+            "13502414797941204782598195942532580786194839256223737894432362681935424485706",
+            "18673738305240077401477088441313771484023070622513584695135539045403188608753"
+        ));
+        transcript.add_poly_commitment(ark_bn254::G1Affine::identity());
+        transcript.add_scalar(
+            ark_bn254::Fr::from_str(
+                "18493166935391704183319420574241503914733913248159936156014286513312199455",
+            )
+            .unwrap(),
+        );
+        transcript.add_poly_commitment(to_g1_bn254!(
+            "20825949499069110345561489838956415747250622568151984013116057026259498945798",
+            "17254354095258677432709627471717649880709525692193666844291487539751153875840"
+        ));
+        transcript.add_scalar(
+            ark_bn254::Fr::from_str(
+                "18493166935391704183319420574241503914733913248159936156014286513312199455",
+            )
+            .unwrap(),
+        );
+        let mut buf = vec![];
+        let test = transcript.get_challenge();
+        test.serialize_uncompressed(&mut buf);
+        println!("{:?}", buf);
+        println!("{}", test);
     }
 }
