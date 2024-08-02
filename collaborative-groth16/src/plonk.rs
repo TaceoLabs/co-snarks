@@ -12,6 +12,7 @@ use std::marker::PhantomData;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
+type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
 struct Challenges<T, P: Pairing>
 where
@@ -88,7 +89,11 @@ where
         challenges: &Challenges<T, P>,
         zkey: &ZKey<P>,
         private_witness: SharedWitness<T, P>,
-    ) -> Result<()> {
+    ) -> Result<(
+        FieldShareVec<T, P>,
+        FieldShareVec<T, P>,
+        FieldShareVec<T, P>,
+    )> {
         let n8 = (P::ScalarField::MODULUS_BIT_SIZE + 7) / 8;
         let num_constraints = zkey.n_constraints;
 
@@ -135,7 +140,7 @@ where
 
         // TODO return what is required
 
-        Ok(())
+        Ok((poly_a.into(), poly_b.into(), poly_c.into()))
     }
 
     fn round1(&mut self, zkey: &ZKey<P>, private_witness: SharedWitness<T, P>) -> Result<()> {
@@ -144,7 +149,16 @@ where
         challenges.random_b(&mut self.driver)?;
 
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        self.compute_wire_polynomials(&challenges, zkey, private_witness)?;
+        let (poly_a, poly_b, poly_c) =
+            self.compute_wire_polynomials(&challenges, zkey, private_witness)?;
+
+        // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
+        let commit_a: PointShare<T, P::G1Affine> =
+            self.driver.msm_public_points(&zkey.p_tau, &poly_a);
+        let commit_b: PointShare<T, P::G1Affine> =
+            self.driver.msm_public_points(&zkey.p_tau, &poly_b);
+        let commit_c: PointShare<T, P::G1Affine> =
+            self.driver.msm_public_points(&zkey.p_tau, &poly_c);
 
         Ok(())
     }
