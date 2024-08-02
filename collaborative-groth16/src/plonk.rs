@@ -1,5 +1,6 @@
 //! A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
 
+use crate::groth16::CollaborativeGroth16;
 use crate::groth16::SharedWitness;
 use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
@@ -19,6 +20,7 @@ use sha3::digest::FixedOutputReset;
 use sha3::Keccak256;
 use std::io::Cursor;
 use std::marker::PhantomData;
+use std::ops::MulAssign;
 
 type Keccak256Transcript<P> = Transcript<Keccak256, P>;
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
@@ -344,7 +346,13 @@ where
         num_arr.push(self.driver.promote_to_trivial_share(P::ScalarField::one()));
         den_arr.push(self.driver.promote_to_trivial_share(P::ScalarField::one()));
 
-        let mut w = self.driver.promote_to_trivial_share(P::ScalarField::one());
+        // TODO Check if this root_of_unity is the one we need
+        let num_constraints = zkey.n_constraints;
+        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
+
+        let mut w = P::ScalarField::one();
         for i in 0..zkey.domain_size {
             let a = T::index_sharevec(&round1_out.buffer_a, i);
             let b = T::index_sharevec(&round1_out.buffer_a, i);
@@ -352,17 +360,17 @@ where
 
             // Z(X) := numArr / denArr
             // numArr := (a + beta·ω + gamma)(b + beta·ω·k1 + gamma)(c + beta·ω·k2 + gamma)
-            let betaw = self.driver.mul_with_public(&challenges.beta, &w);
+            let betaw = challenges.beta * w;
 
-            let n1 = self.driver.add(&a, &betaw);
+            let n1 = self.driver.add_with_public(&betaw, &a);
             let n1 = self.driver.add_with_public(&challenges.gamma, &n1);
 
-            let tmp = self.driver.mul_with_public(&zkey.verifying_key.k1, &betaw);
-            let n2 = self.driver.add(&b, &tmp);
+            let tmp = zkey.verifying_key.k1 * betaw;
+            let n2 = self.driver.add_with_public(&tmp, &b);
             let n2 = self.driver.add_with_public(&challenges.gamma, &n2);
 
-            let tmp = self.driver.mul_with_public(&zkey.verifying_key.k2, &betaw);
-            let n3 = self.driver.add(&c, &tmp);
+            let tmp = zkey.verifying_key.k2 * betaw;
+            let n3 = self.driver.add_with_public(&tmp, &c);
             let n3 = self.driver.add_with_public(&challenges.gamma, &n3);
 
             let num = self.driver.mul(&n1, &n2)?;
@@ -403,8 +411,7 @@ where
                 den_arr.push(den);
             }
 
-            todo!()
-            // w = Fr.mul(w, Fr.w[zkey.power]);
+            w.mul_assign(&root_of_unity);
         }
 
         // Compute the inverse of denArr to compute in the next command the
@@ -415,10 +422,7 @@ where
         }
         let buffer_z = self.driver.mul_vec(&num_arr.into(), &den_arr.into())?;
 
-        // Compute polynomial coefficients z(X) from buffers.Z
-        let num_constraints = zkey.n_constraints;
-        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        // Compute polynomial coefficients z(X) from buffer_z
         let poly_z = self.driver.ifft(&buffer_z, &domain1);
 
         // Compute extended evaluations of z(X) polynomial
