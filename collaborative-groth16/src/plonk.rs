@@ -306,7 +306,7 @@ where
         Ok(outp)
     }
 
-    fn comput_z(&mut self) -> Result<FieldShareVec<T, P>> {
+    fn compute_z(&mut self) -> Result<FieldShareVec<T, P>> {
         todo!()
     }
 
