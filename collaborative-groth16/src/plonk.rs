@@ -16,6 +16,12 @@ type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
+struct Proof<P: Pairing> {
+    commit_a: P::G1,
+    commit_b: P::G1,
+    commit_c: P::G1,
+}
+
 struct Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -145,7 +151,12 @@ where
         Ok((poly_a.into(), poly_b.into(), poly_c.into()))
     }
 
-    fn round1(&mut self, zkey: &ZKey<P>, private_witness: SharedWitness<T, P>) -> Result<()> {
+    fn round1(
+        &mut self,
+        proof: &mut Proof<P>,
+        zkey: &ZKey<P>,
+        private_witness: SharedWitness<T, P>,
+    ) -> Result<()> {
         // STEP 1.1 - Generate random blinding scalars (b0, ..., b10) \in F_p
         let mut challenges = Box::new(Challenges::<T, P>::new());
         challenges.random_b(&mut self.driver)?;
@@ -161,6 +172,11 @@ where
             MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_b);
         let commit_c =
             MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_c);
+
+        // TODO parallelize
+        proof.commit_a = self.driver.open_point(&commit_a)?;
+        proof.commit_b = self.driver.open_point(&commit_b)?;
+        proof.commit_c = self.driver.open_point(&commit_c)?;
 
         Ok(())
     }
