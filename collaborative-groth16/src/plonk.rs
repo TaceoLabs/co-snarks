@@ -1,12 +1,17 @@
 //! A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
 
+use crate::groth16::SharedWitness;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
+use circom_types::plonk::ZKey;
 use eyre::Result;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use std::marker::PhantomData;
+
+type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
+type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
 
 struct Challenges<T, P: Pairing>
 where
@@ -67,9 +72,9 @@ where
 
     fn blind_coefficients(
         &mut self,
-        poly: &<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
-        coeff: &[<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShare],
-    ) -> Vec<<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShare> {
+        poly: &FieldShareVec<T, P>,
+        coeff: &[FieldShare<T, P>],
+    ) -> Vec<FieldShare<T, P>> {
         let mut res = poly.clone().into_iter().collect::<Vec<_>>();
         for (p, c) in res.iter_mut().zip(coeff.iter()) {
             *p = self.driver.sub(p, c);
@@ -78,24 +83,30 @@ where
         res
     }
 
-    fn compute_wire_polynomials(&mut self, challenges: &Challenges<T, P>) -> Result<()> {
+    fn compute_wire_polynomials(
+        &mut self,
+        challenges: &Challenges<T, P>,
+        zkey: &ZKey<P>,
+        private_witness: SharedWitness<T, P>,
+    ) -> Result<()> {
         let n8 = (P::ScalarField::MODULUS_BIT_SIZE + 7) / 8;
-
-        let num_constraints = 10; // TODO get num constraints from zkey once merged
+        let num_constraints = zkey.n_constraints;
 
         let mut buffer_a = Vec::with_capacity(num_constraints);
         let mut buffer_b = Vec::with_capacity(num_constraints);
         let mut buffer_c = Vec::with_capacity(num_constraints);
 
         for i in 0..num_constraints {
-            // TODO read the buffers
+            buffer_a.push(T::index_sharevec(&private_witness.witness, zkey.map_a[i]));
+            buffer_b.push(T::index_sharevec(&private_witness.witness, zkey.map_b[i]));
+            buffer_c.push(T::index_sharevec(&private_witness.witness, zkey.map_c[i]));
         }
 
         // TODO batch to montgomery in MPC?
 
-        let buffer_a = <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec::from(buffer_a);
-        let buffer_b = <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec::from(buffer_b);
-        let buffer_c = <T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec::from(buffer_c);
+        let buffer_a = FieldShareVec::<T, P>::from(buffer_a);
+        let buffer_b = FieldShareVec::<T, P>::from(buffer_b);
+        let buffer_c = FieldShareVec::<T, P>::from(buffer_c);
 
         // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
         let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
@@ -115,19 +126,25 @@ where
         let poly_b = self.blind_coefficients(&poly_b, &challenges.b[2..4]);
         let poly_c = self.blind_coefficients(&poly_c, &challenges.b[4..6]);
 
-        // TODO check degree of the polynomials against domain size of zkey
+        if poly_a.len() > zkey.domain_size + 2
+            || poly_b.len() > zkey.domain_size + 2
+            || poly_c.len() > zkey.domain_size + 2
+        {
+            return Err(SynthesisError::PolynomialDegreeTooLarge.into());
+        }
+
         // TODO return what is required
 
         Ok(())
     }
 
-    fn round1(&mut self) -> Result<()> {
+    fn round1(&mut self, zkey: &ZKey<P>, private_witness: SharedWitness<T, P>) -> Result<()> {
         // STEP 1.1 - Generate random blinding scalars (b0, ..., b10) \in F_p
         let mut challenges = Box::new(Challenges::<T, P>::new());
         challenges.random_b(&mut self.driver)?;
 
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        self.compute_wire_polynomials(&challenges)?;
+        self.compute_wire_polynomials(&challenges, zkey, private_witness)?;
 
         Ok(())
     }

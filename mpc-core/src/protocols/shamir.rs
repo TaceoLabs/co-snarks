@@ -589,6 +589,12 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         }
         println!("]");
     }
+
+    fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare {
+        Self::FieldShare {
+            a: sharevec.a[index],
+        }
+    }
 }
 
 impl<C: CurveGroup, N: ShamirNetwork> EcMpcProtocol<C> for ShamirProtocol<C::ScalarField, N> {

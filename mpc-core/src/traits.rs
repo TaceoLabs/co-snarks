@@ -103,6 +103,9 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 
     /// Prints the shared values-
     fn print(&self, to_print: &Self::FieldShareVec);
+
+    /// Returns the shared value at index `index` in the shared vector `sharevec`.
+    fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare;
 }
 
 /// A trait representing the MPC operations required for extending the secret-shared Circom witness in MPC. The operations are generic over public and private (i.e., secret-shared) inputs.
