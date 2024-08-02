@@ -114,7 +114,7 @@ where
     alpha: P::ScalarField,
     beta: P::ScalarField,
     gamma: P::ScalarField,
-    x_i: P::ScalarField,
+    xi: P::ScalarField,
     v: [P::ScalarField; 5],
 }
 
@@ -140,7 +140,7 @@ where
             alpha: P::ScalarField::default(),
             beta: P::ScalarField::default(),
             gamma: P::ScalarField::default(),
-            x_i: P::ScalarField::default(),
+            xi: P::ScalarField::default(),
             v: core::array::from_fn(|_| P::ScalarField::default()),
         }
     }
