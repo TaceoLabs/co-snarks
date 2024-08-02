@@ -123,21 +123,6 @@ where
     v: [P::ScalarField; 5],
 }
 
-struct WirePolyOutput<T, P: Pairing>
-where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    buffer_a: FieldShareVec<T, P>,
-    buffer_b: FieldShareVec<T, P>,
-    buffer_c: FieldShareVec<T, P>,
-    poly_a: FieldShareVec<T, P>,
-    poly_b: FieldShareVec<T, P>,
-    poly_c: FieldShareVec<T, P>,
-    eval_a: FieldShareVec<T, P>,
-    eval_b: FieldShareVec<T, P>,
-    eval_c: FieldShareVec<T, P>,
-}
-
 impl<T, P: Pairing> Challenges<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -160,6 +145,26 @@ where
 
         Ok(())
     }
+}
+
+struct PolyEval<T, P: Pairing>
+where
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    poly: FieldShareVec<T, P>,
+    eval: FieldShareVec<T, P>,
+}
+
+struct WirePolyOutput<T, P: Pairing>
+where
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    buffer_a: FieldShareVec<T, P>,
+    buffer_b: FieldShareVec<T, P>,
+    buffer_c: FieldShareVec<T, P>,
+    poly_eval_a: PolyEval<T, P>,
+    poly_eval_b: PolyEval<T, P>,
+    poly_eval_c: PolyEval<T, P>,
 }
 
 /// A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
@@ -274,12 +279,18 @@ where
             buffer_a,
             buffer_b,
             buffer_c,
-            poly_a: poly_a.into(),
-            poly_b: poly_b.into(),
-            poly_c: poly_c.into(),
-            eval_a,
-            eval_b,
-            eval_c,
+            poly_eval_a: PolyEval {
+                poly: poly_a.into(),
+                eval: eval_a,
+            },
+            poly_eval_b: PolyEval {
+                poly: poly_b.into(),
+                eval: eval_b,
+            },
+            poly_eval_c: PolyEval {
+                poly: poly_c.into(),
+                eval: eval_c,
+            },
         })
     }
 
@@ -297,12 +308,21 @@ where
         let outp = self.compute_wire_polynomials(challenges, zkey, private_witness)?;
 
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let commit_a =
-            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &outp.poly_a);
-        let commit_b =
-            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &outp.poly_b);
-        let commit_c =
-            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &outp.poly_c);
+        let commit_a = MSMProvider::<P::G1>::msm_public_points(
+            &mut self.driver,
+            &zkey.p_tau,
+            &outp.poly_eval_a.poly,
+        );
+        let commit_b = MSMProvider::<P::G1>::msm_public_points(
+            &mut self.driver,
+            &zkey.p_tau,
+            &outp.poly_eval_b.poly,
+        );
+        let commit_c = MSMProvider::<P::G1>::msm_public_points(
+            &mut self.driver,
+            &zkey.p_tau,
+            &outp.poly_eval_c.poly,
+        );
 
         // TODO parallelize
         proof.commit_a = self.driver.open_point(&commit_a)?;
@@ -317,7 +337,7 @@ where
         challenges: &Challenges<T, P>,
         zkey: &ZKey<P>,
         round1_out: &WirePolyOutput<T, P>,
-    ) -> Result<FieldShareVec<T, P>> {
+    ) -> Result<PolyEval<T, P>> {
         let mut num_arr = Vec::with_capacity(zkey.domain_size);
         let mut den_arr = Vec::with_capacity(zkey.domain_size);
 
@@ -384,9 +404,38 @@ where
             }
 
             todo!()
+            // w = Fr.mul(w, Fr.w[zkey.power]);
         }
 
-        todo!()
+        // Compute the inverse of denArr to compute in the next command the
+        // division numArr/denArr by multiplying num · 1/denArr
+        for den_arr in den_arr.iter_mut() {
+            // TODO parallerlize
+            *den_arr = self.driver.inv(den_arr)?;
+        }
+        let buffer_z = self.driver.mul_vec(&num_arr.into(), &den_arr.into())?;
+
+        // Compute polynomial coefficients z(X) from buffers.Z
+        let num_constraints = zkey.n_constraints;
+        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let poly_z = self.driver.ifft(&buffer_z, &domain1);
+
+        // Compute extended evaluations of z(X) polynomial
+        let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints * 4)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let eval_z = self.driver.fft(poly_z.to_owned(), &domain2);
+
+        let poly_z = self.blind_coefficients(&poly_z, &challenges.b[6..9]);
+
+        if poly_z.len() > zkey.domain_size + 3 {
+            return Err(SynthesisError::PolynomialDegreeTooLarge.into());
+        }
+
+        Ok(PolyEval {
+            poly: poly_z.into(),
+            eval: eval_z,
+        })
     }
 
     fn round2(
@@ -397,7 +446,7 @@ where
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
         round1_out: &WirePolyOutput<T, P>,
-    ) -> Result<()>
+    ) -> Result<PolyEval<T, P>>
     where
         P: Pairing + CircomArkworksPairingBridge,
         P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -432,15 +481,18 @@ where
         challenges.gamma = transcript.get_challenge();
 
         // STEP 2.2 - Compute permutation polynomial z(X)
-        let poly_z = self.compute_z(challenges, zkey, round1_out)?;
+        let poly_eval_z = self.compute_z(challenges, zkey, round1_out)?;
 
         // STEP 2.3 - Compute permutation [z]_1
-        let commit_z =
-            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_z);
+        let commit_z = MSMProvider::<P::G1>::msm_public_points(
+            &mut self.driver,
+            &zkey.p_tau,
+            &poly_eval_z.poly,
+        );
 
         proof.commit_z = self.driver.open_point(&commit_z)?;
 
-        Ok(())
+        Ok(poly_eval_z)
     }
 
     fn round3(&mut self) -> Result<()> {
