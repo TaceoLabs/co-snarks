@@ -20,6 +20,18 @@ struct Proof<P: Pairing> {
     commit_a: P::G1,
     commit_b: P::G1,
     commit_c: P::G1,
+    commit_z: P::G1,
+    commit_t1: P::G1,
+    commit_t2: P::G1,
+    commit_t3: P::G1,
+    eval_a: P::ScalarField,
+    eval_b: P::ScalarField,
+    eval_c: P::ScalarField,
+    eval_s1: P::ScalarField,
+    eval_s2: P::ScalarField,
+    eval_zw: P::ScalarField,
+    commit_wxi: P::G1,
+    commit_wxiw: P::G1,
 }
 
 struct Challenges<T, P: Pairing>
@@ -27,6 +39,11 @@ where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     b: [T::FieldShare; 10],
+    alpha: P::ScalarField,
+    beta: P::ScalarField,
+    gamma: P::ScalarField,
+    x_i: P::ScalarField,
+    v: [P::ScalarField; 5],
 }
 
 struct WirePolyOutput<T, P: Pairing>
@@ -48,6 +65,11 @@ where
     fn new() -> Self {
         Self {
             b: core::array::from_fn(|_| T::FieldShare::default()),
+            alpha: P::ScalarField::default(),
+            beta: P::ScalarField::default(),
+            gamma: P::ScalarField::default(),
+            x_i: P::ScalarField::default(),
+            v: core::array::from_fn(|_| P::ScalarField::default()),
         }
     }
 
