@@ -69,15 +69,16 @@ where
         &mut self,
         poly: &<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShareVec,
         coeff: &[<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShare],
-    ) {
+    ) -> Vec<<T as PrimeFieldMpcProtocol<P::ScalarField>>::FieldShare> {
         let mut res = poly.clone().into_iter().collect::<Vec<_>>();
         for (p, c) in res.iter_mut().zip(coeff.iter()) {
             *p = self.driver.sub(p, c);
         }
         res.extend_from_slice(coeff);
+        res
     }
 
-    fn compute_wire_polynomials(&mut self) -> Result<()> {
+    fn compute_wire_polynomials(&mut self, challenges: &Challenges<T, P>) -> Result<()> {
         let n8 = (P::ScalarField::MODULUS_BIT_SIZE + 7) / 8;
 
         let num_constraints = 10; // TODO get num constraints from zkey once merged
@@ -110,6 +111,10 @@ where
         let eval_b = self.driver.fft(poly_b.to_owned(), &domain2);
         let eval_c = self.driver.fft(poly_c.to_owned(), &domain2);
 
+        let poly_a = self.blind_coefficients(&poly_a, &challenges.b[..2]);
+        let poly_b = self.blind_coefficients(&poly_b, &challenges.b[2..4]);
+        let poly_c = self.blind_coefficients(&poly_c, &challenges.b[4..6]);
+
         todo!();
         Ok(())
     }
@@ -120,7 +125,7 @@ where
         challenges.random_b(&mut self.driver)?;
 
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        self.compute_wire_polynomials()?;
+        self.compute_wire_polynomials(&challenges)?;
 
         Ok(())
     }
