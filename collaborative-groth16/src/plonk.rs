@@ -4,6 +4,7 @@ use crate::groth16::CollaborativeGroth16;
 use crate::groth16::SharedWitness;
 use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
+use ark_ff::Field;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
@@ -183,14 +184,16 @@ where
     phantom_data: PhantomData<P>,
 }
 
-impl<T, P: Pairing> CollaborativePlonk<T, P>
+impl<T, P> CollaborativePlonk<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P: Pairing + CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     /// Creates a new [CollaborativePlonk] protocol with a given MPC driver.
     pub fn new(driver: T) -> Self {
@@ -241,9 +244,9 @@ where
         let mut buffer_c = Vec::with_capacity(num_constraints);
 
         for i in 0..num_constraints {
-            buffer_a.push(self.get_witness(&private_witness, zkey, zkey.map_a[i]));
-            buffer_b.push(self.get_witness(&private_witness, zkey, zkey.map_b[i]));
-            buffer_c.push(self.get_witness(&private_witness, zkey, zkey.map_c[i]));
+            buffer_a.push(self.get_witness(private_witness, zkey, zkey.map_a[i]));
+            buffer_b.push(self.get_witness(private_witness, zkey, zkey.map_b[i]));
+            buffer_c.push(self.get_witness(private_witness, zkey, zkey.map_c[i]));
         }
 
         // TODO batch to montgomery in MPC?
@@ -450,12 +453,7 @@ where
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
         round1_out: &WirePolyOutput<T, P>,
-    ) -> Result<PolyEval<T, P>>
-    where
-        P: Pairing + CircomArkworksPairingBridge,
-        P::BaseField: CircomArkworksPrimeFieldBridge,
-        P::ScalarField: CircomArkworksPrimeFieldBridge,
-    {
+    ) -> Result<PolyEval<T, P>> {
         // STEP 2.1 - Compute permutation challenge beta and gamma \in F_p
 
         // Compute permutation challenge beta
@@ -499,7 +497,26 @@ where
         Ok(poly_eval_z)
     }
 
-    fn round3(&mut self) -> Result<()> {
+    fn round3(
+        &mut self,
+        transcript: &mut Keccak256Transcript<P>,
+        challenges: &mut Challenges<T, P>,
+        proof: &mut Proof<P>,
+        zkey: &ZKey<P>,
+    ) -> Result<()> {
+        // STEP 3.1 - Compute evaluation challenge alpha ∈ F
+        transcript.reset();
+        transcript.add_scalar(challenges.beta);
+        transcript.add_scalar(challenges.gamma);
+        transcript.add_poly_commitment(proof.commit_z.into());
+
+        challenges.alpha = transcript.get_challenge();
+        let alpha2 = challenges.alpha.square();
+
+        // Compute quotient polynomial T(X)
+
+        // Compute [T1]_1, [T2]_1, [T3]_1
+
         todo!();
         Ok(())
     }
