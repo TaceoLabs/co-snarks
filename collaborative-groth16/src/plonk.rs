@@ -17,7 +17,7 @@ use eyre::Result;
 use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
-use num_traits::One;
+use num_traits::{One, Zero};
 use sha3::Digest;
 use sha3::Keccak256;
 use std::marker::PhantomData;
@@ -388,7 +388,7 @@ where
             let zp = self.driver.add(&challenges.b[8], &zp);
             let wW = w * root_of_unity;
             let wW2 = wW.square();
-            let zWp =
+            // let zWp =
         }
     }
 
@@ -499,6 +499,60 @@ where
             poly: poly_z.into(),
             eval: eval_z,
         })
+    }
+
+    fn compute_r(
+        &mut self,
+        challenges: &Challenges<T, P>,
+        proof: &Proof<P>,
+        zkey: &ZKey<P>,
+        private_witness: &SharedWitness<T, P>,
+    ) -> Result<()> {
+        let mut xin = challenges.xi;
+        let power = usize::ilog2(zkey.domain_size); // TODO check if true
+        for i in 0..power {
+            xin.square_in_place();
+        }
+        let zh = xin - P::ScalarField::one();
+
+        // TODO Check if this root_of_unity is the one we need
+        // TODO this is duplicate from compute_z
+        let num_constraints = zkey.n_constraints;
+        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
+
+        let l_length = usize::max(1, zkey.n_public);
+        let mut l = Vec::with_capacity(l_length);
+
+        let n = P::ScalarField::from(zkey.domain_size as u64);
+        let mut w = P::ScalarField::one();
+        for _ in 0..l_length {
+            l.push((w * zh) / (n * (challenges.xi - w)));
+            w *= root_of_unity;
+        }
+
+        let eval_l1 = (xin - P::ScalarField::one()) / (n * (challenges.xi - P::ScalarField::one()));
+
+        let mut eval_pi = P::ScalarField::zero();
+        for (val, l) in private_witness.public_inputs.iter().zip(l) {
+            eval_pi -= l * val;
+        }
+
+        let coef_ab = proof.eval_a * proof.eval_b;
+        let betaxi = challenges.beta * challenges.xi;
+        let e2a = proof.eval_a + betaxi + challenges.gamma;
+        let e2b = proof.eval_b + betaxi * zkey.verifying_key.k1 + challenges.gamma;
+        let e2c = proof.eval_c + betaxi * zkey.verifying_key.k2 + challenges.gamma;
+        let e2 = e2a * e2b * e2c * challenges.alpha;
+
+        let e3a = proof.eval_a + challenges.beta * proof.eval_s1 + challenges.gamma;
+        let e3b = proof.eval_b + challenges.beta * proof.eval_s2 + challenges.gamma;
+        let e3 = e3a * e3b * proof.eval_zw * challenges.alpha;
+
+        let e4 = eval_l1 * challenges.alpha.square();
+
+        todo!()
     }
 
     fn evaluate_poly(
@@ -661,7 +715,10 @@ where
         transcript: &mut Keccak256Transcript<P>,
         challenges: &mut Challenges<T, P>,
         proof: &mut Proof<P>,
+        zkey: &ZKey<P>,
+        private_witness: &SharedWitness<T, P>,
     ) -> Result<()> {
+        // STEP 5.1 - Compute evaluation challenge v \in F_p
         transcript.add_scalar(challenges.xi);
         transcript.add_scalar(proof.eval_a);
         transcript.add_scalar(proof.eval_b);
@@ -669,6 +726,14 @@ where
         transcript.add_scalar(proof.eval_s1);
         transcript.add_scalar(proof.eval_s2);
         transcript.add_scalar(proof.eval_zw);
+
+        challenges.v[0] = transcript.get_challenge();
+        for i in 1..5 {
+            challenges.v[i] = challenges.v[i - 1] * challenges.v[0];
+        }
+
+        // STEP 5.2 Compute linearisation polynomial r(X)
+        self.compute_r(challenges, proof, zkey, private_witness)?;
 
         todo!();
     }
