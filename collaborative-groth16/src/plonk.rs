@@ -779,7 +779,8 @@ where
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
         poly_z: &PolyEval<T, P>,
-    ) -> Result<()> {
+        poly_t: &TPoly<T, P>,
+    ) {
         let mut xin = challenges.xi;
         let power = usize::ilog2(zkey.domain_size); // TODO check if true
         for i in 0..power {
@@ -791,7 +792,8 @@ where
         // TODO this is duplicate from compute_z
         let num_constraints = zkey.n_constraints;
         let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
+            .unwrap(); // TODO There is an unwrap here
         let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
 
         let l_length = usize::max(1, zkey.n_public);
@@ -835,17 +837,42 @@ where
         Self::add_poly(&mut poly_r, &zkey.qc_poly.coeffs);
         Self::add_factor_poly(&mut poly_r, &zkey.s3_poly.coeffs, -(e3 * challenges.beta));
 
-        let mut poly_r_shared = poly_z
-            .poly
-            .clone()
-            .into_iter()
-            .map(|c| self.driver.mul_with_public(&e24, &c))
-            .collect::<Vec<_>>();
-        if poly_r_shared.len() > poly_r.len() {
-            poly_r_shared.resize(poly_r.len(), FieldShare::<T, P>::default());
+        let len = usize::max(T::sharevec_len(&poly_z.poly), poly_r.len());
+        let len = usize::max(len, T::sharevec_len(&poly_t.t1));
+        let len = usize::max(len, T::sharevec_len(&poly_t.t2));
+        let len = usize::max(len, T::sharevec_len(&poly_t.t3));
+
+        let mut poly_r_shared = vec![FieldShare::<T, P>::default(); len];
+
+        for (inout, add) in poly_r_shared
+            .iter_mut()
+            .zip(poly_z.poly.clone().into_iter())
+        {
+            *inout = self.driver.mul_with_public(&e24, &add)
         }
+
         for (inout, add) in poly_r_shared.iter_mut().zip(poly_r.iter()) {
             *inout = self.driver.add_with_public(add, inout);
+        }
+
+        let mut tmp_poly = vec![FieldShare::<T, P>::default(); len];
+        let xin2 = xin.square();
+        for (inout, add) in tmp_poly.iter_mut().zip(poly_t.t3.clone().into_iter()) {
+            *inout = self.driver.mul_with_public(&xin2, &add);
+        }
+        for (inout, add) in tmp_poly.iter_mut().zip(poly_t.t2.clone().into_iter()) {
+            let tmp = self.driver.mul_with_public(&xin, &add);
+            *inout = self.driver.add(&tmp, inout);
+        }
+        for (inout, add) in tmp_poly.iter_mut().zip(poly_t.t1.clone().into_iter()) {
+            *inout = self.driver.add(inout, &add);
+        }
+        for inout in tmp_poly.iter_mut() {
+            *inout = self.driver.mul_with_public(&zh, inout);
+        }
+
+        for (inout, sub) in poly_r_shared.iter_mut().zip(tmp_poly.iter()) {
+            *inout = self.driver.sub(inout, sub);
         }
 
         todo!()
@@ -1023,6 +1050,7 @@ where
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
         poly_z: &PolyEval<T, P>,
+        poly_t: &TPoly<T, P>,
     ) -> Result<()> {
         // STEP 5.1 - Compute evaluation challenge v \in F_p
         transcript.add_scalar(challenges.xi);
@@ -1039,7 +1067,7 @@ where
         }
 
         // STEP 5.2 Compute linearisation polynomial r(X)
-        self.compute_r(challenges, proof, zkey, private_witness, poly_z)?;
+        self.compute_r(challenges, proof, zkey, private_witness, poly_z, poly_t)?;
 
         todo!();
     }

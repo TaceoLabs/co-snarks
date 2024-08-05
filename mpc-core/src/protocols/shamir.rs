@@ -611,6 +611,10 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
     fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize) {
         sharevec.a[index] = val.a;
     }
+
+    fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
+        sharevec.len()
+    }
 }
 
 impl<C: CurveGroup, N: ShamirNetwork> EcMpcProtocol<C> for ShamirProtocol<C::ScalarField, N> {
