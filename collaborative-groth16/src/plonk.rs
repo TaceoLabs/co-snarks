@@ -387,7 +387,7 @@ where
             let zp = self.driver.add(&challenges.b[8], &zp);
             let wW = w * root_of_unity;
             let wW2 = wW.square();
-            let zWp = 
+            let zWp =
         }
     }
 
@@ -499,6 +499,21 @@ where
         })
     }
 
+    fn evaluate_poly(
+        &mut self,
+        poly: &FieldShareVec<T, P>,
+        x: &P::ScalarField,
+    ) -> FieldShare<T, P> {
+        let mut res = FieldShare::<T, P>::default();
+        let mut x_pow = P::ScalarField::one();
+        for coeff in poly.clone().into_iter() {
+            let tmp = self.driver.mul_with_public(&x_pow, &coeff);
+            res = self.driver.add(&res, &tmp);
+            x_pow *= x;
+        }
+        res
+    }
+
     fn round2(
         &mut self,
         transcript: &mut Keccak256Transcript<P>,
@@ -558,7 +573,7 @@ where
         z_poly: &PolyEval<T, P>,
         wire_poly: &WirePolyOutput<T, P>,
     ) -> Result<()> {
-        // STEP 3.1 - Compute evaluation challenge alpha ∈ F
+        // STEP 3.1 - Compute evaluation challenge alpha \in F_p
         transcript.add_scalar(challenges.beta);
         transcript.add_scalar(challenges.gamma);
         transcript.add_poly_commitment(proof.commit_z.into());
@@ -594,6 +609,48 @@ where
         //   Ok(outp)
 
         todo!();
+        Ok(())
+    }
+
+    fn round4(
+        &mut self,
+        transcript: &mut Keccak256Transcript<P>,
+        challenges: &mut Challenges<T, P>,
+        proof: &mut Proof<P>,
+        zkey: &ZKey<P>,
+        round1_out: &WirePolyOutput<T, P>,
+        poly_z: &PolyEval<T, P>,
+    ) -> Result<()> {
+        // STEP 4.1 - Compute evaluation challenge xi \in F_p
+        transcript.add_scalar(challenges.alpha);
+        transcript.add_poly_commitment(proof.commit_t1.into());
+        transcript.add_poly_commitment(proof.commit_t2.into());
+        transcript.add_poly_commitment(proof.commit_t3.into());
+
+        challenges.xi = transcript.get_challenge();
+
+        // TODO Check if this root_of_unity is the one we need
+        // TODO this is duplicate from compute_z
+        let num_constraints = zkey.n_constraints;
+        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
+
+        let xiw = challenges.xi * root_of_unity;
+
+        let eval_a = self.evaluate_poly(&round1_out.poly_eval_a.poly, &challenges.xi);
+        let eval_b = self.evaluate_poly(&round1_out.poly_eval_b.poly, &challenges.xi);
+        let eval_c = self.evaluate_poly(&round1_out.poly_eval_c.poly, &challenges.xi);
+        let eval_z = self.evaluate_poly(&poly_z.poly, &xiw);
+
+        // TODO parallelize
+        proof.eval_a = self.driver.open(&eval_a)?;
+        proof.eval_b = self.driver.open(&eval_b)?;
+        proof.eval_c = self.driver.open(&eval_c)?;
+        proof.eval_z = self.driver.open(&eval_z)?;
+
+        proof.eval_s1 = zkey.poly_s1.eval(&challenges.xi);
+        proof.eval_s2 = zkey.poly_s2.eval(&challenges.xi);
         Ok(())
     }
 }

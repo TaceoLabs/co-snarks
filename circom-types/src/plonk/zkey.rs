@@ -27,8 +27,8 @@
 //! This module defines the [`ZKey`] struct that implements deserialization of circom zkey files via [`ZKey::from_reader`].
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-
 use ark_serialize::CanonicalDeserialize;
+use ark_std::{One, Zero};
 use std::io::{Cursor, Read};
 
 use crate::{
@@ -94,6 +94,18 @@ pub struct Polynomial<P: Pairing> {
     pub coeffs: Vec<P::ScalarField>,
     /// The polynomial's evaluation form
     pub evaluations: Vec<P::ScalarField>,
+}
+
+impl<P: Pairing> Polynomial<P> {
+    pub(crate) fn evaluate(&self, x: P::ScalarField) -> P::ScalarField {
+        let mut result = P::ScalarField::zero();
+        let mut x_pow = P::ScalarField::one();
+        for coeff in self.coeffs.iter() {
+            result += coeff * x_pow;
+            x_pow *= x;
+        }
+        result
+    }
 }
 
 #[derive(Clone)]
