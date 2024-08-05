@@ -780,7 +780,7 @@ where
         private_witness: &SharedWitness<T, P>,
         poly_z: &PolyEval<T, P>,
         poly_t: &TPoly<T, P>,
-    ) {
+    ) -> FieldShareVec<T, P> {
         let mut xin = challenges.xi;
         let power = usize::ilog2(zkey.domain_size); // TODO check if true
         for i in 0..power {
@@ -875,7 +875,10 @@ where
             *inout = self.driver.sub(inout, sub);
         }
 
-        todo!()
+        let r0 = eval_pi - (e3 * (proof.eval_c + challenges.gamma)) - e4;
+
+        poly_r_shared[0] = self.driver.add_with_public(&r0, &poly_r_shared[0]);
+        poly_r_shared.into()
     }
 
     fn evaluate_poly(
@@ -1067,7 +1070,7 @@ where
         }
 
         // STEP 5.2 Compute linearisation polynomial r(X)
-        self.compute_r(challenges, proof, zkey, private_witness, poly_z, poly_t)?;
+        let poly_r = self.compute_r(challenges, proof, zkey, private_witness, poly_z, poly_t);
 
         todo!();
     }
