@@ -9,6 +9,8 @@ use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
+use circom_types::groth16::zkey;
+use circom_types::plonk::Polynomial;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
@@ -776,6 +778,7 @@ where
         proof: &Proof<P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
+        poly_z: &PolyEval<T, P>,
     ) -> Result<()> {
         let mut xin = challenges.xi;
         let power = usize::ilog2(zkey.domain_size); // TODO check if true
@@ -820,6 +823,30 @@ where
         let e3 = e3a * e3b * proof.eval_zw * challenges.alpha;
 
         let e4 = eval_l1 * challenges.alpha.square();
+        let e24 = e2 + e4;
+
+        let mut poly_r = zkey.qm_poly.coeffs.clone();
+        for coeff in poly_r.iter_mut() {
+            *coeff *= coef_ab;
+        }
+        Self::add_factor_poly(&mut poly_r, &zkey.ql_poly.coeffs, proof.eval_a);
+        Self::add_factor_poly(&mut poly_r, &zkey.qr_poly.coeffs, proof.eval_b);
+        Self::add_factor_poly(&mut poly_r, &zkey.qo_poly.coeffs, proof.eval_c);
+        Self::add_poly(&mut poly_r, &zkey.qc_poly.coeffs);
+        Self::add_factor_poly(&mut poly_r, &zkey.s3_poly.coeffs, -(e3 * challenges.beta));
+
+        let mut poly_r_shared = poly_z
+            .poly
+            .clone()
+            .into_iter()
+            .map(|c| self.driver.mul_with_public(&e24, &c))
+            .collect::<Vec<_>>();
+        if poly_r_shared.len() > poly_r.len() {
+            poly_r_shared.resize(poly_r.len(), FieldShare::<T, P>::default());
+        }
+        for (inout, add) in poly_r_shared.iter_mut().zip(poly_r.iter()) {
+            *inout = self.driver.add_with_public(add, inout);
+        }
 
         todo!()
     }
@@ -837,6 +864,30 @@ where
             x_pow *= x;
         }
         res
+    }
+
+    fn add_poly(inout: &mut Vec<P::ScalarField>, add_poly: &[P::ScalarField]) {
+        if add_poly.len() > inout.len() {
+            inout.resize(add_poly.len(), P::ScalarField::zero());
+        }
+
+        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+            *inout += *add;
+        }
+    }
+
+    fn add_factor_poly(
+        inout: &mut Vec<P::ScalarField>,
+        add_poly: &[P::ScalarField],
+        factor: P::ScalarField,
+    ) {
+        if add_poly.len() > inout.len() {
+            inout.resize(add_poly.len(), P::ScalarField::zero());
+        }
+
+        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+            *inout += *add * factor;
+        }
     }
 
     fn round2(
@@ -971,6 +1022,7 @@ where
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
+        poly_z: &PolyEval<T, P>,
     ) -> Result<()> {
         // STEP 5.1 - Compute evaluation challenge v \in F_p
         transcript.add_scalar(challenges.xi);
@@ -987,7 +1039,7 @@ where
         }
 
         // STEP 5.2 Compute linearisation polynomial r(X)
-        self.compute_r(challenges, proof, zkey, private_witness)?;
+        self.compute_r(challenges, proof, zkey, private_witness, poly_z)?;
 
         todo!();
     }
