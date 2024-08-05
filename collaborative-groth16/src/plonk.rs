@@ -783,7 +783,7 @@ where
     ) -> FieldShareVec<T, P> {
         let mut xin = challenges.xi;
         let power = usize::ilog2(zkey.domain_size); // TODO check if true
-        for i in 0..power {
+        for _ in 0..power {
             xin.square_in_place();
         }
         let zh = xin - P::ScalarField::one();
@@ -879,6 +879,81 @@ where
 
         poly_r_shared[0] = self.driver.add_with_public(&r0, &poly_r_shared[0]);
         poly_r_shared.into()
+    }
+
+    fn compute_wxi(
+        &mut self,
+        challenges: &Challenges<T, P>,
+        proof: &Proof<P>,
+        zkey: &ZKey<P>,
+        round1_out: &WirePolyOutput<T, P>,
+        poly_r: &FieldShareVec<T, P>,
+    ) {
+        let len = usize::max(
+            T::sharevec_len(poly_r),
+            T::sharevec_len(&round1_out.poly_eval_a.poly),
+        );
+        let len = usize::max(len, T::sharevec_len(&round1_out.poly_eval_b.poly));
+        let len = usize::max(len, T::sharevec_len(&round1_out.poly_eval_c.poly));
+        let len = usize::max(len, zkey.s1_poly.coeffs.len());
+        let len = usize::max(len, zkey.s2_poly.coeffs.len());
+
+        let mut res = vec![FieldShare::<T, P>::default(); len];
+
+        // R
+        for (inout, add) in res.iter_mut().zip(poly_r.clone().into_iter()) {
+            *inout = add;
+        }
+        // A
+        for (inout, add) in res
+            .iter_mut()
+            .zip(round1_out.poly_eval_a.poly.clone().into_iter())
+        {
+            let tmp = self.driver.mul_with_public(&challenges.v[0], &add);
+            *inout = self.driver.add(&tmp, inout);
+        }
+        // B
+        for (inout, add) in res
+            .iter_mut()
+            .zip(round1_out.poly_eval_b.poly.clone().into_iter())
+        {
+            let tmp = self.driver.mul_with_public(&challenges.v[1], &add);
+            *inout = self.driver.add(&tmp, inout);
+        }
+        // C
+        for (inout, add) in res
+            .iter_mut()
+            .zip(round1_out.poly_eval_c.poly.clone().into_iter())
+        {
+            let tmp = self.driver.mul_with_public(&challenges.v[2], &add);
+            *inout = self.driver.add(&tmp, inout);
+        }
+        // Sigma1
+        for (inout, add) in res.iter_mut().zip(zkey.s1_poly.coeffs.iter()) {
+            *inout = self.driver.add_with_public(&(challenges.v[3] * add), inout);
+        }
+        // Sigma2
+        for (inout, add) in res.iter_mut().zip(zkey.s2_poly.coeffs.iter()) {
+            *inout = self.driver.add_with_public(&(challenges.v[4] * add), inout);
+        }
+
+        res[0] = self
+            .driver
+            .add_with_public(&-(challenges.v[0] * proof.eval_a), &res[0]);
+        res[0] = self
+            .driver
+            .add_with_public(&-(challenges.v[1] * proof.eval_b), &res[0]);
+        res[0] = self
+            .driver
+            .add_with_public(&-(challenges.v[2] * proof.eval_c), &res[0]);
+        res[0] = self
+            .driver
+            .add_with_public(&-(challenges.v[3] * proof.eval_s1), &res[0]);
+        res[0] = self
+            .driver
+            .add_with_public(&-(challenges.v[4] * proof.eval_s2), &res[0]);
+
+        todo!()
     }
 
     fn evaluate_poly(
@@ -1052,6 +1127,7 @@ where
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
+        round1_out: &WirePolyOutput<T, P>,
         poly_z: &PolyEval<T, P>,
         poly_t: &TPoly<T, P>,
     ) -> Result<()> {
@@ -1071,6 +1147,12 @@ where
 
         // STEP 5.2 Compute linearisation polynomial r(X)
         let poly_r = self.compute_r(challenges, proof, zkey, private_witness, poly_z, poly_t);
+
+        //STEP 5.3 Compute opening proof polynomial Wxi(X)
+
+        //STEP 5.4 Compute opening proof polynomial Wxiw(X)
+
+        // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         todo!();
     }
