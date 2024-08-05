@@ -233,6 +233,7 @@ where
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(crate) driver: T,
+    transcript: Keccak256Transcript<P>,
     phantom_data: PhantomData<P>,
 }
 
@@ -251,6 +252,7 @@ where
     pub fn new(driver: T) -> Self {
         Self {
             driver,
+            transcript: Keccak256Transcript::default(),
             phantom_data: PhantomData,
         }
     }

@@ -3,9 +3,13 @@
 //! This module contains the reference implementation without MPC. It will be used by the VM for computing on public values and can be used to test MPC circuits.
 
 use crate::{
-    traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
+    traits::{
+        CircomWitnessExtensionProtocol, EcMpcProtocol, FFTProvider, MSMProvider,
+        PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    },
     RngType,
 };
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{One, PrimeField};
 use eyre::eyre;
 use eyre::Result;
@@ -217,6 +221,128 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
 
     fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize) {
         sharevec[index] = val;
+    }
+}
+
+impl<C: CurveGroup> EcMpcProtocol<C> for PlainDriver<C::ScalarField> {
+    type PointShare = C;
+
+    fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        todo!()
+    }
+
+    fn sub_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        todo!()
+    }
+
+    fn add_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare) {
+        todo!()
+    }
+
+    fn sub_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare) {
+        todo!()
+    }
+
+    fn add_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
+        todo!()
+    }
+
+    fn sub_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
+        todo!()
+    }
+
+    fn add_assign_points_public_affine(
+        &mut self,
+        a: &mut Self::PointShare,
+        b: &<C as CurveGroup>::Affine,
+    ) {
+        todo!()
+    }
+
+    fn sub_assign_points_public_affine(
+        &mut self,
+        a: &mut Self::PointShare,
+        b: &<C as CurveGroup>::Affine,
+    ) {
+        todo!()
+    }
+
+    fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare {
+        todo!()
+    }
+
+    fn scalar_mul_public_scalar(
+        &mut self,
+        a: &Self::PointShare,
+        b: &<C>::ScalarField,
+    ) -> Self::PointShare {
+        todo!()
+    }
+
+    fn scalar_mul(
+        &mut self,
+        a: &Self::PointShare,
+        b: &Self::FieldShare,
+    ) -> std::io::Result<Self::PointShare> {
+        todo!()
+    }
+
+    fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
+        Ok(a.to_owned())
+    }
+}
+
+impl<P: Pairing> PairingEcMpcProtocol<P> for PlainDriver<P::ScalarField> {
+    fn open_two_points(
+        &mut self,
+        a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
+        b: &<Self as EcMpcProtocol<P::G2>>::PointShare,
+    ) -> std::io::Result<(P::G1, P::G2)> {
+        todo!()
+    }
+}
+
+impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainDriver<F> {
+    fn fft<D: ark_poly::EvaluationDomain<F>>(
+        &mut self,
+        data: Self::FieldShareVec,
+        domain: &D,
+    ) -> Self::FieldShareVec {
+        domain.fft(&data)
+    }
+
+    fn fft_in_place<D: ark_poly::EvaluationDomain<F>>(
+        &mut self,
+        data: &mut Self::FieldShareVec,
+        domain: &D,
+    ) {
+        todo!()
+    }
+
+    fn ifft<D: ark_poly::EvaluationDomain<F>>(
+        &mut self,
+        data: &Self::FieldShareVec,
+        domain: &D,
+    ) -> Self::FieldShareVec {
+        domain.ifft(data)
+    }
+
+    fn ifft_in_place<D: ark_poly::EvaluationDomain<F>>(
+        &mut self,
+        data: &mut Self::FieldShareVec,
+        domain: &D,
+    ) {
+        todo!()
+    }
+}
+
+impl<C: CurveGroup> MSMProvider<C> for PlainDriver<C::ScalarField> {
+    fn msm_public_points(
+        &mut self,
+        points: &[C::Affine],
+        scalars: &Self::FieldShareVec,
+    ) -> Self::PointShare {
+        C::msm_unchecked(points, scalars)
     }
 }
 
