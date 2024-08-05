@@ -129,6 +129,12 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         -*a
     }
 
+    fn neg_vec_in_place(&mut self, a: &mut Self::FieldShareVec) {
+        for x in a.iter_mut() {
+            *x = self.neg(x);
+        }
+    }
+
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
         let mut rng = RngType::from_entropy();
         Ok(F::rand(&mut rng))
@@ -136,6 +142,10 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
 
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F> {
         Ok(*a)
+    }
+
+    fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec {
+        a.iter().zip(b.iter()).map(|(a, b)| *a + b).collect()
     }
 
     fn mul_vec(
@@ -203,6 +213,10 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
 
     fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare {
         sharevec[index]
+    }
+
+    fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize) {
+        sharevec[index] = val;
     }
 }
 

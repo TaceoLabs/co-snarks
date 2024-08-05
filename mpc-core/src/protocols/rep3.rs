@@ -353,6 +353,13 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         -a
     }
 
+    fn neg_vec_in_place(&mut self, vec: &mut Self::FieldShareVec) {
+        for (a, b) in vec.a.iter_mut().zip(vec.b.iter_mut()) {
+            a.neg_in_place();
+            b.neg_in_place();
+        }
+    }
+
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
         let (a, b) = self.rngs.rand.random_fes();
         Ok(Self::FieldShare { a, b })
@@ -384,6 +391,18 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
 
     fn promote_to_trivial_shares(&self, public_values: &[F]) -> Self::FieldShareVec {
         Self::FieldShareVec::promote_from_trivial(public_values, self.network.get_id())
+    }
+
+    fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec {
+        debug_assert_eq!(a.len(), b.len());
+        let mut vec = Vec::with_capacity(a.len());
+        for (aa, ab, ba, bb) in izip!(a.a.iter(), a.b.iter(), b.a.iter(), b.b.iter()) {
+            vec.push(Rep3PrimeFieldShare {
+                a: *aa + ba,
+                b: *ab + bb,
+            })
+        }
+        vec.into()
     }
 
     fn mul_vec(
@@ -481,6 +500,11 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
             a: sharevec.a[index],
             b: sharevec.b[index],
         }
+    }
+
+    fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize) {
+        sharevec.a[index] = val.a;
+        sharevec.a[index] = val.a;
     }
 }
 

@@ -9,7 +9,6 @@ use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
-use circom_types::groth16::zkey;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
@@ -18,6 +17,7 @@ use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
 use num_traits::One;
+use num_traits::Zero;
 use sha3::Digest;
 use sha3::Keccak256;
 use std::marker::PhantomData;
@@ -28,6 +28,51 @@ type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
+macro_rules! mul4 {
+    ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $domain: expr, $mod_i:expr) => {{
+        let a_b = $driver.mul($a, $b)?;
+        let a_bp = $driver.mul($a, $bp)?;
+        let ap_b = $driver.mul($ap, $b)?;
+        let ap_bp = $driver.mul($ap, $bp)?;
+
+        let c_d = $driver.mul($c, $d)?;
+        let c_dp = $driver.mul($c, $dp)?;
+        let cp_d = $driver.mul($cp, $d)?;
+        let cp_dp = $driver.mul($cp, $dp)?;
+
+        let r = $driver.mul(&a_b, &c_d)?;
+
+        let mut a0 = $driver.mul(&ap_b, &c_d)?;
+        a0 = $driver.add_mul(&a0, &a_bp, &c_d)?;
+        a0 = $driver.add_mul(&a0, &a_b, &cp_d)?;
+        a0 = $driver.add_mul(&a0, &a_b, &c_dp)?;
+
+        let mut a1 = $driver.mul(&ap_bp, &c_d)?;
+        a1 = $driver.add_mul(&a1, &ap_b, &cp_d)?;
+        a1 = $driver.add_mul(&a1, &ap_b, &c_dp)?;
+        a1 = $driver.add_mul(&a1, &a_bp, &cp_d)?;
+        a1 = $driver.add_mul(&a1, &a_bp, &c_dp)?;
+        a1 = $driver.add_mul(&a1, &a_b, &cp_dp)?;
+
+        let mut a2 = $driver.mul(&a_bp, &cp_dp)?;
+        a2 = $driver.add_mul(&a2, &ap_b, &cp_dp)?;
+        a2 = $driver.add_mul(&a2, &ap_bp, &c_dp)?;
+        a2 = $driver.add_mul(&a2, &ap_bp, &cp_d)?;
+
+        let a3 = $driver.mul(&ap_bp, &cp_dp)?;
+
+        let mut rz = a0;
+        if $mod_i != 0 {
+            let tmp = $driver.mul_with_public(&Self::get_z1($domain)[$mod_i], &a1);
+            rz = $driver.add(&rz, &tmp);
+            let tmp = $driver.mul_with_public(&Self::get_z2($domain)[$mod_i], &a2);
+            rz = $driver.add(&rz, &tmp);
+            let tmp = $driver.mul_with_public(&Self::get_z3($domain)[$mod_i], &a3);
+            rz = $driver.add(&rz, &tmp);
+        }
+        [r, rz]
+    }};
+}
 struct Transcript<D, P>
 where
     D: Digest,
@@ -114,8 +159,9 @@ struct Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    b: [T::FieldShare; 10],
+    b: [T::FieldShare; 11],
     alpha: P::ScalarField,
+    alpha2: P::ScalarField,
     beta: P::ScalarField,
     gamma: P::ScalarField,
     xi: P::ScalarField,
@@ -130,6 +176,7 @@ where
         Self {
             b: core::array::from_fn(|_| T::FieldShare::default()),
             alpha: P::ScalarField::default(),
+            alpha2: P::ScalarField::default(),
             beta: P::ScalarField::default(),
             gamma: P::ScalarField::default(),
             xi: P::ScalarField::default(),
@@ -164,6 +211,15 @@ where
     poly_eval_a: PolyEval<T, P>,
     poly_eval_b: PolyEval<T, P>,
     poly_eval_c: PolyEval<T, P>,
+}
+
+struct TPoly<T, P: Pairing>
+where
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    t1: FieldShareVec<T, P>,
+    t2: FieldShareVec<T, P>,
+    t3: FieldShareVec<T, P>,
 }
 
 /// A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
@@ -339,7 +395,8 @@ where
         zkey: &ZKey<P>,
         z_poly: &PolyEval<T, P>,
         wire_poly: &WirePolyOutput<T, P>,
-    ) {
+        round1_out: &WirePolyOutput<T, P>,
+    ) -> Result<[FieldShareVec<T, P>; 3]> {
         // TODO Check if this root_of_unity is the one we need
         //TODO ALSO CACHE IT SO WE DO NOT NEED IT MULTIPLE TIMES
         let num_constraints = zkey.n_constraints;
@@ -348,7 +405,9 @@ where
             .unwrap();
         let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
 
-        let w = P::ScalarField::one();
+        let mut w = P::ScalarField::one();
+        let mut t_vec = Vec::with_capacity(zkey.domain_size * 4);
+        let mut tz_vec = Vec::with_capacity(zkey.domain_size * 4);
         for i in 0..zkey.domain_size * 4 {
             //let a = zkey.
             let a = T::index_sharevec(&wire_poly.poly_eval_a.eval, i);
@@ -387,8 +446,218 @@ where
             let zp = self.driver.add(&challenges.b[8], &zp);
             let wW = w * root_of_unity;
             let wW2 = wW.square();
-            let zWp = 
+            let zWp_lhs = self.driver.mul_with_public(&wW2, &challenges.b[6]);
+            let zWp_rhs = self.driver.mul_with_public(&wW, &challenges.b[7]);
+            let zWp = self.driver.add(&zWp_lhs, &zWp_rhs);
+            let zp = self.driver.add(&challenges.b[8], &zWp);
+
+            let mut pi = self.driver.zero_share();
+            for (j, lagrange) in zkey.lagrange.iter().enumerate() {
+                let l_eval = lagrange.evaluations[i];
+                let a_val = T::index_sharevec(&round1_out.buffer_a, j);
+                let tmp = self.driver.mul_with_public(&l_eval, &a_val);
+                pi = self.driver.sub(&pi, &tmp);
+            }
+            //todo
+            let a_b = self.driver.mul(&a, &b)?;
+            let a_bp = self.driver.mul(&a, &bp)?;
+            let ap_b = self.driver.mul(&ap, &b)?;
+            let ap_bp = self.driver.mul(&ap, &bp)?;
+            let mut a0 = self.driver.add(&a_bp, &ap_b);
+            let mod_i = i % 4;
+            if mod_i != 0 {
+                let z1 = Self::get_z1(&domain1)[mod_i];
+                let tmp = self.driver.mul_with_public(&z1, &ap_bp);
+                a0 = self.driver.add(&a0, &tmp);
+            }
+            let (mut e1, mut e1z) = (a_b, a0);
+            e1 = self.driver.mul_with_public(&qm, &e1);
+            e1z = self.driver.mul_with_public(&qm, &e1z);
+
+            e1 = self.driver.add_mul_public(&e1, &a, &ql);
+            e1z = self.driver.add_mul_public(&e1z, &ap, &ql);
+
+            e1 = self.driver.add_mul_public(&e1, &b, &qr);
+            e1z = self.driver.add_mul_public(&e1z, &bp, &qr);
+
+            e1 = self.driver.add_mul_public(&e1, &c, &qo);
+            e1z = self.driver.add_mul_public(&e1z, &cp, &qo);
+
+            e1 = self.driver.add(&e1, &pi);
+            e1 = self.driver.add_with_public(&qc, &e1);
+
+            let betaw = challenges.beta * w; //self.driver.mul(challenges.beta, &w);
+            let mut e2a = a.clone();
+            e2a = self.driver.add_with_public(&betaw, &e2a);
+            e2a = self.driver.add_with_public(&challenges.gamma, &e2a);
+
+            let mut e2b = b.clone();
+            e2b = self
+                .driver
+                .add_with_public(&(betaw + zkey.verifying_key.k1), &e2b);
+            e2b = self.driver.add_with_public(&challenges.gamma, &e2b);
+
+            let mut e2c = c.clone();
+            e2c = self
+                .driver
+                .add_with_public(&(betaw + zkey.verifying_key.k2), &e2c);
+            e2c = self.driver.add_with_public(&challenges.gamma, &e2c);
+
+            let e2d = z.clone();
+
+            let [mut e2, mut e2z] = mul4!(
+                self.driver,
+                &e2a,
+                &e2b,
+                &e2c,
+                &e2d,
+                &ap,
+                &bp,
+                &cp,
+                &zp,
+                &domain1,
+                mod_i
+            );
+
+            e2 = self.driver.mul_with_public(&challenges.alpha, &e2);
+            e2z = self.driver.mul_with_public(&challenges.alpha, &e2z);
+
+            let mut e3a = a;
+            e3a = self.driver.add_with_public(&(s1 * challenges.beta), &e3a);
+            e3a = self.driver.add_with_public(&challenges.gamma, &e3a);
+
+            let mut e3b = b;
+            e3b = self.driver.add_with_public(&(s2 * challenges.beta), &e3b);
+            e3b = self.driver.add_with_public(&challenges.gamma, &e3b);
+
+            let mut e3c = c;
+            e3c = self.driver.add_with_public(&(s3 * challenges.beta), &e3c);
+            e3c = self.driver.add_with_public(&challenges.gamma, &e3c);
+
+            let e3d = zw;
+            let [mut e3, mut e3z] = mul4!(
+                self.driver,
+                &e3a,
+                &e3b,
+                &e3c,
+                &e3d,
+                &ap,
+                &bp,
+                &cp,
+                &zWp,
+                &domain1,
+                mod_i
+            );
+
+            e3 = self.driver.mul_with_public(&challenges.alpha, &e3);
+            e3z = self.driver.mul_with_public(&challenges.alpha, &e3z);
+
+            let mut e4 = self.driver.add_with_public(&-P::ScalarField::one(), &z);
+            //THIS IS MOST LIKELY WRONG
+            e4 = self
+                .driver
+                .mul_with_public(&zkey.lagrange[0].evaluations[i], &e4);
+            e4 = self.driver.mul_with_public(&challenges.alpha2, &e4);
+
+            //THIS IS MOST LIKELY WRONG
+            let mut e4z = self
+                .driver
+                .mul_with_public(&zkey.lagrange[0].evaluations[i], &zp);
+            e4 = self.driver.mul_with_public(&challenges.alpha2, &e4z);
+
+            let mut t = self.driver.add(&e1, &e2);
+            t = self.driver.sub(&t, &e3);
+            t = self.driver.add(&t, &e4);
+
+            let mut tz = self.driver.add(&e1z, &e2z);
+            tz = self.driver.sub(&tz, &e3z);
+            tz = self.driver.add(&tz, &e4z);
+
+            t_vec.push(t);
+            tz_vec.push(tz);
+            w *= root_of_unity;
         }
+        let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints * 4)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let mut coefficients_t = self.driver.ifft(&t_vec.into(), &domain2);
+        self.driver.neg_vec_in_place(&mut coefficients_t);
+
+        for i in zkey.domain_size..zkey.domain_size * 4 {
+            let a_lhs = T::index_sharevec(&coefficients_t, i - zkey.domain_size);
+            let a_rhs = T::index_sharevec(&coefficients_t, i);
+            let a = self.driver.sub(&a_lhs, &a_rhs);
+            T::set_index_sharevec(&mut coefficients_t, a, i);
+            /*
+            set check if poly is divisible here!
+             */
+        }
+
+        let coefficients_tz = self.driver.ifft(&tz_vec.into(), &domain2);
+        let t_final = self.driver.add_vec(&coefficients_t, &coefficients_tz);
+        let mut t_final = t_final.into_iter();
+        let mut t1 = Vec::with_capacity(zkey.domain_size);
+        let mut t2 = Vec::with_capacity(zkey.domain_size);
+        for _ in 0..zkey.domain_size {
+            t1.push(t_final.next().unwrap());
+        }
+        for _ in 0..zkey.domain_size {
+            t2.push(t_final.next().unwrap());
+        }
+        let mut t3 = t_final.collect::<Vec<_>>();
+        t1.push(challenges.b[9].to_owned());
+
+        t2[0] = self.driver.sub(&t2[0], &challenges.b[9]);
+        t2.push(challenges.b[10].to_owned());
+
+        t3[0] = self.driver.sub(&t3[0], &challenges.b[10]);
+
+        Ok([t1.into(), t2.into(), t3.into()])
+    }
+
+    fn get_z1(domain: &GeneralEvaluationDomain<P::ScalarField>) -> [P::ScalarField; 4] {
+        //TODO MOVE THIS THIS MUST BE A CONSTANT
+        let zero = P::ScalarField::zero();
+        let neg_1 = zero - P::ScalarField::one();
+        let neg_2 = neg_1 - P::ScalarField::one();
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(domain);
+        [
+            zero,
+            neg_1.to_montgomery() + root_of_unity,
+            neg_2.to_montgomery(),
+            neg_1.to_montgomery() - root_of_unity,
+        ]
+    }
+
+    fn get_z2(domain: &GeneralEvaluationDomain<P::ScalarField>) -> [P::ScalarField; 4] {
+        //TODO MOVE THIS THIS MUST BE A CONSTANT
+        let zero = P::ScalarField::zero();
+        let two = P::ScalarField::one() + P::ScalarField::one();
+        let four = two.square();
+        let neg_2 = zero - two;
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(domain);
+        let neg2_root_unity = neg_2.to_montgomery() * root_of_unity;
+        [
+            zero,
+            neg2_root_unity,
+            four.to_montgomery(),
+            P::ScalarField::zero() - neg2_root_unity,
+        ]
+    }
+
+    fn get_z3(domain: &GeneralEvaluationDomain<P::ScalarField>) -> [P::ScalarField; 4] {
+        //TODO MOVE THIS THIS MUST BE A CONSTANT
+        let zero = P::ScalarField::zero();
+        let two = P::ScalarField::one() + P::ScalarField::one();
+        let neg_eight = -(two.square() * two);
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(domain);
+        let two_mont = two.to_montgomery();
+        let two_root_unity = two_mont * root_of_unity;
+        [
+            zero,
+            two_mont + two_root_unity,
+            neg_eight.to_montgomery(),
+            two_mont - two_root_unity,
+        ]
     }
 
     fn compute_z(
@@ -412,8 +681,8 @@ where
         let mut w = P::ScalarField::one();
         for i in 0..zkey.domain_size {
             let a = T::index_sharevec(&round1_out.buffer_a, i);
-            let b = T::index_sharevec(&round1_out.buffer_a, i);
-            let c = T::index_sharevec(&round1_out.buffer_a, i);
+            let b = T::index_sharevec(&round1_out.buffer_b, i);
+            let c = T::index_sharevec(&round1_out.buffer_c, i);
 
             // Z(X) := numArr / denArr
             // numArr := (a + beta·ω + gamma)(b + beta·ω·k1 + gamma)(c + beta·ω·k2 + gamma)
@@ -557,44 +826,29 @@ where
         zkey: &ZKey<P>,
         z_poly: &PolyEval<T, P>,
         wire_poly: &WirePolyOutput<T, P>,
-    ) -> Result<()> {
+        round1_out: &WirePolyOutput<T, P>,
+    ) -> Result<TPoly<T, P>> {
         // STEP 3.1 - Compute evaluation challenge alpha ∈ F
         transcript.add_scalar(challenges.beta);
         transcript.add_scalar(challenges.gamma);
         transcript.add_poly_commitment(proof.commit_z.into());
 
         challenges.alpha = transcript.get_challenge();
-        let alpha2 = challenges.alpha.square();
+        challenges.alpha2 = challenges.alpha.square();
 
         // Compute quotient polynomial T(X)
-        let t = self.compute_t(challenges, zkey, z_poly, wire_poly);
+        let [t1, t2, t3] = self.compute_t(challenges, zkey, z_poly, wire_poly, round1_out)?;
 
         // Compute [T1]_1, [T2]_1, [T3]_1
-        // let commit_a = MSMProvider::<P::G1>::msm_public_points(
-        //     &mut self.driver,
-        //     &zkey.p_tau,
-        //     &outp.poly_eval_a.poly,
-        // );
-        // let commit_b = MSMProvider::<P::G1>::msm_public_points(
-        //     &mut self.driver,
-        //     &zkey.p_tau,
-        //     &outp.poly_eval_b.poly,
-        // );
-        // let commit_c = MSMProvider::<P::G1>::msm_public_points(
-        //     &mut self.driver,
-        //     &zkey.p_tau,
-        //     &outp.poly_eval_c.poly,
-        // );
+        let commit_a = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t1);
+        let commit_b = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t2);
+        let commit_c = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t3);
 
         // TODO parallelize
-        //   proof.commit_a = self.driver.open_point(&commit_a)?;
-        //   proof.commit_b = self.driver.open_point(&commit_b)?;
-        //   proof.commit_c = self.driver.open_point(&commit_c)?;
-
-        //   Ok(outp)
-
-        todo!();
-        Ok(())
+        proof.commit_a = self.driver.open_point(&commit_a)?;
+        proof.commit_b = self.driver.open_point(&commit_b)?;
+        proof.commit_c = self.driver.open_point(&commit_c)?;
+        Ok(TPoly { t1, t2, t3 })
     }
 }
 

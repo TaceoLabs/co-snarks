@@ -502,6 +502,12 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         -a
     }
 
+    fn neg_vec_in_place(&mut self, vec: &mut Self::FieldShareVec) {
+        for a in vec.a.iter_mut() {
+            a.neg_in_place();
+        }
+    }
+
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
         let (r, _) = self.rng_buffer.get_pair(&mut self.network)?;
         Ok(Self::FieldShare::new(r))
@@ -511,6 +517,12 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         let rcv = self.network.broadcast_next(a.a, self.threshold + 1)?;
         let res = ShamirCore::reconstruct(&rcv, &self.open_lagrange_t);
         Ok(res)
+    }
+
+    fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec {
+        Self::FieldShareVec {
+            a: a.a.iter().zip(b.a.iter()).map(|(a, b)| *a + b).collect(),
+        }
     }
 
     fn mul_vec(
@@ -594,6 +606,10 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         Self::FieldShare {
             a: sharevec.a[index],
         }
+    }
+
+    fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize) {
+        sharevec.a[index] = val.a;
     }
 }
 

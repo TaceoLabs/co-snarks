@@ -21,7 +21,8 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         + Clone
         + CanonicalSerialize
         + CanonicalDeserialize
-        + Sync;
+        + Sync
+        + Default;
 
     /// The type of a vector of shared field elements.
     type FieldShareVec: From<Vec<Self::FieldShare>>
@@ -55,17 +56,45 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     /// Multiply a share b by a public value a: c = a * \[b\].
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
 
+    /// Convenience method for \[a\] + \[b\] * c
+    fn add_mul_public(
+        &mut self,
+        a: &Self::FieldShare,
+        b: &Self::FieldShare,
+        c: &F,
+    ) -> Self::FieldShare {
+        let tmp = self.mul_with_public(c, b);
+        self.add(a, &tmp)
+    }
+
+    /// Convenience method for \[a\] + \[b\] * \[c\]
+    fn add_mul(
+        &mut self,
+        a: &Self::FieldShare,
+        b: &Self::FieldShare,
+        c: &Self::FieldShare,
+    ) -> std::io::Result<Self::FieldShare> {
+        let tmp = self.mul(c, b)?;
+        Ok(self.add(a, &tmp))
+    }
+
     /// Computes the inverse of a shared value: \[b\] = \[a\] ^ -1. Requires network communication.
     fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare>;
 
     /// Negates a shared value: \[b\] = -\[a\].
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
 
+    /// Negates a vector of shared values: \[b\] = -\[a\] for every element in place.
+    fn neg_vec_in_place(&mut self, a: &mut Self::FieldShareVec);
+
     /// Generate a share of a random value. The value is thereby unknown to anyone.
     fn rand(&mut self) -> std::io::Result<Self::FieldShare>;
 
     /// Reconstructs a shared value: a = Open(\[a\]).
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F>;
+
+    /// Elementwise addition of two vectors of shares: \[c_i\] = \[a_i\] + \[b_i\].
+    fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec;
 
     /// Elementwise multiplication of two vectors of shares: \[c_i\] = \[a_i\] * \[b_i\].
     fn mul_vec(
@@ -106,6 +135,14 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 
     /// Returns the shared value at index `index` in the shared vector `sharevec`.
     fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare;
+
+    /// Sets the specified value at `index` in the shared vector `sharevec`.
+    fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize);
+
+    /// Returns a secret shared zero value
+    fn zero_share(&self) -> Self::FieldShare {
+        Self::FieldShare::default()
+    }
 }
 
 /// A trait representing the MPC operations required for extending the secret-shared Circom witness in MPC. The operations are generic over public and private (i.e., secret-shared) inputs.
