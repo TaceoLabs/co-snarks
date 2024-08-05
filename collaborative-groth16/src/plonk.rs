@@ -333,6 +333,7 @@ where
         Ok(outp)
     }
 
+    // TODO parallelize
     fn compute_t(
         &mut self,
         challenges: &Challenges<T, P>,
@@ -391,6 +392,7 @@ where
         }
     }
 
+    // TODO parallelize
     fn compute_z(
         &mut self,
         challenges: &Challenges<T, P>,
@@ -647,11 +649,28 @@ where
         proof.eval_a = self.driver.open(&eval_a)?;
         proof.eval_b = self.driver.open(&eval_b)?;
         proof.eval_c = self.driver.open(&eval_c)?;
-        proof.eval_z = self.driver.open(&eval_z)?;
+        proof.eval_zw = self.driver.open(&eval_z)?;
 
-        proof.eval_s1 = zkey.poly_s1.eval(&challenges.xi);
-        proof.eval_s2 = zkey.poly_s2.eval(&challenges.xi);
+        proof.eval_s1 = zkey.s1_poly.evaluate(&challenges.xi);
+        proof.eval_s2 = zkey.s2_poly.evaluate(&challenges.xi);
         Ok(())
+    }
+
+    fn round5(
+        &mut self,
+        transcript: &mut Keccak256Transcript<P>,
+        challenges: &mut Challenges<T, P>,
+        proof: &mut Proof<P>,
+    ) -> Result<()> {
+        transcript.add_scalar(challenges.xi);
+        transcript.add_scalar(proof.eval_a);
+        transcript.add_scalar(proof.eval_b);
+        transcript.add_scalar(proof.eval_c);
+        transcript.add_scalar(proof.eval_s1);
+        transcript.add_scalar(proof.eval_s2);
+        transcript.add_scalar(proof.eval_zw);
+
+        todo!();
     }
 }
 

@@ -97,11 +97,12 @@ pub struct Polynomial<P: Pairing> {
 }
 
 impl<P: Pairing> Polynomial<P> {
-    pub(crate) fn evaluate(&self, x: P::ScalarField) -> P::ScalarField {
+    /// Evaluates the polynomial at a given point.
+    pub fn evaluate(&self, x: &P::ScalarField) -> P::ScalarField {
         let mut result = P::ScalarField::zero();
         let mut x_pow = P::ScalarField::one();
         for coeff in self.coeffs.iter() {
-            result += coeff * x_pow;
+            result += *coeff * x_pow;
             x_pow *= x;
         }
         result
