@@ -7,6 +7,7 @@ use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
+use circom_types::groth16::zkey;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
@@ -32,6 +33,26 @@ type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
+pub(crate) struct Domains<P: Pairing> {
+    constraint_domain: GeneralEvaluationDomain<P::ScalarField>,
+    constraint_domain4: GeneralEvaluationDomain<P::ScalarField>,
+    phantom_data: PhantomData<P>,
+}
+
+impl<P: Pairing> Domains<P> {
+    fn new(zkey: &ZKey<P>) -> Result<Self> {
+        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 4)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        Ok(Self {
+            constraint_domain: domain1,
+            constraint_domain4: domain2,
+            phantom_data: PhantomData,
+        })
+    }
+}
+
 enum Round<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -43,9 +64,11 @@ where
 {
     Init,
     Round1 {
+        domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
     },
     Round2 {
+        domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
         proof: Round1Proof<P>,
     },
@@ -111,14 +134,19 @@ where
         self,
         driver: &mut T,
         zkey: &ZKey<P>,
-        private_witness: &SharedWitness<T, P>,
+        private_witness: &mut SharedWitness<T, P>,
     ) -> Result<Self> {
         match self {
-            Round::Init => Ok(Round::Round1 {
-                challenges: Round1Challenges::random(driver)?,
-            }), //TODO DO WE NEED TO DO SOMETHING HERE?
-            Round::Round1 { challenges } => Self::round1(driver, challenges, zkey, private_witness),
-            Round::Round2 { challenges, proof } => todo!(),
+            Round::Init => Self::init_round(driver, zkey, private_witness),
+            Round::Round1 {
+                domains,
+                challenges,
+            } => Self::round1(driver, domains, challenges, zkey, private_witness),
+            Round::Round2 {
+                domains,
+                challenges,
+                proof,
+            } => todo!(),
             Round::Round3 => todo!(),
             Round::Round4 => todo!(),
             Round::Round5 => todo!(),
@@ -127,8 +155,27 @@ where
         }
     }
 
-    fn init_round(driver: &mut T) {
+    fn init_round(
+        driver: &mut T,
+        zkey: &ZKey<P>,
+        private_witness: &mut SharedWitness<T, P>,
+    ) -> Result<Self> {
         //TODO calculate additions
+        //set first element to zero as it is not used
+        private_witness.public_inputs[0] = P::ScalarField::zero();
+        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 4)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        Ok(Round::Round1 {
+            domains: Domains {
+                constraint_domain: domain1,
+                constraint_domain4: domain2,
+                phantom_data: PhantomData,
+            },
+
+            challenges: Round1Challenges::random(driver)?,
+        })
     }
 
     // TODO check if this is correct

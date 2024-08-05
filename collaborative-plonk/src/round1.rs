@@ -1,5 +1,5 @@
 use ark_ec::pairing::Pairing;
-use ark_poly::GeneralEvaluationDomain;
+use ark_poly::{domain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use circom_types::{
     plonk::ZKey,
@@ -13,7 +13,7 @@ use mpc_core::traits::{
 
 use crate::{
     types::{PolyEval, WirePolyOutput},
-    FieldShareVec, Round,
+    Domains, FieldShareVec, Round,
 };
 use ark_poly::EvaluationDomain;
 
@@ -91,13 +91,16 @@ where
                 zkey.map_c[i],
             ));
         }
-        println!("HELOOOOOOOOOOOOOO");
 
         // TODO batch to montgomery in MPC?
 
         let buffer_a = FieldShareVec::<T, P>::from(buffer_a);
         let buffer_b = FieldShareVec::<T, P>::from(buffer_b);
         let buffer_c = FieldShareVec::<T, P>::from(buffer_c);
+        driver.print(&buffer_a);
+        driver.print(&buffer_b);
+        driver.print(&buffer_c);
+        panic!();
 
         // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
         let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
@@ -145,6 +148,7 @@ where
 
     pub(super) fn round1(
         driver: &mut T,
+        domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
@@ -166,7 +170,11 @@ where
             commit_b: EcMpcProtocol::<P::G1>::open_point(driver, &commit_b)?,
             commit_c: EcMpcProtocol::<P::G1>::open_point(driver, &commit_c)?,
         };
-        Ok(Round::Round2 { challenges, proof })
+        Ok(Round::Round2 {
+            domains,
+            challenges,
+            proof,
+        })
     }
 }
 
@@ -179,9 +187,10 @@ pub mod tests {
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::Round;
+    use crate::{Domains, Round};
 
     use super::Round1Challenges;
+    use num_traits::Zero;
 
     #[test]
     fn test_round1_multiplier2() {
@@ -191,14 +200,15 @@ pub mod tests {
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
         let witness_file = File::open("../test_vectors/Plonk/bn254/multiplier2_wtns.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
-            public_inputs: vec![witness.values[0], witness.values[1]],
+        let mut witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+            public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
             witness: vec![witness.values[2], witness.values[3]],
         };
 
         let round1 = Round::<PlainDriver<ark_bn254::Fr>, Bn254>::Round1 {
+            domains: Domains::new(&zkey).unwrap(),
             challenges: Round1Challenges::deterministic().unwrap(),
         };
-        let round2 = round1.next_round(&mut driver, &zkey, &witness).unwrap();
+        let round2 = round1.next_round(&mut driver, &zkey, &mut witness).unwrap();
     }
 }
