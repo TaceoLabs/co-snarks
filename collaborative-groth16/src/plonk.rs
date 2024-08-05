@@ -959,6 +959,30 @@ where
         res.into()
     }
 
+    fn compute_wxiw(
+        &mut self,
+        challenges: &Challenges<T, P>,
+        proof: &Proof<P>,
+        zkey: &ZKey<P>,
+        poly_z: &PolyEval<T, P>,
+    ) -> FieldShareVec<T, P> {
+        // TODO Check if this root_of_unity is the one we need
+        // TODO this is duplicate from compute_z
+        let num_constraints = zkey.n_constraints;
+        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
+            .unwrap(); // TODO unrwap here
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
+
+        let xiw = challenges.xi * root_of_unity;
+
+        let mut res = poly_z.poly.clone().into_iter().collect::<Vec<_>>();
+        res[0] = self.driver.add_with_public(&-proof.eval_zw, &res[0]);
+        self.div_by_zerofier(&mut res, 1, xiw);
+
+        res.into()
+    }
+
     fn evaluate_poly(
         &mut self,
         poly: &FieldShareVec<T, P>,
@@ -1194,10 +1218,18 @@ where
         let poly_wxi = self.compute_wxi(challenges, proof, zkey, round1_out, &poly_r);
 
         //STEP 5.4 Compute opening proof polynomial Wxiw(X)
+        let poly_wxiw = self.compute_wxiw(challenges, proof, zkey, poly_z);
 
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
+        let commit_wxi =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_wxi);
+        let commit_wxiw =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_wxiw);
 
-        todo!();
+        // TODO parallelize
+        proof.commit_wxi = self.driver.open_point(&commit_wxi)?;
+        proof.commit_wxiw = self.driver.open_point(&commit_wxiw)?;
+        Ok(())
     }
 }
 
