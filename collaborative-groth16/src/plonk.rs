@@ -18,6 +18,7 @@ use eyre::Result;
 use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
+use num_traits::ops::inv;
 use num_traits::One;
 use num_traits::Zero;
 use sha3::Digest;
@@ -888,7 +889,7 @@ where
         zkey: &ZKey<P>,
         round1_out: &WirePolyOutput<T, P>,
         poly_r: &FieldShareVec<T, P>,
-    ) {
+    ) -> FieldShareVec<T, P> {
         let len = usize::max(
             T::sharevec_len(poly_r),
             T::sharevec_len(&round1_out.poly_eval_a.poly),
@@ -953,7 +954,9 @@ where
             .driver
             .add_with_public(&-(challenges.v[4] * proof.eval_s2), &res[0]);
 
-        todo!()
+        self.div_by_zerofier(&mut res, 1, challenges.xi);
+
+        res.into()
     }
 
     fn evaluate_poly(
@@ -993,6 +996,45 @@ where
         for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
             *inout += *add * factor;
         }
+    }
+
+    fn div_by_zerofier(
+        &mut self,
+        inout: &mut Vec<FieldShare<T, P>>,
+        n: usize,
+        beta: P::ScalarField,
+    ) {
+        let inv_beta = beta.inverse().expect("Highly unlikely to be zero");
+        let inv_beta_neg = -inv_beta;
+
+        let mut is_one = inv_beta_neg.is_one();
+        let mut is_negone = inv_beta.is_one();
+
+        if !is_one {
+            for el in inout.iter_mut().take(n) {
+                if is_negone {
+                    *el = self.driver.neg(el);
+                } else {
+                    *el = self.driver.mul_with_public(&inv_beta_neg, el);
+                }
+            }
+        }
+
+        std::mem::swap(&mut is_negone, &mut is_one);
+
+        for i in n..inout.len() {
+            let element = self.driver.sub(&inout[i - n], &inout[i]);
+
+            if !is_one {
+                if is_negone {
+                    inout[i] = self.driver.neg(&element);
+                } else {
+                    inout[i] = self.driver.mul_with_public(&inv_beta, &element);
+                }
+            }
+        }
+        // We cannot check whether the polyonmial is divisible by the zerofier, but we resize accordingly
+        inout.resize(inout.len() - n, FieldShare::<T, P>::default());
     }
 
     fn round2(
@@ -1149,6 +1191,7 @@ where
         let poly_r = self.compute_r(challenges, proof, zkey, private_witness, poly_z, poly_t);
 
         //STEP 5.3 Compute opening proof polynomial Wxi(X)
+        let poly_wxi = self.compute_wxi(challenges, proof, zkey, round1_out, &poly_r);
 
         //STEP 5.4 Compute opening proof polynomial Wxiw(X)
 
