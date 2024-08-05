@@ -222,6 +222,10 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
     fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize) {
         sharevec[index] = val;
     }
+
+    fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
+        sharevec.len()
+    }
 }
 
 impl<C: CurveGroup> EcMpcProtocol<C> for PlainDriver<C::ScalarField> {

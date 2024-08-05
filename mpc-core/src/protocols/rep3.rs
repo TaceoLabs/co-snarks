@@ -506,6 +506,10 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         sharevec.a[index] = val.a;
         sharevec.a[index] = val.a;
     }
+
+    fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
+        sharevec.len()
+    }
 }
 
 impl<F: PrimeField> Default for Rep3PrimeFieldShare<F> {

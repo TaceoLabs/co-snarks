@@ -139,6 +139,9 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     /// Sets the specified value at `index` in the shared vector `sharevec`.
     fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize);
 
+    /// Returns the length of the shared vector `sharevec`.
+    fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize;
+
     /// Returns a secret shared zero value
     fn zero_share(&self) -> Self::FieldShare {
         Self::FieldShare::default()

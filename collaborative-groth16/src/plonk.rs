@@ -9,6 +9,8 @@ use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
+use circom_types::groth16::zkey;
+use circom_types::plonk::Polynomial;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
@@ -16,6 +18,7 @@ use eyre::Result;
 use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
+use num_traits::ops::inv;
 use num_traits::One;
 use num_traits::Zero;
 use sha3::Digest;
@@ -778,10 +781,12 @@ where
         proof: &Proof<P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
-    ) -> Result<()> {
+        poly_z: &PolyEval<T, P>,
+        poly_t: &TPoly<T, P>,
+    ) -> FieldShareVec<T, P> {
         let mut xin = challenges.xi;
         let power = usize::ilog2(zkey.domain_size); // TODO check if true
-        for i in 0..power {
+        for _ in 0..power {
             xin.square_in_place();
         }
         let zh = xin - P::ScalarField::one();
@@ -790,7 +795,8 @@ where
         // TODO this is duplicate from compute_z
         let num_constraints = zkey.n_constraints;
         let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
+            .unwrap(); // TODO There is an unwrap here
         let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
 
         let l_length = usize::max(1, zkey.n_public);
@@ -822,8 +828,161 @@ where
         let e3 = e3a * e3b * proof.eval_zw * challenges.alpha;
 
         let e4 = eval_l1 * challenges.alpha.square();
+        let e24 = e2 + e4;
 
-        todo!()
+        let mut poly_r = zkey.qm_poly.coeffs.clone();
+        for coeff in poly_r.iter_mut() {
+            *coeff *= coef_ab;
+        }
+        Self::add_factor_poly(&mut poly_r, &zkey.ql_poly.coeffs, proof.eval_a);
+        Self::add_factor_poly(&mut poly_r, &zkey.qr_poly.coeffs, proof.eval_b);
+        Self::add_factor_poly(&mut poly_r, &zkey.qo_poly.coeffs, proof.eval_c);
+        Self::add_poly(&mut poly_r, &zkey.qc_poly.coeffs);
+        Self::add_factor_poly(&mut poly_r, &zkey.s3_poly.coeffs, -(e3 * challenges.beta));
+
+        let len = usize::max(T::sharevec_len(&poly_z.poly), poly_r.len());
+        let len = usize::max(len, T::sharevec_len(&poly_t.t1));
+        let len = usize::max(len, T::sharevec_len(&poly_t.t2));
+        let len = usize::max(len, T::sharevec_len(&poly_t.t3));
+
+        let mut poly_r_shared = vec![FieldShare::<T, P>::default(); len];
+
+        for (inout, add) in poly_r_shared
+            .iter_mut()
+            .zip(poly_z.poly.clone().into_iter())
+        {
+            *inout = self.driver.mul_with_public(&e24, &add)
+        }
+
+        for (inout, add) in poly_r_shared.iter_mut().zip(poly_r.iter()) {
+            *inout = self.driver.add_with_public(add, inout);
+        }
+
+        let mut tmp_poly = vec![FieldShare::<T, P>::default(); len];
+        let xin2 = xin.square();
+        for (inout, add) in tmp_poly.iter_mut().zip(poly_t.t3.clone().into_iter()) {
+            *inout = self.driver.mul_with_public(&xin2, &add);
+        }
+        for (inout, add) in tmp_poly.iter_mut().zip(poly_t.t2.clone().into_iter()) {
+            let tmp = self.driver.mul_with_public(&xin, &add);
+            *inout = self.driver.add(&tmp, inout);
+        }
+        for (inout, add) in tmp_poly.iter_mut().zip(poly_t.t1.clone().into_iter()) {
+            *inout = self.driver.add(inout, &add);
+        }
+        for inout in tmp_poly.iter_mut() {
+            *inout = self.driver.mul_with_public(&zh, inout);
+        }
+
+        for (inout, sub) in poly_r_shared.iter_mut().zip(tmp_poly.iter()) {
+            *inout = self.driver.sub(inout, sub);
+        }
+
+        let r0 = eval_pi - (e3 * (proof.eval_c + challenges.gamma)) - e4;
+
+        poly_r_shared[0] = self.driver.add_with_public(&r0, &poly_r_shared[0]);
+        poly_r_shared.into()
+    }
+
+    fn compute_wxi(
+        &mut self,
+        challenges: &Challenges<T, P>,
+        proof: &Proof<P>,
+        zkey: &ZKey<P>,
+        round1_out: &WirePolyOutput<T, P>,
+        poly_r: &FieldShareVec<T, P>,
+    ) -> FieldShareVec<T, P> {
+        let len = usize::max(
+            T::sharevec_len(poly_r),
+            T::sharevec_len(&round1_out.poly_eval_a.poly),
+        );
+        let len = usize::max(len, T::sharevec_len(&round1_out.poly_eval_b.poly));
+        let len = usize::max(len, T::sharevec_len(&round1_out.poly_eval_c.poly));
+        let len = usize::max(len, zkey.s1_poly.coeffs.len());
+        let len = usize::max(len, zkey.s2_poly.coeffs.len());
+
+        let mut res = vec![FieldShare::<T, P>::default(); len];
+
+        // R
+        for (inout, add) in res.iter_mut().zip(poly_r.clone().into_iter()) {
+            *inout = add;
+        }
+        // A
+        for (inout, add) in res
+            .iter_mut()
+            .zip(round1_out.poly_eval_a.poly.clone().into_iter())
+        {
+            let tmp = self.driver.mul_with_public(&challenges.v[0], &add);
+            *inout = self.driver.add(&tmp, inout);
+        }
+        // B
+        for (inout, add) in res
+            .iter_mut()
+            .zip(round1_out.poly_eval_b.poly.clone().into_iter())
+        {
+            let tmp = self.driver.mul_with_public(&challenges.v[1], &add);
+            *inout = self.driver.add(&tmp, inout);
+        }
+        // C
+        for (inout, add) in res
+            .iter_mut()
+            .zip(round1_out.poly_eval_c.poly.clone().into_iter())
+        {
+            let tmp = self.driver.mul_with_public(&challenges.v[2], &add);
+            *inout = self.driver.add(&tmp, inout);
+        }
+        // Sigma1
+        for (inout, add) in res.iter_mut().zip(zkey.s1_poly.coeffs.iter()) {
+            *inout = self.driver.add_with_public(&(challenges.v[3] * add), inout);
+        }
+        // Sigma2
+        for (inout, add) in res.iter_mut().zip(zkey.s2_poly.coeffs.iter()) {
+            *inout = self.driver.add_with_public(&(challenges.v[4] * add), inout);
+        }
+
+        res[0] = self
+            .driver
+            .add_with_public(&-(challenges.v[0] * proof.eval_a), &res[0]);
+        res[0] = self
+            .driver
+            .add_with_public(&-(challenges.v[1] * proof.eval_b), &res[0]);
+        res[0] = self
+            .driver
+            .add_with_public(&-(challenges.v[2] * proof.eval_c), &res[0]);
+        res[0] = self
+            .driver
+            .add_with_public(&-(challenges.v[3] * proof.eval_s1), &res[0]);
+        res[0] = self
+            .driver
+            .add_with_public(&-(challenges.v[4] * proof.eval_s2), &res[0]);
+
+        self.div_by_zerofier(&mut res, 1, challenges.xi);
+
+        res.into()
+    }
+
+    fn compute_wxiw(
+        &mut self,
+        challenges: &Challenges<T, P>,
+        proof: &Proof<P>,
+        zkey: &ZKey<P>,
+        poly_z: &PolyEval<T, P>,
+    ) -> FieldShareVec<T, P> {
+        // TODO Check if this root_of_unity is the one we need
+        // TODO this is duplicate from compute_z
+        let num_constraints = zkey.n_constraints;
+        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
+            .unwrap(); // TODO unrwap here
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
+
+        let xiw = challenges.xi * root_of_unity;
+
+        let mut res = poly_z.poly.clone().into_iter().collect::<Vec<_>>();
+        res[0] = self.driver.add_with_public(&-proof.eval_zw, &res[0]);
+        self.div_by_zerofier(&mut res, 1, xiw);
+
+        res.into()
     }
 
     fn evaluate_poly(
@@ -839,6 +998,69 @@ where
             x_pow *= x;
         }
         res
+    }
+
+    fn add_poly(inout: &mut Vec<P::ScalarField>, add_poly: &[P::ScalarField]) {
+        if add_poly.len() > inout.len() {
+            inout.resize(add_poly.len(), P::ScalarField::zero());
+        }
+
+        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+            *inout += *add;
+        }
+    }
+
+    fn add_factor_poly(
+        inout: &mut Vec<P::ScalarField>,
+        add_poly: &[P::ScalarField],
+        factor: P::ScalarField,
+    ) {
+        if add_poly.len() > inout.len() {
+            inout.resize(add_poly.len(), P::ScalarField::zero());
+        }
+
+        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+            *inout += *add * factor;
+        }
+    }
+
+    fn div_by_zerofier(
+        &mut self,
+        inout: &mut Vec<FieldShare<T, P>>,
+        n: usize,
+        beta: P::ScalarField,
+    ) {
+        let inv_beta = beta.inverse().expect("Highly unlikely to be zero");
+        let inv_beta_neg = -inv_beta;
+
+        let mut is_one = inv_beta_neg.is_one();
+        let mut is_negone = inv_beta.is_one();
+
+        if !is_one {
+            for el in inout.iter_mut().take(n) {
+                if is_negone {
+                    *el = self.driver.neg(el);
+                } else {
+                    *el = self.driver.mul_with_public(&inv_beta_neg, el);
+                }
+            }
+        }
+
+        std::mem::swap(&mut is_negone, &mut is_one);
+
+        for i in n..inout.len() {
+            let element = self.driver.sub(&inout[i - n], &inout[i]);
+
+            if !is_one {
+                if is_negone {
+                    inout[i] = self.driver.neg(&element);
+                } else {
+                    inout[i] = self.driver.mul_with_public(&inv_beta, &element);
+                }
+            }
+        }
+        // We cannot check whether the polyonmial is divisible by the zerofier, but we resize accordingly
+        inout.resize(inout.len() - n, FieldShare::<T, P>::default());
     }
 
     fn round2(
@@ -973,6 +1195,9 @@ where
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
+        round1_out: &WirePolyOutput<T, P>,
+        poly_z: &PolyEval<T, P>,
+        poly_t: &TPoly<T, P>,
     ) -> Result<()> {
         // STEP 5.1 - Compute evaluation challenge v \in F_p
         transcript.add_scalar(challenges.xi);
@@ -989,9 +1214,24 @@ where
         }
 
         // STEP 5.2 Compute linearisation polynomial r(X)
-        self.compute_r(challenges, proof, zkey, private_witness)?;
+        let poly_r = self.compute_r(challenges, proof, zkey, private_witness, poly_z, poly_t);
 
-        todo!();
+        //STEP 5.3 Compute opening proof polynomial Wxi(X)
+        let poly_wxi = self.compute_wxi(challenges, proof, zkey, round1_out, &poly_r);
+
+        //STEP 5.4 Compute opening proof polynomial Wxiw(X)
+        let poly_wxiw = self.compute_wxiw(challenges, proof, zkey, poly_z);
+
+        // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
+        let commit_wxi =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_wxi);
+        let commit_wxiw =
+            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_wxiw);
+
+        // TODO parallelize
+        proof.commit_wxi = self.driver.open_point(&commit_wxi)?;
+        proof.commit_wxiw = self.driver.open_point(&commit_wxiw)?;
+        Ok(())
     }
 }
 
