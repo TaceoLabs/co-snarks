@@ -88,7 +88,7 @@ macro_rules! mul4vec_post {
 // TODO parallelize these?
 macro_rules! array_prod_mul {
     ($driver: expr, $inp: expr) => {{
-        // To the multiplications of inp[i] * inp[i-1] in constant rounds
+        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
         let len = $inp.len();
         let r = (0..=len)
             .map(|_| $driver.rand())
@@ -872,6 +872,7 @@ where
         let den = self.driver.mul_many(&den, &d3)?;
 
         // TODO parallelize these?
+        // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
         let mut num = array_prod_mul!(self.driver, num);
         let mut den = array_prod_mul!(self.driver, den);
 
