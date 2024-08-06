@@ -260,6 +260,10 @@ where
         }
     }
 
+    fn calculate_additions() {
+        todo!()
+    }
+
     fn blind_coefficients(
         &mut self,
         poly: &FieldShareVec<T, P>,
@@ -277,14 +281,19 @@ where
     fn get_witness(
         &mut self,
         private_witness: &SharedWitness<T, P>,
+        addition_witness: &[FieldShare<T, P>],
         zkey: &ZKey<P>,
         index: usize,
     ) -> FieldShare<T, P> {
         if index < zkey.n_public {
             self.driver
                 .promote_to_trivial_share(private_witness.public_inputs[index])
-        } else {
+        } else if index < zkey.n_vars - zkey.n_additions {
             T::index_sharevec(&private_witness.witness, index - zkey.n_public)
+        } else if index < zkey.n_vars {
+            addition_witness[index - zkey.n_vars + zkey.n_additions].to_owned()
+        } else {
+            panic!("Index out of bounds")
         }
     }
 
@@ -293,6 +302,7 @@ where
         challenges: &Challenges<T, P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
+        addition_witness: &[FieldShare<T, P>],
     ) -> Result<WirePolyOutput<T, P>> {
         let num_constraints = zkey.n_constraints;
 
@@ -301,9 +311,9 @@ where
         let mut buffer_c = Vec::with_capacity(num_constraints);
 
         for i in 0..num_constraints {
-            buffer_a.push(self.get_witness(private_witness, zkey, zkey.map_a[i]));
-            buffer_b.push(self.get_witness(private_witness, zkey, zkey.map_b[i]));
-            buffer_c.push(self.get_witness(private_witness, zkey, zkey.map_c[i]));
+            buffer_a.push(self.get_witness(private_witness, addition_witness, zkey, zkey.map_a[i]));
+            buffer_b.push(self.get_witness(private_witness, addition_witness, zkey, zkey.map_b[i]));
+            buffer_c.push(self.get_witness(private_witness, addition_witness, zkey, zkey.map_c[i]));
         }
 
         // TODO batch to montgomery in MPC?
@@ -780,7 +790,7 @@ where
         challenges: &Challenges<T, P>,
         proof: &Proof<P>,
         zkey: &ZKey<P>,
-        private_witness: &SharedWitness<T, P>,
+        public_inputs: &[P::ScalarField],
         poly_z: &PolyEval<T, P>,
         poly_t: &TPoly<T, P>,
     ) -> FieldShareVec<T, P> {
@@ -812,7 +822,7 @@ where
         let eval_l1 = (xin - P::ScalarField::one()) / (n * (challenges.xi - P::ScalarField::one()));
 
         let mut eval_pi = P::ScalarField::zero();
-        for (val, l) in private_witness.public_inputs.iter().zip(l) {
+        for (val, l) in public_inputs.iter().zip(l) {
             eval_pi -= l * val;
         }
 
@@ -1069,7 +1079,7 @@ where
         challenges: &mut Challenges<T, P>,
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
-        private_witness: &SharedWitness<T, P>,
+        public_inputs: &[P::ScalarField],
         round1_out: &WirePolyOutput<T, P>,
     ) -> Result<PolyEval<T, P>> {
         // STEP 2.1 - Compute permutation challenge beta and gamma \in F_p
@@ -1084,7 +1094,7 @@ where
         transcript.add_poly_commitment(zkey.verifying_key.s2);
         transcript.add_poly_commitment(zkey.verifying_key.s3);
 
-        for val in private_witness.public_inputs.iter().cloned() {
+        for val in public_inputs.iter().cloned() {
             transcript.add_scalar(val);
         }
 
@@ -1194,7 +1204,7 @@ where
         challenges: &mut Challenges<T, P>,
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
-        private_witness: &SharedWitness<T, P>,
+        public_inputs: &[P::ScalarField],
         round1_out: &WirePolyOutput<T, P>,
         poly_z: &PolyEval<T, P>,
         poly_t: &TPoly<T, P>,
@@ -1214,7 +1224,7 @@ where
         }
 
         // STEP 5.2 Compute linearisation polynomial r(X)
-        let poly_r = self.compute_r(challenges, proof, zkey, private_witness, poly_z, poly_t);
+        let poly_r = self.compute_r(challenges, proof, zkey, public_inputs, poly_z, poly_t);
 
         //STEP 5.3 Compute opening proof polynomial Wxi(X)
         let poly_wxi = self.compute_wxi(challenges, proof, zkey, round1_out, &poly_r);
