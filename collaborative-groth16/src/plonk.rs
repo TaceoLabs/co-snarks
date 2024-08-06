@@ -31,6 +31,7 @@ type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
+// TODO parallelize
 macro_rules! mul4 {
     ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $domain: expr, $mod_i:expr) => {{
         let a_b = $driver.mul($a, $b)?;
