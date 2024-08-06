@@ -29,6 +29,7 @@ type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
+// TODO parallelize
 macro_rules! mul4 {
     ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $domain: expr, $mod_i:expr) => {{
         let a_b = $driver.mul($a, $b)?;
@@ -254,6 +255,26 @@ where
         }
     }
 
+    fn calculate_additions(
+        &mut self,
+        private_witness: &SharedWitness<T, P>,
+        zkey: &ZKey<P>,
+    ) -> Vec<FieldShare<T, P>> {
+        let mut additions = Vec::with_capacity(zkey.n_additions);
+        for addition in zkey.additions.iter() {
+            let witness1 =
+                self.get_witness(private_witness, &[], zkey, addition.signal_id1 as usize);
+            let witness2 =
+                self.get_witness(private_witness, &[], zkey, addition.signal_id2 as usize);
+
+            let f1 = self.driver.mul_with_public(&addition.factor1, &witness1);
+            let f2 = self.driver.mul_with_public(&addition.factor2, &witness2);
+            let result = self.driver.add(&f1, &f2);
+            additions.push(result);
+        }
+        additions
+    }
+
     fn blind_coefficients(
         &mut self,
         poly: &FieldShareVec<T, P>,
@@ -267,18 +288,22 @@ where
         res
     }
 
-    // TODO check if this is correct
     fn get_witness(
         &mut self,
         private_witness: &SharedWitness<T, P>,
+        addition_witness: &[FieldShare<T, P>],
         zkey: &ZKey<P>,
         index: usize,
     ) -> FieldShare<T, P> {
         if index < zkey.n_public {
             self.driver
                 .promote_to_trivial_share(private_witness.public_inputs[index])
-        } else {
+        } else if index < zkey.n_vars - zkey.n_additions {
             T::index_sharevec(&private_witness.witness, index - zkey.n_public)
+        } else if index < zkey.n_vars {
+            addition_witness[index - zkey.n_vars + zkey.n_additions].to_owned()
+        } else {
+            panic!("Index out of bounds")
         }
     }
 
@@ -287,6 +312,7 @@ where
         challenges: &Challenges<T, P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
+        addition_witness: &[FieldShare<T, P>],
     ) -> Result<WirePolyOutput<T, P>> {
         let num_constraints = zkey.n_constraints;
 
@@ -295,9 +321,9 @@ where
         let mut buffer_c = Vec::with_capacity(num_constraints);
 
         for i in 0..num_constraints {
-            buffer_a.push(self.get_witness(private_witness, zkey, zkey.map_a[i]));
-            buffer_b.push(self.get_witness(private_witness, zkey, zkey.map_b[i]));
-            buffer_c.push(self.get_witness(private_witness, zkey, zkey.map_c[i]));
+            buffer_a.push(self.get_witness(private_witness, addition_witness, zkey, zkey.map_a[i]));
+            buffer_b.push(self.get_witness(private_witness, addition_witness, zkey, zkey.map_b[i]));
+            buffer_c.push(self.get_witness(private_witness, addition_witness, zkey, zkey.map_c[i]));
         }
 
         // TODO batch to montgomery in MPC?
@@ -356,12 +382,14 @@ where
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
+        addition_witness: &[FieldShare<T, P>],
     ) -> Result<WirePolyOutput<T, P>> {
         // STEP 1.1 - Generate random blinding scalars (b0, ..., b10) \in F_p
         challenges.random_b(&mut self.driver)?;
 
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        let outp = self.compute_wire_polynomials(challenges, zkey, private_witness)?;
+        let outp =
+            self.compute_wire_polynomials(challenges, zkey, private_witness, addition_witness)?;
 
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
         let commit_a = MSMProvider::<P::G1>::msm_public_points(
@@ -380,10 +408,13 @@ where
             &outp.poly_eval_c.poly,
         );
 
-        // TODO parallelize
-        proof.commit_a = self.driver.open_point(&commit_a)?;
-        proof.commit_b = self.driver.open_point(&commit_b)?;
-        proof.commit_c = self.driver.open_point(&commit_c)?;
+        let opened = self
+            .driver
+            .open_point_many(&[commit_a, commit_b, commit_c])?;
+        debug_assert_eq!(opened.len(), 3);
+        proof.commit_a = opened[0];
+        proof.commit_b = opened[1];
+        proof.commit_c = opened[2];
 
         Ok(outp)
     }
@@ -553,17 +584,15 @@ where
             e3z = self.driver.mul_with_public(&challenges.alpha, &e3z);
 
             let mut e4 = self.driver.add_with_public(&-P::ScalarField::one(), &z);
-            //THIS IS MOST LIKELY WRONG
             e4 = self
                 .driver
                 .mul_with_public(&zkey.lagrange[0].evaluations[i], &e4);
             e4 = self.driver.mul_with_public(&challenges.alpha2, &e4);
 
-            //THIS IS MOST LIKELY WRONG
             let mut e4z = self
                 .driver
                 .mul_with_public(&zkey.lagrange[0].evaluations[i], &zp);
-            e4 = self.driver.mul_with_public(&challenges.alpha2, &e4z);
+            e4z = self.driver.mul_with_public(&challenges.alpha2, &e4z);
 
             let mut t = self.driver.add(&e1, &e2);
             t = self.driver.sub(&t, &e3);
@@ -774,7 +803,7 @@ where
         challenges: &Challenges<T, P>,
         proof: &Proof<P>,
         zkey: &ZKey<P>,
-        private_witness: &SharedWitness<T, P>,
+        public_inputs: &[P::ScalarField],
         poly_z: &PolyEval<T, P>,
         poly_t: &TPoly<T, P>,
     ) -> FieldShareVec<T, P> {
@@ -806,7 +835,7 @@ where
         let eval_l1 = (xin - P::ScalarField::one()) / (n * (challenges.xi - P::ScalarField::one()));
 
         let mut eval_pi = P::ScalarField::zero();
-        for (val, l) in private_witness.public_inputs.iter().zip(l) {
+        for (val, l) in public_inputs.iter().zip(l) {
             eval_pi -= l * val;
         }
 
@@ -1063,7 +1092,7 @@ where
         challenges: &mut Challenges<T, P>,
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
-        private_witness: &SharedWitness<T, P>,
+        public_inputs: &[P::ScalarField],
         round1_out: &WirePolyOutput<T, P>,
     ) -> Result<PolyEval<T, P>> {
         // STEP 2.1 - Compute permutation challenge beta and gamma \in F_p
@@ -1078,7 +1107,7 @@ where
         transcript.add_poly_commitment(zkey.verifying_key.s2);
         transcript.add_poly_commitment(zkey.verifying_key.s3);
 
-        for val in private_witness.public_inputs.iter().cloned() {
+        for val in public_inputs.iter().cloned() {
             transcript.add_scalar(val);
         }
 
@@ -1129,14 +1158,18 @@ where
         let [t1, t2, t3] = self.compute_t(challenges, zkey, z_poly, wire_poly, round1_out)?;
 
         // Compute [T1]_1, [T2]_1, [T3]_1
-        let commit_a = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t1);
-        let commit_b = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t2);
-        let commit_c = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t3);
+        let commit_t1 = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t1);
+        let commit_t2 = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t2);
+        let commit_t3 = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t3);
 
-        // TODO parallelize
-        proof.commit_a = self.driver.open_point(&commit_a)?;
-        proof.commit_b = self.driver.open_point(&commit_b)?;
-        proof.commit_c = self.driver.open_point(&commit_c)?;
+        let opened = self
+            .driver
+            .open_point_many(&[commit_t1, commit_t2, commit_t3])?;
+        debug_assert_eq!(opened.len(), 3);
+        proof.commit_t1 = opened[0];
+        proof.commit_t2 = opened[1];
+        proof.commit_t3 = opened[2];
+
         Ok(TPoly { t1, t2, t3 })
     }
 
@@ -1171,11 +1204,12 @@ where
         let eval_c = self.evaluate_poly(&round1_out.poly_eval_c.poly, &challenges.xi);
         let eval_z = self.evaluate_poly(&poly_z.poly, &xiw);
 
-        // TODO parallelize
-        proof.eval_a = self.driver.open(&eval_a)?;
-        proof.eval_b = self.driver.open(&eval_b)?;
-        proof.eval_c = self.driver.open(&eval_c)?;
-        proof.eval_zw = self.driver.open(&eval_z)?;
+        let opened = self.driver.open_many(&[eval_a, eval_b, eval_c, eval_z])?;
+        debug_assert_eq!(opened.len(), 4);
+        proof.eval_a = opened[0];
+        proof.eval_b = opened[1];
+        proof.eval_c = opened[2];
+        proof.eval_zw = opened[3];
 
         proof.eval_s1 = zkey.s1_poly.evaluate(&challenges.xi);
         proof.eval_s2 = zkey.s2_poly.evaluate(&challenges.xi);
@@ -1188,7 +1222,7 @@ where
         challenges: &mut Challenges<T, P>,
         proof: &mut Proof<P>,
         zkey: &ZKey<P>,
-        private_witness: &SharedWitness<T, P>,
+        public_inputs: &[P::ScalarField],
         round1_out: &WirePolyOutput<T, P>,
         poly_z: &PolyEval<T, P>,
         poly_t: &TPoly<T, P>,
@@ -1208,7 +1242,7 @@ where
         }
 
         // STEP 5.2 Compute linearisation polynomial r(X)
-        let poly_r = self.compute_r(challenges, proof, zkey, private_witness, poly_z, poly_t);
+        let poly_r = self.compute_r(challenges, proof, zkey, public_inputs, poly_z, poly_t);
 
         //STEP 5.3 Compute opening proof polynomial Wxi(X)
         let poly_wxi = self.compute_wxi(challenges, proof, zkey, round1_out, &poly_r);
@@ -1222,9 +1256,10 @@ where
         let commit_wxiw =
             MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_wxiw);
 
-        // TODO parallelize
-        proof.commit_wxi = self.driver.open_point(&commit_wxi)?;
-        proof.commit_wxiw = self.driver.open_point(&commit_wxiw)?;
+        let opened = self.driver.open_point_many(&[commit_wxi, commit_wxiw])?;
+        debug_assert_eq!(opened.len(), 2);
+        proof.commit_wxi = opened[0];
+        proof.commit_wxiw = opened[1];
         Ok(())
     }
 }

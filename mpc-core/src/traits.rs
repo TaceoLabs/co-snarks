@@ -148,6 +148,9 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     /// Reconstructs a shared value: a = Open(\[a\]).
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F>;
 
+    /// Reconstructs many shared values: a = Open(\[a\]).
+    fn open_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<F>>;
+
     /// Elementwise addition of two vectors of shares: \[c_i\] = \[a_i\] + \[b_i\].
     fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec;
 
@@ -357,6 +360,9 @@ pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
 
     /// Reconstructs a shared point: A = Open(\[A\]).
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C>;
+
+    /// Reconstructs many shared points: A = Open(\[A\]).
+    fn open_point_many(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<C>>;
 }
 
 /// A trait representing some MPC operations for pairing based  elliptic curves.

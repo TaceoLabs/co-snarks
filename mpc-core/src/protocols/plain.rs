@@ -149,6 +149,10 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         Ok(*a)
     }
 
+    fn open_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<F>> {
+        Ok(a.to_vec())
+    }
+
     fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec {
         a.iter().zip(b.iter()).map(|(a, b)| *a + b).collect()
     }
@@ -316,6 +320,10 @@ impl<C: CurveGroup> EcMpcProtocol<C> for PlainDriver<C::ScalarField> {
 
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
         Ok(a.to_owned())
+    }
+
+    fn open_point_many(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<C>> {
+        Ok(a.to_vec())
     }
 }
 

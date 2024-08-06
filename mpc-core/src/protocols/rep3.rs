@@ -385,6 +385,14 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         Ok(a.a + a.b + c)
     }
 
+    fn open_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<F>> {
+        let bs = a.iter().map(|x| x.b).collect_vec();
+        self.network.send_next(bs)?;
+        let cs = self.network.recv_prev::<Vec<F>>()?;
+
+        Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
+    }
+
     fn promote_to_trivial_share(&self, public_value: F) -> Self::FieldShare {
         Self::FieldShare::promote_from_trivial(&public_value, self.network.get_id())
     }
@@ -605,6 +613,14 @@ impl<C: CurveGroup, N: Rep3Network> EcMpcProtocol<C> for Rep3Protocol<C::ScalarF
         self.network.send_next(a.b)?;
         let c = self.network.recv_prev::<C>()?;
         Ok(a.a + a.b + c)
+    }
+
+    fn open_point_many(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<C>> {
+        let bs = a.iter().map(|x| x.b).collect_vec();
+        self.network.send_next(bs)?;
+        let cs = self.network.recv_prev::<Vec<C>>()?;
+
+        Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
     }
 }
 
