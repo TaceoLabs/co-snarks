@@ -29,7 +29,7 @@ type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
-// TODO parallelize
+// TODO parallelize these?
 macro_rules! mul4vec {
     ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $domain: expr) => {{
         let a_b = $driver.mul_vec($a, $b)?;
@@ -429,7 +429,6 @@ where
         Ok(outp)
     }
 
-    // TODO parallelize
     fn compute_t(
         &mut self,
         challenges: &Challenges<T, P>,
@@ -470,7 +469,7 @@ where
         let bp_vec = bp.into();
         let cp_vec = cp.into();
 
-        // TODO parallelize
+        // TODO parallelize these?
         let a_b = self
             .driver
             .mul_vec(&wire_poly.buffer_a, &wire_poly.buffer_b)?;
