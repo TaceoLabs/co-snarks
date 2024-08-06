@@ -201,7 +201,7 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize;
 
     /// Returns a secret shared zero value
-    fn zero_share(&self) -> Self::FieldShare {
+    fn zero_share() -> Self::FieldShare {
         Self::FieldShare::default()
     }
 }

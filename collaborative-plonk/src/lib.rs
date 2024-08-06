@@ -7,13 +7,13 @@ use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
+use circom_types::groth16::witness;
 use circom_types::groth16::zkey;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use collaborative_groth16::groth16::CollaborativeGroth16;
 use collaborative_groth16::groth16::SharedWitness;
-use eyre::Result;
 use mpc_core::traits::MontgomeryField;
 use mpc_core::traits::MpcToMontgomery;
 use mpc_core::traits::{
@@ -25,15 +25,30 @@ use round1::Round1Challenges;
 use round1::Round1Proof;
 use sha3::Digest;
 use sha3::Keccak256;
+use std::io;
 use std::marker::PhantomData;
 use std::ops::MulAssign;
+use types::WirePolyOutput;
 
 mod round1;
+mod round2;
 pub(crate) mod types;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
+
+type PlonkProofResult<T> = std::result::Result<T, PlonkProofError>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum PlonkProofError {
+    #[error("Cannot index into witness {0}")]
+    CorruptedWitness(usize),
+    #[error("Cannot create domain, Polynomial degree too large")]
+    PolynomialDegreeTooLarge,
+    #[error(transparent)]
+    IOError(#[from] io::Error),
+}
 
 pub(crate) struct Domains<P: Pairing> {
     constraint_domain: GeneralEvaluationDomain<P::ScalarField>,
@@ -43,19 +58,40 @@ pub(crate) struct Domains<P: Pairing> {
 }
 
 impl<P: Pairing> Domains<P> {
-    fn new(zkey: &ZKey<P>) -> Result<Self> {
+    fn new(zkey: &ZKey<P>) -> PlonkProofResult<Self> {
         let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+            .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
         let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 4)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+            .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
         let domain3 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 16)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+            .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
         Ok(Self {
             constraint_domain: domain1,
             constraint_domain4: domain2,
             constraint_domain16: domain3,
             phantom_data: PhantomData,
         })
+    }
+}
+
+pub(crate) struct PlonkWitness<T, P: Pairing>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    shared_witness: SharedWitness<T, P>,
+    addition_witness: FieldShareVec<T, P>,
+}
+
+impl<T, P: Pairing> From<SharedWitness<T, P>> for PlonkWitness<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn from(mut shared_witness: SharedWitness<T, P>) -> Self {
+        shared_witness.public_inputs[0] = P::ScalarField::zero();
+        Self {
+            shared_witness,
+            addition_witness: vec![].into(),
+        }
     }
 }
 
@@ -68,15 +104,19 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
-    Init,
+    Init {
+        witness: SharedWitness<T, P>,
+    },
     Round1 {
         domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
+        witness: PlonkWitness<T, P>,
     },
     Round2 {
         domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
         proof: Round1Proof<P>,
+        wire_polys: WirePolyOutput<T, P>,
     },
     Round3,
     Round4,
@@ -112,10 +152,10 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     /// Creates a new [CollaborativePlonk] protocol with a given MPC driver.
-    pub fn new(driver: T) -> Self {
+    pub fn new(driver: T, witness: SharedWitness<T, P>) -> Self {
         Self {
             driver,
-            state: Round::Init,
+            state: Round::Init { witness },
             phantom_data: PhantomData,
         }
     }
@@ -135,23 +175,20 @@ where
         + MpcToMontgomery<P::ScalarField>,
     P::ScalarField: mpc_core::traits::FFTPostProcessing + MontgomeryField,
 {
-    fn next_round(
-        self,
-        driver: &mut T,
-        zkey: &ZKey<P>,
-        private_witness: &mut SharedWitness<T, P>,
-    ) -> Result<Self> {
+    fn next_round(self, driver: &mut T, zkey: &ZKey<P>) -> PlonkProofResult<Self> {
         match self {
-            Round::Init => Self::init_round(driver, zkey, private_witness),
+            Round::Init { witness } => Self::init_round(driver, zkey, witness),
             Round::Round1 {
                 domains,
                 challenges,
-            } => Self::round1(driver, domains, challenges, zkey, private_witness),
+                witness,
+            } => Self::round1(driver, domains, challenges, zkey, witness),
             Round::Round2 {
                 domains,
                 challenges,
                 proof,
-            } => todo!(),
+                wire_polys,
+            } => Self::round2(driver, domains, challenges, proof, wire_polys),
             Round::Round3 => todo!(),
             Round::Round4 => todo!(),
             Round::Round5 => todo!(),
@@ -160,34 +197,74 @@ where
         }
     }
 
+    fn calculate_additions(
+        driver: &mut T,
+        witness: &mut PlonkWitness<T, P>,
+        zkey: &ZKey<P>,
+    ) -> PlonkProofResult<()> {
+        let mut additions = Vec::with_capacity(zkey.n_additions);
+        for addition in zkey.additions.iter() {
+            let witness1 = Self::get_witness(
+                driver,
+                witness,
+                zkey,
+                addition.signal_id1.try_into().expect("u32 fits into usize"),
+            )?;
+            let witness2 = Self::get_witness(
+                driver,
+                witness,
+                zkey,
+                addition.signal_id2.try_into().expect("u32 fits into usize"),
+            )?;
+
+            let f1 = driver.mul_with_public(&addition.factor1, &witness1);
+            let f2 = driver.mul_with_public(&addition.factor2, &witness2);
+            let result = driver.add(&f1, &f2);
+            additions.push(result);
+        }
+        witness.addition_witness = additions.into();
+        Ok(())
+    }
+
     fn init_round(
         driver: &mut T,
         zkey: &ZKey<P>,
-        private_witness: &mut SharedWitness<T, P>,
-    ) -> Result<Self> {
+        private_witness: SharedWitness<T, P>,
+    ) -> PlonkProofResult<Self> {
         //TODO calculate additions
         //set first element to zero as it is not used
-        private_witness.public_inputs[0] = P::ScalarField::zero();
+        let mut plonk_witness = PlonkWitness::from(private_witness);
+        Self::calculate_additions(driver, &mut plonk_witness, zkey);
 
         Ok(Round::Round1 {
             domains: Domains::new(zkey)?,
             challenges: Round1Challenges::random(driver)?,
+            witness: plonk_witness,
         })
     }
 
     // TODO check if this is correct
     fn get_witness(
         driver: &mut T,
-        private_witness: &SharedWitness<T, P>,
+        witness: &PlonkWitness<T, P>,
         zkey: &ZKey<P>,
         index: usize,
-    ) -> FieldShare<T, P> {
-        if index <= zkey.n_public {
-            driver.promote_to_trivial_share(private_witness.public_inputs[index])
+    ) -> PlonkProofResult<FieldShare<T, P>> {
+        let result = if index <= zkey.n_public {
+            driver.promote_to_trivial_share(witness.shared_witness.public_inputs[index])
+        } else if index <= zkey.n_vars - zkey.n_additions {
+            //subtract public values and the leading 0 in witness
+            T::index_sharevec(&witness.shared_witness.witness, index - zkey.n_public - 1)
+        } else if index < zkey.n_vars {
+            T::index_sharevec(
+                &witness.addition_witness,
+                index - zkey.n_vars + zkey.n_additions,
+            )
         } else {
-            //subtract public values and the leading 1 in witness
-            T::index_sharevec(&private_witness.witness, index - zkey.n_public - 1)
-        }
+            //TODO make this as an error
+            return Err(PlonkProofError::CorruptedWitness(index));
+        };
+        Ok(result)
     }
 
     fn blind_coefficients(

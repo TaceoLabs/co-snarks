@@ -2,7 +2,6 @@ use ark_ec::pairing::Pairing;
 use ark_relations::r1cs::SynthesisError;
 use circom_types::plonk::ZKey;
 use collaborative_groth16::groth16::SharedWitness;
-use eyre::{Ok, Result};
 use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, MontgomeryField, MpcToMontgomery,
     PairingEcMpcProtocol, PrimeFieldMpcProtocol,
@@ -10,7 +9,7 @@ use mpc_core::traits::{
 
 use crate::{
     types::{PolyEval, WirePolyOutput},
-    Domains, FieldShareVec, Round,
+    Domains, FieldShareVec, PlonkProofError, PlonkProofResult, PlonkWitness, Round,
 };
 
 pub(super) struct Round1Challenges<T, P: Pairing>
@@ -30,7 +29,7 @@ impl<T, P: Pairing> Round1Challenges<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    pub(super) fn random(driver: &mut T) -> Result<Self> {
+    pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::FieldShare::default());
         for mut x in b.iter_mut() {
             *x = driver.rand()?;
@@ -38,9 +37,10 @@ where
         Ok(Self { b })
     }
 
-    fn deterministic() -> Result<Self> {
-        let b = core::array::from_fn(|_| T::FieldShare::default());
-        Ok(Self { b })
+    fn deterministic() -> Self {
+        Self {
+            b: core::array::from_fn(|_| T::FieldShare::default()),
+        }
     }
 }
 
@@ -59,8 +59,8 @@ where
         domains: &Domains<P>,
         challenges: &Round1Challenges<T, P>,
         zkey: &ZKey<P>,
-        private_witness: &SharedWitness<T, P>,
-    ) -> Result<WirePolyOutput<T, P>> {
+        private_witness: &PlonkWitness<T, P>,
+    ) -> PlonkProofResult<WirePolyOutput<T, P>> {
         let num_constraints = zkey.n_constraints;
 
         let mut buffer_a = Vec::with_capacity(num_constraints);
@@ -73,19 +73,19 @@ where
                 private_witness,
                 zkey,
                 zkey.map_a[i],
-            ));
+            )?);
             buffer_b.push(Self::get_witness(
                 driver,
                 private_witness,
                 zkey,
                 zkey.map_b[i],
-            ));
+            )?);
             buffer_c.push(Self::get_witness(
                 driver,
                 private_witness,
                 zkey,
                 zkey.map_c[i],
-            ));
+            )?);
         }
 
         // we could do that also during loop but this is more readable
@@ -115,7 +115,7 @@ where
             || poly_b.len() > zkey.domain_size + 2
             || poly_c.len() > zkey.domain_size + 2
         {
-            return Err(SynthesisError::PolynomialDegreeTooLarge.into());
+            return Err(PlonkProofError::PolynomialDegreeTooLarge);
         }
 
         Ok(WirePolyOutput {
@@ -142,11 +142,11 @@ where
         domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
         zkey: &ZKey<P>,
-        private_witness: &SharedWitness<T, P>,
-    ) -> Result<Self> {
+        private_witness: PlonkWitness<T, P>,
+    ) -> PlonkProofResult<Self> {
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
         let wire_polys =
-            Self::compute_wire_polynomials(driver, &domains, &challenges, zkey, private_witness)?;
+            Self::compute_wire_polynomials(driver, &domains, &challenges, zkey, &private_witness)?;
 
         let poly_a_msm = driver.batch_lift_montgomery(&wire_polys.poly_eval_a.poly);
         let poly_b_msm = driver.batch_lift_montgomery(&wire_polys.poly_eval_b.poly);
@@ -166,6 +166,7 @@ where
             domains,
             challenges,
             proof,
+            wire_polys,
         })
     }
 }
@@ -203,20 +204,22 @@ pub mod tests {
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
         let witness_file = File::open("../test_vectors/Plonk/bn254/multiplier2_wtns.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let mut witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
             public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
             witness: vec![witness.values[2], witness.values[3]],
         };
 
         let round1 = Round::<PlainDriver<ark_bn254::Fr>, Bn254>::Round1 {
             domains: Domains::new(&zkey).unwrap(),
-            challenges: Round1Challenges::deterministic().unwrap(),
+            challenges: Round1Challenges::deterministic(),
+            witness: witness.into(),
         };
         if let Round::Round2 {
-            domains,
-            challenges,
+            domains: _,
+            challenges: _,
+            wire_polys: _,
             proof,
-        } = round1.next_round(&mut driver, &zkey, &mut witness).unwrap()
+        } = round1.next_round(&mut driver, &zkey).unwrap()
         {
             assert_eq!(
                 proof.commit_a,

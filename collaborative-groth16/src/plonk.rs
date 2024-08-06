@@ -482,7 +482,7 @@ where
             let zWp = self.driver.add(&zWp_lhs, &zWp_rhs);
             let zp = self.driver.add(&challenges.b[8], &zWp);
 
-            let mut pi = self.driver.zero_share();
+            let mut pi = T::zero_share();
             for (j, lagrange) in zkey.lagrange.iter().enumerate() {
                 let l_eval = lagrange.evaluations[i];
                 let a_val = T::index_sharevec(&round1_out.buffer_a, j);
