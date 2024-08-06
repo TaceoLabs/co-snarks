@@ -59,7 +59,7 @@ where
         domains: &Domains<P>,
         challenges: &Round1Challenges<T, P>,
         zkey: &ZKey<P>,
-        private_witness: &PlonkWitness<T, P>,
+        witness: &PlonkWitness<T, P>,
     ) -> PlonkProofResult<WirePolyOutput<T, P>> {
         let num_constraints = zkey.n_constraints;
 
@@ -68,24 +68,9 @@ where
         let mut buffer_c = Vec::with_capacity(num_constraints);
 
         for i in 0..num_constraints {
-            buffer_a.push(Self::get_witness(
-                driver,
-                private_witness,
-                zkey,
-                zkey.map_a[i],
-            )?);
-            buffer_b.push(Self::get_witness(
-                driver,
-                private_witness,
-                zkey,
-                zkey.map_b[i],
-            )?);
-            buffer_c.push(Self::get_witness(
-                driver,
-                private_witness,
-                zkey,
-                zkey.map_c[i],
-            )?);
+            buffer_a.push(Self::get_witness(driver, witness, zkey, zkey.map_a[i])?);
+            buffer_b.push(Self::get_witness(driver, witness, zkey, zkey.map_b[i])?);
+            buffer_c.push(Self::get_witness(driver, witness, zkey, zkey.map_c[i])?);
         }
 
         // we could do that also during loop but this is more readable
@@ -156,11 +141,13 @@ where
         let commit_b = MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &poly_b_msm);
         let commit_c = MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &poly_c_msm);
 
-        // TODO parallelize
+        let opened = driver.open_point_many(&[commit_a, commit_b, commit_c])?;
+        debug_assert_eq!(opened.len(), 3);
+
         let proof = Round1Proof::<P> {
-            commit_a: EcMpcProtocol::<P::G1>::open_point(driver, &commit_a)?,
-            commit_b: EcMpcProtocol::<P::G1>::open_point(driver, &commit_b)?,
-            commit_c: EcMpcProtocol::<P::G1>::open_point(driver, &commit_c)?,
+            commit_a: opened[0],
+            commit_b: opened[1],
+            commit_c: opened[2],
         };
         Ok(Round::Round2 {
             domains,
