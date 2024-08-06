@@ -108,6 +108,13 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::FieldShare>;
 
+    /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
+    fn mul_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<Self::FieldShare>>;
+
     /// Multiply a share b by a public value a: c = a * \[b\].
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
 
@@ -135,6 +142,9 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 
     /// Computes the inverse of a shared value: \[b\] = \[a\] ^ -1. Requires network communication.
     fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare>;
+
+    /// Computes the inverse of many shared values: \[b\] = \[a\] ^ -1. Requires network communication.
+    fn inv_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<Self::FieldShare>>;
 
     /// Negates a shared value: \[b\] = -\[a\].
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;

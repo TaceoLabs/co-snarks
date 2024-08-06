@@ -335,6 +335,23 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         })
     }
 
+    fn mul_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> IoResult<Vec<Self::FieldShare>> {
+        let local_a = izip!(a, b)
+            .map(|(a, b)| a * b + self.rngs.rand.masking_field_element::<F>())
+            .collect_vec();
+        self.network.send_next(local_a.to_owned())?;
+        let local_b = self.network.recv_prev::<Vec<F>>()?;
+
+        let res = izip!(local_a, local_b)
+            .map(|(a, b)| Self::FieldShare { a, b })
+            .collect_vec();
+        Ok(res)
+    }
+
     fn inv(&mut self, a: &Self::FieldShare) -> IoResult<Self::FieldShare> {
         let r = self.rand()?;
         let tmp = self.mul(a, &r)?;
@@ -347,6 +364,23 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         }
         let y_inv = y.inverse().unwrap();
         Ok(r * y_inv)
+    }
+
+    fn inv_many(&mut self, a: &[Self::FieldShare]) -> IoResult<Vec<Self::FieldShare>> {
+        let r = (0..a.len())
+            .map(|_| self.rand())
+            .collect::<Result<Vec<_>, _>>()?;
+        let tmp = self.mul_many(a, &r)?;
+        let y = self.open_many(&tmp)?;
+        if y.iter().any(|y| y.is_zero()) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of inverse in MPC: cannot compute inverse of zero",
+            ));
+        }
+
+        let res = izip!(r, y).map(|(r, y)| r * y.inverse().unwrap()).collect();
+        Ok(res)
     }
 
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {

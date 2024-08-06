@@ -116,6 +116,14 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         Ok(*a * b)
     }
 
+    fn mul_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<Self::FieldShare>> {
+        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
+    }
+
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
         *a * b
     }
@@ -128,6 +136,22 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
             ));
         }
         Ok(a.inverse().unwrap())
+    }
+
+    fn inv_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<Self::FieldShare>> {
+        let mut res = Vec::with_capacity(a.len());
+
+        for a in a {
+            if a.is_zero() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Cannot invert zero",
+                ));
+            }
+            res.push(a.inverse().unwrap());
+        }
+
+        Ok(res)
     }
 
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
@@ -259,27 +283,27 @@ impl<C: CurveGroup> EcMpcProtocol<C> for PlainDriver<C::ScalarField> {
     type PointShare = C;
 
     fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
-        todo!()
+        *a + b
     }
 
     fn sub_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
-        todo!()
+        *a - b
     }
 
     fn add_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare) {
-        todo!()
+        *a += b;
     }
 
     fn sub_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare) {
-        todo!()
+        *a -= b;
     }
 
     fn add_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
-        todo!()
+        *a += b;
     }
 
     fn sub_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
-        todo!()
+        *a -= b;
     }
 
     fn add_assign_points_public_affine(
@@ -287,7 +311,7 @@ impl<C: CurveGroup> EcMpcProtocol<C> for PlainDriver<C::ScalarField> {
         a: &mut Self::PointShare,
         b: &<C as CurveGroup>::Affine,
     ) {
-        todo!()
+        *a += b;
     }
 
     fn sub_assign_points_public_affine(
@@ -295,11 +319,11 @@ impl<C: CurveGroup> EcMpcProtocol<C> for PlainDriver<C::ScalarField> {
         a: &mut Self::PointShare,
         b: &<C as CurveGroup>::Affine,
     ) {
-        todo!()
+        *a -= b;
     }
 
     fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare {
-        todo!()
+        *a * b
     }
 
     fn scalar_mul_public_scalar(
@@ -307,7 +331,7 @@ impl<C: CurveGroup> EcMpcProtocol<C> for PlainDriver<C::ScalarField> {
         a: &Self::PointShare,
         b: &<C>::ScalarField,
     ) -> Self::PointShare {
-        todo!()
+        *a * b
     }
 
     fn scalar_mul(
@@ -315,7 +339,7 @@ impl<C: CurveGroup> EcMpcProtocol<C> for PlainDriver<C::ScalarField> {
         a: &Self::PointShare,
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::PointShare> {
-        todo!()
+        Ok(*a * b)
     }
 
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
@@ -333,7 +357,7 @@ impl<P: Pairing> PairingEcMpcProtocol<P> for PlainDriver<P::ScalarField> {
         a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
         b: &<Self as EcMpcProtocol<P::G2>>::PointShare,
     ) -> std::io::Result<(P::G1, P::G2)> {
-        todo!()
+        Ok((*a, *b))
     }
 }
 
@@ -351,7 +375,7 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainD
         data: &mut Self::FieldShareVec,
         domain: &D,
     ) {
-        todo!()
+        domain.fft_in_place(data);
     }
 
     fn ifft<D: ark_poly::EvaluationDomain<F>>(
@@ -367,7 +391,7 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainD
         data: &mut Self::FieldShareVec,
         domain: &D,
     ) {
-        todo!()
+        domain.ifft_in_place(data);
     }
 }
 

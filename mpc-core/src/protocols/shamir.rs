@@ -261,6 +261,28 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         Ok(res)
     }
 
+    /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
+    // multiply followed by a opening, thus, no reshare required
+    pub fn mul_open_many(
+        &mut self,
+        a: &[<Self as PrimeFieldMpcProtocol<F>>::FieldShare],
+        b: &[<Self as PrimeFieldMpcProtocol<F>>::FieldShare],
+    ) -> std::io::Result<Vec<F>> {
+        let mul = a
+            .iter()
+            .zip(b.iter())
+            .map(|(a, b)| a * b)
+            .collect::<Vec<_>>();
+        let mul = ShamirPrimeFieldShare::convert_vec(mul);
+
+        let rcv = self.network.broadcast_next(mul, 2 * self.threshold + 1)?;
+        let res = rcv
+            .into_iter()
+            .map(|r| ShamirCore::reconstruct(&r, &self.open_lagrange_2t))
+            .collect();
+        Ok(res)
+    }
+
     pub(crate) fn degree_reduce(
         &mut self,
         mut input: F,
@@ -481,6 +503,20 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         self.degree_reduce(mul)
     }
 
+    fn mul_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<Self::FieldShare>> {
+        let mul = a
+            .iter()
+            .zip(b.iter())
+            .map(|(a, b)| a.a * b.a)
+            .collect::<Vec<_>>();
+        let res = self.degree_reduce_vec(mul)?;
+        Ok(ShamirPrimeFieldShare::convert_vec_rev(res.a))
+    }
+
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
         b * a
     }
@@ -496,6 +532,22 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         }
         let y_inv = y.inverse().unwrap();
         Ok(r * y_inv)
+    }
+
+    fn inv_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<Self::FieldShare>> {
+        let r = (0..a.len())
+            .map(|_| self.rand())
+            .collect::<Result<Vec<_>, _>>()?;
+        let y = self.mul_open_many(a, &r)?;
+        if y.iter().any(|y| y.is_zero()) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of inverse in MPC: cannot compute inverse of zero",
+            ));
+        }
+
+        let res = izip!(r, y).map(|(r, y)| r * y.inverse().unwrap()).collect();
+        Ok(res)
     }
 
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
