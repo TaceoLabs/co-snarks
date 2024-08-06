@@ -36,4 +36,4 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing.workspace = true
 serde_json.workspace = true
 ark-groth16.workspace = true
-config = "0.14.0"
+figment.workspace = true

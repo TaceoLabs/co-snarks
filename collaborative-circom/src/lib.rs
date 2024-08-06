@@ -13,7 +13,10 @@ use circom_types::{
 use clap::ValueEnum;
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
 use color_eyre::eyre::Context;
-use config::{Config as ConfigBuilder, ConfigError, Environment, File};
+use figment::{
+    providers::{Env, Format, Toml},
+    Figment,
+};
 use mpc_core::{
     protocols::rep3::{network::Rep3MpcNet, Rep3Protocol},
     traits::{FFTPostProcessing, PrimeFieldMpcProtocol},
@@ -105,12 +108,11 @@ pub struct Config {
 
 impl Config {
     /// Create a new config with given path   
-    pub fn new(path: &str) -> Result<Self, ConfigError> {
-        let config = ConfigBuilder::builder()
-            .add_source(File::with_name(path))
-            .add_source(Environment::with_prefix("conf"))
-            .build()?;
-        config.try_deserialize()
+    pub fn new(path: &str) -> color_eyre::Result<Config> {
+        Ok(Figment::new()
+            .merge(Toml::file(path))
+            .merge(Env::prefixed("COCIRCOM_CONF_"))
+            .extract()?)
     }
 }
 
