@@ -111,7 +111,7 @@ impl Config {
     pub fn new(path: &str) -> color_eyre::Result<Config> {
         Ok(Figment::new()
             .merge(Toml::file(path))
-            .merge(Env::prefixed("COCIRCOM_CONF_"))
+            .merge(Env::prefixed("COCIRCOM_"))
             .extract()?)
     }
 }
