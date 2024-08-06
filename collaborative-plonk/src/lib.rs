@@ -14,6 +14,8 @@ use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use collaborative_groth16::groth16::CollaborativeGroth16;
 use collaborative_groth16::groth16::SharedWitness;
 use eyre::Result;
+use mpc_core::traits::MontgomeryField;
+use mpc_core::traits::MpcToMontgomery;
 use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
@@ -36,6 +38,7 @@ type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 pub(crate) struct Domains<P: Pairing> {
     constraint_domain: GeneralEvaluationDomain<P::ScalarField>,
     constraint_domain4: GeneralEvaluationDomain<P::ScalarField>,
+    constraint_domain16: GeneralEvaluationDomain<P::ScalarField>,
     phantom_data: PhantomData<P>,
 }
 
@@ -45,9 +48,12 @@ impl<P: Pairing> Domains<P> {
             .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
         let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 4)
             .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let domain3 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 16)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
         Ok(Self {
             constraint_domain: domain1,
             constraint_domain4: domain2,
+            constraint_domain16: domain3,
             phantom_data: PhantomData,
         })
     }
@@ -125,10 +131,9 @@ where
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing + CircomArkworksPrimeFieldBridge,
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
+        + MSMProvider<P::G2>
+        + MpcToMontgomery<P::ScalarField>,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing + MontgomeryField,
 {
     fn next_round(
         self,
@@ -163,17 +168,9 @@ where
         //TODO calculate additions
         //set first element to zero as it is not used
         private_witness.public_inputs[0] = P::ScalarField::zero();
-        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 4)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        Ok(Round::Round1 {
-            domains: Domains {
-                constraint_domain: domain1,
-                constraint_domain4: domain2,
-                phantom_data: PhantomData,
-            },
 
+        Ok(Round::Round1 {
+            domains: Domains::new(zkey)?,
             challenges: Round1Challenges::random(driver)?,
         })
     }

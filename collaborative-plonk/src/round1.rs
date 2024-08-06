@@ -1,21 +1,17 @@
 use ark_ec::pairing::Pairing;
-use ark_poly::{domain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
-use circom_types::{
-    plonk::ZKey,
-    traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
-};
+use circom_types::plonk::ZKey;
 use collaborative_groth16::groth16::SharedWitness;
 use eyre::{Ok, Result};
 use mpc_core::traits::{
-    EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    EcMpcProtocol, FFTProvider, MSMProvider, MontgomeryField, MpcToMontgomery,
+    PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
 
 use crate::{
     types::{PolyEval, WirePolyOutput},
     Domains, FieldShareVec, Round,
 };
-use ark_poly::EvaluationDomain;
 
 pub(super) struct Round1Challenges<T, P: Pairing>
 where
@@ -54,13 +50,13 @@ where
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing + CircomArkworksPrimeFieldBridge,
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
+        + MSMProvider<P::G2>
+        + MpcToMontgomery<P::ScalarField>,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing + MontgomeryField,
 {
     fn compute_wire_polynomials(
         driver: &mut T,
+        domains: &Domains<P>,
         challenges: &Round1Challenges<T, P>,
         zkey: &ZKey<P>,
         private_witness: &SharedWitness<T, P>,
@@ -92,29 +88,24 @@ where
             ));
         }
 
-        // TODO batch to montgomery in MPC?
-
-        let buffer_a = FieldShareVec::<T, P>::from(buffer_a);
-        let buffer_b = FieldShareVec::<T, P>::from(buffer_b);
-        let buffer_c = FieldShareVec::<T, P>::from(buffer_c);
-        driver.print(&buffer_a);
-        driver.print(&buffer_b);
-        driver.print(&buffer_c);
-        panic!();
+        // we could do that also during loop but this is more readable
+        // it may be even faster as this way it is better for the cache
+        let mut buffer_a = FieldShareVec::<T, P>::from(buffer_a);
+        let mut buffer_b = FieldShareVec::<T, P>::from(buffer_b);
+        let mut buffer_c = FieldShareVec::<T, P>::from(buffer_c);
+        driver.inplace_batch_to_montgomery(&mut buffer_a);
+        driver.inplace_batch_to_montgomery(&mut buffer_b);
+        driver.inplace_batch_to_montgomery(&mut buffer_c);
 
         // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
-        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        let poly_a = driver.ifft(&buffer_a, &domain1);
-        let poly_b = driver.ifft(&buffer_b, &domain1);
-        let poly_c = driver.ifft(&buffer_c, &domain1);
+        let poly_a = driver.ifft(&buffer_a, &domains.constraint_domain4);
+        let poly_b = driver.ifft(&buffer_b, &domains.constraint_domain4);
+        let poly_c = driver.ifft(&buffer_c, &domains.constraint_domain4);
 
         // Compute extended evaluations of a(X), b(X) and c(X) polynomials
-        let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints * 4)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        let eval_a = driver.fft(poly_a.to_owned(), &domain2);
-        let eval_b = driver.fft(poly_b.to_owned(), &domain2);
-        let eval_c = driver.fft(poly_c.to_owned(), &domain2);
+        let eval_a = driver.fft(poly_a.to_owned(), &domains.constraint_domain16);
+        let eval_b = driver.fft(poly_b.to_owned(), &domains.constraint_domain16);
+        let eval_c = driver.fft(poly_c.to_owned(), &domains.constraint_domain16);
 
         let poly_a = Self::blind_coefficients(driver, &poly_a, &challenges.b[..2]);
         let poly_b = Self::blind_coefficients(driver, &poly_b, &challenges.b[2..4]);
@@ -154,15 +145,16 @@ where
         private_witness: &SharedWitness<T, P>,
     ) -> Result<Self> {
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        let outp = Self::compute_wire_polynomials(driver, &challenges, zkey, private_witness)?;
+        let wire_polys =
+            Self::compute_wire_polynomials(driver, &domains, &challenges, zkey, private_witness)?;
 
+        let poly_a_msm = driver.batch_lift_montgomery(&wire_polys.poly_eval_a.poly);
+        let poly_b_msm = driver.batch_lift_montgomery(&wire_polys.poly_eval_b.poly);
+        let poly_c_msm = driver.batch_lift_montgomery(&wire_polys.poly_eval_c.poly);
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let commit_a =
-            MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &outp.poly_eval_a.poly);
-        let commit_b =
-            MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &outp.poly_eval_b.poly);
-        let commit_c =
-            MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &outp.poly_eval_c.poly);
+        let commit_a = MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &poly_a_msm);
+        let commit_b = MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &poly_b_msm);
+        let commit_c = MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &poly_c_msm);
 
         // TODO parallelize
         let proof = Round1Proof::<P> {
@@ -190,7 +182,18 @@ pub mod tests {
     use crate::{Domains, Round};
 
     use super::Round1Challenges;
+    use ark_ec::pairing::Pairing;
     use num_traits::Zero;
+    use std::str::FromStr;
+
+    macro_rules! g1_from_xy {
+        ($x: expr,$y: expr) => {
+            <ark_bn254::Bn254 as Pairing>::G1Affine::new(
+                ark_bn254::Fq::from_str($x).unwrap(),
+                ark_bn254::Fq::from_str($y).unwrap(),
+            )
+        };
+    }
 
     #[test]
     fn test_round1_multiplier2() {
@@ -209,6 +212,35 @@ pub mod tests {
             domains: Domains::new(&zkey).unwrap(),
             challenges: Round1Challenges::deterministic().unwrap(),
         };
-        let round2 = round1.next_round(&mut driver, &zkey, &mut witness).unwrap();
+        if let Round::Round2 {
+            domains,
+            challenges,
+            proof,
+        } = round1.next_round(&mut driver, &zkey, &mut witness).unwrap()
+        {
+            assert_eq!(
+                proof.commit_a,
+                g1_from_xy!(
+                    "11327846795108164597862108116687480895455059329060212270066696945088464241533",
+                    "7776921762549167800422434926003437762844064920522926970325762760653252429454"
+                )
+            );
+            assert_eq!(
+                proof.commit_b,
+                g1_from_xy!(
+                    "9372062747415722277840039329560395993406167602129326436042470958833003216581",
+                    "6239816658778119701714344686030767774838449997864231134074073775429258788922"
+                )
+            );
+            assert_eq!(
+                proof.commit_c,
+                g1_from_xy!(
+                    "18369440326418436791793675139620567534336152462051746333537337326721235970210",
+                    "4920943776359951362683576214248080938368830299813420492592037643095097935073"
+                )
+            );
+        } else {
+            panic!("must be round2 after round1");
+        }
     }
 }

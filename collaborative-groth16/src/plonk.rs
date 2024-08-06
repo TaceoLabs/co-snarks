@@ -9,16 +9,14 @@ use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
-use circom_types::groth16::zkey;
-use circom_types::plonk::Polynomial;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use eyre::Result;
+use mpc_core::traits::MontgomeryField;
 use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
-use num_traits::ops::inv;
 use num_traits::One;
 use num_traits::Zero;
 use sha3::Digest;
@@ -97,14 +95,12 @@ impl<P: Pairing> Default for Keccak256Transcript<P> {
 impl<D, P> Transcript<D, P>
 where
     D: Digest,
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
+    P: Pairing,
+    P::ScalarField: MontgomeryField,
 {
     fn add_scalar(&mut self, scalar: P::ScalarField) {
         let mut buf = vec![];
-        scalar
-            .lift_montgomery()
+        <P as Pairing>::ScalarField::lift_montgomery(scalar)
             .serialize_uncompressed(&mut buf)
             .expect("Can Fr write into Vec<u8>");
         buf.reverse();
@@ -136,7 +132,7 @@ where
         let mut digest = D::new();
         std::mem::swap(&mut self.digest, &mut digest);
         let bytes = digest.finalize();
-        P::ScalarField::from_be_bytes_mod_order(&bytes).to_montgomery()
+        P::ScalarField::from_be_bytes_mod_order(&bytes).into_montgomery()
     }
 }
 
@@ -240,16 +236,14 @@ where
     phantom_data: PhantomData<P>,
 }
 
-impl<T, P> CollaborativePlonk<T, P>
+impl<T, P: Pairing> CollaborativePlonk<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing + CircomArkworksPrimeFieldBridge,
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing + MontgomeryField,
 {
     /// Creates a new [CollaborativePlonk] protocol with a given MPC driver.
     pub fn new(driver: T) -> Self {
@@ -628,9 +622,9 @@ where
         let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(domain);
         [
             zero,
-            neg_1.to_montgomery() + root_of_unity,
-            neg_2.to_montgomery(),
-            neg_1.to_montgomery() - root_of_unity,
+            neg_1.into_montgomery() + root_of_unity,
+            neg_2.into_montgomery(),
+            neg_1.into_montgomery() - root_of_unity,
         ]
     }
 
@@ -641,11 +635,11 @@ where
         let four = two.square();
         let neg_2 = zero - two;
         let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(domain);
-        let neg2_root_unity = neg_2.to_montgomery() * root_of_unity;
+        let neg2_root_unity = neg_2.into_montgomery() * root_of_unity;
         [
             zero,
             neg2_root_unity,
-            four.to_montgomery(),
+            four.into_montgomery(),
             P::ScalarField::zero() - neg2_root_unity,
         ]
     }
@@ -656,12 +650,12 @@ where
         let two = P::ScalarField::one() + P::ScalarField::one();
         let neg_eight = -(two.square() * two);
         let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(domain);
-        let two_mont = two.to_montgomery();
+        let two_mont = two.into_montgomery();
         let two_root_unity = two_mont * root_of_unity;
         [
             zero,
             two_mont + two_root_unity,
-            neg_eight.to_montgomery(),
+            neg_eight.into_montgomery(),
             two_mont - two_root_unity,
         ]
     }
@@ -831,7 +825,7 @@ where
         let e24 = e2 + e4;
 
         let mut poly_r = zkey.qm_poly.coeffs.clone();
-        for coeff in poly_r.iter_mut() {
+        for mut coeff in poly_r.iter_mut() {
             *coeff *= coef_ab;
         }
         Self::add_factor_poly(&mut poly_r, &zkey.ql_poly.coeffs, proof.eval_a);
@@ -847,7 +841,7 @@ where
 
         let mut poly_r_shared = vec![FieldShare::<T, P>::default(); len];
 
-        for (inout, add) in poly_r_shared
+        for (mut inout, add) in poly_r_shared
             .iter_mut()
             .zip(poly_z.poly.clone().into_iter())
         {
@@ -860,7 +854,7 @@ where
 
         let mut tmp_poly = vec![FieldShare::<T, P>::default(); len];
         let xin2 = xin.square();
-        for (inout, add) in tmp_poly.iter_mut().zip(poly_t.t3.clone().into_iter()) {
+        for (mut inout, add) in tmp_poly.iter_mut().zip(poly_t.t3.clone().into_iter()) {
             *inout = self.driver.mul_with_public(&xin2, &add);
         }
         for (inout, add) in tmp_poly.iter_mut().zip(poly_t.t2.clone().into_iter()) {
@@ -904,7 +898,7 @@ where
         let mut res = vec![FieldShare::<T, P>::default(); len];
 
         // R
-        for (inout, add) in res.iter_mut().zip(poly_r.clone().into_iter()) {
+        for (mut inout, add) in res.iter_mut().zip(poly_r.clone().into_iter()) {
             *inout = add;
         }
         // A
@@ -1005,7 +999,7 @@ where
             inout.resize(add_poly.len(), P::ScalarField::zero());
         }
 
-        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+        for (mut inout, add) in inout.iter_mut().zip(add_poly.iter()) {
             *inout += *add;
         }
     }
@@ -1019,7 +1013,7 @@ where
             inout.resize(add_poly.len(), P::ScalarField::zero());
         }
 
-        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+        for (mut inout, add) in inout.iter_mut().zip(add_poly.iter()) {
             *inout += *add * factor;
         }
     }

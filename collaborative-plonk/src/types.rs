@@ -5,7 +5,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
-use mpc_core::traits::PrimeFieldMpcProtocol;
+use mpc_core::traits::{MontgomeryField, PrimeFieldMpcProtocol};
 use sha3::{Digest, Keccak256};
 
 use crate::FieldShareVec;
@@ -32,9 +32,8 @@ impl<P: Pairing> Default for Keccak256Transcript<P> {
 impl<D, P> Transcript<D, P>
 where
     D: Digest,
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
+    P: Pairing,
+    P::ScalarField: MontgomeryField,
 {
     fn add_scalar(&mut self, scalar: P::ScalarField) {
         let mut buf = vec![];
@@ -71,7 +70,7 @@ where
         let mut digest = D::new();
         std::mem::swap(&mut self.digest, &mut digest);
         let bytes = digest.finalize();
-        P::ScalarField::from_be_bytes_mod_order(&bytes).to_montgomery()
+        P::ScalarField::from_be_bytes_mod_order(&bytes).into_montgomery()
     }
 }
 

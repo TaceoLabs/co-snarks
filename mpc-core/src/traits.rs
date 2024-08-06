@@ -3,15 +3,68 @@
 //! Contains the traits which need to be implemented by the MPC protocols.
 
 use core::fmt;
+use std::sync::LazyLock;
 
 use ark_ec::{pairing::Pairing, CurveGroup};
 use eyre::Result;
 
+use ark_bls12_381::Fq as Bls12_381_BaseField;
 use ark_bls12_381::Fr as Bls12_381_ScalarField;
-use ark_bn254::Fr as Bn254_ScalarField;
+use ark_bn254::{Fq as Bn254_BaseField, Fr as Bn254_ScalarField};
+use ark_ff::Field;
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+
+static BN254_INVERSE_R_BASE: LazyLock<Bn254_BaseField> =
+    LazyLock::new(|| Bn254_BaseField::from(Bn254_BaseField::R).inverse().unwrap());
+static BN254_INVERSE_R_SCALAR: LazyLock<Bn254_ScalarField> = LazyLock::new(|| {
+    Bn254_ScalarField::from(Bn254_ScalarField::R)
+        .inverse()
+        .unwrap()
+});
+
+static BL12_381_INVERSE_R_BASE: LazyLock<Bls12_381_BaseField> = LazyLock::new(|| {
+    Bls12_381_BaseField::from(Bls12_381_BaseField::R)
+        .inverse()
+        .unwrap()
+});
+static BLS12_381_INVERSE_R_SCALAR: LazyLock<Bls12_381_ScalarField> = LazyLock::new(|| {
+    Bls12_381_ScalarField::from(Bls12_381_ScalarField::R)
+        .inverse()
+        .unwrap()
+});
+pub trait MontgomeryField: PrimeField {
+    fn into_montgomery(self) -> Self;
+    fn lift_montgomery(self) -> Self;
+}
+
+impl MontgomeryField for ark_bn254::Fr {
+    fn into_montgomery(self) -> Self {
+        self * Self::new_unchecked(Self::R2)
+    }
+
+    fn lift_montgomery(self) -> Self {
+        self * *BN254_INVERSE_R_SCALAR
+    }
+}
+
+impl MontgomeryField for ark_bls12_381::Fr {
+    fn into_montgomery(self) -> Self {
+        self * Self::new_unchecked(Self::R2)
+    }
+
+    fn lift_montgomery(self) -> Self {
+        self * *BLS12_381_INVERSE_R_SCALAR
+    }
+}
+
+pub trait MpcToMontgomery<F: MontgomeryField>: PrimeFieldMpcProtocol<F> {
+    fn batch_to_montgomery(&self, vec: &Self::FieldShareVec) -> Self::FieldShareVec;
+    fn batch_lift_montgomery(&self, vec: &Self::FieldShareVec) -> Self::FieldShareVec;
+    fn inplace_batch_to_montgomery(&self, vec: &mut Self::FieldShareVec);
+    fn inplace_batch_lift_montgomery(&self, vec: &mut Self::FieldShareVec);
+}
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
@@ -45,6 +98,8 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 
     /// Elementwise subtraction of two vectors of shares in place: \[a_i\] -= \[b_i\]
     fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec);
+
+    ///
 
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
     fn mul(

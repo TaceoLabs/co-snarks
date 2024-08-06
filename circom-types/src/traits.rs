@@ -1,7 +1,6 @@
 //! This module contains traits for serializing and deserializing field elements and curve points into and from circom files to arkworks representation.
 use std::io::Read;
 use std::marker::PhantomData;
-use std::sync::LazyLock;
 
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::{PrimeField, Zero};
@@ -33,11 +32,6 @@ mod $mod_name {
     use ark_ff::BigInt;
     use ark_serialize::{CanonicalDeserialize, SerializationError};
     use serde::ser::SerializeSeq;
-    use ark_ff::Field;
-    static INVERSE_R_BASE: LazyLock<Fq> =
-        LazyLock::new(|| Fq::from(Fq::R).inverse().unwrap());
-    static INVERSE_R_SCALAR: LazyLock<Fr> =
-        LazyLock::new(|| Fr::from(Fr::R).inverse().unwrap());
 
     use super::*;
         impl CircomArkworksPrimeFieldBridge for Fr {
@@ -62,15 +56,6 @@ mod $mod_name {
                 Ok(Self::new_unchecked(Self::from_reader_unchecked(reader)?.into_bigint()))
             }
 
-            #[inline]
-            fn lift_montgomery(self) -> Self {
-                self * *INVERSE_R_SCALAR
-            }
-
-            #[inline]
-            fn to_montgomery(self) -> Self {
-                self * Fr::new_unchecked(Fr::R2)
-            }
         }
         impl CircomArkworksPrimeFieldBridge for Fq {
             const SERIALIZED_BYTE_SIZE: usize = $field_size;
@@ -92,15 +77,6 @@ mod $mod_name {
             #[inline]
             fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self> {
                 Ok(Self::new_unchecked(Self::from_reader_unchecked(reader)?.into_bigint()))
-            }
-
-            #[inline]
-            fn lift_montgomery(self) -> Self {
-                self * *INVERSE_R_BASE
-            }
-            #[inline]
-            fn to_montgomery(self) -> Self {
-                self * Fq::new_unchecked(Fq::R2)
             }
         }
 
@@ -609,10 +585,6 @@ pub trait CircomArkworksPrimeFieldBridge: PrimeField {
     fn from_reader_unchecked(reader: impl Read) -> IoResult<Self>;
     /// deserializes field elements that are multiplied by R^2 already (elements in zkey are of this form)
     fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self>;
-    /// undos the montgomery reduction
-    fn lift_montgomery(self) -> Self;
-    /// undos the montgomery reduction
-    fn to_montgomery(self) -> Self;
 }
 
 impl_bn256!();

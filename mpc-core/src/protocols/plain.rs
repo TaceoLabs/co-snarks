@@ -4,8 +4,8 @@
 
 use crate::{
     traits::{
-        CircomWitnessExtensionProtocol, EcMpcProtocol, FFTProvider, MSMProvider,
-        PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        CircomWitnessExtensionProtocol, EcMpcProtocol, FFTProvider, MSMProvider, MontgomeryField,
+        MpcToMontgomery, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
     },
     RngType,
 };
@@ -13,6 +13,7 @@ use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{One, PrimeField};
 use eyre::eyre;
 use eyre::Result;
+use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 use rand::SeedableRng;
@@ -225,6 +226,28 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
 
     fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
         sharevec.len()
+    }
+}
+
+impl<F: MontgomeryField> MpcToMontgomery<F> for PlainDriver<F> {
+    fn batch_to_montgomery(&self, vec: &Self::FieldShareVec) -> Self::FieldShareVec {
+        vec.iter().map(|s| s.into_montgomery()).collect_vec()
+    }
+
+    fn batch_lift_montgomery(&self, vec: &Self::FieldShareVec) -> Self::FieldShareVec {
+        vec.iter().map(|s| s.lift_montgomery()).collect_vec()
+    }
+
+    fn inplace_batch_to_montgomery(&self, vec: &mut Self::FieldShareVec) {
+        for mut s in vec.iter_mut() {
+            *s = s.into_montgomery();
+        }
+    }
+
+    fn inplace_batch_lift_montgomery(&self, vec: &mut Self::FieldShareVec) {
+        for mut s in vec.iter_mut() {
+            *s = s.lift_montgomery();
+        }
     }
 }
 
