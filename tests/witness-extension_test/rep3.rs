@@ -192,7 +192,8 @@ mod rep3_tests {
     mod witness_extension {
         use super::*;
         use ark_bn254::Bn254;
-        use circom_mpc_compiler::CompilerBuilder;
+        use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
+        use circom_mpc_vm::mpc_vm::VMConfig;
         use circom_types::groth16::witness::Witness;
         use itertools::izip;
         use mpc_core::protocols::rep3::{self};
@@ -275,13 +276,16 @@ mod rep3_tests {
 
                 for (net, input) in izip!(test_network.get_party_networks(), inputs) {
                     threads.push(thread::spawn(move || {
-                        let witness_extension = CompilerBuilder::<Bn254>::new($file.to_owned())
-                            .link_library("../test_vectors/circuits/libs/")
-                            .build()
-                            .parse()
-                            .unwrap()
-                            .to_rep3_vm_with_network(net)
-                            .unwrap();
+                        let witness_extension = CompilerBuilder::<Bn254>::new(
+                            CompilerConfig::default(),
+                            $file.to_owned(),
+                        )
+                        .link_library("../test_vectors/circuits/libs/")
+                        .build()
+                        .parse()
+                        .unwrap()
+                        .to_rep3_vm_with_network(net, VMConfig::default())
+                        .unwrap();
                         witness_extension
                             .run_with_flat(input, 0)
                             .unwrap()

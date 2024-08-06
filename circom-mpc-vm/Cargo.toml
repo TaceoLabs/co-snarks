@@ -21,3 +21,4 @@ mpc-net = { workspace = true }
 num-bigint.workspace = true
 num-traits.workspace = true
 tracing.workspace = true
+serde.workspace = true

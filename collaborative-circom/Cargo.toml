@@ -20,6 +20,7 @@ ark-ff.workspace = true
 bincode.workspace = true
 circom-types = { version = "0.3.0", path = "../circom-types" }
 circom-mpc-compiler = { version = "0.3.0", path = "../circom-mpc-compiler" }
+circom-mpc-vm = { version = "0.2.0", path = "../circom-mpc-vm" }
 clap.workspace = true
 collaborative-groth16 = { version = "0.2.1", path = "../collaborative-groth16" }
 color-eyre = "0.6.3"
@@ -35,3 +36,4 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing.workspace = true
 serde_json.workspace = true
 ark-groth16.workspace = true
+config = "0.14.0"
