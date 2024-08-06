@@ -14,8 +14,7 @@ use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use collaborative_groth16::groth16::CollaborativeGroth16;
 use collaborative_groth16::groth16::SharedWitness;
-use mpc_core::traits::MontgomeryField;
-use mpc_core::traits::MpcToMontgomery;
+use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
@@ -23,6 +22,8 @@ use num_traits::One;
 use num_traits::Zero;
 use round1::Round1Challenges;
 use round1::Round1Proof;
+use round2::Round2Challenges;
+use round2::Round2Proof;
 use sha3::Digest;
 use sha3::Keccak256;
 use std::io;
@@ -129,7 +130,13 @@ where
         wire_polys: WirePolyOutput<T, P>,
         data: PlonkData<T, P>,
     },
-    Round3,
+    Round3 {
+        domains: Domains<P>,
+        challenges: Round2Challenges<T, P>,
+        proof: Round2Proof<P>,
+        wire_polys: WirePolyOutput<T, P>,
+        data: PlonkData<T, P>,
+    },
     Round4,
     Round5,
     Round6,
@@ -191,9 +198,8 @@ where
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
-        + MSMProvider<P::G2>
-        + MpcToMontgomery<P::ScalarField>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing + MontgomeryField,
+        + MSMProvider<P::G2>,
+    P::ScalarField: FFTPostProcessing,
 {
     fn next_round(self, driver: &mut T) -> PlonkProofResult<Self> {
         match self {
@@ -214,7 +220,13 @@ where
                 wire_polys,
                 data,
             } => Self::round2(driver, domains, challenges, proof, wire_polys, data),
-            Round::Round3 => todo!(),
+            Round::Round3 {
+                domains,
+                challenges,
+                proof,
+                wire_polys,
+                data,
+            } => todo!(),
             Round::Round4 => todo!(),
             Round::Round5 => todo!(),
             Round::Round6 => todo!(),

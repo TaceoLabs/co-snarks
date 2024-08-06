@@ -3,13 +3,14 @@ use ark_relations::r1cs::SynthesisError;
 use circom_types::plonk::ZKey;
 use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::traits::{
-    EcMpcProtocol, FFTProvider, MSMProvider, MontgomeryField, MpcToMontgomery,
-    PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    EcMpcProtocol, FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol,
+    PrimeFieldMpcProtocol,
 };
 
 use crate::{
     types::{PolyEval, WirePolyOutput},
-    Domains, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult, PlonkWitness, Round,
+    Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult, PlonkWitness,
+    Round,
 };
 
 pub(super) struct Round1Challenges<T, P: Pairing>
@@ -50,9 +51,8 @@ where
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
-        + MSMProvider<P::G2>
-        + MpcToMontgomery<P::ScalarField>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing + MontgomeryField,
+        + MSMProvider<P::G2>,
+    P::ScalarField: FFTPostProcessing,
 {
     fn compute_wire_polynomials(
         driver: &mut T,
@@ -63,24 +63,21 @@ where
     ) -> PlonkProofResult<WirePolyOutput<T, P>> {
         let num_constraints = zkey.n_constraints;
 
-        let mut buffer_a = Vec::with_capacity(num_constraints);
-        let mut buffer_b = Vec::with_capacity(num_constraints);
-        let mut buffer_c = Vec::with_capacity(num_constraints);
+        let mut buffer_a = vec![FieldShare::<T, P>::default(); zkey.domain_size];
+        let mut buffer_b = vec![FieldShare::<T, P>::default(); zkey.domain_size];
+        let mut buffer_c = vec![FieldShare::<T, P>::default(); zkey.domain_size];
 
         for i in 0..num_constraints {
-            buffer_a.push(Self::get_witness(driver, witness, zkey, zkey.map_a[i])?);
-            buffer_b.push(Self::get_witness(driver, witness, zkey, zkey.map_b[i])?);
-            buffer_c.push(Self::get_witness(driver, witness, zkey, zkey.map_c[i])?);
+            buffer_a[i] = Self::get_witness(driver, witness, zkey, zkey.map_a[i])?;
+            buffer_b[i] = Self::get_witness(driver, witness, zkey, zkey.map_b[i])?;
+            buffer_c[i] = Self::get_witness(driver, witness, zkey, zkey.map_c[i])?;
         }
 
         // we could do that also during loop but this is more readable
         // it may be even faster as this way it is better for the cache
-        let mut buffer_a = FieldShareVec::<T, P>::from(buffer_a);
-        let mut buffer_b = FieldShareVec::<T, P>::from(buffer_b);
-        let mut buffer_c = FieldShareVec::<T, P>::from(buffer_c);
-        driver.inplace_batch_to_montgomery(&mut buffer_a);
-        driver.inplace_batch_to_montgomery(&mut buffer_b);
-        driver.inplace_batch_to_montgomery(&mut buffer_c);
+        let buffer_a = FieldShareVec::<T, P>::from(buffer_a);
+        let buffer_b = FieldShareVec::<T, P>::from(buffer_b);
+        let buffer_c = FieldShareVec::<T, P>::from(buffer_c);
 
         // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
         let poly_a = driver.ifft(&buffer_a, &domains.constraint_domain4);
@@ -134,13 +131,22 @@ where
         let wire_polys =
             Self::compute_wire_polynomials(driver, &domains, &challenges, zkey, witness)?;
 
-        let poly_a = driver.batch_lift_montgomery(&wire_polys.poly_eval_a.poly);
-        let poly_b = driver.batch_lift_montgomery(&wire_polys.poly_eval_b.poly);
-        let poly_c = driver.batch_lift_montgomery(&wire_polys.poly_eval_c.poly);
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let commit_a = MSMProvider::<P::G1>::msm_public_points(driver, &data.zkey.p_tau, &poly_a);
-        let commit_b = MSMProvider::<P::G1>::msm_public_points(driver, &data.zkey.p_tau, &poly_b);
-        let commit_c = MSMProvider::<P::G1>::msm_public_points(driver, &data.zkey.p_tau, &poly_c);
+        let commit_a = MSMProvider::<P::G1>::msm_public_points(
+            driver,
+            &data.zkey.p_tau,
+            &wire_polys.poly_eval_a.poly,
+        );
+        let commit_b = MSMProvider::<P::G1>::msm_public_points(
+            driver,
+            &data.zkey.p_tau,
+            &wire_polys.poly_eval_b.poly,
+        );
+        let commit_c = MSMProvider::<P::G1>::msm_public_points(
+            driver,
+            &data.zkey.p_tau,
+            &wire_polys.poly_eval_c.poly,
+        );
 
         let opened = driver.open_point_many(&[commit_a, commit_b, commit_c])?;
         debug_assert_eq!(opened.len(), 3);
@@ -165,10 +171,7 @@ pub mod tests {
     use std::{fs::File, io::BufReader};
 
     use ark_bn254::Bn254;
-    use circom_types::{
-        groth16::{public_input, witness::Witness},
-        plonk::ZKey,
-    };
+    use circom_types::{groth16::witness::Witness, plonk::ZKey};
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 

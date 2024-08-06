@@ -64,6 +64,7 @@ pub trait MpcToMontgomery<F: MontgomeryField>: PrimeFieldMpcProtocol<F> {
     fn batch_lift_montgomery(&self, vec: &Self::FieldShareVec) -> Self::FieldShareVec;
     fn inplace_batch_to_montgomery(&self, vec: &mut Self::FieldShareVec);
     fn inplace_batch_lift_montgomery(&self, vec: &mut Self::FieldShareVec);
+    fn print_share(&self, to_print: &Self::FieldShare);
 }
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
@@ -98,8 +99,6 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 
     /// Elementwise subtraction of two vectors of shares in place: \[a_i\] -= \[b_i\]
     fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec);
-
-    ///
 
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
     fn mul(

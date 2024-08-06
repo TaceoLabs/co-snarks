@@ -198,6 +198,32 @@ where
         self.create_proof_with_assignment(pk, r, s, &h, &public_inputs[1..], private_witness)
     }
 
+    //TODO IS THIS CORRECT NOW????
+    fn root_of_unities<F: PrimeField + FftField>(
+        domain: &GeneralEvaluationDomain<F>,
+    ) -> (F, Vec<F>) {
+        let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
+        let mut q = F::one();
+        while q.legendre() != LegendreSymbol::QuadraticNonResidue {
+            q += F::one();
+        }
+        let z = q.pow(F::TRACE);
+        roots[0] = z;
+        for i in 1..roots.len() {
+            roots[i] = roots[i - 1].square();
+        }
+        roots.reverse();
+        (q, roots)
+    }
+
+    pub fn xth_root_of_unity<F: PrimeField + FftField>(
+        x: usize,
+        domain: &GeneralEvaluationDomain<F>,
+    ) -> F {
+        let (_, roots) = Self::root_of_unities(domain);
+        roots[x]
+    }
+
     /* old way of computing root of unity, does not work for bls12_381:
     let root_of_unity = {
         let domain_size_double = 2 * domain_size;
@@ -222,6 +248,7 @@ where
             roots[i] = roots[i - 1].square();
         }
         roots.reverse();
+        let (q, roots) = Self::root_of_unities(domain);
         if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
             q.square()
         } else {

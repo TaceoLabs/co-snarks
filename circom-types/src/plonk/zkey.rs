@@ -51,6 +51,8 @@ pub struct ZKey<P: Pairing> {
     pub n_public: usize,
     /// The domain size (power of two)
     pub domain_size: usize,
+    /// ld(domain size)
+    pub power: usize,
     /// The amounts of additions
     pub n_additions: usize,
     /// The amounts of constraints
@@ -191,12 +193,12 @@ where
     fn evaluations<R: Read>(domain_size: usize, mut reader: R) -> ZKeyParserResult<Polynomial<P>> {
         let mut coeffs = Vec::with_capacity(domain_size);
         for _ in 0..domain_size {
-            coeffs.push(P::ScalarField::deserialize_compressed(&mut reader)?);
+            coeffs.push(<P::ScalarField>::from_reader_unchecked(&mut reader)?);
         }
 
         let mut evaluations = Vec::with_capacity(domain_size * 4);
         for _ in 0..domain_size * 4 {
-            evaluations.push(P::ScalarField::deserialize_compressed(&mut reader)?);
+            evaluations.push(<P::ScalarField>::from_reader_unchecked(&mut reader)?);
         }
         Ok(Polynomial {
             coeffs,
@@ -293,6 +295,7 @@ where
             n_vars,
             n_public,
             domain_size,
+            power: header.power,
             n_additions,
             n_constraints,
             verifying_key: header.verifying_key,
@@ -324,8 +327,8 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn new<R: Read>(mut reader: R) -> ZKeyParserResult<Self> {
-        let k1 = <P::ScalarField>::from_reader(&mut reader)?;
-        let k2 = <P::ScalarField>::from_reader(&mut reader)?;
+        let k1 = <P::ScalarField>::from_reader_unchecked(&mut reader)?;
+        let k2 = <P::ScalarField>::from_reader_unchecked(&mut reader)?;
         let qm = P::g1_from_reader(&mut reader)?;
         let ql = P::g1_from_reader(&mut reader)?;
         let qr = P::g1_from_reader(&mut reader)?;
@@ -358,6 +361,7 @@ struct PlonkHeader<P: Pairing> {
     n_vars: usize,
     n_public: usize,
     domain_size: usize,
+    power: usize,
     n_additions: usize,
     n_constraints: usize,
     verifying_key: VerifyingKey<P>,
@@ -394,6 +398,7 @@ where
             n_vars: u32_to_usize!(n_vars),
             n_public: u32_to_usize!(n_public),
             domain_size: u32_to_usize!(domain_size),
+            power: u32_to_usize!(domain_size.ilog2()),
             n_additions: u32_to_usize!(n_additions),
             n_constraints: u32_to_usize!(n_constraints),
             verifying_key,

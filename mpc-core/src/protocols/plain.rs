@@ -237,11 +237,9 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
     }
 
     fn print(&self, to_print: &Self::FieldShareVec) {
-        print!("[");
         for a in to_print.iter() {
-            print!("{a}, ")
+            println!("{a}")
         }
-        println!("]");
     }
 
     fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare {
@@ -258,6 +256,9 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
 }
 
 impl<F: MontgomeryField> MpcToMontgomery<F> for PlainDriver<F> {
+    fn print_share(&self, to_print: &Self::FieldShare) {
+        println!("{}", to_print);
+    }
     fn batch_to_montgomery(&self, vec: &Self::FieldShareVec) -> Self::FieldShareVec {
         vec.iter().map(|s| s.into_montgomery()).collect_vec()
     }

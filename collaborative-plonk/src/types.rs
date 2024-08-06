@@ -4,8 +4,7 @@ use std::marker::PhantomData;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
-use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
-use mpc_core::traits::{MontgomeryField, PrimeFieldMpcProtocol};
+use mpc_core::traits::PrimeFieldMpcProtocol;
 use sha3::{Digest, Keccak256};
 
 use crate::FieldShareVec;
@@ -33,7 +32,6 @@ impl<D, P> Transcript<D, P>
 where
     D: Digest,
     P: Pairing,
-    P::ScalarField: MontgomeryField,
 {
     pub(crate) fn add_scalar(&mut self, scalar: P::ScalarField) {
         let mut buf = vec![];
@@ -45,9 +43,6 @@ where
         self.digest.update(&buf);
     }
 
-    pub(crate) fn add_montgomery_scalar(&mut self, scalar: P::ScalarField) {
-        self.add_scalar(scalar.lift_montgomery())
-    }
     pub(crate) fn add_point(&mut self, point: P::G1Affine) {
         let bits: usize = P::BaseField::MODULUS_BIT_SIZE
             .try_into()
@@ -72,7 +67,7 @@ where
 
     pub(crate) fn get_challenge(self) -> P::ScalarField {
         let bytes = self.digest.finalize();
-        P::ScalarField::from_be_bytes_mod_order(&bytes).into_montgomery()
+        P::ScalarField::from_be_bytes_mod_order(&bytes)
     }
 }
 
@@ -145,7 +140,7 @@ mod tests {
             "20825949499069110345561489838956415747250622568151984013116057026259498945798",
             "17254354095258677432709627471717649880709525692193666844291487539751153875840"
         ));
-        transcript.add_montgomery_scalar(
+        transcript.add_scalar(
             ark_bn254::Fr::from_str(
                 "18493166935391704183319420574241503914733913248159936156014286513312199455",
             )
