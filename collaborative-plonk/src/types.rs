@@ -35,16 +35,20 @@ where
     P: Pairing,
     P::ScalarField: MontgomeryField,
 {
-    fn add_scalar(&mut self, scalar: P::ScalarField) {
+    pub(crate) fn add_scalar(&mut self, scalar: P::ScalarField) {
         let mut buf = vec![];
         scalar
-            .lift_montgomery()
+            //.lift_montgomery() Check if we need this or not. For round2 we do not need it
             .serialize_uncompressed(&mut buf)
             .expect("Can Fr write into Vec<u8>");
         buf.reverse();
         self.digest.update(&buf);
     }
-    fn add_poly_commitment(&mut self, point: P::G1Affine) {
+
+    pub(crate) fn add_montgomery_scalar(&mut self, scalar: P::ScalarField) {
+        self.add_scalar(scalar.lift_montgomery())
+    }
+    pub(crate) fn add_point(&mut self, point: P::G1Affine) {
         let bits: usize = P::BaseField::MODULUS_BIT_SIZE
             .try_into()
             .expect("u32 fits into usize");
@@ -66,10 +70,8 @@ where
         }
     }
 
-    fn get_challenge(&mut self) -> P::ScalarField {
-        let mut digest = D::new();
-        std::mem::swap(&mut self.digest, &mut digest);
-        let bytes = digest.finalize();
+    pub(crate) fn get_challenge(self) -> P::ScalarField {
+        let bytes = self.digest.finalize();
         P::ScalarField::from_be_bytes_mod_order(&bytes).into_montgomery()
     }
 }
@@ -124,26 +126,26 @@ mod tests {
     #[test]
     fn test_keccak_transcript() {
         let mut transcript = Keccak256Transcript::<Bn254>::default();
-        transcript.add_poly_commitment(to_g1_bn254!(
+        transcript.add_point(to_g1_bn254!(
             "20825949499069110345561489838956415747250622568151984013116057026259498945798",
             "4633888776580597789536778273539625207986785465104156818397550354894072332743"
         ));
-        transcript.add_poly_commitment(to_g1_bn254!(
+        transcript.add_point(to_g1_bn254!(
             "13502414797941204782598195942532580786194839256223737894432362681935424485706",
             "18673738305240077401477088441313771484023070622513584695135539045403188608753"
         ));
-        transcript.add_poly_commitment(ark_bn254::G1Affine::identity());
+        transcript.add_point(ark_bn254::G1Affine::identity());
         transcript.add_scalar(
             ark_bn254::Fr::from_str(
                 "18493166935391704183319420574241503914733913248159936156014286513312199455",
             )
             .unwrap(),
         );
-        transcript.add_poly_commitment(to_g1_bn254!(
+        transcript.add_point(to_g1_bn254!(
             "20825949499069110345561489838956415747250622568151984013116057026259498945798",
             "17254354095258677432709627471717649880709525692193666844291487539751153875840"
         ));
-        transcript.add_scalar(
+        transcript.add_montgomery_scalar(
             ark_bn254::Fr::from_str(
                 "18493166935391704183319420574241503914733913248159936156014286513312199455",
             )
@@ -152,7 +154,7 @@ mod tests {
         let is_challenge = transcript.get_challenge();
         assert_eq!(
             ark_bn254::Fr::from_str(
-                "21571066717628871486594124342047303120063887347042301886903413955514057146987",
+                "17217611606783903786519756581064691877765084316359051724941375688886751695364",
             )
             .unwrap(),
             is_challenge

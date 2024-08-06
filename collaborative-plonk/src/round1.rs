@@ -9,20 +9,20 @@ use mpc_core::traits::{
 
 use crate::{
     types::{PolyEval, WirePolyOutput},
-    Domains, FieldShareVec, PlonkProofError, PlonkProofResult, PlonkWitness, Round,
+    Domains, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult, PlonkWitness, Round,
 };
 
 pub(super) struct Round1Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    b: [T::FieldShare; 11],
+    pub(crate) b: [T::FieldShare; 11],
 }
 
 pub(super) struct Round1Proof<P: Pairing> {
-    commit_a: P::G1,
-    commit_b: P::G1,
-    commit_c: P::G1,
+    pub(crate) commit_a: P::G1,
+    pub(crate) commit_b: P::G1,
+    pub(crate) commit_c: P::G1,
 }
 
 impl<T, P: Pairing> Round1Challenges<T, P>
@@ -37,7 +37,7 @@ where
         Ok(Self { b })
     }
 
-    fn deterministic() -> Self {
+    pub(crate) fn deterministic() -> Self {
         Self {
             b: core::array::from_fn(|_| T::FieldShare::default()),
         }
@@ -126,20 +126,21 @@ where
         driver: &mut T,
         domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
-        zkey: &ZKey<P>,
-        private_witness: PlonkWitness<T, P>,
+        data: PlonkData<T, P>,
     ) -> PlonkProofResult<Self> {
+        let zkey = &data.zkey;
+        let witness = &data.witness;
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
         let wire_polys =
-            Self::compute_wire_polynomials(driver, &domains, &challenges, zkey, &private_witness)?;
+            Self::compute_wire_polynomials(driver, &domains, &challenges, zkey, witness)?;
 
-        let poly_a_msm = driver.batch_lift_montgomery(&wire_polys.poly_eval_a.poly);
-        let poly_b_msm = driver.batch_lift_montgomery(&wire_polys.poly_eval_b.poly);
-        let poly_c_msm = driver.batch_lift_montgomery(&wire_polys.poly_eval_c.poly);
+        let poly_a = driver.batch_lift_montgomery(&wire_polys.poly_eval_a.poly);
+        let poly_b = driver.batch_lift_montgomery(&wire_polys.poly_eval_b.poly);
+        let poly_c = driver.batch_lift_montgomery(&wire_polys.poly_eval_c.poly);
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let commit_a = MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &poly_a_msm);
-        let commit_b = MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &poly_b_msm);
-        let commit_c = MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &poly_c_msm);
+        let commit_a = MSMProvider::<P::G1>::msm_public_points(driver, &data.zkey.p_tau, &poly_a);
+        let commit_b = MSMProvider::<P::G1>::msm_public_points(driver, &data.zkey.p_tau, &poly_b);
+        let commit_c = MSMProvider::<P::G1>::msm_public_points(driver, &data.zkey.p_tau, &poly_c);
 
         let opened = driver.open_point_many(&[commit_a, commit_b, commit_c])?;
         debug_assert_eq!(opened.len(), 3);
@@ -154,6 +155,7 @@ where
             challenges,
             proof,
             wire_polys,
+            data,
         })
     }
 }
@@ -163,11 +165,14 @@ pub mod tests {
     use std::{fs::File, io::BufReader};
 
     use ark_bn254::Bn254;
-    use circom_types::{groth16::witness::Witness, plonk::ZKey};
+    use circom_types::{
+        groth16::{public_input, witness::Witness},
+        plonk::ZKey,
+    };
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::{Domains, Round};
+    use crate::{Domains, PlonkData, Round};
 
     use super::Round1Challenges;
     use ark_ec::pairing::Pairing;
@@ -199,14 +204,18 @@ pub mod tests {
         let round1 = Round::<PlainDriver<ark_bn254::Fr>, Bn254>::Round1 {
             domains: Domains::new(&zkey).unwrap(),
             challenges: Round1Challenges::deterministic(),
-            witness: witness.into(),
+            data: PlonkData {
+                witness: witness.into(),
+                zkey,
+            },
         };
         if let Round::Round2 {
             domains: _,
             challenges: _,
             wire_polys: _,
+            data: _,
             proof,
-        } = round1.next_round(&mut driver, &zkey).unwrap()
+        } = round1.next_round(&mut driver).unwrap()
         {
             assert_eq!(
                 proof.commit_a,

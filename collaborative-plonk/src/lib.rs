@@ -4,11 +4,11 @@ use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
 use ark_ff::Field;
 use ark_ff::PrimeField;
+use ark_groth16::data_structures;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
-use circom_types::groth16::witness;
-use circom_types::groth16::zkey;
+use circom_types::groth16::public_input;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
@@ -82,6 +82,14 @@ where
     addition_witness: FieldShareVec<T, P>,
 }
 
+pub(crate) struct PlonkData<T, P: Pairing>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    witness: PlonkWitness<T, P>,
+    zkey: ZKey<P>,
+}
+
 impl<T, P: Pairing> From<SharedWitness<T, P>> for PlonkWitness<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -105,18 +113,21 @@ where
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     Init {
+        zkey: ZKey<P>,
         witness: SharedWitness<T, P>,
+        public_inputs: Vec<P::ScalarField>,
     },
     Round1 {
         domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
-        witness: PlonkWitness<T, P>,
+        data: PlonkData<T, P>,
     },
     Round2 {
         domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
         proof: Round1Proof<P>,
         wire_polys: WirePolyOutput<T, P>,
+        data: PlonkData<T, P>,
     },
     Round3,
     Round4,
@@ -152,10 +163,19 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     /// Creates a new [CollaborativePlonk] protocol with a given MPC driver.
-    pub fn new(driver: T, witness: SharedWitness<T, P>) -> Self {
+    pub fn new(
+        driver: T,
+        public_inputs: Vec<P::ScalarField>,
+        zkey: ZKey<P>,
+        witness: SharedWitness<T, P>,
+    ) -> Self {
         Self {
             driver,
-            state: Round::Init { witness },
+            state: Round::Init {
+                zkey,
+                witness,
+                public_inputs,
+            },
             phantom_data: PhantomData,
         }
     }
@@ -175,20 +195,25 @@ where
         + MpcToMontgomery<P::ScalarField>,
     P::ScalarField: mpc_core::traits::FFTPostProcessing + MontgomeryField,
 {
-    fn next_round(self, driver: &mut T, zkey: &ZKey<P>) -> PlonkProofResult<Self> {
+    fn next_round(self, driver: &mut T) -> PlonkProofResult<Self> {
         match self {
-            Round::Init { witness } => Self::init_round(driver, zkey, witness),
+            Round::Init {
+                zkey,
+                public_inputs,
+                witness,
+            } => Self::init_round(driver, zkey, public_inputs, witness),
             Round::Round1 {
                 domains,
                 challenges,
-                witness,
-            } => Self::round1(driver, domains, challenges, zkey, witness),
+                data,
+            } => Self::round1(driver, domains, challenges, data),
             Round::Round2 {
                 domains,
                 challenges,
                 proof,
                 wire_polys,
-            } => Self::round2(driver, domains, challenges, proof, wire_polys),
+                data,
+            } => Self::round2(driver, domains, challenges, proof, wire_polys, data),
             Round::Round3 => todo!(),
             Round::Round4 => todo!(),
             Round::Round5 => todo!(),
@@ -228,18 +253,22 @@ where
 
     fn init_round(
         driver: &mut T,
-        zkey: &ZKey<P>,
+        zkey: ZKey<P>,
+        public_input: Vec<P::ScalarField>,
         private_witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<Self> {
         //TODO calculate additions
         //set first element to zero as it is not used
         let mut plonk_witness = PlonkWitness::from(private_witness);
-        Self::calculate_additions(driver, &mut plonk_witness, zkey);
+        Self::calculate_additions(driver, &mut plonk_witness, &zkey);
 
         Ok(Round::Round1 {
-            domains: Domains::new(zkey)?,
+            domains: Domains::new(&zkey)?,
             challenges: Round1Challenges::random(driver)?,
-            witness: plonk_witness,
+            data: PlonkData {
+                witness: plonk_witness,
+                zkey,
+            },
         })
     }
 
