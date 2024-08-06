@@ -519,6 +519,19 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         Ok(res)
     }
 
+    fn open_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<F>> {
+        let a_a = ShamirPrimeFieldShare::convert_slice(a);
+
+        let rcv = self
+            .network
+            .broadcast_next(a_a.to_owned(), self.threshold + 1)?;
+        let res = rcv
+            .into_iter()
+            .map(|r| ShamirCore::reconstruct(&r, &self.open_lagrange_t))
+            .collect();
+        Ok(res)
+    }
+
     fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec {
         Self::FieldShareVec {
             a: a.a.iter().zip(b.a.iter()).map(|(a, b)| *a + b).collect(),
@@ -684,6 +697,19 @@ impl<C: CurveGroup, N: ShamirNetwork> EcMpcProtocol<C> for ShamirProtocol<C::Sca
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
         let rcv = self.network.broadcast_next(a.a, self.threshold + 1)?;
         let res = ShamirCore::reconstruct_point(&rcv, &self.open_lagrange_t);
+        Ok(res)
+    }
+
+    fn open_point_many(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<C>> {
+        let a_a = ShamirPointShare::convert_slice(a);
+
+        let rcv = self
+            .network
+            .broadcast_next(a_a.to_owned(), self.threshold + 1)?;
+        let res = rcv
+            .into_iter()
+            .map(|r| ShamirCore::reconstruct_point(&r, &self.open_lagrange_t))
+            .collect();
         Ok(res)
     }
 }
