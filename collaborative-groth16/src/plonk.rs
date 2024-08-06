@@ -777,12 +777,6 @@ where
         zkey: &ZKey<P>,
         round1_out: &WirePolyOutput<T, P>,
     ) -> Result<PolyEval<T, P>> {
-        let mut num_arr = Vec::with_capacity(zkey.domain_size);
-        let mut den_arr = Vec::with_capacity(zkey.domain_size);
-
-        num_arr.push(self.driver.promote_to_trivial_share(P::ScalarField::one()));
-        den_arr.push(self.driver.promote_to_trivial_share(P::ScalarField::one()));
-
         // TODO Check if this root_of_unity is the one we need
         let num_constraints = zkey.n_constraints;
         let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
@@ -790,6 +784,12 @@ where
         let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
 
         let mut w = P::ScalarField::one();
+        let mut n1 = Vec::with_capacity(zkey.domain_size);
+        let mut n2 = Vec::with_capacity(zkey.domain_size);
+        let mut n3 = Vec::with_capacity(zkey.domain_size);
+        let mut d1 = Vec::with_capacity(zkey.domain_size);
+        let mut d2 = Vec::with_capacity(zkey.domain_size);
+        let mut d3 = Vec::with_capacity(zkey.domain_size);
         for i in 0..zkey.domain_size {
             let a = T::index_sharevec(&round1_out.buffer_a, i);
             let b = T::index_sharevec(&round1_out.buffer_b, i);
@@ -799,65 +799,66 @@ where
             // numArr := (a + beta·ω + gamma)(b + beta·ω·k1 + gamma)(c + beta·ω·k2 + gamma)
             let betaw = challenges.beta * w;
 
-            let n1 = self.driver.add_with_public(&betaw, &a);
-            let n1 = self.driver.add_with_public(&challenges.gamma, &n1);
+            let n1_ = self.driver.add_with_public(&betaw, &a);
+            let n1_ = self.driver.add_with_public(&challenges.gamma, &n1_);
 
             let tmp = zkey.verifying_key.k1 * betaw;
-            let n2 = self.driver.add_with_public(&tmp, &b);
-            let n2 = self.driver.add_with_public(&challenges.gamma, &n2);
+            let n2_ = self.driver.add_with_public(&tmp, &b);
+            let n2_ = self.driver.add_with_public(&challenges.gamma, &n2_);
 
             let tmp = zkey.verifying_key.k2 * betaw;
-            let n3 = self.driver.add_with_public(&tmp, &c);
-            let n3 = self.driver.add_with_public(&challenges.gamma, &n3);
+            let n3_ = self.driver.add_with_public(&tmp, &c);
+            let n3_ = self.driver.add_with_public(&challenges.gamma, &n3_);
 
-            let num = self.driver.mul(&n1, &n2)?;
-            let mut num = self.driver.mul(&num, &n3)?;
+            n1.push(n1_);
+            n2.push(n2_);
+            n3.push(n3_);
 
             // denArr := (a + beta·sigma1 + gamma)(b + beta·sigma2 + gamma)(c + beta·sigma3 + gamma)
-            let d1 = self
+            let d1_ = self
                 .driver
                 .add_with_public(&(challenges.beta * zkey.s1_poly.evaluations[i * 4]), &a);
-            let d1 = self.driver.add_with_public(&challenges.gamma, &d1);
+            let d1_ = self.driver.add_with_public(&challenges.gamma, &d1_);
 
-            let d2 = self
+            let d2_ = self
                 .driver
                 .add_with_public(&(challenges.beta * zkey.s2_poly.evaluations[i * 4]), &b);
-            let d2 = self.driver.add_with_public(&challenges.gamma, &d2);
+            let d2_ = self.driver.add_with_public(&challenges.gamma, &d2_);
 
-            let d3 = self
+            let d3_ = self
                 .driver
                 .add_with_public(&(challenges.beta * zkey.s3_poly.evaluations[i * 4]), &c);
-            let d3 = self.driver.add_with_public(&challenges.gamma, &d3);
+            let d3_ = self.driver.add_with_public(&challenges.gamma, &d3_);
 
-            // TODO parallelize with num above
-            let den = self.driver.mul(&d1, &d2)?;
-            let mut den = self.driver.mul(&den, &d3)?;
-
-            // Multiply current num value with the previous one saved in num_arr/den_arr
-            if i != 0 {
-                // TODO parallelize
-                num = self.driver.mul(&num, &num_arr[i])?;
-                den = self.driver.mul(&den, &den_arr[i])?;
-            }
-
-            if i == zkey.domain_size - 1 {
-                num_arr[0] = num;
-                den_arr[0] = den;
-            } else {
-                num_arr.push(num);
-                den_arr.push(den);
-            }
+            d1.push(d1_);
+            d2.push(d2_);
+            d3.push(d3_);
 
             w.mul_assign(&root_of_unity);
         }
 
+        // TODO parallelize these?
+        let num = self.driver.mul_many(&n1, &n2)?;
+        let mut num = self.driver.mul_many(&num, &n3)?;
+        let den = self.driver.mul_many(&d1, &d2)?;
+        let mut den = self.driver.mul_many(&den, &d3)?;
+
+        for i in 0..zkey.domain_size {
+            // Multiply current num value with the previous one saved in num_arr/den_arr
+            if i != 0 {
+                // TODO parallelize
+                num[i] = self.driver.mul(&num[i], &num[i - 1])?;
+                den[i] = self.driver.mul(&den[i], &den[i - 1])?;
+            }
+        }
+
+        num.rotate_right(1);
+        den.rotate_right(1);
+
         // Compute the inverse of denArr to compute in the next command the
         // division numArr/denArr by multiplying num · 1/denArr
-        for den_arr in den_arr.iter_mut() {
-            // TODO parallerlize
-            *den_arr = self.driver.inv(den_arr)?;
-        }
-        let buffer_z = self.driver.mul_vec(&num_arr.into(), &den_arr.into())?;
+        let den = self.driver.inv_many(&den)?;
+        let buffer_z = self.driver.mul_many(&num, &den)?.into();
 
         // Compute polynomial coefficients z(X) from buffer_z
         let poly_z = self.driver.ifft(&buffer_z, &domain1);
