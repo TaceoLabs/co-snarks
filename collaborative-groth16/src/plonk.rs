@@ -85,6 +85,34 @@ macro_rules! mul4vec_post {
     }};
 }
 
+// TODO parallelize these?
+macro_rules! array_prod_mul {
+    ($driver: expr, $inp: expr) => {{
+        // To the multiplications of inp[i] * inp[i-1] in constant rounds
+        let len = $inp.len();
+        let r = (0..=len)
+            .map(|_| $driver.rand())
+            .collect::<Result<Vec<_>, _>>()?;
+        let r_inv = $driver.inv_many(&r)?;
+        let r_inv0 = vec![r_inv[0].clone(); len];
+        let mut unblind = $driver.mul_many(&r_inv0, &r[1..])?;
+
+        let mul = $driver.mul_many(&r[..len], &$inp)?;
+        // TODO maybe mul_open
+        let mul = $driver.mul_many(&mul, &r_inv[1..])?;
+        let mut open = $driver.open_many(&mul)?;
+
+        for i in 1..open.len() {
+            open[i] = open[i] * open[i - 1];
+        }
+
+        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
+            *unblind = $driver.mul_with_public(open, unblind);
+        }
+        unblind
+    }};
+}
+
 struct Transcript<D, P>
 where
     D: Digest,
@@ -839,18 +867,13 @@ where
 
         // TODO parallelize these?
         let num = self.driver.mul_many(&n1, &n2)?;
-        let mut num = self.driver.mul_many(&num, &n3)?;
+        let num = self.driver.mul_many(&num, &n3)?;
         let den = self.driver.mul_many(&d1, &d2)?;
-        let mut den = self.driver.mul_many(&den, &d3)?;
+        let den = self.driver.mul_many(&den, &d3)?;
 
-        for i in 0..zkey.domain_size {
-            // Multiply current num value with the previous one saved in num_arr/den_arr
-            if i != 0 {
-                // TODO parallelize
-                num[i] = self.driver.mul(&num[i], &num[i - 1])?;
-                den[i] = self.driver.mul(&den[i], &den[i - 1])?;
-            }
-        }
+        // TODO parallelize these?
+        let mut num = array_prod_mul!(self.driver, num);
+        let mut den = array_prod_mul!(self.driver, den);
 
         num.rotate_right(1);
         den.rotate_right(1);
