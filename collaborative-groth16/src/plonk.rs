@@ -220,6 +220,7 @@ where
     gamma: P::ScalarField,
     xi: P::ScalarField,
     v: [P::ScalarField; 5],
+    u: P::ScalarField,
 }
 
 impl<T, P: Pairing> Challenges<T, P>
@@ -235,6 +236,7 @@ where
             gamma: P::ScalarField::default(),
             xi: P::ScalarField::default(),
             v: core::array::from_fn(|_| P::ScalarField::default()),
+            u: P::ScalarField::default(),
         }
     }
 
@@ -318,6 +320,7 @@ where
         let mut challenges = Challenges::new();
         let mut transcript = Keccak256Transcript::<P>::default();
 
+        // Challenge round 2: beta and gamma
         transcript.add_poly_commitment(vk.qm);
         transcript.add_poly_commitment(vk.ql);
         transcript.add_poly_commitment(vk.qr);
@@ -336,8 +339,40 @@ where
         transcript.add_poly_commitment(proof.commit_c.into());
 
         challenges.beta = transcript.get_challenge();
+        transcript.add_scalar(challenges.beta);
+        challenges.gamma = transcript.get_challenge();
 
-        todo!();
+        // Challenge round 3: alpha
+        transcript.add_scalar(challenges.beta);
+        transcript.add_scalar(challenges.gamma);
+        transcript.add_poly_commitment(proof.commit_z.into());
+        challenges.alpha = transcript.get_challenge();
+
+        // Challenge round 4: xi
+        transcript.add_scalar(challenges.alpha);
+        transcript.add_poly_commitment(proof.commit_t1.into());
+        transcript.add_poly_commitment(proof.commit_t2.into());
+        transcript.add_poly_commitment(proof.commit_t3.into());
+        challenges.xi = transcript.get_challenge();
+
+        // Challenge round 5: v
+        transcript.add_scalar(challenges.xi);
+        transcript.add_scalar(proof.eval_a);
+        transcript.add_scalar(proof.eval_b);
+        transcript.add_scalar(proof.eval_c);
+        transcript.add_scalar(proof.eval_s1);
+        transcript.add_scalar(proof.eval_s2);
+        transcript.add_scalar(proof.eval_zw);
+        challenges.v[0] = transcript.get_challenge();
+
+        for i in 1..5 {
+            challenges.v[i] = challenges.v[i - 1] * challenges.v[0];
+        }
+
+        // Challenge: u
+        transcript.add_poly_commitment(proof.commit_wxi.into());
+        transcript.add_poly_commitment(proof.commit_wxiw.into());
+        challenges.u = transcript.get_challenge();
 
         challenges
     }
