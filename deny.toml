@@ -21,6 +21,8 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 # output a note when they are encountered.
 ignore = [
     #"RUSTSEC-0000-0000",
+    { id = "RUSTSEC-2021-0139", reason = "ignore ansi_term unmaintained" },
+    { id = "RUSTSEC-2022-0081", reason = "ignore json unmaintained" },
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
@@ -57,6 +59,8 @@ allow = [
     # Required for ring
     "OpenSSL",
     "CC0-1.0",
+    "GPL-3.0",
+    "MPL-2.0",
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the
