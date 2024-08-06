@@ -617,7 +617,7 @@ where
         let e2d_vec = e2d.into();
         let zp_vec = zp.into();
 
-        let [mut e2, mut e2z_0, e2z_1, e2z_2, e2z_3] = mul4vec!(
+        let [e2, e2z_0, e2z_1, e2z_2, e2z_3] = mul4vec!(
             self.driver,
             &e2a_vec,
             &e2b_vec,
@@ -636,7 +636,7 @@ where
         let e3d_vec = e3d.into();
         let zwp_vec = zwp.into();
 
-        let [mut e3, mut e3z_0, e3z_1, e3z_2, e3z_3] = mul4vec!(
+        let [e3, e3z_0, e3z_1, e3z_2, e3z_3] = mul4vec!(
             self.driver,
             &e3a_vec,
             &e3b_vec,
