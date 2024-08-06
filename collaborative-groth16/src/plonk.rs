@@ -260,8 +260,24 @@ where
         }
     }
 
-    fn calculate_additions() {
-        todo!()
+    fn calculate_additions(
+        &mut self,
+        private_witness: &SharedWitness<T, P>,
+        zkey: &ZKey<P>,
+    ) -> Vec<FieldShare<T, P>> {
+        let mut additions = Vec::with_capacity(zkey.n_additions);
+        for addition in zkey.additions.iter() {
+            let witness1 =
+                self.get_witness(private_witness, &[], zkey, addition.signal_id1 as usize);
+            let witness2 =
+                self.get_witness(private_witness, &[], zkey, addition.signal_id2 as usize);
+
+            let f1 = self.driver.mul_with_public(&addition.factor1, &witness1);
+            let f2 = self.driver.mul_with_public(&addition.factor2, &witness2);
+            let result = self.driver.add(&f1, &f2);
+            additions.push(result);
+        }
+        additions
     }
 
     fn blind_coefficients(
@@ -277,7 +293,6 @@ where
         res
     }
 
-    // TODO check if this is correct
     fn get_witness(
         &mut self,
         private_witness: &SharedWitness<T, P>,
