@@ -267,13 +267,13 @@ impl<F: MontgomeryField> MpcToMontgomery<F> for PlainDriver<F> {
     }
 
     fn inplace_batch_to_montgomery(&self, vec: &mut Self::FieldShareVec) {
-        for mut s in vec.iter_mut() {
+        for s in vec.iter_mut() {
             *s = s.into_montgomery();
         }
     }
 
     fn inplace_batch_lift_montgomery(&self, vec: &mut Self::FieldShareVec) {
-        for mut s in vec.iter_mut() {
+        for s in vec.iter_mut() {
             *s = s.lift_montgomery();
         }
     }

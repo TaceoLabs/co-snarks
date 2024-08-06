@@ -437,20 +437,44 @@ where
         let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
 
         let mut w = P::ScalarField::one();
+        let mut ap = Vec::with_capacity(zkey.domain_size * 4);
+        let mut bp = Vec::with_capacity(zkey.domain_size * 4);
+        let mut cp = Vec::with_capacity(zkey.domain_size * 4);
+        for i in 0..zkey.domain_size * 4 {
+            let ap_ = self.driver.mul_with_public(&w, &challenges.b[0]);
+            let ap_ = self.driver.add(&challenges.b[1], &ap_);
+            ap.push(ap_);
+
+            let bp_ = self.driver.mul_with_public(&w, &challenges.b[2]);
+            let bp_ = self.driver.add(&challenges.b[3], &bp_);
+            bp.push(bp_);
+
+            let cp_ = self.driver.mul_with_public(&w, &challenges.b[4]);
+            let cp_ = self.driver.add(&challenges.b[5], &cp_);
+            cp.push(cp_);
+
+            w *= root_of_unity;
+        }
+
+        let ap_vec = ap.into();
+        let bp_vec = bp.into();
+
+        // TODO parallelize
+        let a_b = self
+            .driver
+            .mul_vec(&wire_poly.buffer_a, &wire_poly.buffer_b)?;
+        let a_bp = self.driver.mul_vec(&wire_poly.buffer_a, &bp_vec)?;
+        let ap_b = self.driver.mul_vec(&round1_out.buffer_b, &ap_vec)?;
+        let ap_bp = self.driver.mul_vec(&ap_vec, &bp_vec)?;
+
         let mut t_vec = Vec::with_capacity(zkey.domain_size * 4);
         let mut tz_vec = Vec::with_capacity(zkey.domain_size * 4);
+        let mut w = P::ScalarField::one();
         for i in 0..zkey.domain_size * 4 {
-            //let a = zkey.
             let a = T::index_sharevec(&wire_poly.poly_eval_a.eval, i);
             let b = T::index_sharevec(&wire_poly.poly_eval_b.eval, i);
             let c = T::index_sharevec(&wire_poly.poly_eval_c.eval, i);
             let z = T::index_sharevec(&z_poly.eval, i);
-            //const zw = evaluations.Z.getEvaluation((zkey.domainSize * 4 + 4 + i) % (zkey.domainSize * 4));
-            let zw = T::index_sharevec(
-                &z_poly.eval,
-                (zkey.domain_size * 4 + 4 + i) % (zkey.domain_size * 4),
-            );
-
             let qm = zkey.qm_poly.evaluations[i];
             let ql = zkey.ql_poly.evaluations[i];
             let qr = zkey.qr_poly.evaluations[i];
@@ -459,48 +483,37 @@ where
             let s1 = zkey.s1_poly.evaluations[i];
             let s2 = zkey.s2_poly.evaluations[i];
             let s3 = zkey.s3_poly.evaluations[i];
-
-            let ap = self.driver.mul_with_public(&w, &challenges.b[0]);
-            let ap = self.driver.add(&challenges.b[1], &ap);
-
-            let bp = self.driver.mul_with_public(&w, &challenges.b[2]);
-            let bp = self.driver.add(&challenges.b[3], &bp);
-
-            let cp = self.driver.mul_with_public(&w, &challenges.b[4]);
-            let cp = self.driver.add(&challenges.b[5], &cp);
+            let a_bp = T::index_sharevec(&a_bp, i);
+            let a_b = T::index_sharevec(&a_b, i);
+            let ap_b = T::index_sharevec(&ap_b, i);
+            let ap = T::index_sharevec(&ap_vec, i);
+            let bp = T::index_sharevec(&bp_vec, i);
 
             let w2 = w.square();
-            //const zp = Fr.add(Fr.add(Fr.mul(challenges.b[7], w2), Fr.mul(challenges.b[8], w)), challenges.b[9]);
             let zp_lhs = self.driver.mul_with_public(&w2, &challenges.b[6]);
             let zp_rhs = self.driver.mul_with_public(&w, &challenges.b[7]);
             let zp = self.driver.add(&zp_lhs, &zp_rhs);
             let zp = self.driver.add(&challenges.b[8], &zp);
-            let wW = w * root_of_unity;
-            let wW2 = wW.square();
-            let zWp_lhs = self.driver.mul_with_public(&wW2, &challenges.b[6]);
-            let zWp_rhs = self.driver.mul_with_public(&wW, &challenges.b[7]);
-            let zWp = self.driver.add(&zWp_lhs, &zWp_rhs);
-            let zp = self.driver.add(&challenges.b[8], &zWp);
+            let w_w = w * root_of_unity;
+            let w_w2 = w_w.square();
+            let zw = T::index_sharevec(
+                &z_poly.eval,
+                (zkey.domain_size * 4 + 4 + i) % (zkey.domain_size * 4),
+            );
+            let zwp_lhs = self.driver.mul_with_public(&w_w2, &challenges.b[6]);
+            let zwp_rhs = self.driver.mul_with_public(&w_w, &challenges.b[7]);
+            let zwp = self.driver.add(&zwp_lhs, &zwp_rhs);
+            let zwp = self.driver.add(&challenges.b[8], &zwp);
 
-            let mut pi = T::zero_share();
-            for (j, lagrange) in zkey.lagrange.iter().enumerate() {
-                let l_eval = lagrange.evaluations[i];
-                let a_val = T::index_sharevec(&round1_out.buffer_a, j);
-                let tmp = self.driver.mul_with_public(&l_eval, &a_val);
-                pi = self.driver.sub(&pi, &tmp);
-            }
-            //todo
-            let a_b = self.driver.mul(&a, &b)?;
-            let a_bp = self.driver.mul(&a, &bp)?;
-            let ap_b = self.driver.mul(&ap, &b)?;
-            let ap_bp = self.driver.mul(&ap, &bp)?;
             let mut a0 = self.driver.add(&a_bp, &ap_b);
             let mod_i = i % 4;
             if mod_i != 0 {
                 let z1 = Self::get_z1(&domain1)[mod_i];
+                let ap_bp = T::index_sharevec(&ap_bp, i);
                 let tmp = self.driver.mul_with_public(&z1, &ap_bp);
                 a0 = self.driver.add(&a0, &tmp);
             }
+
             let (mut e1, mut e1z) = (a_b, a0);
             e1 = self.driver.mul_with_public(&qm, &e1);
             e1z = self.driver.mul_with_public(&qm, &e1z);
@@ -512,12 +525,20 @@ where
             e1z = self.driver.add_mul_public(&e1z, &bp, &qr);
 
             e1 = self.driver.add_mul_public(&e1, &c, &qo);
-            e1z = self.driver.add_mul_public(&e1z, &cp, &qo);
+            e1z = self.driver.add_mul_public(&e1z, &cp[i], &qo);
+
+            let mut pi = T::zero_share();
+            for (j, lagrange) in zkey.lagrange.iter().enumerate() {
+                let l_eval = lagrange.evaluations[i];
+                let a_val = T::index_sharevec(&round1_out.buffer_a, j);
+                let tmp = self.driver.mul_with_public(&l_eval, &a_val);
+                pi = self.driver.sub(&pi, &tmp);
+            }
 
             e1 = self.driver.add(&e1, &pi);
             e1 = self.driver.add_with_public(&qc, &e1);
 
-            let betaw = challenges.beta * w; //self.driver.mul(challenges.beta, &w);
+            let betaw = challenges.beta * w;
             let mut e2a = a.clone();
             e2a = self.driver.add_with_public(&betaw, &e2a);
             e2a = self.driver.add_with_public(&challenges.gamma, &e2a);
@@ -544,7 +565,7 @@ where
                 &e2d,
                 &ap,
                 &bp,
-                &cp,
+                &cp[i],
                 &zp,
                 &domain1,
                 mod_i
@@ -574,8 +595,8 @@ where
                 &e3d,
                 &ap,
                 &bp,
-                &cp,
-                &zWp,
+                &cp[i],
+                &zwp,
                 &domain1,
                 mod_i
             );
@@ -617,8 +638,8 @@ where
             let a = self.driver.sub(&a_lhs, &a_rhs);
             T::set_index_sharevec(&mut coefficients_t, a, i);
             /*
-            set check if poly is divisible here!
-             */
+            TODO set check if poly is divisible here!
+              */
         }
 
         let coefficients_tz = self.driver.ifft(&tz_vec.into(), &domain2);
