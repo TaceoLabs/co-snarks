@@ -552,6 +552,38 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
     fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
         sharevec.len()
     }
+
+    fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F> {
+        let a = a * b + self.rngs.rand.masking_field_element::<F>();
+        self.network.send_next(a.to_owned())?;
+        self.network
+            .send(self.network.get_id().prev_id(), a.to_owned());
+
+        let b = self.network.recv_prev::<F>()?;
+        let c = self.network.recv::<F>(self.network.get_id().next_id())?;
+        Ok(a + b + c)
+    }
+
+    fn mul_open_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<F>> {
+        let mut a = izip!(a, b)
+            .map(|(a, b)| a * b + self.rngs.rand.masking_field_element::<F>())
+            .collect_vec();
+        self.network.send_next(a.to_owned())?;
+        self.network
+            .send(self.network.get_id().prev_id(), a.to_owned());
+
+        let b = self.network.recv_prev::<Vec<F>>()?;
+        let c = self
+            .network
+            .recv::<Vec<F>>(self.network.get_id().next_id())?;
+
+        izip!(a.iter_mut(), b, c).for_each(|(a, b, c)| *a += b + c);
+        Ok(a)
+    }
 }
 
 impl<F: PrimeField> Default for Rep3PrimeFieldShare<F> {

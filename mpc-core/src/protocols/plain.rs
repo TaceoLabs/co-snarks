@@ -253,6 +253,18 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
     fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
         sharevec.len()
     }
+
+    fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F> {
+        Ok(*a * b)
+    }
+
+    fn mul_open_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<F>> {
+        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
+    }
 }
 
 impl<F: MontgomeryField> MpcToMontgomery<F> for PlainDriver<F> {

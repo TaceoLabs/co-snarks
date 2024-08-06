@@ -139,6 +139,17 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         Ok(self.add(a, &tmp))
     }
 
+    /// Convenience method for \[a\] + \[b\] * \[c\]
+    fn add_mul_vec(
+        &mut self,
+        a: &Self::FieldShareVec,
+        b: &Self::FieldShareVec,
+        c: &Self::FieldShareVec,
+    ) -> std::io::Result<Self::FieldShareVec> {
+        let tmp = self.mul_vec(c, b)?;
+        Ok(self.add_vec(a, &tmp))
+    }
+
     /// Computes the inverse of a shared value: \[b\] = \[a\] ^ -1. Requires network communication.
     fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare>;
 
@@ -213,6 +224,16 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     fn zero_share() -> Self::FieldShare {
         Self::FieldShare::default()
     }
+
+    /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
+    fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F>;
+
+    /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
+    fn mul_open_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<F>>;
 }
 
 /// A trait representing the MPC operations required for extending the secret-shared Circom witness in MPC. The operations are generic over public and private (i.e., secret-shared) inputs.

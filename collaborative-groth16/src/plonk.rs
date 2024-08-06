@@ -9,6 +9,8 @@ use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
+use ark_serialize::Valid;
+use circom_types::plonk::VerifyingKey;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
@@ -29,52 +31,88 @@ type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
 type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
-// TODO parallelize
-macro_rules! mul4 {
-    ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $domain: expr, $mod_i:expr) => {{
-        let a_b = $driver.mul($a, $b)?;
-        let a_bp = $driver.mul($a, $bp)?;
-        let ap_b = $driver.mul($ap, $b)?;
-        let ap_bp = $driver.mul($ap, $bp)?;
+// TODO parallelize these?
+macro_rules! mul4vec {
+    ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $domain: expr) => {{
+        let a_b = $driver.mul_vec($a, $b)?;
+        let a_bp = $driver.mul_vec($a, $bp)?;
+        let ap_b = $driver.mul_vec($ap, $b)?;
+        let ap_bp = $driver.mul_vec($ap, $bp)?;
 
-        let c_d = $driver.mul($c, $d)?;
-        let c_dp = $driver.mul($c, $dp)?;
-        let cp_d = $driver.mul($cp, $d)?;
-        let cp_dp = $driver.mul($cp, $dp)?;
+        let c_d = $driver.mul_vec($c, $d)?;
+        let c_dp = $driver.mul_vec($c, $dp)?;
+        let cp_d = $driver.mul_vec($cp, $d)?;
+        let cp_dp = $driver.mul_vec($cp, $dp)?;
 
-        let r = $driver.mul(&a_b, &c_d)?;
+        let r = $driver.mul_vec(&a_b, &c_d)?;
 
-        let mut a0 = $driver.mul(&ap_b, &c_d)?;
-        a0 = $driver.add_mul(&a0, &a_bp, &c_d)?;
-        a0 = $driver.add_mul(&a0, &a_b, &cp_d)?;
-        a0 = $driver.add_mul(&a0, &a_b, &c_dp)?;
+        let mut a0 = $driver.mul_vec(&ap_b, &c_d)?;
+        a0 = $driver.add_mul_vec(&a0, &a_bp, &c_d)?;
+        a0 = $driver.add_mul_vec(&a0, &a_b, &cp_d)?;
+        a0 = $driver.add_mul_vec(&a0, &a_b, &c_dp)?;
 
-        let mut a1 = $driver.mul(&ap_bp, &c_d)?;
-        a1 = $driver.add_mul(&a1, &ap_b, &cp_d)?;
-        a1 = $driver.add_mul(&a1, &ap_b, &c_dp)?;
-        a1 = $driver.add_mul(&a1, &a_bp, &cp_d)?;
-        a1 = $driver.add_mul(&a1, &a_bp, &c_dp)?;
-        a1 = $driver.add_mul(&a1, &a_b, &cp_dp)?;
+        let mut a1 = $driver.mul_vec(&ap_bp, &c_d)?;
+        a1 = $driver.add_mul_vec(&a1, &ap_b, &cp_d)?;
+        a1 = $driver.add_mul_vec(&a1, &ap_b, &c_dp)?;
+        a1 = $driver.add_mul_vec(&a1, &a_bp, &cp_d)?;
+        a1 = $driver.add_mul_vec(&a1, &a_bp, &c_dp)?;
+        a1 = $driver.add_mul_vec(&a1, &a_b, &cp_dp)?;
 
-        let mut a2 = $driver.mul(&a_bp, &cp_dp)?;
-        a2 = $driver.add_mul(&a2, &ap_b, &cp_dp)?;
-        a2 = $driver.add_mul(&a2, &ap_bp, &c_dp)?;
-        a2 = $driver.add_mul(&a2, &ap_bp, &cp_d)?;
+        let mut a2 = $driver.mul_vec(&a_bp, &cp_dp)?;
+        a2 = $driver.add_mul_vec(&a2, &ap_b, &cp_dp)?;
+        a2 = $driver.add_mul_vec(&a2, &ap_bp, &c_dp)?;
+        a2 = $driver.add_mul_vec(&a2, &ap_bp, &cp_d)?;
 
-        let a3 = $driver.mul(&ap_bp, &cp_dp)?;
-
-        let mut rz = a0;
-        if $mod_i != 0 {
-            let tmp = $driver.mul_with_public(&Self::get_z1($domain)[$mod_i], &a1);
-            rz = $driver.add(&rz, &tmp);
-            let tmp = $driver.mul_with_public(&Self::get_z2($domain)[$mod_i], &a2);
-            rz = $driver.add(&rz, &tmp);
-            let tmp = $driver.mul_with_public(&Self::get_z3($domain)[$mod_i], &a3);
-            rz = $driver.add(&rz, &tmp);
-        }
-        [r, rz]
+        let a3 = $driver.mul_vec(&ap_bp, &cp_dp)?;
+        [r, a0, a1, a2, a3]
     }};
 }
+
+macro_rules! mul4vec_post {
+    ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$i: expr, $domain: expr) => {{
+        let mod_i = $i % 4;
+        let mut rz = T::index_sharevec(&$a, $i);
+        if mod_i != 0 {
+            let b = T::index_sharevec(&$b, $i);
+            let c = T::index_sharevec(&$c, $i);
+            let d = T::index_sharevec(&$d, $i);
+            let tmp = $driver.mul_with_public(&Self::get_z1($domain)[mod_i], &b);
+            rz = $driver.add(&rz, &tmp);
+            let tmp = $driver.mul_with_public(&Self::get_z2($domain)[mod_i], &c);
+            rz = $driver.add(&rz, &tmp);
+            let tmp = $driver.mul_with_public(&Self::get_z3($domain)[mod_i], &d);
+            rz = $driver.add(&rz, &tmp);
+        }
+        rz
+    }};
+}
+
+// TODO parallelize these?
+macro_rules! array_prod_mul {
+    ($driver: expr, $inp: expr) => {{
+        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
+        let len = $inp.len();
+        let r = (0..=len)
+            .map(|_| $driver.rand())
+            .collect::<Result<Vec<_>, _>>()?;
+        let r_inv = $driver.inv_many(&r)?;
+        let r_inv0 = vec![r_inv[0].clone(); len];
+        let mut unblind = $driver.mul_many(&r_inv0, &r[1..])?;
+
+        let mul = $driver.mul_many(&r[..len], &$inp)?;
+        let mut open = $driver.mul_open_many(&mul, &r_inv[1..])?;
+
+        for i in 1..open.len() {
+            open[i] = open[i] * open[i - 1];
+        }
+
+        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
+            *unblind = $driver.mul_with_public(open, unblind);
+        }
+        unblind
+    }};
+}
+
 struct Transcript<D, P>
 where
     D: Digest,
@@ -155,6 +193,22 @@ struct Proof<P: Pairing> {
     commit_wxiw: P::G1,
 }
 
+impl<P: Pairing> Proof<P> {
+    fn is_well_constructed(&self) -> Result<(), eyre::Report> {
+        self.commit_a.check()?;
+        self.commit_b.check()?;
+        self.commit_c.check()?;
+        self.commit_z.check()?;
+        self.commit_t1.check()?;
+        self.commit_t2.check()?;
+        self.commit_t3.check()?;
+        self.commit_wxi.check()?;
+        self.commit_wxiw.check()?;
+
+        Ok(())
+    }
+}
+
 struct Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -166,6 +220,7 @@ where
     gamma: P::ScalarField,
     xi: P::ScalarField,
     v: [P::ScalarField; 5],
+    u: P::ScalarField,
 }
 
 impl<T, P: Pairing> Challenges<T, P>
@@ -181,6 +236,7 @@ where
             gamma: P::ScalarField::default(),
             xi: P::ScalarField::default(),
             v: core::array::from_fn(|_| P::ScalarField::default()),
+            u: P::ScalarField::default(),
         }
     }
 
@@ -253,6 +309,87 @@ where
             transcript: Keccak256Transcript::default(),
             phantom_data: PhantomData,
         }
+    }
+
+    fn calculate_challenges(
+        &self,
+        vk: &VerifyingKey<P>,
+        proof: &Proof<P>,
+        public_inputs: &[P::ScalarField],
+    ) -> Challenges<T, P> {
+        let mut challenges = Challenges::new();
+        let mut transcript = Keccak256Transcript::<P>::default();
+
+        // Challenge round 2: beta and gamma
+        transcript.add_poly_commitment(vk.qm);
+        transcript.add_poly_commitment(vk.ql);
+        transcript.add_poly_commitment(vk.qr);
+        transcript.add_poly_commitment(vk.qo);
+        transcript.add_poly_commitment(vk.qc);
+        transcript.add_poly_commitment(vk.s1);
+        transcript.add_poly_commitment(vk.s2);
+        transcript.add_poly_commitment(vk.s3);
+
+        for p in public_inputs.iter().cloned() {
+            transcript.add_scalar(p);
+        }
+
+        transcript.add_poly_commitment(proof.commit_a.into());
+        transcript.add_poly_commitment(proof.commit_b.into());
+        transcript.add_poly_commitment(proof.commit_c.into());
+
+        challenges.beta = transcript.get_challenge();
+        transcript.add_scalar(challenges.beta);
+        challenges.gamma = transcript.get_challenge();
+
+        // Challenge round 3: alpha
+        transcript.add_scalar(challenges.beta);
+        transcript.add_scalar(challenges.gamma);
+        transcript.add_poly_commitment(proof.commit_z.into());
+        challenges.alpha = transcript.get_challenge();
+
+        // Challenge round 4: xi
+        transcript.add_scalar(challenges.alpha);
+        transcript.add_poly_commitment(proof.commit_t1.into());
+        transcript.add_poly_commitment(proof.commit_t2.into());
+        transcript.add_poly_commitment(proof.commit_t3.into());
+        challenges.xi = transcript.get_challenge();
+
+        // Challenge round 5: v
+        transcript.add_scalar(challenges.xi);
+        transcript.add_scalar(proof.eval_a);
+        transcript.add_scalar(proof.eval_b);
+        transcript.add_scalar(proof.eval_c);
+        transcript.add_scalar(proof.eval_s1);
+        transcript.add_scalar(proof.eval_s2);
+        transcript.add_scalar(proof.eval_zw);
+        challenges.v[0] = transcript.get_challenge();
+
+        for i in 1..5 {
+            challenges.v[i] = challenges.v[i - 1] * challenges.v[0];
+        }
+
+        // Challenge: u
+        transcript.add_poly_commitment(proof.commit_wxi.into());
+        transcript.add_poly_commitment(proof.commit_wxiw.into());
+        challenges.u = transcript.get_challenge();
+
+        challenges
+    }
+
+    pub fn verify(
+        &self,
+        vk: &VerifyingKey<P>,
+        proof: &Proof<P>,
+        public_inputs: &[P::ScalarField],
+    ) -> Result<bool, eyre::Report> {
+        if proof.is_well_constructed().is_err() {
+            return Ok(false);
+        }
+
+        let challenges = self.calculate_challenges(vk, proof, public_inputs);
+
+        todo!()
     }
 
     fn calculate_additions(
@@ -419,7 +556,6 @@ where
         Ok(outp)
     }
 
-    // TODO parallelize
     fn compute_t(
         &mut self,
         challenges: &Challenges<T, P>,
@@ -440,7 +576,7 @@ where
         let mut ap = Vec::with_capacity(zkey.domain_size * 4);
         let mut bp = Vec::with_capacity(zkey.domain_size * 4);
         let mut cp = Vec::with_capacity(zkey.domain_size * 4);
-        for i in 0..zkey.domain_size * 4 {
+        for _ in 0..zkey.domain_size * 4 {
             let ap_ = self.driver.mul_with_public(&w, &challenges.b[0]);
             let ap_ = self.driver.add(&challenges.b[1], &ap_);
             ap.push(ap_);
@@ -458,8 +594,9 @@ where
 
         let ap_vec = ap.into();
         let bp_vec = bp.into();
+        let cp_vec = cp.into();
 
-        // TODO parallelize
+        // TODO parallelize these?
         let a_b = self
             .driver
             .mul_vec(&wire_poly.buffer_a, &wire_poly.buffer_b)?;
@@ -467,8 +604,20 @@ where
         let ap_b = self.driver.mul_vec(&round1_out.buffer_b, &ap_vec)?;
         let ap_bp = self.driver.mul_vec(&ap_vec, &bp_vec)?;
 
-        let mut t_vec = Vec::with_capacity(zkey.domain_size * 4);
-        let mut tz_vec = Vec::with_capacity(zkey.domain_size * 4);
+        let mut e1 = Vec::with_capacity(zkey.domain_size * 4);
+        let mut e1z = Vec::with_capacity(zkey.domain_size * 4);
+
+        let mut e2a = Vec::with_capacity(zkey.domain_size * 4);
+        let mut e2b = Vec::with_capacity(zkey.domain_size * 4);
+        let mut e2c = Vec::with_capacity(zkey.domain_size * 4);
+        let mut e2d = Vec::with_capacity(zkey.domain_size * 4);
+        let mut zp = Vec::with_capacity(zkey.domain_size * 4);
+
+        let mut e3a = Vec::with_capacity(zkey.domain_size * 4);
+        let mut e3b = Vec::with_capacity(zkey.domain_size * 4);
+        let mut e3c = Vec::with_capacity(zkey.domain_size * 4);
+        let mut e3d = Vec::with_capacity(zkey.domain_size * 4);
+        let mut zwp = Vec::with_capacity(zkey.domain_size * 4);
         let mut w = P::ScalarField::one();
         for i in 0..zkey.domain_size * 4 {
             let a = T::index_sharevec(&wire_poly.poly_eval_a.eval, i);
@@ -492,8 +641,10 @@ where
             let w2 = w.square();
             let zp_lhs = self.driver.mul_with_public(&w2, &challenges.b[6]);
             let zp_rhs = self.driver.mul_with_public(&w, &challenges.b[7]);
-            let zp = self.driver.add(&zp_lhs, &zp_rhs);
-            let zp = self.driver.add(&challenges.b[8], &zp);
+            let zp_ = self.driver.add(&zp_lhs, &zp_rhs);
+            let zp_ = self.driver.add(&challenges.b[8], &zp_);
+            zp.push(zp_);
+
             let w_w = w * root_of_unity;
             let w_w2 = w_w.square();
             let zw = T::index_sharevec(
@@ -502,8 +653,9 @@ where
             );
             let zwp_lhs = self.driver.mul_with_public(&w_w2, &challenges.b[6]);
             let zwp_rhs = self.driver.mul_with_public(&w_w, &challenges.b[7]);
-            let zwp = self.driver.add(&zwp_lhs, &zwp_rhs);
-            let zwp = self.driver.add(&challenges.b[8], &zwp);
+            let zwp_ = self.driver.add(&zwp_lhs, &zwp_rhs);
+            let zwp_ = self.driver.add(&challenges.b[8], &zwp_);
+            zwp.push(zwp_);
 
             let mut a0 = self.driver.add(&a_bp, &ap_b);
             let mod_i = i % 4;
@@ -514,18 +666,20 @@ where
                 a0 = self.driver.add(&a0, &tmp);
             }
 
-            let (mut e1, mut e1z) = (a_b, a0);
-            e1 = self.driver.mul_with_public(&qm, &e1);
-            e1z = self.driver.mul_with_public(&qm, &e1z);
+            let (mut e1_, mut e1z_) = (a_b, a0);
+            e1_ = self.driver.mul_with_public(&qm, &e1_);
+            e1z_ = self.driver.mul_with_public(&qm, &e1z_);
 
-            e1 = self.driver.add_mul_public(&e1, &a, &ql);
-            e1z = self.driver.add_mul_public(&e1z, &ap, &ql);
+            e1_ = self.driver.add_mul_public(&e1_, &a, &ql);
+            e1z_ = self.driver.add_mul_public(&e1z_, &ap, &ql);
 
-            e1 = self.driver.add_mul_public(&e1, &b, &qr);
-            e1z = self.driver.add_mul_public(&e1z, &bp, &qr);
+            e1_ = self.driver.add_mul_public(&e1_, &b, &qr);
+            e1z_ = self.driver.add_mul_public(&e1z_, &bp, &qr);
 
-            e1 = self.driver.add_mul_public(&e1, &c, &qo);
-            e1z = self.driver.add_mul_public(&e1z, &cp[i], &qo);
+            e1_ = self.driver.add_mul_public(&e1_, &c, &qo);
+            e1z_ = self
+                .driver
+                .add_mul_public(&e1z_, &T::index_sharevec(&cp_vec, i), &qo);
 
             let mut pi = T::zero_share();
             for (j, lagrange) in zkey.lagrange.iter().enumerate() {
@@ -535,71 +689,105 @@ where
                 pi = self.driver.sub(&pi, &tmp);
             }
 
-            e1 = self.driver.add(&e1, &pi);
-            e1 = self.driver.add_with_public(&qc, &e1);
+            e1_ = self.driver.add(&e1_, &pi);
+            e1_ = self.driver.add_with_public(&qc, &e1_);
+            e1.push(e1_);
+            e1z.push(e1z_);
 
             let betaw = challenges.beta * w;
-            let mut e2a = a.clone();
-            e2a = self.driver.add_with_public(&betaw, &e2a);
-            e2a = self.driver.add_with_public(&challenges.gamma, &e2a);
+            let mut e2a_ = a.clone();
+            e2a_ = self.driver.add_with_public(&betaw, &e2a_);
+            e2a_ = self.driver.add_with_public(&challenges.gamma, &e2a_);
+            e2a.push(e2a_);
 
-            let mut e2b = b.clone();
-            e2b = self
+            let mut e2b_ = b.clone();
+            e2b_ = self
                 .driver
-                .add_with_public(&(betaw + zkey.verifying_key.k1), &e2b);
-            e2b = self.driver.add_with_public(&challenges.gamma, &e2b);
+                .add_with_public(&(betaw + zkey.verifying_key.k1), &e2b_);
+            e2b_ = self.driver.add_with_public(&challenges.gamma, &e2b_);
+            e2b.push(e2b_);
 
-            let mut e2c = c.clone();
-            e2c = self
+            let mut e2c_ = c.clone();
+            e2c_ = self
                 .driver
-                .add_with_public(&(betaw + zkey.verifying_key.k2), &e2c);
-            e2c = self.driver.add_with_public(&challenges.gamma, &e2c);
+                .add_with_public(&(betaw + zkey.verifying_key.k2), &e2c_);
+            e2c_ = self.driver.add_with_public(&challenges.gamma, &e2c_);
+            e2c.push(e2c_);
 
-            let e2d = z.clone();
+            let e2d_ = z;
+            e2d.push(e2d_);
 
-            let [mut e2, mut e2z] = mul4!(
-                self.driver,
-                &e2a,
-                &e2b,
-                &e2c,
-                &e2d,
-                &ap,
-                &bp,
-                &cp[i],
-                &zp,
-                &domain1,
-                mod_i
-            );
+            let mut e3a_ = a;
+            e3a_ = self.driver.add_with_public(&(s1 * challenges.beta), &e3a_);
+            e3a_ = self.driver.add_with_public(&challenges.gamma, &e3a_);
+            e3a.push(e3a_);
+
+            let mut e3b_ = b;
+            e3b_ = self.driver.add_with_public(&(s2 * challenges.beta), &e3b_);
+            e3b_ = self.driver.add_with_public(&challenges.gamma, &e3b_);
+            e3b.push(e3b_);
+
+            let mut e3c_ = c;
+            e3c_ = self.driver.add_with_public(&(s3 * challenges.beta), &e3c_);
+            e3c_ = self.driver.add_with_public(&challenges.gamma, &e3c_);
+            e3c.push(e3c_);
+
+            let e3d_ = zw;
+            e3d.push(e3d_);
+            w *= root_of_unity;
+        }
+
+        let e2a_vec = e2a.into();
+        let e2b_vec = e2b.into();
+        let e2c_vec = e2c.into();
+        let e2d_vec = e2d.into();
+        let zp_vec = zp.into();
+
+        let [e2, e2z_0, e2z_1, e2z_2, e2z_3] = mul4vec!(
+            self.driver,
+            &e2a_vec,
+            &e2b_vec,
+            &e2c_vec,
+            &e2d_vec,
+            &ap_vec,
+            &bp_vec,
+            &cp_vec,
+            &zp_vec,
+            &domain1
+        );
+
+        let e3a_vec = e3a.into();
+        let e3b_vec = e3b.into();
+        let e3c_vec = e3c.into();
+        let e3d_vec = e3d.into();
+        let zwp_vec = zwp.into();
+
+        let [e3, e3z_0, e3z_1, e3z_2, e3z_3] = mul4vec!(
+            self.driver,
+            &e3a_vec,
+            &e3b_vec,
+            &e3c_vec,
+            &e3d_vec,
+            &ap_vec,
+            &bp_vec,
+            &cp_vec,
+            &zwp_vec,
+            &domain1
+        );
+
+        let mut t_vec = Vec::with_capacity(zkey.domain_size * 4);
+        let mut tz_vec = Vec::with_capacity(zkey.domain_size * 4);
+        for i in 0..zkey.domain_size * 4 {
+            let mut e2 = T::index_sharevec(&e2, i);
+            let mut e2z = mul4vec_post!(self.driver, e2z_0, e2z_1, e2z_2, e2z_3, i, &domain1);
+            let mut e3 = T::index_sharevec(&e3, i);
+            let mut e3z = mul4vec_post!(self.driver, e3z_0, e3z_1, e3z_2, e3z_3, i, &domain1);
+
+            let z = T::index_sharevec(&z_poly.eval, i);
+            let zp = T::index_sharevec(&zp_vec, i);
 
             e2 = self.driver.mul_with_public(&challenges.alpha, &e2);
             e2z = self.driver.mul_with_public(&challenges.alpha, &e2z);
-
-            let mut e3a = a;
-            e3a = self.driver.add_with_public(&(s1 * challenges.beta), &e3a);
-            e3a = self.driver.add_with_public(&challenges.gamma, &e3a);
-
-            let mut e3b = b;
-            e3b = self.driver.add_with_public(&(s2 * challenges.beta), &e3b);
-            e3b = self.driver.add_with_public(&challenges.gamma, &e3b);
-
-            let mut e3c = c;
-            e3c = self.driver.add_with_public(&(s3 * challenges.beta), &e3c);
-            e3c = self.driver.add_with_public(&challenges.gamma, &e3c);
-
-            let e3d = zw;
-            let [mut e3, mut e3z] = mul4!(
-                self.driver,
-                &e3a,
-                &e3b,
-                &e3c,
-                &e3d,
-                &ap,
-                &bp,
-                &cp[i],
-                &zwp,
-                &domain1,
-                mod_i
-            );
 
             e3 = self.driver.mul_with_public(&challenges.alpha, &e3);
             e3z = self.driver.mul_with_public(&challenges.alpha, &e3z);
@@ -615,17 +803,16 @@ where
                 .mul_with_public(&zkey.lagrange[0].evaluations[i], &zp);
             e4z = self.driver.mul_with_public(&challenges.alpha2, &e4z);
 
-            let mut t = self.driver.add(&e1, &e2);
+            let mut t = self.driver.add(&e1[i], &e2);
             t = self.driver.sub(&t, &e3);
             t = self.driver.add(&t, &e4);
 
-            let mut tz = self.driver.add(&e1z, &e2z);
+            let mut tz = self.driver.add(&e1z[i], &e2z);
             tz = self.driver.sub(&tz, &e3z);
             tz = self.driver.add(&tz, &e4z);
 
             t_vec.push(t);
             tz_vec.push(tz);
-            w *= root_of_unity;
         }
         let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints * 4)
             .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
@@ -638,8 +825,8 @@ where
             let a = self.driver.sub(&a_lhs, &a_rhs);
             T::set_index_sharevec(&mut coefficients_t, a, i);
             /*
-            TODO set check if poly is divisible here!
-              */
+              We cannot check whether the polynomial is divisible by Zh here
+            */
         }
 
         let coefficients_tz = self.driver.ifft(&tz_vec.into(), &domain2);
@@ -710,19 +897,12 @@ where
         ]
     }
 
-    // TODO parallelize
     fn compute_z(
         &mut self,
         challenges: &Challenges<T, P>,
         zkey: &ZKey<P>,
         round1_out: &WirePolyOutput<T, P>,
     ) -> Result<PolyEval<T, P>> {
-        let mut num_arr = Vec::with_capacity(zkey.domain_size);
-        let mut den_arr = Vec::with_capacity(zkey.domain_size);
-
-        num_arr.push(self.driver.promote_to_trivial_share(P::ScalarField::one()));
-        den_arr.push(self.driver.promote_to_trivial_share(P::ScalarField::one()));
-
         // TODO Check if this root_of_unity is the one we need
         let num_constraints = zkey.n_constraints;
         let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
@@ -730,6 +910,12 @@ where
         let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
 
         let mut w = P::ScalarField::one();
+        let mut n1 = Vec::with_capacity(zkey.domain_size);
+        let mut n2 = Vec::with_capacity(zkey.domain_size);
+        let mut n3 = Vec::with_capacity(zkey.domain_size);
+        let mut d1 = Vec::with_capacity(zkey.domain_size);
+        let mut d2 = Vec::with_capacity(zkey.domain_size);
+        let mut d3 = Vec::with_capacity(zkey.domain_size);
         for i in 0..zkey.domain_size {
             let a = T::index_sharevec(&round1_out.buffer_a, i);
             let b = T::index_sharevec(&round1_out.buffer_b, i);
@@ -739,65 +925,62 @@ where
             // numArr := (a + beta·ω + gamma)(b + beta·ω·k1 + gamma)(c + beta·ω·k2 + gamma)
             let betaw = challenges.beta * w;
 
-            let n1 = self.driver.add_with_public(&betaw, &a);
-            let n1 = self.driver.add_with_public(&challenges.gamma, &n1);
+            let n1_ = self.driver.add_with_public(&betaw, &a);
+            let n1_ = self.driver.add_with_public(&challenges.gamma, &n1_);
 
             let tmp = zkey.verifying_key.k1 * betaw;
-            let n2 = self.driver.add_with_public(&tmp, &b);
-            let n2 = self.driver.add_with_public(&challenges.gamma, &n2);
+            let n2_ = self.driver.add_with_public(&tmp, &b);
+            let n2_ = self.driver.add_with_public(&challenges.gamma, &n2_);
 
             let tmp = zkey.verifying_key.k2 * betaw;
-            let n3 = self.driver.add_with_public(&tmp, &c);
-            let n3 = self.driver.add_with_public(&challenges.gamma, &n3);
+            let n3_ = self.driver.add_with_public(&tmp, &c);
+            let n3_ = self.driver.add_with_public(&challenges.gamma, &n3_);
 
-            let num = self.driver.mul(&n1, &n2)?;
-            let mut num = self.driver.mul(&num, &n3)?;
+            n1.push(n1_);
+            n2.push(n2_);
+            n3.push(n3_);
 
             // denArr := (a + beta·sigma1 + gamma)(b + beta·sigma2 + gamma)(c + beta·sigma3 + gamma)
-            let d1 = self
+            let d1_ = self
                 .driver
                 .add_with_public(&(challenges.beta * zkey.s1_poly.evaluations[i * 4]), &a);
-            let d1 = self.driver.add_with_public(&challenges.gamma, &d1);
+            let d1_ = self.driver.add_with_public(&challenges.gamma, &d1_);
 
-            let d2 = self
+            let d2_ = self
                 .driver
                 .add_with_public(&(challenges.beta * zkey.s2_poly.evaluations[i * 4]), &b);
-            let d2 = self.driver.add_with_public(&challenges.gamma, &d2);
+            let d2_ = self.driver.add_with_public(&challenges.gamma, &d2_);
 
-            let d3 = self
+            let d3_ = self
                 .driver
                 .add_with_public(&(challenges.beta * zkey.s3_poly.evaluations[i * 4]), &c);
-            let d3 = self.driver.add_with_public(&challenges.gamma, &d3);
+            let d3_ = self.driver.add_with_public(&challenges.gamma, &d3_);
 
-            // TODO parallelize with num above
-            let den = self.driver.mul(&d1, &d2)?;
-            let mut den = self.driver.mul(&den, &d3)?;
-
-            // Multiply current num value with the previous one saved in num_arr/den_arr
-            if i != 0 {
-                // TODO parallelize
-                num = self.driver.mul(&num, &num_arr[i])?;
-                den = self.driver.mul(&den, &den_arr[i])?;
-            }
-
-            if i == zkey.domain_size - 1 {
-                num_arr[0] = num;
-                den_arr[0] = den;
-            } else {
-                num_arr.push(num);
-                den_arr.push(den);
-            }
+            d1.push(d1_);
+            d2.push(d2_);
+            d3.push(d3_);
 
             w.mul_assign(&root_of_unity);
         }
 
+        // TODO parallelize these?
+        let num = self.driver.mul_many(&n1, &n2)?;
+        let num = self.driver.mul_many(&num, &n3)?;
+        let den = self.driver.mul_many(&d1, &d2)?;
+        let den = self.driver.mul_many(&den, &d3)?;
+
+        // TODO parallelize these?
+        // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
+        let mut num = array_prod_mul!(self.driver, num);
+        let mut den = array_prod_mul!(self.driver, den);
+
+        num.rotate_right(1);
+        den.rotate_right(1);
+
         // Compute the inverse of denArr to compute in the next command the
         // division numArr/denArr by multiplying num · 1/denArr
-        for den_arr in den_arr.iter_mut() {
-            // TODO parallerlize
-            *den_arr = self.driver.inv(den_arr)?;
-        }
-        let buffer_z = self.driver.mul_vec(&num_arr.into(), &den_arr.into())?;
+        let den = self.driver.inv_many(&den)?;
+        let buffer_z = self.driver.mul_many(&num, &den)?.into();
 
         // Compute polynomial coefficients z(X) from buffer_z
         let poly_z = self.driver.ifft(&buffer_z, &domain1);
