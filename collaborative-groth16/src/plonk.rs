@@ -98,9 +98,7 @@ macro_rules! array_prod_mul {
         let mut unblind = $driver.mul_many(&r_inv0, &r[1..])?;
 
         let mul = $driver.mul_many(&r[..len], &$inp)?;
-        // TODO maybe mul_open
-        let mul = $driver.mul_many(&mul, &r_inv[1..])?;
-        let mut open = $driver.open_many(&mul)?;
+        let mut open = $driver.mul_open_many(&mul, &r_inv[1..])?;
 
         for i in 1..open.len() {
             open[i] = open[i] * open[i - 1];
@@ -726,8 +724,8 @@ where
             let a = self.driver.sub(&a_lhs, &a_rhs);
             T::set_index_sharevec(&mut coefficients_t, a, i);
             /*
-            TODO set check if poly is divisible here!
-              */
+              We cannot check whether the polynomial is divisible by Zh here
+            */
         }
 
         let coefficients_tz = self.driver.ifft(&tz_vec.into(), &domain2);
@@ -798,7 +796,6 @@ where
         ]
     }
 
-    // TODO parallelize
     fn compute_z(
         &mut self,
         challenges: &Challenges<T, P>,

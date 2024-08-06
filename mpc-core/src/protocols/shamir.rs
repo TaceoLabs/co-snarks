@@ -248,41 +248,6 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         self.rng_buffer.buffer_triples(&mut self.network, amount)
     }
 
-    /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
-    // multiply followed by a opening, thus, no reshare required
-    pub fn mul_open(
-        &mut self,
-        a: &<Self as PrimeFieldMpcProtocol<F>>::FieldShare,
-        b: &<Self as PrimeFieldMpcProtocol<F>>::FieldShare,
-    ) -> std::io::Result<F> {
-        let mul = a * b;
-        let rcv = self.network.broadcast_next(mul.a, 2 * self.threshold + 1)?;
-        let res = ShamirCore::reconstruct(&rcv, &self.open_lagrange_2t);
-        Ok(res)
-    }
-
-    /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
-    // multiply followed by a opening, thus, no reshare required
-    pub fn mul_open_many(
-        &mut self,
-        a: &[<Self as PrimeFieldMpcProtocol<F>>::FieldShare],
-        b: &[<Self as PrimeFieldMpcProtocol<F>>::FieldShare],
-    ) -> std::io::Result<Vec<F>> {
-        let mul = a
-            .iter()
-            .zip(b.iter())
-            .map(|(a, b)| a * b)
-            .collect::<Vec<_>>();
-        let mul = ShamirPrimeFieldShare::convert_vec(mul);
-
-        let rcv = self.network.broadcast_next(mul, 2 * self.threshold + 1)?;
-        let res = rcv
-            .into_iter()
-            .map(|r| ShamirCore::reconstruct(&r, &self.open_lagrange_2t))
-            .collect();
-        Ok(res)
-    }
-
     pub(crate) fn degree_reduce(
         &mut self,
         mut input: F,
@@ -679,6 +644,35 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
 
     fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
         sharevec.len()
+    }
+
+    /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
+    fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F> {
+        let mul = a * b;
+        let rcv = self.network.broadcast_next(mul.a, 2 * self.threshold + 1)?;
+        let res = ShamirCore::reconstruct(&rcv, &self.open_lagrange_2t);
+        Ok(res)
+    }
+
+    /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
+    fn mul_open_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<F>> {
+        let mul = a
+            .iter()
+            .zip(b.iter())
+            .map(|(a, b)| a * b)
+            .collect::<Vec<_>>();
+        let mul = ShamirPrimeFieldShare::convert_vec(mul);
+
+        let rcv = self.network.broadcast_next(mul, 2 * self.threshold + 1)?;
+        let res = rcv
+            .into_iter()
+            .map(|r| ShamirCore::reconstruct(&r, &self.open_lagrange_2t))
+            .collect();
+        Ok(res)
     }
 }
 
