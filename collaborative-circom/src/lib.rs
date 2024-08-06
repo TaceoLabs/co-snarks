@@ -12,7 +12,7 @@ use circom_types::{
 };
 use clap::ValueEnum;
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
-use color_eyre::eyre::Context;
+use color_eyre::eyre::{Context, ContextCompat};
 use figment::{
     providers::{Env, Format, Toml},
     Figment,
@@ -145,9 +145,9 @@ pub fn generate_witness_rep3<P: Pairing>(
     let circuit_path = PathBuf::from(&circuit);
     file_utils::check_file_exists(&circuit_path)?;
 
-    let network_config = config.network.expect("expected a network config");
-    let compiler_config = config.compiler.expect("expected a network config");
-    let vm_config = config.vm.expect("expected a vm config");
+    let network_config = config.network.context("expected a network config")?;
+    let compiler_config = config.compiler.context("expected a network config")?;
+    let vm_config = config.vm.context("expected a vm config")?;
 
     // parse circuit file & put through our compiler
     let mut builder = CompilerBuilder::<P>::new(compiler_config, circuit);

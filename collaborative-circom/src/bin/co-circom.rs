@@ -14,7 +14,7 @@ use circom_types::{
 use clap::{Parser, Subcommand};
 use collaborative_circom::{file_utils, Config, MPCCurve, MPCProtocol};
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
-use color_eyre::eyre::{eyre, Context};
+use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::{
     protocols::{
         rep3::{self, network::Rep3MpcNet, Rep3Protocol},
@@ -250,7 +250,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     file_utils::check_file_exists(config_path)?;
 
     // parse and merge config from env and config file
-    let config = Config::new(config_path.to_str().expect("invalid path"))
+    let config = Config::new(config_path.to_str().context("invalid path")?)
         .context("expected valid config")?;
 
     // verify that curve is set in args or config
@@ -258,7 +258,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         .command
         .get_curve()
         .or(config.curve)
-        .expect("expected curve either in args or config");
+        .context("expected curve either in args or config")?;
 
     match curve {
         MPCCurve::BN254 => main_function::<Bn254>(args, config),
@@ -294,7 +294,7 @@ where
             // verify that protocol is set in args or config
             let protocol = protocol
                 .or(cfg.protocol)
-                .expect("protocol required for this command");
+                .context("protocol required for this command")?;
 
             // read the Circom witness file
             let witness_file =
@@ -327,9 +327,9 @@ where
                     // write out the shares to the output directory
                     let base_name = witness_path
                         .file_name()
-                        .expect("we have a file name")
+                        .context("we have a file name")?
                         .to_str()
-                        .ok_or(eyre!("witness file name is not valid UTF-8"))?;
+                        .context("witness file name is not valid UTF-8")?;
                     for (i, share) in shares.iter().enumerate() {
                         let path = out_dir.join(format!("{}.{}.shared", base_name, i));
                         let out_file = BufWriter::new(
@@ -352,9 +352,9 @@ where
                     // write out the shares to the output directory
                     let base_name = witness_path
                         .file_name()
-                        .expect("we have a file name")
+                        .context("we have a file name")?
                         .to_str()
-                        .ok_or(eyre!("witness file name is not valid UTF-8"))?;
+                        .context("witness file name is not valid UTF-8")?;
                     for (i, share) in shares.iter().enumerate() {
                         let path = out_dir.join(format!("{}.{}.shared", base_name, i));
                         let out_file = BufWriter::new(
@@ -380,7 +380,7 @@ where
             // verify that protocol is set in args or config
             let protocol = protocol
                 .or(cfg.protocol)
-                .expect("protocol required for this command");
+                .context("protocol required for this command")?;
 
             if protocol != MPCProtocol::REP3 {
                 return Err(eyre!(
@@ -392,7 +392,7 @@ where
             file_utils::check_file_exists(&circuit_path)?;
             file_utils::check_dir_exists(&out_dir)?;
 
-            let compiler_config = cfg.compiler.expect("expected a compiler config");
+            let compiler_config = cfg.compiler.context("expected a compiler config")?;
 
             //get the public inputs if any from parser
             let mut builder = CompilerBuilder::<P>::new(compiler_config, circuit);
@@ -442,9 +442,9 @@ where
             // write out the shares to the output directory
             let base_name = input
                 .file_name()
-                .expect("we have a file name")
+                .context("we have a file name")?
                 .to_str()
-                .ok_or(eyre!("input file name is not valid UTF-8"))?;
+                .context("input file name is not valid UTF-8")?;
             for (i, share) in shares.iter().enumerate() {
                 let path = out_dir.join(format!("{}.{}.shared", base_name, i));
                 let out_file =
@@ -472,7 +472,7 @@ where
             // verify that protocol is set in args or config
             let protocol = protocol
                 .or(cfg.protocol)
-                .expect("protocol required for this command");
+                .context("protocol required for this command")?;
 
             match protocol {
                 MPCProtocol::REP3 => {
@@ -497,7 +497,7 @@ where
             // verify that protocol is set in args or config
             let protocol = protocol
                 .or(cfg.protocol)
-                .expect("protocol required for this command");
+                .context("protocol required for this command")?;
 
             if protocol != MPCProtocol::REP3 {
                 return Err(eyre!(
@@ -537,7 +537,7 @@ where
             }
             file_utils::check_file_exists(&witness)?;
 
-            let network_config = cfg.network.expect("expected network config");
+            let network_config = cfg.network.context("expected network config")?;
 
             // parse witness shares
             let witness_file =
@@ -578,12 +578,12 @@ where
             file_utils::check_file_exists(&witness)?;
             file_utils::check_file_exists(&zkey)?;
 
-            let network_config = cfg.network.expect("expected a network config");
+            let network_config = cfg.network.context("expected a network config")?;
 
             // verify that protocol is set in args or config
             let protocol = protocol
                 .or(cfg.protocol)
-                .expect("protocol required for this command");
+                .context("protocol required for this command")?;
 
             // parse witness shares
             let witness_file =
