@@ -589,17 +589,15 @@ where
             e3z = self.driver.mul_with_public(&challenges.alpha, &e3z);
 
             let mut e4 = self.driver.add_with_public(&-P::ScalarField::one(), &z);
-            //THIS IS MOST LIKELY WRONG
             e4 = self
                 .driver
                 .mul_with_public(&zkey.lagrange[0].evaluations[i], &e4);
             e4 = self.driver.mul_with_public(&challenges.alpha2, &e4);
 
-            //THIS IS MOST LIKELY WRONG
-            let e4z = self
+            let mut e4z = self
                 .driver
                 .mul_with_public(&zkey.lagrange[0].evaluations[i], &zp);
-            e4 = self.driver.mul_with_public(&challenges.alpha2, &e4z);
+            e4z = self.driver.mul_with_public(&challenges.alpha2, &e4z);
 
             let mut t = self.driver.add(&e1, &e2);
             t = self.driver.sub(&t, &e3);
