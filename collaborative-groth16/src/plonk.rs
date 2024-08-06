@@ -413,10 +413,13 @@ where
             &outp.poly_eval_c.poly,
         );
 
-        // TODO parallelize
-        proof.commit_a = self.driver.open_point(&commit_a)?;
-        proof.commit_b = self.driver.open_point(&commit_b)?;
-        proof.commit_c = self.driver.open_point(&commit_c)?;
+        let opened = self
+            .driver
+            .open_point_many(&[commit_a, commit_b, commit_c])?;
+        debug_assert_eq!(opened.len(), 3);
+        proof.commit_a = opened[0];
+        proof.commit_b = opened[1];
+        proof.commit_c = opened[2];
 
         Ok(outp)
     }
@@ -593,7 +596,7 @@ where
             e4 = self.driver.mul_with_public(&challenges.alpha2, &e4);
 
             //THIS IS MOST LIKELY WRONG
-            let mut e4z = self
+            let e4z = self
                 .driver
                 .mul_with_public(&zkey.lagrange[0].evaluations[i], &zp);
             e4 = self.driver.mul_with_public(&challenges.alpha2, &e4z);
