@@ -78,7 +78,7 @@ macro_rules! mul4vec_post {
             rz = $driver.add(&rz, &tmp);
             let tmp = $driver.mul_with_public(&Self::get_z2($domain)[mod_i], &c);
             rz = $driver.add(&rz, &tmp);
-            let tmp = $driver.mul_with_public(&Self::get_z3($domain)[mod_i], &c);
+            let tmp = $driver.mul_with_public(&Self::get_z3($domain)[mod_i], &d);
             rz = $driver.add(&rz, &tmp);
         }
         rz
