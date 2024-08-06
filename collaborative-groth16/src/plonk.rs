@@ -9,6 +9,8 @@ use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
+use ark_serialize::Valid;
+use circom_types::plonk::VerifyingKey;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
@@ -191,6 +193,22 @@ struct Proof<P: Pairing> {
     commit_wxiw: P::G1,
 }
 
+impl<P: Pairing> Proof<P> {
+    fn is_well_constructed(&self) -> Result<(), eyre::Report> {
+        self.commit_a.check()?;
+        self.commit_b.check()?;
+        self.commit_c.check()?;
+        self.commit_z.check()?;
+        self.commit_t1.check()?;
+        self.commit_t2.check()?;
+        self.commit_t3.check()?;
+        self.commit_wxi.check()?;
+        self.commit_wxiw.check()?;
+
+        Ok(())
+    }
+}
+
 struct Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -289,6 +307,54 @@ where
             transcript: Keccak256Transcript::default(),
             phantom_data: PhantomData,
         }
+    }
+
+    fn calculate_challenges(
+        &self,
+        vk: &VerifyingKey<P>,
+        proof: &Proof<P>,
+        public_inputs: &[P::ScalarField],
+    ) -> Challenges<T, P> {
+        let mut challenges = Challenges::new();
+        let mut transcript = Keccak256Transcript::<P>::default();
+
+        transcript.add_poly_commitment(vk.qm);
+        transcript.add_poly_commitment(vk.ql);
+        transcript.add_poly_commitment(vk.qr);
+        transcript.add_poly_commitment(vk.qo);
+        transcript.add_poly_commitment(vk.qc);
+        transcript.add_poly_commitment(vk.s1);
+        transcript.add_poly_commitment(vk.s2);
+        transcript.add_poly_commitment(vk.s3);
+
+        for p in public_inputs.iter().cloned() {
+            transcript.add_scalar(p);
+        }
+
+        transcript.add_poly_commitment(proof.commit_a.into());
+        transcript.add_poly_commitment(proof.commit_b.into());
+        transcript.add_poly_commitment(proof.commit_c.into());
+
+        challenges.beta = transcript.get_challenge();
+
+        todo!();
+
+        challenges
+    }
+
+    pub fn verify(
+        &self,
+        vk: &VerifyingKey<P>,
+        proof: &Proof<P>,
+        public_inputs: &[P::ScalarField],
+    ) -> Result<bool, eyre::Report> {
+        if proof.is_well_constructed().is_err() {
+            return Ok(false);
+        }
+
+        let challenges = self.calculate_challenges(vk, proof, public_inputs);
+
+        todo!()
     }
 
     fn calculate_additions(
