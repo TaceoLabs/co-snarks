@@ -1165,14 +1165,18 @@ where
         let [t1, t2, t3] = self.compute_t(challenges, zkey, z_poly, wire_poly, round1_out)?;
 
         // Compute [T1]_1, [T2]_1, [T3]_1
-        let commit_a = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t1);
-        let commit_b = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t2);
-        let commit_c = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t3);
+        let commit_t1 = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t1);
+        let commit_t2 = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t2);
+        let commit_t3 = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &t3);
 
-        // TODO parallelize
-        proof.commit_a = self.driver.open_point(&commit_a)?;
-        proof.commit_b = self.driver.open_point(&commit_b)?;
-        proof.commit_c = self.driver.open_point(&commit_c)?;
+        let opened = self
+            .driver
+            .open_point_many(&[commit_t1, commit_t2, commit_t3])?;
+        debug_assert_eq!(opened.len(), 3);
+        proof.commit_t1 = opened[0];
+        proof.commit_t2 = opened[1];
+        proof.commit_t3 = opened[2];
+
         Ok(TPoly { t1, t2, t3 })
     }
 
@@ -1207,11 +1211,12 @@ where
         let eval_c = self.evaluate_poly(&round1_out.poly_eval_c.poly, &challenges.xi);
         let eval_z = self.evaluate_poly(&poly_z.poly, &xiw);
 
-        // TODO parallelize
-        proof.eval_a = self.driver.open(&eval_a)?;
-        proof.eval_b = self.driver.open(&eval_b)?;
-        proof.eval_c = self.driver.open(&eval_c)?;
-        proof.eval_zw = self.driver.open(&eval_z)?;
+        let opened = self.driver.open_many(&[eval_a, eval_b, eval_c, eval_z])?;
+        debug_assert_eq!(opened.len(), 4);
+        proof.eval_a = opened[0];
+        proof.eval_b = opened[1];
+        proof.eval_c = opened[2];
+        proof.eval_zw = opened[3];
 
         proof.eval_s1 = zkey.s1_poly.evaluate(&challenges.xi);
         proof.eval_s2 = zkey.s2_poly.evaluate(&challenges.xi);
@@ -1258,9 +1263,10 @@ where
         let commit_wxiw =
             MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.p_tau, &poly_wxiw);
 
-        // TODO parallelize
-        proof.commit_wxi = self.driver.open_point(&commit_wxi)?;
-        proof.commit_wxiw = self.driver.open_point(&commit_wxiw)?;
+        let opened = self.driver.open_point_many(&[commit_wxi, commit_wxiw])?;
+        debug_assert_eq!(opened.len(), 2);
+        proof.commit_wxi = opened[0];
+        proof.commit_wxiw = opened[1];
         Ok(())
     }
 }
