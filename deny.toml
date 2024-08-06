@@ -21,6 +21,8 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 # output a note when they are encountered.
 ignore = [
     #"RUSTSEC-0000-0000",
+    { id = "RUSTSEC-2021-0139", reason = "ignore ansi_term unmaintained" },
+    { id = "RUSTSEC-2022-0081", reason = "ignore json unmaintained" },
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
@@ -67,7 +69,18 @@ confidence-threshold = 0.8
 # aren't accepted for every possible crate as with the normal allow list
 exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
-    # list
+    { crate = "webpki-roots", allow = ["MPL-2.0"] },
+    { crate = "type_analysis", allow = ["GPL-3.0"] },
+    { crate = "program_structure", allow = ["GPL-3.0"] },
+    { crate = "parser", allow = ["GPL-3.0"] },
+    { crate = "dag", allow = ["GPL-3.0"] },
+    { crate = "constraint_writers", allow = ["GPL-3.0"] },
+    { crate = "constraint_list", allow = ["GPL-3.0"] },
+    { crate = "constraint_generation", allow = ["GPL-3.0"] },
+    { crate = "constant_tracking", allow = ["GPL-3.0"] },
+    { crate = "compiler", allow = ["GPL-3.0"] },
+    { crate = "code_producers", allow = ["GPL-3.0"] },
+    { crate = "circom_algebra", allow = ["GPL-3.0"] },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,
