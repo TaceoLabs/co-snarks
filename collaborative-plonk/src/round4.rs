@@ -298,7 +298,7 @@ pub mod tests {
                 .unwrap()
             );
         } else {
-            panic!("must be round2 after round1");
+            panic!("must be round5 after round4");
         }
     }
 }
