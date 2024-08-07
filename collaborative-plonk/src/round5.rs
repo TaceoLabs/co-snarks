@@ -52,42 +52,30 @@ impl<P: Pairing> Round5Challenges<P> {
     }
 }
 
-pub(super) struct Round5Proof<P: Pairing> {
-    pub(crate) commit_a: P::G1,
-    pub(crate) commit_b: P::G1,
-    pub(crate) commit_c: P::G1,
-    pub(crate) commit_z: P::G1,
-    pub(crate) commit_t1: P::G1,
-    pub(crate) commit_t2: P::G1,
-    pub(crate) commit_t3: P::G1,
-    pub(crate) eval_a: P::ScalarField,
-    pub(crate) eval_b: P::ScalarField,
-    pub(crate) eval_c: P::ScalarField,
-    pub(crate) eval_zw: P::ScalarField,
-    pub(crate) eval_s1: P::ScalarField,
-    pub(crate) eval_s2: P::ScalarField,
-    pub(crate) commit_wxi: P::G1,
-    pub(crate) commit_wxiw: P::G1,
-}
-
-impl<P: Pairing> Round5Proof<P> {
-    fn new(round4_proof: Round4Proof<P>, commit_wxi: P::G1, commit_wxiw: P::G1) -> Self {
-        Self {
-            commit_a: round4_proof.commit_a,
-            commit_b: round4_proof.commit_b,
-            commit_c: round4_proof.commit_c,
-            commit_z: round4_proof.commit_z,
-            commit_t1: round4_proof.commit_t1,
-            commit_t2: round4_proof.commit_t2,
-            commit_t3: round4_proof.commit_t3,
-            eval_a: round4_proof.eval_a,
-            eval_b: round4_proof.eval_b,
-            eval_c: round4_proof.eval_c,
-            eval_zw: round4_proof.eval_zw,
-            eval_s1: round4_proof.eval_s1,
-            eval_s2: round4_proof.eval_s2,
-            commit_wxi,
-            commit_wxiw,
+impl<P: Pairing + CircomArkworksPairingBridge> Round4Proof<P>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    fn into_final_proof(self, commit_wxi: P::G1, commit_wxiw: P::G1) -> PlonkProof<P> {
+        PlonkProof {
+            a: self.commit_a.into(),
+            b: self.commit_b.into(),
+            c: self.commit_c.into(),
+            z: self.commit_z.into(),
+            t1: self.commit_t1.into(),
+            t2: self.commit_t2.into(),
+            t3: self.commit_t3.into(),
+            eval_a: self.eval_a,
+            eval_b: self.eval_b,
+            eval_c: self.eval_c,
+            eval_s1: self.eval_s1,
+            eval_s2: self.eval_s2,
+            eval_zw: self.eval_zw,
+            wxi: commit_wxi.into(),
+            wxiw: commit_wxiw.into(),
+            protocol: "plonk".to_string(),
+            curve: P::get_circom_name(),
         }
     }
 }
@@ -399,7 +387,7 @@ where
         debug_assert_eq!(opened.len(), 2);
         let commit_wxi = opened[0];
         let commit_wxiw = opened[1];
-        Ok(Round5Proof::new(proof, commit_wxi, commit_wxiw).into())
+        Ok(proof.into_final_proof(commit_wxi, commit_wxiw))
     }
 }
 

@@ -244,8 +244,6 @@ pub mod tests {
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::{Domains, PlonkData};
-
     use super::{Round1, Round1Challenges};
     use ark_ec::pairing::Pairing;
     use num_traits::Zero;

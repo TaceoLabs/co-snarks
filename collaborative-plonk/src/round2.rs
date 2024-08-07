@@ -292,7 +292,7 @@ pub mod tests {
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::{round1::Round1, Domains, PlonkData};
+    use crate::round1::Round1;
     macro_rules! g1_from_xy {
         ($x: expr,$y: expr) => {
             <ark_bn254::Bn254 as Pairing>::G1Affine::new(

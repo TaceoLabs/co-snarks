@@ -1,5 +1,4 @@
 //! A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
-
 use ark_ec::pairing::Pairing;
 use ark_ff::FftField;
 use ark_ff::LegendreSymbol;
@@ -10,23 +9,10 @@ use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use collaborative_groth16::groth16::SharedWitness;
-use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 use round1::Round1;
-use round1::Round1Challenges;
-use round1::Round1Polys;
-use round1::Round1Proof;
-use round2::Round2Challenges;
-use round2::Round2Polys;
-use round2::Round2Proof;
-use round3::FinalPolys;
-use round3::Round3Challenges;
-use round3::Round3Proof;
-use round4::Round4Challenges;
-use round4::Round4Proof;
-use round5::Round5Proof;
 use std::io;
 use std::marker::PhantomData;
 
@@ -164,35 +150,6 @@ where
         let state = state.round3()?;
         let state = state.round4()?;
         state.round5()
-    }
-}
-
-impl<P> From<Round5Proof<P>> for PlonkProof<P>
-where
-    P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-{
-    fn from(proof: Round5Proof<P>) -> Self {
-        Self {
-            a: proof.commit_a.into(),
-            b: proof.commit_b.into(),
-            c: proof.commit_c.into(),
-            z: proof.commit_z.into(),
-            t1: proof.commit_t1.into(),
-            t2: proof.commit_t2.into(),
-            t3: proof.commit_t3.into(),
-            wxi: proof.commit_wxi.into(),
-            wxiw: proof.commit_wxiw.into(),
-            eval_a: proof.eval_a,
-            eval_b: proof.eval_b,
-            eval_c: proof.eval_c,
-            eval_s1: proof.eval_s1,
-            eval_s2: proof.eval_s2,
-            eval_zw: proof.eval_zw,
-            protocol: "plonk".to_string(),
-            curve: P::get_circom_name(),
-        }
     }
 }
 
