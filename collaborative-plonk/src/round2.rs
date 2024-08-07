@@ -106,9 +106,9 @@ where
             buffer_a: polys.buffer_a,
             buffer_b: polys.buffer_b,
             buffer_c: polys.buffer_c,
-            poly_eval_a: polys.poly_eval_a,
-            poly_eval_b: polys.poly_eval_b,
-            poly_eval_c: polys.poly_eval_c,
+            poly_eval_a: polys.a,
+            poly_eval_b: polys.b,
+            poly_eval_c: polys.c,
             z,
         }
     }
@@ -128,7 +128,7 @@ where
         zkey: &ZKey<P>,
         domains: &Domains<P>,
         challenges: &Round2Challenges<T, P>,
-        wire_polys: &Round1Polys<T, P>,
+        polys: &Round1Polys<T, P>,
     ) -> PlonkProofResult<PolyEval<T, P>> {
         // TODO Check if this root_of_unity is the one we need
         // FIXME  Do we want the dependency to collaborative Groth16??
@@ -141,9 +141,9 @@ where
         let mut d2 = Vec::with_capacity(zkey.domain_size);
         let mut d3 = Vec::with_capacity(zkey.domain_size);
         for i in 0..zkey.domain_size {
-            let a = T::index_sharevec(&wire_polys.buffer_a, i);
-            let b = T::index_sharevec(&wire_polys.buffer_b, i);
-            let c = T::index_sharevec(&wire_polys.buffer_c, i);
+            let a = T::index_sharevec(&polys.buffer_a, i);
+            let b = T::index_sharevec(&polys.buffer_b, i);
+            let c = T::index_sharevec(&polys.buffer_c, i);
 
             // Z(X) := numArr / denArr
             // numArr := (a + beta·ω + gamma)(b + beta·ω·k1 + gamma)(c + beta·ω·k2 + gamma)

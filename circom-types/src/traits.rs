@@ -13,18 +13,27 @@ type IoResult<T> = Result<T, SerializationError>;
 
 macro_rules! impl_bn256 {
     () => {
-        impl_serde_for_curve!(bn254, Bn254, ark_bn254, "bn254", 32, 32);
+        //TODO use stringify
+        impl_serde_for_curve!(bn254, Bn254, ark_bn254, "bn254", 32, 32, "bn128");
     };
 }
 
 macro_rules! impl_bls12_381 {
     () => {
-        impl_serde_for_curve!(bls12_381, Bls12_381, ark_bls12_381, "bls12_381", 48, 32);
+        impl_serde_for_curve!(
+            bls12_381,
+            Bls12_381,
+            ark_bls12_381,
+            "bls12_381",
+            48,
+            32,
+            "bls12_381"
+        );
     };
 }
 
 macro_rules! impl_serde_for_curve {
-    ($mod_name: ident, $config: ident, $curve: ident, $name: expr, $field_size: expr, $scalar_field_size: expr) => {
+    ($mod_name: ident, $config: ident, $curve: ident, $name: expr, $field_size: expr, $scalar_field_size: expr, $circom_name: expr) => {
 
 mod $mod_name {
 
@@ -87,6 +96,11 @@ mod $mod_name {
             const G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize = $field_size * 2 * 2;
             const GT_SERIALIZED_BYTE_SIZE_COMPRESSED: usize = 0;
             const GT_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize = 0;
+
+            fn get_circom_name() -> String {
+                $circom_name.to_owned()
+            }
+
             //Circom serializes its field elements in montgomery form
             //therefore we use Fq::from_reader_unchecked
             fn g1_from_reader(mut reader: impl Read) -> IoResult<Self::G1Affine> {
@@ -515,6 +529,8 @@ where
     const GT_SERIALIZED_BYTE_SIZE_COMPRESSED: usize;
     /// Size of uncompressed element of Gt in bytes
     const GT_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize;
+    /// Returns the name of the curve as defined in circom
+    fn get_circom_name() -> String;
     /// Deserializes element of G1 from reader where the element is already in montgomery form (no montgomery reduction performed)
     fn g1_from_reader(reader: impl Read) -> IoResult<Self::G1Affine>;
     /// Deserializes element of G2 from reader where the element is already in montgomery form (no montgomery reduction performed)

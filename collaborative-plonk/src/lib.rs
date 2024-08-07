@@ -200,7 +200,6 @@ where
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(crate) driver: T,
-    pub(crate) state: Round<T, P>,
     phantom_data: PhantomData<P>,
 }
 
@@ -216,26 +215,64 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     /// Creates a new [CollaborativePlonk] protocol with a given MPC driver.
-    pub fn new(
-        driver: T,
-        public_inputs: Vec<P::ScalarField>,
-        zkey: ZKey<P>,
-        witness: SharedWitness<T, P>,
-    ) -> Self {
+    pub fn new(driver: T) -> Self {
         Self {
             driver,
-            state: Round::Init {
-                zkey,
-                witness,
-                public_inputs,
-            },
             phantom_data: PhantomData,
         }
     }
 
-    pub fn proof(self) {}
+    pub fn proof(
+        mut self,
+        public_inputs: Vec<P::ScalarField>,
+        zkey: ZKey<P>,
+        witness: SharedWitness<T, P>,
+    ) -> PlonkProofResult<PlonkProof<P>> {
+        let init_round = Round::Init {
+            zkey,
+            witness,
+            public_inputs,
+        };
+        let round1 = init_round.next_round(&mut self.driver)?;
+        let round2 = round1.next_round(&mut self.driver)?;
+        let round3 = round2.next_round(&mut self.driver)?;
+        let round4 = round3.next_round(&mut self.driver)?;
+        let round5 = round4.next_round(&mut self.driver)?;
+        if let Round::Finished { proof } = round5.next_round(&mut self.driver)? {
+            Ok(proof.into())
+        } else {
+            unreachable!("must be finished after round 5")
+        }
+    }
+}
 
-    pub(crate) fn next_round(&mut self) {}
+impl<P> From<Round5Proof<P>> for PlonkProof<P>
+where
+    P: Pairing + CircomArkworksPairingBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+{
+    fn from(proof: Round5Proof<P>) -> Self {
+        Self {
+            a: proof.commit_a.into(),
+            b: proof.commit_a.into(),
+            c: proof.commit_a.into(),
+            z: proof.commit_a.into(),
+            t1: proof.commit_t1.into(),
+            t2: proof.commit_t2.into(),
+            t3: proof.commit_t3.into(),
+            wxi: proof.commit_wxi.into(),
+            wxiw: proof.commit_wxiw.into(),
+            eval_a: proof.eval_a,
+            eval_b: proof.eval_b,
+            eval_c: proof.eval_c,
+            eval_s1: proof.eval_s1,
+            eval_s2: proof.eval_s2,
+            eval_zw: proof.eval_zw,
+            protocol: "plonk".to_string(),
+            curve: P::get_circom_name(),
+        }
+    }
 }
 
 impl<T, P: Pairing> Round<T, P>

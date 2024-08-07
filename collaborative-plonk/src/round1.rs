@@ -32,9 +32,9 @@ where
     pub(crate) buffer_a: FieldShareVec<T, P>,
     pub(crate) buffer_b: FieldShareVec<T, P>,
     pub(crate) buffer_c: FieldShareVec<T, P>,
-    pub(crate) poly_eval_a: PolyEval<T, P>,
-    pub(crate) poly_eval_b: PolyEval<T, P>,
-    pub(crate) poly_eval_c: PolyEval<T, P>,
+    pub(crate) a: PolyEval<T, P>,
+    pub(crate) b: PolyEval<T, P>,
+    pub(crate) c: PolyEval<T, P>,
 }
 
 impl<T, P: Pairing> Round1Challenges<T, P>
@@ -115,15 +115,15 @@ where
             buffer_a,
             buffer_b,
             buffer_c,
-            poly_eval_a: PolyEval {
+            a: PolyEval {
                 poly: poly_a.into(),
                 eval: eval_a,
             },
-            poly_eval_b: PolyEval {
+            b: PolyEval {
                 poly: poly_b.into(),
                 eval: eval_b,
             },
-            poly_eval_c: PolyEval {
+            c: PolyEval {
                 poly: poly_c.into(),
                 eval: eval_c,
             },
@@ -138,25 +138,14 @@ where
     ) -> PlonkProofResult<Self> {
         let zkey = &data.zkey;
         let witness = &data.witness;
+        let p_tau = &zkey.p_tau;
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
         let polys = Self::compute_wire_polynomials(driver, &domains, &challenges, zkey, witness)?;
 
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let commit_a = MSMProvider::<P::G1>::msm_public_points(
-            driver,
-            &data.zkey.p_tau,
-            &polys.poly_eval_a.poly,
-        );
-        let commit_b = MSMProvider::<P::G1>::msm_public_points(
-            driver,
-            &data.zkey.p_tau,
-            &polys.poly_eval_b.poly,
-        );
-        let commit_c = MSMProvider::<P::G1>::msm_public_points(
-            driver,
-            &data.zkey.p_tau,
-            &polys.poly_eval_c.poly,
-        );
+        let commit_a = MSMProvider::<P::G1>::msm_public_points(driver, p_tau, &polys.a.poly);
+        let commit_b = MSMProvider::<P::G1>::msm_public_points(driver, p_tau, &polys.b.poly);
+        let commit_c = MSMProvider::<P::G1>::msm_public_points(driver, p_tau, &polys.c.poly);
 
         let opened = driver.open_point_many(&[commit_a, commit_b, commit_c])?;
         debug_assert_eq!(opened.len(), 3);
