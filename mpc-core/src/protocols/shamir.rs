@@ -11,7 +11,7 @@ use self::{
 use crate::{
     traits::{
         EcMpcProtocol, FFTProvider, Iterable, MSMProvider, PairingEcMpcProtocol,
-        PrimeFieldMpcProtocol,
+        PrimeFieldMpcProtocol, Viewable,
     },
     RngType,
 };
@@ -458,8 +458,14 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
     type FieldShareViewMut<'a> = ShamirPrimeFieldShareViewMut<'a, F>;
     type FieldShareVec = ShamirPrimeFieldShareVec<F>;
 
-    fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
-        a + b
+    fn add<'a, 'b, 'c>(
+        &'c mut self,
+        a: &'a impl Viewable<Item<'a> = Self::FieldShareView<'a>>,
+        b: &'b impl Viewable<Item<'b> = Self::FieldShareView<'b>>,
+    ) -> Self::FieldShare {
+        let a = a.view();
+        let b = b.view();
+        ShamirPrimeFieldShare { a: *a.a + b.a }
     }
 
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {

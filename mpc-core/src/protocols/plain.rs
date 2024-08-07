@@ -3,12 +3,17 @@
 //! This module contains the reference implementation without MPC. It will be used by the VM for computing on public values and can be used to test MPC circuits.
 
 use crate::{
-    traits::{CircomWitnessExtensionProtocol, Iterable, IterableMut, PrimeFieldMpcProtocol},
+    traits::{
+        CircomWitnessExtensionProtocol, Iterable, IterableMut, PrimeFieldMpcProtocol, Viewable,
+        ViewableMut,
+    },
     RngType,
 };
 use ark_ff::{One, PrimeField};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use eyre::eyre;
 use eyre::Result;
+use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 use rand::SeedableRng;
@@ -83,34 +88,20 @@ impl<F: PrimeField> Default for PlainDriver<F> {
     }
 }
 
-impl<F: PrimeField> Iterable for Vec<F> {
-    type Item<'a> = &'a F;
-
-    type Iter<'a> = std::slice::Iter<'a, F>;
-
-    fn iter<'a>(&'a self) -> Self::Iter<'a> {
-        self.as_slice().iter()
-    }
-}
-
-impl<F: PrimeField> IterableMut for Vec<F> {
-    type Item<'a> = &'a mut F;
-
-    type Iter<'a> = std::slice::IterMut<'a, F>;
-
-    fn iter_mut<'a>(&'a mut self) -> Self::Iter<'a> {
-        self.as_mut_slice().iter_mut()
-    }
-}
-
 impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
     type FieldShare = F;
-    type FieldShareView<'a> = &'a F;
-    type FieldShareViewMut<'a> = &'a mut F;
-    type FieldShareVec = Vec<F>;
+    type FieldShareView<'a> = PrimeFieldView<'a, F>;
+    type FieldShareViewMut<'a> = PrimeFieldViewMut<'a, F>;
+    type FieldShareVec = PrimeFieldVec<F>;
 
-    fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
-        *a + b
+    fn add<'a, 'b, 'c>(
+        &'c mut self,
+        a: &'a impl Viewable<Item<'a> = Self::FieldShareView<'a>>,
+        b: &'b impl Viewable<Item<'b> = Self::FieldShareView<'b>>,
+    ) -> Self::FieldShare {
+        let a = a.view();
+        let b = b.view();
+        *a.value + b.value
     }
 
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
@@ -122,7 +113,10 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
     }
 
     fn sub_assign_vec(&mut self, a: &mut Self::FieldShareVec, b: &Self::FieldShareVec) {
-        a.iter_mut().zip(b.iter()).for_each(|(a, b)| *a -= b);
+        a.values
+            .iter_mut()
+            .zip(b.values.iter())
+            .for_each(|(a, b)| *a -= b);
     }
 
     fn mul(
@@ -165,7 +159,12 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         a: &Self::FieldShareVec,
         b: &Self::FieldShareVec,
     ) -> std::io::Result<Self::FieldShareVec> {
-        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
+        Ok(a.values
+            .iter()
+            .zip(b.values.iter())
+            .map(|(a, b)| *a * b)
+            .collect_vec()
+            .into())
     }
 
     fn promote_to_trivial_share(&self, public_value: F) -> Self::FieldShare {
@@ -173,12 +172,12 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
     }
 
     fn promote_to_trivial_shares(&self, public_values: &[F]) -> Self::FieldShareVec {
-        public_values.to_vec()
+        public_values.to_vec().into()
     }
 
     fn distribute_powers_and_mul_by_const(&mut self, coeffs: &mut Self::FieldShareVec, g: F, c: F) {
         let mut pow = c;
-        for c in coeffs.iter_mut() {
+        for c in coeffs.values.iter_mut() {
             *c *= pow;
             pow *= g;
         }
@@ -195,7 +194,7 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
             if index < &public_inputs.len() {
                 acc += *coeff * public_inputs[*index];
             } else {
-                acc += *coeff * private_witness[*index - public_inputs.len()];
+                acc += *coeff * private_witness.values[*index - public_inputs.len()];
             }
         }
         acc
@@ -209,10 +208,11 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         src_offset: usize,
         len: usize,
     ) {
-        assert!(dst.len() >= dst_offset + len);
-        assert!(src.len() >= src_offset + len);
+        assert!(dst.values.len() >= dst_offset + len);
+        assert!(src.values.len() >= src_offset + len);
         assert!(len > 0);
-        dst[dst_offset..dst_offset + len].clone_from_slice(&src[src_offset..src_offset + len]);
+        dst.values[dst_offset..dst_offset + len]
+            .clone_from_slice(&src.values[src_offset..src_offset + len]);
     }
 
     fn print(&self, to_print: &Self::FieldShareVec) {
@@ -406,5 +406,135 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver<F> {
 
     fn public_one(&self) -> Self::VmType {
         F::one()
+    }
+}
+
+impl<F: PrimeField> Viewable for F {
+    type Item<'a> = PrimeFieldView<'a, F>;
+
+    fn view<'a>(&'a self) -> Self::Item<'a> {
+        PrimeFieldView { value: self }
+    }
+}
+
+impl<'b, F: PrimeField> Viewable for PrimeFieldView<'b, F> {
+    type Item<'a> = PrimeFieldView<'a, F> where 'b: 'a;
+
+    fn view<'a>(&'a self) -> Self::Item<'a> {
+        PrimeFieldView { value: &self.value }
+    }
+}
+
+impl<F: PrimeField> ViewableMut for F {
+    type Item<'a> = PrimeFieldViewMut<'a, F>;
+
+    fn view_mut<'a>(&'a mut self) -> Self::Item<'a> {
+        PrimeFieldViewMut { value: self }
+    }
+}
+
+impl<'b, F: PrimeField> Viewable for PrimeFieldViewMut<'b, F> {
+    type Item<'a> = PrimeFieldView<'a, F> where 'b: 'a;
+
+    fn view<'a>(&'a self) -> Self::Item<'a> {
+        PrimeFieldView { value: &self.value }
+    }
+}
+
+impl<'b, F: PrimeField> ViewableMut for PrimeFieldViewMut<'b, F> {
+    type Item<'a> = PrimeFieldViewMut<'a, F> where 'b: 'a;
+
+    fn view_mut<'a>(&'a mut self) -> Self::Item<'a> {
+        PrimeFieldViewMut {
+            value: &mut self.value,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, CanonicalDeserialize, CanonicalSerialize)]
+pub struct PrimeFieldVec<F: PrimeField> {
+    values: Vec<F>,
+}
+
+impl<F: PrimeField> From<Vec<F>> for PrimeFieldVec<F> {
+    fn from(values: Vec<F>) -> Self {
+        Self { values }
+    }
+}
+
+impl<F: PrimeField> IntoIterator for PrimeFieldVec<F> {
+    type Item = F;
+    type IntoIter = std::vec::IntoIter<F>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.values.into_iter()
+    }
+}
+
+pub struct PrimeFieldView<'a, F> {
+    value: &'a F,
+}
+
+pub struct PrimeFieldViewMut<'a, F> {
+    value: &'a mut F,
+}
+
+pub struct PrimeFieldVecIter<'a, F> {
+    iter: std::slice::Iter<'a, F>,
+}
+
+impl<'a, F: PrimeField> Iterator for PrimeFieldVecIter<'a, F> {
+    type Item = PrimeFieldView<'a, F>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|value| PrimeFieldView { value })
+    }
+}
+
+pub struct PrimeFieldVecIterMut<'a, F: PrimeField> {
+    iter: std::slice::IterMut<'a, F>,
+}
+
+impl<'a, F: PrimeField> Iterator for PrimeFieldVecIterMut<'a, F> {
+    type Item = PrimeFieldViewMut<'a, F>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|value| PrimeFieldViewMut { value })
+    }
+}
+
+impl<F: PrimeField> Iterable for PrimeFieldVec<F> {
+    type Item<'a> = PrimeFieldView<'a, F>;
+
+    type Iter<'a> = PrimeFieldVecIter<'a, F>;
+
+    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+        PrimeFieldVecIter {
+            iter: self.values.as_slice().iter(),
+        }
+    }
+}
+
+impl<F: PrimeField> IterableMut for PrimeFieldVec<F> {
+    type Item<'a> = PrimeFieldViewMut<'a, F>;
+
+    type Iter<'a> = PrimeFieldVecIterMut<'a, F>;
+
+    fn iter_mut<'a>(&'a mut self) -> Self::Iter<'a> {
+        PrimeFieldVecIterMut {
+            iter: self.values.as_mut_slice().iter_mut(),
+        }
+    }
+}
+
+impl<'a, F: PrimeField> std::fmt::Display for PrimeFieldView<'a, F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.value)
+    }
+}
+
+impl<'a, F: PrimeField> std::fmt::Display for PrimeFieldViewMut<'a, F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.value)
     }
 }

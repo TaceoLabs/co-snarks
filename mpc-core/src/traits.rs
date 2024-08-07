@@ -21,9 +21,11 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         + Clone
         + CanonicalSerialize
         + CanonicalDeserialize
+        + for<'a> Viewable<Item<'a> = Self::FieldShareView<'a>>
+        + for<'a> ViewableMut<Item<'a> = Self::FieldShareViewMut<'a>>
         + Sync;
 
-    type FieldShareView<'a>;
+    type FieldShareView<'a>: Viewable<Item<'a> = Self::FieldShareView<'a>> + 'a;
     type FieldShareViewMut<'a>;
 
     /// The type of a vector of shared field elements.
@@ -39,7 +41,11 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         + Sync;
 
     /// Add two shares: \[c\] = \[a\] + \[b\]
-    fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
+    fn add<'a, 'b, 'c>(
+        &'c mut self,
+        a: &'a impl Viewable<Item<'a> = Self::FieldShareView<'a>>,
+        b: &'b impl Viewable<Item<'b> = Self::FieldShareView<'b>>,
+    ) -> Self::FieldShare;
 
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
@@ -345,4 +351,18 @@ pub trait IterableMut {
     where
         Self: 'a;
     fn iter_mut<'a>(&'a mut self) -> Self::Iter<'a>;
+}
+
+pub trait Viewable {
+    type Item<'x>
+    where
+        Self: 'x;
+    fn view<'a>(&'a self) -> Self::Item<'a>;
+}
+
+pub trait ViewableMut {
+    type Item<'x>
+    where
+        Self: 'x;
+    fn view_mut<'a>(&'a mut self) -> Self::Item<'a>;
 }

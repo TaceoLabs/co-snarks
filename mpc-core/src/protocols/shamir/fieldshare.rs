@@ -7,7 +7,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;
 use std::mem::ManuallyDrop;
 
-use crate::traits::{Iterable, IterableMut};
+use crate::traits::{Iterable, IterableMut, Viewable, ViewableMut};
 
 /// This type represents a Shamir-shared value. Since a Shamir-share of a field element is a field element, this is a wrapper over a field element.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
@@ -359,5 +359,40 @@ impl<'a, F: PrimeField> Iterator for ShamirPrimeFieldShareVecIterMut<'a, F> {
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.a.size_hint()
+    }
+}
+
+impl<F: PrimeField> Viewable for ShamirPrimeFieldShare<F> {
+    type Item<'a> = ShamirPrimeFieldShareView<'a, F>;
+    fn view<'a>(&'a self) -> ShamirPrimeFieldShareView<'a, F> {
+        ShamirPrimeFieldShareView { a: &self.a }
+    }
+}
+
+impl<F: PrimeField> ViewableMut for ShamirPrimeFieldShare<F> {
+    type Item<'a> = ShamirPrimeFieldShareViewMut<'a, F>;
+    fn view_mut<'a>(&'a mut self) -> ShamirPrimeFieldShareViewMut<'a, F> {
+        ShamirPrimeFieldShareViewMut { a: &mut self.a }
+    }
+}
+
+impl<'b, F: PrimeField> Viewable for ShamirPrimeFieldShareView<'b, F> {
+    type Item<'a> = ShamirPrimeFieldShareView<'a, F> where 'b: 'a;
+    fn view<'a>(&'a self) -> ShamirPrimeFieldShareView<'a, F> {
+        ShamirPrimeFieldShareView { a: &self.a }
+    }
+}
+
+impl<'b, F: PrimeField> Viewable for ShamirPrimeFieldShareViewMut<'b, F> {
+    type Item<'a> = ShamirPrimeFieldShareView<'a, F> where 'b: 'a;
+    fn view<'a>(&'a self) -> ShamirPrimeFieldShareView<'a, F> {
+        ShamirPrimeFieldShareView { a: &self.a }
+    }
+}
+
+impl<'b, F: PrimeField> ViewableMut for ShamirPrimeFieldShareViewMut<'b, F> {
+    type Item<'a> = ShamirPrimeFieldShareViewMut<'a, F> where 'b: 'a;
+    fn view_mut<'a>(&'a mut self) -> ShamirPrimeFieldShareViewMut<'a, F> {
+        ShamirPrimeFieldShareViewMut { a: &mut self.a }
     }
 }

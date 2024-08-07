@@ -2,7 +2,7 @@
 //!
 //! This module contains the implementation of rep3-shared field elements.
 
-use crate::traits::{Iterable, IterableMut};
+use crate::traits::{Iterable, IterableMut, Viewable, ViewableMut};
 
 use super::id::PartyID;
 use ark_ff::PrimeField;
@@ -279,13 +279,13 @@ impl<F: PrimeField> IntoIterator for Rep3PrimeFieldShareVec<F> {
     }
 }
 
-pub struct Rep3PrimeFieldShareView<'a, 'b, F> {
+pub struct Rep3PrimeFieldShareView<'a, F> {
     pub(crate) a: &'a F,
-    pub(crate) b: &'b F,
+    pub(crate) b: &'a F,
 }
 
 impl<F: PrimeField> Iterable for Rep3PrimeFieldShareVec<F> {
-    type Item<'a> = Rep3PrimeFieldShareView<'a, 'a, F>;
+    type Item<'a> = Rep3PrimeFieldShareView<'a, F>;
     type Iter<'a> = Rep3PrimeFieldShareVecIter<'a, F>;
 
     fn iter<'a>(&'a self) -> Self::Iter<'a> {
@@ -303,7 +303,7 @@ pub struct Rep3PrimeFieldShareVecIter<'a, F> {
 }
 
 impl<'a, F: PrimeField> Iterator for Rep3PrimeFieldShareVecIter<'a, F> {
-    type Item = Rep3PrimeFieldShareView<'a, 'a, F>;
+    type Item = Rep3PrimeFieldShareView<'a, F>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(Rep3PrimeFieldShareView {
@@ -316,13 +316,13 @@ impl<'a, F: PrimeField> Iterator for Rep3PrimeFieldShareVecIter<'a, F> {
     }
 }
 
-pub struct Rep3PrimeFieldShareViewMut<'a, 'b, F> {
+pub struct Rep3PrimeFieldShareViewMut<'a, F> {
     pub(crate) a: &'a mut F,
-    pub(crate) b: &'b mut F,
+    pub(crate) b: &'a mut F,
 }
 
 impl<F: PrimeField> IterableMut for Rep3PrimeFieldShareVec<F> {
-    type Item<'a> = Rep3PrimeFieldShareViewMut<'a, 'a, F>;
+    type Item<'a> = Rep3PrimeFieldShareViewMut<'a, F>;
     type Iter<'a> = Rep3PrimeFieldShareVecIterMut<'a, F>;
 
     fn iter_mut<'a>(&'a mut self) -> Self::Iter<'a> {
@@ -339,7 +339,7 @@ pub struct Rep3PrimeFieldShareVecIterMut<'a, F> {
 }
 
 impl<'a, F: PrimeField> Iterator for Rep3PrimeFieldShareVecIterMut<'a, F> {
-    type Item = Rep3PrimeFieldShareViewMut<'a, 'a, F>;
+    type Item = Rep3PrimeFieldShareViewMut<'a, F>;
 
     fn next(&mut self) -> Option<Self::Item> {
         Some(Rep3PrimeFieldShareViewMut {
@@ -349,5 +349,53 @@ impl<'a, F: PrimeField> Iterator for Rep3PrimeFieldShareVecIterMut<'a, F> {
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.a.size_hint()
+    }
+}
+
+impl<F: PrimeField> Viewable for Rep3PrimeFieldShare<F> {
+    type Item<'a> = Rep3PrimeFieldShareView<'a, F>;
+    fn view<'a>(&'a self) -> Rep3PrimeFieldShareView<'a, F> {
+        Rep3PrimeFieldShareView {
+            a: &self.a,
+            b: &self.b,
+        }
+    }
+}
+impl<F: PrimeField> ViewableMut for Rep3PrimeFieldShare<F> {
+    type Item<'a> = Rep3PrimeFieldShareViewMut<'a, F>;
+    fn view_mut<'a>(&'a mut self) -> Rep3PrimeFieldShareViewMut<'a, F> {
+        Rep3PrimeFieldShareViewMut {
+            a: &mut self.a,
+            b: &mut self.b,
+        }
+    }
+}
+
+impl<'b, F: PrimeField> Viewable for Rep3PrimeFieldShareView<'b, F> {
+    type Item<'a> = Rep3PrimeFieldShareView<'a, F> where 'b: 'a;
+    fn view<'a>(&'a self) -> Rep3PrimeFieldShareView<'a, F> {
+        Rep3PrimeFieldShareView {
+            a: &self.a,
+            b: &self.b,
+        }
+    }
+}
+
+impl<'b, F: PrimeField> Viewable for Rep3PrimeFieldShareViewMut<'b, F> {
+    type Item<'a> = Rep3PrimeFieldShareView<'a, F> where 'b: 'a;
+    fn view<'a>(&'a self) -> Rep3PrimeFieldShareView<'a, F> {
+        Rep3PrimeFieldShareView {
+            a: &self.a,
+            b: &self.b,
+        }
+    }
+}
+impl<'b, F: PrimeField> ViewableMut for Rep3PrimeFieldShareViewMut<'b, F> {
+    type Item<'a> = Rep3PrimeFieldShareViewMut<'a, F> where 'b: 'a;
+    fn view_mut<'a>(&'a mut self) -> Rep3PrimeFieldShareViewMut<'a, F> {
+        Rep3PrimeFieldShareViewMut {
+            a: &mut self.a,
+            b: &mut self.b,
+        }
     }
 }

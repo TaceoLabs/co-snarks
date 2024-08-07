@@ -17,6 +17,7 @@ use crate::traits::CircomWitnessExtensionProtocol;
 use crate::{
     traits::{
         EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        Viewable,
     },
     RngType,
 };
@@ -316,12 +317,21 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
 
 impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F, N> {
     type FieldShare = Rep3PrimeFieldShare<F>;
-    type FieldShareView<'a> = Rep3PrimeFieldShareView<'a, 'a, F>;
-    type FieldShareViewMut<'a> = Rep3PrimeFieldShareViewMut<'a, 'a, F>;
+    type FieldShareView<'a> = Rep3PrimeFieldShareView<'a, F>;
+    type FieldShareViewMut<'a> = Rep3PrimeFieldShareViewMut<'a, F>;
     type FieldShareVec = Rep3PrimeFieldShareVec<F>;
 
-    fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
-        a + b
+    fn add<'a, 'b, 'c>(
+        &'c mut self,
+        a: &'a impl Viewable<Item<'a> = Self::FieldShareView<'a>>,
+        b: &'b impl Viewable<Item<'b> = Self::FieldShareView<'b>>,
+    ) -> Self::FieldShare {
+        let a = a.view();
+        let b = b.view();
+        Rep3PrimeFieldShare {
+            a: *a.a + b.a,
+            b: *a.b + b.b,
+        }
     }
 
     fn sub(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
