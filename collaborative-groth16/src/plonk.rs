@@ -422,6 +422,24 @@ where
         pi
     }
 
+    fn calculate_r0(
+        proof: &Proof<P>,
+        pi: P::ScalarField,
+        l0: &P::ScalarField,
+        alpha: &P::ScalarField,
+        beta: &P::ScalarField,
+        gamma: &P::ScalarField,
+    ) -> P::ScalarField {
+        let e1 = pi;
+        let e2 = alpha.square() * l0;
+        let e3a = proof.eval_a + proof.eval_s1 * beta + gamma;
+        let e3b = proof.eval_b + proof.eval_s2 * beta + gamma;
+        let e3c = proof.eval_c + gamma;
+
+        let e3 = e3a * e3b * e3c * proof.eval_zw * alpha;
+        e1 - e2 - e3
+    }
+
     pub fn verify(
         &self,
         vk: &JsonVerificationKey<P>,
@@ -444,6 +462,14 @@ where
         let challenges = Self::calculate_challenges(vk, proof, public_inputs);
         let (l, _, _) = Self::calculate_lagrange_evaluations(vk.power, vk.n_public, &challenges.xi);
         let pi = Self::calculate_pi(public_inputs, &l);
+        let r0 = Self::calculate_r0(
+            proof,
+            pi,
+            &l[0],
+            &challenges.alpha,
+            &challenges.beta,
+            &challenges.gamma,
+        );
 
         todo!()
     }
@@ -1071,7 +1097,7 @@ where
             Self::calculate_lagrange_evaluations(zkey.power, zkey.n_public, &challenges.xi);
         let zh = xin - P::ScalarField::one();
 
-        let eval_l1 = (xin - P::ScalarField::one()) / (n * (challenges.xi - P::ScalarField::one()));
+        let l0 = &l[0];
         let eval_pi = Self::calculate_pi(public_inputs, &l);
 
         let coef_ab = proof.eval_a * proof.eval_b;
@@ -1085,7 +1111,7 @@ where
         let e3b = proof.eval_b + challenges.beta * proof.eval_s2 + challenges.gamma;
         let e3 = e3a * e3b * proof.eval_zw * challenges.alpha;
 
-        let e4 = eval_l1 * challenges.alpha.square();
+        let e4 = challenges.alpha.square() * l0;
         let e24 = e2 + e4;
 
         let mut poly_r = zkey.qm_poly.coeffs.clone();
