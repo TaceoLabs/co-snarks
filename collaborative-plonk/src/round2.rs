@@ -14,6 +14,32 @@ use mpc_core::traits::{
 };
 use num_traits::One;
 
+// TODO parallelize these?
+macro_rules! array_prod_mul {
+    ($driver: expr, $inp: expr) => {{
+        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
+        let len = $inp.len();
+        let r = (0..=len)
+            .map(|_| $driver.rand())
+            .collect::<Result<Vec<_>, _>>()?;
+        let r_inv = $driver.inv_many(&r)?;
+        let r_inv0 = vec![r_inv[0].clone(); len];
+        let mut unblind = $driver.mul_many(&r_inv0, &r[1..])?;
+
+        let mul = $driver.mul_many(&r[..len], &$inp)?;
+        let mut open = $driver.mul_open_many(&mul, &r_inv[1..])?;
+
+        for i in 1..open.len() {
+            open[i] = open[i] * open[i - 1];
+        }
+
+        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
+            *unblind = $driver.mul_with_public(open, unblind);
+        }
+        unblind
+    }};
+}
+
 pub(super) struct Round2Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -74,12 +100,6 @@ where
         zkey: &ZKey<P>,
         wire_polys: &WirePolyOutput<T, P>,
     ) -> PlonkProofResult<PolyEval<T, P>> {
-        let mut num_arr = Vec::with_capacity(zkey.domain_size);
-        let mut den_arr = Vec::with_capacity(zkey.domain_size);
-
-        num_arr.push(driver.promote_to_trivial_share(P::ScalarField::one()));
-        den_arr.push(driver.promote_to_trivial_share(P::ScalarField::one()));
-
         // TODO Check if this root_of_unity is the one we need
         // FIXME  Do we want the dependency to collaborative Groth16??
         let num_constraints = zkey.n_constraints;
@@ -89,6 +109,12 @@ where
         );
 
         let mut w = P::ScalarField::one();
+        let mut n1 = Vec::with_capacity(zkey.domain_size);
+        let mut n2 = Vec::with_capacity(zkey.domain_size);
+        let mut n3 = Vec::with_capacity(zkey.domain_size);
+        let mut d1 = Vec::with_capacity(zkey.domain_size);
+        let mut d2 = Vec::with_capacity(zkey.domain_size);
+        let mut d3 = Vec::with_capacity(zkey.domain_size);
         for i in 0..zkey.domain_size {
             let a = T::index_sharevec(&wire_polys.buffer_a, i);
             let b = T::index_sharevec(&wire_polys.buffer_b, i);
@@ -98,59 +124,59 @@ where
             // numArr := (a + beta·ω + gamma)(b + beta·ω·k1 + gamma)(c + beta·ω·k2 + gamma)
             let betaw = challenges.beta * w;
 
-            let n1 = driver.add_with_public(&betaw, &a);
-            let n1 = driver.add_with_public(&challenges.gamma, &n1);
+            let n1_ = driver.add_with_public(&betaw, &a);
+            let n1_ = driver.add_with_public(&challenges.gamma, &n1_);
 
-            let n2 = driver.add_with_public(&(zkey.verifying_key.k1 * betaw), &b);
-            let n2 = driver.add_with_public(&challenges.gamma, &n2);
+            let tmp = zkey.verifying_key.k1 * betaw;
+            let n2_ = driver.add_with_public(&tmp, &b);
+            let n2_ = driver.add_with_public(&challenges.gamma, &n2_);
 
-            let n3 = driver.add_with_public(&(zkey.verifying_key.k2 * betaw), &c);
-            let n3 = driver.add_with_public(&challenges.gamma, &n3);
+            let tmp = zkey.verifying_key.k2 * betaw;
+            let n3_ = driver.add_with_public(&tmp, &c);
+            let n3_ = driver.add_with_public(&challenges.gamma, &n3_);
 
-            let num = driver.mul(&n1, &n2)?;
-            let mut num = driver.mul(&num, &n3)?;
+            n1.push(n1_);
+            n2.push(n2_);
+            n3.push(n3_);
 
             // denArr := (a + beta·sigma1 + gamma)(b + beta·sigma2 + gamma)(c + beta·sigma3 + gamma)
-            let d1 =
+            let d1_ =
                 driver.add_with_public(&(challenges.beta * zkey.s1_poly.evaluations[i * 4]), &a);
-            let d1 = driver.add_with_public(&challenges.gamma, &d1);
+            let d1_ = driver.add_with_public(&challenges.gamma, &d1_);
 
-            let d2 =
+            let d2_ =
                 driver.add_with_public(&(challenges.beta * zkey.s2_poly.evaluations[i * 4]), &b);
-            let d2 = driver.add_with_public(&challenges.gamma, &d2);
+            let d2_ = driver.add_with_public(&challenges.gamma, &d2_);
 
-            let d3 =
+            let d3_ =
                 driver.add_with_public(&(challenges.beta * zkey.s3_poly.evaluations[i * 4]), &c);
-            let d3 = driver.add_with_public(&challenges.gamma, &d3);
+            let d3_ = driver.add_with_public(&challenges.gamma, &d3_);
 
-            let den = driver.mul(&d1, &d2)?;
-            let mut den = driver.mul(&den, &d3)?;
-
-            // Multiply current num value with the previous one saved in num_arr/den_arr
-            if i != 0 {
-                // TODO parallelize
-                num = driver.mul(&num, &num_arr[i])?;
-                den = driver.mul(&den, &den_arr[i])?;
-            }
-
-            if i == zkey.domain_size - 1 {
-                num_arr[0] = num;
-                den_arr[0] = den;
-            } else {
-                num_arr.push(num);
-                den_arr.push(den);
-            }
+            d1.push(d1_);
+            d2.push(d2_);
+            d3.push(d3_);
 
             w *= &root_of_unity;
         }
 
+        // TODO parallelize these?
+        let num = driver.mul_many(&n1, &n2)?;
+        let num = driver.mul_many(&num, &n3)?;
+        let den = driver.mul_many(&d1, &d2)?;
+        let den = driver.mul_many(&den, &d3)?;
+
+        // TODO parallelize these?
+        // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
+        let mut num = array_prod_mul!(driver, num);
+        let mut den = array_prod_mul!(driver, den);
+
+        num.rotate_right(1);
+        den.rotate_right(1);
+
         // Compute the inverse of denArr to compute in the next command the
         // division numArr/denArr by multiplying num · 1/denArr
-        for den_arr in den_arr.iter_mut() {
-            // TODO parallerlize
-            *den_arr = driver.inv(den_arr)?;
-        }
-        let buffer_z = driver.mul_vec(&num_arr.into(), &den_arr.into())?;
+        let den = driver.inv_many(&den)?;
+        let buffer_z = driver.mul_many(&num, &den)?.into();
 
         // Compute polynomial coefficients z(X) from buffer_z
         let poly_z = driver.ifft(&buffer_z, &domains.constraint_domain4);
