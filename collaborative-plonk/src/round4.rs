@@ -3,7 +3,7 @@ use crate::{
     round2::{Round2Challenges, Round2Polys, Round2Proof},
     round3::{Round3Challenges, Round3Polys, Round3Proof},
     types::{Keccak256Transcript, PolyEval},
-    Domains, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult, Round,
+    Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult, Round,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
@@ -30,8 +30,9 @@ where
     pub(crate) alpha: P::ScalarField,
     pub(crate) alpha2: P::ScalarField,
     pub(crate) xi: P::ScalarField,
+    pub(crate) xiw: P::ScalarField,
 }
-
+/*
 pub(super) struct Round4Polys<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -66,12 +67,16 @@ where
         }
     }
 }
-
+*/
 impl<T, P: Pairing> Round4Challenges<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    fn new(round3_challenges: Round3Challenges<T, P>, xi: P::ScalarField) -> Self {
+    fn new(
+        round3_challenges: Round3Challenges<T, P>,
+        xi: P::ScalarField,
+        xiw: P::ScalarField,
+    ) -> Self {
         Self {
             b: round3_challenges.b,
             beta: round3_challenges.beta,
@@ -79,6 +84,7 @@ where
             alpha: round3_challenges.alpha,
             alpha2: round3_challenges.alpha2,
             xi,
+            xiw,
         }
     }
 }
@@ -91,10 +97,24 @@ pub(super) struct Round4Proof<P: Pairing> {
     pub(crate) commit_t1: P::G1,
     pub(crate) commit_t2: P::G1,
     pub(crate) commit_t3: P::G1,
+    pub(crate) eval_a: P::ScalarField,
+    pub(crate) eval_b: P::ScalarField,
+    pub(crate) eval_c: P::ScalarField,
+    pub(crate) eval_zw: P::ScalarField,
+    pub(crate) eval_s1: P::ScalarField,
+    pub(crate) eval_s2: P::ScalarField,
 }
 
 impl<P: Pairing> Round4Proof<P> {
-    fn new(round3_proof: Round3Proof<P>) -> Self {
+    fn new(
+        round3_proof: Round3Proof<P>,
+        eval_a: P::ScalarField,
+        eval_b: P::ScalarField,
+        eval_c: P::ScalarField,
+        eval_zw: P::ScalarField,
+        eval_s1: P::ScalarField,
+        eval_s2: P::ScalarField,
+    ) -> Self {
         Self {
             commit_a: round3_proof.commit_a,
             commit_b: round3_proof.commit_b,
@@ -103,6 +123,12 @@ impl<P: Pairing> Round4Proof<P> {
             commit_t1: round3_proof.commit_t1,
             commit_t2: round3_proof.commit_t1,
             commit_t3: round3_proof.commit_t1,
+            eval_a,
+            eval_b,
+            eval_c,
+            eval_zw,
+            eval_s1,
+            eval_s2,
         }
     }
 }
@@ -116,6 +142,20 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: FFTPostProcessing,
 {
+    fn evaluate_poly(
+        driver: &mut T,
+        poly: &FieldShareVec<T, P>,
+        x: &P::ScalarField,
+    ) -> FieldShare<T, P> {
+        let mut res = FieldShare::<T, P>::default();
+        let mut x_pow = P::ScalarField::one();
+        for coeff in poly.clone().into_iter() {
+            let tmp = driver.mul_with_public(&x_pow, &coeff);
+            res = driver.add(&res, &tmp);
+            x_pow *= x;
+        }
+        res
+    }
     pub(super) fn round4(
         driver: &mut T,
         domains: Domains<P>,
@@ -131,8 +171,31 @@ where
         transcript.add_point(proof.commit_t2.into());
         transcript.add_point(proof.commit_t3.into());
         let xi = transcript.get_challenge();
-        let challenges = Round4Challenges::new(challenges, xi);
-        todo!()
+        let xiw = xi * domains.roots_of_unity[data.zkey.power];
+        let challenges = Round4Challenges::new(challenges, xi, xiw);
+        let eval_a = Self::evaluate_poly(driver, &polys.poly_eval_a.poly, &challenges.xi);
+        let eval_b = Self::evaluate_poly(driver, &polys.poly_eval_b.poly, &challenges.xi);
+        let eval_c = Self::evaluate_poly(driver, &polys.poly_eval_c.poly, &challenges.xi);
+        let eval_z = Self::evaluate_poly(driver, &polys.z.poly, &xiw);
+
+        let opened = driver.open_many(&[eval_a, eval_b, eval_c, eval_z])?;
+        debug_assert_eq!(opened.len(), 4);
+        let eval_a = opened[0];
+        let eval_b = opened[1];
+        let eval_c = opened[2];
+        let eval_zw = opened[3];
+
+        let eval_s1 = data.zkey.s1_poly.evaluate(&challenges.xi);
+        let eval_s2 = data.zkey.s2_poly.evaluate(&challenges.xi);
+        let proof = Round4Proof::new(proof, eval_a, eval_b, eval_c, eval_zw, eval_s1, eval_s2);
+
+        Ok(Round::Round5 {
+            domains,
+            challenges,
+            proof,
+            polys,
+            data,
+        })
     }
 }
 
@@ -192,6 +255,48 @@ pub mod tests {
             data,
         } = round4.next_round(&mut driver).unwrap()
         {
+            assert_eq!(
+                proof.eval_a,
+                ark_bn254::Fr::from_str(
+                    "845064597589976587983320520286701706946530826215356517459893094571507845251"
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                proof.eval_b,
+                ark_bn254::Fr::from_str(
+                    "20088810539126557583059113478182070720256321439971003930734638118067978695664"
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                proof.eval_c,
+                ark_bn254::Fr::from_str(
+                    "16373749693013573349660532574715799045305298781227479578964302491092150829105"
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                proof.eval_zw,
+                ark_bn254::Fr::from_str(
+                    "20882665744359396100860164497768884152895242904540546834903380509907333427185"
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                proof.eval_s1,
+                ark_bn254::Fr::from_str(
+                    "13590653347681637358899170294674137853753383607268590755697955262525977491327"
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                proof.eval_s2,
+                ark_bn254::Fr::from_str(
+                    "9896910797687364856325988313588603603926516879601189410056767189114777297823"
+                )
+                .unwrap()
+            );
         } else {
             panic!("must be round2 after round1");
         }

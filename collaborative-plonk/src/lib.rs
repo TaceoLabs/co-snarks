@@ -11,6 +11,7 @@ use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
 use circom_types::groth16::public_input;
+use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
@@ -33,8 +34,8 @@ use round3::Round3Challenges;
 use round3::Round3Polys;
 use round3::Round3Proof;
 use round4::Round4Challenges;
-use round4::Round4Polys;
 use round4::Round4Proof;
+use round5::Round5Proof;
 use sha3::Digest;
 use sha3::Keccak256;
 use std::io;
@@ -180,11 +181,12 @@ where
         domains: Domains<P>,
         challenges: Round4Challenges<T, P>,
         proof: Round4Proof<P>,
-        polys: Round4Polys<T, P>,
+        polys: Round3Polys<T, P>,
         data: PlonkData<T, P>,
     },
-    Round6,
-    Finished,
+    Finished {
+        proof: Round5Proof<P>,
+    },
 }
 
 /// A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
@@ -285,8 +287,7 @@ where
                 polys,
                 data,
             } => Self::round5(driver, domains, challenges, proof, polys, data),
-            Round::Round6 => todo!(),
-            Round::Finished => todo!(),
+            Round::Finished { proof } => todo!(),
         }
     }
 
