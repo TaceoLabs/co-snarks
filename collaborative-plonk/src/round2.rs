@@ -295,10 +295,12 @@ pub mod tests {
     #[test]
     fn test_round2_multiplier2() {
         let mut driver = PlainDriver::<ark_bn254::Fr>::default();
-        let mut reader =
-            BufReader::new(File::open("../test_vectors/Plonk/bn254/multiplier2.zkey").unwrap());
+        let mut reader = BufReader::new(
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
+        );
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
-        let witness_file = File::open("../test_vectors/Plonk/bn254/multiplier2_wtns.wtns").unwrap();
+        let witness_file =
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
             public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
