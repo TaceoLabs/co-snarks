@@ -471,7 +471,7 @@ where
         for _ in 0..zkey.domain_size {
             t2.push(t_final.next().unwrap());
         }
-        let mut t3 = t_final.collect::<Vec<_>>();
+        let mut t3 = t_final.take(zkey.domain_size + 6).collect::<Vec<_>>();
         t1.push(challenges.b[9].to_owned());
 
         t2[0] = driver.sub(&t2[0], &challenges.b[9]);
@@ -502,9 +502,21 @@ where
         let [t1, t2, t3] = Self::compute_t(&mut driver, &domains, &challenges, &data.zkey, &polys)?;
 
         // Compute [T1]_1, [T2]_1, [T3]_1
-        let commit_t1 = MSMProvider::<P::G1>::msm_public_points(&mut driver, &data.zkey.p_tau, &t1);
-        let commit_t2 = MSMProvider::<P::G1>::msm_public_points(&mut driver, &data.zkey.p_tau, &t2);
-        let commit_t3 = MSMProvider::<P::G1>::msm_public_points(&mut driver, &data.zkey.p_tau, &t3);
+        let commit_t1 = MSMProvider::<P::G1>::msm_public_points(
+            &mut driver,
+            &data.zkey.p_tau[..T::sharevec_len(&t1)],
+            &t1,
+        );
+        let commit_t2 = MSMProvider::<P::G1>::msm_public_points(
+            &mut driver,
+            &data.zkey.p_tau[..T::sharevec_len(&t2)],
+            &t2,
+        );
+        let commit_t3 = MSMProvider::<P::G1>::msm_public_points(
+            &mut driver,
+            &data.zkey.p_tau[..T::sharevec_len(&t3)],
+            &t3,
+        );
 
         let opened = driver.open_point_many(&[commit_t1, commit_t2, commit_t3])?;
         debug_assert_eq!(opened.len(), 3);
