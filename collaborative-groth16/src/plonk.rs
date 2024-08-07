@@ -422,26 +422,60 @@ where
         pi
     }
 
-    fn calculate_r0(
+    fn calculate_r0_d(
+        vk: &JsonVerificationKey<P>,
         proof: &Proof<P>,
         pi: P::ScalarField,
         l0: &P::ScalarField,
-        alpha: &P::ScalarField,
-        beta: &P::ScalarField,
-        gamma: &P::ScalarField,
-    ) -> P::ScalarField {
+        xin: P::ScalarField,
+        challenges: &Challenges<T, P>,
+    ) -> (P::ScalarField, P::G1)
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        // R0
         let e1 = pi;
-        let e2 = alpha.square() * l0;
-        let e3a = proof.eval_a + proof.eval_s1 * beta + gamma;
-        let e3b = proof.eval_b + proof.eval_s2 * beta + gamma;
-        let e3c = proof.eval_c + gamma;
+        let e2 = challenges.alpha.square() * l0;
+        let e3a = proof.eval_a + proof.eval_s1 * challenges.beta + challenges.gamma;
+        let e3b = proof.eval_b + proof.eval_s2 * challenges.beta + challenges.gamma;
+        let e3c = proof.eval_c + challenges.gamma;
 
-        let e3 = e3a * e3b * e3c * proof.eval_zw * alpha;
-        e1 - e2 - e3
+        let e3 = e3a * e3b * e3c * proof.eval_zw * challenges.alpha;
+        let r0 = e1 - e2 - e3;
+
+        // D
+        let d1 = vk.qm * proof.eval_a * proof.eval_b
+            + vk.ql * proof.eval_a
+            + vk.qr * proof.eval_b
+            + vk.qo * proof.eval_c
+            + vk.qc;
+
+        let betaxi = challenges.beta * challenges.xi;
+        let d2a1 = proof.eval_a + betaxi + challenges.gamma;
+        let d2a2 = proof.eval_b + betaxi * vk.k1 + challenges.gamma;
+        let d2a3 = proof.eval_c + betaxi * vk.k2 + challenges.gamma;
+        let d2a = d2a1 * d2a2 * d2a3 * challenges.alpha;
+        let d2b = e2;
+        let d2 = proof.commit_z * (d2a + d2b + challenges.u);
+
+        let d3a = e3a;
+        let d3b = e3b;
+        let d3c = challenges.alpha * challenges.beta * proof.eval_zw;
+        let d3 = vk.s3 * (d3a * d3b * d3c);
+
+        let d4_low = proof.commit_t1;
+        let d4_mid = proof.commit_t2 * xin;
+        let d4_high = proof.commit_t3 * xin.square();
+        let d4 = (d4_low + d4_mid + d4_high) * (xin - P::ScalarField::one());
+
+        let d = d1 + d2 - d3 - d4;
+
+        (r0, d)
     }
 
     pub fn verify(
-        &self,
         vk: &JsonVerificationKey<P>,
         proof: &Proof<P>,
         public_inputs: &[P::ScalarField],
@@ -460,16 +494,14 @@ where
         }
 
         let challenges = Self::calculate_challenges(vk, proof, public_inputs);
-        let (l, _, _) = Self::calculate_lagrange_evaluations(vk.power, vk.n_public, &challenges.xi);
+        let (l, xin, _) =
+            Self::calculate_lagrange_evaluations(vk.power, vk.n_public, &challenges.xi);
         let pi = Self::calculate_pi(public_inputs, &l);
-        let r0 = Self::calculate_r0(
-            proof,
-            pi,
-            &l[0],
-            &challenges.alpha,
-            &challenges.beta,
-            &challenges.gamma,
-        );
+        let (r0, d) = Self::calculate_r0_d(vk, proof, pi, &l[0], xin, &challenges);
+
+        // calculateF
+        // calculateE
+        // isValidPairing
 
         todo!()
     }
