@@ -1,46 +1,34 @@
 //! A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
 
 use ark_ec::pairing::Pairing;
-use ark_ec::AffineRepr;
 use ark_ff::FftField;
-use ark_ff::Field;
 use ark_ff::LegendreSymbol;
 use ark_ff::PrimeField;
-use ark_groth16::data_structures;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use ark_relations::r1cs::SynthesisError;
-use ark_serialize::CanonicalSerialize;
-use circom_types::groth16::public_input;
 use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
-use collaborative_groth16::groth16::CollaborativeGroth16;
 use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::traits::FFTPostProcessing;
-use mpc_core::traits::{
-    EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
-};
-use num_traits::One;
+use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use num_traits::ToPrimitive;
 use num_traits::Zero;
+use round1::Round1;
 use round1::Round1Challenges;
 use round1::Round1Polys;
 use round1::Round1Proof;
 use round2::Round2Challenges;
 use round2::Round2Polys;
 use round2::Round2Proof;
+use round3::FinalPolys;
 use round3::Round3Challenges;
-use round3::Round3Polys;
 use round3::Round3Proof;
 use round4::Round4Challenges;
 use round4::Round4Proof;
 use round5::Round5Proof;
-use sha3::Digest;
-use sha3::Keccak256;
 use std::io;
 use std::marker::PhantomData;
-use std::ops::MulAssign;
 
 mod round1;
 mod round2;
@@ -51,7 +39,6 @@ pub(crate) mod types;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
-type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
 type PlonkProofResult<T> = std::result::Result<T, PlonkProofError>;
 
@@ -66,7 +53,6 @@ pub enum PlonkProofError {
 }
 
 pub(crate) struct Domains<P: Pairing> {
-    constraint_domain: GeneralEvaluationDomain<P::ScalarField>,
     constraint_domain4: GeneralEvaluationDomain<P::ScalarField>,
     constraint_domain16: GeneralEvaluationDomain<P::ScalarField>,
     roots_of_unity: Vec<P::ScalarField>,
@@ -91,17 +77,16 @@ fn roots_of_unity<F: PrimeField + FftField>() -> Vec<F> {
 
 impl<P: Pairing> Domains<P> {
     fn new(zkey: &ZKey<P>) -> PlonkProofResult<Self> {
-        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints)
-            .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-        let domain2 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 4)
-            .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-        let domain3 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 16)
-            .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
+        let constraint_domain4 =
+            GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 4)
+                .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
+        let constraint_domain16 =
+            GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 16)
+                .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
 
         Ok(Self {
-            constraint_domain: domain1,
-            constraint_domain4: domain2,
-            constraint_domain16: domain3,
+            constraint_domain4,
+            constraint_domain16,
             roots_of_unity: roots_of_unity(),
             phantom_data: PhantomData,
         })
@@ -135,58 +120,6 @@ where
             addition_witness: vec![].into(),
         }
     }
-}
-
-enum Round<T, P: Pairing>
-where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
-        + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>
-        + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
-{
-    Init {
-        zkey: ZKey<P>,
-        witness: SharedWitness<T, P>,
-        public_inputs: Vec<P::ScalarField>,
-    },
-    Round1 {
-        domains: Domains<P>,
-        challenges: Round1Challenges<T, P>,
-        data: PlonkData<T, P>,
-    },
-    Round2 {
-        domains: Domains<P>,
-        challenges: Round1Challenges<T, P>,
-        proof: Round1Proof<P>,
-        polys: Round1Polys<T, P>,
-        data: PlonkData<T, P>,
-    },
-    Round3 {
-        domains: Domains<P>,
-        challenges: Round2Challenges<T, P>,
-        proof: Round2Proof<P>,
-        polys: Round2Polys<T, P>,
-        data: PlonkData<T, P>,
-    },
-    Round4 {
-        domains: Domains<P>,
-        challenges: Round3Challenges<T, P>,
-        proof: Round3Proof<P>,
-        polys: Round3Polys<T, P>,
-        data: PlonkData<T, P>,
-    },
-    Round5 {
-        domains: Domains<P>,
-        challenges: Round4Challenges<T, P>,
-        proof: Round4Proof<P>,
-        polys: Round3Polys<T, P>,
-        data: PlonkData<T, P>,
-    },
-    Finished {
-        proof: Round5Proof<P>,
-    },
 }
 
 /// A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
@@ -223,26 +156,16 @@ where
     }
 
     pub fn proof(
-        mut self,
-        public_inputs: Vec<P::ScalarField>,
+        self,
         zkey: ZKey<P>,
         witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<PlonkProof<P>> {
-        let init_round = Round::Init {
-            zkey,
-            witness,
-            public_inputs,
-        };
-        let round1 = init_round.next_round(&mut self.driver)?;
-        let round2 = round1.next_round(&mut self.driver)?;
-        let round3 = round2.next_round(&mut self.driver)?;
-        let round4 = round3.next_round(&mut self.driver)?;
-        let round5 = round4.next_round(&mut self.driver)?;
-        if let Round::Finished { proof } = round5.next_round(&mut self.driver)? {
-            Ok(proof.into())
-        } else {
-            unreachable!("must be finished after round 5")
-        }
+        let state = Round1::init_round(self.driver, zkey, witness)?;
+        let state = state.round1()?;
+        let state = state.round2()?;
+        let state = state.round3()?;
+        let state = state.round4()?;
+        state.round5()
     }
 }
 
@@ -255,9 +178,9 @@ where
     fn from(proof: Round5Proof<P>) -> Self {
         Self {
             a: proof.commit_a.into(),
-            b: proof.commit_a.into(),
-            c: proof.commit_a.into(),
-            z: proof.commit_a.into(),
+            b: proof.commit_b.into(),
+            c: proof.commit_c.into(),
+            z: proof.commit_z.into(),
             t1: proof.commit_t1.into(),
             t2: proof.commit_t2.into(),
             t3: proof.commit_t3.into(),
@@ -275,116 +198,22 @@ where
     }
 }
 
-impl<T, P: Pairing> Round<T, P>
-where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
-        + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>
-        + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
-    P::ScalarField: FFTPostProcessing,
-{
-    fn next_round(self, driver: &mut T) -> PlonkProofResult<Self> {
-        match self {
-            Round::Init {
-                zkey,
-                public_inputs,
-                witness,
-            } => Self::init_round(driver, zkey, public_inputs, witness),
-            Round::Round1 {
-                domains,
-                challenges,
-                data,
-            } => Self::round1(driver, domains, challenges, data),
-            Round::Round2 {
-                domains,
-                challenges,
-                proof,
-                polys,
-                data,
-            } => Self::round2(driver, domains, challenges, proof, polys, data),
-            Round::Round3 {
-                domains,
-                challenges,
-                proof,
-                polys,
-                data,
-            } => Self::round3(driver, domains, challenges, proof, polys, data),
-            Round::Round4 {
-                domains,
-                challenges,
-                proof,
-                polys,
-                data,
-            } => Self::round4(driver, domains, challenges, proof, polys, data),
-            Round::Round5 {
-                domains,
-                challenges,
-                proof,
-                polys,
-                data,
-            } => Self::round5(driver, domains, challenges, proof, polys, data),
-            Round::Finished { proof } => todo!(),
-        }
-    }
+pub(crate) mod plonk_utils {
+    use ark_ec::pairing::Pairing;
+    use circom_types::plonk::ZKey;
+    use mpc_core::traits::PrimeFieldMpcProtocol;
 
-    fn calculate_additions(
-        driver: &mut T,
-        witness: &mut PlonkWitness<T, P>,
-        zkey: &ZKey<P>,
-    ) -> PlonkProofResult<()> {
-        let mut additions = Vec::with_capacity(zkey.n_additions);
-        for addition in zkey.additions.iter() {
-            let witness1 = Self::get_witness(
-                driver,
-                witness,
-                zkey,
-                addition.signal_id1.try_into().expect("u32 fits into usize"),
-            )?;
-            let witness2 = Self::get_witness(
-                driver,
-                witness,
-                zkey,
-                addition.signal_id2.try_into().expect("u32 fits into usize"),
-            )?;
+    use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult, PlonkWitness};
 
-            let f1 = driver.mul_with_public(&addition.factor1, &witness1);
-            let f2 = driver.mul_with_public(&addition.factor2, &witness2);
-            let result = driver.add(&f1, &f2);
-            additions.push(result);
-        }
-        witness.addition_witness = additions.into();
-        Ok(())
-    }
-
-    fn init_round(
-        driver: &mut T,
-        zkey: ZKey<P>,
-        public_input: Vec<P::ScalarField>,
-        private_witness: SharedWitness<T, P>,
-    ) -> PlonkProofResult<Self> {
-        //TODO calculate additions
-        //set first element to zero as it is not used
-        let mut plonk_witness = PlonkWitness::from(private_witness);
-        Self::calculate_additions(driver, &mut plonk_witness, &zkey);
-
-        Ok(Round::Round1 {
-            domains: Domains::new(&zkey)?,
-            challenges: Round1Challenges::random(driver)?,
-            data: PlonkData {
-                witness: plonk_witness,
-                zkey,
-            },
-        })
-    }
-
-    // TODO check if this is correct
-    fn get_witness(
+    pub(crate) fn get_witness<T, P: Pairing>(
         driver: &mut T,
         witness: &PlonkWitness<T, P>,
         zkey: &ZKey<P>,
         index: usize,
-    ) -> PlonkProofResult<FieldShare<T, P>> {
+    ) -> PlonkProofResult<FieldShare<T, P>>
+    where
+        T: PrimeFieldMpcProtocol<P::ScalarField>,
+    {
         let result = if index <= zkey.n_public {
             driver.promote_to_trivial_share(witness.shared_witness.public_inputs[index])
         } else if index <= zkey.n_vars - zkey.n_additions {
@@ -402,11 +231,14 @@ where
         Ok(result)
     }
 
-    fn blind_coefficients(
+    pub(crate) fn blind_coefficients<T, P: Pairing>(
         driver: &mut T,
         poly: &FieldShareVec<T, P>,
         coeff: &[FieldShare<T, P>],
-    ) -> Vec<FieldShare<T, P>> {
+    ) -> Vec<FieldShare<T, P>>
+    where
+        T: PrimeFieldMpcProtocol<P::ScalarField>,
+    {
         let mut res = poly.clone().into_iter().collect::<Vec<_>>();
         for (p, c) in res.iter_mut().zip(coeff.iter()) {
             *p = driver.sub(p, c);

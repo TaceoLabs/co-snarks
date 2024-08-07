@@ -1,88 +1,52 @@
 use crate::{
-    round1::{Round1Challenges, Round1Proof},
-    round2::{Round2Challenges, Round2Polys, Round2Proof},
-    round3::{Round3Challenges, Round3Polys, Round3Proof},
+    round3::FinalPolys,
     round4::{Round4Challenges, Round4Proof},
-    types::{Keccak256Transcript, PolyEval, Transcript},
-    Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult, Round,
+    types::Keccak256Transcript,
+    Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
-use ark_poly::GeneralEvaluationDomain;
 use circom_types::{
-    groth16::{public_input, zkey},
-    plonk::ZKey,
+    plonk::PlonkProof,
+    traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
-use collaborative_groth16::groth16::CollaborativeGroth16;
-use mpc_core::traits::EcMpcProtocol;
 use mpc_core::traits::{
-    FFTPostProcessing, FFTProvider, MSMProvider, MontgomeryField, MpcToMontgomery,
-    PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
 use num_traits::One;
 use num_traits::Zero;
-pub(super) struct Round5Challenges<T, P: Pairing>
+
+pub(super) struct Round5<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+        + PairingEcMpcProtocol<P>
+        + FFTProvider<P::ScalarField>
+        + MSMProvider<P::G1>
+        + MSMProvider<P::G2>,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
-    b: [T::FieldShare; 11],
+    pub(crate) driver: T,
+    pub(crate) domains: Domains<P>,
+    pub(crate) challenges: Round4Challenges<P>,
+    pub(crate) proof: Round4Proof<P>,
+    pub(crate) polys: FinalPolys<T, P>,
+    pub(crate) data: PlonkData<T, P>,
+}
+pub(super) struct Round5Challenges<P: Pairing> {
     beta: P::ScalarField,
     gamma: P::ScalarField,
     alpha: P::ScalarField,
-    alpha2: P::ScalarField,
     xi: P::ScalarField,
-    xiw: P::ScalarField,
     v: [P::ScalarField; 5],
 }
 
-pub(super) struct Round5Polys<T, P: Pairing>
-where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    pub(crate) buffer_a: FieldShareVec<T, P>,
-    pub(crate) buffer_b: FieldShareVec<T, P>,
-    pub(crate) buffer_c: FieldShareVec<T, P>,
-    pub(crate) poly_eval_a: PolyEval<T, P>,
-    pub(crate) poly_eval_b: PolyEval<T, P>,
-    pub(crate) poly_eval_c: PolyEval<T, P>,
-    pub(crate) z: PolyEval<T, P>,
-    pub(crate) t1: FieldShareVec<T, P>,
-    pub(crate) t2: FieldShareVec<T, P>,
-    pub(crate) t3: FieldShareVec<T, P>,
-}
-impl<T, P: Pairing> Round5Polys<T, P>
-where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    fn new(polys: Round3Polys<T, P>) -> Self {
+impl<P: Pairing> Round5Challenges<P> {
+    fn new(round4_challenges: Round4Challenges<P>, v: [P::ScalarField; 5]) -> Self {
         Self {
-            buffer_a: polys.buffer_a,
-            buffer_b: polys.buffer_b,
-            buffer_c: polys.buffer_c,
-            poly_eval_a: polys.poly_eval_a,
-            poly_eval_b: polys.poly_eval_b,
-            poly_eval_c: polys.poly_eval_c,
-            z: polys.z,
-            t1: polys.t1,
-            t2: polys.t2,
-            t3: polys.t3,
-        }
-    }
-}
-
-impl<T, P: Pairing> Round5Challenges<T, P>
-where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    fn new(round4_challenges: Round4Challenges<T, P>, v: [P::ScalarField; 5]) -> Self {
-        Self {
-            b: round4_challenges.b,
             beta: round4_challenges.beta,
             gamma: round4_challenges.gamma,
             alpha: round4_challenges.alpha,
-            alpha2: round4_challenges.alpha2,
             xi: round4_challenges.xi,
-            xiw: round4_challenges.xiw,
             v,
         }
     }
@@ -114,8 +78,8 @@ impl<P: Pairing> Round5Proof<P> {
             commit_c: round4_proof.commit_c,
             commit_z: round4_proof.commit_z,
             commit_t1: round4_proof.commit_t1,
-            commit_t2: round4_proof.commit_t1,
-            commit_t3: round4_proof.commit_t1,
+            commit_t2: round4_proof.commit_t2,
+            commit_t3: round4_proof.commit_t3,
             eval_a: round4_proof.eval_a,
             eval_b: round4_proof.eval_b,
             eval_c: round4_proof.eval_c,
@@ -128,7 +92,7 @@ impl<P: Pairing> Round5Proof<P> {
     }
 }
 
-impl<T, P: Pairing> Round<T, P>
+impl<T, P: Pairing> Round5<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -136,6 +100,9 @@ where
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
     P::ScalarField: FFTPostProcessing,
+    P: CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn calculate_lagrange_evaluations(
         power: usize,
@@ -243,9 +210,9 @@ where
         driver: &mut T,
         domains: &Domains<P>,
         proof: &Round4Proof<P>,
-        challenges: &Round5Challenges<T, P>,
+        challenges: &Round5Challenges<P>,
         data: &PlonkData<T, P>,
-        polys: &Round3Polys<T, P>,
+        polys: &FinalPolys<T, P>,
     ) -> FieldShareVec<T, P> {
         let zkey = &data.zkey;
         let public_inputs = &data.witness.shared_witness.public_inputs;
@@ -328,18 +295,13 @@ where
     fn compute_wxi(
         driver: &mut T,
         proof: &Round4Proof<P>,
-        challenges: &Round5Challenges<T, P>,
+        challenges: &Round5Challenges<P>,
         data: &PlonkData<T, P>,
-        polys: &Round3Polys<T, P>,
+        polys: &FinalPolys<T, P>,
         poly_r: &FieldShareVec<T, P>,
     ) -> FieldShareVec<T, P> {
         let s1_poly_coeffs = &data.zkey.s1_poly.coeffs;
         let s2_poly_coeffs = &data.zkey.s2_poly.coeffs;
-        let len = usize::max(
-            T::sharevec_len(poly_r),
-            T::sharevec_len(&polys.poly_eval_a.poly),
-        );
-
         let mut res = vec![FieldShare::<T, P>::default(); data.zkey.domain_size + 6];
 
         // R
@@ -347,26 +309,17 @@ where
             *inout = add;
         }
         // A
-        for (inout, add) in res
-            .iter_mut()
-            .zip(polys.poly_eval_a.poly.clone().into_iter())
-        {
+        for (inout, add) in res.iter_mut().zip(polys.a.poly.clone().into_iter()) {
             let tmp = driver.mul_with_public(&challenges.v[0], &add);
             *inout = driver.add(&tmp, inout);
         }
         // B
-        for (inout, add) in res
-            .iter_mut()
-            .zip(polys.poly_eval_b.poly.clone().into_iter())
-        {
+        for (inout, add) in res.iter_mut().zip(polys.b.poly.clone().into_iter()) {
             let tmp = driver.mul_with_public(&challenges.v[1], &add);
             *inout = driver.add(&tmp, inout);
         }
         // C
-        for (inout, add) in res
-            .iter_mut()
-            .zip(polys.poly_eval_c.poly.clone().into_iter())
-        {
+        for (inout, add) in res.iter_mut().zip(polys.c.poly.clone().into_iter()) {
             let tmp = driver.mul_with_public(&challenges.v[2], &add);
             *inout = driver.add(&tmp, inout);
         }
@@ -394,9 +347,9 @@ where
         driver: &mut T,
         domains: &Domains<P>,
         proof: &Round4Proof<P>,
-        challenges: &Round5Challenges<T, P>,
+        challenges: &Round5Challenges<P>,
         data: &PlonkData<T, P>,
-        polys: &Round3Polys<T, P>,
+        polys: &FinalPolys<T, P>,
     ) -> FieldShareVec<T, P> {
         let xiw = challenges.xi * domains.roots_of_unity[data.zkey.power];
 
@@ -406,14 +359,15 @@ where
 
         res.into()
     }
-    pub(super) fn round5(
-        driver: &mut T,
-        domains: Domains<P>,
-        challenges: Round4Challenges<T, P>,
-        proof: Round4Proof<P>,
-        polys: Round3Polys<T, P>,
-        data: PlonkData<T, P>,
-    ) -> PlonkProofResult<Self> {
+    pub(super) fn round5(self) -> PlonkProofResult<PlonkProof<P>> {
+        let Self {
+            mut driver,
+            domains,
+            challenges,
+            proof,
+            polys,
+            data,
+        } = self;
         let mut transcript = Keccak256Transcript::<P>::default();
         // STEP 5.1 - Compute evaluation challenge v \in F_p
         transcript.add_scalar(challenges.xi);
@@ -432,26 +386,24 @@ where
         let challenges = Round5Challenges::new(challenges, v);
 
         // STEP 5.2 Compute linearisation polynomial r(X)
-        let r = Self::compute_r(driver, &domains, &proof, &challenges, &data, &polys);
+        let r = Self::compute_r(&mut driver, &domains, &proof, &challenges, &data, &polys);
         //STEP 5.3 Compute opening proof polynomial Wxi(X)
-        let wxi = Self::compute_wxi(driver, &proof, &challenges, &data, &polys, &r);
+        let wxi = Self::compute_wxi(&mut driver, &proof, &challenges, &data, &polys, &r);
         //snarkjs has one trailing zero - is this relevant?
 
         //STEP 5.4 Compute opening proof polynomial Wxiw(X)
-        let wxiw = Self::compute_wxiw(driver, &domains, &proof, &challenges, &data, &polys);
+        let wxiw = Self::compute_wxiw(&mut driver, &domains, &proof, &challenges, &data, &polys);
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         let p_tau = &data.zkey.p_tau;
-        let commit_wxi = MSMProvider::<P::G1>::msm_public_points(driver, p_tau, &wxi);
-        let commit_wxiw = MSMProvider::<P::G1>::msm_public_points(driver, p_tau, &wxiw);
+        let commit_wxi = MSMProvider::<P::G1>::msm_public_points(&mut driver, p_tau, &wxi);
+        let commit_wxiw = MSMProvider::<P::G1>::msm_public_points(&mut driver, p_tau, &wxiw);
 
         let opened = driver.open_point_many(&[commit_wxi, commit_wxiw])?;
         debug_assert_eq!(opened.len(), 2);
         let commit_wxi = opened[0];
         let commit_wxiw = opened[1];
-        Ok(Round::Finished {
-            proof: Round5Proof::new(proof, commit_wxi, commit_wxiw),
-        })
+        Ok(Round5Proof::new(proof, commit_wxi, commit_wxiw).into())
     }
 }
 
@@ -465,7 +417,10 @@ pub mod tests {
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::{Domains, PlonkData, Round};
+    use crate::{
+        round1::{Round1, Round1Challenges},
+        Domains, PlonkData,
+    };
     macro_rules! g1_from_xy {
         ($x: expr,$y: expr) => {
             <ark_bn254::Bn254 as Pairing>::G1Affine::new(
@@ -475,7 +430,6 @@ pub mod tests {
         };
     }
 
-    use super::Round1Challenges;
     use ark_ec::pairing::Pairing;
     use num_traits::Zero;
     use std::str::FromStr;
@@ -492,35 +446,33 @@ pub mod tests {
             witness: vec![witness.values[2], witness.values[3]],
         };
 
-        let round1 = Round::<PlainDriver<ark_bn254::Fr>, Bn254>::Round1 {
-            domains: Domains::new(&zkey).unwrap(),
+        let round1 = Round1 {
             challenges: Round1Challenges::deterministic(&mut driver),
+            driver,
+            domains: Domains::new(&zkey).unwrap(),
             data: PlonkData {
                 witness: witness.into(),
                 zkey,
             },
         };
-        let round2 = round1.next_round(&mut driver).unwrap();
-        let round3 = round2.next_round(&mut driver).unwrap();
-        let round4 = round3.next_round(&mut driver).unwrap();
-        let round5 = round4.next_round(&mut driver).unwrap();
-        if let Round::Finished { proof } = round5.next_round(&mut driver).unwrap() {
-            assert_eq!(
-                proof.commit_wxi,
-                g1_from_xy!(
-                    "4329097845486505830634365153212275596432950765149605790709187747717015162804",
-                    "3341366150734122225834578088990337734750095441774280053351010471181993400779"
-                )
-            );
-            assert_eq!(
-                proof.commit_wxiw,
-                g1_from_xy!(
-                    "16661904516393530409439952377741308650234616154674488926230015210553665229568",
-                    "19414395546663341558564137558575273143353981410327853582113788899527050228324"
-                )
-            );
-        } else {
-            panic!("must be finished after round5");
-        }
+        let round2 = round1.round1().unwrap();
+        let round3 = round2.round2().unwrap();
+        let round4 = round3.round3().unwrap();
+        let round5 = round4.round4().unwrap();
+        let proof = round5.round5().unwrap();
+        assert_eq!(
+            proof.wxi,
+            g1_from_xy!(
+                "4329097845486505830634365153212275596432950765149605790709187747717015162804",
+                "3341366150734122225834578088990337734750095441774280053351010471181993400779"
+            )
+        );
+        assert_eq!(
+            proof.wxiw,
+            g1_from_xy!(
+                "16661904516393530409439952377741308650234616154674488926230015210553665229568",
+                "19414395546663341558564137558575273143353981410327853582113788899527050228324"
+            )
+        );
     }
 }

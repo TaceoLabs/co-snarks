@@ -34,37 +34,6 @@ static BLS12_381_INVERSE_R_SCALAR: LazyLock<Bls12_381_ScalarField> = LazyLock::n
         .inverse()
         .unwrap()
 });
-pub trait MontgomeryField: PrimeField {
-    fn into_montgomery(self) -> Self;
-    fn lift_montgomery(self) -> Self;
-}
-
-impl MontgomeryField for ark_bn254::Fr {
-    fn into_montgomery(self) -> Self {
-        self * Self::new_unchecked(Self::R2)
-    }
-
-    fn lift_montgomery(self) -> Self {
-        self * *BN254_INVERSE_R_SCALAR
-    }
-}
-
-impl MontgomeryField for ark_bls12_381::Fr {
-    fn into_montgomery(self) -> Self {
-        self * Self::new_unchecked(Self::R2)
-    }
-
-    fn lift_montgomery(self) -> Self {
-        self * *BLS12_381_INVERSE_R_SCALAR
-    }
-}
-
-pub trait MpcToMontgomery<F: MontgomeryField>: PrimeFieldMpcProtocol<F> {
-    fn batch_to_montgomery(&self, vec: &Self::FieldShareVec) -> Self::FieldShareVec;
-    fn batch_lift_montgomery(&self, vec: &Self::FieldShareVec) -> Self::FieldShareVec;
-    fn inplace_batch_to_montgomery(&self, vec: &mut Self::FieldShareVec);
-    fn inplace_batch_lift_montgomery(&self, vec: &mut Self::FieldShareVec);
-}
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {

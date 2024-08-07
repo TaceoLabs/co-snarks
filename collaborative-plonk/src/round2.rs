@@ -1,16 +1,14 @@
 use crate::{
+    plonk_utils,
     round1::{Round1Challenges, Round1Polys, Round1Proof},
+    round3::Round3,
     types::{Keccak256Transcript, PolyEval},
-    Domains, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult, Round,
+    Domains, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
-use ark_poly::GeneralEvaluationDomain;
-use circom_types::{groth16::public_input, plonk::ZKey};
-use collaborative_groth16::groth16::CollaborativeGroth16;
-use mpc_core::traits::EcMpcProtocol;
+use circom_types::plonk::ZKey;
 use mpc_core::traits::{
-    FFTPostProcessing, FFTProvider, MSMProvider, MontgomeryField, MpcToMontgomery,
-    PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
 use num_traits::One;
 
@@ -40,6 +38,23 @@ macro_rules! array_prod_mul {
     }};
 }
 
+pub(crate) struct Round2<T, P: Pairing>
+where
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+        + PairingEcMpcProtocol<P>
+        + FFTProvider<P::ScalarField>
+        + MSMProvider<P::G1>
+        + MSMProvider<P::G2>,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing,
+{
+    pub(crate) driver: T,
+    pub(crate) domains: Domains<P>,
+    pub(crate) challenges: Round1Challenges<T, P>,
+    pub(crate) proof: Round1Proof<P>,
+    pub(crate) polys: Round1Polys<T, P>,
+    pub(crate) data: PlonkData<T, P>,
+}
+
 pub(super) struct Round2Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -61,8 +76,6 @@ where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(crate) buffer_a: FieldShareVec<T, P>,
-    pub(crate) buffer_b: FieldShareVec<T, P>,
-    pub(crate) buffer_c: FieldShareVec<T, P>,
     pub(crate) poly_eval_a: PolyEval<T, P>,
     pub(crate) poly_eval_b: PolyEval<T, P>,
     pub(crate) poly_eval_c: PolyEval<T, P>,
@@ -104,8 +117,6 @@ where
     fn new(polys: Round1Polys<T, P>, z: PolyEval<T, P>) -> Self {
         Self {
             buffer_a: polys.buffer_a,
-            buffer_b: polys.buffer_b,
-            buffer_c: polys.buffer_c,
             poly_eval_a: polys.a,
             poly_eval_b: polys.b,
             poly_eval_c: polys.c,
@@ -114,7 +125,7 @@ where
     }
 }
 
-impl<T, P: Pairing> Round<T, P>
+impl<T, P: Pairing> Round2<T, P>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -209,7 +220,7 @@ where
         // Compute extended evaluations of z(X) polynomial
         let eval_z = driver.fft(poly_z.to_owned(), &domains.constraint_domain16);
 
-        let poly_z = Self::blind_coefficients(driver, &poly_z, &challenges.b[6..9]);
+        let poly_z = plonk_utils::blind_coefficients::<T, P>(driver, &poly_z, &challenges.b[6..9]);
 
         if poly_z.len() > zkey.domain_size + 3 {
             Err(PlonkProofError::PolynomialDegreeTooLarge)
@@ -221,14 +232,15 @@ where
         }
     }
 
-    pub(super) fn round2(
-        driver: &mut T,
-        domains: Domains<P>,
-        challenges: Round1Challenges<T, P>,
-        proof: Round1Proof<P>,
-        polys: Round1Polys<T, P>,
-        data: PlonkData<T, P>,
-    ) -> PlonkProofResult<Self> {
+    pub(super) fn round2(self) -> PlonkProofResult<Round3<T, P>> {
+        let Self {
+            mut driver,
+            data,
+            proof,
+            challenges,
+            domains,
+            polys,
+        } = self;
         let zkey = &data.zkey;
         let public_input = &data.witness.shared_witness.public_inputs;
         let mut transcript = Keccak256Transcript::<P>::default();
@@ -253,12 +265,14 @@ where
         transcript.add_scalar(beta);
         let gamma = transcript.get_challenge();
         let challenges = Round2Challenges::new(challenges, beta, gamma);
-        let z = Self::compute_z(driver, zkey, &domains, &challenges, &polys)?;
+        let z = Self::compute_z(&mut driver, zkey, &domains, &challenges, &polys)?;
         // STEP 2.3 - Compute permutation [z]_1
-        let commit_z = MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &z.poly);
+
+        let commit_z = MSMProvider::<P::G1>::msm_public_points(&mut driver, &zkey.p_tau, &z.poly);
         let proof = Round2Proof::new(proof, driver.open_point(&commit_z)?);
 
-        Ok(Round::Round3 {
+        Ok(Round3 {
+            driver,
             domains,
             challenges,
             proof,
@@ -278,7 +292,7 @@ pub mod tests {
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::{Domains, PlonkData, Round};
+    use crate::{round1::Round1, Domains, PlonkData};
     macro_rules! g1_from_xy {
         ($x: expr,$y: expr) => {
             <ark_bn254::Bn254 as Pairing>::G1Affine::new(
@@ -305,32 +319,23 @@ pub mod tests {
             witness: vec![witness.values[2], witness.values[3]],
         };
 
-        let round1 = Round::<PlainDriver<ark_bn254::Fr>, Bn254>::Round1 {
-            domains: Domains::new(&zkey).unwrap(),
+        let round1 = Round1 {
             challenges: Round1Challenges::deterministic(&mut driver),
+            driver,
+            domains: Domains::new(&zkey).unwrap(),
             data: PlonkData {
                 witness: witness.into(),
                 zkey,
             },
         };
-        let round2 = round1.next_round(&mut driver).unwrap();
-        if let Round::Round3 {
-            domains,
-            challenges,
-            proof,
-            polys,
-            data,
-        } = round2.next_round(&mut driver).unwrap()
-        {
-            assert_eq!(
-                proof.commit_z,
-                g1_from_xy!(
-                    "3193853225338636777745825115445130632572036577821757614861727562557294229347",
-                    "2273189363544172111301372917925262144551721107173868058666388265726379163785"
-                )
-            );
-        } else {
-            panic!("must be round3 after round2");
-        }
+        let round2 = round1.round1().unwrap();
+        let round3 = round2.round2().unwrap();
+        assert_eq!(
+            round3.proof.commit_z,
+            g1_from_xy!(
+                "3193853225338636777745825115445130632572036577821757614861727562557294229347",
+                "2273189363544172111301372917925262144551721107173868058666388265726379163785"
+            )
+        );
     }
 }

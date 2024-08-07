@@ -4,7 +4,6 @@
 mod circom_reduction;
 pub mod circuit;
 pub mod groth16;
-pub mod plonk;
 mod serde_compat;
 
 #[cfg(test)]
