@@ -64,10 +64,10 @@ fn roots_of_unity<F: PrimeField + FftField>() -> Vec<F> {
 }
 
 impl<P: Pairing> Domains<P> {
-    fn new(zkey: &ZKey<P>) -> PlonkProofResult<Self> {
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.domain_size)
+    fn new(domain_size: usize) -> PlonkProofResult<Self> {
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(domain_size)
             .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-        let extended_domain = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.domain_size * 4)
+        let extended_domain = GeneralEvaluationDomain::<P::ScalarField>::new(domain_size * 4)
             .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
 
         Ok(Self {
@@ -153,46 +153,20 @@ where
         let state = state.round4()?;
         state.round5()
     }
-
-    pub fn verify(
-        vk: &JsonVerificationKey<P>,
-        proof: &PlonkProof<P>,
-        public_inputs: &[P::ScalarField],
-    ) -> Result<bool, eyre::Report>
-    where
-        P: CircomArkworksPairingBridge,
-        P::BaseField: CircomArkworksPrimeFieldBridge,
-        P::ScalarField: CircomArkworksPrimeFieldBridge,
-    {
-        if vk.n_public != public_inputs.len() {
-            return Err(eyre::eyre!("Invalid number of public inputs"));
-        }
-
-        if proof.is_well_constructed().is_err() {
-            return Ok(false);
-        }
-
-        let challenges = Self::calculate_challenges(vk, proof, public_inputs);
-
-        let roots = roots_of_unity();
-        let (l, xin) =
-            Self::calculate_lagrange_evaluations(vk.power, vk.n_public, &challenges.xi, &roots);
-        let pi = Self::calculate_pi(public_inputs, &l);
-        let (r0, d) = Self::calculate_r0_d(vk, proof, &challenges, pi, &l[0], xin);
-
-        let e = Self::calculate_e(proof, &challenges, r0);
-        let f = Self::calculate_f(vk, proof, &challenges, d);
-
-        Ok(Self::valid_pairing(vk, proof, &challenges, e, f, &roots))
-    }
 }
 
-pub(crate) mod plonk_utils {
+pub mod plonk_utils {
     use ark_ec::pairing::Pairing;
-    use circom_types::plonk::ZKey;
+    use circom_types::{
+        plonk::{JsonVerificationKey, PlonkProof, ZKey},
+        traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
+    };
     use mpc_core::traits::PrimeFieldMpcProtocol;
 
-    use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult, PlonkWitness};
+    use crate::{
+        roots_of_unity, verifiy::Plonk, FieldShare, FieldShareVec, PlonkProofError,
+        PlonkProofResult, PlonkWitness,
+    };
 
     pub(crate) fn get_witness<T, P: Pairing>(
         driver: &mut T,
@@ -231,5 +205,48 @@ pub(crate) mod plonk_utils {
         }
         res.extend_from_slice(coeff);
         res
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use std::{fs::File, io::BufReader};
+
+    use ark_bn254::Bn254;
+    use circom_types::{
+        groth16::witness::Witness,
+        plonk::{JsonVerificationKey, ZKey},
+    };
+    use collaborative_groth16::groth16::SharedWitness;
+    use mpc_core::protocols::plain::PlainDriver;
+    use num_traits::Zero;
+
+    use crate::{plonk_utils, verifiy::Plonk, CollaborativePlonk};
+
+    #[test]
+    pub fn test_multiplier2_bn254() {
+        let driver = PlainDriver::<ark_bn254::Fr>::default();
+        let mut reader = BufReader::new(
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
+        );
+        let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
+        let witness_file =
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns").unwrap();
+        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let value1 = witness.values[1];
+        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+            public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
+            witness: vec![witness.values[2], witness.values[3]],
+        };
+
+        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/verification_key.json").unwrap(),
+        )
+        .unwrap();
+
+        let plonk_prover = CollaborativePlonk::new(driver);
+        let proof = plonk_prover.prove(zkey, witness).unwrap();
+        let result = Plonk::<Bn254>::verify(&vk, &proof, &[value1]).unwrap();
+        assert!(result)
     }
 }

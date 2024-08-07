@@ -188,7 +188,7 @@ where
         Ok(Self {
             challenges: Round1Challenges::random(&mut driver)?,
             driver,
-            domains: Domains::new(&zkey)?,
+            domains: Domains::new(zkey.domain_size)?,
             data: PlonkData {
                 witness: plonk_witness,
                 zkey,

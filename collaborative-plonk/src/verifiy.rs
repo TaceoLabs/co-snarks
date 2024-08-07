@@ -1,16 +1,16 @@
-use crate::{types::Keccak256Transcript, CollaborativePlonk};
+use std::marker::PhantomData;
+
+use crate::{types::Keccak256Transcript, Domains};
 use ark_ec::{pairing::Pairing, Group};
 use ark_ff::Field;
 use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
-use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use num_traits::{One, Zero};
 
 pub(crate) struct VerfierChallenges<P: Pairing> {
     alpha: P::ScalarField,
-    alpha2: P::ScalarField,
     beta: P::ScalarField,
     gamma: P::ScalarField,
     pub(crate) xi: P::ScalarField,
@@ -22,7 +22,6 @@ impl<P: Pairing> VerfierChallenges<P> {
     fn new() -> Self {
         Self {
             alpha: P::ScalarField::zero(),
-            alpha2: P::ScalarField::zero(),
             beta: P::ScalarField::zero(),
             gamma: P::ScalarField::zero(),
             xi: P::ScalarField::zero(),
@@ -31,19 +30,61 @@ impl<P: Pairing> VerfierChallenges<P> {
         }
     }
 }
+pub(super) struct Plonk<P: Pairing> {
+    phantom_data: PhantomData<P>,
+}
 
-impl<T, P> CollaborativePlonk<T, P>
+impl<P: Pairing> Plonk<P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
-        + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>
-        + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
     P: Pairing + CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
-    pub(crate) fn calculate_challenges(
+    pub fn verify(
+        vk: &JsonVerificationKey<P>,
+        proof: &PlonkProof<P>,
+        public_inputs: &[P::ScalarField],
+    ) -> Result<bool, eyre::Report>
+    where
+        P: Pairing,
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        if vk.n_public != public_inputs.len() {
+            return Err(eyre::eyre!("Invalid number of public inputs"));
+        }
+
+        if proof.is_well_constructed().is_err() {
+            return Ok(false);
+        }
+
+        let challenges = Plonk::<P>::calculate_challenges(vk, proof, public_inputs);
+
+        let domains = Domains::<P>::new(1 << vk.power)?;
+        let roots = domains.roots_of_unity;
+        let (l, xin) = Plonk::<P>::calculate_lagrange_evaluations(
+            vk.power,
+            vk.n_public,
+            &challenges.xi,
+            &roots,
+        );
+        let pi = Plonk::<P>::calculate_pi(public_inputs, &l);
+        let (r0, d) = Plonk::<P>::calculate_r0_d(vk, proof, &challenges, pi, &l[0], xin);
+
+        let e = Plonk::<P>::calculate_e(proof, &challenges, r0);
+        let f = Plonk::<P>::calculate_f(vk, proof, &challenges, d);
+
+        Ok(Plonk::<P>::valid_pairing(
+            vk,
+            proof,
+            &challenges,
+            e,
+            f,
+            &roots,
+        ))
+    }
+    pub(super) fn calculate_challenges(
         vk: &JsonVerificationKey<P>,
         proof: &PlonkProof<P>,
         public_inputs: &[P::ScalarField],
@@ -70,9 +111,9 @@ where
             transcript.add_scalar(p);
         }
 
-        transcript.add_point(proof.a.into());
-        transcript.add_point(proof.b.into());
-        transcript.add_point(proof.c.into());
+        transcript.add_point(proof.a);
+        transcript.add_point(proof.b);
+        transcript.add_point(proof.c);
 
         challenges.beta = transcript.get_challenge();
 
@@ -84,15 +125,15 @@ where
         let mut transcript = Keccak256Transcript::<P>::default();
         transcript.add_scalar(challenges.beta);
         transcript.add_scalar(challenges.gamma);
-        transcript.add_point(proof.z.into());
+        transcript.add_point(proof.z);
         challenges.alpha = transcript.get_challenge();
 
         // Challenge round 4: xi
         let mut transcript = Keccak256Transcript::<P>::default();
         transcript.add_scalar(challenges.alpha);
-        transcript.add_point(proof.t1.into());
-        transcript.add_point(proof.t2.into());
-        transcript.add_point(proof.t3.into());
+        transcript.add_point(proof.t1);
+        transcript.add_point(proof.t2);
+        transcript.add_point(proof.t3);
         challenges.xi = transcript.get_challenge();
 
         // Challenge round 5: v
@@ -112,8 +153,8 @@ where
 
         // Challenge: u
         let mut transcript = Keccak256Transcript::<P>::default();
-        transcript.add_point(proof.wxi.into());
-        transcript.add_point(proof.wxiw.into());
+        transcript.add_point(proof.wxi);
+        transcript.add_point(proof.wxiw);
         challenges.u = transcript.get_challenge();
 
         challenges

@@ -2,6 +2,7 @@ use crate::{
     round3::FinalPolys,
     round4::{Round4Challenges, Round4Proof},
     types::Keccak256Transcript,
+    verifiy::Plonk,
     CollaborativePlonk, Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
@@ -165,7 +166,7 @@ where
     ) -> FieldShareVec<T, P> {
         let zkey = &data.zkey;
         let public_inputs = &data.witness.shared_witness.public_inputs;
-        let (l, xin) = CollaborativePlonk::<T, P>::calculate_lagrange_evaluations(
+        let (l, xin) = Plonk::<P>::calculate_lagrange_evaluations(
             data.zkey.power,
             data.zkey.n_public,
             &challenges.xi,
@@ -174,7 +175,7 @@ where
         let zh = xin - P::ScalarField::one();
 
         let l0 = &l[0];
-        let eval_pi = CollaborativePlonk::<T, P>::calculate_pi(public_inputs, &l);
+        let eval_pi = Plonk::<P>::calculate_pi(public_inputs, &l);
 
         let coef_ab = proof.eval_a * proof.eval_b;
         let betaxi = challenges.beta * challenges.xi;
