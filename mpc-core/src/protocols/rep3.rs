@@ -569,7 +569,7 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         let a = a * b + self.rngs.rand.masking_field_element::<F>();
         self.network.send_next(a.to_owned())?;
         self.network
-            .send(self.network.get_id().prev_id(), a.to_owned());
+            .send(self.network.get_id().prev_id(), a.to_owned())?;
 
         let b = self.network.recv_prev::<F>()?;
         let c = self.network.recv::<F>(self.network.get_id().next_id())?;
@@ -586,7 +586,7 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
             .collect_vec();
         self.network.send_next(a.to_owned())?;
         self.network
-            .send(self.network.get_id().prev_id(), a.to_owned());
+            .send(self.network.get_id().prev_id(), a.to_owned())?;
 
         let b = self.network.recv_prev::<Vec<F>>()?;
         let c = self

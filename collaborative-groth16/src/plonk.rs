@@ -2,14 +2,12 @@
 
 use crate::groth16::CollaborativeGroth16;
 use crate::groth16::SharedWitness;
-use ark_ec::pairing::Pairing;
-use ark_ec::AffineRepr;
-use ark_ff::Field;
-use ark_ff::PrimeField;
+use ark_ec::{pairing::Pairing, AffineRepr, Group};
+use ark_ff::{Field, PrimeField};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
-use ark_serialize::CanonicalSerialize;
-use ark_serialize::Valid;
+use ark_serialize::{CanonicalSerialize, Valid};
+use circom_types::plonk::JsonVerificationKey;
 use circom_types::plonk::VerifyingKey;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
@@ -312,11 +310,15 @@ where
     }
 
     fn calculate_challenges(
-        &self,
-        vk: &VerifyingKey<P>,
+        vk: &JsonVerificationKey<P>,
         proof: &Proof<P>,
         public_inputs: &[P::ScalarField],
-    ) -> Challenges<T, P> {
+    ) -> Challenges<T, P>
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
         let mut challenges = Challenges::new();
         let mut transcript = Keccak256Transcript::<P>::default();
 
@@ -377,19 +379,186 @@ where
         challenges
     }
 
+    fn calculate_lagrange_evaluations(
+        power: usize,
+        n_public: usize,
+        xi: &P::ScalarField,
+    ) -> (Vec<P::ScalarField>, P::ScalarField, P::ScalarField) {
+        let mut xin = *xi;
+        let mut domain_size = 1;
+        for _ in 0..power {
+            xin.square_in_place();
+            domain_size *= 2;
+        }
+        let zh = xin - P::ScalarField::one();
+
+        // TODO Check if this root_of_unity is the one we need
+        // TODO this is duplicate from compute_z
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(domain_size)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
+            .unwrap(); // TODO There is an unwrap here
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain);
+
+        let l_length = usize::max(1, n_public);
+        let mut l = Vec::with_capacity(l_length);
+
+        let n = P::ScalarField::from(domain_size as u64);
+        let mut w = P::ScalarField::one();
+        for _ in 0..l_length {
+            l.push((w * zh) / (n * (*xi - w)));
+            w *= root_of_unity;
+        }
+        (l, xin, n)
+    }
+
+    fn calculate_pi(public_inputs: &[P::ScalarField], l: &[P::ScalarField]) -> P::ScalarField {
+        let mut pi = P::ScalarField::zero();
+        for (val, l) in public_inputs.iter().zip(l) {
+            pi -= *l * val;
+        }
+        pi
+    }
+
+    fn calculate_r0_d(
+        vk: &JsonVerificationKey<P>,
+        proof: &Proof<P>,
+        challenges: &Challenges<T, P>,
+        pi: P::ScalarField,
+        l0: &P::ScalarField,
+        xin: P::ScalarField,
+    ) -> (P::ScalarField, P::G1)
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        // R0
+        let e1 = pi;
+        let e2 = challenges.alpha.square() * l0;
+        let e3a = proof.eval_a + proof.eval_s1 * challenges.beta + challenges.gamma;
+        let e3b = proof.eval_b + proof.eval_s2 * challenges.beta + challenges.gamma;
+        let e3c = proof.eval_c + challenges.gamma;
+
+        let e3 = e3a * e3b * e3c * proof.eval_zw * challenges.alpha;
+        let r0 = e1 - e2 - e3;
+
+        // D
+        let d1 = vk.qm * proof.eval_a * proof.eval_b
+            + vk.ql * proof.eval_a
+            + vk.qr * proof.eval_b
+            + vk.qo * proof.eval_c
+            + vk.qc;
+
+        let betaxi = challenges.beta * challenges.xi;
+        let d2a1 = proof.eval_a + betaxi + challenges.gamma;
+        let d2a2 = proof.eval_b + betaxi * vk.k1 + challenges.gamma;
+        let d2a3 = proof.eval_c + betaxi * vk.k2 + challenges.gamma;
+        let d2a = d2a1 * d2a2 * d2a3 * challenges.alpha;
+        let d2b = e2;
+        let d2 = proof.commit_z * (d2a + d2b + challenges.u);
+
+        let d3a = e3a;
+        let d3b = e3b;
+        let d3c = challenges.alpha * challenges.beta * proof.eval_zw;
+        let d3 = vk.s3 * (d3a * d3b * d3c);
+
+        let d4_low = proof.commit_t1;
+        let d4_mid = proof.commit_t2 * xin;
+        let d4_high = proof.commit_t3 * xin.square();
+        let d4 = (d4_low + d4_mid + d4_high) * (xin - P::ScalarField::one());
+
+        let d = d1 + d2 - d3 - d4;
+
+        (r0, d)
+    }
+
+    fn calculate_e(proof: &Proof<P>, challenges: &Challenges<T, P>, r0: P::ScalarField) -> P::G1 {
+        let e = challenges.v[0] * proof.eval_a
+            + challenges.v[1] * proof.eval_b
+            + challenges.v[2] * proof.eval_c
+            + challenges.v[3] * proof.eval_s1
+            + challenges.v[4] * proof.eval_s2
+            + challenges.u * proof.eval_zw
+            - r0;
+        P::G1::generator() * e
+    }
+
+    fn calculate_f(
+        vk: &JsonVerificationKey<P>,
+        proof: &Proof<P>,
+        challenges: &Challenges<T, P>,
+        d: P::G1,
+    ) -> P::G1
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        d + proof.commit_a * challenges.v[0]
+            + proof.commit_b * challenges.v[1]
+            + proof.commit_c * challenges.v[2]
+            + vk.s1 * challenges.v[3]
+            + vk.s2 * challenges.v[4]
+    }
+
+    fn valid_pairing(
+        vk: &JsonVerificationKey<P>,
+        proof: &Proof<P>,
+        challenges: &Challenges<T, P>,
+        e: P::G1,
+        f: P::G1,
+    ) -> bool
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        // TODO Check if this root_of_unity is the one we need
+        // TODO this is duplicate from compute_z
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(1 << vk.power)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
+            .unwrap(); // TODO There is an unwrap here
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain);
+
+        let s = challenges.u * challenges.xi * root_of_unity;
+
+        let a1 = -(proof.commit_wxi + proof.commit_wxiw * challenges.u);
+        let b1 = proof.commit_wxi * challenges.xi + proof.commit_wxiw * s + e + f;
+
+        let lhs = P::pairing(a1, vk.x2);
+        let rhs = P::pairing(b1, P::G2::generator());
+
+        lhs == rhs
+    }
+
     pub fn verify(
-        &self,
-        vk: &VerifyingKey<P>,
+        vk: &JsonVerificationKey<P>,
         proof: &Proof<P>,
         public_inputs: &[P::ScalarField],
-    ) -> Result<bool, eyre::Report> {
+    ) -> Result<bool, eyre::Report>
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        if vk.n_public != public_inputs.len() {
+            return Err(eyre::eyre!("Invalid number of public inputs"));
+        }
+
         if proof.is_well_constructed().is_err() {
             return Ok(false);
         }
 
-        let challenges = self.calculate_challenges(vk, proof, public_inputs);
+        let challenges = Self::calculate_challenges(vk, proof, public_inputs);
+        let (l, xin, _) =
+            Self::calculate_lagrange_evaluations(vk.power, vk.n_public, &challenges.xi);
+        let pi = Self::calculate_pi(public_inputs, &l);
+        let (r0, d) = Self::calculate_r0_d(vk, proof, &challenges, pi, &l[0], xin);
 
-        todo!()
+        let e = Self::calculate_e(proof, &challenges, r0);
+        let f = Self::calculate_f(vk, proof, &challenges, d);
+
+        Ok(Self::valid_pairing(vk, proof, &challenges, e, f))
     }
 
     fn calculate_additions(
@@ -1011,37 +1180,12 @@ where
         poly_z: &PolyEval<T, P>,
         poly_t: &TPoly<T, P>,
     ) -> FieldShareVec<T, P> {
-        let mut xin = challenges.xi;
-        let power = usize::ilog2(zkey.domain_size); // TODO check if true
-        for _ in 0..power {
-            xin.square_in_place();
-        }
+        let (l, xin, n) =
+            Self::calculate_lagrange_evaluations(zkey.power, zkey.n_public, &challenges.xi);
         let zh = xin - P::ScalarField::one();
 
-        // TODO Check if this root_of_unity is the one we need
-        // TODO this is duplicate from compute_z
-        let num_constraints = zkey.n_constraints;
-        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
-            .unwrap(); // TODO There is an unwrap here
-        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
-
-        let l_length = usize::max(1, zkey.n_public);
-        let mut l = Vec::with_capacity(l_length);
-
-        let n = P::ScalarField::from(zkey.domain_size as u64);
-        let mut w = P::ScalarField::one();
-        for _ in 0..l_length {
-            l.push((w * zh) / (n * (challenges.xi - w)));
-            w *= root_of_unity;
-        }
-
-        let eval_l1 = (xin - P::ScalarField::one()) / (n * (challenges.xi - P::ScalarField::one()));
-
-        let mut eval_pi = P::ScalarField::zero();
-        for (val, l) in public_inputs.iter().zip(l) {
-            eval_pi -= l * val;
-        }
+        let l0 = &l[0];
+        let eval_pi = Self::calculate_pi(public_inputs, &l);
 
         let coef_ab = proof.eval_a * proof.eval_b;
         let betaxi = challenges.beta * challenges.xi;
@@ -1054,7 +1198,7 @@ where
         let e3b = proof.eval_b + challenges.beta * proof.eval_s2 + challenges.gamma;
         let e3 = e3a * e3b * proof.eval_zw * challenges.alpha;
 
-        let e4 = eval_l1 * challenges.alpha.square();
+        let e4 = challenges.alpha.square() * l0;
         let e24 = e2 + e4;
 
         let mut poly_r = zkey.qm_poly.coeffs.clone();

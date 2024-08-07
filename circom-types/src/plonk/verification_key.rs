@@ -20,7 +20,7 @@ where
     /// The number of public inputs
     #[serde(rename = "nPublic")]
     pub n_public: usize,
-    /// Proof element Z    
+    /// Proof element Z
     pub power: usize,
     /// Proof element Z
     #[serde(serialize_with = "P::serialize_fr::<_>")]
@@ -34,47 +34,47 @@ where
     #[serde(rename = "Qm")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
-    qm: P::G1Affine,
+    pub qm: P::G1Affine,
     /// Proof element Z
     #[serde(rename = "Ql")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
-    ql: P::G1Affine,
+    pub ql: P::G1Affine,
     /// Proof element Z
     #[serde(rename = "Qr")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
-    qr: P::G1Affine,
+    pub qr: P::G1Affine,
     /// Proof element Z
     #[serde(rename = "Qo")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
-    qo: P::G1Affine,
+    pub qo: P::G1Affine,
     /// Proof element Z
     #[serde(rename = "Qc")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
-    qc: P::G1Affine,
+    pub qc: P::G1Affine,
     /// Proof element Z
     #[serde(rename = "S1")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
-    s1: P::G1Affine,
+    pub s1: P::G1Affine,
     /// Proof element Z
     #[serde(rename = "S2")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
-    s2: P::G1Affine,
+    pub s2: P::G1Affine,
     /// Proof element Z
     #[serde(rename = "S3")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
-    s3: P::G1Affine,
+    pub s3: P::G1Affine,
     /// Proof element Z
     #[serde(rename = "X_2")]
     #[serde(serialize_with = "P::serialize_g2::<_>")]
     #[serde(deserialize_with = "P::deserialize_g2_element::<_>")]
-    x2: P::G2Affine,
+    pub x2: P::G2Affine,
     // This is curve.Fr.toObject(curve.Fr.w[zkey.power]) so some root of unity (can be computed as in groth16.rs fn root_of_unity() I guess)
     #[serde(rename = "w")]
     #[serde(serialize_with = "P::serialize_fr::<_>")]
