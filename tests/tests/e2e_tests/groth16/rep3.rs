@@ -1,7 +1,9 @@
 use ark_bn254::Bn254;
 use ark_groth16::{prepare_verifying_key, Groth16};
-use circom_types::groth16::{proof::JsonProof, witness::Witness, zkey::ZKey};
-use circom_types::r1cs::R1CS;
+use circom_types::{
+    groth16::{proof::JsonProof, witness::Witness, zkey::ZKey},
+    r1cs::R1CS,
+};
 use collaborative_groth16::{
     circuit::Circuit,
     groth16::{CollaborativeGroth16, SharedWitness},
@@ -13,9 +15,9 @@ use tests::rep3_network::{PartyTestNetwork, Rep3TestNetwork};
 
 #[test]
 fn e2e_proof_poseidon_bn254() {
-    let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
-    let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
-    let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
+    let zkey_file = File::open("../test_vectors/Groth16/bn254/poseidon/circuit_0000.zkey").unwrap();
+    let r1cs_file = File::open("../test_vectors/Groth16/bn254/poseidon/poseidon.r1cs").unwrap();
+    let witness_file = File::open("../test_vectors/Groth16/bn254/poseidon/witness.wtns").unwrap();
     let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
     let (pk1, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
     let pk2 = pk1.clone();
@@ -62,8 +64,8 @@ fn e2e_proof_poseidon_bn254() {
 
 #[test]
 fn e2e_proof_poseidon_bn254_with_zkey_matrices() {
-    let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
-    let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
+    let zkey_file = File::open("../test_vectors/Groth16/bn254/poseidon/circuit_0000.zkey").unwrap();
+    let witness_file = File::open("../test_vectors/Groth16/bn254/poseidon/witness.wtns").unwrap();
     let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
     let (pk1, matrices) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
     let pk2 = pk1.clone();

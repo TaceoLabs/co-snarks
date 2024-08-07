@@ -98,7 +98,7 @@ where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     shared_witness: SharedWitness<T, P>,
-    addition_witness: FieldShareVec<T, P>,
+    addition_witness: Vec<FieldShare<T, P>>,
 }
 
 pub(crate) struct PlonkData<T, P: Pairing>
@@ -109,15 +109,15 @@ where
     zkey: ZKey<P>,
 }
 
-impl<T, P: Pairing> From<SharedWitness<T, P>> for PlonkWitness<T, P>
+impl<T, P: Pairing> PlonkWitness<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    fn from(mut shared_witness: SharedWitness<T, P>) -> Self {
+    fn new(mut shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
         shared_witness.public_inputs[0] = P::ScalarField::zero();
         Self {
             shared_witness,
-            addition_witness: vec![].into(),
+            addition_witness: Vec::with_capacity(n_additions),
         }
     }
 }
@@ -216,14 +216,11 @@ pub(crate) mod plonk_utils {
     {
         let result = if index <= zkey.n_public {
             driver.promote_to_trivial_share(witness.shared_witness.public_inputs[index])
-        } else if index <= zkey.n_vars - zkey.n_additions {
+        } else if index < zkey.n_vars - zkey.n_additions {
             //subtract public values and the leading 0 in witness
             T::index_sharevec(&witness.shared_witness.witness, index - zkey.n_public - 1)
         } else if index < zkey.n_vars {
-            T::index_sharevec(
-                &witness.addition_witness,
-                index - zkey.n_vars + zkey.n_additions,
-            )
+            witness.addition_witness[index + zkey.n_additions - zkey.n_vars].to_owned()
         } else {
             //TODO make this as an error
             return Err(PlonkProofError::CorruptedWitness(index));

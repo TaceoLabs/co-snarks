@@ -309,25 +309,21 @@ pub mod tests {
     #[test]
     fn test_round2_multiplier2() {
         let mut driver = PlainDriver::<ark_bn254::Fr>::default();
-        let mut reader =
-            BufReader::new(File::open("../test_vectors/Plonk/bn254/multiplier2.zkey").unwrap());
+        let mut reader = BufReader::new(
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
+        );
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
-        let witness_file = File::open("../test_vectors/Plonk/bn254/multiplier2_wtns.wtns").unwrap();
+        let witness_file =
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
             public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
             witness: vec![witness.values[2], witness.values[3]],
         };
 
-        let round1 = Round1 {
-            challenges: Round1Challenges::deterministic(&mut driver),
-            driver,
-            domains: Domains::new(&zkey).unwrap(),
-            data: PlonkData {
-                witness: witness.into(),
-                zkey,
-            },
-        };
+        let challenges = Round1Challenges::deterministic(&mut driver);
+        let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
+        round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         let round3 = round2.round2().unwrap();
         assert_eq!(

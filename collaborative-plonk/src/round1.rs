@@ -148,20 +148,23 @@ where
 
     fn calculate_additions(
         driver: &mut T,
-        witness: &mut PlonkWitness<T, P>,
+        witness: SharedWitness<T, P>,
         zkey: &ZKey<P>,
-    ) -> PlonkProofResult<()> {
-        let mut additions = Vec::with_capacity(zkey.n_additions);
+    ) -> PlonkProofResult<PlonkWitness<T, P>> {
+        //TODO calculate additions
+        //set first element to zero as it is not used
+        let mut witness = PlonkWitness::new(witness, zkey.n_additions);
+
         for addition in zkey.additions.iter() {
             let witness1 = plonk_utils::get_witness(
                 driver,
-                witness,
+                &witness,
                 zkey,
                 addition.signal_id1.try_into().expect("u32 fits into usize"),
             )?;
             let witness2 = plonk_utils::get_witness(
                 driver,
-                witness,
+                &witness,
                 zkey,
                 addition.signal_id2.try_into().expect("u32 fits into usize"),
             )?;
@@ -169,10 +172,9 @@ where
             let f1 = driver.mul_with_public(&addition.factor1, &witness1);
             let f2 = driver.mul_with_public(&addition.factor2, &witness2);
             let result = driver.add(&f1, &f2);
-            additions.push(result);
+            witness.addition_witness.push(result);
         }
-        witness.addition_witness = additions.into();
-        Ok(())
+        Ok(witness)
     }
 
     pub(super) fn init_round(
@@ -181,8 +183,7 @@ where
         private_witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<Self> {
         //set first element to zero as it is not used
-        let mut plonk_witness = PlonkWitness::from(private_witness);
-        Self::calculate_additions(&mut driver, &mut plonk_witness, &zkey)?;
+        let plonk_witness = Self::calculate_additions(&mut driver, private_witness, &zkey)?;
 
         Ok(Self {
             challenges: Round1Challenges::random(&mut driver)?,
@@ -262,25 +263,20 @@ pub mod tests {
     #[test]
     fn test_round1_multiplier2() {
         let mut driver = PlainDriver::<ark_bn254::Fr>::default();
-        let mut reader =
-            BufReader::new(File::open("../test_vectors/Plonk/bn254/multiplier2.zkey").unwrap());
+        let mut reader = BufReader::new(
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
+        );
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
-        let witness_file = File::open("../test_vectors/Plonk/bn254/multiplier2_wtns.wtns").unwrap();
+        let witness_file =
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
             public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
             witness: vec![witness.values[2], witness.values[3]],
         };
-
-        let round1 = Round1 {
-            challenges: Round1Challenges::deterministic(&mut driver),
-            driver,
-            domains: Domains::new(&zkey).unwrap(),
-            data: PlonkData {
-                witness: witness.into(),
-                zkey,
-            },
-        };
+        let challenges = Round1Challenges::deterministic(&mut driver);
+        let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
+        round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         assert_eq!(
             round2.proof.commit_a,
