@@ -10,6 +10,7 @@ use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
 use ark_serialize::CanonicalSerialize;
 use ark_serialize::Valid;
+use circom_types::plonk::JsonVerificationKey;
 use circom_types::plonk::VerifyingKey;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
@@ -312,11 +313,15 @@ where
     }
 
     fn calculate_challenges(
-        &self,
-        vk: &VerifyingKey<P>,
+        vk: &JsonVerificationKey<P>,
         proof: &Proof<P>,
         public_inputs: &[P::ScalarField],
-    ) -> Challenges<T, P> {
+    ) -> Challenges<T, P>
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
         let mut challenges = Challenges::new();
         let mut transcript = Keccak256Transcript::<P>::default();
 
@@ -377,17 +382,68 @@ where
         challenges
     }
 
+    fn calculate_lagrange_evaluations(
+        power: usize,
+        n_public: usize,
+        xi: &P::ScalarField,
+    ) -> (Vec<P::ScalarField>, P::ScalarField, P::ScalarField) {
+        let mut xin = *xi;
+        let mut domain_size = 1;
+        for _ in 0..power {
+            xin.square_in_place();
+            domain_size *= 2;
+        }
+        let zh = xin - P::ScalarField::one();
+
+        // TODO Check if this root_of_unity is the one we need
+        // TODO this is duplicate from compute_z
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(domain_size)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
+            .unwrap(); // TODO There is an unwrap here
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain);
+
+        let l_length = usize::max(1, n_public);
+        let mut l = Vec::with_capacity(l_length);
+
+        let n = P::ScalarField::from(domain_size as u64);
+        let mut w = P::ScalarField::one();
+        for _ in 0..l_length {
+            l.push((w * zh) / (n * (*xi - w)));
+            w *= root_of_unity;
+        }
+        (l, xin, n)
+    }
+
+    fn calculate_pi(public_inputs: &[P::ScalarField], l: &[P::ScalarField]) -> P::ScalarField {
+        let mut pi = P::ScalarField::zero();
+        for (val, l) in public_inputs.iter().zip(l) {
+            pi -= *l * val;
+        }
+        pi
+    }
+
     pub fn verify(
         &self,
-        vk: &VerifyingKey<P>,
+        vk: &JsonVerificationKey<P>,
         proof: &Proof<P>,
         public_inputs: &[P::ScalarField],
-    ) -> Result<bool, eyre::Report> {
+    ) -> Result<bool, eyre::Report>
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        if vk.n_public != public_inputs.len() {
+            return Err(eyre::eyre!("Invalid number of public inputs"));
+        }
+
         if proof.is_well_constructed().is_err() {
             return Ok(false);
         }
 
-        let challenges = self.calculate_challenges(vk, proof, public_inputs);
+        let challenges = Self::calculate_challenges(vk, proof, public_inputs);
+        let (l, _, _) = Self::calculate_lagrange_evaluations(vk.power, vk.n_public, &challenges.xi);
+        let pi = Self::calculate_pi(public_inputs, &l);
 
         todo!()
     }
@@ -1011,37 +1067,12 @@ where
         poly_z: &PolyEval<T, P>,
         poly_t: &TPoly<T, P>,
     ) -> FieldShareVec<T, P> {
-        let mut xin = challenges.xi;
-        let power = usize::ilog2(zkey.domain_size); // TODO check if true
-        for _ in 0..power {
-            xin.square_in_place();
-        }
+        let (l, xin, n) =
+            Self::calculate_lagrange_evaluations(zkey.power, zkey.n_public, &challenges.xi);
         let zh = xin - P::ScalarField::one();
 
-        // TODO Check if this root_of_unity is the one we need
-        // TODO this is duplicate from compute_z
-        let num_constraints = zkey.n_constraints;
-        let domain1 = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
-            .unwrap(); // TODO There is an unwrap here
-        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain1);
-
-        let l_length = usize::max(1, zkey.n_public);
-        let mut l = Vec::with_capacity(l_length);
-
-        let n = P::ScalarField::from(zkey.domain_size as u64);
-        let mut w = P::ScalarField::one();
-        for _ in 0..l_length {
-            l.push((w * zh) / (n * (challenges.xi - w)));
-            w *= root_of_unity;
-        }
-
         let eval_l1 = (xin - P::ScalarField::one()) / (n * (challenges.xi - P::ScalarField::one()));
-
-        let mut eval_pi = P::ScalarField::zero();
-        for (val, l) in public_inputs.iter().zip(l) {
-            eval_pi -= l * val;
-        }
+        let eval_pi = Self::calculate_pi(public_inputs, &l);
 
         let coef_ab = proof.eval_a * proof.eval_b;
         let betaxi = challenges.beta * challenges.xi;
