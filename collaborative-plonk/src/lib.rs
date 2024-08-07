@@ -10,6 +10,7 @@ use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use collaborative_groth16::groth16::SharedWitness;
+use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use num_traits::ToPrimitive;
 use num_traits::Zero;
@@ -17,13 +18,13 @@ use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
 
+mod plonk;
 mod round1;
 mod round2;
 mod round3;
 mod round4;
 mod round5;
 pub(crate) mod types;
-mod verifiy;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
@@ -116,7 +117,7 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
+    P::ScalarField: FFTPostProcessing,
 {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
@@ -157,16 +158,13 @@ where
 
 pub mod plonk_utils {
     use ark_ec::pairing::Pairing;
-    use circom_types::{
-        plonk::{JsonVerificationKey, PlonkProof, ZKey},
-        traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
-    };
+    use circom_types::plonk::ZKey;
     use mpc_core::traits::PrimeFieldMpcProtocol;
 
-    use crate::{
-        roots_of_unity, verifiy::Plonk, FieldShare, FieldShareVec, PlonkProofError,
-        PlonkProofResult, PlonkWitness,
-    };
+    use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult, PlonkWitness};
+    use ark_ff::Field;
+    use num_traits::One;
+    use num_traits::Zero;
 
     pub(crate) fn get_witness<T, P: Pairing>(
         driver: &mut T,
@@ -206,6 +204,45 @@ pub mod plonk_utils {
         res.extend_from_slice(coeff);
         res
     }
+
+    pub(crate) fn calculate_lagrange_evaluations<P: Pairing>(
+        power: usize,
+        n_public: usize,
+        xi: &P::ScalarField,
+        root_of_unitys: &[P::ScalarField],
+    ) -> (Vec<P::ScalarField>, P::ScalarField) {
+        let mut xin = *xi;
+        let mut domain_size = 1;
+        for _ in 0..power {
+            xin.square_in_place();
+            domain_size *= 2;
+        }
+        let zh = xin - P::ScalarField::one();
+        let l_length = usize::max(1, n_public);
+        let mut l = Vec::with_capacity(l_length);
+        let root_of_unity = root_of_unitys[power];
+
+        let n = P::ScalarField::from(domain_size as u64);
+        let mut w = P::ScalarField::one();
+        for _ in 0..l_length {
+            l.push((w * zh) / (n * (*xi - w)));
+            w *= root_of_unity;
+        }
+        (l, xin)
+    }
+
+    pub(crate) fn calculate_pi<P: Pairing>(
+        public_inputs: &[P::ScalarField],
+        l: &[P::ScalarField],
+    ) -> P::ScalarField {
+        let mut pi = P::ScalarField::zero();
+        //TODO WE WANT THE PUBLIC INPUTS WITHOUT THE LEADING ZERO!
+        //WHERE DO WE NEED TO CHANGE THIS
+        for (val, l) in public_inputs.iter().skip(1).zip(l) {
+            pi -= *l * val;
+        }
+        pi
+    }
 }
 
 #[cfg(test)]
@@ -221,7 +258,7 @@ pub mod tests {
     use mpc_core::protocols::plain::PlainDriver;
     use num_traits::Zero;
 
-    use crate::{plonk_utils, verifiy::Plonk, CollaborativePlonk};
+    use crate::{plonk::Plonk, CollaborativePlonk};
 
     #[test]
     pub fn test_multiplier2_bn254() {

@@ -1,8 +1,9 @@
 use crate::{
+    plonk::Plonk,
+    plonk_utils,
     round3::FinalPolys,
     round4::{Round4Challenges, Round4Proof},
     types::Keccak256Transcript,
-    verifiy::Plonk,
     CollaborativePlonk, Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
@@ -166,7 +167,7 @@ where
     ) -> FieldShareVec<T, P> {
         let zkey = &data.zkey;
         let public_inputs = &data.witness.shared_witness.public_inputs;
-        let (l, xin) = Plonk::<P>::calculate_lagrange_evaluations(
+        let (l, xin) = plonk_utils::calculate_lagrange_evaluations::<P>(
             data.zkey.power,
             data.zkey.n_public,
             &challenges.xi,
@@ -175,7 +176,7 @@ where
         let zh = xin - P::ScalarField::one();
 
         let l0 = &l[0];
-        let eval_pi = Plonk::<P>::calculate_pi(public_inputs, &l);
+        let eval_pi = plonk_utils::calculate_pi::<P>(public_inputs, &l);
 
         let coef_ab = proof.eval_a * proof.eval_b;
         let betaxi = challenges.beta * challenges.xi;
@@ -346,16 +347,8 @@ where
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         let p_tau = &data.zkey.p_tau;
-        let commit_wxi = MSMProvider::<P::G1>::msm_public_points(
-            &mut driver,
-            &p_tau[..T::sharevec_len(&wxi)],
-            &wxi,
-        );
-        let commit_wxiw = MSMProvider::<P::G1>::msm_public_points(
-            &mut driver,
-            &p_tau[..T::sharevec_len(&wxiw)],
-            &wxiw,
-        );
+        let commit_wxi = MSMProvider::<P::G1>::msm_public_points(&mut driver, p_tau, &wxi);
+        let commit_wxiw = MSMProvider::<P::G1>::msm_public_points(&mut driver, p_tau, &wxiw);
 
         let opened = driver.open_point_many(&[commit_wxi, commit_wxiw])?;
         debug_assert_eq!(opened.len(), 2);

@@ -1,12 +1,13 @@
 use std::marker::PhantomData;
 
-use crate::{types::Keccak256Transcript, Domains};
+use crate::{plonk_utils, types::Keccak256Transcript, CollaborativePlonk, Domains};
 use ark_ec::{pairing::Pairing, Group};
 use ark_ff::Field;
 use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
+use mpc_core::{protocols::plain::PlainDriver, traits::FFTPostProcessing};
 use num_traits::{One, Zero};
 
 pub(crate) struct VerfierChallenges<P: Pairing> {
@@ -30,15 +31,15 @@ impl<P: Pairing> VerfierChallenges<P> {
         }
     }
 }
-pub(super) struct Plonk<P: Pairing> {
-    phantom_data: PhantomData<P>,
-}
+
+pub type Plonk<P> = CollaborativePlonk<PlainDriver<<P as Pairing>::ScalarField>, P>;
 
 impl<P: Pairing> Plonk<P>
 where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
     P: Pairing + CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: FFTPostProcessing,
 {
     pub fn verify(
         vk: &JsonVerificationKey<P>,
@@ -63,13 +64,13 @@ where
 
         let domains = Domains::<P>::new(1 << vk.power)?;
         let roots = domains.roots_of_unity;
-        let (l, xin) = Plonk::<P>::calculate_lagrange_evaluations(
+        let (l, xin) = plonk_utils::calculate_lagrange_evaluations::<P>(
             vk.power,
             vk.n_public,
             &challenges.xi,
             &roots,
         );
-        let pi = Plonk::<P>::calculate_pi(public_inputs, &l);
+        let pi = plonk_utils::calculate_pi::<P>(public_inputs, &l);
         let (r0, d) = Plonk::<P>::calculate_r0_d(vk, proof, &challenges, pi, &l[0], xin);
 
         let e = Plonk::<P>::calculate_e(proof, &challenges, r0);
@@ -158,45 +159,6 @@ where
         challenges.u = transcript.get_challenge();
 
         challenges
-    }
-
-    pub(crate) fn calculate_lagrange_evaluations(
-        power: usize,
-        n_public: usize,
-        xi: &P::ScalarField,
-        root_of_unitys: &[P::ScalarField],
-    ) -> (Vec<P::ScalarField>, P::ScalarField) {
-        let mut xin = *xi;
-        let mut domain_size = 1;
-        for _ in 0..power {
-            xin.square_in_place();
-            domain_size *= 2;
-        }
-        let zh = xin - P::ScalarField::one();
-        let l_length = usize::max(1, n_public);
-        let mut l = Vec::with_capacity(l_length);
-        let root_of_unity = root_of_unitys[power];
-
-        let n = P::ScalarField::from(domain_size as u64);
-        let mut w = P::ScalarField::one();
-        for _ in 0..l_length {
-            l.push((w * zh) / (n * (*xi - w)));
-            w *= root_of_unity;
-        }
-        (l, xin)
-    }
-
-    pub(crate) fn calculate_pi(
-        public_inputs: &[P::ScalarField],
-        l: &[P::ScalarField],
-    ) -> P::ScalarField {
-        let mut pi = P::ScalarField::zero();
-        //TODO WE WANT THE PUBLIC INPUTS WITHOUT THE LEADING ZERO!
-        //WHERE DO WE NEED TO CHANGE THIS
-        for (val, l) in public_inputs.iter().skip(1).zip(l) {
-            pi -= *l * val;
-        }
-        pi
     }
 
     pub(crate) fn calculate_r0_d(
