@@ -2,6 +2,8 @@
 //!
 //! This module contains the implementation of rep3-shared field elements.
 
+use crate::traits::{Iterable, IterableMut};
+
 use super::id::PartyID;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -274,5 +276,78 @@ impl<F: PrimeField> IntoIterator for Rep3PrimeFieldShareVec<F> {
             // TODO: can we save this collect? cannot name map type directly yet
             .collect_vec()
             .into_iter()
+    }
+}
+
+pub struct Rep3PrimeFieldShareView<'a, 'b, F> {
+    pub(crate) a: &'a F,
+    pub(crate) b: &'b F,
+}
+
+impl<F: PrimeField> Iterable for Rep3PrimeFieldShareVec<F> {
+    type Item<'a> = Rep3PrimeFieldShareView<'a, 'a, F>;
+    type Iter<'a> = Rep3PrimeFieldShareVecIter<'a, F>;
+
+    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+        assert!(self.a.len() == self.b.len());
+        Rep3PrimeFieldShareVecIter {
+            a: self.a.iter(),
+            b: self.b.iter(),
+        }
+    }
+}
+
+pub struct Rep3PrimeFieldShareVecIter<'a, F> {
+    a: std::slice::Iter<'a, F>,
+    b: std::slice::Iter<'a, F>,
+}
+
+impl<'a, F: PrimeField> Iterator for Rep3PrimeFieldShareVecIter<'a, F> {
+    type Item = Rep3PrimeFieldShareView<'a, 'a, F>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(Rep3PrimeFieldShareView {
+            a: self.a.next()?,
+            b: self.b.next()?,
+        })
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.a.size_hint()
+    }
+}
+
+pub struct Rep3PrimeFieldShareViewMut<'a, 'b, F> {
+    pub(crate) a: &'a mut F,
+    pub(crate) b: &'b mut F,
+}
+
+impl<F: PrimeField> IterableMut for Rep3PrimeFieldShareVec<F> {
+    type Item<'a> = Rep3PrimeFieldShareViewMut<'a, 'a, F>;
+    type Iter<'a> = Rep3PrimeFieldShareVecIterMut<'a, F>;
+
+    fn iter_mut<'a>(&'a mut self) -> Self::Iter<'a> {
+        assert!(self.a.len() == self.b.len());
+        Rep3PrimeFieldShareVecIterMut {
+            a: self.a.iter_mut(),
+            b: self.b.iter_mut(),
+        }
+    }
+}
+pub struct Rep3PrimeFieldShareVecIterMut<'a, F> {
+    a: std::slice::IterMut<'a, F>,
+    b: std::slice::IterMut<'a, F>,
+}
+
+impl<'a, F: PrimeField> Iterator for Rep3PrimeFieldShareVecIterMut<'a, F> {
+    type Item = Rep3PrimeFieldShareViewMut<'a, 'a, F>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(Rep3PrimeFieldShareViewMut {
+            a: self.a.next()?,
+            b: self.b.next()?,
+        })
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.a.size_hint()
     }
 }

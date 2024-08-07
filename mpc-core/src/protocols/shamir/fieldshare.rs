@@ -7,6 +7,8 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;
 use std::mem::ManuallyDrop;
 
+use crate::traits::{Iterable, IterableMut};
+
 /// This type represents a Shamir-shared value. Since a Shamir-share of a field element is a field element, this is a wrapper over a field element.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 #[repr(transparent)]
@@ -301,5 +303,61 @@ mod unsafe_test {
 
     test_impl! {
         [ark_bn254::Fr, bn254_test]
+    }
+}
+pub struct ShamirPrimeFieldShareView<'a, F> {
+    pub(crate) a: &'a F,
+}
+
+impl<F: PrimeField> Iterable for ShamirPrimeFieldShareVec<F> {
+    type Item<'a> = ShamirPrimeFieldShareView<'a, F>;
+    type Iter<'a> = ShamirPrimeFieldShareVecIter<'a, F>;
+
+    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+        ShamirPrimeFieldShareVecIter { a: self.a.iter() }
+    }
+}
+
+pub struct ShamirPrimeFieldShareVecIter<'a, F> {
+    a: std::slice::Iter<'a, F>,
+}
+
+impl<'a, F: PrimeField> Iterator for ShamirPrimeFieldShareVecIter<'a, F> {
+    type Item = ShamirPrimeFieldShareView<'a, F>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(ShamirPrimeFieldShareView { a: self.a.next()? })
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.a.size_hint()
+    }
+}
+
+pub struct ShamirPrimeFieldShareViewMut<'a, F> {
+    pub(crate) a: &'a mut F,
+}
+
+impl<F: PrimeField> IterableMut for ShamirPrimeFieldShareVec<F> {
+    type Item<'a> = ShamirPrimeFieldShareViewMut<'a, F>;
+    type Iter<'a> = ShamirPrimeFieldShareVecIterMut<'a, F>;
+
+    fn iter_mut<'a>(&'a mut self) -> Self::Iter<'a> {
+        ShamirPrimeFieldShareVecIterMut {
+            a: self.a.iter_mut(),
+        }
+    }
+}
+pub struct ShamirPrimeFieldShareVecIterMut<'a, F> {
+    a: std::slice::IterMut<'a, F>,
+}
+
+impl<'a, F: PrimeField> Iterator for ShamirPrimeFieldShareVecIterMut<'a, F> {
+    type Item = ShamirPrimeFieldShareViewMut<'a, F>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(ShamirPrimeFieldShareViewMut { a: self.a.next()? })
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.a.size_hint()
     }
 }

@@ -10,7 +10,8 @@ use self::{
 };
 use crate::{
     traits::{
-        EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        EcMpcProtocol, FFTProvider, Iterable, MSMProvider, PairingEcMpcProtocol,
+        PrimeFieldMpcProtocol,
     },
     RngType,
 };
@@ -18,6 +19,7 @@ use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
+use fieldshare::{ShamirPrimeFieldShareView, ShamirPrimeFieldShareViewMut};
 use itertools::{izip, Itertools};
 use rand::{Rng as _, SeedableRng};
 use std::{marker::PhantomData, thread, time::Duration};
@@ -452,6 +454,8 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
 
 impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtocol<F, N> {
     type FieldShare = ShamirPrimeFieldShare<F>;
+    type FieldShareView<'a> = ShamirPrimeFieldShareView<'a, F>;
+    type FieldShareViewMut<'a> = ShamirPrimeFieldShareViewMut<'a, F>;
     type FieldShareVec = ShamirPrimeFieldShareVec<F>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {

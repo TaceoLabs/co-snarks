@@ -23,6 +23,9 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         + CanonicalDeserialize
         + Sync;
 
+    type FieldShareView<'a>;
+    type FieldShareViewMut<'a>;
+
     /// The type of a vector of shared field elements.
     type FieldShareVec: From<Vec<Self::FieldShare>>
         + Clone
@@ -31,6 +34,8 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         + Default
         + std::fmt::Debug
         + IntoIterator<Item = Self::FieldShare>
+        + for<'a> Iterable<Item<'a> = Self::FieldShareView<'a>>
+        + for<'a> IterableMut<Item<'a> = Self::FieldShareViewMut<'a>>
         + Sync;
 
     /// Add two shares: \[c\] = \[a\] + \[b\]
@@ -322,3 +327,22 @@ impl FFTPostProcessing for Bls12_381_ScalarField {
     }
 }
 impl FFTPostProcessing for Bn254_ScalarField {}
+
+pub trait Iterable {
+    type Item<'a>
+    where
+        Self: 'a;
+    type Iter<'a>: Iterator<Item = Self::Item<'a>>
+    where
+        Self: 'a;
+    fn iter<'a>(&'a self) -> Self::Iter<'a>;
+}
+pub trait IterableMut {
+    type Item<'a>
+    where
+        Self: 'a;
+    type Iter<'a>: Iterator<Item = Self::Item<'a>>
+    where
+        Self: 'a;
+    fn iter_mut<'a>(&'a mut self) -> Self::Iter<'a>;
+}

@@ -3,7 +3,7 @@
 //! This module contains the reference implementation without MPC. It will be used by the VM for computing on public values and can be used to test MPC circuits.
 
 use crate::{
-    traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
+    traits::{CircomWitnessExtensionProtocol, Iterable, IterableMut, PrimeFieldMpcProtocol},
     RngType,
 };
 use ark_ff::{One, PrimeField};
@@ -83,8 +83,30 @@ impl<F: PrimeField> Default for PlainDriver<F> {
     }
 }
 
+impl<F: PrimeField> Iterable for Vec<F> {
+    type Item<'a> = &'a F;
+
+    type Iter<'a> = std::slice::Iter<'a, F>;
+
+    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+        self.as_slice().iter()
+    }
+}
+
+impl<F: PrimeField> IterableMut for Vec<F> {
+    type Item<'a> = &'a mut F;
+
+    type Iter<'a> = std::slice::IterMut<'a, F>;
+
+    fn iter_mut<'a>(&'a mut self) -> Self::Iter<'a> {
+        self.as_mut_slice().iter_mut()
+    }
+}
+
 impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
     type FieldShare = F;
+    type FieldShareView<'a> = &'a F;
+    type FieldShareViewMut<'a> = &'a mut F;
     type FieldShareVec = Vec<F>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {

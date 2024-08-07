@@ -6,6 +6,7 @@ use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use eyre::Report;
+use fieldshare::{Rep3PrimeFieldShareView, Rep3PrimeFieldShareViewMut};
 use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
 use rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp};
@@ -315,6 +316,8 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
 
 impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F, N> {
     type FieldShare = Rep3PrimeFieldShare<F>;
+    type FieldShareView<'a> = Rep3PrimeFieldShareView<'a, 'a, F>;
+    type FieldShareViewMut<'a> = Rep3PrimeFieldShareViewMut<'a, 'a, F>;
     type FieldShareVec = Rep3PrimeFieldShareVec<F>;
 
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare {
