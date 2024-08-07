@@ -268,7 +268,11 @@ where
         let z = Self::compute_z(&mut driver, zkey, &domains, &challenges, &polys)?;
         // STEP 2.3 - Compute permutation [z]_1
 
-        let commit_z = MSMProvider::<P::G1>::msm_public_points(&mut driver, &zkey.p_tau, &z.poly);
+        let commit_z = MSMProvider::<P::G1>::msm_public_points(
+            &mut driver,
+            &zkey.p_tau[..T::sharevec_len(&z.poly)],
+            &z.poly,
+        );
         let proof = Round2Proof::new(proof, driver.open_point(&commit_z)?);
 
         Ok(Round3 {

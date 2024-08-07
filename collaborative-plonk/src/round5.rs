@@ -345,8 +345,16 @@ where
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         let p_tau = &data.zkey.p_tau;
-        let commit_wxi = MSMProvider::<P::G1>::msm_public_points(&mut driver, p_tau, &wxi);
-        let commit_wxiw = MSMProvider::<P::G1>::msm_public_points(&mut driver, p_tau, &wxiw);
+        let commit_wxi = MSMProvider::<P::G1>::msm_public_points(
+            &mut driver,
+            &p_tau[..T::sharevec_len(&wxi)],
+            &wxi,
+        );
+        let commit_wxiw = MSMProvider::<P::G1>::msm_public_points(
+            &mut driver,
+            &p_tau[..T::sharevec_len(&wxiw)],
+            &wxiw,
+        );
 
         let opened = driver.open_point_many(&[commit_wxi, commit_wxiw])?;
         debug_assert_eq!(opened.len(), 2);

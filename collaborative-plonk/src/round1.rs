@@ -212,9 +212,21 @@ where
             Self::compute_wire_polynomials(&mut driver, &domains, &challenges, zkey, witness)?;
 
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let commit_a = MSMProvider::<P::G1>::msm_public_points(&mut driver, p_tau, &polys.a.poly);
-        let commit_b = MSMProvider::<P::G1>::msm_public_points(&mut driver, p_tau, &polys.b.poly);
-        let commit_c = MSMProvider::<P::G1>::msm_public_points(&mut driver, p_tau, &polys.c.poly);
+        let commit_a = MSMProvider::<P::G1>::msm_public_points(
+            &mut driver,
+            &p_tau[..T::sharevec_len(&polys.a.poly)],
+            &polys.a.poly,
+        );
+        let commit_b = MSMProvider::<P::G1>::msm_public_points(
+            &mut driver,
+            &p_tau[..T::sharevec_len(&polys.b.poly)],
+            &polys.b.poly,
+        );
+        let commit_c = MSMProvider::<P::G1>::msm_public_points(
+            &mut driver,
+            &p_tau[..T::sharevec_len(&polys.c.poly)],
+            &polys.c.poly,
+        );
 
         let opened = driver.open_point_many(&[commit_a, commit_b, commit_c])?;
         debug_assert_eq!(opened.len(), 3);
