@@ -382,7 +382,7 @@ where
         } else if index < zkey.n_vars {
             T::index_sharevec(
                 &witness.addition_witness,
-                index - zkey.n_vars + zkey.n_additions,
+                index + zkey.n_additions - zkey.n_vars,
             )
         } else {
             //TODO make this as an error

@@ -9,9 +9,9 @@ use tests::rep3_network::{PartyTestNetwork, Rep3TestNetwork};
 
 #[test]
 fn e2e_proof_poseidon_bn254() {
-    let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
-    let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
-    let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
+    let zkey_file = File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.zkey").unwrap();
+    let r1cs_file = File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.r1cs").unwrap();
+    let witness_file = File::open("../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
     let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
     let pk1 = ZKey::<Bn254>::from_reader(zkey_file).unwrap();
     let pk2 = pk1.clone();
