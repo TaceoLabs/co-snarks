@@ -18,7 +18,7 @@ use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
 
-mod plonk;
+pub mod plonk;
 mod round1;
 mod round2;
 mod round3;
