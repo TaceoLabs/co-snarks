@@ -2,14 +2,11 @@
 
 use crate::groth16::CollaborativeGroth16;
 use crate::groth16::SharedWitness;
-use ark_ec::pairing::Pairing;
-use ark_ec::AffineRepr;
-use ark_ff::Field;
-use ark_ff::PrimeField;
+use ark_ec::{pairing::Pairing, AffineRepr, Group};
+use ark_ff::{Field, PrimeField};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::SynthesisError;
-use ark_serialize::CanonicalSerialize;
-use ark_serialize::Valid;
+use ark_serialize::{CanonicalSerialize, Valid};
 use circom_types::plonk::JsonVerificationKey;
 use circom_types::plonk::VerifyingKey;
 use circom_types::plonk::ZKey;
@@ -425,10 +422,10 @@ where
     fn calculate_r0_d(
         vk: &JsonVerificationKey<P>,
         proof: &Proof<P>,
+        challenges: &Challenges<T, P>,
         pi: P::ScalarField,
         l0: &P::ScalarField,
         xin: P::ScalarField,
-        challenges: &Challenges<T, P>,
     ) -> (P::ScalarField, P::G1)
     where
         P: CircomArkworksPairingBridge,
@@ -475,6 +472,35 @@ where
         (r0, d)
     }
 
+    fn calculate_e(proof: &Proof<P>, challenges: &Challenges<T, P>, r0: P::ScalarField) -> P::G1 {
+        let e = challenges.v[0] * proof.eval_a
+            + challenges.v[1] * proof.eval_b
+            + challenges.v[2] * proof.eval_c
+            + challenges.v[3] * proof.eval_s1
+            + challenges.v[4] * proof.eval_s2
+            + challenges.u * proof.eval_zw
+            - r0;
+        P::G1::generator() * e
+    }
+
+    fn calculate_f(
+        vk: &JsonVerificationKey<P>,
+        proof: &Proof<P>,
+        challenges: &Challenges<T, P>,
+        d: P::G1,
+    ) -> P::G1
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        d + proof.commit_a * challenges.v[0]
+            + proof.commit_b * challenges.v[1]
+            + proof.commit_c * challenges.v[2]
+            + vk.s1 * challenges.v[3]
+            + vk.s2 * challenges.v[4]
+    }
+
     pub fn verify(
         vk: &JsonVerificationKey<P>,
         proof: &Proof<P>,
@@ -497,10 +523,11 @@ where
         let (l, xin, _) =
             Self::calculate_lagrange_evaluations(vk.power, vk.n_public, &challenges.xi);
         let pi = Self::calculate_pi(public_inputs, &l);
-        let (r0, d) = Self::calculate_r0_d(vk, proof, pi, &l[0], xin, &challenges);
+        let (r0, d) = Self::calculate_r0_d(vk, proof, &challenges, pi, &l[0], xin);
 
-        // calculateF
-        // calculateE
+        let e = Self::calculate_e(proof, &challenges, r0);
+        let f = Self::calculate_f(vk, proof, &challenges, d);
+
         // isValidPairing
 
         todo!()
