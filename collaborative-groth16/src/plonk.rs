@@ -501,6 +501,36 @@ where
             + vk.s2 * challenges.v[4]
     }
 
+    fn valid_pairing(
+        vk: &JsonVerificationKey<P>,
+        proof: &Proof<P>,
+        challenges: &Challenges<T, P>,
+        e: P::G1,
+        f: P::G1,
+    ) -> bool
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        // TODO Check if this root_of_unity is the one we need
+        // TODO this is duplicate from compute_z
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(1 << vk.power)
+            .ok_or(SynthesisError::PolynomialDegreeTooLarge)
+            .unwrap(); // TODO There is an unwrap here
+        let root_of_unity = CollaborativeGroth16::<T, P>::root_of_unity(&domain);
+
+        let s = challenges.u * challenges.xi * root_of_unity;
+
+        let a1 = -(proof.commit_wxi + proof.commit_wxiw * challenges.u);
+        let b1 = proof.commit_wxi * challenges.xi + proof.commit_wxiw * s + e + f;
+
+        let lhs = P::pairing(a1, vk.x2);
+        let rhs = P::pairing(b1, P::G2::generator());
+
+        lhs == rhs
+    }
+
     pub fn verify(
         vk: &JsonVerificationKey<P>,
         proof: &Proof<P>,
@@ -528,9 +558,7 @@ where
         let e = Self::calculate_e(proof, &challenges, r0);
         let f = Self::calculate_f(vk, proof, &challenges, d);
 
-        // isValidPairing
-
-        todo!()
+        Ok(Self::valid_pairing(vk, proof, &challenges, e, f))
     }
 
     fn calculate_additions(
