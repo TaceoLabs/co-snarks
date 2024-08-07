@@ -149,7 +149,6 @@ where
     Init {
         zkey: ZKey<P>,
         witness: SharedWitness<T, P>,
-        public_inputs: Vec<P::ScalarField>,
     },
     Round1 {
         domains: Domains<P>,
@@ -222,17 +221,12 @@ where
         }
     }
 
-    pub fn proof(
+    pub fn prove(
         mut self,
-        public_inputs: Vec<P::ScalarField>,
         zkey: ZKey<P>,
         witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<PlonkProof<P>> {
-        let init_round = Round::Init {
-            zkey,
-            witness,
-            public_inputs,
-        };
+        let init_round = Round::Init { zkey, witness };
         let round1 = init_round.next_round(&mut self.driver)?;
         let round2 = round1.next_round(&mut self.driver)?;
         let round3 = round2.next_round(&mut self.driver)?;
@@ -286,11 +280,7 @@ where
 {
     fn next_round(self, driver: &mut T) -> PlonkProofResult<Self> {
         match self {
-            Round::Init {
-                zkey,
-                public_inputs,
-                witness,
-            } => Self::init_round(driver, zkey, public_inputs, witness),
+            Round::Init { zkey, witness } => Self::init_round(driver, zkey, witness),
             Round::Round1 {
                 domains,
                 challenges,
@@ -360,13 +350,12 @@ where
     fn init_round(
         driver: &mut T,
         zkey: ZKey<P>,
-        public_input: Vec<P::ScalarField>,
         private_witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<Self> {
         //TODO calculate additions
         //set first element to zero as it is not used
         let mut plonk_witness = PlonkWitness::from(private_witness);
-        Self::calculate_additions(driver, &mut plonk_witness, &zkey);
+        Self::calculate_additions(driver, &mut plonk_witness, &zkey)?;
 
         Ok(Round::Round1 {
             domains: Domains::new(&zkey)?,
