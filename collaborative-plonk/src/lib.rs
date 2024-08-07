@@ -4,6 +4,7 @@ use ark_ff::FftField;
 use ark_ff::LegendreSymbol;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
+use circom_types::plonk::JsonVerificationKey;
 use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
@@ -22,6 +23,7 @@ mod round3;
 mod round4;
 mod round5;
 pub(crate) mod types;
+mod verifiy;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
@@ -139,7 +141,7 @@ where
         }
     }
 
-    pub fn proof(
+    pub fn prove(
         self,
         zkey: ZKey<P>,
         witness: SharedWitness<T, P>,
@@ -150,6 +152,38 @@ where
         let state = state.round3()?;
         let state = state.round4()?;
         state.round5()
+    }
+
+    pub fn verify(
+        vk: &JsonVerificationKey<P>,
+        proof: &PlonkProof<P>,
+        public_inputs: &[P::ScalarField],
+    ) -> Result<bool, eyre::Report>
+    where
+        P: CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        if vk.n_public != public_inputs.len() {
+            return Err(eyre::eyre!("Invalid number of public inputs"));
+        }
+
+        if proof.is_well_constructed().is_err() {
+            return Ok(false);
+        }
+
+        let challenges = Self::calculate_challenges(vk, proof, public_inputs);
+
+        let roots = roots_of_unity();
+        let (l, xin) =
+            Self::calculate_lagrange_evaluations(vk.power, vk.n_public, &challenges.xi, &roots);
+        let pi = Self::calculate_pi(public_inputs, &l);
+        let (r0, d) = Self::calculate_r0_d(vk, proof, &challenges, pi, &l[0], xin);
+
+        let e = Self::calculate_e(proof, &challenges, r0);
+        let f = Self::calculate_f(vk, proof, &challenges, d);
+
+        Ok(Self::valid_pairing(vk, proof, &challenges, e, f, &roots))
     }
 }
 
