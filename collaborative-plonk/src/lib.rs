@@ -375,7 +375,7 @@ where
     ) -> PlonkProofResult<FieldShare<T, P>> {
         let result = if index <= zkey.n_public {
             driver.promote_to_trivial_share(witness.shared_witness.public_inputs[index])
-        } else if index <= zkey.n_vars - zkey.n_additions {
+        } else if index < zkey.n_vars - zkey.n_additions {
             //subtract public values and the leading 0 in witness
             T::index_sharevec(&witness.shared_witness.witness, index - zkey.n_public - 1)
         } else if index < zkey.n_vars {
