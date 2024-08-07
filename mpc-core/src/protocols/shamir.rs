@@ -548,7 +548,16 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         let rcv = self
             .network
             .broadcast_next(a_a.to_owned(), self.threshold + 1)?;
-        let res = rcv
+
+        let mut transposed = vec![vec![F::zero(); self.threshold + 1]; a.len()];
+
+        for (j, r) in rcv.into_iter().enumerate() {
+            for (i, val) in r.into_iter().enumerate() {
+                transposed[i][j] = val;
+            }
+        }
+
+        let res = transposed
             .into_iter()
             .map(|r| ShamirCore::reconstruct(&r, &self.open_lagrange_t))
             .collect();
@@ -678,7 +687,16 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         let mul = ShamirPrimeFieldShare::convert_vec(mul);
 
         let rcv = self.network.broadcast_next(mul, 2 * self.threshold + 1)?;
-        let res = rcv
+
+        let mut transposed = vec![vec![F::zero(); 2 * self.threshold + 1]; a.len()];
+
+        for (j, r) in rcv.into_iter().enumerate() {
+            for (i, val) in r.into_iter().enumerate() {
+                transposed[i][j] = val;
+            }
+        }
+
+        let res = transposed
             .into_iter()
             .map(|r| ShamirCore::reconstruct(&r, &self.open_lagrange_2t))
             .collect();
@@ -762,7 +780,16 @@ impl<C: CurveGroup, N: ShamirNetwork> EcMpcProtocol<C> for ShamirProtocol<C::Sca
         let rcv = self
             .network
             .broadcast_next(a_a.to_owned(), self.threshold + 1)?;
-        let res = rcv
+
+        let mut transposed = vec![vec![C::zero(); self.threshold + 1]; a.len()];
+
+        for (j, r) in rcv.into_iter().enumerate() {
+            for (i, val) in r.into_iter().enumerate() {
+                transposed[i][j] = val;
+            }
+        }
+
+        let res = transposed
             .into_iter()
             .map(|r| ShamirCore::reconstruct_point(&r, &self.open_lagrange_t))
             .collect();
