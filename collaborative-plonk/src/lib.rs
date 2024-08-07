@@ -113,7 +113,7 @@ where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     shared_witness: SharedWitness<T, P>,
-    addition_witness: FieldShareVec<T, P>,
+    addition_witness: Vec<FieldShare<T, P>>,
 }
 
 pub(crate) struct PlonkData<T, P: Pairing>
@@ -124,15 +124,15 @@ where
     zkey: ZKey<P>,
 }
 
-impl<T, P: Pairing> From<SharedWitness<T, P>> for PlonkWitness<T, P>
+impl<T, P: Pairing> PlonkWitness<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    fn from(mut shared_witness: SharedWitness<T, P>) -> Self {
+    fn new(mut shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
         shared_witness.public_inputs[0] = P::ScalarField::zero();
         Self {
             shared_witness,
-            addition_witness: vec![].into(),
+            addition_witness: Vec::with_capacity(n_additions),
         }
     }
 }
@@ -320,20 +320,23 @@ where
 
     fn calculate_additions(
         driver: &mut T,
-        witness: &mut PlonkWitness<T, P>,
+        witness: SharedWitness<T, P>,
         zkey: &ZKey<P>,
-    ) -> PlonkProofResult<()> {
-        let mut additions = Vec::with_capacity(zkey.n_additions);
+    ) -> PlonkProofResult<PlonkWitness<T, P>> {
+        //TODO calculate additions
+        //set first element to zero as it is not used
+        let mut witness = PlonkWitness::new(witness, zkey.n_additions);
+
         for addition in zkey.additions.iter() {
             let witness1 = Self::get_witness(
                 driver,
-                witness,
+                &witness,
                 zkey,
                 addition.signal_id1.try_into().expect("u32 fits into usize"),
             )?;
             let witness2 = Self::get_witness(
                 driver,
-                witness,
+                &witness,
                 zkey,
                 addition.signal_id2.try_into().expect("u32 fits into usize"),
             )?;
@@ -341,10 +344,9 @@ where
             let f1 = driver.mul_with_public(&addition.factor1, &witness1);
             let f2 = driver.mul_with_public(&addition.factor2, &witness2);
             let result = driver.add(&f1, &f2);
-            additions.push(result);
+            witness.addition_witness.push(result);
         }
-        witness.addition_witness = additions.into();
-        Ok(())
+        Ok(witness)
     }
 
     fn init_round(
@@ -352,10 +354,7 @@ where
         zkey: ZKey<P>,
         private_witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<Self> {
-        //TODO calculate additions
-        //set first element to zero as it is not used
-        let mut plonk_witness = PlonkWitness::from(private_witness);
-        Self::calculate_additions(driver, &mut plonk_witness, &zkey)?;
+        let plonk_witness = Self::calculate_additions(driver, private_witness, &zkey)?;
 
         Ok(Round::Round1 {
             domains: Domains::new(&zkey)?,
@@ -380,10 +379,7 @@ where
             //subtract public values and the leading 0 in witness
             T::index_sharevec(&witness.shared_witness.witness, index - zkey.n_public - 1)
         } else if index < zkey.n_vars {
-            T::index_sharevec(
-                &witness.addition_witness,
-                index + zkey.n_additions - zkey.n_vars,
-            )
+            witness.addition_witness[index + zkey.n_additions - zkey.n_vars].to_owned()
         } else {
             //TODO make this as an error
             return Err(PlonkProofError::CorruptedWitness(index));
