@@ -78,22 +78,22 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
-    pub(crate) driver: T,
-    pub(crate) domains: Domains<P>,
-    pub(crate) challenges: Round2Challenges<T, P>,
-    pub(crate) proof: Round2Proof<P>,
-    pub(crate) polys: Round2Polys<T, P>,
-    pub(crate) data: PlonkData<T, P>,
+    pub(super) driver: T,
+    pub(super) domains: Domains<P>,
+    pub(super) challenges: Round2Challenges<T, P>,
+    pub(super) proof: Round2Proof<P>,
+    pub(super) polys: Round2Polys<T, P>,
+    pub(super) data: PlonkData<T, P>,
 }
 
 pub(super) struct Round3Proof<P: Pairing> {
-    pub(crate) commit_a: P::G1,
-    pub(crate) commit_b: P::G1,
-    pub(crate) commit_c: P::G1,
-    pub(crate) commit_z: P::G1,
-    pub(crate) commit_t1: P::G1,
-    pub(crate) commit_t2: P::G1,
-    pub(crate) commit_t3: P::G1,
+    pub(super) commit_a: P::G1,
+    pub(super) commit_b: P::G1,
+    pub(super) commit_c: P::G1,
+    pub(super) commit_z: P::G1,
+    pub(super) commit_t1: P::G1,
+    pub(super) commit_t2: P::G1,
+    pub(super) commit_t3: P::G1,
 }
 
 impl<P: Pairing> Round3Proof<P> {
@@ -118,24 +118,24 @@ pub(super) struct Round3Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    pub(crate) b: [T::FieldShare; 11],
-    pub(crate) beta: P::ScalarField,
-    pub(crate) gamma: P::ScalarField,
-    pub(crate) alpha: P::ScalarField,
-    pub(crate) alpha2: P::ScalarField,
+    pub(super) b: [T::FieldShare; 11],
+    pub(super) beta: P::ScalarField,
+    pub(super) gamma: P::ScalarField,
+    pub(super) alpha: P::ScalarField,
+    pub(super) alpha2: P::ScalarField,
 }
 
 pub(super) struct FinalPolys<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    pub(crate) a: PolyEval<T, P>,
-    pub(crate) b: PolyEval<T, P>,
-    pub(crate) c: PolyEval<T, P>,
-    pub(crate) z: PolyEval<T, P>,
-    pub(crate) t1: FieldShareVec<T, P>,
-    pub(crate) t2: FieldShareVec<T, P>,
-    pub(crate) t3: FieldShareVec<T, P>,
+    pub(super) a: PolyEval<T, P>,
+    pub(super) b: PolyEval<T, P>,
+    pub(super) c: PolyEval<T, P>,
+    pub(super) z: PolyEval<T, P>,
+    pub(super) t1: FieldShareVec<T, P>,
+    pub(super) t2: FieldShareVec<T, P>,
+    pub(super) t3: FieldShareVec<T, P>,
 }
 impl<T, P: Pairing> FinalPolys<T, P>
 where
@@ -531,7 +531,10 @@ pub mod tests {
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::{round1::Round1Challenges, Domains, PlonkData};
+    use crate::{
+        round1::{Round1, Round1Challenges},
+        Domains, PlonkData,
+    };
     macro_rules! g1_from_xy {
         ($x: expr,$y: expr) => {
             <ark_bn254::Bn254 as Pairing>::G1Affine::new(
@@ -545,5 +548,46 @@ pub mod tests {
     use num_traits::Zero;
     use std::str::FromStr;
     #[test]
-    fn test_round3_multiplier2() {}
+    fn test_round3_multiplier2() {
+        let mut driver = PlainDriver::<ark_bn254::Fr>::default();
+        let mut reader = BufReader::new(
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
+        );
+        let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
+        let witness_file =
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns").unwrap();
+        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+            public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
+            witness: vec![witness.values[2], witness.values[3]],
+        };
+
+        let challenges = Round1Challenges::deterministic(&mut driver);
+        let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
+        round1.challenges = challenges;
+        let round2 = round1.round1().unwrap();
+        let round3 = round2.round2().unwrap();
+        let round4 = round3.round3().unwrap();
+        assert_eq!(
+            round4.proof.commit_t1,
+            g1_from_xy!(
+                "19565274859171776656487339149400891418763323717194784371999925527281379783558",
+                "10386763814606525393157981088877418120953953282074496034368009898032691004276"
+            )
+        );
+        assert_eq!(
+            round4.proof.commit_t2,
+            g1_from_xy!(
+                "21373781172590655440995199489129447744768377173681683872177714389170709756453",
+                "15022438500999602781656113216961007860523642088813935888401623445602503921378"
+            )
+        );
+        assert_eq!(
+            round4.proof.commit_t3,
+            g1_from_xy!(
+                "17716310934983494559822846675349569221799734312843852303648316069451468517652",
+                "3901565218682159263339490461749079732547202222201762568846146351037318174485"
+            )
+        );
+    }
 }

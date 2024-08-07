@@ -25,12 +25,12 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
-    pub(crate) driver: T,
-    pub(crate) domains: Domains<P>,
-    pub(crate) challenges: Round4Challenges<P>,
-    pub(crate) proof: Round4Proof<P>,
-    pub(crate) polys: FinalPolys<T, P>,
-    pub(crate) data: PlonkData<T, P>,
+    pub(super) driver: T,
+    pub(super) domains: Domains<P>,
+    pub(super) challenges: Round4Challenges<P>,
+    pub(super) proof: Round4Proof<P>,
+    pub(super) polys: FinalPolys<T, P>,
+    pub(super) data: PlonkData<T, P>,
 }
 pub(super) struct Round5Challenges<P: Pairing> {
     beta: P::ScalarField,

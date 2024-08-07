@@ -12,7 +12,7 @@ use crate::{
 /*
 
 */
-pub(crate) struct Round1<T, P: Pairing>
+pub(super) struct Round1<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -21,34 +21,34 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
-    pub(crate) driver: T,
-    pub(crate) domains: Domains<P>,
-    pub(crate) challenges: Round1Challenges<T, P>,
-    pub(crate) data: PlonkData<T, P>,
+    pub(super) driver: T,
+    pub(super) domains: Domains<P>,
+    pub(super) challenges: Round1Challenges<T, P>,
+    pub(super) data: PlonkData<T, P>,
 }
 
 pub(super) struct Round1Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    pub(crate) b: [T::FieldShare; 11],
+    pub(super) b: [T::FieldShare; 11],
 }
 
 pub(super) struct Round1Proof<P: Pairing> {
-    pub(crate) commit_a: P::G1,
-    pub(crate) commit_b: P::G1,
-    pub(crate) commit_c: P::G1,
+    pub(super) commit_a: P::G1,
+    pub(super) commit_b: P::G1,
+    pub(super) commit_c: P::G1,
 }
-pub(crate) struct Round1Polys<T, P: Pairing>
+pub(super) struct Round1Polys<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    pub(crate) buffer_a: FieldShareVec<T, P>,
-    pub(crate) buffer_b: FieldShareVec<T, P>,
-    pub(crate) buffer_c: FieldShareVec<T, P>,
-    pub(crate) a: PolyEval<T, P>,
-    pub(crate) b: PolyEval<T, P>,
-    pub(crate) c: PolyEval<T, P>,
+    pub(super) buffer_a: FieldShareVec<T, P>,
+    pub(super) buffer_b: FieldShareVec<T, P>,
+    pub(super) buffer_c: FieldShareVec<T, P>,
+    pub(super) a: PolyEval<T, P>,
+    pub(super) b: PolyEval<T, P>,
+    pub(super) c: PolyEval<T, P>,
 }
 
 impl<T, P: Pairing> Round1Challenges<T, P>
@@ -64,7 +64,7 @@ where
     }
 
     #[cfg(test)]
-    pub(crate) fn deterministic(driver: &mut T) -> Self {
+    pub(super) fn deterministic(driver: &mut T) -> Self {
         use num_traits::One;
         Self {
             b: core::array::from_fn(|_| driver.promote_to_trivial_share(P::ScalarField::one())),

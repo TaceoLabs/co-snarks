@@ -19,18 +19,18 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
-    pub(crate) driver: T,
-    pub(crate) domains: Domains<P>,
-    pub(crate) challenges: Round3Challenges<T, P>,
-    pub(crate) proof: Round3Proof<P>,
-    pub(crate) polys: FinalPolys<T, P>,
-    pub(crate) data: PlonkData<T, P>,
+    pub(super) driver: T,
+    pub(super) domains: Domains<P>,
+    pub(super) challenges: Round3Challenges<T, P>,
+    pub(super) proof: Round3Proof<P>,
+    pub(super) polys: FinalPolys<T, P>,
+    pub(super) data: PlonkData<T, P>,
 }
 pub(super) struct Round4Challenges<P: Pairing> {
-    pub(crate) beta: P::ScalarField,
-    pub(crate) gamma: P::ScalarField,
-    pub(crate) alpha: P::ScalarField,
-    pub(crate) xi: P::ScalarField,
+    pub(super) beta: P::ScalarField,
+    pub(super) gamma: P::ScalarField,
+    pub(super) alpha: P::ScalarField,
+    pub(super) xi: P::ScalarField,
 }
 impl<P: Pairing> Round4Challenges<P> {
     fn new<T>(round3_challenges: Round3Challenges<T, P>, xi: P::ScalarField) -> Self
@@ -47,19 +47,19 @@ impl<P: Pairing> Round4Challenges<P> {
 }
 
 pub(super) struct Round4Proof<P: Pairing> {
-    pub(crate) commit_a: P::G1,
-    pub(crate) commit_b: P::G1,
-    pub(crate) commit_c: P::G1,
-    pub(crate) commit_z: P::G1,
-    pub(crate) commit_t1: P::G1,
-    pub(crate) commit_t2: P::G1,
-    pub(crate) commit_t3: P::G1,
-    pub(crate) eval_a: P::ScalarField,
-    pub(crate) eval_b: P::ScalarField,
-    pub(crate) eval_c: P::ScalarField,
-    pub(crate) eval_zw: P::ScalarField,
-    pub(crate) eval_s1: P::ScalarField,
-    pub(crate) eval_s2: P::ScalarField,
+    pub(super) commit_a: P::G1,
+    pub(super) commit_b: P::G1,
+    pub(super) commit_c: P::G1,
+    pub(super) commit_z: P::G1,
+    pub(super) commit_t1: P::G1,
+    pub(super) commit_t2: P::G1,
+    pub(super) commit_t3: P::G1,
+    pub(super) eval_a: P::ScalarField,
+    pub(super) eval_b: P::ScalarField,
+    pub(super) eval_c: P::ScalarField,
+    pub(super) eval_zw: P::ScalarField,
+    pub(super) eval_s1: P::ScalarField,
+    pub(super) eval_s2: P::ScalarField,
 }
 
 impl<P: Pairing> Round4Proof<P> {

@@ -38,7 +38,7 @@ macro_rules! array_prod_mul {
     }};
 }
 
-pub(crate) struct Round2<T, P: Pairing>
+pub(super) struct Round2<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -47,39 +47,39 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
-    pub(crate) driver: T,
-    pub(crate) domains: Domains<P>,
-    pub(crate) challenges: Round1Challenges<T, P>,
-    pub(crate) proof: Round1Proof<P>,
-    pub(crate) polys: Round1Polys<T, P>,
-    pub(crate) data: PlonkData<T, P>,
+    pub(super) driver: T,
+    pub(super) domains: Domains<P>,
+    pub(super) challenges: Round1Challenges<T, P>,
+    pub(super) proof: Round1Proof<P>,
+    pub(super) polys: Round1Polys<T, P>,
+    pub(super) data: PlonkData<T, P>,
 }
 
 pub(super) struct Round2Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    pub(crate) b: [T::FieldShare; 11],
-    pub(crate) beta: P::ScalarField,
-    pub(crate) gamma: P::ScalarField,
+    pub(super) b: [T::FieldShare; 11],
+    pub(super) beta: P::ScalarField,
+    pub(super) gamma: P::ScalarField,
 }
 
 pub(super) struct Round2Proof<P: Pairing> {
-    pub(crate) commit_a: P::G1,
-    pub(crate) commit_b: P::G1,
-    pub(crate) commit_c: P::G1,
-    pub(crate) commit_z: P::G1,
+    pub(super) commit_a: P::G1,
+    pub(super) commit_b: P::G1,
+    pub(super) commit_c: P::G1,
+    pub(super) commit_z: P::G1,
 }
 
 pub(super) struct Round2Polys<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    pub(crate) buffer_a: FieldShareVec<T, P>,
-    pub(crate) poly_eval_a: PolyEval<T, P>,
-    pub(crate) poly_eval_b: PolyEval<T, P>,
-    pub(crate) poly_eval_c: PolyEval<T, P>,
-    pub(crate) z: PolyEval<T, P>,
+    pub(super) buffer_a: FieldShareVec<T, P>,
+    pub(super) poly_eval_a: PolyEval<T, P>,
+    pub(super) poly_eval_b: PolyEval<T, P>,
+    pub(super) poly_eval_c: PolyEval<T, P>,
+    pub(super) z: PolyEval<T, P>,
 }
 
 impl<T, P: Pairing> Round2Challenges<T, P>
