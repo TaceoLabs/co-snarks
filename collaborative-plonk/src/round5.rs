@@ -117,11 +117,7 @@ where
             domain_size *= 2;
         }
         let zh = xin - P::ScalarField::one();
-
-        // TODO Check if this root_of_unity is the one we need
-        // TODO this is duplicate from compute_z
         let root_of_unity = domains.roots_of_unity[power];
-
         let l_length = usize::max(1, n_public);
         let mut l = Vec::with_capacity(l_length);
 
@@ -417,10 +413,7 @@ pub mod tests {
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::{
-        round1::{Round1, Round1Challenges},
-        Domains, PlonkData,
-    };
+    use crate::round1::{Round1, Round1Challenges};
     macro_rules! g1_from_xy {
         ($x: expr,$y: expr) => {
             <ark_bn254::Bn254 as Pairing>::G1Affine::new(

@@ -215,10 +215,10 @@ where
         let buffer_z = driver.mul_many(&num, &den)?.into();
 
         // Compute polynomial coefficients z(X) from buffer_z
-        let poly_z = driver.ifft(&buffer_z, &domains.constraint_domain4);
+        let poly_z = driver.ifft(&buffer_z, &domains.domain);
 
         // Compute extended evaluations of z(X) polynomial
-        let eval_z = driver.fft(poly_z.to_owned(), &domains.constraint_domain16);
+        let eval_z = driver.fft(poly_z.to_owned(), &domains.extended_domain);
 
         let poly_z = plonk_utils::blind_coefficients::<T, P>(driver, &poly_z, &challenges.b[6..9]);
 

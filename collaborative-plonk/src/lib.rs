@@ -53,8 +53,8 @@ pub enum PlonkProofError {
 }
 
 pub(crate) struct Domains<P: Pairing> {
-    constraint_domain4: GeneralEvaluationDomain<P::ScalarField>,
-    constraint_domain16: GeneralEvaluationDomain<P::ScalarField>,
+    domain: GeneralEvaluationDomain<P::ScalarField>,
+    extended_domain: GeneralEvaluationDomain<P::ScalarField>,
     roots_of_unity: Vec<P::ScalarField>,
     phantom_data: PhantomData<P>,
 }
@@ -77,16 +77,14 @@ fn roots_of_unity<F: PrimeField + FftField>() -> Vec<F> {
 
 impl<P: Pairing> Domains<P> {
     fn new(zkey: &ZKey<P>) -> PlonkProofResult<Self> {
-        let constraint_domain4 =
-            GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 4)
-                .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-        let constraint_domain16 =
-            GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 16)
-                .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.domain_size)
+            .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
+        let extended_domain = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.domain_size * 4)
+            .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
 
         Ok(Self {
-            constraint_domain4,
-            constraint_domain16,
+            domain,
+            extended_domain,
             roots_of_unity: roots_of_unity(),
             phantom_data: PhantomData,
         })

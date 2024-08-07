@@ -447,7 +447,7 @@ where
             t_vec.push(t);
             tz_vec.push(tz);
         }
-        let mut coefficients_t = driver.ifft(&t_vec.into(), &domains.constraint_domain16);
+        let mut coefficients_t = driver.ifft(&t_vec.into(), &domains.extended_domain);
         driver.neg_vec_in_place_limit(&mut coefficients_t, zkey.domain_size);
 
         for i in zkey.domain_size..zkey.domain_size * 4 {
@@ -460,7 +460,7 @@ where
             */
         }
 
-        let coefficients_tz = driver.ifft(&tz_vec.into(), &domains.constraint_domain16);
+        let coefficients_tz = driver.ifft(&tz_vec.into(), &domains.extended_domain);
         let t_final = driver.add_vec(&coefficients_t, &coefficients_tz);
         let mut t_final = t_final.into_iter();
         let mut t1 = Vec::with_capacity(zkey.domain_size + 1);

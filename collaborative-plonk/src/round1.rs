@@ -107,14 +107,14 @@ where
         let buffer_c = FieldShareVec::<T, P>::from(buffer_c);
 
         // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
-        let poly_a = driver.ifft(&buffer_a, &domains.constraint_domain4);
-        let poly_b = driver.ifft(&buffer_b, &domains.constraint_domain4);
-        let poly_c = driver.ifft(&buffer_c, &domains.constraint_domain4);
+        let poly_a = driver.ifft(&buffer_a, &domains.domain);
+        let poly_b = driver.ifft(&buffer_b, &domains.domain);
+        let poly_c = driver.ifft(&buffer_c, &domains.domain);
 
         // Compute extended evaluations of a(X), b(X) and c(X) polynomials
-        let eval_a = driver.fft(poly_a.to_owned(), &domains.constraint_domain16);
-        let eval_b = driver.fft(poly_b.to_owned(), &domains.constraint_domain16);
-        let eval_c = driver.fft(poly_c.to_owned(), &domains.constraint_domain16);
+        let eval_a = driver.fft(poly_a.to_owned(), &domains.extended_domain);
+        let eval_b = driver.fft(poly_b.to_owned(), &domains.extended_domain);
+        let eval_c = driver.fft(poly_c.to_owned(), &domains.extended_domain);
 
         let poly_a = plonk_utils::blind_coefficients::<T, P>(driver, &poly_a, &challenges.b[..2]);
         let poly_b = plonk_utils::blind_coefficients::<T, P>(driver, &poly_b, &challenges.b[2..4]);
