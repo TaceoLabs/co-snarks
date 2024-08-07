@@ -558,7 +558,7 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
 
     fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize) {
         sharevec.a[index] = val.a;
-        sharevec.a[index] = val.a;
+        sharevec.b[index] = val.b;
     }
 
     fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
