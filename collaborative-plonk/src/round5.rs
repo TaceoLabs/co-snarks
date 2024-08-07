@@ -2,7 +2,7 @@ use crate::{
     round3::FinalPolys,
     round4::{Round4Challenges, Round4Proof},
     types::Keccak256Transcript,
-    Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofResult,
+    CollaborativePlonk, Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
@@ -92,41 +92,6 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    fn calculate_lagrange_evaluations(
-        power: usize,
-        n_public: usize,
-        xi: &P::ScalarField,
-        domains: &Domains<P>,
-    ) -> (Vec<P::ScalarField>, P::ScalarField) {
-        let mut xin = *xi;
-        let mut domain_size = 1;
-        for _ in 0..power {
-            xin.square_in_place();
-            domain_size *= 2;
-        }
-        let zh = xin - P::ScalarField::one();
-        let root_of_unity = domains.roots_of_unity[power];
-        let l_length = usize::max(1, n_public);
-        let mut l = Vec::with_capacity(l_length);
-
-        let n = P::ScalarField::from(domain_size as u64);
-        let mut w = P::ScalarField::one();
-        for _ in 0..l_length {
-            l.push((w * zh) / (n * (*xi - w)));
-            w *= root_of_unity;
-        }
-        (l, xin)
-    }
-    fn calculate_pi(public_inputs: &[P::ScalarField], l: &[P::ScalarField]) -> P::ScalarField {
-        let mut pi = P::ScalarField::zero();
-        //TODO WE WANT THE PUBLIC INPUTS WITHOUT THE LEADING ZERO!
-        //WHERE DO WE NEED TO CHANGE THIS
-        for (val, l) in public_inputs.iter().skip(1).zip(l) {
-            pi -= *l * val;
-        }
-        pi
-    }
-
     fn div_by_zerofier(
         driver: &mut T,
         inout: &mut Vec<FieldShare<T, P>>,
@@ -200,16 +165,16 @@ where
     ) -> FieldShareVec<T, P> {
         let zkey = &data.zkey;
         let public_inputs = &data.witness.shared_witness.public_inputs;
-        let (l, xin) = Self::calculate_lagrange_evaluations(
+        let (l, xin) = CollaborativePlonk::<T, P>::calculate_lagrange_evaluations(
             data.zkey.power,
             data.zkey.n_public,
             &challenges.xi,
-            domains,
+            &domains.roots_of_unity,
         );
         let zh = xin - P::ScalarField::one();
 
         let l0 = &l[0];
-        let eval_pi = Self::calculate_pi(public_inputs, &l);
+        let eval_pi = CollaborativePlonk::<T, P>::calculate_pi(public_inputs, &l);
 
         let coef_ab = proof.eval_a * proof.eval_b;
         let betaxi = challenges.beta * challenges.xi;
