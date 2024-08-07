@@ -592,7 +592,7 @@ pub mod tests {
                 )
             );
         } else {
-            panic!("must be round2 after round1");
+            panic!("must be round4 after round3");
         }
     }
 }

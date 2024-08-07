@@ -193,7 +193,7 @@ pub mod tests {
         } = round4.next_round(&mut driver).unwrap()
         {
         } else {
-            panic!("must be round2 after round1");
+            panic!("must be round5 after round4");
         }
     }
 }
