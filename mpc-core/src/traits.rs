@@ -64,7 +64,6 @@ pub trait MpcToMontgomery<F: MontgomeryField>: PrimeFieldMpcProtocol<F> {
     fn batch_lift_montgomery(&self, vec: &Self::FieldShareVec) -> Self::FieldShareVec;
     fn inplace_batch_to_montgomery(&self, vec: &mut Self::FieldShareVec);
     fn inplace_batch_lift_montgomery(&self, vec: &mut Self::FieldShareVec);
-    fn print_share(&self, to_print: &Self::FieldShare);
 }
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
@@ -162,6 +161,9 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     /// Negates a vector of shared values: \[b\] = -\[a\] for every element in place.
     fn neg_vec_in_place(&mut self, a: &mut Self::FieldShareVec);
 
+    /// Negates a vector of shared values: \[b\] = -\[a\] for up to the limit-th element in place.
+    fn neg_vec_in_place_limit(&mut self, a: &mut Self::FieldShareVec, limit: usize);
+
     /// Generate a share of a random value. The value is thereby unknown to anyone.
     fn rand(&mut self) -> std::io::Result<Self::FieldShare>;
 
@@ -210,6 +212,9 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 
     /// Prints the shared values-
     fn print(&self, to_print: &Self::FieldShareVec);
+
+    /// Prints a single the shared value
+    fn print_share(&self, to_print: &Self::FieldShare);
 
     /// Returns the shared value at index `index` in the shared vector `sharevec`.
     fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare;

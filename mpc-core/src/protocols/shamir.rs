@@ -525,6 +525,12 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         }
     }
 
+    fn neg_vec_in_place_limit(&mut self, vec: &mut Self::FieldShareVec, limit: usize) {
+        for a in vec.a.iter_mut().take(limit) {
+            a.neg_in_place();
+        }
+    }
+
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
         let (r, _) = self.rng_buffer.get_pair(&mut self.network)?;
         Ok(Self::FieldShare::new(r))
@@ -619,6 +625,10 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         assert!(src.a.len() >= src_offset + len);
         assert!(len > 0);
         dst.a[dst_offset..dst_offset + len].clone_from_slice(&src.a[src_offset..src_offset + len]);
+    }
+
+    fn print_share(&self, _: &Self::FieldShare) {
+        panic!("do not print shamir shares");
     }
 
     fn print(&self, to_print: &Self::FieldShareVec) {

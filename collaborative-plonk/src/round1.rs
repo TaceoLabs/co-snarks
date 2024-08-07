@@ -8,10 +8,10 @@ use mpc_core::traits::{
 };
 
 use crate::{
-    types::{PolyEval, WirePolyOutput},
-    Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult, PlonkWitness,
-    Round,
+    types::PolyEval, Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofError,
+    PlonkProofResult, PlonkWitness, Round,
 };
+use num_traits::One;
 
 pub(super) struct Round1Challenges<T, P: Pairing>
 where
@@ -24,6 +24,17 @@ pub(super) struct Round1Proof<P: Pairing> {
     pub(crate) commit_a: P::G1,
     pub(crate) commit_b: P::G1,
     pub(crate) commit_c: P::G1,
+}
+pub(crate) struct Round1Polys<T, P: Pairing>
+where
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub(crate) buffer_a: FieldShareVec<T, P>,
+    pub(crate) buffer_b: FieldShareVec<T, P>,
+    pub(crate) buffer_c: FieldShareVec<T, P>,
+    pub(crate) poly_eval_a: PolyEval<T, P>,
+    pub(crate) poly_eval_b: PolyEval<T, P>,
+    pub(crate) poly_eval_c: PolyEval<T, P>,
 }
 
 impl<T, P: Pairing> Round1Challenges<T, P>
@@ -38,9 +49,9 @@ where
         Ok(Self { b })
     }
 
-    pub(crate) fn deterministic() -> Self {
+    pub(crate) fn deterministic(driver: &mut T) -> Self {
         Self {
-            b: core::array::from_fn(|_| T::FieldShare::default()),
+            b: core::array::from_fn(|_| driver.promote_to_trivial_share(P::ScalarField::one())),
         }
     }
 }
@@ -60,7 +71,7 @@ where
         challenges: &Round1Challenges<T, P>,
         zkey: &ZKey<P>,
         witness: &PlonkWitness<T, P>,
-    ) -> PlonkProofResult<WirePolyOutput<T, P>> {
+    ) -> PlonkProofResult<Round1Polys<T, P>> {
         let num_constraints = zkey.n_constraints;
 
         let mut buffer_a = vec![FieldShare::<T, P>::default(); zkey.domain_size];
@@ -100,7 +111,7 @@ where
             return Err(PlonkProofError::PolynomialDegreeTooLarge);
         }
 
-        Ok(WirePolyOutput {
+        Ok(Round1Polys {
             buffer_a,
             buffer_b,
             buffer_c,
@@ -128,24 +139,23 @@ where
         let zkey = &data.zkey;
         let witness = &data.witness;
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        let wire_polys =
-            Self::compute_wire_polynomials(driver, &domains, &challenges, zkey, witness)?;
+        let polys = Self::compute_wire_polynomials(driver, &domains, &challenges, zkey, witness)?;
 
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
         let commit_a = MSMProvider::<P::G1>::msm_public_points(
             driver,
             &data.zkey.p_tau,
-            &wire_polys.poly_eval_a.poly,
+            &polys.poly_eval_a.poly,
         );
         let commit_b = MSMProvider::<P::G1>::msm_public_points(
             driver,
             &data.zkey.p_tau,
-            &wire_polys.poly_eval_b.poly,
+            &polys.poly_eval_b.poly,
         );
         let commit_c = MSMProvider::<P::G1>::msm_public_points(
             driver,
             &data.zkey.p_tau,
-            &wire_polys.poly_eval_c.poly,
+            &polys.poly_eval_c.poly,
         );
 
         let opened = driver.open_point_many(&[commit_a, commit_b, commit_c])?;
@@ -160,7 +170,7 @@ where
             domains,
             challenges,
             proof,
-            wire_polys,
+            polys,
             data,
         })
     }
@@ -206,7 +216,7 @@ pub mod tests {
 
         let round1 = Round::<PlainDriver<ark_bn254::Fr>, Bn254>::Round1 {
             domains: Domains::new(&zkey).unwrap(),
-            challenges: Round1Challenges::deterministic(),
+            challenges: Round1Challenges::deterministic(&mut driver),
             data: PlonkData {
                 witness: witness.into(),
                 zkey,
@@ -215,7 +225,7 @@ pub mod tests {
         if let Round::Round2 {
             domains: _,
             challenges: _,
-            wire_polys: _,
+            polys: _,
             data: _,
             proof,
         } = round1.next_round(&mut driver).unwrap()
@@ -223,22 +233,22 @@ pub mod tests {
             assert_eq!(
                 proof.commit_a,
                 g1_from_xy!(
-                    "11327846795108164597862108116687480895455059329060212270066696945088464241533",
-                    "7776921762549167800422434926003437762844064920522926970325762760653252429454"
+                    "3388598946998037934523247214958481082013443546016537275698814746665095654011",
+                    "16418302496354878039048280340533375731194422868622884330371991683673050823927"
                 )
             );
             assert_eq!(
                 proof.commit_b,
                 g1_from_xy!(
-                    "9372062747415722277840039329560395993406167602129326436042470958833003216581",
-                    "6239816658778119701714344686030767774838449997864231134074073775429258788922"
+                    "13049912696015027105906326615100790685802699797933384361100854080401912076778",
+                    "10378643755673287533327241708901786955592525369489297709043438653533861197932"
                 )
             );
             assert_eq!(
                 proof.commit_c,
                 g1_from_xy!(
-                    "18369440326418436791793675139620567534336152462051746333537337326721235970210",
-                    "4920943776359951362683576214248080938368830299813420492592037643095097935073"
+                    "21886373095085320996754257372559726802002159951253295441999131091936518950332",
+                    "12906740162362256844913813683120863430935708683114986453107641385068771252717"
                 )
             );
         } else {

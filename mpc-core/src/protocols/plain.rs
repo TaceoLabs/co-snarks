@@ -164,6 +164,12 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         }
     }
 
+    fn neg_vec_in_place_limit(&mut self, a: &mut Self::FieldShareVec, limit: usize) {
+        for x in a.iter_mut().take(limit) {
+            *x = self.neg(x);
+        }
+    }
+
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
         let mut rng = RngType::from_entropy();
         Ok(F::rand(&mut rng))
@@ -236,9 +242,21 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         dst[dst_offset..dst_offset + len].clone_from_slice(&src[src_offset..src_offset + len]);
     }
 
+    fn print_share(&self, to_print: &Self::FieldShare) {
+        if to_print.is_zero() {
+            println!("0")
+        } else {
+            println!("{to_print}")
+        }
+    }
+
     fn print(&self, to_print: &Self::FieldShareVec) {
         for a in to_print.iter() {
-            println!("{a}")
+            if a.is_zero() {
+                println!("0")
+            } else {
+                println!("{a}")
+            }
         }
     }
 
@@ -268,9 +286,6 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
 }
 
 impl<F: MontgomeryField> MpcToMontgomery<F> for PlainDriver<F> {
-    fn print_share(&self, to_print: &Self::FieldShare) {
-        println!("{}", to_print);
-    }
     fn batch_to_montgomery(&self, vec: &Self::FieldShareVec) -> Self::FieldShareVec {
         vec.iter().map(|s| s.into_montgomery()).collect_vec()
     }

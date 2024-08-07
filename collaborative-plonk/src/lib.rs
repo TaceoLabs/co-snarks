@@ -2,7 +2,9 @@
 
 use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
+use ark_ff::FftField;
 use ark_ff::Field;
+use ark_ff::LegendreSymbol;
 use ark_ff::PrimeField;
 use ark_groth16::data_structures;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
@@ -19,20 +21,31 @@ use mpc_core::traits::{
     EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
 use num_traits::One;
+use num_traits::ToPrimitive;
 use num_traits::Zero;
 use round1::Round1Challenges;
+use round1::Round1Polys;
 use round1::Round1Proof;
 use round2::Round2Challenges;
+use round2::Round2Polys;
 use round2::Round2Proof;
+use round3::Round3Challenges;
+use round3::Round3Polys;
+use round3::Round3Proof;
+use round4::Round4Challenges;
+use round4::Round4Polys;
+use round4::Round4Proof;
 use sha3::Digest;
 use sha3::Keccak256;
 use std::io;
 use std::marker::PhantomData;
 use std::ops::MulAssign;
-use types::WirePolyOutput;
 
 mod round1;
 mod round2;
+mod round3;
+mod round4;
+mod round5;
 pub(crate) mod types;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
@@ -55,7 +68,24 @@ pub(crate) struct Domains<P: Pairing> {
     constraint_domain: GeneralEvaluationDomain<P::ScalarField>,
     constraint_domain4: GeneralEvaluationDomain<P::ScalarField>,
     constraint_domain16: GeneralEvaluationDomain<P::ScalarField>,
+    roots_of_unity: Vec<P::ScalarField>,
     phantom_data: PhantomData<P>,
+}
+
+//TODO WE COPIED THIS FROM GROTH16 - WE WANT A COMMON PLACE
+fn roots_of_unity<F: PrimeField + FftField>() -> Vec<F> {
+    let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
+    let mut q = F::one();
+    while q.legendre() != LegendreSymbol::QuadraticNonResidue {
+        q += F::one();
+    }
+    let z = q.pow(F::TRACE);
+    roots[0] = z;
+    for i in 1..roots.len() {
+        roots[i] = roots[i - 1].square();
+    }
+    roots.reverse();
+    roots
 }
 
 impl<P: Pairing> Domains<P> {
@@ -66,10 +96,12 @@ impl<P: Pairing> Domains<P> {
             .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
         let domain3 = GeneralEvaluationDomain::<P::ScalarField>::new(zkey.n_constraints * 16)
             .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
+
         Ok(Self {
             constraint_domain: domain1,
             constraint_domain4: domain2,
             constraint_domain16: domain3,
+            roots_of_unity: roots_of_unity(),
             phantom_data: PhantomData,
         })
     }
@@ -127,18 +159,30 @@ where
         domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
         proof: Round1Proof<P>,
-        wire_polys: WirePolyOutput<T, P>,
+        polys: Round1Polys<T, P>,
         data: PlonkData<T, P>,
     },
     Round3 {
         domains: Domains<P>,
         challenges: Round2Challenges<T, P>,
         proof: Round2Proof<P>,
-        wire_polys: WirePolyOutput<T, P>,
+        polys: Round2Polys<T, P>,
         data: PlonkData<T, P>,
     },
-    Round4,
-    Round5,
+    Round4 {
+        domains: Domains<P>,
+        challenges: Round3Challenges<T, P>,
+        proof: Round3Proof<P>,
+        polys: Round3Polys<T, P>,
+        data: PlonkData<T, P>,
+    },
+    Round5 {
+        domains: Domains<P>,
+        challenges: Round4Challenges<T, P>,
+        proof: Round4Proof<P>,
+        polys: Round4Polys<T, P>,
+        data: PlonkData<T, P>,
+    },
     Round6,
     Finished,
 }
@@ -217,18 +261,30 @@ where
                 domains,
                 challenges,
                 proof,
-                wire_polys,
+                polys,
                 data,
-            } => Self::round2(driver, domains, challenges, proof, wire_polys, data),
+            } => Self::round2(driver, domains, challenges, proof, polys, data),
             Round::Round3 {
                 domains,
                 challenges,
                 proof,
-                wire_polys,
+                polys,
                 data,
-            } => todo!(),
-            Round::Round4 => todo!(),
-            Round::Round5 => todo!(),
+            } => Self::round3(driver, domains, challenges, proof, polys, data),
+            Round::Round4 {
+                domains,
+                challenges,
+                proof,
+                polys,
+                data,
+            } => Self::round4(driver, domains, challenges, proof, polys, data),
+            Round::Round5 {
+                domains,
+                challenges,
+                proof,
+                polys,
+                data,
+            } => Self::round5(driver, domains, challenges, proof, polys, data),
             Round::Round6 => todo!(),
             Round::Finished => todo!(),
         }

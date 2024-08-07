@@ -79,18 +79,6 @@ where
     pub(crate) eval: FieldShareVec<T, P>,
 }
 
-pub(crate) struct WirePolyOutput<T, P: Pairing>
-where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    pub(crate) buffer_a: FieldShareVec<T, P>,
-    pub(crate) buffer_b: FieldShareVec<T, P>,
-    pub(crate) buffer_c: FieldShareVec<T, P>,
-    pub(crate) poly_eval_a: PolyEval<T, P>,
-    pub(crate) poly_eval_b: PolyEval<T, P>,
-    pub(crate) poly_eval_c: PolyEval<T, P>,
-}
-
 pub(crate) struct TPoly<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,

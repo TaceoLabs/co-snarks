@@ -1,7 +1,7 @@
 use crate::{
-    round1::{Round1Challenges, Round1Proof},
-    types::{Keccak256Transcript, PolyEval, WirePolyOutput},
-    Domains, PlonkData, PlonkProofError, PlonkProofResult, Round,
+    round1::{Round1Challenges, Round1Polys, Round1Proof},
+    types::{Keccak256Transcript, PolyEval},
+    Domains, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult, Round,
 };
 use ark_ec::pairing::Pairing;
 use ark_poly::GeneralEvaluationDomain;
@@ -18,9 +18,29 @@ pub(super) struct Round2Challenges<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    b: [T::FieldShare; 11],
-    beta: P::ScalarField,
-    gamma: P::ScalarField,
+    pub(crate) b: [T::FieldShare; 11],
+    pub(crate) beta: P::ScalarField,
+    pub(crate) gamma: P::ScalarField,
+}
+
+pub(super) struct Round2Proof<P: Pairing> {
+    pub(crate) commit_a: P::G1,
+    pub(crate) commit_b: P::G1,
+    pub(crate) commit_c: P::G1,
+    pub(crate) commit_z: P::G1,
+}
+
+pub(super) struct Round2Polys<T, P: Pairing>
+where
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub(crate) buffer_a: FieldShareVec<T, P>,
+    pub(crate) buffer_b: FieldShareVec<T, P>,
+    pub(crate) buffer_c: FieldShareVec<T, P>,
+    pub(crate) poly_eval_a: PolyEval<T, P>,
+    pub(crate) poly_eval_b: PolyEval<T, P>,
+    pub(crate) poly_eval_c: PolyEval<T, P>,
+    pub(crate) z: PolyEval<T, P>,
 }
 
 impl<T, P: Pairing> Round2Challenges<T, P>
@@ -40,13 +60,6 @@ where
     }
 }
 
-pub(super) struct Round2Proof<P: Pairing> {
-    pub(crate) commit_a: P::G1,
-    pub(crate) commit_b: P::G1,
-    pub(crate) commit_c: P::G1,
-    pub(crate) commit_z: P::G1,
-}
-
 impl<P: Pairing> Round2Proof<P> {
     fn new(round1_proof: Round1Proof<P>, commit_z: P::G1) -> Self {
         Self {
@@ -54,6 +67,23 @@ impl<P: Pairing> Round2Proof<P> {
             commit_b: round1_proof.commit_b,
             commit_c: round1_proof.commit_c,
             commit_z,
+        }
+    }
+}
+
+impl<T, P: Pairing> Round2Polys<T, P>
+where
+    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn new(polys: Round1Polys<T, P>, z: PolyEval<T, P>) -> Self {
+        Self {
+            buffer_a: polys.buffer_a,
+            buffer_b: polys.buffer_b,
+            buffer_c: polys.buffer_c,
+            poly_eval_a: polys.poly_eval_a,
+            poly_eval_b: polys.poly_eval_b,
+            poly_eval_c: polys.poly_eval_c,
+            z,
         }
     }
 }
@@ -69,10 +99,10 @@ where
 {
     fn compute_z(
         driver: &mut T,
+        zkey: &ZKey<P>,
         domains: &Domains<P>,
         challenges: &Round2Challenges<T, P>,
-        zkey: &ZKey<P>,
-        wire_polys: &WirePolyOutput<T, P>,
+        wire_polys: &Round1Polys<T, P>,
     ) -> PlonkProofResult<PolyEval<T, P>> {
         let mut num_arr = Vec::with_capacity(zkey.domain_size);
         let mut den_arr = Vec::with_capacity(zkey.domain_size);
@@ -80,15 +110,8 @@ where
         num_arr.push(driver.promote_to_trivial_share(P::ScalarField::one()));
         den_arr.push(driver.promote_to_trivial_share(P::ScalarField::one()));
 
-        // TODO Check if this root_of_unity is the one we need
-        // FIXME  Do we want the dependency to collaborative Groth16??
-        let num_constraints = zkey.n_constraints;
-        let root_of_unity = CollaborativeGroth16::<T, P>::xth_root_of_unity(
-            zkey.power,
-            &domains.constraint_domain4,
-        );
-
         let mut w = P::ScalarField::one();
+        let pow_root_of_unity = domains.roots_of_unity[zkey.power];
         for i in 0..zkey.domain_size {
             let a = T::index_sharevec(&wire_polys.buffer_a, i);
             let b = T::index_sharevec(&wire_polys.buffer_b, i);
@@ -141,7 +164,7 @@ where
                 den_arr.push(den);
             }
 
-            w *= &root_of_unity;
+            w *= &pow_root_of_unity;
         }
 
         // Compute the inverse of denArr to compute in the next command the
@@ -175,7 +198,7 @@ where
         domains: Domains<P>,
         challenges: Round1Challenges<T, P>,
         proof: Round1Proof<P>,
-        wire_polys: WirePolyOutput<T, P>,
+        polys: Round1Polys<T, P>,
         data: PlonkData<T, P>,
     ) -> PlonkProofResult<Self> {
         let zkey = &data.zkey;
@@ -202,7 +225,7 @@ where
         transcript.add_scalar(beta);
         let gamma = transcript.get_challenge();
         let challenges = Round2Challenges::new(challenges, beta, gamma);
-        let z = Self::compute_z(driver, &domains, &challenges, zkey, &wire_polys)?;
+        let z = Self::compute_z(driver, zkey, &domains, &challenges, &polys)?;
         // STEP 2.3 - Compute permutation [z]_1
         let commit_z = MSMProvider::<P::G1>::msm_public_points(driver, &zkey.p_tau, &z.poly);
         let proof = Round2Proof::new(proof, driver.open_point(&commit_z)?);
@@ -211,7 +234,7 @@ where
             domains,
             challenges,
             proof,
-            wire_polys,
+            polys: Round2Polys::new(polys, z),
             data,
         })
     }
@@ -256,7 +279,7 @@ pub mod tests {
 
         let round1 = Round::<PlainDriver<ark_bn254::Fr>, Bn254>::Round1 {
             domains: Domains::new(&zkey).unwrap(),
-            challenges: Round1Challenges::deterministic(),
+            challenges: Round1Challenges::deterministic(&mut driver),
             data: PlonkData {
                 witness: witness.into(),
                 zkey,
@@ -267,15 +290,15 @@ pub mod tests {
             domains,
             challenges,
             proof,
-            wire_polys,
+            polys,
             data,
         } = round2.next_round(&mut driver).unwrap()
         {
             assert_eq!(
                 proof.commit_z,
                 g1_from_xy!(
-                    "13569953266614293784688018920058603260157586396246814241629501297726983543959",
-                    "16291647213004268805645944755738181530935160682887241922013136786503204504150"
+                    "3193853225338636777745825115445130632572036577821757614861727562557294229347",
+                    "2273189363544172111301372917925262144551721107173868058666388265726379163785"
                 )
             );
         } else {

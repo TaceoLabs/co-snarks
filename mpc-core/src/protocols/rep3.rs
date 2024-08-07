@@ -5,6 +5,7 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
+use core::panic;
 use eyre::Report;
 use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
@@ -394,6 +395,13 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         }
     }
 
+    fn neg_vec_in_place_limit(&mut self, vec: &mut Self::FieldShareVec, limit: usize) {
+        for (a, b) in vec.a.iter_mut().zip(vec.b.iter_mut()).take(limit) {
+            a.neg_in_place();
+            b.neg_in_place();
+        }
+    }
+
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
         let (a, b) = self.rngs.rand.random_fes();
         Ok(Self::FieldShare { a, b })
@@ -522,6 +530,10 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         assert!(len > 0);
         dst.a[dst_offset..dst_offset + len].clone_from_slice(&src.a[src_offset..src_offset + len]);
         dst.b[dst_offset..dst_offset + len].clone_from_slice(&src.b[src_offset..src_offset + len]);
+    }
+
+    fn print_share(&self, _: &Self::FieldShare) {
+        panic!("do not print rep3 shares");
     }
 
     fn print(&self, to_print: &Self::FieldShareVec) {
