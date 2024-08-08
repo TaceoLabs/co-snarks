@@ -8,7 +8,8 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use circom_types::plonk::ZKey;
 use mpc_core::traits::{
-    FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    FFTPostProcessing, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
+    PrimeFieldMpcProtocol,
 };
 use num_traits::One;
 use num_traits::Zero;
@@ -53,11 +54,11 @@ macro_rules! mul4vec {
 macro_rules! mul4vec_post {
     ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$i: expr, $z1: expr, $z2: expr, $z3: expr) => {{
         let mod_i = $i % 4;
-        let mut rz = T::index_sharevec(&$a, $i);
+        let mut rz = $a.index($i);
         if mod_i != 0 {
-            let b = T::index_sharevec(&$b, $i);
-            let c = T::index_sharevec(&$c, $i);
-            let d = T::index_sharevec(&$d, $i);
+            let b = $b.index($i);
+            let c = $c.index($i);
+            let d = $d.index($i);
             let tmp = $driver.mul_with_public(&$z1[mod_i], &b);
             rz = $driver.add(&rz, &tmp);
             let tmp = $driver.mul_with_public(&$z2[mod_i], &c);
@@ -253,9 +254,9 @@ where
             w *= &pow_plus2_root_of_unity;
         }
 
-        let ap_vec = ap.into();
-        let bp_vec = bp.into();
-        let cp_vec = cp.into();
+        let ap_vec: FieldShareVec<T, P> = ap.into();
+        let bp_vec: FieldShareVec<T, P> = bp.into();
+        let cp_vec: FieldShareVec<T, P> = cp.into();
 
         // TODO parallelize these?
         let a_b = driver.mul_vec(&polys.poly_eval_a.eval, &polys.poly_eval_b.eval)?;
@@ -279,10 +280,10 @@ where
         let mut zwp = Vec::with_capacity(zkey.domain_size * 4);
         let mut w = P::ScalarField::one();
         for i in 0..zkey.domain_size * 4 {
-            let a = T::index_sharevec(&polys.poly_eval_a.eval, i);
-            let b = T::index_sharevec(&polys.poly_eval_b.eval, i);
-            let c = T::index_sharevec(&polys.poly_eval_c.eval, i);
-            let z = T::index_sharevec(&polys.z.eval, i);
+            let a = polys.poly_eval_a.eval.index(i);
+            let b = polys.poly_eval_b.eval.index(i);
+            let c = polys.poly_eval_c.eval.index(i);
+            let z = polys.z.eval.index(i);
             let qm = zkey.qm_poly.evaluations[i];
             let ql = zkey.ql_poly.evaluations[i];
             let qr = zkey.qr_poly.evaluations[i];
@@ -291,11 +292,11 @@ where
             let s1 = zkey.s1_poly.evaluations[i];
             let s2 = zkey.s2_poly.evaluations[i];
             let s3 = zkey.s3_poly.evaluations[i];
-            let a_bp = T::index_sharevec(&a_bp, i);
-            let a_b = T::index_sharevec(&a_b, i);
-            let ap_b = T::index_sharevec(&ap_b, i);
-            let ap = T::index_sharevec(&ap_vec, i);
-            let bp = T::index_sharevec(&bp_vec, i);
+            let a_bp = a_bp.index(i);
+            let a_b = a_b.index(i);
+            let ap_b = ap_b.index(i);
+            let ap = ap_vec.index(i);
+            let bp = bp_vec.index(i);
 
             let w2 = w.square();
             let zp_lhs = driver.mul_with_public(&w2, &challenges.b[6]);
@@ -305,11 +306,11 @@ where
             zp.push(zp_);
 
             let w_w = w * pow_root_of_unity;
-            let w_w2 = w_w.square();
-            let zw = T::index_sharevec(
-                &polys.z.eval,
-                (zkey.domain_size * 4 + 4 + i) % (zkey.domain_size * 4),
-            );
+            let w_w2: <P as Pairing>::ScalarField = w_w.square();
+            let zw = polys
+                .z
+                .eval
+                .index((zkey.domain_size * 4 + 4 + i) % (zkey.domain_size * 4));
             let zwp_lhs = driver.mul_with_public(&w_w2, &challenges.b[6]);
             let zwp_rhs = driver.mul_with_public(&w_w, &challenges.b[7]);
             let zwp_ = driver.add(&zwp_lhs, &zwp_rhs);
@@ -320,7 +321,7 @@ where
             let mod_i = i % 4;
             if mod_i != 0 {
                 let z1 = z1[mod_i];
-                let ap_bp = T::index_sharevec(&ap_bp, i);
+                let ap_bp = ap_bp.index(i);
                 let tmp = driver.mul_with_public(&z1, &ap_bp);
                 a0 = driver.add(&a0, &tmp);
             }
@@ -336,12 +337,12 @@ where
             e1z_ = driver.add_mul_public(&e1z_, &bp, &qr);
 
             e1_ = driver.add_mul_public(&e1_, &c, &qo);
-            e1z_ = driver.add_mul_public(&e1z_, &T::index_sharevec(&cp_vec, i), &qo);
+            e1z_ = driver.add_mul_public(&e1z_, &cp_vec.index(i), &qo);
 
             let mut pi = T::zero_share();
             for (j, lagrange) in zkey.lagrange.iter().enumerate() {
                 let l_eval = lagrange.evaluations[i];
-                let a_val = T::index_sharevec(&polys.buffer_a, j);
+                let a_val = polys.buffer_a.index(j);
                 let tmp = driver.mul_with_public(&l_eval, &a_val);
                 pi = driver.sub(&pi, &tmp);
             }
@@ -415,13 +416,13 @@ where
         let mut t_vec = Vec::with_capacity(zkey.domain_size * 4);
         let mut tz_vec = Vec::with_capacity(zkey.domain_size * 4);
         for i in 0..zkey.domain_size * 4 {
-            let mut e2 = T::index_sharevec(&e2, i);
+            let mut e2 = e2.index(i);
             let mut e2z = mul4vec_post!(driver, e2z_0, e2z_1, e2z_2, e2z_3, i, z1, z2, z3);
-            let mut e3 = T::index_sharevec(&e3, i);
+            let mut e3 = e3.index(i);
             let mut e3z = mul4vec_post!(driver, e3z_0, e3z_1, e3z_2, e3z_3, i, z1, z2, z3);
 
-            let z = T::index_sharevec(&polys.z.eval, i);
-            let zp = T::index_sharevec(&zp_vec, i);
+            let z = polys.z.eval.index(i);
+            let zp = zp_vec.index(i);
 
             e2 = driver.mul_with_public(&challenges.alpha, &e2);
             e2z = driver.mul_with_public(&challenges.alpha, &e2z);
@@ -451,10 +452,10 @@ where
         driver.neg_vec_in_place_limit(&mut coefficients_t, zkey.domain_size);
 
         for i in zkey.domain_size..zkey.domain_size * 4 {
-            let a_lhs = T::index_sharevec(&coefficients_t, i - zkey.domain_size);
-            let a_rhs = T::index_sharevec(&coefficients_t, i);
+            let a_lhs = coefficients_t.index(i - zkey.domain_size);
+            let a_rhs = coefficients_t.index(i);
             let a = driver.sub(&a_lhs, &a_rhs);
-            T::set_index_sharevec(&mut coefficients_t, a, i);
+            coefficients_t.set_index(a, i);
             /*
               We cannot check whether the polynomial is divisible by Zh here
             */
@@ -504,17 +505,17 @@ where
         // Compute [T1]_1, [T2]_1, [T3]_1
         let commit_t1 = MSMProvider::<P::G1>::msm_public_points(
             &mut driver,
-            &data.zkey.p_tau[..T::sharevec_len(&t1)],
+            &data.zkey.p_tau[..t1.get_len()],
             &t1,
         );
         let commit_t2 = MSMProvider::<P::G1>::msm_public_points(
             &mut driver,
-            &data.zkey.p_tau[..T::sharevec_len(&t2)],
+            &data.zkey.p_tau[..t2.get_len()],
             &t2,
         );
         let commit_t3 = MSMProvider::<P::G1>::msm_public_points(
             &mut driver,
-            &data.zkey.p_tau[..T::sharevec_len(&t3)],
+            &data.zkey.p_tau[..t3.get_len()],
             &t3,
         );
 

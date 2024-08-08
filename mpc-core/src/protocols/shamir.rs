@@ -10,7 +10,8 @@ use self::{
 };
 use crate::{
     traits::{
-        EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        EcMpcProtocol, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
+        PrimeFieldMpcProtocol,
     },
     RngType,
 };
@@ -437,6 +438,24 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     }
 }
 
+impl<F: PrimeField> FieldShareVecTrait for ShamirPrimeFieldShareVec<F> {
+    type FieldShare = ShamirPrimeFieldShare<F>;
+
+    fn index(&self, index: usize) -> Self::FieldShare {
+        Self::FieldShare {
+            a: self.a[index].to_owned(),
+        }
+    }
+
+    fn set_index(&mut self, val: Self::FieldShare, index: usize) {
+        self.a[index] = val.a;
+    }
+
+    fn get_len(&self) -> usize {
+        self.len()
+    }
+}
+
 impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtocol<F, N> {
     type FieldShare = ShamirPrimeFieldShare<F>;
     type FieldShareVec = ShamirPrimeFieldShareVec<F>;
@@ -653,20 +672,6 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
             print!("{a}, ")
         }
         println!("]");
-    }
-
-    fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare {
-        Self::FieldShare {
-            a: sharevec.a[index],
-        }
-    }
-
-    fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize) {
-        sharevec.a[index] = val.a;
-    }
-
-    fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
-        sharevec.len()
     }
 
     /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).

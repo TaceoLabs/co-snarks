@@ -15,7 +15,8 @@ use std::{marker::PhantomData, thread, time::Duration};
 use crate::traits::CircomWitnessExtensionProtocol;
 use crate::{
     traits::{
-        EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        EcMpcProtocol, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
+        PrimeFieldMpcProtocol,
     },
     RngType,
 };
@@ -313,6 +314,26 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
     }
 }
 
+impl<F: PrimeField> FieldShareVecTrait for Rep3PrimeFieldShareVec<F> {
+    type FieldShare = Rep3PrimeFieldShare<F>;
+
+    fn index(&self, index: usize) -> Self::FieldShare {
+        Self::FieldShare {
+            a: self.a[index],
+            b: self.b[index],
+        }
+    }
+
+    fn set_index(&mut self, val: Self::FieldShare, index: usize) {
+        self.a[index] = val.a;
+        self.b[index] = val.b;
+    }
+
+    fn get_len(&self) -> usize {
+        self.len()
+    }
+}
+
 impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F, N> {
     type FieldShare = Rep3PrimeFieldShare<F>;
     type FieldShareVec = Rep3PrimeFieldShareVec<F>;
@@ -551,22 +572,6 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
             print!("{a}, ")
         }
         println!("]");
-    }
-
-    fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare {
-        Self::FieldShare {
-            a: sharevec.a[index],
-            b: sharevec.b[index],
-        }
-    }
-
-    fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize) {
-        sharevec.a[index] = val.a;
-        sharevec.b[index] = val.b;
-    }
-
-    fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
-        sharevec.len()
     }
 
     fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F> {

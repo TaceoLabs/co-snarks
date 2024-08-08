@@ -11,6 +11,35 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use core::fmt;
 use eyre::Result;
 
+pub trait FieldShareVecTrait:
+    From<Vec<Self::FieldShare>>
+    + IntoIterator<Item = Self::FieldShare>
+    + Clone
+    + CanonicalSerialize
+    + CanonicalDeserialize
+    + Default
+    + std::fmt::Debug
+    + Sync
+{
+    /// The type of a share of a field element.
+    type FieldShare: Default
+        + std::fmt::Debug
+        + Clone
+        + CanonicalSerialize
+        + CanonicalDeserialize
+        + Sync
+        + Default;
+
+    /// Returns the shared value at index `index` in the shared vector.
+    fn index(&self, index: usize) -> Self::FieldShare;
+
+    /// Sets the specified value at `index` in the shared vector.
+    fn set_index(&mut self, val: Self::FieldShare, index: usize);
+
+    /// Returns the length of the shared vector.
+    fn get_len(&self) -> usize;
+}
+
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     /// The type of a share of a field element.
@@ -23,14 +52,7 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         + Default;
 
     /// The type of a vector of shared field elements.
-    type FieldShareVec: From<Vec<Self::FieldShare>>
-        + Clone
-        + CanonicalSerialize
-        + CanonicalDeserialize
-        + Default
-        + std::fmt::Debug
-        + IntoIterator<Item = Self::FieldShare>
-        + Sync;
+    type FieldShareVec: FieldShareVecTrait<FieldShare = Self::FieldShare>;
 
     /// Add two shares: \[c\] = \[a\] + \[b\]
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
@@ -160,15 +182,6 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 
     /// Prints a single the shared value
     fn print_share(&self, to_print: &Self::FieldShare);
-
-    /// Returns the shared value at index `index` in the shared vector `sharevec`.
-    fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare;
-
-    /// Sets the specified value at `index` in the shared vector `sharevec`.
-    fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize);
-
-    /// Returns the length of the shared vector `sharevec`.
-    fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize;
 
     /// Returns a secret shared zero value
     fn zero_share() -> Self::FieldShare {

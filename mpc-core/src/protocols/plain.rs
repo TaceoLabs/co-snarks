@@ -4,8 +4,8 @@
 
 use crate::{
     traits::{
-        CircomWitnessExtensionProtocol, EcMpcProtocol, FFTProvider, MSMProvider,
-        PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        CircomWitnessExtensionProtocol, EcMpcProtocol, FFTProvider, FieldShareVecTrait,
+        MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
     },
     RngType,
 };
@@ -84,6 +84,22 @@ impl<F: PrimeField> Default for PlainDriver<F> {
         Self {
             negative_one: F::from(modulus / two + one),
         }
+    }
+}
+
+impl<F: PrimeField> FieldShareVecTrait for Vec<F> {
+    type FieldShare = F;
+
+    fn index(&self, index: usize) -> Self::FieldShare {
+        self[index].to_owned()
+    }
+
+    fn set_index(&mut self, val: Self::FieldShare, index: usize) {
+        self[index] = val;
+    }
+
+    fn get_len(&self) -> usize {
+        self.len()
     }
 }
 
@@ -257,18 +273,6 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
                 println!("{a}")
             }
         }
-    }
-
-    fn index_sharevec(sharevec: &Self::FieldShareVec, index: usize) -> Self::FieldShare {
-        sharevec[index]
-    }
-
-    fn set_index_sharevec(sharevec: &mut Self::FieldShareVec, val: Self::FieldShare, index: usize) {
-        sharevec[index] = val;
-    }
-
-    fn sharevec_len(sharevec: &Self::FieldShareVec) -> usize {
-        sharevec.len()
     }
 
     fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F> {

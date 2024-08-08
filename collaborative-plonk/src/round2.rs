@@ -8,7 +8,8 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use circom_types::plonk::ZKey;
 use mpc_core::traits::{
-    FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    FFTPostProcessing, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
+    PrimeFieldMpcProtocol,
 };
 use num_traits::One;
 
@@ -152,9 +153,9 @@ where
         let mut d2 = Vec::with_capacity(zkey.domain_size);
         let mut d3 = Vec::with_capacity(zkey.domain_size);
         for i in 0..zkey.domain_size {
-            let a = T::index_sharevec(&polys.buffer_a, i);
-            let b = T::index_sharevec(&polys.buffer_b, i);
-            let c = T::index_sharevec(&polys.buffer_c, i);
+            let a = polys.buffer_a.index(i);
+            let b = polys.buffer_b.index(i);
+            let c = polys.buffer_c.index(i);
 
             // Z(X) := numArr / denArr
             // numArr := (a + beta·ω + gamma)(b + beta·ω·k1 + gamma)(c + beta·ω·k2 + gamma)
@@ -270,7 +271,7 @@ where
 
         let commit_z = MSMProvider::<P::G1>::msm_public_points(
             &mut driver,
-            &zkey.p_tau[..T::sharevec_len(&z.poly)],
+            &zkey.p_tau[..z.poly.get_len()],
             &z.poly,
         );
         let proof = Round2Proof::new(proof, driver.open_point(&commit_z)?);
