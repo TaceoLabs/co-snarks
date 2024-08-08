@@ -163,6 +163,7 @@ mod test {
         let der_vk = serde_json::from_str::<JsonVerificationKey<Bn254>>(&ser_vk).unwrap();
         assert_eq!(der_vk, vk);
     }
+
     #[test]
     fn can_serde_vk_bls12_381() {
         let vk_string =
