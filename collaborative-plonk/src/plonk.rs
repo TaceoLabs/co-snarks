@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::{plonk_utils, types::Keccak256Transcript, CollaborativePlonk, Domains};
 use ark_ec::{pairing::Pairing, Group};
 use ark_ff::Field;

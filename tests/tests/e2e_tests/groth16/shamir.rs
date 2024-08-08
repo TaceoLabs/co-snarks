@@ -53,10 +53,12 @@ fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
     for r in results {
         assert_eq!(result1, r);
     }
-    let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
-    let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
-    let verified =
-        Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
+    let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1.to_owned())).unwrap();
+    let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof)
+        .unwrap()
+        .into();
+    assert_eq!(der_proof, result1);
+    let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof, &inputs).expect("can verify");
     assert!(verified);
 }
 
@@ -101,11 +103,13 @@ fn e2e_poseidon_bn254_with_zkey_matrices_inner(num_parties: usize, threshold: us
     for r in results {
         assert_eq!(result1, r);
     }
-    let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
-    let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
+    let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1.to_owned())).unwrap();
+    let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof)
+        .unwrap()
+        .into();
+    assert_eq!(der_proof, result1);
     let inputs = witness.values[1..num_inputs].to_vec();
-    let verified =
-        Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
+    let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof, &inputs).expect("can verify");
     assert!(verified);
 }
 

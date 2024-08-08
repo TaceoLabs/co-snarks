@@ -1,7 +1,11 @@
 use ark_bn254::Bn254;
-use circom_types::{groth16::witness::Witness, plonk::ZKey, r1cs::R1CS};
+use circom_types::{
+    groth16::witness::Witness,
+    plonk::{JsonVerificationKey, PlonkProof, ZKey},
+    r1cs::R1CS,
+};
 use collaborative_groth16::{circuit::Circuit, groth16::SharedWitness};
-use collaborative_plonk::CollaborativePlonk;
+use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};
 use itertools::izip;
 use mpc_core::protocols::shamir::ShamirProtocol;
 use rand::thread_rng;
@@ -12,6 +16,11 @@ fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
     let zkey_file = File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.zkey").unwrap();
     let r1cs_file = File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.r1cs").unwrap();
     let witness_file = File::open("../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
+    let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
+        File::open("../test_vectors/Plonk/bn254/multiplierAdd2/verification_key.json").unwrap(),
+    )
+    .unwrap();
+
     let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
     let pk1 = ZKey::<Bn254>::from_reader(zkey_file).unwrap();
     let pk = vec![pk1.clone(); num_parties];
@@ -45,12 +54,12 @@ fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
         assert_eq!(result1, r);
     }
 
-    // TODO rewrite for plonk
-    // let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
-    // let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
-    // let verified =
-    //     Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
-    // assert!(verified);
+    let ser_proof = serde_json::to_string(&result1).unwrap();
+    let der_proof = serde_json::from_str::<PlonkProof<Bn254>>(&ser_proof).unwrap();
+    assert_eq!(der_proof, result1);
+    let verified =
+        Plonk::<Bn254>::verify(&vk, &der_proof, &public_inputs1[1..]).expect("can verify");
+    assert!(verified);
 }
 
 #[test]
