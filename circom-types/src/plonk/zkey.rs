@@ -393,15 +393,21 @@ where
         let n_additions = u32::deserialize_uncompressed(&mut reader)?;
         let n_constraints = u32::deserialize_uncompressed(&mut reader)?;
         let verifying_key = VerifyingKey::new(&mut reader)?;
-        Ok(Self {
-            n8r: u32_to_usize!(n8r),
-            n_vars: u32_to_usize!(n_vars),
-            n_public: u32_to_usize!(n_public),
-            domain_size: u32_to_usize!(domain_size),
-            power: u32_to_usize!(domain_size.ilog2()),
-            n_additions: u32_to_usize!(n_additions),
-            n_constraints: u32_to_usize!(n_constraints),
-            verifying_key,
-        })
+        if domain_size & (domain_size - 1) == 0 {
+            Ok(Self {
+                n8r: u32_to_usize!(n8r),
+                n_vars: u32_to_usize!(n_vars),
+                n_public: u32_to_usize!(n_public),
+                domain_size: u32_to_usize!(domain_size),
+                power: u32_to_usize!(domain_size.ilog2()),
+                n_additions: u32_to_usize!(n_additions),
+                n_constraints: u32_to_usize!(n_constraints),
+                verifying_key,
+            })
+        } else {
+            Err(ZKeyParserError::CorruptedBinFile(format!(
+                "Invalid domain size {domain_size}. Must be power of 2"
+            )))
+        }
     }
 }
