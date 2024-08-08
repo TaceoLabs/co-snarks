@@ -8,10 +8,10 @@ use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
+use collaborative_groth16::groth16::roots_of_unity;
 use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
-use num_traits::ToPrimitive;
 use num_traits::Zero;
 use round1::Round1;
 use std::io;
@@ -46,33 +46,18 @@ pub(crate) struct Domains<F: PrimeField> {
     roots_of_unity: Vec<F>,
 }
 
-//TODO WE COPIED THIS FROM GROTH16 - WE WANT A COMMON PLACE
-fn roots_of_unity<F: PrimeField + FftField>() -> Vec<F> {
-    let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
-    let mut q = F::one();
-    while q.legendre() != LegendreSymbol::QuadraticNonResidue {
-        q += F::one();
-    }
-    let z = q.pow(F::TRACE);
-    roots[0] = z;
-    for i in 1..roots.len() {
-        roots[i] = roots[i - 1].square();
-    }
-    roots.reverse();
-    roots
-}
-
 impl<F: PrimeField> Domains<F> {
     fn new(domain_size: usize) -> PlonkProofResult<Self> {
         let domain = GeneralEvaluationDomain::<F>::new(domain_size)
             .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
         let extended_domain = GeneralEvaluationDomain::<F>::new(domain_size * 4)
             .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
+        let (_, roots_of_unity) = roots_of_unity();
 
         Ok(Self {
             domain,
             extended_domain,
-            roots_of_unity: roots_of_unity(),
+            roots_of_unity,
         })
     }
 }

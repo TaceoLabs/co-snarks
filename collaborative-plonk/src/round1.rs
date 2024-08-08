@@ -77,9 +77,7 @@ where
 {
     pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::FieldShare::default());
-        //this is a clippy bug. Remove me if fixed
-        //#[allow(unused_mut)]
-        for x in b.as_mut_slice() {
+        for mut x in b.iter_mut() {
             *x = driver.rand()?;
         }
         Ok(Self { b })

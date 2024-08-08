@@ -41,7 +41,50 @@ type CurveFieldShareVec<T, C> = <T as PrimeFieldMpcProtocol<
     <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
 >>::FieldShareVec;
 
+/// Computes the roots of unity over the provided prime field. This method
+/// is equivalent with [circom's implementation](https://github.com/iden3/ffjavascript/blob/337b881579107ab74d5b2094dbe1910e33da4484/src/wasm_field1.js).
+///
+/// We calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p). We also calculate smallest t s.t. p-1=2^s*t, s is the two adicity.
+/// We use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
+/// Then if log2(\text{domain_size}) equals s we take q^2 as root of unity. Else we take the log2(\text{domain_size}) + 1-th element of the domain created above.
+pub fn roots_of_unity<F: PrimeField + FftField>() -> (F, Vec<F>) {
+    let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
+    let mut q = F::one();
+    while q.legendre() != LegendreSymbol::QuadraticNonResidue {
+        q += F::one();
+    }
+    let z = q.pow(F::TRACE);
+    roots[0] = z;
+    for i in 1..roots.len() {
+        roots[i] = roots[i - 1].square();
+    }
+    roots.reverse();
+    (q, roots)
+}
+
+/* old way of computing root of unity, does not work for bls12_381:
+let root_of_unity = {
+    let domain_size_double = 2 * domain_size;
+    let domain_double =
+        D::new(domain_size_double).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+    domain_double.element(1)
+};
+new one is computed in the same way as in snarkjs (More precisely in ffjavascript/src/wasm_field1.js)
+calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) also calculate smallest t (F::TRACE) s.t. p-1=2^s*t, s is the two_adicity
+use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
+then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
+*/
+fn root_of_unity_for_groth16<F: PrimeField + FftField>(domain: &GeneralEvaluationDomain<F>) -> F {
+    let (q, roots) = roots_of_unity::<F>();
+    if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
+        q.square()
+    } else {
+        roots[domain.log_size_of_group().to_usize().unwrap() + 1]
+    }
+}
+
 // TODO: maybe move this type to some other crate, as this is the only used type from this crate for many dependencies
+// TODO: if you are at it, move the roots of unity function above also
 /// A shared witness for a Groth16 proof.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedWitness<T, P: Pairing>
@@ -199,52 +242,6 @@ where
         self.create_proof_with_assignment(pk, r, s, &h, &public_inputs[1..], private_witness)
     }
 
-    //TODO IS THIS CORRECT NOW????
-    fn root_of_unities<F: PrimeField + FftField>(
-        domain: &GeneralEvaluationDomain<F>,
-    ) -> (F, Vec<F>) {
-        let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
-        let mut q = F::one();
-        while q.legendre() != LegendreSymbol::QuadraticNonResidue {
-            q += F::one();
-        }
-        let z = q.pow(F::TRACE);
-        roots[0] = z;
-        for i in 1..roots.len() {
-            roots[i] = roots[i - 1].square();
-        }
-        roots.reverse();
-        (q, roots)
-    }
-
-    pub fn xth_root_of_unity<F: PrimeField + FftField>(
-        x: usize,
-        domain: &GeneralEvaluationDomain<F>,
-    ) -> F {
-        let (_, roots) = Self::root_of_unities(domain);
-        roots[x]
-    }
-
-    /* old way of computing root of unity, does not work for bls12_381:
-    let root_of_unity = {
-        let domain_size_double = 2 * domain_size;
-        let domain_double =
-            D::new(domain_size_double).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        domain_double.element(1)
-    };
-    new one is computed in the same way as in snarkjs (More precisely in ffjavascript/src/wasm_field1.js)
-    calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) also calculate smallest t (F::TRACE) s.t. p-1=2^s*t, s is the two_adicity
-    use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
-    then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
-    */
-    pub fn root_of_unity<F: PrimeField + FftField>(domain: &GeneralEvaluationDomain<F>) -> F {
-        let (q, roots) = Self::root_of_unities(domain);
-        if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
-            q.square()
-        } else {
-            roots[domain.log_size_of_group().to_usize().unwrap() + 1]
-        }
-    }
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     pub fn prove_with_matrices(
@@ -302,7 +299,7 @@ where
 
         let mut b = FieldShareVec::<T, P>::from(b);
         let mut c = self.driver.mul_vec(&a, &b)?;
-        let root_of_unity = Self::root_of_unity(&domain);
+        let root_of_unity = root_of_unity_for_groth16(&domain);
         tracing::debug!("ifft");
         self.driver.ifft_in_place(&mut a, &domain);
         self.driver.ifft_in_place(&mut b, &domain);
