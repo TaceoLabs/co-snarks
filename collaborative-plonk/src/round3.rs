@@ -269,7 +269,8 @@ where
         let mut e3d = Vec::with_capacity(zkey.domain_size * 4);
         let mut zwp = Vec::with_capacity(zkey.domain_size * 4);
         let mut w = P::ScalarField::one();
-        for i in 0..zkey.domain_size * 4 {
+        // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
+        (0..zkey.domain_size * 4).for_each(|i| {
             let a = polys.poly_eval_a.eval.index(i);
             let b = polys.poly_eval_b.eval.index(i);
             let c = polys.poly_eval_c.eval.index(i);
@@ -296,7 +297,7 @@ where
             zp.push(zp_);
 
             let w_w = w * pow_root_of_unity;
-            let w_w2: <P as Pairing>::ScalarField = w_w.square();
+            let w_w2 = w_w.square();
             let zw = polys
                 .z
                 .eval
@@ -357,7 +358,7 @@ where
             e3c.push(driver.add_with_public(&(s3 * challenges.beta + challenges.gamma), &c));
             e3d.push(zw);
             w *= pow_plus2_root_of_unity;
-        }
+        });
 
         let e2a_vec = e2a.into();
         let e2b_vec = e2b.into();
@@ -383,7 +384,8 @@ where
 
         let mut t_vec = Vec::with_capacity(zkey.domain_size * 4);
         let mut tz_vec = Vec::with_capacity(zkey.domain_size * 4);
-        for i in 0..zkey.domain_size * 4 {
+        // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
+        (0..zkey.domain_size * 4).for_each(|i| {
             let mut e2 = e2.index(i);
             let mut e2z = mul4vec_post!(driver, e2z_0, e2z_1, e2z_2, e2z_3, i, z1, z2, z3);
             let mut e3 = e3.index(i);
@@ -415,7 +417,7 @@ where
 
             t_vec.push(t);
             tz_vec.push(tz);
-        }
+        });
         let mut coefficients_t = driver.ifft(&t_vec.into(), &domains.extended_domain);
         driver.neg_vec_in_place_limit(&mut coefficients_t, zkey.domain_size);
 
@@ -450,6 +452,7 @@ where
 
         Ok([t1.into(), t2.into(), t3.into()])
     }
+
     pub(super) fn round3(self) -> PlonkProofResult<Round4<T, P>> {
         let Self {
             mut driver,
