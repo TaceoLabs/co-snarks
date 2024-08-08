@@ -15,62 +15,62 @@ where
 {
     /// The protocol (Plonk in this case)
     pub protocol: String,
-    /// The number of public inputs
+    /// The curve
     pub curve: String,
     /// The number of public inputs
     #[serde(rename = "nPublic")]
     pub n_public: usize,
-    /// Proof element Z
+    /// The size of the fft domain
     pub power: usize,
-    /// Proof element Z
+    /// Proof element k1
     #[serde(serialize_with = "P::serialize_fr::<_>")]
     #[serde(deserialize_with = "P::deserialize_fr_element::<_>")]
     pub k1: P::ScalarField,
-    /// Proof element Z
+    /// Proof element k2
     #[serde(serialize_with = "P::serialize_fr::<_>")]
     #[serde(deserialize_with = "P::deserialize_fr_element::<_>")]
     pub k2: P::ScalarField,
-    /// Proof element Z
+    /// Proof element Qm
     #[serde(rename = "Qm")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub qm: P::G1Affine,
-    /// Proof element Z
+    /// Proof element Ql
     #[serde(rename = "Ql")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub ql: P::G1Affine,
-    /// Proof element Z
+    /// Proof element Qr
     #[serde(rename = "Qr")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub qr: P::G1Affine,
-    /// Proof element Z
+    /// Proof element Qo
     #[serde(rename = "Qo")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub qo: P::G1Affine,
-    /// Proof element Z
+    /// Proof element Qc
     #[serde(rename = "Qc")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub qc: P::G1Affine,
-    /// Proof element Z
+    /// Proof element s1
     #[serde(rename = "S1")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub s1: P::G1Affine,
-    /// Proof element Z
+    /// Proof element s2
     #[serde(rename = "S2")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub s2: P::G1Affine,
-    /// Proof element Z
+    /// Proof element s3
     #[serde(rename = "S3")]
     #[serde(serialize_with = "P::serialize_g1::<_>")]
     #[serde(deserialize_with = "P::deserialize_g1_element::<_>")]
     pub s3: P::G1Affine,
-    /// Proof element Z
+    /// Proof element x2
     #[serde(rename = "X_2")]
     #[serde(serialize_with = "P::serialize_g2::<_>")]
     #[serde(deserialize_with = "P::deserialize_g2_element::<_>")]
