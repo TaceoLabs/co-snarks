@@ -7,108 +7,99 @@ use circom_types::{
 };
 use mpc_core::{protocols::plain::PlainDriver, traits::FFTPostProcessing};
 use num_traits::One;
-use verifier::VerifierChallenges;
+use num_traits::Zero;
 
-mod verifier {
-    use ark_ec::pairing::Pairing;
-    use circom_types::{
-        plonk::{JsonVerificationKey, PlonkProof},
-        traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
-    };
-    use num_traits::Zero;
+use crate::types::Keccak256Transcript;
 
-    use crate::types::Keccak256Transcript;
+pub(crate) struct VerifierChallenges<P: Pairing> {
+    pub(super) alpha: P::ScalarField,
+    pub(super) beta: P::ScalarField,
+    pub(super) gamma: P::ScalarField,
+    pub(super) xi: P::ScalarField,
+    pub(super) v: [P::ScalarField; 5],
+    pub(super) u: P::ScalarField,
+}
 
-    pub(crate) struct VerifierChallenges<P: Pairing> {
-        pub(super) alpha: P::ScalarField,
-        pub(super) beta: P::ScalarField,
-        pub(super) gamma: P::ScalarField,
-        pub(super) xi: P::ScalarField,
-        pub(super) v: [P::ScalarField; 5],
-        pub(super) u: P::ScalarField,
-    }
+impl<P: Pairing> VerifierChallenges<P>
+where
+    P: CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    pub(super) fn new(
+        vk: &JsonVerificationKey<P>,
+        proof: &PlonkProof<P>,
+        public_inputs: &[P::ScalarField],
+    ) -> Self {
+        let mut transcript = Keccak256Transcript::<P>::default();
 
-    impl<P: Pairing> VerifierChallenges<P>
-    where
-        P: CircomArkworksPairingBridge,
-        P::BaseField: CircomArkworksPrimeFieldBridge,
-        P::ScalarField: CircomArkworksPrimeFieldBridge,
-    {
-        pub(super) fn new(
-            vk: &JsonVerificationKey<P>,
-            proof: &PlonkProof<P>,
-            public_inputs: &[P::ScalarField],
-        ) -> Self {
-            let mut transcript = Keccak256Transcript::<P>::default();
+        // Challenge round 2: beta and gamma
+        transcript.add_point(vk.qm);
+        transcript.add_point(vk.ql);
+        transcript.add_point(vk.qr);
+        transcript.add_point(vk.qo);
+        transcript.add_point(vk.qc);
+        transcript.add_point(vk.s1);
+        transcript.add_point(vk.s2);
+        transcript.add_point(vk.s3);
 
-            // Challenge round 2: beta and gamma
-            transcript.add_point(vk.qm);
-            transcript.add_point(vk.ql);
-            transcript.add_point(vk.qr);
-            transcript.add_point(vk.qo);
-            transcript.add_point(vk.qc);
-            transcript.add_point(vk.s1);
-            transcript.add_point(vk.s2);
-            transcript.add_point(vk.s3);
+        for p in public_inputs.iter().cloned() {
+            transcript.add_scalar(p);
+        }
 
-            for p in public_inputs.iter().cloned() {
-                transcript.add_scalar(p);
-            }
+        transcript.add_point(proof.a);
+        transcript.add_point(proof.b);
+        transcript.add_point(proof.c);
 
-            transcript.add_point(proof.a);
-            transcript.add_point(proof.b);
-            transcript.add_point(proof.c);
+        let beta = transcript.get_challenge();
 
-            let beta = transcript.get_challenge();
+        let mut transcript = Keccak256Transcript::<P>::default();
+        transcript.add_scalar(beta);
+        let gamma = transcript.get_challenge();
 
-            let mut transcript = Keccak256Transcript::<P>::default();
-            transcript.add_scalar(beta);
-            let gamma = transcript.get_challenge();
+        // Challenge round 3: alpha
+        let mut transcript = Keccak256Transcript::<P>::default();
+        transcript.add_scalar(beta);
+        transcript.add_scalar(gamma);
+        transcript.add_point(proof.z);
+        let alpha = transcript.get_challenge();
 
-            // Challenge round 3: alpha
-            let mut transcript = Keccak256Transcript::<P>::default();
-            transcript.add_scalar(beta);
-            transcript.add_scalar(gamma);
-            transcript.add_point(proof.z);
-            let alpha = transcript.get_challenge();
+        // Challenge round 4: xi
+        let mut transcript = Keccak256Transcript::<P>::default();
+        transcript.add_scalar(alpha);
+        transcript.add_point(proof.t1);
+        transcript.add_point(proof.t2);
+        transcript.add_point(proof.t3);
+        let xi = transcript.get_challenge();
 
-            // Challenge round 4: xi
-            let mut transcript = Keccak256Transcript::<P>::default();
-            transcript.add_scalar(alpha);
-            transcript.add_point(proof.t1);
-            transcript.add_point(proof.t2);
-            transcript.add_point(proof.t3);
-            let xi = transcript.get_challenge();
+        // Challenge round 5: v
+        let mut transcript = Keccak256Transcript::<P>::default();
+        transcript.add_scalar(xi);
+        transcript.add_scalar(proof.eval_a);
+        transcript.add_scalar(proof.eval_b);
+        transcript.add_scalar(proof.eval_c);
+        transcript.add_scalar(proof.eval_s1);
+        transcript.add_scalar(proof.eval_s2);
+        transcript.add_scalar(proof.eval_zw);
+        let mut v = [P::ScalarField::zero(); 5];
+        v[0] = transcript.get_challenge();
 
-            // Challenge round 5: v
-            let mut transcript = Keccak256Transcript::<P>::default();
-            transcript.add_scalar(xi);
-            transcript.add_scalar(proof.eval_a);
-            transcript.add_scalar(proof.eval_b);
-            transcript.add_scalar(proof.eval_c);
-            transcript.add_scalar(proof.eval_s1);
-            transcript.add_scalar(proof.eval_s2);
-            transcript.add_scalar(proof.eval_zw);
-            let mut v = [P::ScalarField::zero(); 5];
-            v[0] = transcript.get_challenge();
+        for i in 1..5 {
+            v[i] = v[i - 1] * v[0];
+        }
 
-            for i in 1..5 {
-                v[i] = v[i - 1] * v[0];
-            }
-
-            // Challenge: u
-            let mut transcript = Keccak256Transcript::<P>::default();
-            transcript.add_point(proof.wxi);
-            transcript.add_point(proof.wxiw);
-            let u = transcript.get_challenge();
-            Self {
-                alpha,
-                beta,
-                gamma,
-                xi,
-                v,
-                u,
-            }
+        // Challenge: u
+        let mut transcript = Keccak256Transcript::<P>::default();
+        transcript.add_point(proof.wxi);
+        transcript.add_point(proof.wxiw);
+        let u = transcript.get_challenge();
+        Self {
+            alpha,
+            beta,
+            gamma,
+            xi,
+            v,
+            u,
         }
     }
 }
@@ -292,7 +283,7 @@ pub mod tests {
     };
     use itertools::Itertools;
 
-    use super::{verifier::VerifierChallenges, Plonk};
+    use super::{Plonk, VerifierChallenges};
     use std::str::FromStr;
     #[test]
     pub fn calculate_verifier_challenges() {

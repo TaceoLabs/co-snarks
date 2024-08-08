@@ -36,7 +36,6 @@ where
     pub(crate) fn add_scalar(&mut self, scalar: P::ScalarField) {
         let mut buf = vec![];
         scalar
-            //.lift_montgomery() Check if we need this or not. For round2 we do not need it
             .serialize_uncompressed(&mut buf)
             .expect("Can Fr write into Vec<u8>");
         buf.reverse();
