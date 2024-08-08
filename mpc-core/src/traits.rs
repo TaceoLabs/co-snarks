@@ -2,38 +2,14 @@
 //!
 //! Contains the traits which need to be implemented by the MPC protocols.
 
-use core::fmt;
-use std::sync::LazyLock;
-
-use ark_ec::{pairing::Pairing, CurveGroup};
-use eyre::Result;
-
-use ark_bls12_381::Fq as Bls12_381_BaseField;
 use ark_bls12_381::Fr as Bls12_381_ScalarField;
-use ark_bn254::{Fq as Bn254_BaseField, Fr as Bn254_ScalarField};
-use ark_ff::Field;
+use ark_bn254::Fr as Bn254_ScalarField;
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-
-static BN254_INVERSE_R_BASE: LazyLock<Bn254_BaseField> =
-    LazyLock::new(|| Bn254_BaseField::from(Bn254_BaseField::R).inverse().unwrap());
-static BN254_INVERSE_R_SCALAR: LazyLock<Bn254_ScalarField> = LazyLock::new(|| {
-    Bn254_ScalarField::from(Bn254_ScalarField::R)
-        .inverse()
-        .unwrap()
-});
-
-static BL12_381_INVERSE_R_BASE: LazyLock<Bls12_381_BaseField> = LazyLock::new(|| {
-    Bls12_381_BaseField::from(Bls12_381_BaseField::R)
-        .inverse()
-        .unwrap()
-});
-static BLS12_381_INVERSE_R_SCALAR: LazyLock<Bls12_381_ScalarField> = LazyLock::new(|| {
-    Bls12_381_ScalarField::from(Bls12_381_ScalarField::R)
-        .inverse()
-        .unwrap()
-});
+use core::fmt;
+use eyre::Result;
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {

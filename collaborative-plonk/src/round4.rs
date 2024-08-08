@@ -168,10 +168,7 @@ pub mod tests {
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::{
-        round1::{Round1, Round1Challenges},
-        Domains, PlonkData,
-    };
+    use crate::round1::{Round1, Round1Challenges};
 
     use num_traits::Zero;
     use std::str::FromStr;

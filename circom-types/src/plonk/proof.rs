@@ -92,6 +92,7 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    /// This function checks whether the group elements are valid.
     pub fn is_well_constructed(&self) -> Result<(), SerializationError> {
         self.a.check()?;
         self.b.check()?;

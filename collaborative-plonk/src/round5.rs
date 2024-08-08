@@ -1,10 +1,9 @@
 use crate::{
-    plonk::Plonk,
     plonk_utils,
     round3::FinalPolys,
     round4::{Round4Challenges, Round4Proof},
     types::Keccak256Transcript,
-    CollaborativePlonk, Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofResult,
+    Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;

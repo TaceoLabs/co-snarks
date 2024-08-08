@@ -65,7 +65,6 @@ where
 
     #[cfg(test)]
     pub(super) fn deterministic(driver: &mut T) -> Self {
-        use num_traits::One;
         Self {
             b: core::array::from_fn(|i| {
                 driver.promote_to_trivial_share(P::ScalarField::from(i as u64))

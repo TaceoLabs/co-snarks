@@ -4,7 +4,6 @@ use ark_ff::FftField;
 use ark_ff::LegendreSymbol;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use circom_types::plonk::JsonVerificationKey;
 use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
@@ -13,7 +12,6 @@ use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use num_traits::ToPrimitive;
-use num_traits::Zero;
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
@@ -264,7 +262,6 @@ pub mod tests {
     use crate::{
         plonk::Plonk,
         round1::{Round1, Round1Challenges},
-        CollaborativePlonk,
     };
 
     #[test]
