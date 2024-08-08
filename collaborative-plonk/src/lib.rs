@@ -187,7 +187,7 @@ pub mod plonk_utils {
         Ok(result)
     }
 
-    // For convenience coeff is given in revere order
+    // For convenience coeff is given in reverse order
     pub(crate) fn blind_coefficients<T, P: Pairing>(
         driver: &mut T,
         poly: &FieldShareVec<T, P>,
