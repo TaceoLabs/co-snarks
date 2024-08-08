@@ -1,5 +1,4 @@
 use crate::{plonk_utils, CollaborativePlonk, Domains};
-use ark_ec::CurveGroup;
 use ark_ec::{pairing::Pairing, Group};
 use ark_ff::Field;
 use circom_types::{
