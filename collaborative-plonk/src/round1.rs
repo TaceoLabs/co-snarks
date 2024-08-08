@@ -4,6 +4,7 @@ use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::traits::{
     FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
+use num_traits::Zero;
 
 use crate::{
     plonk_utils, round2::Round2, types::PolyEval, Domains, FieldShare, FieldShareVec, PlonkData,
@@ -171,8 +172,6 @@ where
         witness: SharedWitness<T, P>,
         zkey: &ZKey<P>,
     ) -> PlonkProofResult<PlonkWitness<T, P>> {
-        //TODO calculate additions
-        //set first element to zero as it is not used
         let mut witness = PlonkWitness::new(witness, zkey.n_additions);
 
         for addition in zkey.additions.iter() {
@@ -200,9 +199,9 @@ where
     pub(super) fn init_round(
         mut driver: T,
         zkey: ZKey<P>,
-        private_witness: SharedWitness<T, P>,
+        mut private_witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<Self> {
-        //set first element to zero as it is not used
+        private_witness.public_inputs[0] = P::ScalarField::zero();
         let plonk_witness = Self::calculate_additions(&mut driver, private_witness, &zkey)?;
 
         Ok(Self {

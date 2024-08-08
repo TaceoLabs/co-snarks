@@ -17,7 +17,7 @@ fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
     let r1cs_file = File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.r1cs").unwrap();
     let witness_file = File::open("../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
     let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
-        File::open("../test_vectors/Plonk/bn254/multiplierAdd2/verification_key.json").unwrap(),
+        File::open("../test_vectors/Plonk/bn254/poseidon/verification_key.json").unwrap(),
     )
     .unwrap();
 
