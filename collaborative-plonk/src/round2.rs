@@ -41,7 +41,7 @@ macro_rules! array_prod_mul {
 
 pub(super) struct Round2<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -49,7 +49,7 @@ where
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
-    pub(super) domains: Domains<P>,
+    pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<T, P>,
     pub(super) proof: Round1Proof<P>,
     pub(super) polys: Round1Polys<T, P>,
@@ -58,7 +58,7 @@ where
 
 pub(super) struct Round2Challenges<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) b: [T::FieldShare; 11],
     pub(super) beta: P::ScalarField,
@@ -74,7 +74,7 @@ pub(super) struct Round2Proof<P: Pairing> {
 
 pub(super) struct Round2Polys<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) buffer_a: FieldShareVec<T, P>,
     pub(super) poly_eval_a: PolyEval<T, P>,
@@ -85,7 +85,7 @@ where
 
 impl<T, P: Pairing> Round2Challenges<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     fn new(
         round1_challenges: Round1Challenges<T, P>,
@@ -113,7 +113,7 @@ impl<P: Pairing> Round2Proof<P> {
 
 impl<T, P: Pairing> Round2Polys<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     fn new(polys: Round1Polys<T, P>, z: PolyEval<T, P>) -> Self {
         Self {
@@ -128,7 +128,7 @@ where
 
 impl<T, P: Pairing> Round2<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -138,7 +138,7 @@ where
     fn compute_z(
         driver: &mut T,
         zkey: &ZKey<P>,
-        domains: &Domains<P>,
+        domains: &Domains<P::ScalarField>,
         challenges: &Round2Challenges<T, P>,
         polys: &Round1Polys<T, P>,
     ) -> PlonkProofResult<PolyEval<T, P>> {

@@ -12,6 +12,7 @@ use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use num_traits::ToPrimitive;
+use num_traits::Zero;
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
@@ -39,11 +40,10 @@ pub enum PlonkProofError {
     IOError(#[from] io::Error),
 }
 
-pub(crate) struct Domains<P: Pairing> {
-    domain: GeneralEvaluationDomain<P::ScalarField>,
-    extended_domain: GeneralEvaluationDomain<P::ScalarField>,
-    roots_of_unity: Vec<P::ScalarField>,
-    phantom_data: PhantomData<P>,
+pub(crate) struct Domains<F: PrimeField> {
+    domain: GeneralEvaluationDomain<F>,
+    extended_domain: GeneralEvaluationDomain<F>,
+    roots_of_unity: Vec<F>,
 }
 
 //TODO WE COPIED THIS FROM GROTH16 - WE WANT A COMMON PLACE
@@ -62,18 +62,17 @@ fn roots_of_unity<F: PrimeField + FftField>() -> Vec<F> {
     roots
 }
 
-impl<P: Pairing> Domains<P> {
+impl<F: PrimeField> Domains<F> {
     fn new(domain_size: usize) -> PlonkProofResult<Self> {
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(domain_size)
+        let domain = GeneralEvaluationDomain::<F>::new(domain_size)
             .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-        let extended_domain = GeneralEvaluationDomain::<P::ScalarField>::new(domain_size * 4)
+        let extended_domain = GeneralEvaluationDomain::<F>::new(domain_size * 4)
             .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
 
         Ok(Self {
             domain,
             extended_domain,
             roots_of_unity: roots_of_unity(),
-            phantom_data: PhantomData,
         })
     }
 }
@@ -99,8 +98,9 @@ impl<T, P: Pairing> PlonkWitness<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    fn new(shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
-        //we need the leading zero for round1
+    fn new(mut shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
+        // The leading zero is 1 in Circom
+        shared_witness.public_inputs[0] = P::ScalarField::zero();
         Self {
             public_inputs: shared_witness.public_inputs,
             witness: shared_witness.witness,
@@ -112,7 +112,7 @@ where
 /// A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CollaborativePlonk<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -125,12 +125,12 @@ where
 
 impl<T, P> CollaborativePlonk<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
     P: Pairing + CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
@@ -156,7 +156,7 @@ where
     }
 }
 
-pub mod plonk_utils {
+mod plonk_utils {
     use ark_ec::pairing::Pairing;
     use circom_types::plonk::ZKey;
     use mpc_core::traits::FieldShareVecTrait;
@@ -253,10 +253,7 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::{
-        groth16::{
-            public_input::{self, JsonPublicInput},
-            witness::{self, Witness},
-        },
+        groth16::{public_input::JsonPublicInput, witness::Witness},
         plonk::{JsonVerificationKey, ZKey},
         r1cs::R1CS,
     };
@@ -269,7 +266,7 @@ pub mod tests {
     #[test]
     pub fn test_multiplier2_bn254() -> eyre::Result<()> {
         let zkey_file = "../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey";
-        let witness_file = "../test_vectors/Plonk/bn254/multiplierAdd2/witness.wtns";
+        let witness_file = "../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns";
         let zkey = ZKey::<Bn254>::from_reader(File::open(zkey_file)?)?;
         let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
         let driver = PlainDriver::<ark_bn254::Fr>::default();
@@ -285,7 +282,7 @@ pub mod tests {
         .unwrap();
 
         let public_input: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/verification_key.json").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/public.json").unwrap(),
         )
         .unwrap();
 

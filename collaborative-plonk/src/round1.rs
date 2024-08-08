@@ -13,7 +13,7 @@ use crate::{
 };
 pub(super) struct Round1<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -21,7 +21,7 @@ where
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
-    pub(super) domains: Domains<P>,
+    pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<T, P>,
     pub(super) data: PlonkDataRound1<T, P>,
 }
@@ -50,7 +50,7 @@ where
 
 pub(super) struct Round1Challenges<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) b: [T::FieldShare; 11],
 }
@@ -62,7 +62,7 @@ pub(super) struct Round1Proof<P: Pairing> {
 }
 pub(super) struct Round1Polys<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) buffer_a: FieldShareVec<T, P>,
     pub(super) buffer_b: FieldShareVec<T, P>,
@@ -74,7 +74,7 @@ where
 
 impl<T, P: Pairing> Round1Challenges<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::FieldShare::default());
@@ -96,7 +96,7 @@ where
 
 impl<T, P: Pairing> Round1<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -105,7 +105,7 @@ where
 {
     fn compute_wire_polynomials(
         driver: &mut T,
-        domains: &Domains<P>,
+        domains: &Domains<P::ScalarField>,
         challenges: &Round1Challenges<T, P>,
         zkey: &ZKey<P>,
         witness: &PlonkWitness<T, P>,
@@ -200,9 +200,8 @@ where
     pub(super) fn init_round(
         mut driver: T,
         zkey: ZKey<P>,
-        mut private_witness: SharedWitness<T, P>,
+        private_witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<Self> {
-        private_witness.public_inputs[0] = P::ScalarField::zero();
         let plonk_witness = Self::calculate_additions(&mut driver, private_witness, &zkey)?;
 
         Ok(Self {

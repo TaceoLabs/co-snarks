@@ -9,7 +9,7 @@ use eyre::Report;
 use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
 use rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp};
-use std::{marker::PhantomData, thread, time::Duration};
+use std::marker::PhantomData;
 
 #[cfg(doc)]
 use crate::traits::CircomWitnessExtensionProtocol;
@@ -551,27 +551,6 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         assert!(len > 0);
         dst.a[dst_offset..dst_offset + len].clone_from_slice(&src.a[src_offset..src_offset + len]);
         dst.b[dst_offset..dst_offset + len].clone_from_slice(&src.b[src_offset..src_offset + len]);
-    }
-
-    fn print_share(&self, to_print: &Self::FieldShare) {
-        if to_print.a.is_zero() {
-            println!("0")
-        } else {
-            println!("{}", to_print.a)
-        }
-    }
-
-    fn print(&self, to_print: &Self::FieldShareVec) {
-        match self.network.get_id() {
-            PartyID::ID0 => thread::sleep(Duration::from_millis(10)),
-            PartyID::ID1 => thread::sleep(Duration::from_millis(100)),
-            PartyID::ID2 => thread::sleep(Duration::from_millis(300)),
-        }
-        print!("[");
-        for a in to_print.b.iter() {
-            print!("{a}, ")
-        }
-        println!("]");
     }
 
     fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F> {

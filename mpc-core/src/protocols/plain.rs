@@ -257,24 +257,6 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         dst[dst_offset..dst_offset + len].clone_from_slice(&src[src_offset..src_offset + len]);
     }
 
-    fn print_share(&self, to_print: &Self::FieldShare) {
-        if to_print.is_zero() {
-            println!("0")
-        } else {
-            println!("{to_print}")
-        }
-    }
-
-    fn print(&self, to_print: &Self::FieldShareVec) {
-        for a in to_print.iter() {
-            if a.is_zero() {
-                println!("0")
-            } else {
-                println!("{a}")
-            }
-        }
-    }
-
     fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F> {
         Ok(*a * b)
     }

@@ -21,7 +21,7 @@ use ark_poly::EvaluationDomain;
 use eyre::{bail, Report};
 use itertools::{izip, Itertools};
 use rand::{Rng as _, SeedableRng};
-use std::{marker::PhantomData, thread, time::Duration};
+use std::marker::PhantomData;
 
 pub mod fieldshare;
 pub mod network;
@@ -653,25 +653,6 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         assert!(src.a.len() >= src_offset + len);
         assert!(len > 0);
         dst.a[dst_offset..dst_offset + len].clone_from_slice(&src.a[src_offset..src_offset + len]);
-    }
-
-    fn print_share(&self, to_print: &Self::FieldShare) {
-        if to_print.a.is_zero() {
-            println!("0")
-        } else {
-            println!("{}", to_print.a)
-        }
-    }
-
-    fn print(&self, to_print: &Self::FieldShareVec) {
-        thread::sleep(Duration::from_millis(
-            200 * self.network.get_id() as u64 + 100,
-        ));
-        print!("[");
-        for a in to_print.a.iter() {
-            print!("{a}, ")
-        }
-        println!("]");
     }
 
     /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
