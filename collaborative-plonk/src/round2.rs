@@ -204,16 +204,15 @@ where
 
         // TODO parallelize these?
         // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
-        let mut num = array_prod_mul!(driver, num);
-        let mut den = array_prod_mul!(driver, den);
-
-        num.rotate_right(1);
-        den.rotate_right(1);
+        let num = array_prod_mul!(driver, num);
+        let den = array_prod_mul!(driver, den);
 
         // Compute the inverse of denArr to compute in the next command the
         // division numArr/denArr by multiplying num · 1/denArr
         let den = driver.inv_many(&den)?;
-        let buffer_z = driver.mul_many(&num, &den)?.into();
+        let mut buffer_z = driver.mul_many(&num, &den)?;
+        buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
+        let buffer_z = buffer_z.into();
 
         // Compute polynomial coefficients z(X) from buffer_z
         let poly_z = driver.ifft(&buffer_z, &domains.domain);
