@@ -49,7 +49,7 @@ where
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
-    pub(super) domains: Domains<P>,
+    pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<T, P>,
     pub(super) proof: Round1Proof<P>,
     pub(super) polys: Round1Polys<T, P>,
@@ -138,7 +138,7 @@ where
     fn compute_z(
         driver: &mut T,
         zkey: &ZKey<P>,
-        domains: &Domains<P>,
+        domains: &Domains<P::ScalarField>,
         challenges: &Round2Challenges<T, P>,
         polys: &Round1Polys<T, P>,
     ) -> PlonkProofResult<PolyEval<T, P>> {

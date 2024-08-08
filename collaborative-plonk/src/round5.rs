@@ -28,7 +28,7 @@ where
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
-    pub(super) domains: Domains<P>,
+    pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round4Challenges<P>,
     pub(super) proof: Round4Proof<P>,
     pub(super) polys: FinalPolys<T, P>,
@@ -159,7 +159,7 @@ where
 
     fn compute_r(
         driver: &mut T,
-        domains: &Domains<P>,
+        domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
         data: &PlonkData<T, P>,
@@ -296,7 +296,7 @@ where
 
     fn compute_wxiw(
         driver: &mut T,
-        domains: &Domains<P>,
+        domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
         data: &PlonkData<T, P>,

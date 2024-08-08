@@ -80,7 +80,7 @@ where
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
-    pub(super) domains: Domains<P>,
+    pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round2Challenges<T, P>,
     pub(super) proof: Round2Proof<P>,
     pub(super) polys: Round2Polys<T, P>,
@@ -188,7 +188,7 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: FFTPostProcessing,
 {
-    fn get_z1(domains: &Domains<P>) -> [P::ScalarField; 4] {
+    fn get_z1(domains: &Domains<P::ScalarField>) -> [P::ScalarField; 4] {
         //TODO MOVE THIS THIS MUST BE A CONSTANT
         let zero = P::ScalarField::zero();
         let neg_1 = zero - P::ScalarField::one();
@@ -197,7 +197,7 @@ where
         [zero, neg_1 + root_of_unity, neg_2, neg_1 - root_of_unity]
     }
 
-    fn get_z2(domains: &Domains<P>) -> [P::ScalarField; 4] {
+    fn get_z2(domains: &Domains<P::ScalarField>) -> [P::ScalarField; 4] {
         let zero = P::ScalarField::zero();
         let two = P::ScalarField::one() + P::ScalarField::one();
         let four = two.square();
@@ -212,7 +212,7 @@ where
         ]
     }
 
-    fn get_z3(domains: &Domains<P>) -> [P::ScalarField; 4] {
+    fn get_z3(domains: &Domains<P::ScalarField>) -> [P::ScalarField; 4] {
         let zero = P::ScalarField::zero();
         let two = P::ScalarField::one() + P::ScalarField::one();
         let neg_eight = -(two.square() * two);
@@ -222,7 +222,7 @@ where
     }
     fn compute_t(
         driver: &mut T,
-        domains: &Domains<P>,
+        domains: &Domains<P::ScalarField>,
         challenges: &Round3Challenges<T, P>,
         zkey: &ZKey<P>,
         polys: &Round2Polys<T, P>,

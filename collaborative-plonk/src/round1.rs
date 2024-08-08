@@ -21,7 +21,7 @@ where
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
-    pub(super) domains: Domains<P>,
+    pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<T, P>,
     pub(super) data: PlonkDataRound1<T, P>,
 }
@@ -105,7 +105,7 @@ where
 {
     fn compute_wire_polynomials(
         driver: &mut T,
-        domains: &Domains<P>,
+        domains: &Domains<P::ScalarField>,
         challenges: &Round1Challenges<T, P>,
         zkey: &ZKey<P>,
         witness: &PlonkWitness<T, P>,

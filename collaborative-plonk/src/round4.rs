@@ -20,7 +20,7 @@ where
     P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
-    pub(super) domains: Domains<P>,
+    pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round3Challenges<T, P>,
     pub(super) proof: Round3Proof<P>,
     pub(super) polys: FinalPolys<T, P>,

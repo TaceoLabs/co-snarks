@@ -39,11 +39,10 @@ pub enum PlonkProofError {
     IOError(#[from] io::Error),
 }
 
-pub(crate) struct Domains<P: Pairing> {
-    domain: GeneralEvaluationDomain<P::ScalarField>,
-    extended_domain: GeneralEvaluationDomain<P::ScalarField>,
-    roots_of_unity: Vec<P::ScalarField>,
-    phantom_data: PhantomData<P>,
+pub(crate) struct Domains<F: PrimeField> {
+    domain: GeneralEvaluationDomain<F>,
+    extended_domain: GeneralEvaluationDomain<F>,
+    roots_of_unity: Vec<F>,
 }
 
 //TODO WE COPIED THIS FROM GROTH16 - WE WANT A COMMON PLACE
@@ -62,18 +61,17 @@ fn roots_of_unity<F: PrimeField + FftField>() -> Vec<F> {
     roots
 }
 
-impl<P: Pairing> Domains<P> {
+impl<F: PrimeField> Domains<F> {
     fn new(domain_size: usize) -> PlonkProofResult<Self> {
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(domain_size)
+        let domain = GeneralEvaluationDomain::<F>::new(domain_size)
             .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-        let extended_domain = GeneralEvaluationDomain::<P::ScalarField>::new(domain_size * 4)
+        let extended_domain = GeneralEvaluationDomain::<F>::new(domain_size * 4)
             .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
 
         Ok(Self {
             domain,
             extended_domain,
             roots_of_unity: roots_of_unity(),
-            phantom_data: PhantomData,
         })
     }
 }

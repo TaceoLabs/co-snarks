@@ -144,7 +144,7 @@ where
         }
 
         let challenges = VerifierChallenges::<P>::new(vk, proof, public_inputs);
-        let domains = Domains::<P>::new(1 << vk.power)?;
+        let domains = Domains::<P::ScalarField>::new(1 << vk.power)?;
         let roots = domains.roots_of_unity;
 
         let (l, xin) = plonk_utils::calculate_lagrange_evaluations::<P>(
