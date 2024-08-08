@@ -259,7 +259,6 @@ pub mod tests {
     use crate::{
         plonk::Plonk,
         round1::{Round1, Round1Challenges},
-        CollaborativePlonk,
     };
 
     #[test]
@@ -291,8 +290,8 @@ pub mod tests {
         let state = state.round3().unwrap();
         let state = state.round4().unwrap();
         let proof = state.round5().unwrap();
-        serde_json::to_writer_pretty(File::create("I AM HERE").unwrap(), &proof).unwrap();
-        //       let result = Plonk::<Bn254>::verify(&vk, &proof, &[value1]).unwrap();
-        //       assert!(result)
+        //serde_json::to_writer_pretty(File::create("I AM HERE").unwrap(), &proof).unwrap();
+        let result = Plonk::<Bn254>::verify(&vk, &proof, &[value1]).unwrap();
+        assert!(result)
     }
 }
