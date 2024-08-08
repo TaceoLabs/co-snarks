@@ -237,17 +237,6 @@ where
     then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
     */
     pub fn root_of_unity<F: PrimeField + FftField>(domain: &GeneralEvaluationDomain<F>) -> F {
-        let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
-        let mut q = F::one();
-        while q.legendre() != LegendreSymbol::QuadraticNonResidue {
-            q += F::one();
-        }
-        let z = q.pow(F::TRACE);
-        roots[0] = z;
-        for i in 1..roots.len() {
-            roots[i] = roots[i - 1].square();
-        }
-        roots.reverse();
         let (q, roots) = Self::root_of_unities(domain);
         if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
             q.square()

@@ -337,7 +337,7 @@ pub mod tests {
             File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.zkey").unwrap(),
         );
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
-        let witness_file = File::open("/home/fnieddu/repos/collaborative-circom/test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
+        let witness_file = File::open("../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let r1cs = R1CS::<Bn254>::from_reader(
             File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.r1cs").unwrap(),
