@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn can_deser_witness_bn254() {
-        let witness = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
+        let witness = File::open("../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
         let is_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
         assert_eq!(
             is_witness,
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn can_deser_witness_bls12381() {
-        let witness = File::open("../test_vectors/bls12_381/witness.wtns").unwrap();
+        let witness = File::open("../test_vectors/Groth16/bls12_381/witness.wtns").unwrap();
         let is_witness = Witness::<ark_bls12_381::Fr>::from_reader(witness).unwrap();
         assert_eq!(
             is_witness,

@@ -179,7 +179,7 @@ mod $mod_name {
                     vec![x.to_string(), y.to_string(), "1".to_owned()]
                 } else {
                     //point at infinity
-                    vec!["0".to_owned(), "0".to_owned(), "1".to_owned()]
+                    vec!["0".to_owned(), "1".to_owned(), "0".to_owned()]
                 }
             }
 
