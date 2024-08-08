@@ -429,9 +429,11 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
     fn open_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<F>> {
         let bs = a.iter().map(|x| x.b).collect_vec();
         self.network.send_next(bs)?;
-        let cs = self.network.recv_prev::<Vec<F>>()?;
+        let mut cs = self.network.recv_prev::<Vec<F>>()?;
 
-        Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
+        izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
+
+        Ok(cs)
     }
 
     fn promote_to_trivial_share(&self, public_value: F) -> Self::FieldShare {
@@ -444,14 +446,14 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
 
     fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec {
         debug_assert_eq!(a.len(), b.len());
-        let mut vec = Vec::with_capacity(a.len());
-        for (aa, ab, ba, bb) in izip!(a.a.iter(), a.b.iter(), b.a.iter(), b.b.iter()) {
-            vec.push(Rep3PrimeFieldShare {
-                a: *aa + ba,
-                b: *ab + bb,
-            })
-        }
-        vec.into()
+        let a_vec = izip!(a.a.iter(), b.a.iter())
+            .map(|(a, b)| *a + b)
+            .collect::<Vec<_>>();
+        let b_vec = izip!(a.b.iter(), b.b.iter())
+            .map(|(a, b)| *a + b)
+            .collect::<Vec<_>>();
+
+        Self::FieldShareVec::new(a_vec, b_vec)
     }
 
     fn mul_vec(
