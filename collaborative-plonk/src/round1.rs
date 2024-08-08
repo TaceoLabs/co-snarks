@@ -111,15 +111,33 @@ where
     ) -> PlonkProofResult<Round1Polys<T, P>> {
         let num_constraints = zkey.n_constraints;
 
-        let mut buffer_a = vec![FieldShare::<T, P>::default(); zkey.domain_size];
-        let mut buffer_b = vec![FieldShare::<T, P>::default(); zkey.domain_size];
-        let mut buffer_c = vec![FieldShare::<T, P>::default(); zkey.domain_size];
+        let mut buffer_a = Vec::with_capacity(zkey.domain_size);
+        let mut buffer_b = Vec::with_capacity(zkey.domain_size);
+        let mut buffer_c = Vec::with_capacity(zkey.domain_size);
 
         for i in 0..num_constraints {
-            buffer_a[i] = plonk_utils::get_witness(driver, witness, zkey, zkey.map_a[i])?;
-            buffer_b[i] = plonk_utils::get_witness(driver, witness, zkey, zkey.map_b[i])?;
-            buffer_c[i] = plonk_utils::get_witness(driver, witness, zkey, zkey.map_c[i])?;
+            buffer_a.push(plonk_utils::get_witness(
+                driver,
+                witness,
+                zkey,
+                zkey.map_a[i],
+            )?);
+            buffer_b.push(plonk_utils::get_witness(
+                driver,
+                witness,
+                zkey,
+                zkey.map_b[i],
+            )?);
+            buffer_c.push(plonk_utils::get_witness(
+                driver,
+                witness,
+                zkey,
+                zkey.map_c[i],
+            )?);
         }
+        buffer_a.resize(zkey.domain_size, FieldShare::<T, P>::default());
+        buffer_b.resize(zkey.domain_size, FieldShare::<T, P>::default());
+        buffer_c.resize(zkey.domain_size, FieldShare::<T, P>::default());
 
         // we could do that also during loop but this is more readable
         // it may be even faster as this way it is better for the cache
