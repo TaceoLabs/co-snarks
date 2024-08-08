@@ -533,8 +533,12 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         dst.b[dst_offset..dst_offset + len].clone_from_slice(&src.b[src_offset..src_offset + len]);
     }
 
-    fn print_share(&self, _: &Self::FieldShare) {
-        panic!("do not print rep3 shares");
+    fn print_share(&self, to_print: &Self::FieldShare) {
+        if to_print.a.is_zero() {
+            println!("0")
+        } else {
+            println!("{}", to_print.a)
+        }
     }
 
     fn print(&self, to_print: &Self::FieldShareVec) {

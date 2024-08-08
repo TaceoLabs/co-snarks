@@ -636,8 +636,12 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         dst.a[dst_offset..dst_offset + len].clone_from_slice(&src.a[src_offset..src_offset + len]);
     }
 
-    fn print_share(&self, _: &Self::FieldShare) {
-        panic!("do not print shamir shares");
+    fn print_share(&self, to_print: &Self::FieldShare) {
+        if to_print.a.is_zero() {
+            println!("0")
+        } else {
+            println!("{}", to_print.a)
+        }
     }
 
     fn print(&self, to_print: &Self::FieldShareVec) {
