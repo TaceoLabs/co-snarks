@@ -5,7 +5,6 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
-use core::panic;
 use eyre::Report;
 use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
