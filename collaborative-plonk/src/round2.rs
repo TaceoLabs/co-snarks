@@ -242,7 +242,7 @@ where
             polys,
         } = self;
         let zkey = &data.zkey;
-        let public_input = &data.witness.shared_witness.public_inputs;
+        let public_input = &data.witness.public_inputs;
         let mut transcript = Keccak256Transcript::<P>::default();
         transcript.add_point(zkey.verifying_key.qm);
         transcript.add_point(zkey.verifying_key.ql);
@@ -252,7 +252,7 @@ where
         transcript.add_point(zkey.verifying_key.s1);
         transcript.add_point(zkey.verifying_key.s2);
         transcript.add_point(zkey.verifying_key.s3);
-        for val in public_input.iter().skip(1).cloned() {
+        for val in public_input.iter().cloned() {
             transcript.add_scalar(val);
         }
         transcript.add_point(proof.commit_a.into());

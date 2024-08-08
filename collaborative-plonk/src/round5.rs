@@ -166,7 +166,7 @@ where
         polys: &FinalPolys<T, P>,
     ) -> FieldShareVec<T, P> {
         let zkey = &data.zkey;
-        let public_inputs = &data.witness.shared_witness.public_inputs;
+        let public_inputs = &data.witness.public_inputs;
         let (l, xin) = plonk_utils::calculate_lagrange_evaluations::<P>(
             data.zkey.power,
             data.zkey.n_public,

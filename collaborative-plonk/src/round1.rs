@@ -201,7 +201,7 @@ where
             mut driver,
             domains,
             challenges,
-            data,
+            mut data,
         } = self;
         let witness = &data.witness;
         let zkey = &data.zkey;
@@ -236,6 +236,8 @@ where
             commit_b: opened[1],
             commit_c: opened[2],
         };
+        //when we are done, we remove the leading zero of the public inputs
+        data.witness.public_inputs = data.witness.public_inputs[1..].to_vec();
         Ok(Round2 {
             driver,
             domains,

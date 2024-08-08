@@ -84,7 +84,8 @@ pub(crate) struct PlonkWitness<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    shared_witness: SharedWitness<T, P>,
+    public_inputs: Vec<P::ScalarField>,
+    witness: FieldShareVec<T, P>,
     addition_witness: Vec<FieldShare<T, P>>,
 }
 
@@ -100,10 +101,11 @@ impl<T, P: Pairing> PlonkWitness<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    fn new(mut shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
-        shared_witness.public_inputs[0] = P::ScalarField::zero();
+    fn new(shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
+        //we need the leading zero for round1
         Self {
-            shared_witness,
+            public_inputs: shared_witness.public_inputs,
+            witness: shared_witness.witness,
             addition_witness: Vec::with_capacity(n_additions),
         }
     }
@@ -176,14 +178,12 @@ pub mod plonk_utils {
         T: PrimeFieldMpcProtocol<P::ScalarField>,
     {
         let result = if index <= zkey.n_public {
-            driver.promote_to_trivial_share(witness.shared_witness.public_inputs[index])
+            driver.promote_to_trivial_share(witness.public_inputs[index])
         } else if index < zkey.n_vars - zkey.n_additions {
-            //subtract public values and the leading 0 in witness
-            T::index_sharevec(&witness.shared_witness.witness, index - zkey.n_public - 1)
+            T::index_sharevec(&witness.witness, index - zkey.n_public - 1)
         } else if index < zkey.n_vars {
             witness.addition_witness[index + zkey.n_additions - zkey.n_vars].to_owned()
         } else {
-            //TODO make this as an error
             return Err(PlonkProofError::CorruptedWitness(index));
         };
         Ok(result)
@@ -236,9 +236,7 @@ pub mod plonk_utils {
         l: &[P::ScalarField],
     ) -> P::ScalarField {
         let mut pi = P::ScalarField::zero();
-        //TODO WE WANT THE PUBLIC INPUTS WITHOUT THE LEADING ZERO!
-        //WHERE DO WE NEED TO CHANGE THIS
-        for (val, l) in public_inputs.iter().skip(1).zip(l) {
+        for (val, l) in public_inputs.iter().zip(l) {
             pi -= *l * val;
         }
         pi
@@ -258,11 +256,15 @@ pub mod tests {
     use mpc_core::protocols::plain::PlainDriver;
     use num_traits::Zero;
 
-    use crate::{plonk::Plonk, CollaborativePlonk};
+    use crate::{
+        plonk::Plonk,
+        round1::{Round1, Round1Challenges},
+        CollaborativePlonk,
+    };
 
     #[test]
     pub fn test_multiplier2_bn254() {
-        let driver = PlainDriver::<ark_bn254::Fr>::default();
+        let mut driver = PlainDriver::<ark_bn254::Fr>::default();
         let mut reader = BufReader::new(
             File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
         );
@@ -281,8 +283,14 @@ pub mod tests {
         )
         .unwrap();
 
-        let plonk_prover = CollaborativePlonk::new(driver);
-        let proof = plonk_prover.prove(zkey, witness).unwrap();
+        let challenges = Round1Challenges::deterministic(&mut driver);
+        let mut state = Round1::init_round(driver, zkey, witness).unwrap();
+        state.challenges = challenges;
+        let state = state.round1().unwrap();
+        let state = state.round2().unwrap();
+        let state = state.round3().unwrap();
+        let state = state.round4().unwrap();
+        let proof = state.round5().unwrap();
         serde_json::to_writer_pretty(File::create("I AM HERE").unwrap(), &proof).unwrap();
         //       let result = Plonk::<Bn254>::verify(&vk, &proof, &[value1]).unwrap();
         //       assert!(result)
