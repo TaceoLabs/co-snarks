@@ -183,7 +183,7 @@ where
         let r0 = e1 - e2 - e3;
 
         // D
-        let d1 = vk.qm * proof.eval_a * proof.eval_b
+        let d1 = vk.qm * (proof.eval_a * proof.eval_b)
             + vk.ql * proof.eval_a
             + vk.qr * proof.eval_b
             + vk.qo * proof.eval_c

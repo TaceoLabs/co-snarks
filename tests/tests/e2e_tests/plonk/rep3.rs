@@ -28,6 +28,7 @@ fn e2e_proof_poseidon_bn254() {
     let r1cs1 = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
     let circuit = Circuit::new(r1cs1.clone(), witness);
     let (public_inputs1, witness) = circuit.get_wire_mapping();
+    let inputs = circuit.public_inputs();
     let mut rng = thread_rng();
     let [witness_share1, witness_share2, witness_share3] =
         SharedWitness::share_rep3(&witness, &public_inputs1, &mut rng);
@@ -57,7 +58,6 @@ fn e2e_proof_poseidon_bn254() {
     let ser_proof = serde_json::to_string(&result1).unwrap();
     let der_proof = serde_json::from_str::<PlonkProof<Bn254>>(&ser_proof).unwrap();
     assert_eq!(der_proof, result1);
-    let verified =
-        Plonk::<Bn254>::verify(&vk, &der_proof, &public_inputs1[1..]).expect("can verify");
+    let verified = Plonk::<Bn254>::verify(&vk, &der_proof, &inputs).expect("can verify");
     assert!(verified);
 }
