@@ -142,8 +142,6 @@ where
         challenges: &Round2Challenges<T, P>,
         polys: &Round1Polys<T, P>,
     ) -> PlonkProofResult<PolyEval<T, P>> {
-        // TODO Check if this root_of_unity is the one we need
-        // FIXME  Do we want the dependency to collaborative Groth16??
         let pow_root_of_unity = domains.roots_of_unity[zkey.power];
         let mut w = P::ScalarField::one();
         let mut n1 = Vec::with_capacity(zkey.domain_size);
@@ -204,16 +202,15 @@ where
 
         // TODO parallelize these?
         // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
-        let mut num = array_prod_mul!(driver, num);
-        let mut den = array_prod_mul!(driver, den);
-
-        num.rotate_right(1);
-        den.rotate_right(1);
+        let num = array_prod_mul!(driver, num);
+        let den = array_prod_mul!(driver, den);
 
         // Compute the inverse of denArr to compute in the next command the
         // division numArr/denArr by multiplying num · 1/denArr
         let den = driver.inv_many(&den)?;
-        let buffer_z = driver.mul_many(&num, &den)?.into();
+        let mut buffer_z = driver.mul_many(&num, &den)?;
+        buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
+        let buffer_z = buffer_z.into();
 
         // Compute polynomial coefficients z(X) from buffer_z
         let poly_z = driver.ifft(&buffer_z, &domains.domain);

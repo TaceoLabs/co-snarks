@@ -180,8 +180,14 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 
     /// Prints a single the shared value
     #[cfg(feature = "dangerous")]
-    fn debug_print(&mut self, to_print: &Self::FieldShare) {
-        println!("{:?}", self.open(to_print).unwrap());
+    fn debug_print(&mut self, to_print: &Self::FieldShare) -> std::io::Result<()> {
+        let val = self.open(to_print)?;
+        if val.is_zero() {
+            println!("0");
+        } else {
+            println!("{}", val);
+        }
+        Ok(())
     }
 
     /// Returns a secret shared zero value
