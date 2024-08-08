@@ -1,7 +1,7 @@
 use ark_bn254::Bn254;
 use circom_types::{
     groth16::witness::Witness,
-    plonk::{JsonVerificationKey, ZKey},
+    plonk::{JsonVerificationKey, PlonkProof, ZKey},
     r1cs::R1CS,
 };
 use collaborative_groth16::{circuit::Circuit, groth16::SharedWitness};
@@ -54,11 +54,10 @@ fn e2e_proof_poseidon_bn254() {
     assert_eq!(result1, result2);
     assert_eq!(result2, result3);
 
-    // TODO rewrite for plonk
-    let der_proof = result1;
-    // let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
-    // let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
+    let ser_proof = serde_json::to_string(&result1).unwrap();
+    let der_proof = serde_json::from_str::<PlonkProof<Bn254>>(&ser_proof).unwrap();
+    assert_eq!(der_proof, result1);
     let verified =
-        Plonk::<Bn254>::verify(&vk, &der_proof.into(), &public_inputs1[1..]).expect("can verify");
+        Plonk::<Bn254>::verify(&vk, &der_proof, &public_inputs1[1..]).expect("can verify");
     assert!(verified);
 }

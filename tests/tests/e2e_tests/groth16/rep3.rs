@@ -56,9 +56,11 @@ fn e2e_proof_poseidon_bn254() {
     assert_eq!(result1, result2);
     assert_eq!(result2, result3);
     let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
-    let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
-    let verified =
-        Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
+    let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof)
+        .unwrap()
+        .into();
+    assert_eq!(der_proof, result2);
+    let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof, &inputs).expect("can verify");
     assert!(verified);
 }
 
@@ -102,9 +104,11 @@ fn e2e_proof_poseidon_bn254_with_zkey_matrices() {
     assert_eq!(result1, result2);
     assert_eq!(result2, result3);
     let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(result1)).unwrap();
-    let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
+    let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof)
+        .unwrap()
+        .into();
+    assert_eq!(der_proof, result2);
     let inputs = witness.values[1..num_inputs].to_vec();
-    let verified =
-        Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &inputs).expect("can verify");
+    let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof, &inputs).expect("can verify");
     assert!(verified);
 }
