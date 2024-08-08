@@ -271,8 +271,8 @@ pub mod tests {
     use std::{fs::File, io::BufReader};
 
     use ark_bn254::Bn254;
-    use circom_types::{groth16::witness::Witness, plonk::ZKey};
-    use collaborative_groth16::groth16::SharedWitness;
+    use circom_types::{groth16::witness::Witness, plonk::ZKey, r1cs::R1CS};
+    use collaborative_groth16::{circuit::Circuit, groth16::SharedWitness};
     use mpc_core::protocols::plain::PlainDriver;
 
     use super::{Round1, Round1Challenges};
@@ -326,6 +326,54 @@ pub mod tests {
             g1_from_xy!(
                 "20485908711320514402551205858850203782200965138609516350615831567884414565573",
                 "15768769013544319661339758086625559380140102897998695716128502014937718532856"
+            )
+        );
+    }
+
+    #[test]
+    fn test_round1_poseidon() {
+        let mut driver = PlainDriver::<ark_bn254::Fr>::default();
+        let mut reader = BufReader::new(
+            File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.zkey").unwrap(),
+        );
+        let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
+        let witness_file = File::open("/home/fnieddu/repos/collaborative-circom/test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
+        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let r1cs = R1CS::<Bn254>::from_reader(
+            File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.r1cs").unwrap(),
+        )
+        .unwrap();
+        let circuit = Circuit::new(r1cs, witness);
+        let public_inputs = circuit.public_inputs();
+        let mut extended_zero = vec![ark_bn254::Fr::zero()];
+        extended_zero.extend(public_inputs);
+        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+            public_inputs: extended_zero,
+            witness: circuit.witnesses(),
+        };
+        let challenges = Round1Challenges::deterministic(&mut driver);
+        let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
+        round1.challenges = challenges;
+        let round2 = round1.round1().unwrap();
+        assert_eq!(
+            round2.proof.commit_a,
+            g1_from_xy!(
+                "13812466450794470884661331151385376512162284890675188237967299444193078435569",
+                "16061503463853695707793612062764581459492572730553723145821022336612759728347"
+            )
+        );
+        assert_eq!(
+            round2.proof.commit_b,
+            g1_from_xy!(
+                "10281767689914863431546078016203250176148463015408651718795446489753663357569",
+                "16453086169685282221497891328441763803467696437600784438345395444285863001285"
+            )
+        );
+        assert_eq!(
+            round2.proof.commit_c,
+            g1_from_xy!(
+                "17667284608243945034492717495020920877280541391673092959083909872497225328504",
+                "6863014328034443651980192880461835347768751620358363471951701922162021637275"
             )
         );
     }
