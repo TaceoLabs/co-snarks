@@ -252,7 +252,10 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::{
-        groth16::{public_input::JsonPublicInput, witness::Witness},
+        groth16::{
+            public_input::{self, JsonPublicInput},
+            witness::{self, Witness},
+        },
         plonk::{JsonVerificationKey, ZKey},
         r1cs::R1CS,
     };
@@ -263,19 +266,16 @@ pub mod tests {
     use crate::plonk::Plonk;
 
     #[test]
-    pub fn test_multiplier2_bn254() {
+    pub fn test_multiplier2_bn254() -> eyre::Result<()> {
+        let zkey_file = "../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey";
+        let witness_file = "../test_vectors/Plonk/bn254/multiplierAdd2/witness.wtns";
+        let zkey = ZKey::<Bn254>::from_reader(File::open(zkey_file)?)?;
+        let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
         let driver = PlainDriver::<ark_bn254::Fr>::default();
-        let mut reader = BufReader::new(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
-        );
-        let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
-        let witness_file =
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns").unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let value1 = witness.values[1];
+
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
-            public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
-            witness: vec![witness.values[2], witness.values[3]],
+            public_inputs: witness.values[..=zkey.n_public].to_vec(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
         let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
@@ -283,10 +283,16 @@ pub mod tests {
         )
         .unwrap();
 
+        let public_input: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/verification_key.json").unwrap(),
+        )
+        .unwrap();
+
         let plonk = Plonk::<Bn254>::new(driver);
         let proof = plonk.prove(zkey, witness).unwrap();
-        let result = Plonk::<Bn254>::verify(&vk, &proof, &[value1]).unwrap();
-        assert!(result)
+        let result = Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
+        assert!(result);
+        Ok(())
     }
 
     #[test]
@@ -323,7 +329,6 @@ pub mod tests {
 
         let plonk = Plonk::<Bn254>::new(driver);
         let proof = plonk.prove(zkey, witness).unwrap();
-        // println!("{}", serde_json::to_string(&proof).unwrap());
         let result = Plonk::<Bn254>::verify(&vk, &proof, &public_inputs.values).unwrap();
         assert!(result)
     }

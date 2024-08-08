@@ -9,6 +9,7 @@ use ark_relations::r1cs::{
     ConstraintMatrices, ConstraintSystem, ConstraintSystemRef, LinearCombination, OptimizationGoal,
     SynthesisError, Variable,
 };
+use circom_types::groth16::witness::{self, Witness};
 use circom_types::r1cs::R1CS;
 use eyre::{bail, Result};
 use itertools::izip;
@@ -533,10 +534,12 @@ where
 impl<N: Rep3Network, P: Pairing> SharedWitness<Rep3Protocol<P::ScalarField, N>, P> {
     /// Shares a given witness and public input vector using the Rep3 protocol.
     pub fn share_rep3<R: Rng + CryptoRng>(
-        witness: &[P::ScalarField],
-        public_inputs: &[P::ScalarField],
+        witness: Witness<P::ScalarField>,
+        num_pub_inputs: usize,
         rng: &mut R,
     ) -> [Self; 3] {
+        let public_inputs = &witness.values[..num_pub_inputs];
+        let witness = &witness.values[num_pub_inputs..];
         let [share1, share2, share3] = rep3::utils::share_field_elements(witness, rng);
         let witness1 = Self {
             public_inputs: public_inputs.to_vec(),
@@ -599,8 +602,8 @@ mod test {
         let mut rng = thread_rng();
         let [s1, _, _] =
             SharedWitness::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::share_rep3(
-                &witness.values[r1cs.num_inputs..],
-                &witness.values[..r1cs.num_inputs],
+                witness,
+                r1cs.num_inputs,
                 &mut rng,
             );
         println!("{}", serde_json::to_string(&s1).unwrap());

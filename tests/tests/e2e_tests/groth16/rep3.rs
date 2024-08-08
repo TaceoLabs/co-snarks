@@ -1,7 +1,7 @@
 use ark_bn254::Bn254;
 use ark_groth16::{prepare_verifying_key, Groth16};
 use circom_types::{
-    groth16::{proof::JsonProof, witness::Witness, zkey::ZKey},
+    groth16::{proof::JsonProof, public_input, witness::Witness, zkey::ZKey},
     r1cs::R1CS,
 };
 use collaborative_groth16::{
@@ -26,12 +26,11 @@ fn e2e_proof_poseidon_bn254() {
     let r1cs1 = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
     let r1cs2 = r1cs1.clone();
     let r1cs3 = r1cs1.clone();
-    let circuit = Circuit::new(r1cs1.clone(), witness);
-    let (public_inputs1, witness) = circuit.get_wire_mapping();
-    let inputs = circuit.public_inputs();
+    //ignore leading zero for verification
+    let public_input = witness.values[1..r1cs1.num_inputs].to_vec();
     let mut rng = thread_rng();
     let [witness_share1, witness_share2, witness_share3] =
-        SharedWitness::share_rep3(&witness, &public_inputs1, &mut rng);
+        SharedWitness::share_rep3(witness, r1cs1.num_inputs, &mut rng);
     let test_network = Rep3TestNetwork::default();
     let mut threads = vec![];
     for (((net, x), r1cs), pk) in test_network
@@ -60,7 +59,8 @@ fn e2e_proof_poseidon_bn254() {
         .unwrap()
         .into();
     assert_eq!(der_proof, result2);
-    let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof, &inputs).expect("can verify");
+    let verified =
+        Groth16::<Bn254>::verify_proof(&pvk, &der_proof, &public_input).expect("can verify");
     assert!(verified);
 }
 
@@ -75,11 +75,8 @@ fn e2e_proof_poseidon_bn254_with_zkey_matrices() {
     let num_inputs = matrices.num_instance_variables;
     let pvk = prepare_verifying_key(&pk1.vk);
     let mut rng = thread_rng();
-    let [witness_share1, witness_share2, witness_share3] = SharedWitness::share_rep3(
-        &witness.values[num_inputs..],
-        &witness.values[..num_inputs],
-        &mut rng,
-    );
+    let [witness_share1, witness_share2, witness_share3] =
+        SharedWitness::share_rep3(witness.clone(), num_inputs, &mut rng);
     let test_network = Rep3TestNetwork::default();
     let mut threads = vec![];
     for (((net, x), mat), pk) in test_network
