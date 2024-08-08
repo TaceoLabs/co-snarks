@@ -238,19 +238,9 @@ where
         let pow_root_of_unity = domains.roots_of_unity[zkey.power];
         let pow_plus2_root_of_unity = domains.roots_of_unity[zkey.power + 2];
         for _ in 0..zkey.domain_size * 4 {
-            //TODO use add_mul convenience method
-            let ap_ = driver.mul_with_public(&w, &challenges.b[0]);
-            let ap_ = driver.add(&challenges.b[1], &ap_);
-            ap.push(ap_);
-
-            let bp_ = driver.mul_with_public(&w, &challenges.b[2]);
-            let bp_ = driver.add(&challenges.b[3], &bp_);
-            bp.push(bp_);
-
-            let cp_ = driver.mul_with_public(&w, &challenges.b[4]);
-            let cp_ = driver.add(&challenges.b[5], &cp_);
-            cp.push(cp_);
-
+            ap.push(driver.add_mul_public(&challenges.b[1], &challenges.b[0], &w));
+            bp.push(driver.add_mul_public(&challenges.b[3], &challenges.b[2], &w));
+            cp.push(driver.add_mul_public(&challenges.b[5], &challenges.b[4], &w));
             w *= &pow_plus2_root_of_unity;
         }
 
@@ -353,23 +343,15 @@ where
             e1z.push(e1z_);
 
             let betaw = challenges.beta * w;
-            let mut e2a_ = a.clone();
-            e2a_ = driver.add_with_public(&betaw, &e2a_);
-            e2a_ = driver.add_with_public(&challenges.gamma, &e2a_);
-            e2a.push(e2a_);
+            e2a.push(driver.add_with_public(&(betaw + challenges.gamma), &a));
+            e2b.push(
+                driver.add_with_public(&(betaw * zkey.verifying_key.k1 + challenges.gamma), &b),
+            );
+            e2c.push(
+                driver.add_with_public(&(betaw * zkey.verifying_key.k2 + challenges.gamma), &c),
+            );
 
-            let mut e2b_ = b.clone();
-            e2b_ = driver.add_with_public(&(betaw * zkey.verifying_key.k1), &e2b_);
-            e2b_ = driver.add_with_public(&challenges.gamma, &e2b_);
-            e2b.push(e2b_);
-
-            let mut e2c_ = c.clone();
-            e2c_ = driver.add_with_public(&(betaw * zkey.verifying_key.k2), &e2c_);
-            e2c_ = driver.add_with_public(&challenges.gamma, &e2c_);
-            e2c.push(e2c_);
-
-            let e2d_ = z;
-            e2d.push(e2d_);
+            e2d.push(z.clone());
 
             let mut e3a_ = a;
             e3a_ = driver.add_with_public(&(s1 * challenges.beta), &e3a_);
