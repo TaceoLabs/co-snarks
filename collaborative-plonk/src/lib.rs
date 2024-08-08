@@ -128,7 +128,7 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
     P: Pairing + CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
