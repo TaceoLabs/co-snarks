@@ -9,7 +9,7 @@ use ark_relations::r1cs::{
     ConstraintMatrices, ConstraintSystem, ConstraintSystemRef, LinearCombination, OptimizationGoal,
     SynthesisError, Variable,
 };
-use circom_types::groth16::witness::{self, Witness};
+use circom_types::groth16::witness::Witness;
 use circom_types::r1cs::R1CS;
 use eyre::{bail, Result};
 use itertools::izip;
@@ -144,7 +144,7 @@ where
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CollaborativeGroth16<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -157,7 +157,7 @@ where
 
 impl<T, P: Pairing> CollaborativeGroth16<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>

@@ -12,7 +12,7 @@ use num_traits::One;
 
 pub(super) struct Round4<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -35,7 +35,7 @@ pub(super) struct Round4Challenges<P: Pairing> {
 impl<P: Pairing> Round4Challenges<P> {
     fn new<T>(round3_challenges: Round3Challenges<T, P>, xi: P::ScalarField) -> Self
     where
-        for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+        T: PrimeFieldMpcProtocol<P::ScalarField>,
     {
         Self {
             beta: round3_challenges.beta,
@@ -92,7 +92,7 @@ impl<P: Pairing> Round4Proof<P> {
 
 impl<T, P: Pairing> Round4<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>

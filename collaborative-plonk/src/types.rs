@@ -73,7 +73,7 @@ where
 
 pub(crate) struct PolyEval<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(crate) poly: FieldShareVec<T, P>,
     pub(crate) eval: FieldShareVec<T, P>,

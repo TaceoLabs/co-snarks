@@ -13,7 +13,7 @@ use crate::{
 };
 pub(super) struct Round1<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -50,7 +50,7 @@ where
 
 pub(super) struct Round1Challenges<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) b: [T::FieldShare; 11],
 }
@@ -62,7 +62,7 @@ pub(super) struct Round1Proof<P: Pairing> {
 }
 pub(super) struct Round1Polys<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) buffer_a: FieldShareVec<T, P>,
     pub(super) buffer_b: FieldShareVec<T, P>,
@@ -74,7 +74,7 @@ where
 
 impl<T, P: Pairing> Round1Challenges<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::FieldShare::default());
@@ -96,7 +96,7 @@ where
 
 impl<T, P: Pairing> Round1<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>

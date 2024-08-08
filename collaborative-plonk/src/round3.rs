@@ -72,7 +72,7 @@ macro_rules! mul4vec_post {
 
 pub(super) struct Round3<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -117,7 +117,7 @@ impl<P: Pairing> Round3Proof<P> {
 }
 pub(super) struct Round3Challenges<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) b: [T::FieldShare; 11],
     pub(super) beta: P::ScalarField,
@@ -128,7 +128,7 @@ where
 
 pub(super) struct FinalPolys<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) a: PolyEval<T, P>,
     pub(super) b: PolyEval<T, P>,
@@ -140,7 +140,7 @@ where
 }
 impl<T, P: Pairing> FinalPolys<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     fn new(
         polys: Round2Polys<T, P>,
@@ -181,7 +181,7 @@ where
 
 impl<T, P: Pairing> Round3<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
