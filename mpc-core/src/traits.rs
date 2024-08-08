@@ -178,11 +178,11 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         len: usize,
     );
 
-    /// Prints the shared values-
-    fn print(&self, to_print: &Self::FieldShareVec);
-
     /// Prints a single the shared value
-    fn print_share(&self, to_print: &Self::FieldShare);
+    #[cfg(feature = "dangerous")]
+    fn debug_print(&mut self, to_print: &Self::FieldShare) {
+        println!("{:?}", self.open(to_print).unwrap());
+    }
 
     /// Returns a secret shared zero value
     fn zero_share() -> Self::FieldShare {
