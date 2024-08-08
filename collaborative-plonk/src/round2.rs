@@ -142,8 +142,6 @@ where
         challenges: &Round2Challenges<T, P>,
         polys: &Round1Polys<T, P>,
     ) -> PlonkProofResult<PolyEval<T, P>> {
-        // TODO Check if this root_of_unity is the one we need
-        // FIXME  Do we want the dependency to collaborative Groth16??
         let pow_root_of_unity = domains.roots_of_unity[zkey.power];
         let mut w = P::ScalarField::one();
         let mut n1 = Vec::with_capacity(zkey.domain_size);
