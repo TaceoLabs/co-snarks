@@ -393,7 +393,7 @@ where
         let n_additions = u32::deserialize_uncompressed(&mut reader)?;
         let n_constraints = u32::deserialize_uncompressed(&mut reader)?;
         let verifying_key = VerifyingKey::new(&mut reader)?;
-        if domain_size & (domain_size - 1) == 0 {
+        if domain_size & (domain_size - 1) == 0 && domain_size > 0 {
             Ok(Self {
                 n8r: u32_to_usize!(n8r),
                 n_vars: u32_to_usize!(n_vars),
