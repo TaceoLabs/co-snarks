@@ -549,12 +549,14 @@ impl<N: Rep3Network, P: Pairing> SharedWitness<Rep3Protocol<P::ScalarField, N>, 
 impl<N: ShamirNetwork, P: Pairing> SharedWitness<ShamirProtocol<P::ScalarField, N>, P> {
     /// Shares a given witness and public input vector using the Shamir protocol.
     pub fn share_shamir<R: Rng + CryptoRng>(
-        witness: &[P::ScalarField],
-        public_inputs: &[P::ScalarField],
+        witness: Witness<P::ScalarField>,
+        num_pub_inputs: usize,
         degree: usize,
         num_parties: usize,
         rng: &mut R,
     ) -> Vec<Self> {
+        let public_inputs = &witness.values[..num_pub_inputs];
+        let witness = &witness.values[num_pub_inputs..];
         let shares = shamir::utils::share_field_elements(witness, degree, num_parties, rng);
         shares
             .into_iter()
@@ -605,8 +607,8 @@ mod test {
         let r1cs = R1CS::<ark_bn254::Bn254>::from_reader(r1cs_file).unwrap();
         let mut rng = thread_rng();
         let s1 = SharedWitness::<ShamirProtocol<ark_bn254::Fr, ShamirMpcNet>, Bn254>::share_shamir(
-            &witness.values[r1cs.num_inputs..],
-            &witness.values[..r1cs.num_inputs],
+            witness,
+            r1cs.num_inputs,
             threshold,
             num_parties,
             &mut rng,

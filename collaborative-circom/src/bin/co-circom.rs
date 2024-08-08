@@ -300,8 +300,8 @@ where
                     // create witness shares
                     let shares =
                         SharedWitness::<ShamirProtocol<P::ScalarField, ShamirMpcNet>, P>::share_shamir(
-                            &witness.values[r1cs.num_inputs..],
-                            &witness.values[..r1cs.num_inputs],t,n,
+                            witness,
+                            r1cs.num_inputs,t,n,
                             &mut rng,
                         );
 

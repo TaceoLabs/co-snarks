@@ -4,10 +4,7 @@ use circom_types::{
     groth16::{proof::JsonProof, witness::Witness, zkey::ZKey},
     r1cs::R1CS,
 };
-use collaborative_groth16::{
-    circuit::Circuit,
-    groth16::{CollaborativeGroth16, SharedWitness},
-};
+use collaborative_groth16::groth16::{CollaborativeGroth16, SharedWitness};
 use itertools::izip;
 use mpc_core::protocols::shamir::ShamirProtocol;
 use rand::thread_rng;
@@ -24,12 +21,11 @@ fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
     let pvk = prepare_verifying_key(&pk1.vk);
     let r1cs1 = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
     let r1cs = vec![r1cs1.clone(); num_parties];
-    let circuit = Circuit::new(r1cs1.clone(), witness);
-    let (public_inputs1, witness) = circuit.get_wire_mapping();
-    let inputs = circuit.public_inputs();
     let mut rng = thread_rng();
+    //ignore leading one for verification
+    let public_input = witness.values[1..r1cs1.num_inputs].to_vec();
     let witness_share =
-        SharedWitness::share_shamir(&witness, &public_inputs1, threshold, num_parties, &mut rng);
+        SharedWitness::share_shamir(witness, r1cs1.num_inputs, threshold, num_parties, &mut rng);
 
     let test_network = ShamirTestNetwork::new(num_parties);
     let mut threads = vec![];
@@ -58,7 +54,8 @@ fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
         .unwrap()
         .into();
     assert_eq!(der_proof, result1);
-    let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof, &inputs).expect("can verify");
+    let verified =
+        Groth16::<Bn254>::verify_proof(&pvk, &der_proof, &public_input).expect("can verify");
     assert!(verified);
 }
 
@@ -73,8 +70,8 @@ fn e2e_poseidon_bn254_with_zkey_matrices_inner(num_parties: usize, threshold: us
     let mut rng = thread_rng();
 
     let witness_share = SharedWitness::share_shamir(
-        &witness.values[num_inputs..],
-        &witness.values[..num_inputs],
+        witness.clone(),
+        num_inputs,
         threshold,
         num_parties,
         &mut rng,

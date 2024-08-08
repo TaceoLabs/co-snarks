@@ -1,13 +1,10 @@
 use ark_bn254::Bn254;
 use ark_groth16::{prepare_verifying_key, Groth16};
 use circom_types::{
-    groth16::{proof::JsonProof, public_input, witness::Witness, zkey::ZKey},
+    groth16::{proof::JsonProof, witness::Witness, zkey::ZKey},
     r1cs::R1CS,
 };
-use collaborative_groth16::{
-    circuit::Circuit,
-    groth16::{CollaborativeGroth16, SharedWitness},
-};
+use collaborative_groth16::groth16::{CollaborativeGroth16, SharedWitness};
 use mpc_core::protocols::rep3::Rep3Protocol;
 use rand::thread_rng;
 use std::{fs::File, thread};
@@ -26,7 +23,7 @@ fn e2e_proof_poseidon_bn254() {
     let r1cs1 = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
     let r1cs2 = r1cs1.clone();
     let r1cs3 = r1cs1.clone();
-    //ignore leading zero for verification
+    //ignore leading 1 for verification
     let public_input = witness.values[1..r1cs1.num_inputs].to_vec();
     let mut rng = thread_rng();
     let [witness_share1, witness_share2, witness_share3] =
