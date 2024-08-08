@@ -371,8 +371,7 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         let r = (0..a.len())
             .map(|_| self.rand())
             .collect::<Result<Vec<_>, _>>()?;
-        let tmp = self.mul_many(a, &r)?;
-        let y = self.open_many(&tmp)?;
+        let y = self.mul_open_many(a, &r)?;
         if y.iter().any(|y| y.is_zero()) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
