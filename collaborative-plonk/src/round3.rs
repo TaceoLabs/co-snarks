@@ -421,7 +421,8 @@ where
         let mut coefficients_t = driver.ifft(&t_vec.into(), &domains.extended_domain);
         driver.neg_vec_in_place_limit(&mut coefficients_t, zkey.domain_size);
 
-        for i in zkey.domain_size..zkey.domain_size * 4 {
+        // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
+        (zkey.domain_size..zkey.domain_size * 4).for_each(|i| {
             let a_lhs = coefficients_t.index(i - zkey.domain_size);
             let a_rhs = coefficients_t.index(i);
             let a = driver.sub(&a_lhs, &a_rhs);
@@ -429,7 +430,7 @@ where
             /*
               We cannot check whether the polynomial is divisible by Zh here
             */
-        }
+        });
 
         let coefficients_tz = driver.ifft(&tz_vec.into(), &domains.extended_domain);
         let t_final = driver.add_vec(&coefficients_t, &coefficients_tz);
