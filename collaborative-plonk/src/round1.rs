@@ -77,7 +77,7 @@ where
 {
     pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::FieldShare::default());
-        for mut x in b.iter_mut() {
+        for x in b.iter_mut() {
             *x = driver.rand()?;
         }
         Ok(Self { b })

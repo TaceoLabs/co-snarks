@@ -138,7 +138,7 @@ where
             inout.resize(add_poly.len(), P::ScalarField::zero());
         }
 
-        for (mut inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
             *inout += *add;
         }
     }
@@ -152,7 +152,7 @@ where
             inout.resize(add_poly.len(), P::ScalarField::zero());
         }
 
-        for (mut inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
             *inout += *add * factor;
         }
     }
@@ -193,7 +193,7 @@ where
         let e24 = e2 + e4;
 
         let mut poly_r = zkey.qm_poly.coeffs.clone();
-        for mut coeff in poly_r.iter_mut() {
+        for coeff in poly_r.iter_mut() {
             *coeff *= coef_ab;
         }
         Self::add_factor_poly(&mut poly_r, &zkey.ql_poly.coeffs, proof.eval_a);
@@ -206,7 +206,7 @@ where
 
         let mut poly_r_shared = vec![FieldShare::<T, P>::default(); len];
 
-        for (mut inout, add) in poly_r_shared
+        for (inout, add) in poly_r_shared
             .iter_mut()
             .zip(polys.z.poly.clone().into_iter())
         {
@@ -219,7 +219,7 @@ where
 
         let mut tmp_poly = vec![FieldShare::<T, P>::default(); len];
         let xin2 = xin.square();
-        for (mut inout, add) in tmp_poly.iter_mut().zip(polys.t3.clone().into_iter()) {
+        for (inout, add) in tmp_poly.iter_mut().zip(polys.t3.clone().into_iter()) {
             *inout = driver.mul_with_public(&xin2, &add);
         }
         for (inout, add) in tmp_poly.iter_mut().zip(polys.t2.clone().into_iter()) {
@@ -256,7 +256,7 @@ where
         let mut res = vec![FieldShare::<T, P>::default(); data.zkey.domain_size + 6];
 
         // R
-        for (mut inout, add) in res.iter_mut().zip(poly_r.clone().into_iter()) {
+        for (inout, add) in res.iter_mut().zip(poly_r.clone().into_iter()) {
             *inout = add;
         }
         // A

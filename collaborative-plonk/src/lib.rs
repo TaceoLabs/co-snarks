@@ -1,7 +1,7 @@
 //! A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
+
+#![warn(missing_docs)]
 use ark_ec::pairing::Pairing;
-use ark_ff::FftField;
-use ark_ff::LegendreSymbol;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use circom_types::plonk::PlonkProof;
@@ -30,12 +30,16 @@ type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarFie
 
 type PlonkProofResult<T> = std::result::Result<T, PlonkProofError>;
 
+/// The errors that may arise during the computation of a co-PLONK proof.
 #[derive(Debug, thiserror::Error)]
 pub enum PlonkProofError {
+    /// Indicates that the witness is too small for the provided circuit.
     #[error("Cannot index into witness {0}")]
     CorruptedWitness(usize),
+    /// Indicates that the domain size from the zkey is corrupted.
     #[error("Cannot create domain, Polynomial degree too large")]
     PolynomialDegreeTooLarge,
+    /// An [io::Error]. Communication to another party failed.
     #[error(transparent)]
     IOError(#[from] io::Error),
 }
@@ -127,6 +131,7 @@ where
         }
     }
 
+    /// Execute the PLONK prover using the internal MPC driver.
     pub fn prove(
         self,
         zkey: ZKey<P>,
