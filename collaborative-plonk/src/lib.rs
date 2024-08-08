@@ -12,6 +12,7 @@ use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use num_traits::ToPrimitive;
+use num_traits::Zero;
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
@@ -97,8 +98,9 @@ impl<T, P: Pairing> PlonkWitness<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    fn new(shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
-        //we need the leading zero for round1
+    fn new(mut shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
+        // The leading zero is 1 in Circom
+        shared_witness.public_inputs[0] = P::ScalarField::zero();
         Self {
             public_inputs: shared_witness.public_inputs,
             witness: shared_witness.witness,

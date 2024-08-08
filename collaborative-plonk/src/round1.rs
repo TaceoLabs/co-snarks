@@ -200,9 +200,8 @@ where
     pub(super) fn init_round(
         mut driver: T,
         zkey: ZKey<P>,
-        mut private_witness: SharedWitness<T, P>,
+        private_witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<Self> {
-        private_witness.public_inputs[0] = P::ScalarField::zero();
         let plonk_witness = Self::calculate_additions(&mut driver, private_witness, &zkey)?;
 
         Ok(Self {
