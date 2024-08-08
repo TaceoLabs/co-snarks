@@ -9,9 +9,6 @@ use crate::{
     plonk_utils, round2::Round2, types::PolyEval, Domains, FieldShare, FieldShareVec, PlonkData,
     PlonkProofError, PlonkProofResult, PlonkWitness,
 };
-/*
-
-*/
 pub(super) struct Round1<T, P: Pairing>
 where
     for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -24,7 +21,29 @@ where
     pub(super) driver: T,
     pub(super) domains: Domains<P>,
     pub(super) challenges: Round1Challenges<T, P>,
-    pub(super) data: PlonkData<T, P>,
+    pub(super) data: PlonkDataRound1<T, P>,
+}
+
+pub(super) struct PlonkDataRound1<T, P: Pairing>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    witness: PlonkWitness<T, P>,
+    zkey: ZKey<P>,
+}
+
+impl<T, P: Pairing> From<PlonkDataRound1<T, P>> for PlonkData<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn from(mut data: PlonkDataRound1<T, P>) -> Self {
+        //when we are done, we remove the leading zero of the public inputs
+        data.witness.public_inputs = data.witness.public_inputs[1..].to_vec();
+        Self {
+            witness: data.witness,
+            zkey: data.zkey,
+        }
+    }
 }
 
 pub(super) struct Round1Challenges<T, P: Pairing>
@@ -189,7 +208,7 @@ where
             challenges: Round1Challenges::random(&mut driver)?,
             driver,
             domains: Domains::new(zkey.domain_size)?,
-            data: PlonkData {
+            data: PlonkDataRound1 {
                 witness: plonk_witness,
                 zkey,
             },
@@ -201,7 +220,7 @@ where
             mut driver,
             domains,
             challenges,
-            mut data,
+            data,
         } = self;
         let witness = &data.witness;
         let zkey = &data.zkey;
@@ -236,15 +255,13 @@ where
             commit_b: opened[1],
             commit_c: opened[2],
         };
-        //when we are done, we remove the leading zero of the public inputs
-        data.witness.public_inputs = data.witness.public_inputs[1..].to_vec();
         Ok(Round2 {
             driver,
             domains,
             challenges,
             proof,
             polys,
-            data,
+            data: data.into(),
         })
     }
 }
