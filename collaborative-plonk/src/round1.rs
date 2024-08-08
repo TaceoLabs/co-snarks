@@ -202,7 +202,6 @@ where
         zkey: ZKey<P>,
         private_witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<Self> {
-        //set first element to zero as it is not used
         let plonk_witness = Self::calculate_additions(&mut driver, private_witness, &zkey)?;
 
         Ok(Self {

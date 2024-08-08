@@ -170,8 +170,8 @@ where
         for _ in 0..n_additions {
             let signal_id1 = u32::deserialize_uncompressed(&mut reader)?;
             let signal_id2 = u32::deserialize_uncompressed(&mut reader)?;
-            let factor1 = P::ScalarField::from_reader(&mut reader)?;
-            let factor2 = P::ScalarField::from_reader(&mut reader)?;
+            let factor1 = P::ScalarField::from_reader_unchecked(&mut reader)?;
+            let factor2 = P::ScalarField::from_reader_unchecked(&mut reader)?;
             additions.push(Additions {
                 signal_id1,
                 signal_id2,

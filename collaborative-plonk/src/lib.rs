@@ -252,10 +252,7 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::{
-        groth16::{
-            public_input::{self, JsonPublicInput},
-            witness::Witness,
-        },
+        groth16::{public_input::JsonPublicInput, witness::Witness},
         plonk::{JsonVerificationKey, ZKey},
         r1cs::R1CS,
     };
@@ -327,6 +324,7 @@ pub mod tests {
 
         let plonk = Plonk::<Bn254>::new(driver);
         let proof = plonk.prove(zkey, witness).unwrap();
+        // println!("{}", serde_json::to_string(&proof).unwrap());
         let result = Plonk::<Bn254>::verify(&vk, &proof, &public_inputs.values).unwrap();
         assert!(result)
     }
