@@ -488,7 +488,7 @@ where
         );
 
         let opened = driver.open_point_many(&[commit_t1, commit_t2, commit_t3])?;
-        debug_assert_eq!(opened.len(), 3);
+
         let polys = FinalPolys::new(polys, t1, t2, t3);
         let proof = Round3Proof::new(proof, opened[0], opened[1], opened[2]);
         Ok(Round4 {

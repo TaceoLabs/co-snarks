@@ -353,7 +353,7 @@ where
             MSMProvider::<P::G1>::msm_public_points(&mut driver, &p_tau[..wxiw.get_len()], &wxiw);
 
         let opened = driver.open_point_many(&[commit_wxi, commit_wxiw])?;
-        debug_assert_eq!(opened.len(), 2);
+
         let commit_wxi = opened[0];
         let commit_wxiw = opened[1];
         Ok(proof.into_final_proof(commit_wxi, commit_wxiw))

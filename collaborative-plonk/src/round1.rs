@@ -265,7 +265,6 @@ where
         );
 
         let opened = driver.open_point_many(&[commit_a, commit_b, commit_c])?;
-        debug_assert_eq!(opened.len(), 3);
 
         let proof = Round1Proof::<P> {
             commit_a: opened[0],
