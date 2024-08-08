@@ -159,6 +159,7 @@ where
 pub mod plonk_utils {
     use ark_ec::pairing::Pairing;
     use circom_types::plonk::ZKey;
+    use mpc_core::traits::FieldShareVecTrait;
     use mpc_core::traits::PrimeFieldMpcProtocol;
 
     use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult, PlonkWitness};
@@ -178,7 +179,7 @@ pub mod plonk_utils {
         let result = if index <= zkey.n_public {
             driver.promote_to_trivial_share(witness.public_inputs[index])
         } else if index < zkey.n_vars - zkey.n_additions {
-            T::index_sharevec(&witness.witness, index - zkey.n_public - 1)
+            witness.witness.index(index - zkey.n_public - 1)
         } else if index < zkey.n_vars {
             witness.addition_witness[index + zkey.n_additions - zkey.n_vars].to_owned()
         } else {

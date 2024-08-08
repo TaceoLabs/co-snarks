@@ -12,7 +12,8 @@ use circom_types::{
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
 use mpc_core::traits::{
-    FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    FFTPostProcessing, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
+    PrimeFieldMpcProtocol,
 };
 use num_traits::One;
 use num_traits::Zero;
@@ -346,16 +347,10 @@ where
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         let p_tau = &data.zkey.p_tau;
-        let commit_wxi = MSMProvider::<P::G1>::msm_public_points(
-            &mut driver,
-            &p_tau[..T::sharevec_len(&wxi)],
-            &wxi,
-        );
-        let commit_wxiw = MSMProvider::<P::G1>::msm_public_points(
-            &mut driver,
-            &p_tau[..T::sharevec_len(&wxiw)],
-            &wxiw,
-        );
+        let commit_wxi =
+            MSMProvider::<P::G1>::msm_public_points(&mut driver, &p_tau[..wxi.get_len()], &wxi);
+        let commit_wxiw =
+            MSMProvider::<P::G1>::msm_public_points(&mut driver, &p_tau[..wxiw.get_len()], &wxiw);
 
         let opened = driver.open_point_many(&[commit_wxi, commit_wxiw])?;
         debug_assert_eq!(opened.len(), 2);

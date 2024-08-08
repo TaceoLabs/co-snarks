@@ -2,7 +2,8 @@ use ark_ec::pairing::Pairing;
 use circom_types::plonk::ZKey;
 use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::traits::{
-    FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    FFTPostProcessing, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
+    PrimeFieldMpcProtocol,
 };
 use num_traits::Zero;
 
@@ -233,17 +234,17 @@ where
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
         let commit_a = MSMProvider::<P::G1>::msm_public_points(
             &mut driver,
-            &p_tau[..T::sharevec_len(&polys.a.poly)],
+            &p_tau[..polys.a.poly.get_len()],
             &polys.a.poly,
         );
         let commit_b = MSMProvider::<P::G1>::msm_public_points(
             &mut driver,
-            &p_tau[..T::sharevec_len(&polys.b.poly)],
+            &p_tau[..polys.b.poly.get_len()],
             &polys.b.poly,
         );
         let commit_c = MSMProvider::<P::G1>::msm_public_points(
             &mut driver,
-            &p_tau[..T::sharevec_len(&polys.c.poly)],
+            &p_tau[..polys.c.poly.get_len()],
             &polys.c.poly,
         );
 
@@ -337,7 +338,7 @@ pub mod tests {
             File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.zkey").unwrap(),
         );
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
-        let witness_file = File::open("/home/fnieddu/repos/collaborative-circom/test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
+        let witness_file = File::open("../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let r1cs = R1CS::<Bn254>::from_reader(
             File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.r1cs").unwrap(),
