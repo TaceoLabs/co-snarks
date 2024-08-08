@@ -251,10 +251,7 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::{
-        groth16::{
-            public_input::{self, JsonPublicInput},
-            witness::{self, Witness},
-        },
+        groth16::{public_input::JsonPublicInput, witness::Witness},
         plonk::{JsonVerificationKey, ZKey},
         r1cs::R1CS,
     };
@@ -267,7 +264,7 @@ pub mod tests {
     #[test]
     pub fn test_multiplier2_bn254() -> eyre::Result<()> {
         let zkey_file = "../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey";
-        let witness_file = "../test_vectors/Plonk/bn254/multiplierAdd2/witness.wtns";
+        let witness_file = "../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns";
         let zkey = ZKey::<Bn254>::from_reader(File::open(zkey_file)?)?;
         let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
         let driver = PlainDriver::<ark_bn254::Fr>::default();
@@ -283,7 +280,7 @@ pub mod tests {
         .unwrap();
 
         let public_input: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/verification_key.json").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/public.json").unwrap(),
         )
         .unwrap();
 
