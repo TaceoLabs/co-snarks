@@ -4,7 +4,6 @@ use ark_ff::FftField;
 use ark_ff::LegendreSymbol;
 use ark_ff::PrimeField;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use circom_types::plonk::JsonVerificationKey;
 use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
@@ -13,7 +12,6 @@ use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use num_traits::ToPrimitive;
-use num_traits::Zero;
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
@@ -189,19 +187,24 @@ pub mod plonk_utils {
         Ok(result)
     }
 
+    // For convenience coeff is given in revere order
     pub(crate) fn blind_coefficients<T, P: Pairing>(
         driver: &mut T,
         poly: &FieldShareVec<T, P>,
-        coeff: &[FieldShare<T, P>],
+        coeff_rev: &[FieldShare<T, P>],
     ) -> Vec<FieldShare<T, P>>
     where
         T: PrimeFieldMpcProtocol<P::ScalarField>,
     {
         let mut res = poly.clone().into_iter().collect::<Vec<_>>();
-        for (p, c) in res.iter_mut().zip(coeff.iter()) {
+        for (p, c) in res.iter_mut().zip(coeff_rev.iter().rev()) {
             *p = driver.sub(p, c);
         }
-        res.extend_from_slice(coeff);
+        // Extend
+        res.reserve(coeff_rev.len());
+        for c in coeff_rev.iter().rev().cloned() {
+            res.push(c);
+        }
         res
     }
 
@@ -290,7 +293,6 @@ pub mod tests {
         let state = state.round3().unwrap();
         let state = state.round4().unwrap();
         let proof = state.round5().unwrap();
-        //serde_json::to_writer_pretty(File::create("I AM HERE").unwrap(), &proof).unwrap();
         let result = Plonk::<Bn254>::verify(&vk, &proof, &[value1]).unwrap();
         assert!(result)
     }

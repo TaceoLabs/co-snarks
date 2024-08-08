@@ -79,15 +79,6 @@ where
     pub(crate) eval: FieldShareVec<T, P>,
 }
 
-pub(crate) struct TPoly<T, P: Pairing>
-where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    t1: FieldShareVec<T, P>,
-    t2: FieldShareVec<T, P>,
-    t3: FieldShareVec<T, P>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::Keccak256Transcript;
