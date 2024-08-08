@@ -154,7 +154,7 @@ where
     }
 }
 
-pub mod plonk_utils {
+mod plonk_utils {
     use ark_ec::pairing::Pairing;
     use circom_types::plonk::ZKey;
     use mpc_core::traits::FieldShareVecTrait;
