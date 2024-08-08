@@ -4,25 +4,31 @@ use std::{io::Read, path::PathBuf};
 
 use ark_ec::pairing::Pairing;
 use ark_groth16::Proof;
-use circom_mpc_compiler::CompilerBuilder;
+use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
+use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::{
     groth16::zkey::ZKey,
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
 use clap::ValueEnum;
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
-use color_eyre::eyre::Context;
+use color_eyre::eyre::{Context, ContextCompat};
+use figment::{
+    providers::{Env, Format, Toml},
+    Figment,
+};
 use mpc_core::{
     protocols::rep3::{network::Rep3MpcNet, Rep3Protocol},
     traits::{FFTPostProcessing, PrimeFieldMpcProtocol},
 };
 use mpc_net::config::NetworkConfig;
+use serde::Deserialize;
 
 /// A module for file utility functions.
 pub mod file_utils;
 
 /// An enum representing the MPC protocol to use.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 pub enum MPCCurve {
     /// The BN254 curve (called BN128 in circom).
     BN254,
@@ -53,7 +59,7 @@ impl std::fmt::Display for MPCCurve {
 }
 
 /// An enum representing the MPC protocol to use.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 pub enum MPCProtocol {
     /// A protocol based on the Replicated Secret Sharing Scheme for 3 parties.
     /// For more information see <https://eprint.iacr.org/2018/403.pdf>.
@@ -85,6 +91,31 @@ impl std::fmt::Display for MPCProtocol {
     }
 }
 
+/// Collaborative-circom configuration
+#[derive(Debug, Deserialize, Default)]
+pub struct Config {
+    /// Mpc curve to be sued
+    pub curve: Option<MPCCurve>,
+    /// Mpc protocl to bu sued
+    pub protocol: Option<MPCProtocol>,
+    /// Mpc-vm config
+    pub vm: Option<VMConfig>,
+    /// Mpc-compiler config
+    pub compiler: Option<CompilerConfig>,
+    /// Network config
+    pub network: Option<NetworkConfig>,
+}
+
+impl Config {
+    /// Create a new config with given path   
+    pub fn new(path: &str) -> color_eyre::Result<Config> {
+        Ok(Figment::new()
+            .merge(Toml::file(path))
+            .merge(Env::prefixed("COCIRCOM_"))
+            .extract()?)
+    }
+}
+
 /// Try to parse a [SharedWitness] from a [Read]er.
 pub fn parse_witness_share<R: Read, P: Pairing, T: PrimeFieldMpcProtocol<P::ScalarField>>(
     reader: R,
@@ -109,13 +140,17 @@ pub fn generate_witness_rep3<P: Pairing>(
     circuit: String,
     link_library: Vec<String>,
     input_share: SharedInput<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>,
-    config: NetworkConfig,
+    config: Config,
 ) -> color_eyre::Result<SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>> {
     let circuit_path = PathBuf::from(&circuit);
     file_utils::check_file_exists(&circuit_path)?;
 
+    let network_config = config.network.context("expected a network config")?;
+    let compiler_config = config.compiler.context("expected a network config")?;
+    let vm_config = config.vm.context("expected a vm config")?;
+
     // parse circuit file & put through our compiler
-    let mut builder = CompilerBuilder::<P>::new(circuit);
+    let mut builder = CompilerBuilder::<P>::new(compiler_config, circuit);
     for lib in link_library {
         builder = builder.link_library(lib);
     }
@@ -125,11 +160,11 @@ pub fn generate_witness_rep3<P: Pairing>(
         .context("while parsing circuit file")?;
 
     // connect to network
-    let net = Rep3MpcNet::new(config).context("while connecting to network")?;
+    let net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
 
     // init MPC protocol
     let rep3_vm = parsed_circom_circuit
-        .to_rep3_vm_with_network(net)
+        .to_rep3_vm_with_network(net, vm_config)
         .context("while constructing MPC VM")?;
 
     // execute witness generation in MPC

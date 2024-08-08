@@ -22,7 +22,15 @@ use mpc_core::{
     traits::CircomWitnessExtensionProtocol,
 };
 use mpc_net::config::NetworkConfig;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, rc::Rc};
+
+/// The mpc-vm configuration
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct VMConfig {
+    /// Allow leaking of secret values in logs
+    pub allow_leaky_logs: bool,
+}
 
 /// The MPC-VM that performs the witness extension.
 ///
@@ -40,6 +48,7 @@ pub struct WitnessExtension<P: Pairing, C: CircomWitnessExtensionProtocol<P::Sca
     main_input_list: InputList,
     output_mapping: OutputMapping,
     driver: C,
+    config: VMConfig,
 }
 
 /// Shorthand type for an instance of the MPC-VM that runs locally on a single machine without MPC.
@@ -269,7 +278,12 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
             tracing::info!("{idx:0>4}|   {inst}");
         }
     }
-    pub fn run(&mut self, protocol: &mut C, ctx: &mut WitnessExtensionCtx<P, C>) -> Result<()> {
+    pub fn run(
+        &mut self,
+        protocol: &mut C,
+        ctx: &mut WitnessExtensionCtx<P, C>,
+        config: &VMConfig,
+    ) -> Result<()> {
         let mut ip = 0;
         let mut current_body = Rc::clone(&self.component_body);
         let mut current_vars = vec![C::VmType::default(); self.amount_vars];
@@ -402,7 +416,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     //check if we can run it instantly
                     for mut component in new_components {
                         if component.input_signals == 0 {
-                            component.run(protocol, ctx)?;
+                            component.run(protocol, ctx, config)?;
                         }
                         self.sub_components.push(component);
                     }
@@ -442,7 +456,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                         .clone_from_slice(&input_signals);
                     component.provided_input_signals += amount;
                     if component.provided_input_signals == component.input_signals {
-                        component.run(protocol, ctx)?;
+                        component.run(protocol, ctx, config)?;
                     }
                 }
                 op_codes::MpcOpCode::Assert(line) => {
@@ -739,8 +753,12 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                     current_body = old_body;
                 }
                 op_codes::MpcOpCode::Log => {
-                    let field = protocol.vm_open(self.pop_field())?;
-                    self.log_buf.push_str(&field.to_string());
+                    if config.allow_leaky_logs {
+                        let field = protocol.vm_open(self.pop_field())?;
+                        self.log_buf.push_str(&field.to_string());
+                    } else {
+                        self.log_buf.push_str("secret");
+                    }
                     self.log_buf.push(' ');
                 }
                 op_codes::MpcOpCode::LogString(idx) => {
@@ -859,7 +877,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> WitnessExten
             .get(&self.main)
             .ok_or(eyre!("cannot find main template: {}", self.main))?;
         let mut main_component = Component::init(main_templ, 1);
-        main_component.run(&mut self.driver, &mut self.ctx)?;
+        main_component.run(&mut self.driver, &mut self.ctx, &self.config)?;
         Ok(())
     }
 
@@ -978,7 +996,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>>
 }
 
 impl<P: Pairing> PlainWitnessExtension<P> {
-    pub(crate) fn new(parser: CollaborativeCircomCompilerParsed<P>) -> Self {
+    pub(crate) fn new(parser: CollaborativeCircomCompilerParsed<P>, config: VMConfig) -> Self {
         let mut signals = vec![P::ScalarField::default(); parser.amount_signals];
         signals[0] = P::ScalarField::one();
         Self {
@@ -997,6 +1015,7 @@ impl<P: Pairing> PlainWitnessExtension<P> {
             main_outputs: parser.main_outputs,
             main_input_list: parser.main_input_list,
             output_mapping: parser.output_mapping,
+            config,
         }
     }
 }
@@ -1006,6 +1025,7 @@ impl<P: Pairing, N: Rep3Network> Rep3WitnessExtension<P, N> {
         parser: CollaborativeCircomCompilerParsed<P>,
         network: N,
         mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, N>>,
+        config: VMConfig,
     ) -> Result<Self> {
         let driver = Rep3Protocol::new(network)?;
         let mut signals = vec![Rep3VmType::default(); parser.amount_signals];
@@ -1031,6 +1051,7 @@ impl<P: Pairing, N: Rep3Network> Rep3WitnessExtension<P, N> {
             main_outputs: parser.main_outputs,
             main_input_list: parser.main_input_list,
             output_mapping: parser.output_mapping,
+            config,
         })
     }
 }
@@ -1038,9 +1059,15 @@ impl<P: Pairing, N: Rep3Network> Rep3WitnessExtension<P, N> {
 impl<P: Pairing> Rep3WitnessExtension<P, Rep3MpcNet> {
     pub(crate) fn new(
         parser: CollaborativeCircomCompilerParsed<P>,
-        config: NetworkConfig,
+        network_config: NetworkConfig,
         mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, Rep3MpcNet>>,
+        vm_config: VMConfig,
     ) -> Result<Self> {
-        Self::from_network(parser, Rep3MpcNet::new(config)?, mpc_accelerator)
+        Self::from_network(
+            parser,
+            Rep3MpcNet::new(network_config)?,
+            mpc_accelerator,
+            vm_config,
+        )
     }
 }

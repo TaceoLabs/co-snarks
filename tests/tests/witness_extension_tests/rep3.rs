@@ -11,6 +11,9 @@ use std::str::FromStr;
 use std::{fs::File, thread};
 use tests::rep3_network::{PartyTestNetwork, Rep3TestNetwork};
 
+use circom_mpc_compiler::CompilerConfig;
+use circom_mpc_vm::mpc_vm::VMConfig;
+
 #[allow(dead_code)]
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
@@ -107,13 +110,14 @@ macro_rules! run_test {
 
         for (net, input) in izip!(test_network.get_party_networks(), inputs) {
             threads.push(thread::spawn(move || {
-                let witness_extension = CompilerBuilder::<Bn254>::new($file.to_owned())
-                    .link_library("../test_vectors/circuits/libs/")
-                    .build()
-                    .parse()
-                    .unwrap()
-                    .to_rep3_vm_with_network(net)
-                    .unwrap();
+                let witness_extension =
+                    CompilerBuilder::<Bn254>::new(CompilerConfig::default(), $file.to_owned())
+                        .link_library("../test_vectors/circuits/libs/")
+                        .build()
+                        .parse()
+                        .unwrap()
+                        .to_rep3_vm_with_network(net, VMConfig::default())
+                        .unwrap();
                 witness_extension
                     .run_with_flat(input, 0)
                     .unwrap()

@@ -240,12 +240,14 @@ there that demonstrate all the necessary steps.
 This project is licensed under either the [MIT License](LICENSE-MIT) or the
 [Apache](LICENSE-APACHE), at your choice.
 
-Individual sub-libraries within this project have different licenses, reflecting
+`SPDX-License-Identifier: Apache-2.0 OR MIT`
+
+Select sub-libraries within this project have different licenses, reflecting
 their dependencies on
 [circom](https://github.com/iden3/circom?tab=GPL-3.0-1-ov-file).
 
-- **collaborative-circom**: Licensed under [GPL-3.0](LICENSE-GPL).
-- **circom-mpc-compiler**: Licensed under [GPL-3.0](LICENSE-GPL).
+- **collaborative-circom**: Licensed under [GPL-3.0](LICENSE.GPL) `SPDX-License-Identifier: GPL-3.0-only`.
+- **circom-mpc-compiler**: Licensed under [GPL-3.0](LICENSE.GPL) `SPDX-License-Identifier: GPL-3.0-only`.
 
 ## Disclaimer
 

@@ -9,7 +9,7 @@ use mpc_net::config::NetworkConfig;
 
 use crate::{
     accelerator::MpcAccelerator,
-    mpc_vm::{PlainWitnessExtension, Rep3WitnessExtension, WitnessExtension},
+    mpc_vm::{PlainWitnessExtension, Rep3WitnessExtension, VMConfig, WitnessExtension},
     op_codes::CodeBlock,
 };
 use eyre::Result;
@@ -145,8 +145,11 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
     /// witness and input will not be protected. Do not share sensitive data when using this feature.
     ///
     /// This method is primarily intended for testing purposes.
-    pub fn to_plain_vm(self) -> WitnessExtension<P, PlainDriver<P::ScalarField>> {
-        PlainWitnessExtension::new(self)
+    pub fn to_plain_vm(
+        self,
+        vm_config: VMConfig,
+    ) -> WitnessExtension<P, PlainDriver<P::ScalarField>> {
+        PlainWitnessExtension::new(self, vm_config)
     }
 
     /// Consumes `self` and a [`NetworkConfig`], and constructs an instance of [`Rep3WitnessExtension`].
@@ -160,8 +163,14 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
     pub fn to_rep3_vm(
         self,
         network_config: NetworkConfig,
+        vm_config: VMConfig,
     ) -> Result<Rep3WitnessExtension<P, Rep3MpcNet>> {
-        Rep3WitnessExtension::new(self, network_config, MpcAccelerator::full_mpc_accelerator())
+        Rep3WitnessExtension::new(
+            self,
+            network_config,
+            MpcAccelerator::full_mpc_accelerator(),
+            vm_config,
+        )
     }
 
     /// Consumes `self` and an already established [`Rep3Network`], and constructs an instance of [`Rep3WitnessExtension`].
@@ -175,7 +184,13 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
     pub fn to_rep3_vm_with_network<N: Rep3Network>(
         self,
         network: N,
+        vm_config: VMConfig,
     ) -> Result<Rep3WitnessExtension<P, N>> {
-        Rep3WitnessExtension::from_network(self, network, MpcAccelerator::full_mpc_accelerator())
+        Rep3WitnessExtension::from_network(
+            self,
+            network,
+            MpcAccelerator::full_mpc_accelerator(),
+            vm_config,
+        )
     }
 }

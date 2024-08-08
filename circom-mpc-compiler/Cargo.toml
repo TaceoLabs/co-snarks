@@ -26,6 +26,7 @@ circom-program_structure = { version = "2.1.9", git = "https://github.com/TaceoL
 circom-type_analysis = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "type_analysis", branch = "dev" }
 eyre.workspace = true
 itertools.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 ark-bn254.workspace = true

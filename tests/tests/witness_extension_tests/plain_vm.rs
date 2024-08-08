@@ -1,5 +1,7 @@
 use ark_bn254::Bn254;
 use circom_mpc_compiler::CompilerBuilder;
+use circom_mpc_compiler::CompilerConfig;
+use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::groth16::witness::Witness;
 use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::protocols::plain::PlainDriver;
@@ -33,16 +35,19 @@ macro_rules! witness_extension_test_plain {
         fn $name() {
             let inp: TestInputs = from_test_name(stringify!($name));
             for i in 0..inp.inputs.len() {
-                let builder = CompilerBuilder::<Bn254>::new(format!(
-                    "../test_vectors/circuits/test-circuits/{}.circom",
-                    stringify!($name)
-                ))
+                let builder = CompilerBuilder::<Bn254>::new(
+                    CompilerConfig::default(),
+                    format!(
+                        "../test_vectors/circuits/test-circuits/{}.circom",
+                        stringify!($name)
+                    ),
+                )
                 .link_library("../test_vectors/circuits/libs/");
                 let is_witness = builder
                     .build()
                     .parse()
                     .unwrap()
-                    .to_plain_vm()
+                    .to_plain_vm(VMConfig::default())
                     .run_with_flat(inp.inputs[i].to_owned(), 0)
                     .unwrap()
                     .into_shared_witness();

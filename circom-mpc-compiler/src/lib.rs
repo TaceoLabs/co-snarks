@@ -13,13 +13,13 @@
 //! Finally, we build the compiler and parse the circuit:
 //!
 //! ```
-//! # use circom_mpc_compiler::CompilerBuilder;
+//! # use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
 //! # use ark_bn254::Bn254;
 //! # let circuit_file = "".to_owned();
 //!
 //! let link_library = vec!["link/to/lib/"];
 //! // Instantiate the compiler with the circuit file
-//! let mut builder = CompilerBuilder::<Bn254>::new(circuit_file);
+//! let mut builder = CompilerBuilder::<Bn254>::new(CompilerConfig::default(), circuit_file);
 //!
 //! // Link external circom libraries
 //! for lib in link_library {
@@ -58,9 +58,17 @@ use circom_type_analysis::check_types;
 use eyre::eyre;
 use eyre::{bail, Result};
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 const DEFAULT_VERSION: &str = "2.0.0";
+
+/// The mpc-compiler configuration
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct CompilerConfig {
+    /// Allow leaking of secret values in loops
+    pub allow_leaky_loops: bool,
+}
 
 /// A builder to create a [`CollaborativeCircomCompiler`].
 ///
@@ -71,13 +79,13 @@ const DEFAULT_VERSION: &str = "2.0.0";
 /// # Examples
 ///
 /// ```
-/// # use circom_mpc_compiler::CompilerBuilder;
+/// # use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
 /// # use ark_bn254::Bn254;
 /// # let circuit_file = "".to_owned();
 ///
 /// let link_library = vec!["link/to/lib/"];
 /// // Create a new compiler builder for the Bn254 curve
-/// let mut builder = CompilerBuilder::<Bn254>::new(circuit_file);
+/// let mut builder = CompilerBuilder::<Bn254>::new(CompilerConfig::default(), circuit_file);
 ///
 /// // Link external circom libraries
 /// for lib in link_library {
@@ -93,6 +101,7 @@ pub struct CompilerBuilder<P: Pairing> {
     version: String,
     link_libraries: Vec<PathBuf>,
     phantom_data: PhantomData<P>,
+    config: CompilerConfig,
 }
 
 /// The constructed compiler.
@@ -103,6 +112,8 @@ pub struct CollaborativeCircomCompiler<P: Pairing> {
     version: String,
     link_libraries: Vec<PathBuf>,
     phantom_data: PhantomData<P>,
+    #[allow(dead_code)]
+    config: CompilerConfig,
     pub(crate) fun_decls: HashMap<String, FunDecl>,
     pub(crate) templ_decls: HashMap<String, TemplateDecl>,
     pub(crate) current_code_block: CodeBlock,
@@ -116,12 +127,13 @@ impl<P: Pairing> CompilerBuilder<P> {
     /// # Arguments
     ///
     /// * `file` - The path to the circom file.
-    pub fn new(file: String) -> Self {
+    pub fn new(config: CompilerConfig, file: String) -> Self {
         Self {
             file,
             version: DEFAULT_VERSION.to_owned(),
             link_libraries: vec![],
             phantom_data: PhantomData,
+            config,
         }
     }
 
@@ -135,10 +147,10 @@ impl<P: Pairing> CompilerBuilder<P> {
     ///
     /// ```
     /// # use std::path::PathBuf;
-    /// # use circom_mpc_compiler::CompilerBuilder;
+    /// # use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
     /// # use ark_bn254::Bn254;
     ///
-    /// let mut builder = CompilerBuilder::<Bn254>::new("/path/to/your/circom/file.circom".to_owned());
+    /// let mut builder = CompilerBuilder::<Bn254>::new(CompilerConfig::default(), "/path/to/your/circom/file.circom".to_owned());
     ///
     /// // Add multiple libraries to link during compilation
     /// builder = builder.link_library(PathBuf::from("/path/to/library1"));
@@ -160,6 +172,7 @@ impl<P: Pairing> CompilerBuilder<P> {
             file: self.file,
             version: self.version,
             link_libraries: self.link_libraries,
+            config: self.config,
             current_code_block: vec![],
             fun_decls: HashMap::new(),
             templ_decls: HashMap::new(),
@@ -710,8 +723,9 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
 #[cfg(test)]
 mod tests {
     use ark_bn254::Bn254;
+    use circom_mpc_vm::mpc_vm::VMConfig;
 
-    use crate::CompilerBuilder;
+    use crate::{CompilerBuilder, CompilerConfig};
     use std::str::FromStr;
     macro_rules! to_field_vec {
         ($vec: expr) => {
@@ -723,10 +737,15 @@ mod tests {
     #[test]
     fn test_get_output_from_finalized_witness() {
         let builder = CompilerBuilder::<Bn254>::new(
+            CompilerConfig::default(),
             "../test_vectors/circuits/test-circuits/bitonic_sort.circom".to_owned(),
         );
 
-        let plain_vm = builder.build().parse().unwrap().to_plain_vm();
+        let plain_vm = builder
+            .build()
+            .parse()
+            .unwrap()
+            .to_plain_vm(VMConfig::default());
         let finalized_witness = plain_vm
             .run_with_flat(
                 to_field_vec!(vec![
