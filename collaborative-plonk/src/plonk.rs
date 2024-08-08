@@ -288,7 +288,7 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::{
-        groth16::public_input::{self, JsonPublicInput},
+        groth16::public_input::JsonPublicInput,
         plonk::{JsonVerificationKey, PlonkProof},
     };
     use itertools::Itertools;

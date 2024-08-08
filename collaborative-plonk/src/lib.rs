@@ -252,21 +252,22 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::{
-        groth16::witness::Witness,
+        groth16::{
+            public_input::{self, JsonPublicInput},
+            witness::Witness,
+        },
         plonk::{JsonVerificationKey, ZKey},
+        r1cs::R1CS,
     };
-    use collaborative_groth16::groth16::SharedWitness;
+    use collaborative_groth16::{circuit::Circuit, groth16::SharedWitness};
     use mpc_core::protocols::plain::PlainDriver;
     use num_traits::Zero;
 
-    use crate::{
-        plonk::Plonk,
-        round1::{Round1, Round1Challenges},
-    };
+    use crate::plonk::Plonk;
 
     #[test]
     pub fn test_multiplier2_bn254() {
-        let mut driver = PlainDriver::<ark_bn254::Fr>::default();
+        let driver = PlainDriver::<ark_bn254::Fr>::default();
         let mut reader = BufReader::new(
             File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
         );
@@ -285,15 +286,48 @@ pub mod tests {
         )
         .unwrap();
 
-        let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut state = Round1::init_round(driver, zkey, witness).unwrap();
-        state.challenges = challenges;
-        let state = state.round1().unwrap();
-        let state = state.round2().unwrap();
-        let state = state.round3().unwrap();
-        let state = state.round4().unwrap();
-        let proof = state.round5().unwrap();
+        let plonk = Plonk::<Bn254>::new(driver);
+        let proof = plonk.prove(zkey, witness).unwrap();
         let result = Plonk::<Bn254>::verify(&vk, &proof, &[value1]).unwrap();
+        assert!(result)
+    }
+    use num_traits::One;
+
+    #[test]
+    pub fn test_poseidon_bn254() {
+        let driver = PlainDriver::<ark_bn254::Fr>::default();
+        let mut reader = BufReader::new(
+            File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.zkey").unwrap(),
+        );
+        let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
+        let witness_file = File::open("../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
+        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let r1cs = R1CS::<Bn254>::from_reader(
+            File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.r1cs").unwrap(),
+        )
+        .unwrap();
+        let circuit = Circuit::new(r1cs, witness);
+        let public_inputs = circuit.public_inputs();
+        let mut public_input = vec![ark_bn254::Fr::one()];
+        public_input.extend(public_inputs);
+        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+            public_inputs: public_input,
+            witness: circuit.witnesses(),
+        };
+
+        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
+            File::open("../test_vectors/Plonk/bn254/poseidon/verification_key.json").unwrap(),
+        )
+        .unwrap();
+
+        let public_inputs: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
+            File::open("../test_vectors/Plonk/bn254/poseidon/public.json").unwrap(),
+        )
+        .unwrap();
+
+        let plonk = Plonk::<Bn254>::new(driver);
+        let proof = plonk.prove(zkey, witness).unwrap();
+        let result = Plonk::<Bn254>::verify(&vk, &proof, &public_inputs.values).unwrap();
         assert!(result)
     }
 }
