@@ -288,7 +288,6 @@ pub mod tests {
         let result = Plonk::<Bn254>::verify(&vk, &proof, &[value1]).unwrap();
         assert!(result)
     }
-    use num_traits::One;
 
     #[test]
     pub fn test_poseidon_bn254() {
@@ -305,7 +304,7 @@ pub mod tests {
         .unwrap();
         let circuit = Circuit::new(r1cs, witness);
         let public_inputs = circuit.public_inputs();
-        let mut public_input = vec![ark_bn254::Fr::one()];
+        let mut public_input = vec![ark_bn254::Fr::zero()];
         public_input.extend(public_inputs);
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
             public_inputs: public_input,
