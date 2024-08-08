@@ -5,7 +5,6 @@ use mpc_core::traits::{
     FFTPostProcessing, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
     PrimeFieldMpcProtocol,
 };
-use num_traits::Zero;
 
 use crate::{
     plonk_utils, round2::Round2, types::PolyEval, Domains, FieldShare, FieldShareVec, PlonkData,
@@ -78,7 +77,9 @@ where
 {
     pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::FieldShare::default());
-        for mut x in b.iter_mut() {
+        //this is a clippy bug. Remove me if fixed
+        //#[allow(unused_mut)]
+        for x in b.as_mut_slice() {
             *x = driver.rand()?;
         }
         Ok(Self { b })

@@ -352,24 +352,10 @@ where
             );
 
             e2d.push(z.clone());
-
-            let mut e3a_ = a;
-            e3a_ = driver.add_with_public(&(s1 * challenges.beta), &e3a_);
-            e3a_ = driver.add_with_public(&challenges.gamma, &e3a_);
-            e3a.push(e3a_);
-
-            let mut e3b_ = b;
-            e3b_ = driver.add_with_public(&(s2 * challenges.beta), &e3b_);
-            e3b_ = driver.add_with_public(&challenges.gamma, &e3b_);
-            e3b.push(e3b_);
-
-            let mut e3c_ = c;
-            e3c_ = driver.add_with_public(&(s3 * challenges.beta), &e3c_);
-            e3c_ = driver.add_with_public(&challenges.gamma, &e3c_);
-            e3c.push(e3c_);
-
-            let e3d_ = zw;
-            e3d.push(e3d_);
+            e3a.push(driver.add_with_public(&(s1 * challenges.beta + challenges.gamma), &a));
+            e3b.push(driver.add_with_public(&(s2 * challenges.beta + challenges.gamma), &b));
+            e3c.push(driver.add_with_public(&(s3 * challenges.beta + challenges.gamma), &c));
+            e3d.push(zw);
             w *= pow_plus2_root_of_unity;
         }
 
