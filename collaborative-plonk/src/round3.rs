@@ -162,7 +162,7 @@ where
 
 impl<T, P: Pairing> Round3Challenges<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     fn new(
         round2_challenges: Round2Challenges<T, P>,
@@ -255,6 +255,7 @@ where
         let ap_b = driver.mul_vec(&polys.poly_eval_b.eval, &ap_vec)?;
         let ap_bp = driver.mul_vec(&ap_vec, &bp_vec)?;
 
+        // TODO keep RAM requirements in mind
         let mut e1 = Vec::with_capacity(zkey.domain_size * 4);
         let mut e1z = Vec::with_capacity(zkey.domain_size * 4);
 
