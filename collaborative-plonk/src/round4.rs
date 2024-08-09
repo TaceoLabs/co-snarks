@@ -122,7 +122,7 @@ where
         let eval_z = driver.evaluate_poly_public(polys.z.poly.to_owned(), &xiw);
 
         let opened = driver.open_many(&[eval_a, eval_b, eval_c, eval_z])?;
-        debug_assert_eq!(opened.len(), 4);
+
         let eval_a = opened[0];
         let eval_b = opened[1];
         let eval_c = opened[2];
