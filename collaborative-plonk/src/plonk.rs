@@ -370,7 +370,7 @@ pub mod tests {
     }
 
     #[test]
-    pub fn verify() {
+    pub fn verify_multiplier2_from_circom() {
         let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
             File::open("../test_vectors/Plonk/bn254/multiplierAdd2/verification_key.json").unwrap(),
         )
@@ -381,6 +381,23 @@ pub mod tests {
         .unwrap();
         let public_inputs: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
             File::open("../test_vectors/Plonk/bn254/multiplierAdd2/public.json").unwrap(),
+        )
+        .unwrap();
+        assert!(Plonk::verify(&vk, &proof, &public_inputs.values).unwrap());
+    }
+
+    #[test]
+    pub fn verify_poseidon_from_circom() {
+        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
+            File::open("../test_vectors/Plonk/bn254/poseidon/verification_key.json").unwrap(),
+        )
+        .unwrap();
+        let proof: PlonkProof<Bn254> = serde_json::from_reader(
+            File::open("../test_vectors/Plonk/bn254/poseidon/circom.proof").unwrap(),
+        )
+        .unwrap();
+        let public_inputs: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
+            File::open("../test_vectors/Plonk/bn254/poseidon/public.json").unwrap(),
         )
         .unwrap();
         assert!(Plonk::verify(&vk, &proof, &public_inputs.values).unwrap());
