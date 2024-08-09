@@ -426,14 +426,14 @@ where
     fn read<R: Read>(mut reader: &mut R) -> OurResult<Self> {
         // TODO: Impl From<u32> in Arkworks
         let n8q: u32 = u32::deserialize_uncompressed(&mut reader)?;
-        //modulos of BaseField
+        //modulus of BaseField
         let q = <P::BaseField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
         let modulus = <P::BaseField as PrimeField>::MODULUS;
         if q != modulus {
             return Err(ZKeyParserError::InvalidGroth16Header);
         }
         let n8r: u32 = u32::deserialize_uncompressed(&mut reader)?;
-        //modulos of ScalarField
+        //modulus of ScalarField
         let r = <P::ScalarField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
         let modulus = <P::ScalarField as PrimeField>::MODULUS;
         assert_eq!(r, modulus);
@@ -476,7 +476,7 @@ mod tests {
 
     #[test]
     fn can_deser_bls12_381_mult2_key() {
-        let zkey = File::open("../test_vectors/bls12_381/multiplier2.zkey").unwrap();
+        let zkey = File::open("../test_vectors/Groth16/bls12_381/multiplier2.zkey").unwrap();
         let (pk, _) = ZKey::<Bls12_381>::from_reader(zkey).unwrap().split();
         let beta_g1 = test_utils::to_g1_bls12_381!(
             "3250926845764181697440489887589522470230793318088642572984668490087093900624850910545082127315229930931755140742241",
@@ -591,8 +591,9 @@ mod tests {
     }
 
     #[test]
-    fn test_can_deser_bn254_mult2_key() {
-        let zkey = File::open("../test_vectors/bn254/multiplier2/multiplier2.zkey").unwrap();
+    fn can_deser_bn254_mult2_key() {
+        let zkey =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.zkey").unwrap();
         let (pk, matrices) = ZKey::<Bn254>::from_reader(zkey).unwrap().split();
         let beta_g1 = test_utils::to_g1_bn254!(
             "1436132865180440050058953936123839411531217265376140788508003974087015278078",

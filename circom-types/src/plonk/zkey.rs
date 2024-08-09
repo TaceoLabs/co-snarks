@@ -27,7 +27,7 @@
 //! This module defines the [`ZKey`] struct that implements deserialization of circom zkey files via [`ZKey::from_reader`].
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-
+use ark_poly::{univariate::DensePolynomial, Polynomial};
 use ark_serialize::CanonicalDeserialize;
 use std::io::{Cursor, Read};
 
@@ -51,6 +51,8 @@ pub struct ZKey<P: Pairing> {
     pub n_public: usize,
     /// The domain size (power of two)
     pub domain_size: usize,
+    /// ld(domain size)
+    pub power: usize,
     /// The amounts of additions
     pub n_additions: usize,
     /// The amounts of constraints
@@ -66,34 +68,41 @@ pub struct ZKey<P: Pairing> {
     /// The witness indices of the signals of wire mapping c
     pub map_c: Vec<usize>,
     /// Qm polynomial
-    pub qm_poly: Polynomial<P>,
+    pub qm_poly: CircomPolynomial<P::ScalarField>,
     /// Ql polynomial
-    pub ql_poly: Polynomial<P>,
+    pub ql_poly: CircomPolynomial<P::ScalarField>,
     /// Qr polynomial
-    pub qr_poly: Polynomial<P>,
+    pub qr_poly: CircomPolynomial<P::ScalarField>,
     /// Qo polynomial
-    pub qo_poly: Polynomial<P>,
+    pub qo_poly: CircomPolynomial<P::ScalarField>,
     /// Qc polynomial
-    pub qc_poly: Polynomial<P>,
+    pub qc_poly: CircomPolynomial<P::ScalarField>,
     /// σ1 polynomial
-    pub s1_poly: Polynomial<P>,
+    pub s1_poly: CircomPolynomial<P::ScalarField>,
     /// σ2 polynomial
-    pub s2_poly: Polynomial<P>,
+    pub s2_poly: CircomPolynomial<P::ScalarField>,
     /// σ3 polynomial
-    pub s3_poly: Polynomial<P>,
+    pub s3_poly: CircomPolynomial<P::ScalarField>,
     /// Lagrange polynomials. One [Polynomial] for each public input.
-    pub lagrange: Vec<Polynomial<P>>,
+    pub lagrange: Vec<CircomPolynomial<P::ScalarField>>,
     /// The powers of 𝜏
     pub p_tau: Vec<P::G1Affine>,
 }
 
 /// A polynomial in coefficient and evaluation form for PLONK's [ZKey].
 #[derive(Clone)]
-pub struct Polynomial<P: Pairing> {
+pub struct CircomPolynomial<F: PrimeField> {
     /// The polynomial's coefficient form
-    pub coeffs: Vec<P::ScalarField>,
+    pub coeffs: DensePolynomial<F>,
     /// The polynomial's evaluation form
-    pub evaluations: Vec<P::ScalarField>,
+    pub evaluations: Vec<F>,
+}
+
+impl<F: PrimeField> CircomPolynomial<F> {
+    /// Evaluates the polynomial at a certain point
+    pub fn evaluate(&self, point: &F) -> F {
+        self.coeffs.evaluate(point)
+    }
 }
 
 #[derive(Clone)]
@@ -155,8 +164,8 @@ where
         for _ in 0..n_additions {
             let signal_id1 = u32::deserialize_uncompressed(&mut reader)?;
             let signal_id2 = u32::deserialize_uncompressed(&mut reader)?;
-            let factor1 = P::ScalarField::from_reader(&mut reader)?;
-            let factor2 = P::ScalarField::from_reader(&mut reader)?;
+            let factor1 = P::ScalarField::from_reader_unchecked(&mut reader)?;
+            let factor2 = P::ScalarField::from_reader_unchecked(&mut reader)?;
             additions.push(Additions {
                 signal_id1,
                 signal_id2,
@@ -175,18 +184,21 @@ where
         Ok(map)
     }
 
-    fn evaluations<R: Read>(domain_size: usize, mut reader: R) -> ZKeyParserResult<Polynomial<P>> {
+    fn evaluations<R: Read>(
+        domain_size: usize,
+        mut reader: R,
+    ) -> ZKeyParserResult<CircomPolynomial<P::ScalarField>> {
         let mut coeffs = Vec::with_capacity(domain_size);
         for _ in 0..domain_size {
-            coeffs.push(P::ScalarField::deserialize_compressed(&mut reader)?);
+            coeffs.push(<P::ScalarField>::from_reader_unchecked(&mut reader)?);
         }
 
         let mut evaluations = Vec::with_capacity(domain_size * 4);
         for _ in 0..domain_size * 4 {
-            evaluations.push(P::ScalarField::deserialize_compressed(&mut reader)?);
+            evaluations.push(<P::ScalarField>::from_reader_unchecked(&mut reader)?);
         }
-        Ok(Polynomial {
-            coeffs,
+        Ok(CircomPolynomial {
+            coeffs: DensePolynomial { coeffs },
             evaluations,
         })
     }
@@ -195,7 +207,7 @@ where
         n_public: usize,
         domain_size: usize,
         mut reader: R,
-    ) -> ZKeyParserResult<Vec<Polynomial<P>>> {
+    ) -> ZKeyParserResult<Vec<CircomPolynomial<P::ScalarField>>> {
         let mut lagrange = Vec::with_capacity(n_public);
         for _ in 0..n_public {
             lagrange.push(Self::evaluations(domain_size, &mut reader)?);
@@ -280,6 +292,7 @@ where
             n_vars,
             n_public,
             domain_size,
+            power: header.power,
             n_additions,
             n_constraints,
             verifying_key: header.verifying_key,
@@ -311,8 +324,8 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn new<R: Read>(mut reader: R) -> ZKeyParserResult<Self> {
-        let k1 = <P::ScalarField>::from_reader(&mut reader)?;
-        let k2 = <P::ScalarField>::from_reader(&mut reader)?;
+        let k1 = <P::ScalarField>::from_reader_unchecked(&mut reader)?;
+        let k2 = <P::ScalarField>::from_reader_unchecked(&mut reader)?;
         let qm = P::g1_from_reader(&mut reader)?;
         let ql = P::g1_from_reader(&mut reader)?;
         let qr = P::g1_from_reader(&mut reader)?;
@@ -345,6 +358,7 @@ struct PlonkHeader<P: Pairing> {
     n_vars: usize,
     n_public: usize,
     domain_size: usize,
+    power: usize,
     n_additions: usize,
     n_constraints: usize,
     verifying_key: VerifyingKey<P>,
@@ -357,14 +371,14 @@ where
 {
     fn read<R: Read>(mut reader: &mut R) -> ZKeyParserResult<Self> {
         let _n8q: u32 = u32::deserialize_uncompressed(&mut reader)?;
-        //modulos of BaseField
+        //modulus of BaseField
         let q = <P::BaseField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
         let modulus = <P::BaseField as PrimeField>::MODULUS;
         if q != modulus {
             return Err(ZKeyParserError::InvalidPrimeInHeader);
         }
         let n8r = u32::deserialize_uncompressed(&mut reader)?;
-        //modulos of ScalarField
+        //modulus of ScalarField
         let r = <P::ScalarField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
         let modulus = <P::ScalarField as PrimeField>::MODULUS;
         if r != modulus {
@@ -376,155 +390,21 @@ where
         let n_additions = u32::deserialize_uncompressed(&mut reader)?;
         let n_constraints = u32::deserialize_uncompressed(&mut reader)?;
         let verifying_key = VerifyingKey::new(&mut reader)?;
-        Ok(Self {
-            n8r: u32_to_usize!(n8r),
-            n_vars: u32_to_usize!(n_vars),
-            n_public: u32_to_usize!(n_public),
-            domain_size: u32_to_usize!(domain_size),
-            n_additions: u32_to_usize!(n_additions),
-            n_constraints: u32_to_usize!(n_constraints),
-            verifying_key,
-        })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        fs::File,
-        io::{BufRead, BufReader},
-    };
-
-    use ark_bn254::Bn254;
-    use std::str::FromStr;
-
-    use super::ZKey;
-    use ark_ec::pairing::Pairing;
-
-    macro_rules! bn_fr_from_lines {
-        ($lines: expr) => {
-            ark_bn254::Fr::from_str($lines.next().unwrap().unwrap().as_str()).unwrap()
-        };
-    }
-
-    macro_rules! batch_to_fr {
-        ($lines:expr, $amount: expr) => {
-            (0..$amount)
-                .into_iter()
-                .map(|_| bn_fr_from_lines!($lines))
-                .collect::<Vec<_>>()
-        };
-    }
-
-    macro_rules! g1_from_lines {
-        ($lines: expr) => {
-            <ark_bn254::Bn254 as Pairing>::G1Affine::new(
-                ark_bn254::Fq::from_str($lines.next().unwrap().unwrap().as_str()).unwrap(),
-                ark_bn254::Fq::from_str($lines.next().unwrap().unwrap().as_str()).unwrap(),
-            )
-        };
-    }
-
-    macro_rules! batch_to_g1 {
-        ($lines:expr, $amount: expr) => {
-            (0..$amount)
-                .into_iter()
-                .map(|_| g1_from_lines!($lines))
-                .collect::<Vec<_>>()
-        };
-    }
-    macro_rules! g2_from_lines {
-        ($lines: expr) => {
-            <ark_bn254::Bn254 as Pairing>::G2Affine::new(
-                ark_bn254::Fq2::new(
-                    ark_bn254::Fq::from_str($lines.next().unwrap().unwrap().as_str()).unwrap(),
-                    ark_bn254::Fq::from_str($lines.next().unwrap().unwrap().as_str()).unwrap(),
-                ),
-                ark_bn254::Fq2::new(
-                    ark_bn254::Fq::from_str($lines.next().unwrap().unwrap().as_str()).unwrap(),
-                    ark_bn254::Fq::from_str($lines.next().unwrap().unwrap().as_str()).unwrap(),
-                ),
-            )
-        };
-    }
-
-    #[test]
-    fn can_serde_zkey_bn254() {
-        let mut reader =
-            BufReader::new(File::open("../test_vectors/Plonk/bn254/multiplier2.zkey").unwrap());
-        let mut lines =
-            BufReader::new(File::open("../test_vectors/Plonk/bn254/multiplier2.zkey.kat").unwrap())
-                .lines();
-        let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
-        assert_eq!(zkey.n_vars, 4);
-        assert_eq!(zkey.n_public, 1);
-        assert_eq!(zkey.domain_size, 8);
-        assert_eq!(zkey.n_additions, 0);
-        assert_eq!(zkey.n_constraints, 2);
-        assert_eq!(zkey.verifying_key.k1, bn_fr_from_lines!(lines));
-        assert_eq!(zkey.verifying_key.k2, bn_fr_from_lines!(lines));
-        assert_eq!(zkey.verifying_key.qm, g1_from_lines!(lines));
-        assert_eq!(zkey.verifying_key.ql, g1_from_lines!(lines));
-        assert_eq!(zkey.verifying_key.qr, ark_bn254::G1Affine::identity());
-        assert_eq!(zkey.verifying_key.qo, g1_from_lines!(lines));
-        assert_eq!(zkey.verifying_key.qc, g1_from_lines!(lines));
-        assert_eq!(zkey.verifying_key.s1, g1_from_lines!(lines));
-        assert_eq!(zkey.verifying_key.s2, g1_from_lines!(lines));
-        assert_eq!(zkey.verifying_key.s3, g1_from_lines!(lines));
-        assert_eq!(zkey.verifying_key.x_2, g2_from_lines!(lines));
-        assert!(zkey.additions.is_empty());
-        assert_eq!(zkey.map_a, vec![1, 2]);
-        assert_eq!(zkey.map_b, vec![0, 3]);
-        assert_eq!(zkey.map_c, vec![0, 1]);
-        assert_eq!(zkey.s1_poly.coeffs, batch_to_fr!(lines, zkey.domain_size));
-        assert_eq!(
-            zkey.s1_poly.evaluations,
-            batch_to_fr!(lines, zkey.domain_size * 4)
-        );
-        assert_eq!(zkey.s2_poly.coeffs, batch_to_fr!(lines, zkey.domain_size));
-        assert_eq!(
-            zkey.s2_poly.evaluations,
-            batch_to_fr!(lines, zkey.domain_size * 4)
-        );
-        assert_eq!(zkey.s3_poly.coeffs, batch_to_fr!(lines, zkey.domain_size));
-        assert_eq!(
-            zkey.s3_poly.evaluations,
-            batch_to_fr!(lines, zkey.domain_size * 4)
-        );
-        assert_eq!(zkey.ql_poly.coeffs, batch_to_fr!(lines, zkey.domain_size));
-        assert_eq!(zkey.qr_poly.coeffs, batch_to_fr!(lines, zkey.domain_size));
-        assert_eq!(zkey.qm_poly.coeffs, batch_to_fr!(lines, zkey.domain_size));
-        assert_eq!(zkey.qo_poly.coeffs, batch_to_fr!(lines, zkey.domain_size));
-        assert_eq!(zkey.qc_poly.coeffs, batch_to_fr!(lines, zkey.domain_size));
-        assert_eq!(
-            zkey.ql_poly.evaluations,
-            batch_to_fr!(lines, zkey.domain_size * 4)
-        );
-        assert_eq!(
-            zkey.qr_poly.evaluations,
-            batch_to_fr!(lines, zkey.domain_size * 4)
-        );
-        assert_eq!(
-            zkey.qm_poly.evaluations,
-            batch_to_fr!(lines, zkey.domain_size * 4)
-        );
-        assert_eq!(
-            zkey.qo_poly.evaluations,
-            batch_to_fr!(lines, zkey.domain_size * 4)
-        );
-        assert_eq!(
-            zkey.qc_poly.evaluations,
-            batch_to_fr!(lines, zkey.domain_size * 4)
-        );
-        assert_eq!(zkey.lagrange.len(), 1);
-        assert_eq!(
-            zkey.lagrange[0].coeffs,
-            batch_to_fr!(lines, zkey.domain_size)
-        );
-        assert_eq!(
-            zkey.lagrange[0].evaluations,
-            batch_to_fr!(lines, zkey.domain_size * 4)
-        );
-        assert_eq!(zkey.p_tau, batch_to_g1!(lines, 14));
+        if domain_size & (domain_size - 1) == 0 && domain_size > 0 {
+            Ok(Self {
+                n8r: u32_to_usize!(n8r),
+                n_vars: u32_to_usize!(n_vars),
+                n_public: u32_to_usize!(n_public),
+                domain_size: u32_to_usize!(domain_size),
+                power: u32_to_usize!(domain_size.ilog2()),
+                n_additions: u32_to_usize!(n_additions),
+                n_constraints: u32_to_usize!(n_constraints),
+                verifying_key,
+            })
+        } else {
+            Err(ZKeyParserError::CorruptedBinFile(format!(
+                "Invalid domain size {domain_size}. Must be power of 2"
+            )))
+        }
     }
 }

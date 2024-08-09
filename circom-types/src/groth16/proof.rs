@@ -89,7 +89,7 @@ mod tests {
     #[test]
     pub fn deserialize_bn254_proof() {
         let proof_string =
-            fs::read_to_string("../test_vectors/bn254/multiplier2/proof.json").unwrap();
+            fs::read_to_string("../test_vectors/Groth16/bn254/multiplier2/proof.json").unwrap();
         let proof = serde_json::from_str::<JsonProof<Bn254>>(&proof_string).unwrap();
 
         let pi_a = test_utils::to_g1_bn254!(
@@ -117,7 +117,8 @@ mod tests {
 
     #[test]
     pub fn deserialize_bls12_381_proof() {
-        let proof_string = fs::read_to_string("../test_vectors/bls12_381/proof.json").unwrap();
+        let proof_string =
+            fs::read_to_string("../test_vectors/Groth16/bls12_381/proof.json").unwrap();
         let proof = serde_json::from_str::<JsonProof<Bls12_381>>(&proof_string).unwrap();
 
         let pi_a = test_utils::to_g1_bls12_381!(

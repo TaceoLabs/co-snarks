@@ -213,7 +213,8 @@ mod test {
     #[test]
     fn can_serde_vk_bn254() {
         let vk_string =
-            fs::read_to_string("../test_vectors/bn254/multiplier2/verification_key.json").unwrap();
+            fs::read_to_string("../test_vectors/Groth16/bn254/multiplier2/verification_key.json")
+                .unwrap();
         let vk = serde_json::from_str::<JsonVerificationKey<Bn254>>(&vk_string).unwrap();
         let alpha_1 = test_utils::to_g1_bn254!(
             "16899422092493380665487369855810985762968608626455123789954325961085508316984",
@@ -287,7 +288,7 @@ mod test {
     #[test]
     fn can_serde_vk_bls12_381() {
         let vk_string =
-            fs::read_to_string("../test_vectors/bls12_381/verification_key.json").unwrap();
+            fs::read_to_string("../test_vectors/Groth16/bls12_381/verification_key.json").unwrap();
         let vk = serde_json::from_str::<JsonVerificationKey<Bls12_381>>(&vk_string).unwrap();
         let alpha_1 = test_utils::to_g1_bls12_381!(
             "1006274644424409217186953213662503172434575368717179668374437354164299156533023899663544377042948523039106817870257",

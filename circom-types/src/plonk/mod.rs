@@ -7,7 +7,7 @@ mod zkey;
 pub use proof::PlonkProof;
 pub use verification_key::JsonVerificationKey;
 pub use zkey::Additions;
-pub use zkey::Polynomial;
+pub use zkey::CircomPolynomial;
 pub use zkey::VerifyingKey;
 pub use zkey::ZKey;
 

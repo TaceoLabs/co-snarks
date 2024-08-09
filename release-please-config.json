@@ -40,6 +40,14 @@
       "draft": false,
       "prerelease": false
     },
+    "collaborative-plonk": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "rust",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    },
     "mpc-core": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
