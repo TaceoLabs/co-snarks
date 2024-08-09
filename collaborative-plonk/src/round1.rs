@@ -7,8 +7,10 @@ use mpc_core::traits::{
 };
 
 use crate::{
-    plonk_utils, round2::Round2, types::PolyEval, Domains, FieldShare, FieldShareVec, PlonkData,
-    PlonkProofError, PlonkProofResult, PlonkWitness,
+    plonk_utils,
+    round2::Round2,
+    types::{Domains, PlonkData, PlonkWitness, PolyEval},
+    FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult,
 };
 
 // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)

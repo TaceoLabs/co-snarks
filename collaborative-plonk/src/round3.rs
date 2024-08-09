@@ -1,8 +1,8 @@
 use crate::{
     round2::{Round2Challenges, Round2Polys, Round2Proof},
     round4::Round4,
-    types::{Keccak256Transcript, PolyEval},
-    Domains, FieldShareVec, PlonkData, PlonkProofResult,
+    types::{Domains, Keccak256Transcript, PlonkData, PolyEval},
+    FieldShareVec, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;

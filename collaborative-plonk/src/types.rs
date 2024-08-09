@@ -1,17 +1,20 @@
 use ark_ec::AffineRepr;
+use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
+use circom_types::plonk::ZKey;
+use collaborative_groth16::groth16::{roots_of_unity, SharedWitness};
 use std::marker::PhantomData;
 
+use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use mpc_core::traits::PrimeFieldMpcProtocol;
+use num_traits::Zero;
 use sha3::{Digest, Keccak256};
 
-use crate::FieldShareVec;
+pub(super) type Keccak256Transcript<P> = Transcript<Keccak256, P>;
 
-pub(crate) type Keccak256Transcript<P> = Transcript<Keccak256, P>;
-
-pub(crate) struct Transcript<D, P>
+pub(super) struct Transcript<D, P>
 where
     D: Digest,
     P: Pairing,
@@ -20,6 +23,75 @@ where
     phantom_data: PhantomData<P>,
 }
 
+pub(super) struct PolyEval<T, P: Pairing>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub(super) poly: FieldShareVec<T, P>,
+    pub(super) eval: FieldShareVec<T, P>,
+}
+
+pub(super) struct Domains<F: PrimeField> {
+    pub(super) domain: GeneralEvaluationDomain<F>,
+    pub(super) extended_domain: GeneralEvaluationDomain<F>,
+    pub(super) root_of_unity_pow: F,
+    pub(super) root_of_unity_2: F,
+    pub(super) root_of_unity_pow_2: F,
+}
+
+pub(super) struct PlonkWitness<T, P: Pairing>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub(super) public_inputs: Vec<P::ScalarField>,
+    pub(super) witness: FieldShareVec<T, P>,
+    pub(super) addition_witness: Vec<FieldShare<T, P>>,
+}
+
+pub(super) struct PlonkData<T, P: Pairing>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub(super) witness: PlonkWitness<T, P>,
+    pub(super) zkey: ZKey<P>,
+}
+
+impl<F: PrimeField> Domains<F> {
+    pub(super) fn new(domain_size: usize) -> PlonkProofResult<Self> {
+        if domain_size & (domain_size - 1) != 0 || domain_size == 0 {
+            Err(PlonkProofError::InvalidDomainSize(domain_size))
+        } else {
+            let domain = GeneralEvaluationDomain::<F>::new(domain_size)
+                .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
+            let extended_domain = GeneralEvaluationDomain::<F>::new(domain_size * 4)
+                .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
+            let (_, roots_of_unity) = roots_of_unity();
+            let pow = usize::try_from(domain_size.ilog2()).expect("u32 fits into usize");
+
+            Ok(Self {
+                domain,
+                extended_domain,
+                root_of_unity_2: roots_of_unity[2],
+                root_of_unity_pow: roots_of_unity[pow],
+                root_of_unity_pow_2: roots_of_unity[pow + 2],
+            })
+        }
+    }
+}
+impl<T, P: Pairing> PlonkWitness<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub(super) fn new(mut shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
+        // The leading zero is 1 in Circom
+        shared_witness.public_inputs[0] = P::ScalarField::zero();
+        Self {
+            public_inputs: shared_witness.public_inputs,
+            witness: shared_witness.witness,
+            addition_witness: Vec::with_capacity(n_additions),
+        }
+    }
+}
 impl<P: Pairing> Default for Keccak256Transcript<P> {
     fn default() -> Self {
         Self {
@@ -34,7 +106,7 @@ where
     D: Digest,
     P: Pairing,
 {
-    pub(crate) fn add_scalar(&mut self, scalar: P::ScalarField) {
+    pub(super) fn add_scalar(&mut self, scalar: P::ScalarField) {
         let mut buf = vec![];
         scalar
             .serialize_uncompressed(&mut buf)
@@ -43,7 +115,7 @@ where
         self.digest.update(&buf);
     }
 
-    pub(crate) fn add_point(&mut self, point: P::G1Affine) {
+    pub(super) fn add_point(&mut self, point: P::G1Affine) {
         let byte_len: usize = P::BaseField::MODULUS_BIT_SIZE
             .div_ceil(8)
             .try_into()
@@ -70,18 +142,10 @@ where
         }
     }
 
-    pub(crate) fn get_challenge(self) -> P::ScalarField {
+    pub(super) fn get_challenge(self) -> P::ScalarField {
         let bytes = self.digest.finalize();
         P::ScalarField::from_be_bytes_mod_order(&bytes)
     }
-}
-
-pub(crate) struct PolyEval<T, P: Pairing>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    pub(crate) poly: FieldShareVec<T, P>,
-    pub(crate) eval: FieldShareVec<T, P>,
 }
 
 #[cfg(test)]

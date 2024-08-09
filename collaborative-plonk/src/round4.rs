@@ -1,8 +1,8 @@
 use crate::{
     round3::{FinalPolys, Round3Challenges, Round3Proof},
     round5::Round5,
-    types::Keccak256Transcript,
-    Domains, PlonkData, PlonkProofResult,
+    types::{Domains, Keccak256Transcript, PlonkData},
+    PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use mpc_core::traits::{

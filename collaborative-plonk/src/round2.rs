@@ -2,8 +2,8 @@ use crate::{
     plonk_utils,
     round1::{Round1Challenges, Round1Polys, Round1Proof},
     round3::Round3,
-    types::{Keccak256Transcript, PolyEval},
-    Domains, FieldShareVec, PlonkData, PlonkProofError, PlonkProofResult,
+    types::{Domains, Keccak256Transcript, PlonkData, PolyEval},
+    FieldShareVec, PlonkProofError, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use circom_types::plonk::ZKey;

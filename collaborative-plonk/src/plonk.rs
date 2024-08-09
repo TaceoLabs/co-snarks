@@ -4,7 +4,7 @@
 //! You will most likely need the plain PLONK implementation to verify a proof from co-PLONK. For that
 //! see the [`Plonk::verify`] method.
 
-use crate::{plonk_utils, CollaborativePlonk, Domains};
+use crate::{plonk_utils, types::Domains, CollaborativePlonk};
 use ark_ec::{pairing::Pairing, Group};
 use ark_ff::Field;
 use circom_types::{

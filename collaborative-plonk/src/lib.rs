@@ -2,17 +2,13 @@
 
 #![warn(missing_docs)]
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
-use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
-use collaborative_groth16::groth16::roots_of_unity;
 use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
-use num_traits::Zero;
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
@@ -45,69 +41,6 @@ pub enum PlonkProofError {
     /// An [io::Error]. Communication to another party failed.
     #[error(transparent)]
     IOError(#[from] io::Error),
-}
-
-pub(crate) struct Domains<F: PrimeField> {
-    domain: GeneralEvaluationDomain<F>,
-    extended_domain: GeneralEvaluationDomain<F>,
-    root_of_unity_pow: F,
-    root_of_unity_2: F,
-    root_of_unity_pow_2: F,
-}
-
-impl<F: PrimeField> Domains<F> {
-    fn new(domain_size: usize) -> PlonkProofResult<Self> {
-        if domain_size & (domain_size - 1) != 0 || domain_size == 0 {
-            Err(PlonkProofError::InvalidDomainSize(domain_size))
-        } else {
-            let domain = GeneralEvaluationDomain::<F>::new(domain_size)
-                .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-            let extended_domain = GeneralEvaluationDomain::<F>::new(domain_size * 4)
-                .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-            let (_, roots_of_unity) = roots_of_unity();
-            let pow = usize::try_from(domain_size.ilog2()).expect("u32 fits into usize");
-
-            Ok(Self {
-                domain,
-                extended_domain,
-                root_of_unity_2: roots_of_unity[2],
-                root_of_unity_pow: roots_of_unity[pow],
-                root_of_unity_pow_2: roots_of_unity[pow + 2],
-            })
-        }
-    }
-}
-
-pub(crate) struct PlonkWitness<T, P: Pairing>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    public_inputs: Vec<P::ScalarField>,
-    witness: FieldShareVec<T, P>,
-    addition_witness: Vec<FieldShare<T, P>>,
-}
-
-pub(crate) struct PlonkData<T, P: Pairing>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    witness: PlonkWitness<T, P>,
-    zkey: ZKey<P>,
-}
-
-impl<T, P: Pairing> PlonkWitness<T, P>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
-    fn new(mut shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
-        // The leading zero is 1 in Circom
-        shared_witness.public_inputs[0] = P::ScalarField::zero();
-        Self {
-            public_inputs: shared_witness.public_inputs,
-            witness: shared_witness.witness,
-            addition_witness: Vec::with_capacity(n_additions),
-        }
-    }
 }
 
 /// A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
@@ -161,11 +94,10 @@ where
 mod plonk_utils {
     use ark_ec::pairing::Pairing;
     use circom_types::plonk::ZKey;
-    use mpc_core::traits::FieldShareVecTrait;
-    use mpc_core::traits::PrimeFieldMpcProtocol;
+    use mpc_core::traits::{FieldShareVecTrait, PrimeFieldMpcProtocol};
 
-    use crate::Domains;
-    use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult, PlonkWitness};
+    use crate::types::{Domains, PlonkWitness};
+    use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult};
     use ark_ff::Field;
     use num_traits::One;
     use num_traits::Zero;
