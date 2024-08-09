@@ -9,6 +9,7 @@ use ark_relations::r1cs::{
     ConstraintMatrices, ConstraintSystem, ConstraintSystemRef, LinearCombination, OptimizationGoal,
     SynthesisError, Variable,
 };
+use circom_types::groth16::witness::Witness;
 use circom_types::r1cs::R1CS;
 use eyre::{bail, Result};
 use itertools::izip;
@@ -40,7 +41,50 @@ type CurveFieldShareVec<T, C> = <T as PrimeFieldMpcProtocol<
     <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
 >>::FieldShareVec;
 
+/// Computes the roots of unity over the provided prime field. This method
+/// is equivalent with [circom's implementation](https://github.com/iden3/ffjavascript/blob/337b881579107ab74d5b2094dbe1910e33da4484/src/wasm_field1.js).
+///
+/// We calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p). We also calculate smallest t s.t. p-1=2^s*t, s is the two adicity.
+/// We use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
+/// Then if log2(\text{domain_size}) equals s we take q^2 as root of unity. Else we take the log2(\text{domain_size}) + 1-th element of the domain created above.
+pub fn roots_of_unity<F: PrimeField + FftField>() -> (F, Vec<F>) {
+    let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
+    let mut q = F::one();
+    while q.legendre() != LegendreSymbol::QuadraticNonResidue {
+        q += F::one();
+    }
+    let z = q.pow(F::TRACE);
+    roots[0] = z;
+    for i in 1..roots.len() {
+        roots[i] = roots[i - 1].square();
+    }
+    roots.reverse();
+    (q, roots)
+}
+
+/* old way of computing root of unity, does not work for bls12_381:
+let root_of_unity = {
+    let domain_size_double = 2 * domain_size;
+    let domain_double =
+        D::new(domain_size_double).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+    domain_double.element(1)
+};
+new one is computed in the same way as in snarkjs (More precisely in ffjavascript/src/wasm_field1.js)
+calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) also calculate smallest t (F::TRACE) s.t. p-1=2^s*t, s is the two_adicity
+use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
+then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
+*/
+fn root_of_unity_for_groth16<F: PrimeField + FftField>(domain: &GeneralEvaluationDomain<F>) -> F {
+    let (q, roots) = roots_of_unity::<F>();
+    if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
+        q.square()
+    } else {
+        roots[domain.log_size_of_group().to_usize().unwrap() + 1]
+    }
+}
+
 // TODO: maybe move this type to some other crate, as this is the only used type from this crate for many dependencies
+// TODO: if you are at it, move the roots of unity function above also
 /// A shared witness for a Groth16 proof.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedWitness<T, P: Pairing>
@@ -143,7 +187,7 @@ where
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CollaborativeGroth16<T, P: Pairing>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -156,7 +200,7 @@ where
 
 impl<T, P: Pairing> CollaborativeGroth16<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>
+    T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
@@ -198,36 +242,6 @@ where
         self.create_proof_with_assignment(pk, r, s, &h, &public_inputs[1..], private_witness)
     }
 
-    /* old way of computing root of unity, does not work for bls12_381:
-    let root_of_unity = {
-        let domain_size_double = 2 * domain_size;
-        let domain_double =
-            D::new(domain_size_double).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        domain_double.element(1)
-    };
-    new one is computed in the same way as in snarkjs (More precisely in ffjavascript/src/wasm_field1.js)
-    calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) also calculate smallest t (F::TRACE) s.t. p-1=2^s*t, s is the two_adicity
-    use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
-    then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
-    */
-    fn root_of_unity<F: PrimeField + FftField>(domain: &GeneralEvaluationDomain<F>) -> F {
-        let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
-        let mut q = F::one();
-        while q.legendre() != LegendreSymbol::QuadraticNonResidue {
-            q += F::one();
-        }
-        let z = q.pow(F::TRACE);
-        roots[0] = z;
-        for i in 1..roots.len() {
-            roots[i] = roots[i - 1].square();
-        }
-        roots.reverse();
-        if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
-            q.square()
-        } else {
-            roots[domain.log_size_of_group().to_usize().unwrap() + 1]
-        }
-    }
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     pub fn prove_with_matrices(
@@ -285,7 +299,7 @@ where
 
         let mut b = FieldShareVec::<T, P>::from(b);
         let mut c = self.driver.mul_vec(&a, &b)?;
-        let root_of_unity = Self::root_of_unity(&domain);
+        let root_of_unity = root_of_unity_for_groth16(&domain);
         tracing::debug!("ifft");
         self.driver.ifft_in_place(&mut a, &domain);
         self.driver.ifft_in_place(&mut b, &domain);
@@ -506,10 +520,12 @@ where
 impl<N: Rep3Network, P: Pairing> SharedWitness<Rep3Protocol<P::ScalarField, N>, P> {
     /// Shares a given witness and public input vector using the Rep3 protocol.
     pub fn share_rep3<R: Rng + CryptoRng>(
-        witness: &[P::ScalarField],
-        public_inputs: &[P::ScalarField],
+        witness: Witness<P::ScalarField>,
+        num_pub_inputs: usize,
         rng: &mut R,
     ) -> [Self; 3] {
+        let public_inputs = &witness.values[..num_pub_inputs];
+        let witness = &witness.values[num_pub_inputs..];
         let [share1, share2, share3] = rep3::utils::share_field_elements(witness, rng);
         let witness1 = Self {
             public_inputs: public_inputs.to_vec(),
@@ -530,12 +546,14 @@ impl<N: Rep3Network, P: Pairing> SharedWitness<Rep3Protocol<P::ScalarField, N>, 
 impl<N: ShamirNetwork, P: Pairing> SharedWitness<ShamirProtocol<P::ScalarField, N>, P> {
     /// Shares a given witness and public input vector using the Shamir protocol.
     pub fn share_shamir<R: Rng + CryptoRng>(
-        witness: &[P::ScalarField],
-        public_inputs: &[P::ScalarField],
+        witness: Witness<P::ScalarField>,
+        num_pub_inputs: usize,
         degree: usize,
         num_parties: usize,
         rng: &mut R,
     ) -> Vec<Self> {
+        let public_inputs = &witness.values[..num_pub_inputs];
+        let witness = &witness.values[num_pub_inputs..];
         let shares = shamir::utils::share_field_elements(witness, degree, num_parties, rng);
         shares
             .into_iter()
@@ -572,8 +590,8 @@ mod test {
         let mut rng = thread_rng();
         let [s1, _, _] =
             SharedWitness::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::share_rep3(
-                &witness.values[r1cs.num_inputs..],
-                &witness.values[..r1cs.num_inputs],
+                witness,
+                r1cs.num_inputs,
                 &mut rng,
             );
         println!("{}", serde_json::to_string(&s1).unwrap());
@@ -586,8 +604,8 @@ mod test {
         let r1cs = R1CS::<ark_bn254::Bn254>::from_reader(r1cs_file).unwrap();
         let mut rng = thread_rng();
         let s1 = SharedWitness::<ShamirProtocol<ark_bn254::Fr, ShamirMpcNet>, Bn254>::share_shamir(
-            &witness.values[r1cs.num_inputs..],
-            &witness.values[..r1cs.num_inputs],
+            witness,
+            r1cs.num_inputs,
             threshold,
             num_parties,
             &mut rng,
