@@ -321,7 +321,6 @@ where
         let r = Self::compute_r(&mut driver, &domains, &proof, &challenges, &data, &polys);
         //STEP 5.3 Compute opening proof polynomial Wxi(X)
         let wxi = Self::compute_wxi(&mut driver, &proof, &challenges, &data, &polys, &r);
-        //snarkjs has one trailing zero - is this relevant?
 
         //STEP 5.4 Compute opening proof polynomial Wxiw(X)
         let wxiw = Self::compute_wxiw(&mut driver, &domains, &proof, &challenges, &data, &polys);
