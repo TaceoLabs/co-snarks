@@ -146,12 +146,6 @@ where
             return Err(eyre::eyre!("Invalid number of public inputs"));
         }
 
-        //TODO is well constructed should not be necessary as our
-        //reader already checks that the points are on the curve
-        if proof.is_well_constructed().is_err() {
-            return Ok(false);
-        }
-
         let challenges = VerifierChallenges::<P>::new(vk, proof, public_inputs);
         let domains = Domains::<P::ScalarField>::new(1 << vk.power)?;
         let roots = domains.roots_of_unity;

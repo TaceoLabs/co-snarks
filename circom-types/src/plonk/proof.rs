@@ -2,7 +2,6 @@
 
 use crate::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use ark_ec::pairing::Pairing;
-use ark_serialize::{SerializationError, Valid};
 use serde::{Deserialize, Serialize};
 
 /// Represents a Plonk proof that was created by circom. Supports de/serialization using [`serde`].
@@ -85,26 +84,6 @@ where
     pub protocol: String,
     /// The curve used to generate the proof
     pub curve: String,
-}
-
-impl<P: Pairing + CircomArkworksPairingBridge> PlonkProof<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    /// This function checks whether the group elements are valid.
-    pub fn is_well_constructed(&self) -> Result<(), SerializationError> {
-        self.a.check()?;
-        self.b.check()?;
-        self.c.check()?;
-        self.z.check()?;
-        self.t1.check()?;
-        self.t2.check()?;
-        self.t3.check()?;
-        self.wxi.check()?;
-        self.wxiw.check()?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]
