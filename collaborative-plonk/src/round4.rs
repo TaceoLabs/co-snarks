@@ -114,7 +114,7 @@ where
         transcript.add_point(proof.commit_t2.into());
         transcript.add_point(proof.commit_t3.into());
         let xi = transcript.get_challenge();
-        let xiw = xi * domains.roots_of_unity[data.zkey.power];
+        let xiw = xi * domains.root_of_unity_pow;
         let challenges = Round4Challenges::new(challenges, xi);
         let eval_a = driver.evaluate_poly_public(polys.a.poly.to_owned(), &challenges.xi);
         let eval_b = driver.evaluate_poly_public(polys.b.poly.to_owned(), &challenges.xi);

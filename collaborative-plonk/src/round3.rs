@@ -192,7 +192,7 @@ where
         let zero = P::ScalarField::zero();
         let neg_1 = zero - P::ScalarField::one();
         let neg_2 = neg_1 - P::ScalarField::one();
-        let root_of_unity = domains.roots_of_unity[2];
+        let root_of_unity = domains.root_of_unity_2;
         [zero, neg_1 + root_of_unity, neg_2, neg_1 - root_of_unity]
     }
 
@@ -201,7 +201,7 @@ where
         let two = P::ScalarField::one() + P::ScalarField::one();
         let four = two.square();
         let neg_2 = zero - two;
-        let root_of_unity = domains.roots_of_unity[2];
+        let root_of_unity = domains.root_of_unity_2;
         let neg2_root_unity = neg_2 * root_of_unity;
         [
             zero,
@@ -215,7 +215,7 @@ where
         let zero = P::ScalarField::zero();
         let two = P::ScalarField::one() + P::ScalarField::one();
         let neg_eight = -(two.square() * two);
-        let root_of_unity = domains.roots_of_unity[2];
+        let root_of_unity = domains.root_of_unity_2;
         let two_root_unity = two * root_of_unity;
         [zero, two + two_root_unity, neg_eight, two - two_root_unity]
     }
@@ -235,8 +235,8 @@ where
         let mut bp = Vec::with_capacity(zkey.domain_size * 4);
         let mut cp = Vec::with_capacity(zkey.domain_size * 4);
 
-        let pow_root_of_unity = domains.roots_of_unity[zkey.power];
-        let pow_plus2_root_of_unity = domains.roots_of_unity[zkey.power + 2];
+        let pow_root_of_unity = domains.root_of_unity_pow;
+        let pow_plus2_root_of_unity = domains.root_of_unity_pow_2;
         for _ in 0..zkey.domain_size * 4 {
             ap.push(driver.add_mul_public(&challenges.b[1], &challenges.b[0], &w));
             bp.push(driver.add_mul_public(&challenges.b[3], &challenges.b[2], &w));

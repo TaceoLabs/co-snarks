@@ -152,7 +152,7 @@ where
             data.zkey.power,
             data.zkey.n_public,
             &challenges.xi,
-            &domains.roots_of_unity,
+            domains,
         );
         let zh = xin - P::ScalarField::one();
 
@@ -280,10 +280,9 @@ where
         domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
-        data: &PlonkData<T, P>,
         polys: &FinalPolys<T, P>,
     ) -> FieldShareVec<T, P> {
-        let xiw = challenges.xi * domains.roots_of_unity[data.zkey.power];
+        let xiw = challenges.xi * domains.root_of_unity_pow;
 
         let mut res = polys.z.poly.clone().into_iter().collect::<Vec<_>>();
         res[0] = driver.add_with_public(&-proof.eval_zw, &res[0]);
@@ -324,7 +323,7 @@ where
         //snarkjs has one trailing zero - is this relevant?
 
         //STEP 5.4 Compute opening proof polynomial Wxiw(X)
-        let wxiw = Self::compute_wxiw(&mut driver, &domains, &proof, &challenges, &data, &polys);
+        let wxiw = Self::compute_wxiw(&mut driver, &domains, &proof, &challenges, &polys);
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         let p_tau = &data.zkey.p_tau;

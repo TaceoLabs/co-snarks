@@ -33,6 +33,9 @@ type PlonkProofResult<T> = std::result::Result<T, PlonkProofError>;
 /// The errors that may arise during the computation of a co-PLONK proof.
 #[derive(Debug, thiserror::Error)]
 pub enum PlonkProofError {
+    /// Invalid domain size
+    #[error("Invalid domain size {0}. Must be power of two")]
+    InvalidDomainSize(usize),
     /// Indicates that the witness is too small for the provided circuit.
     #[error("Cannot index into witness {0}")]
     CorruptedWitness(usize),
@@ -47,22 +50,31 @@ pub enum PlonkProofError {
 pub(crate) struct Domains<F: PrimeField> {
     domain: GeneralEvaluationDomain<F>,
     extended_domain: GeneralEvaluationDomain<F>,
-    roots_of_unity: Vec<F>,
+    root_of_unity_pow: F,
+    root_of_unity_2: F,
+    root_of_unity_pow_2: F,
 }
 
 impl<F: PrimeField> Domains<F> {
     fn new(domain_size: usize) -> PlonkProofResult<Self> {
-        let domain = GeneralEvaluationDomain::<F>::new(domain_size)
-            .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-        let extended_domain = GeneralEvaluationDomain::<F>::new(domain_size * 4)
-            .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-        let (_, roots_of_unity) = roots_of_unity();
+        if domain_size & (domain_size - 1) != 0 || domain_size == 0 {
+            Err(PlonkProofError::InvalidDomainSize(domain_size))
+        } else {
+            let domain = GeneralEvaluationDomain::<F>::new(domain_size)
+                .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
+            let extended_domain = GeneralEvaluationDomain::<F>::new(domain_size * 4)
+                .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
+            let (_, roots_of_unity) = roots_of_unity();
+            let pow = usize::try_from(domain_size.ilog2()).expect("u32 fits into usize");
 
-        Ok(Self {
-            domain,
-            extended_domain,
-            roots_of_unity,
-        })
+            Ok(Self {
+                domain,
+                extended_domain,
+                root_of_unity_2: roots_of_unity[2],
+                root_of_unity_pow: roots_of_unity[pow],
+                root_of_unity_pow_2: roots_of_unity[pow + 2],
+            })
+        }
     }
 }
 
@@ -148,10 +160,12 @@ where
 
 mod plonk_utils {
     use ark_ec::pairing::Pairing;
+    use ark_poly::domain;
     use circom_types::plonk::ZKey;
     use mpc_core::traits::FieldShareVecTrait;
     use mpc_core::traits::PrimeFieldMpcProtocol;
 
+    use crate::Domains;
     use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult, PlonkWitness};
     use ark_ff::Field;
     use num_traits::One;
@@ -203,7 +217,7 @@ mod plonk_utils {
         power: usize,
         n_public: usize,
         xi: &P::ScalarField,
-        root_of_unitys: &[P::ScalarField],
+        domains: &Domains<P::ScalarField>,
     ) -> (Vec<P::ScalarField>, P::ScalarField) {
         let mut xin = *xi;
         let mut domain_size = 1;
@@ -214,7 +228,7 @@ mod plonk_utils {
         let zh = xin - P::ScalarField::one();
         let l_length = usize::max(1, n_public);
         let mut l = Vec::with_capacity(l_length);
-        let root_of_unity = root_of_unitys[power];
+        let root_of_unity = domains.root_of_unity_pow;
 
         let n = P::ScalarField::from(domain_size as u64);
         let mut w = P::ScalarField::one();
@@ -317,6 +331,10 @@ pub mod tests {
 
         let plonk = Plonk::<Bn254>::new(driver);
         let proof = plonk.prove(zkey, witness).unwrap();
+
+        let mut proof_bytes = vec![];
+        serde_json::to_writer(&mut proof_bytes, &proof).unwrap();
+        let proof = serde_json::from_reader(proof_bytes.as_slice()).unwrap();
         let result = Plonk::<Bn254>::verify(&vk, &proof, &public_inputs.values).unwrap();
         assert!(result)
     }

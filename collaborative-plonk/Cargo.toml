@@ -1,6 +1,6 @@
 [package]
 name = "collaborative-plonk"
-version = "0.2.1"
+version = "0.1.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true

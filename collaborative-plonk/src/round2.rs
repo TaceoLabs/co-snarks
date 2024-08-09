@@ -142,7 +142,7 @@ where
         challenges: &Round2Challenges<T, P>,
         polys: &Round1Polys<T, P>,
     ) -> PlonkProofResult<PolyEval<T, P>> {
-        let pow_root_of_unity = domains.roots_of_unity[zkey.power];
+        let pow_root_of_unity = domains.root_of_unity_pow;
         let mut w = P::ScalarField::one();
         let mut n1 = Vec::with_capacity(zkey.domain_size);
         let mut n2 = Vec::with_capacity(zkey.domain_size);

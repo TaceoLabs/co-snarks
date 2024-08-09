@@ -154,13 +154,12 @@ where
 
         let challenges = VerifierChallenges::<P>::new(vk, proof, public_inputs);
         let domains = Domains::<P::ScalarField>::new(1 << vk.power)?;
-        let roots = domains.roots_of_unity;
 
         let (l, xin) = plonk_utils::calculate_lagrange_evaluations::<P>(
             vk.power,
             vk.n_public,
             &challenges.xi,
-            &roots,
+            &domains,
         );
         let pi = plonk_utils::calculate_pi::<P>(public_inputs, &l);
         let (r0, d) = Plonk::<P>::calculate_r0_d(vk, proof, &challenges, pi, &l[0], xin);
@@ -174,7 +173,7 @@ where
             &challenges,
             e,
             f,
-            &roots,
+            &domains,
         ))
     }
 
@@ -270,15 +269,14 @@ where
         challenges: &VerifierChallenges<P>,
         e: P::G1,
         f: P::G1,
-        root_of_unitys: &[P::ScalarField],
+        domains: &Domains<P::ScalarField>,
     ) -> bool
     where
         P: CircomArkworksPairingBridge,
         P::BaseField: CircomArkworksPrimeFieldBridge,
         P::ScalarField: CircomArkworksPrimeFieldBridge,
     {
-        let root_of_unity = root_of_unitys[vk.power];
-        let s = challenges.u * challenges.xi * root_of_unity;
+        let s = challenges.u * challenges.xi * domains.root_of_unity_pow;
 
         let a1 = proof.wxi + proof.wxiw * challenges.u;
         let b1 = proof.wxi * challenges.xi + proof.wxiw * s - e + f;
