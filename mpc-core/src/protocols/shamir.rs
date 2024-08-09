@@ -10,17 +10,18 @@ use self::{
 };
 use crate::{
     traits::{
-        EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        EcMpcProtocol, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
+        PrimeFieldMpcProtocol,
     },
     RngType,
 };
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
-use ark_poly::EvaluationDomain;
+use ark_poly::{univariate::DensePolynomial, EvaluationDomain, Polynomial};
 use eyre::{bail, Report};
 use itertools::{izip, Itertools};
 use rand::{Rng as _, SeedableRng};
-use std::{marker::PhantomData, thread, time::Duration};
+use std::marker::PhantomData;
 
 pub mod fieldshare;
 pub mod network;
@@ -248,19 +249,6 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         self.rng_buffer.buffer_triples(&mut self.network, amount)
     }
 
-    /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
-    // multiply followed by a opening, thus, no reshare required
-    pub fn mul_open(
-        &mut self,
-        a: &<Self as PrimeFieldMpcProtocol<F>>::FieldShare,
-        b: &<Self as PrimeFieldMpcProtocol<F>>::FieldShare,
-    ) -> std::io::Result<F> {
-        let mul = a * b;
-        let rcv = self.network.broadcast_next(mul.a, 2 * self.threshold + 1)?;
-        let res = ShamirCore::reconstruct(&rcv, &self.open_lagrange_2t);
-        Ok(res)
-    }
-
     pub(crate) fn degree_reduce(
         &mut self,
         mut input: F,
@@ -450,6 +438,24 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     }
 }
 
+impl<F: PrimeField> FieldShareVecTrait for ShamirPrimeFieldShareVec<F> {
+    type FieldShare = ShamirPrimeFieldShare<F>;
+
+    fn index(&self, index: usize) -> Self::FieldShare {
+        Self::FieldShare {
+            a: self.a[index].to_owned(),
+        }
+    }
+
+    fn set_index(&mut self, val: Self::FieldShare, index: usize) {
+        self.a[index] = val.a;
+    }
+
+    fn get_len(&self) -> usize {
+        self.len()
+    }
+}
+
 impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtocol<F, N> {
     type FieldShare = ShamirPrimeFieldShare<F>;
     type FieldShareVec = ShamirPrimeFieldShareVec<F>;
@@ -481,6 +487,20 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         self.degree_reduce(mul)
     }
 
+    fn mul_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<Self::FieldShare>> {
+        let mul = a
+            .iter()
+            .zip(b.iter())
+            .map(|(a, b)| a.a * b.a)
+            .collect::<Vec<_>>();
+        let res = self.degree_reduce_vec(mul)?;
+        Ok(ShamirPrimeFieldShare::convert_vec_rev(res.a))
+    }
+
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
         b * a
     }
@@ -498,8 +518,36 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         Ok(r * y_inv)
     }
 
+    fn inv_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<Self::FieldShare>> {
+        let r = (0..a.len())
+            .map(|_| self.rand())
+            .collect::<Result<Vec<_>, _>>()?;
+        let y = self.mul_open_many(a, &r)?;
+        if y.iter().any(|y| y.is_zero()) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of inverse in MPC: cannot compute inverse of zero",
+            ));
+        }
+
+        let res = izip!(r, y).map(|(r, y)| r * y.inverse().unwrap()).collect();
+        Ok(res)
+    }
+
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
         -a
+    }
+
+    fn neg_vec_in_place(&mut self, vec: &mut Self::FieldShareVec) {
+        for a in vec.a.iter_mut() {
+            a.neg_in_place();
+        }
+    }
+
+    fn neg_vec_in_place_limit(&mut self, vec: &mut Self::FieldShareVec, limit: usize) {
+        for a in vec.a.iter_mut().take(limit) {
+            a.neg_in_place();
+        }
     }
 
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
@@ -511,6 +559,34 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         let rcv = self.network.broadcast_next(a.a, self.threshold + 1)?;
         let res = ShamirCore::reconstruct(&rcv, &self.open_lagrange_t);
         Ok(res)
+    }
+
+    fn open_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<F>> {
+        let a_a = ShamirPrimeFieldShare::convert_slice(a);
+
+        let rcv = self
+            .network
+            .broadcast_next(a_a.to_owned(), self.threshold + 1)?;
+
+        let mut transposed = vec![vec![F::zero(); self.threshold + 1]; a.len()];
+
+        for (j, r) in rcv.into_iter().enumerate() {
+            for (i, val) in r.into_iter().enumerate() {
+                transposed[i][j] = val;
+            }
+        }
+
+        let res = transposed
+            .into_iter()
+            .map(|r| ShamirCore::reconstruct(&r, &self.open_lagrange_t))
+            .collect();
+        Ok(res)
+    }
+
+    fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec {
+        Self::FieldShareVec {
+            a: a.a.iter().zip(b.a.iter()).map(|(a, b)| *a + b).collect(),
+        }
     }
 
     fn mul_vec(
@@ -579,15 +655,42 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         dst.a[dst_offset..dst_offset + len].clone_from_slice(&src.a[src_offset..src_offset + len]);
     }
 
-    fn print(&self, to_print: &Self::FieldShareVec) {
-        thread::sleep(Duration::from_millis(
-            200 * self.network.get_id() as u64 + 100,
-        ));
-        print!("[");
-        for a in to_print.a.iter() {
-            print!("{a}, ")
+    /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
+    fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F> {
+        let mul = a * b;
+        let rcv = self.network.broadcast_next(mul.a, 2 * self.threshold + 1)?;
+        let res = ShamirCore::reconstruct(&rcv, &self.open_lagrange_2t);
+        Ok(res)
+    }
+
+    /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
+    fn mul_open_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<F>> {
+        let mul = a
+            .iter()
+            .zip(b.iter())
+            .map(|(a, b)| a * b)
+            .collect::<Vec<_>>();
+        let mul = ShamirPrimeFieldShare::convert_vec(mul);
+
+        let rcv = self.network.broadcast_next(mul, 2 * self.threshold + 1)?;
+
+        let mut transposed = vec![vec![F::zero(); 2 * self.threshold + 1]; a.len()];
+
+        for (j, r) in rcv.into_iter().enumerate() {
+            for (i, val) in r.into_iter().enumerate() {
+                transposed[i][j] = val;
+            }
         }
-        println!("]");
+
+        let res = transposed
+            .into_iter()
+            .map(|r| ShamirCore::reconstruct(&r, &self.open_lagrange_2t))
+            .collect();
+        Ok(res)
     }
 }
 
@@ -660,6 +763,28 @@ impl<C: CurveGroup, N: ShamirNetwork> EcMpcProtocol<C> for ShamirProtocol<C::Sca
         let res = ShamirCore::reconstruct_point(&rcv, &self.open_lagrange_t);
         Ok(res)
     }
+
+    fn open_point_many(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<C>> {
+        let a_a = ShamirPointShare::convert_slice(a);
+
+        let rcv = self
+            .network
+            .broadcast_next(a_a.to_owned(), self.threshold + 1)?;
+
+        let mut transposed = vec![vec![C::zero(); self.threshold + 1]; a.len()];
+
+        for (j, r) in rcv.into_iter().enumerate() {
+            for (i, val) in r.into_iter().enumerate() {
+                transposed[i][j] = val;
+            }
+        }
+
+        let res = transposed
+            .into_iter()
+            .map(|r| ShamirCore::reconstruct_point(&r, &self.open_lagrange_t))
+            .collect();
+        Ok(res)
+    }
 }
 
 impl<P: Pairing, N: ShamirNetwork> PairingEcMpcProtocol<P> for ShamirProtocol<P::ScalarField, N> {
@@ -716,6 +841,11 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing, N: ShamirNetwork> FFTProv
     ) {
         domain.ifft_in_place(&mut data.a);
         crate::traits::FFTPostProcessing::fft_post_processing(&mut data.a);
+    }
+
+    fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare {
+        let poly = DensePolynomial { coeffs: poly.a };
+        Self::FieldShare::new(poly.evaluate(point))
     }
 }
 
