@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_bls_12_381_mult2() {
-        let r1cs_file = File::open("../test_vectors/bls12_381/multiplier2.r1cs").unwrap();
+        let r1cs_file = File::open("../test_vectors/Groth16/bls12_381/multiplier2.r1cs").unwrap();
         let r1cs = R1CS::<Bls12_381>::from_reader(r1cs_file).unwrap();
         assert_eq!(r1cs.num_inputs, 2);
         assert_eq!(r1cs.num_aux, 2);
@@ -308,7 +308,8 @@ mod tests {
     }
     #[test]
     fn test_bn254_mult2() {
-        let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
+        let r1cs_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.r1cs").unwrap();
         let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
         assert_eq!(r1cs.num_inputs, 2);
         assert_eq!(r1cs.num_aux, 2);

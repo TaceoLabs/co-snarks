@@ -25,9 +25,12 @@ mod tests {
 
     #[test]
     fn create_proof_and_verify_bn254() {
-        let zkey_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
+        let zkey_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.zkey").unwrap();
+        let witness_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
+        let r1cs_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.r1cs").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
         let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
@@ -49,8 +52,10 @@ mod tests {
 
     #[test]
     fn create_proof_and_verify_bn254_using_zkey_matrices() {
-        let zkey_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
+        let zkey_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.zkey").unwrap();
+        let witness_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let (pk, matrices) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
         let mut rng = thread_rng();
@@ -78,10 +83,11 @@ mod tests {
     #[test]
     fn verify_circom_proof_bn254() {
         let vk_string =
-            fs::read_to_string("../test_vectors/bn254/multiplier2/verification_key.json").unwrap();
+            fs::read_to_string("../test_vectors/Groth16/bn254/multiplier2/verification_key.json")
+                .unwrap();
         let public_string = "[\"33\"]";
         let proof_string =
-            fs::read_to_string("../test_vectors/bn254/multiplier2/proof.json").unwrap();
+            fs::read_to_string("../test_vectors/Groth16/bn254/multiplier2/proof.json").unwrap();
 
         let vk = serde_json::from_str::<JsonVerificationKey<Bn254>>(&vk_string).unwrap();
         let public_input =
@@ -95,9 +101,11 @@ mod tests {
 
     #[test]
     fn create_proof_and_verify_poseidon_hash_bn254() {
-        let zkey_file = File::open("../test_vectors/bn254/poseidon/circuit_0000.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bn254/poseidon/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/bn254/poseidon/poseidon.r1cs").unwrap();
+        let zkey_file =
+            File::open("../test_vectors/Groth16/bn254/poseidon/circuit_0000.zkey").unwrap();
+        let witness_file =
+            File::open("../test_vectors/Groth16/bn254/poseidon/witness.wtns").unwrap();
+        let r1cs_file = File::open("../test_vectors/Groth16/bn254/poseidon/poseidon.r1cs").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
         let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
@@ -119,11 +127,13 @@ mod tests {
     #[test]
     fn verify_circom_proof_poseidon_bn254() {
         let vk_string =
-            fs::read_to_string("../test_vectors/bn254/poseidon/verification_key.json").unwrap();
+            fs::read_to_string("../test_vectors/Groth16/bn254/poseidon/verification_key.json")
+                .unwrap();
         let public_string = "[
             \"17853941289740592551682164141790101668489478619664963356488634739728685875777\"
            ]";
-        let proof_string = fs::read_to_string("../test_vectors/bn254/poseidon/proof.json").unwrap();
+        let proof_string =
+            fs::read_to_string("../test_vectors/Groth16/bn254/poseidon/proof.json").unwrap();
 
         let vk = serde_json::from_str::<JsonVerificationKey<Bn254>>(&vk_string).unwrap();
         let public_input =
@@ -138,9 +148,10 @@ mod tests {
     #[test]
     fn verify_circom_proof_bls12_381() {
         let vk_string =
-            fs::read_to_string("../test_vectors/bls12_381/verification_key.json").unwrap();
+            fs::read_to_string("../test_vectors/Groth16/bls12_381/verification_key.json").unwrap();
         let public_string = "[\"33\"]";
-        let proof_string = fs::read_to_string("../test_vectors/bls12_381/proof.json").unwrap();
+        let proof_string =
+            fs::read_to_string("../test_vectors/Groth16/bls12_381/proof.json").unwrap();
 
         let vk = serde_json::from_str::<JsonVerificationKey<Bls12_381>>(&vk_string).unwrap();
         let public_input =
@@ -154,8 +165,8 @@ mod tests {
     }
     #[test]
     fn proof_circom_proof_bls12_381_using_zkey_matrices() {
-        let zkey_file = File::open("../test_vectors/bls12_381/multiplier2.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bls12_381/witness.wtns").unwrap();
+        let zkey_file = File::open("../test_vectors/Groth16/bls12_381/multiplier2.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/Groth16/bls12_381/witness.wtns").unwrap();
         let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
         let (pk, matrices) = ZKey::<Bls12_381>::from_reader(zkey_file).unwrap().split();
         let mut rng = thread_rng();
@@ -183,9 +194,9 @@ mod tests {
 
     #[test]
     fn proof_circom_proof_bls12_381() {
-        let zkey_file = File::open("../test_vectors/bls12_381/multiplier2.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bls12_381/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/bls12_381/multiplier2.r1cs").unwrap();
+        let zkey_file = File::open("../test_vectors/Groth16/bls12_381/multiplier2.zkey").unwrap();
+        let witness_file = File::open("../test_vectors/Groth16/bls12_381/witness.wtns").unwrap();
+        let r1cs_file = File::open("../test_vectors/Groth16/bls12_381/multiplier2.r1cs").unwrap();
         let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
         let (pk, _) = ZKey::<Bls12_381>::from_reader(zkey_file).unwrap().split();
         let r1cs = R1CS::<Bls12_381>::from_reader(r1cs_file).unwrap();
@@ -211,9 +222,12 @@ mod tests {
 
     #[test]
     fn proof_circom_proof_bn254() {
-        let zkey_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
+        let zkey_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.zkey").unwrap();
+        let witness_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
+        let r1cs_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.r1cs").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
         let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();

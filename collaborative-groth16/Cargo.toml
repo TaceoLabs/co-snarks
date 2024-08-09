@@ -21,7 +21,6 @@ ark-poly = { workspace = true }
 ark-relations = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
-byteorder = { workspace = true }
 circom-types = { version = "0.3.0", path = "../circom-types" }
 eyre = { workspace = true }
 itertools = { workspace = true }
@@ -30,8 +29,7 @@ mpc-net = { version = "0.1.2", path = "../mpc-net" }
 num-traits = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
-num-bigint = { workspace = true }
+
 [dev-dependencies]
 serde_json = { workspace = true }
