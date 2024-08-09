@@ -103,31 +103,12 @@ where
         let inv_beta = beta.inverse().expect("Highly unlikely to be zero");
         let inv_beta_neg = -inv_beta;
 
-        let mut is_one = inv_beta_neg.is_one();
-        let mut is_negone = inv_beta.is_one();
-
-        if !is_one {
-            for el in inout.iter_mut().take(n) {
-                if is_negone {
-                    *el = driver.neg(el);
-                } else {
-                    *el = driver.mul_with_public(&inv_beta_neg, el);
-                }
-            }
+        for el in inout.iter_mut().take(n) {
+            *el = driver.mul_with_public(&inv_beta_neg, el);
         }
-
-        std::mem::swap(&mut is_negone, &mut is_one);
-
         for i in n..inout.len() {
             let element = driver.sub(&inout[i - n], &inout[i]);
-
-            if !is_one {
-                if is_negone {
-                    inout[i] = driver.neg(&element);
-                } else {
-                    inout[i] = driver.mul_with_public(&inv_beta, &element);
-                }
-            }
+            inout[i] = driver.mul_with_public(&inv_beta, &element);
         }
         // We cannot check whether the polyonmial is divisible by the zerofier, but we resize accordingly
         inout.resize(inout.len() - n, FieldShare::<T, P>::default());
