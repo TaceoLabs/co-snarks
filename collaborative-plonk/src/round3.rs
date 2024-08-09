@@ -14,7 +14,7 @@ use mpc_core::traits::{
 use num_traits::One;
 use num_traits::Zero;
 
-// TODO parallelize these?
+// TODO parallelize these? With a different network structure this might not be needed though
 macro_rules! mul4vec {
     ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $domain: expr) => {{
         let a_b = $driver.mul_vec($a, $b)?;
@@ -162,7 +162,7 @@ where
 
 impl<T, P: Pairing> Round3Challenges<T, P>
 where
-    for<'a> T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     fn new(
         round2_challenges: Round2Challenges<T, P>,
@@ -237,23 +237,25 @@ where
 
         let pow_root_of_unity = domains.root_of_unity_pow;
         let pow_plus2_root_of_unity = domains.root_of_unity_pow_2;
-        for _ in 0..zkey.domain_size * 4 {
+        // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
+        (0..zkey.domain_size * 4).for_each(|_| {
             ap.push(driver.add_mul_public(&challenges.b[1], &challenges.b[0], &w));
             bp.push(driver.add_mul_public(&challenges.b[3], &challenges.b[2], &w));
             cp.push(driver.add_mul_public(&challenges.b[5], &challenges.b[4], &w));
             w *= &pow_plus2_root_of_unity;
-        }
+        });
 
         let ap_vec: FieldShareVec<T, P> = ap.into();
         let bp_vec: FieldShareVec<T, P> = bp.into();
         let cp_vec: FieldShareVec<T, P> = cp.into();
 
-        // TODO parallelize these?
+        // TODO parallelize these? With a different network structure this might not be needed though
         let a_b = driver.mul_vec(&polys.poly_eval_a.eval, &polys.poly_eval_b.eval)?;
         let a_bp = driver.mul_vec(&polys.poly_eval_a.eval, &bp_vec)?;
         let ap_b = driver.mul_vec(&polys.poly_eval_b.eval, &ap_vec)?;
         let ap_bp = driver.mul_vec(&ap_vec, &bp_vec)?;
 
+        // TODO keep RAM requirements in mind
         let mut e1 = Vec::with_capacity(zkey.domain_size * 4);
         let mut e1z = Vec::with_capacity(zkey.domain_size * 4);
 
@@ -427,9 +429,7 @@ where
             let a_rhs = coefficients_t.index(i);
             let a = driver.sub(&a_lhs, &a_rhs);
             coefficients_t.set_index(a, i);
-            /*
-              We cannot check whether the polynomial is divisible by Zh here
-            */
+            // Snarkjs is checking whether the poly was divisble by Zh, but we cannot do this here
         });
 
         let coefficients_tz = driver.ifft(&tz_vec.into(), &domains.extended_domain);

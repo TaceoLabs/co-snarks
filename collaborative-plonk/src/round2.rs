@@ -13,7 +13,7 @@ use mpc_core::traits::{
 };
 use num_traits::One;
 
-// TODO parallelize these?
+// TODO parallelize these? With a different network structure this might not be needed though
 macro_rules! array_prod_mul {
     ($driver: expr, $inp: expr) => {{
         // Do the multiplications of inp[i] * inp[i-1] in constant rounds
@@ -194,13 +194,13 @@ where
             w *= &pow_root_of_unity;
         }
 
-        // TODO parallelize these?
+        // TODO parallelize these? With a different network structure this might not be needed though
         let num = driver.mul_many(&n1, &n2)?;
         let num = driver.mul_many(&num, &n3)?;
         let den = driver.mul_many(&d1, &d2)?;
         let den = driver.mul_many(&den, &d3)?;
 
-        // TODO parallelize these?
+        // TODO parallelize these? With a different network structure this might not be needed though
         // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
         let num = array_prod_mul!(driver, num);
         let den = array_prod_mul!(driver, den);

@@ -30,7 +30,6 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 tokio = { workspace = true }
 tracing.workspace = true
-serde = { workspace = true }
 ark-bn254 = { workspace = true }
 ark-bls12-381 = { workspace = true }
 
