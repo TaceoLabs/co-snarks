@@ -13,6 +13,7 @@ use mpc_core::traits::{
 };
 use num_traits::One;
 
+// To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
 // TODO parallelize these? With a different network structure this might not be needed though
 macro_rules! array_prod_mul {
     ($driver: expr, $inp: expr) => {{
@@ -39,6 +40,7 @@ macro_rules! array_prod_mul {
     }};
 }
 
+// Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
 pub(super) struct Round2<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -126,6 +128,7 @@ where
     }
 }
 
+// Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
 impl<T, P: Pairing> Round2<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -135,7 +138,7 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: FFTPostProcessing,
 {
-    // compute the permutation polynomial z(X)
+    // Computes the permutation polynomial z(X) (see https://eprint.iacr.org/2019/953.pdf)
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     fn compute_z(
         driver: &mut T,
@@ -232,6 +235,7 @@ where
         }
     }
 
+    // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
     pub(super) fn round2(self) -> PlonkProofResult<Round3<T, P>> {
         let Self {
             mut driver,

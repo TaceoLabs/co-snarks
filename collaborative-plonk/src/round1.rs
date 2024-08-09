@@ -10,6 +10,8 @@ use crate::{
     plonk_utils, round2::Round2, types::PolyEval, Domains, FieldShare, FieldShareVec, PlonkData,
     PlonkProofError, PlonkProofResult, PlonkWitness,
 };
+
+// Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
 pub(super) struct Round1<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -93,6 +95,7 @@ where
     }
 }
 
+// Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
 impl<T, P: Pairing> Round1<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -234,6 +237,7 @@ where
         })
     }
 
+    // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
     pub(super) fn round1(self) -> PlonkProofResult<Round2<T, P>> {
         let Self {
             mut driver,
