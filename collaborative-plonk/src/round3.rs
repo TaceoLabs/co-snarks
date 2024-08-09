@@ -429,9 +429,7 @@ where
             let a_rhs = coefficients_t.index(i);
             let a = driver.sub(&a_lhs, &a_rhs);
             coefficients_t.set_index(a, i);
-            /*
-              We cannot check whether the polynomial is divisible by Zh here
-            */
+            // Snarkjs is checking whether the poly was divisble by Zh, but we cannot do this here
         });
 
         let coefficients_tz = driver.ifft(&tz_vec.into(), &domains.extended_domain);
