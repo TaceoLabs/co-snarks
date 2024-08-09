@@ -3,10 +3,15 @@
 //! This module contains the reference implementation without MPC. It will be used by the VM for computing on public values and can be used to test MPC circuits.
 
 use crate::{
-    traits::{CircomWitnessExtensionProtocol, PrimeFieldMpcProtocol},
+    traits::{
+        CircomWitnessExtensionProtocol, EcMpcProtocol, FFTProvider, FieldShareVecTrait,
+        MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+    },
     RngType,
 };
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{One, PrimeField};
+use ark_poly::{univariate::DensePolynomial, Polynomial};
 use eyre::eyre;
 use eyre::Result;
 use num_bigint::BigUint;
@@ -83,6 +88,22 @@ impl<F: PrimeField> Default for PlainDriver<F> {
     }
 }
 
+impl<F: PrimeField> FieldShareVecTrait for Vec<F> {
+    type FieldShare = F;
+
+    fn index(&self, index: usize) -> Self::FieldShare {
+        self[index].to_owned()
+    }
+
+    fn set_index(&mut self, val: Self::FieldShare, index: usize) {
+        self[index] = val;
+    }
+
+    fn get_len(&self) -> usize {
+        self.len()
+    }
+}
+
 impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
     type FieldShare = F;
     type FieldShareVec = Vec<F>;
@@ -111,6 +132,14 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         Ok(*a * b)
     }
 
+    fn mul_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<Self::FieldShare>> {
+        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
+    }
+
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare {
         *a * b
     }
@@ -125,8 +154,36 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         Ok(a.inverse().unwrap())
     }
 
+    fn inv_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<Self::FieldShare>> {
+        let mut res = Vec::with_capacity(a.len());
+
+        for a in a {
+            if a.is_zero() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Cannot invert zero",
+                ));
+            }
+            res.push(a.inverse().unwrap());
+        }
+
+        Ok(res)
+    }
+
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
         -*a
+    }
+
+    fn neg_vec_in_place(&mut self, a: &mut Self::FieldShareVec) {
+        for x in a.iter_mut() {
+            *x = self.neg(x);
+        }
+    }
+
+    fn neg_vec_in_place_limit(&mut self, a: &mut Self::FieldShareVec, limit: usize) {
+        for x in a.iter_mut().take(limit) {
+            *x = self.neg(x);
+        }
     }
 
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
@@ -136,6 +193,14 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
 
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F> {
         Ok(*a)
+    }
+
+    fn open_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<F>> {
+        Ok(a.to_vec())
+    }
+
+    fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec {
+        a.iter().zip(b.iter()).map(|(a, b)| *a + b).collect()
     }
 
     fn mul_vec(
@@ -193,12 +258,147 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         dst[dst_offset..dst_offset + len].clone_from_slice(&src[src_offset..src_offset + len]);
     }
 
-    fn print(&self, to_print: &Self::FieldShareVec) {
-        print!("[");
-        for a in to_print.iter() {
-            print!("{a}, ")
-        }
-        println!("]");
+    fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F> {
+        Ok(*a * b)
+    }
+
+    fn mul_open_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<F>> {
+        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
+    }
+}
+
+impl<C: CurveGroup> EcMpcProtocol<C> for PlainDriver<C::ScalarField> {
+    type PointShare = C;
+
+    fn add_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        *a + b
+    }
+
+    fn sub_points(&mut self, a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        *a - b
+    }
+
+    fn add_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare) {
+        *a += b;
+    }
+
+    fn sub_assign_points(&mut self, a: &mut Self::PointShare, b: &Self::PointShare) {
+        *a -= b;
+    }
+
+    fn add_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
+        *a += b;
+    }
+
+    fn sub_assign_points_public(&mut self, a: &mut Self::PointShare, b: &C) {
+        *a -= b;
+    }
+
+    fn add_assign_points_public_affine(
+        &mut self,
+        a: &mut Self::PointShare,
+        b: &<C as CurveGroup>::Affine,
+    ) {
+        *a += b;
+    }
+
+    fn sub_assign_points_public_affine(
+        &mut self,
+        a: &mut Self::PointShare,
+        b: &<C as CurveGroup>::Affine,
+    ) {
+        *a -= b;
+    }
+
+    fn scalar_mul_public_point(&mut self, a: &C, b: &Self::FieldShare) -> Self::PointShare {
+        *a * b
+    }
+
+    fn scalar_mul_public_scalar(
+        &mut self,
+        a: &Self::PointShare,
+        b: &<C>::ScalarField,
+    ) -> Self::PointShare {
+        *a * b
+    }
+
+    fn scalar_mul(
+        &mut self,
+        a: &Self::PointShare,
+        b: &Self::FieldShare,
+    ) -> std::io::Result<Self::PointShare> {
+        Ok(*a * b)
+    }
+
+    fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C> {
+        Ok(a.to_owned())
+    }
+
+    fn open_point_many(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<C>> {
+        Ok(a.to_vec())
+    }
+}
+
+impl<P: Pairing> PairingEcMpcProtocol<P> for PlainDriver<P::ScalarField> {
+    fn open_two_points(
+        &mut self,
+        a: &<Self as EcMpcProtocol<P::G1>>::PointShare,
+        b: &<Self as EcMpcProtocol<P::G2>>::PointShare,
+    ) -> std::io::Result<(P::G1, P::G2)> {
+        Ok((*a, *b))
+    }
+}
+
+impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainDriver<F> {
+    fn fft<D: ark_poly::EvaluationDomain<F>>(
+        &mut self,
+        data: Self::FieldShareVec,
+        domain: &D,
+    ) -> Self::FieldShareVec {
+        domain.fft(&data)
+    }
+
+    fn fft_in_place<D: ark_poly::EvaluationDomain<F>>(
+        &mut self,
+        data: &mut Self::FieldShareVec,
+        domain: &D,
+    ) {
+        domain.fft_in_place(data);
+    }
+
+    fn ifft<D: ark_poly::EvaluationDomain<F>>(
+        &mut self,
+        data: &Self::FieldShareVec,
+        domain: &D,
+    ) -> Self::FieldShareVec {
+        domain.ifft(data)
+    }
+
+    fn ifft_in_place<D: ark_poly::EvaluationDomain<F>>(
+        &mut self,
+        data: &mut Self::FieldShareVec,
+        domain: &D,
+    ) {
+        domain.ifft_in_place(data);
+    }
+
+    fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare {
+        let poly = DensePolynomial { coeffs: poly };
+        poly.evaluate(point)
+    }
+}
+
+impl<C: CurveGroup> MSMProvider<C> for PlainDriver<C::ScalarField> {
+    fn msm_public_points(
+        &mut self,
+        points: &[C::Affine],
+        scalars: &Self::FieldShareVec,
+    ) -> Self::PointShare {
+        C::msm_unchecked(points, scalars)
     }
 }
 

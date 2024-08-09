@@ -4,18 +4,19 @@
 
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
-use ark_poly::EvaluationDomain;
+use ark_poly::{univariate::DensePolynomial, EvaluationDomain, Polynomial};
 use eyre::Report;
 use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
 use rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp};
-use std::{marker::PhantomData, thread, time::Duration};
+use std::marker::PhantomData;
 
 #[cfg(doc)]
 use crate::traits::CircomWitnessExtensionProtocol;
 use crate::{
     traits::{
-        EcMpcProtocol, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        EcMpcProtocol, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
+        PrimeFieldMpcProtocol,
     },
     RngType,
 };
@@ -313,6 +314,26 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
     }
 }
 
+impl<F: PrimeField> FieldShareVecTrait for Rep3PrimeFieldShareVec<F> {
+    type FieldShare = Rep3PrimeFieldShare<F>;
+
+    fn index(&self, index: usize) -> Self::FieldShare {
+        Self::FieldShare {
+            a: self.a[index],
+            b: self.b[index],
+        }
+    }
+
+    fn set_index(&mut self, val: Self::FieldShare, index: usize) {
+        self.a[index] = val.a;
+        self.b[index] = val.b;
+    }
+
+    fn get_len(&self) -> usize {
+        self.len()
+    }
+}
+
 impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F, N> {
     type FieldShare = Rep3PrimeFieldShare<F>;
     type FieldShareVec = Rep3PrimeFieldShareVec<F>;
@@ -335,6 +356,23 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         })
     }
 
+    fn mul_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> IoResult<Vec<Self::FieldShare>> {
+        let local_a = izip!(a, b)
+            .map(|(a, b)| a * b + self.rngs.rand.masking_field_element::<F>())
+            .collect_vec();
+        self.network.send_next(local_a.to_owned())?;
+        let local_b = self.network.recv_prev::<Vec<F>>()?;
+
+        let res = izip!(local_a, local_b)
+            .map(|(a, b)| Self::FieldShare { a, b })
+            .collect_vec();
+        Ok(res)
+    }
+
     fn inv(&mut self, a: &Self::FieldShare) -> IoResult<Self::FieldShare> {
         let r = self.rand()?;
         let tmp = self.mul(a, &r)?;
@@ -349,8 +387,38 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         Ok(r * y_inv)
     }
 
+    fn inv_many(&mut self, a: &[Self::FieldShare]) -> IoResult<Vec<Self::FieldShare>> {
+        let r = (0..a.len())
+            .map(|_| self.rand())
+            .collect::<Result<Vec<_>, _>>()?;
+        let y = self.mul_open_many(a, &r)?;
+        if y.iter().any(|y| y.is_zero()) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of inverse in MPC: cannot compute inverse of zero",
+            ));
+        }
+
+        let res = izip!(r, y).map(|(r, y)| r * y.inverse().unwrap()).collect();
+        Ok(res)
+    }
+
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
         -a
+    }
+
+    fn neg_vec_in_place(&mut self, vec: &mut Self::FieldShareVec) {
+        for (a, b) in vec.a.iter_mut().zip(vec.b.iter_mut()) {
+            a.neg_in_place();
+            b.neg_in_place();
+        }
+    }
+
+    fn neg_vec_in_place_limit(&mut self, vec: &mut Self::FieldShareVec, limit: usize) {
+        for (a, b) in vec.a.iter_mut().zip(vec.b.iter_mut()).take(limit) {
+            a.neg_in_place();
+            b.neg_in_place();
+        }
     }
 
     fn rand(&mut self) -> std::io::Result<Self::FieldShare> {
@@ -378,12 +446,34 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         Ok(a.a + a.b + c)
     }
 
+    fn open_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<F>> {
+        let bs = a.iter().map(|x| x.b).collect_vec();
+        self.network.send_next(bs)?;
+        let mut cs = self.network.recv_prev::<Vec<F>>()?;
+
+        izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
+
+        Ok(cs)
+    }
+
     fn promote_to_trivial_share(&self, public_value: F) -> Self::FieldShare {
         Self::FieldShare::promote_from_trivial(&public_value, self.network.get_id())
     }
 
     fn promote_to_trivial_shares(&self, public_values: &[F]) -> Self::FieldShareVec {
         Self::FieldShareVec::promote_from_trivial(public_values, self.network.get_id())
+    }
+
+    fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec {
+        debug_assert_eq!(a.len(), b.len());
+        let a_vec = izip!(a.a.iter(), b.a.iter())
+            .map(|(a, b)| *a + b)
+            .collect::<Vec<_>>();
+        let b_vec = izip!(a.b.iter(), b.b.iter())
+            .map(|(a, b)| *a + b)
+            .collect::<Vec<_>>();
+
+        Self::FieldShareVec::new(a_vec, b_vec)
     }
 
     fn mul_vec(
@@ -463,17 +553,36 @@ impl<F: PrimeField, N: Rep3Network> PrimeFieldMpcProtocol<F> for Rep3Protocol<F,
         dst.b[dst_offset..dst_offset + len].clone_from_slice(&src.b[src_offset..src_offset + len]);
     }
 
-    fn print(&self, to_print: &Self::FieldShareVec) {
-        match self.network.get_id() {
-            PartyID::ID0 => thread::sleep(Duration::from_millis(10)),
-            PartyID::ID1 => thread::sleep(Duration::from_millis(100)),
-            PartyID::ID2 => thread::sleep(Duration::from_millis(300)),
-        }
-        print!("[");
-        for a in to_print.b.iter() {
-            print!("{a}, ")
-        }
-        println!("]");
+    fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F> {
+        let a = a * b + self.rngs.rand.masking_field_element::<F>();
+        self.network.send_next(a.to_owned())?;
+        self.network
+            .send(self.network.get_id().prev_id(), a.to_owned())?;
+
+        let b = self.network.recv_prev::<F>()?;
+        let c = self.network.recv::<F>(self.network.get_id().next_id())?;
+        Ok(a + b + c)
+    }
+
+    fn mul_open_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<F>> {
+        let mut a = izip!(a, b)
+            .map(|(a, b)| a * b + self.rngs.rand.masking_field_element::<F>())
+            .collect_vec();
+        self.network.send_next(a.to_owned())?;
+        self.network
+            .send(self.network.get_id().prev_id(), a.to_owned())?;
+
+        let b = self.network.recv_prev::<Vec<F>>()?;
+        let c = self
+            .network
+            .recv::<Vec<F>>(self.network.get_id().next_id())?;
+
+        izip!(a.iter_mut(), b, c).for_each(|(a, b, c)| *a += b + c);
+        Ok(a)
     }
 }
 
@@ -571,6 +680,14 @@ impl<C: CurveGroup, N: Rep3Network> EcMpcProtocol<C> for Rep3Protocol<C::ScalarF
         let c = self.network.recv_prev::<C>()?;
         Ok(a.a + a.b + c)
     }
+
+    fn open_point_many(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<C>> {
+        let bs = a.iter().map(|x| x.b).collect_vec();
+        self.network.send_next(bs)?;
+        let cs = self.network.recv_prev::<Vec<C>>()?;
+
+        Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
+    }
 }
 
 impl<P: Pairing, N: Rep3Network> PairingEcMpcProtocol<P> for Rep3Protocol<P::ScalarField, N> {
@@ -632,6 +749,14 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing, N: Rep3Network> FFTProvid
         domain.ifft_in_place(&mut data.b);
         crate::traits::FFTPostProcessing::fft_post_processing(&mut data.a);
         crate::traits::FFTPostProcessing::fft_post_processing(&mut data.b);
+    }
+
+    fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare {
+        let poly_a = DensePolynomial { coeffs: poly.a };
+        let poly_b = DensePolynomial { coeffs: poly.b };
+        let a = poly_a.evaluate(point);
+        let b = poly_b.evaluate(point);
+        Self::FieldShare::new(a, b)
     }
 }
 

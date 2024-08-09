@@ -2,16 +2,44 @@
 //!
 //! Contains the traits which need to be implemented by the MPC protocols.
 
-use core::fmt;
-
-use ark_ec::{pairing::Pairing, CurveGroup};
-use eyre::Result;
-
 use ark_bls12_381::Fr as Bls12_381_ScalarField;
 use ark_bn254::Fr as Bn254_ScalarField;
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use core::fmt;
+use eyre::Result;
+
+/// A trait representing the basic operations for handling vectors of shares
+pub trait FieldShareVecTrait:
+    From<Vec<Self::FieldShare>>
+    + IntoIterator<Item = Self::FieldShare>
+    + Clone
+    + CanonicalSerialize
+    + CanonicalDeserialize
+    + Default
+    + std::fmt::Debug
+    + Sync
+{
+    /// The type of a share of a field element.
+    type FieldShare: Default
+        + std::fmt::Debug
+        + Clone
+        + CanonicalSerialize
+        + CanonicalDeserialize
+        + Sync
+        + Default;
+
+    /// Returns the shared value at index `index` in the shared vector.
+    fn index(&self, index: usize) -> Self::FieldShare;
+
+    /// Sets the specified value at `index` in the shared vector.
+    fn set_index(&mut self, val: Self::FieldShare, index: usize);
+
+    /// Returns the length of the shared vector.
+    fn get_len(&self) -> usize;
+}
 
 /// A trait encompassing basic operations for MPC protocols over prime fields.
 pub trait PrimeFieldMpcProtocol<F: PrimeField> {
@@ -21,17 +49,11 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         + Clone
         + CanonicalSerialize
         + CanonicalDeserialize
-        + Sync;
+        + Sync
+        + Default;
 
     /// The type of a vector of shared field elements.
-    type FieldShareVec: From<Vec<Self::FieldShare>>
-        + Clone
-        + CanonicalSerialize
-        + CanonicalDeserialize
-        + Default
-        + std::fmt::Debug
-        + IntoIterator<Item = Self::FieldShare>
-        + Sync;
+    type FieldShareVec: FieldShareVecTrait<FieldShare = Self::FieldShare>;
 
     /// Add two shares: \[c\] = \[a\] + \[b\]
     fn add(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> Self::FieldShare;
@@ -52,20 +74,75 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         b: &Self::FieldShare,
     ) -> std::io::Result<Self::FieldShare>;
 
+    /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
+    fn mul_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<Self::FieldShare>>;
+
     /// Multiply a share b by a public value a: c = a * \[b\].
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
+
+    /// Convenience method for \[a\] + \[b\] * c
+    fn add_mul_public(
+        &mut self,
+        a: &Self::FieldShare,
+        b: &Self::FieldShare,
+        c: &F,
+    ) -> Self::FieldShare {
+        let tmp = self.mul_with_public(c, b);
+        self.add(a, &tmp)
+    }
+
+    /// Convenience method for \[a\] + \[b\] * \[c\]
+    fn add_mul(
+        &mut self,
+        a: &Self::FieldShare,
+        b: &Self::FieldShare,
+        c: &Self::FieldShare,
+    ) -> std::io::Result<Self::FieldShare> {
+        let tmp = self.mul(c, b)?;
+        Ok(self.add(a, &tmp))
+    }
+
+    /// Convenience method for \[a\] + \[b\] * \[c\]
+    fn add_mul_vec(
+        &mut self,
+        a: &Self::FieldShareVec,
+        b: &Self::FieldShareVec,
+        c: &Self::FieldShareVec,
+    ) -> std::io::Result<Self::FieldShareVec> {
+        let tmp = self.mul_vec(c, b)?;
+        Ok(self.add_vec(a, &tmp))
+    }
 
     /// Computes the inverse of a shared value: \[b\] = \[a\] ^ -1. Requires network communication.
     fn inv(&mut self, a: &Self::FieldShare) -> std::io::Result<Self::FieldShare>;
 
+    /// Computes the inverse of many shared values: \[b\] = \[a\] ^ -1. Requires network communication.
+    fn inv_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<Self::FieldShare>>;
+
     /// Negates a shared value: \[b\] = -\[a\].
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
+
+    /// Negates a vector of shared values: \[b\] = -\[a\] for every element in place.
+    fn neg_vec_in_place(&mut self, a: &mut Self::FieldShareVec);
+
+    /// Negates a vector of shared values: \[b\] = -\[a\] for up to the limit-th element in place.
+    fn neg_vec_in_place_limit(&mut self, a: &mut Self::FieldShareVec, limit: usize);
 
     /// Generate a share of a random value. The value is thereby unknown to anyone.
     fn rand(&mut self) -> std::io::Result<Self::FieldShare>;
 
     /// Reconstructs a shared value: a = Open(\[a\]).
     fn open(&mut self, a: &Self::FieldShare) -> std::io::Result<F>;
+
+    /// Reconstructs many shared values: a = Open(\[a\]).
+    fn open_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<F>>;
+
+    /// Elementwise addition of two vectors of shares: \[c_i\] = \[a_i\] + \[b_i\].
+    fn add_vec(&mut self, a: &Self::FieldShareVec, b: &Self::FieldShareVec) -> Self::FieldShareVec;
 
     /// Elementwise multiplication of two vectors of shares: \[c_i\] = \[a_i\] * \[b_i\].
     fn mul_vec(
@@ -101,8 +178,32 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         len: usize,
     );
 
-    /// Prints the shared values-
-    fn print(&self, to_print: &Self::FieldShareVec);
+    /// Prints a single the shared value
+    #[cfg(feature = "dangerous")]
+    fn debug_print(&mut self, to_print: &Self::FieldShare) -> std::io::Result<()> {
+        let val = self.open(to_print)?;
+        if val.is_zero() {
+            println!("0");
+        } else {
+            println!("{}", val);
+        }
+        Ok(())
+    }
+
+    /// Returns a secret shared zero value
+    fn zero_share() -> Self::FieldShare {
+        Self::FieldShare::default()
+    }
+
+    /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
+    fn mul_open(&mut self, a: &Self::FieldShare, b: &Self::FieldShare) -> std::io::Result<F>;
+
+    /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
+    fn mul_open_many(
+        &mut self,
+        a: &[Self::FieldShare],
+        b: &[Self::FieldShare],
+    ) -> std::io::Result<Vec<F>>;
 }
 
 /// A trait representing the MPC operations required for extending the secret-shared Circom witness in MPC. The operations are generic over public and private (i.e., secret-shared) inputs.
@@ -259,6 +360,9 @@ pub trait EcMpcProtocol<C: CurveGroup>: PrimeFieldMpcProtocol<C::ScalarField> {
 
     /// Reconstructs a shared point: A = Open(\[A\]).
     fn open_point(&mut self, a: &Self::PointShare) -> std::io::Result<C>;
+
+    /// Reconstructs many shared points: A = Open(\[A\]).
+    fn open_point_many(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<C>>;
 }
 
 /// A trait representing some MPC operations for pairing based  elliptic curves.
@@ -292,6 +396,9 @@ pub trait FFTProvider<F: PrimeField + FFTPostProcessing>: PrimeFieldMpcProtocol<
 
     /// Computes the inverse FFT of a vector of shared field elements in place.
     fn ifft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D);
+
+    /// Evaluates the shared polynomial at the public point
+    fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare;
 }
 
 /// A trait representing the application of the multi-scalar multiplication (MSM) in MPC.
