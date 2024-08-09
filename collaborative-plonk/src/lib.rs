@@ -160,7 +160,6 @@ where
 
 mod plonk_utils {
     use ark_ec::pairing::Pairing;
-    use ark_poly::domain;
     use circom_types::plonk::ZKey;
     use mpc_core::traits::FieldShareVecTrait;
     use mpc_core::traits::PrimeFieldMpcProtocol;
