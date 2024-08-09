@@ -189,7 +189,6 @@ where
     P::ScalarField: FFTPostProcessing,
 {
     fn get_z1(domains: &Domains<P::ScalarField>) -> [P::ScalarField; 4] {
-        //TODO MOVE THIS THIS MUST BE A CONSTANT
         let zero = P::ScalarField::zero();
         let neg_1 = zero - P::ScalarField::one();
         let neg_2 = neg_1 - P::ScalarField::one();
@@ -220,6 +219,7 @@ where
         let two_root_unity = two * root_of_unity;
         [zero, two + two_root_unity, neg_eight, two - two_root_unity]
     }
+
     fn compute_t(
         driver: &mut T,
         domains: &Domains<P::ScalarField>,
