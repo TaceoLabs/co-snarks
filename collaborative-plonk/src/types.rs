@@ -89,7 +89,6 @@ mod tests {
     use super::Keccak256Transcript;
     use ark_bn254::Bn254;
     use ark_ec::pairing::Pairing;
-    use ark_serialize::CanonicalSerialize;
     use std::str::FromStr;
 
     //this is copied from circom-type/groth16/mod/test_utils. Maybe we can
