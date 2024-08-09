@@ -70,6 +70,7 @@ macro_rules! mul4vec_post {
     }};
 }
 
+// Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
 pub(super) struct Round3<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -179,6 +180,7 @@ where
     }
 }
 
+// Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
 impl<T, P: Pairing> Round3<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -220,6 +222,8 @@ where
         [zero, two + two_root_unity, neg_eight, two - two_root_unity]
     }
 
+    // Compute the quotient polynomial T(X) (see https://eprint.iacr.org/2019/953.pdf)
+    // It is implemented with a constant number of communication rounds in MPC
     fn compute_t(
         driver: &mut T,
         domains: &Domains<P::ScalarField>,
@@ -454,6 +458,7 @@ where
         Ok([t1.into(), t2.into(), t3.into()])
     }
 
+    // Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
     pub(super) fn round3(self) -> PlonkProofResult<Round4<T, P>> {
         let Self {
             mut driver,

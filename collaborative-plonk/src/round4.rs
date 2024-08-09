@@ -9,6 +9,7 @@ use mpc_core::traits::{
     FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
 
+// Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
 pub(super) struct Round4<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -89,6 +90,7 @@ impl<P: Pairing> Round4Proof<P> {
     }
 }
 
+// Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
 impl<T, P: Pairing> Round4<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -98,6 +100,7 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: FFTPostProcessing,
 {
+    // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
     pub(super) fn round4(self) -> PlonkProofResult<Round5<T, P>> {
         let Self {
             mut driver,

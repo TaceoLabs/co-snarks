@@ -18,6 +18,7 @@ use mpc_core::traits::{
 use num_traits::One;
 use num_traits::Zero;
 
+// Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
 pub(super) struct Round5<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -82,6 +83,7 @@ where
     }
 }
 
+// Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
 impl<T, P: Pairing> Round5<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -138,6 +140,7 @@ where
         }
     }
 
+    // The linearisation polynomial R(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_r(
         driver: &mut T,
         domains: &Domains<P::ScalarField>,
@@ -224,6 +227,7 @@ where
         poly_r_shared.into()
     }
 
+    // The opening proof polynomial W_xi(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_wxi(
         driver: &mut T,
         proof: &Round4Proof<P>,
@@ -275,6 +279,7 @@ where
         res.into()
     }
 
+    // The opening proof polynomial W_xiw(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_wxiw(
         driver: &mut T,
         domains: &Domains<P::ScalarField>,
@@ -290,6 +295,8 @@ where
 
         res.into()
     }
+
+    // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
     pub(super) fn round5(self) -> PlonkProofResult<PlonkProof<P>> {
         let Self {
             mut driver,

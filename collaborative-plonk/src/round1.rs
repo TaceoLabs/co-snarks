@@ -10,6 +10,8 @@ use crate::{
     plonk_utils, round2::Round2, types::PolyEval, Domains, FieldShare, FieldShareVec, PlonkData,
     PlonkProofError, PlonkProofResult, PlonkWitness,
 };
+
+// Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
 pub(super) struct Round1<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -93,6 +95,7 @@ where
     }
 }
 
+// Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
 impl<T, P: Pairing> Round1<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
@@ -102,6 +105,7 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: FFTPostProcessing,
 {
+    // Essentially the fft of the trace columns
     fn compute_wire_polynomials(
         driver: &mut T,
         domains: &Domains<P::ScalarField>,
@@ -185,6 +189,7 @@ where
         })
     }
 
+    // Calculate the witnesses for the additions, since they are not part of the SharedWitness
     fn calculate_additions(
         driver: &mut T,
         witness: SharedWitness<T, P>,
@@ -232,6 +237,7 @@ where
         })
     }
 
+    // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
     pub(super) fn round1(self) -> PlonkProofResult<Round2<T, P>> {
         let Self {
             mut driver,
