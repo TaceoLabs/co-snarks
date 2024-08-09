@@ -17,7 +17,7 @@ use crate::{
 };
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
-use ark_poly::EvaluationDomain;
+use ark_poly::{univariate::DensePolynomial, EvaluationDomain, Polynomial};
 use eyre::{bail, Report};
 use itertools::{izip, Itertools};
 use rand::{Rng as _, SeedableRng};
@@ -841,6 +841,11 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing, N: ShamirNetwork> FFTProv
     ) {
         domain.ifft_in_place(&mut data.a);
         crate::traits::FFTPostProcessing::fft_post_processing(&mut data.a);
+    }
+
+    fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare {
+        let poly = DensePolynomial { coeffs: poly.a };
+        Self::FieldShare::new(poly.evaluate(point))
     }
 }
 

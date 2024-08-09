@@ -396,6 +396,9 @@ pub trait FFTProvider<F: PrimeField + FFTPostProcessing>: PrimeFieldMpcProtocol<
 
     /// Computes the inverse FFT of a vector of shared field elements in place.
     fn ifft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D);
+
+    /// Evaluates the shared polynomial at the public point
+    fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare;
 }
 
 /// A trait representing the application of the multi-scalar multiplication (MSM) in MPC.

@@ -2,13 +2,12 @@ use crate::{
     round3::{FinalPolys, Round3Challenges, Round3Proof},
     round5::Round5,
     types::Keccak256Transcript,
-    Domains, FieldShare, FieldShareVec, PlonkData, PlonkProofResult,
+    Domains, PlonkData, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use mpc_core::traits::{
     FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
-use num_traits::One;
 
 pub(super) struct Round4<T, P: Pairing>
 where
@@ -99,21 +98,6 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: FFTPostProcessing,
 {
-    fn evaluate_poly(
-        driver: &mut T,
-        poly: &FieldShareVec<T, P>,
-        x: &P::ScalarField,
-    ) -> FieldShare<T, P> {
-        let mut res = FieldShare::<T, P>::default();
-        let mut x_pow = P::ScalarField::one();
-        for coeff in poly.clone().into_iter() {
-            let tmp = driver.mul_with_public(&x_pow, &coeff);
-            res = driver.add(&res, &tmp);
-            x_pow *= x;
-        }
-        res
-    }
-
     pub(super) fn round4(self) -> PlonkProofResult<Round5<T, P>> {
         let Self {
             mut driver,
@@ -132,10 +116,10 @@ where
         let xi = transcript.get_challenge();
         let xiw = xi * domains.roots_of_unity[data.zkey.power];
         let challenges = Round4Challenges::new(challenges, xi);
-        let eval_a = Self::evaluate_poly(&mut driver, &polys.a.poly, &challenges.xi);
-        let eval_b = Self::evaluate_poly(&mut driver, &polys.b.poly, &challenges.xi);
-        let eval_c = Self::evaluate_poly(&mut driver, &polys.c.poly, &challenges.xi);
-        let eval_z = Self::evaluate_poly(&mut driver, &polys.z.poly, &xiw);
+        let eval_a = driver.evaluate_poly_public(polys.a.poly.to_owned(), &challenges.xi);
+        let eval_b = driver.evaluate_poly_public(polys.b.poly.to_owned(), &challenges.xi);
+        let eval_c = driver.evaluate_poly_public(polys.c.poly.to_owned(), &challenges.xi);
+        let eval_z = driver.evaluate_poly_public(polys.z.poly.to_owned(), &xiw);
 
         let opened = driver.open_many(&[eval_a, eval_b, eval_c, eval_z])?;
         debug_assert_eq!(opened.len(), 4);

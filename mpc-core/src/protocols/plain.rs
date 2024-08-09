@@ -11,6 +11,7 @@ use crate::{
 };
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{One, PrimeField};
+use ark_poly::{univariate::DensePolynomial, Polynomial};
 use eyre::eyre;
 use eyre::Result;
 use num_bigint::BigUint;
@@ -383,6 +384,11 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainD
         domain: &D,
     ) {
         domain.ifft_in_place(data);
+    }
+
+    fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare {
+        let poly = DensePolynomial { coeffs: poly };
+        poly.evaluate(point)
     }
 }
 
