@@ -62,13 +62,13 @@ where
 {
     fn into_final_proof(self, commit_wxi: P::G1, commit_wxiw: P::G1) -> PlonkProof<P> {
         PlonkProof {
-            a: self.commit_a.into(),
-            b: self.commit_b.into(),
-            c: self.commit_c.into(),
-            z: self.commit_z.into(),
-            t1: self.commit_t1.into(),
-            t2: self.commit_t2.into(),
-            t3: self.commit_t3.into(),
+            a: P::G1Affine::from(self.commit_a),
+            b: P::G1Affine::from(self.commit_b),
+            c: P::G1Affine::from(self.commit_c),
+            z: P::G1Affine::from(self.commit_z),
+            t1: P::G1Affine::from(self.commit_t1),
+            t2: P::G1Affine::from(self.commit_t2),
+            t3: P::G1Affine::from(self.commit_t3),
             eval_a: self.eval_a,
             eval_b: self.eval_b,
             eval_c: self.eval_c,
@@ -76,7 +76,7 @@ where
             eval_s2: self.eval_s2,
             eval_zw: self.eval_zw,
             wxi: commit_wxi.into(),
-            wxiw: commit_wxiw.into(),
+            wxiw: P::G1Affine::from(commit_wxiw),
             protocol: "plonk".to_string(),
             curve: P::get_circom_name(),
         }

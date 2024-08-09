@@ -83,7 +83,8 @@ where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) fn new(mut shared_witness: SharedWitness<T, P>, n_additions: usize) -> Self {
-        // The leading zero is 1 in Circom
+        // we have a Groth16 witness, therefore there is a leading one in the witness.
+        // we just write zero here instead of one to mirror snarkjs.
         shared_witness.public_inputs[0] = P::ScalarField::zero();
         Self {
             public_inputs: shared_witness.public_inputs,
