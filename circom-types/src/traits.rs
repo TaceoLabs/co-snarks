@@ -10,22 +10,33 @@ use serde::{de, Serializer};
 use std::str::FromStr;
 
 type IoResult<T> = Result<T, SerializationError>;
+
 macro_rules! impl_bn256 {
     () => {
-        impl_serde_for_curve!(bn254, Bn254, ark_bn254, "bn254", 32, 32);
+        //TODO use stringify
+        impl_serde_for_curve!(bn254, Bn254, ark_bn254, "bn254", 32, 32, "bn128");
     };
 }
 
 macro_rules! impl_bls12_381 {
     () => {
-        impl_serde_for_curve!(bls12_381, Bls12_381, ark_bls12_381, "bls12_381", 48, 32);
+        impl_serde_for_curve!(
+            bls12_381,
+            Bls12_381,
+            ark_bls12_381,
+            "bls12_381",
+            48,
+            32,
+            "bls12_381"
+        );
     };
 }
 
 macro_rules! impl_serde_for_curve {
-    ($mod_name: ident, $config: ident, $curve: ident, $name: expr, $field_size: expr, $scalar_field_size: expr) => {
+    ($mod_name: ident, $config: ident, $curve: ident, $name: expr, $field_size: expr, $scalar_field_size: expr, $circom_name: expr) => {
 
 mod $mod_name {
+
     use $curve::{$config, Fq, Fq2, Fr};
     use ark_ff::BigInt;
     use ark_serialize::{CanonicalDeserialize, SerializationError};
@@ -53,6 +64,7 @@ mod $mod_name {
             fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self> {
                 Ok(Self::new_unchecked(Self::from_reader_unchecked(reader)?.into_bigint()))
             }
+
         }
         impl CircomArkworksPrimeFieldBridge for Fq {
             const SERIALIZED_BYTE_SIZE: usize = $field_size;
@@ -84,6 +96,11 @@ mod $mod_name {
             const G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize = $field_size * 2 * 2;
             const GT_SERIALIZED_BYTE_SIZE_COMPRESSED: usize = 0;
             const GT_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize = 0;
+
+            fn get_circom_name() -> String {
+                $circom_name.to_owned()
+            }
+
             //Circom serializes its field elements in montgomery form
             //therefore we use Fq::from_reader_unchecked
             fn g1_from_reader(mut reader: impl Read) -> IoResult<Self::G1Affine> {
@@ -162,7 +179,7 @@ mod $mod_name {
                     vec![x.to_string(), y.to_string(), "1".to_owned()]
                 } else {
                     //point at infinity
-                    vec!["0".to_owned(), "0".to_owned(), "1".to_owned()]
+                    vec!["0".to_owned(), "1".to_owned(), "0".to_owned()]
                 }
             }
 
@@ -512,6 +529,8 @@ where
     const GT_SERIALIZED_BYTE_SIZE_COMPRESSED: usize;
     /// Size of uncompressed element of Gt in bytes
     const GT_SERIALIZED_BYTE_SIZE_UNCOMPRESSED: usize;
+    /// Returns the name of the curve as defined in circom
+    fn get_circom_name() -> String;
     /// Deserializes element of G1 from reader where the element is already in montgomery form (no montgomery reduction performed)
     fn g1_from_reader(reader: impl Read) -> IoResult<Self::G1Affine>;
     /// Deserializes element of G2 from reader where the element is already in montgomery form (no montgomery reduction performed)
