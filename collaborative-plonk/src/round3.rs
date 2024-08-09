@@ -237,12 +237,13 @@ where
 
         let pow_root_of_unity = domains.roots_of_unity[zkey.power];
         let pow_plus2_root_of_unity = domains.roots_of_unity[zkey.power + 2];
-        for _ in 0..zkey.domain_size * 4 {
+        // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
+        (0..zkey.domain_size * 4).for_each(|_| {
             ap.push(driver.add_mul_public(&challenges.b[1], &challenges.b[0], &w));
             bp.push(driver.add_mul_public(&challenges.b[3], &challenges.b[2], &w));
             cp.push(driver.add_mul_public(&challenges.b[5], &challenges.b[4], &w));
             w *= &pow_plus2_root_of_unity;
-        }
+        });
 
         let ap_vec: FieldShareVec<T, P> = ap.into();
         let bp_vec: FieldShareVec<T, P> = bp.into();
