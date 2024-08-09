@@ -224,7 +224,7 @@ where
         (r0, d)
     }
 
-    pub(crate) fn calculate_e(
+    fn calculate_e(
         proof: &PlonkProof<P>,
         challenges: &VerifierChallenges<P>,
         r0: P::ScalarField,
@@ -239,17 +239,12 @@ where
         P::G1::generator() * e
     }
 
-    pub(crate) fn calculate_f(
+    fn calculate_f(
         vk: &JsonVerificationKey<P>,
         proof: &PlonkProof<P>,
         challenges: &VerifierChallenges<P>,
         d: P::G1,
-    ) -> P::G1
-    where
-        P: CircomArkworksPairingBridge,
-        P::BaseField: CircomArkworksPrimeFieldBridge,
-        P::ScalarField: CircomArkworksPrimeFieldBridge,
-    {
+    ) -> P::G1 {
         d + proof.a * challenges.v[0]
             + proof.b * challenges.v[1]
             + proof.c * challenges.v[2]
@@ -257,19 +252,14 @@ where
             + vk.s2 * challenges.v[4]
     }
 
-    pub(crate) fn valid_pairing(
+    fn valid_pairing(
         vk: &JsonVerificationKey<P>,
         proof: &PlonkProof<P>,
         challenges: &VerifierChallenges<P>,
         e: P::G1,
         f: P::G1,
         domains: &Domains<P::ScalarField>,
-    ) -> bool
-    where
-        P: CircomArkworksPairingBridge,
-        P::BaseField: CircomArkworksPrimeFieldBridge,
-        P::ScalarField: CircomArkworksPrimeFieldBridge,
-    {
+    ) -> bool {
         let s = challenges.u * challenges.xi * domains.root_of_unity_pow;
 
         let a1 = proof.wxi + proof.wxiw * challenges.u;
