@@ -138,6 +138,7 @@ where
         }
     }
 
+    // The linearisation polynomial R(X)
     fn compute_r(
         driver: &mut T,
         domains: &Domains<P::ScalarField>,

@@ -102,6 +102,7 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: FFTPostProcessing,
 {
+    // Essentially the fft of the trace columns
     fn compute_wire_polynomials(
         driver: &mut T,
         domains: &Domains<P::ScalarField>,
@@ -185,6 +186,7 @@ where
         })
     }
 
+    // Calculate the witnesses for the additions, since they are not part of the SharedWitness
     fn calculate_additions(
         driver: &mut T,
         witness: SharedWitness<T, P>,

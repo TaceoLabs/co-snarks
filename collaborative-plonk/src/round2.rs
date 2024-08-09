@@ -135,6 +135,8 @@ where
         + MSMProvider<P::G2>,
     P::ScalarField: FFTPostProcessing,
 {
+    // compute the permutation polynomial z(X)
+    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     fn compute_z(
         driver: &mut T,
         zkey: &ZKey<P>,

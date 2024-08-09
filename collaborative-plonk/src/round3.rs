@@ -220,6 +220,8 @@ where
         [zero, two + two_root_unity, neg_eight, two - two_root_unity]
     }
 
+    // Compute the quotient polynomial T(X)
+    // It is implemented with a constant number of communication rounds in MPC
     fn compute_t(
         driver: &mut T,
         domains: &Domains<P::ScalarField>,
