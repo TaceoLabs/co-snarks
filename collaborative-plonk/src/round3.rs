@@ -14,7 +14,7 @@ use mpc_core::traits::{
 use num_traits::One;
 use num_traits::Zero;
 
-// TODO parallelize these?
+// TODO parallelize these? With a different network structure this might not be needed though
 macro_rules! mul4vec {
     ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $domain: expr) => {{
         let a_b = $driver.mul_vec($a, $b)?;
@@ -249,7 +249,7 @@ where
         let bp_vec: FieldShareVec<T, P> = bp.into();
         let cp_vec: FieldShareVec<T, P> = cp.into();
 
-        // TODO parallelize these?
+        // TODO parallelize these? With a different network structure this might not be needed though
         let a_b = driver.mul_vec(&polys.poly_eval_a.eval, &polys.poly_eval_b.eval)?;
         let a_bp = driver.mul_vec(&polys.poly_eval_a.eval, &bp_vec)?;
         let ap_b = driver.mul_vec(&polys.poly_eval_b.eval, &ap_vec)?;
