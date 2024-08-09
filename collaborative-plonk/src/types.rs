@@ -10,6 +10,7 @@ use sha3::{Digest, Keccak256};
 use crate::FieldShareVec;
 
 pub(crate) type Keccak256Transcript<P> = Transcript<Keccak256, P>;
+
 pub(crate) struct Transcript<D, P>
 where
     D: Digest,
@@ -43,23 +44,28 @@ where
     }
 
     pub(crate) fn add_point(&mut self, point: P::G1Affine) {
-        let bits: usize = P::BaseField::MODULUS_BIT_SIZE
+        let byte_len: usize = P::BaseField::MODULUS_BIT_SIZE
+            .div_ceil(8)
             .try_into()
             .expect("u32 fits into usize");
-        let mut buf = Vec::with_capacity(bits);
+        let mut buf = Vec::with_capacity(byte_len);
         if let Some((x, y)) = point.xy() {
             x.serialize_uncompressed(&mut buf)
-                .expect("Can Fq write into Vec<u8>");
+                .expect("Can write Fq into Vec<u8>");
             buf.reverse();
             self.digest.update(&buf);
             buf.clear();
             y.serialize_uncompressed(&mut buf)
-                .expect("Can Fq write into Vec<u8>");
+                .expect("Can write Fq into Vec<u8>");
             buf.reverse();
             self.digest.update(&buf);
         } else {
-            // we are at infinity
-            buf.resize(((bits + 7) / 8) * 2, 0);
+            // we are at infinity - in this case, snarkjs writes (MODULUS_BIT_SIZE / 8) Zero-bytes
+            // to the input buffer. If we serialize with arkworks, we would
+            // get (MODULUS_BIT_SIZE / 8 - 1) Zero-bytes with a trailing byte indicating the length of
+            // the serialized group element, resulting in an incompatible hash. Therefore we simple resize
+            // the buffer with Zeros and write it to the hash instance.
+            buf.resize(byte_len * 2, 0);
             self.digest.update(&buf);
         }
     }
@@ -83,6 +89,7 @@ mod tests {
     use super::Keccak256Transcript;
     use ark_bn254::Bn254;
     use ark_ec::pairing::Pairing;
+    use ark_serialize::CanonicalSerialize;
     use std::str::FromStr;
 
     //this is copied from circom-type/groth16/mod/test_utils. Maybe we can
