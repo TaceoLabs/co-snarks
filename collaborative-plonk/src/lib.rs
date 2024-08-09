@@ -239,8 +239,6 @@ mod plonk_utils {
 
 #[cfg(test)]
 pub mod tests {
-    use std::{fs::File, io::BufReader};
-
     use ark_bn254::Bn254;
     use circom_types::{
         groth16::{public_input::JsonPublicInput, witness::Witness},
@@ -250,6 +248,7 @@ pub mod tests {
     use collaborative_groth16::{circuit::Circuit, groth16::SharedWitness};
     use mpc_core::protocols::plain::PlainDriver;
     use num_traits::Zero;
+    use std::{fs::File, io::BufReader};
 
     use crate::plonk::Plonk;
 
