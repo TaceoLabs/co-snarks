@@ -319,8 +319,8 @@ where
                     // create witness shares
                     let shares =
                         SharedWitness::<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>::share_rep3(
-                            &witness.values[r1cs.num_inputs..],
-                            &witness.values[..r1cs.num_inputs],
+                            witness,
+                            r1cs.num_inputs,
                             &mut rng,
                         );
 
@@ -344,8 +344,8 @@ where
                     // create witness shares
                     let shares =
                         SharedWitness::<ShamirProtocol<P::ScalarField, ShamirMpcNet>, P>::share_shamir(
-                            &witness.values[r1cs.num_inputs..],
-                            &witness.values[..r1cs.num_inputs],t,n,
+                            witness,
+                            r1cs.num_inputs,t,n,
                             &mut rng,
                         );
 
