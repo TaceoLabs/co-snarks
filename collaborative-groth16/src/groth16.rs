@@ -2,21 +2,18 @@
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, LegendreSymbol, PrimeField};
-use ark_groth16::{Groth16, PreparedVerifyingKey, Proof, ProvingKey};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use ark_relations::r1cs::Result as R1CSResult;
-use ark_relations::r1cs::{
-    ConstraintMatrices, ConstraintSystem, ConstraintSystemRef, LinearCombination, OptimizationGoal,
-    SynthesisError, Variable,
-};
-use circom_types::groth16::witness::Witness;
-use circom_types::r1cs::R1CS;
+use ark_relations::r1cs::{ConstraintMatrices, SynthesisError};
+use circom_types::groth16::{proof::Groth16Proof, witness::Witness, zkey::ZKey};
+use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use eyre::{bail, Result};
 use itertools::izip;
+use mpc_core::protocols::plain::PlainDriver;
 use mpc_core::protocols::rep3::network::Rep3Network;
 use mpc_core::protocols::shamir::network::ShamirNetwork;
 use mpc_core::protocols::shamir::ShamirProtocol;
 use mpc_core::protocols::{rep3, shamir};
+use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{EcMpcProtocol, MSMProvider};
 use mpc_core::{
     protocols::rep3::{network::Rep3MpcNet, Rep3Protocol},
@@ -29,6 +26,18 @@ use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
+
+/// The plain [`Groth16`] type.
+///
+/// This type is actually the [`CollaborativeGroth16`] type initialized with
+/// the [`PlainDriver`], a single party (you) MPC protocol (i.e., your everyday Groth16).
+/// You can use this instance to create a proof, but we recommend against it for a real use-case.
+/// Have a look at the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/)
+/// for a plain Groth16 prover.
+///
+/// More interesting is the [`Groth16::verify`] method. You can verify any circom Groth16 proof, be it
+/// from snarkjs or one created by this project. Under the hood we use the arkwork Groth16 project for verifying.
+pub type Groth16<P> = CollaborativeGroth16<PlainDriver<<P as Pairing>::ScalarField>, P>;
 
 /// A type alias for a [CollaborativeGroth16] protocol using replicated secret sharing.
 pub type Rep3CollaborativeGroth16<P> =
@@ -192,7 +201,7 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
+    P::ScalarField: FFTPostProcessing,
 {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
@@ -205,7 +214,9 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
+    P: CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
 {
     /// Creates a new [CollaborativeGroth16] protocol with a given MPC driver.
     pub fn new(driver: T) -> Self {
@@ -214,42 +225,15 @@ where
             phantom_data: PhantomData,
         }
     }
-    /// Execute the Groth16 prover using the internal MPC driver.
-    /// This version re-calculates the constraint matrices from the [R1CS].
-    pub fn prove(
-        &mut self,
-        pk: &ProvingKey<P>,
-        r1cs: &R1CS<P>,
-        private_witness: SharedWitness<T, P>,
-    ) -> Result<Proof<P>> {
-        let public_inputs = &private_witness.public_inputs;
-        let cs = ConstraintSystem::new_ref();
-        cs.set_optimization_goal(OptimizationGoal::Constraints);
-        Self::generate_constraints(public_inputs, r1cs, cs.clone())?;
-        let matrices = cs.to_matrices().unwrap();
-        let num_inputs = cs.num_instance_variables();
-        let num_constraints = cs.num_constraints();
-        let private_witness = &private_witness.witness;
-        let h = self.witness_map_from_matrices(
-            &matrices,
-            num_constraints,
-            num_inputs,
-            public_inputs,
-            private_witness,
-        )?;
-        let r = self.driver.rand()?;
-        let s = self.driver.rand()?;
-        self.create_proof_with_assignment(pk, r, s, &h, &public_inputs[1..], private_witness)
-    }
 
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
-    pub fn prove_with_matrices(
+    pub fn prove(
         &mut self,
-        pk: &ProvingKey<P>,
-        matrices: &ConstraintMatrices<P::ScalarField>,
+        zkey: &ZKey<P>,
         private_witness: SharedWitness<T, P>,
-    ) -> Result<Proof<P>> {
+    ) -> Result<Groth16Proof<P>> {
+        let matrices = &zkey.matrices;
         let num_inputs = matrices.num_instance_variables;
         let num_constraints = matrices.num_constraints;
         let public_inputs = &private_witness.public_inputs;
@@ -268,7 +252,7 @@ where
         let s = self.driver.rand()?;
         tracing::debug!("done!");
         tracing::debug!("calling create_proof_with_assignment...");
-        self.create_proof_with_assignment(pk, r, s, &h, &public_inputs[1..], private_witness)
+        self.create_proof_with_assignment(zkey, r, s, &h, &public_inputs[1..], private_witness)
     }
 
     fn witness_map_from_matrices(
@@ -335,42 +319,6 @@ where
         Ok(ab)
     }
 
-    fn generate_constraints(
-        public_inputs: &[P::ScalarField],
-        r1cs: &R1CS<P>,
-        cs: ConstraintSystemRef<P::ScalarField>,
-    ) -> Result<()> {
-        for f in public_inputs.iter().skip(1) {
-            cs.new_input_variable(|| Ok(*f))?;
-        }
-
-        let make_index = |index| {
-            if index < r1cs.num_inputs {
-                Variable::Instance(index)
-            } else {
-                Variable::Witness(index - r1cs.num_inputs)
-            }
-        };
-        let make_lc = |lc_data: &[(usize, P::ScalarField)]| {
-            lc_data.iter().fold(
-                LinearCombination::<P::ScalarField>::zero(),
-                |lc: LinearCombination<P::ScalarField>, (index, coeff)| {
-                    lc + (*coeff, make_index(*index))
-                },
-            )
-        };
-
-        for constraint in &r1cs.constraints {
-            cs.enforce_constraint(
-                make_lc(&constraint.0),
-                make_lc(&constraint.1),
-                make_lc(&constraint.2),
-            )?;
-        }
-        cs.finalize();
-        Ok(())
-    }
-
     fn calculate_coeff<C: CurveGroup>(
         &mut self,
         initial: PointShare<T, C>,
@@ -402,23 +350,26 @@ where
 
     fn create_proof_with_assignment(
         &mut self,
-        pk: &ProvingKey<P>,
+        zkey: &ZKey<P>,
         r: FieldShare<T, P>,
         s: FieldShare<T, P>,
         h: &FieldShareVec<T, P>,
         input_assignment: &[P::ScalarField],
         aux_assignment: &FieldShareVec<T, P>,
-    ) -> Result<Proof<P>> {
+    ) -> Result<Groth16Proof<P>> {
         tracing::debug!("msm");
         //let c_acc_time = start_timer!(|| "Compute C");
-        let h_acc = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &pk.h_query, h);
+        let h_acc = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.h_query, h);
 
         tracing::debug!("msm pubs");
         // Compute C
-        let l_aux_acc =
-            MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &pk.l_query, aux_assignment);
+        let l_aux_acc = MSMProvider::<P::G1>::msm_public_points(
+            &mut self.driver,
+            &zkey.l_query,
+            aux_assignment,
+        );
 
-        let delta_g1 = pk.delta_g1.into_group();
+        let delta_g1 = zkey.delta_g1.into_group();
         let rs = self.driver.mul(&r, &s)?;
         tracing::debug!("scalar_mul_public_point");
         let r_s_delta_g1 = self.driver.scalar_mul_public_point(&delta_g1, &rs);
@@ -432,8 +383,8 @@ where
         tracing::debug!("calc coeff");
         let g_a = self.calculate_coeff::<P::G1>(
             r_g1,
-            &pk.a_query,
-            pk.vk.alpha_g1,
+            &zkey.a_query,
+            zkey.vk.alpha_g1,
             input_assignment,
             aux_assignment,
         );
@@ -451,8 +402,8 @@ where
         tracing::debug!("calc coeff");
         let g1_b = self.calculate_coeff::<P::G1>(
             s_g1,
-            &pk.b_g1_query,
-            pk.beta_g1,
+            &zkey.b_g1_query,
+            zkey.beta_g1,
             input_assignment,
             aux_assignment,
         );
@@ -461,14 +412,14 @@ where
         //  end_timer!(b_g1_acc_time);
 
         // Compute B in G2
-        let delta_g2 = pk.vk.delta_g2.into_group();
+        let delta_g2 = zkey.vk.delta_g2.into_group();
         //  let b_g2_acc_time = start_timer!(|| "Compute B in G2");
         let s_g2 = self.driver.scalar_mul_public_point(&delta_g2, &s);
         tracing::debug!("calc coeff");
         let g2_b = self.calculate_coeff::<P::G2>(
             s_g2,
-            &pk.b_g2_query,
-            pk.vk.beta_g2,
+            &zkey.b_g2_query,
+            zkey.vk.beta_g2,
             input_assignment,
             aux_assignment,
         );
@@ -486,28 +437,21 @@ where
         let (g_c_opened, g2_b_opened) =
             PairingEcMpcProtocol::<P>::open_two_points(&mut self.driver, &g_c, &g2_b)?;
 
-        Ok(Proof {
-            a: g_a_opened.into_affine(),
-            b: g2_b_opened.into_affine(),
-            c: g_c_opened.into_affine(),
+        Ok(Groth16Proof {
+            pi_a: g_a_opened.into_affine(),
+            pi_b: g2_b_opened.into_affine(),
+            pi_c: g_c_opened.into_affine(),
+            protocol: "groth16".to_owned(),
+            curve: P::get_circom_name(),
         })
-    }
-
-    /// Verify a Groth16 proof.
-    /// This method is a wrapper around the [Groth16::verify_proof] method and does not use MPC.
-    pub fn verify(
-        &self,
-        pvk: &PreparedVerifyingKey<P>,
-        proof: &Proof<P>,
-        public_inputs: &[P::ScalarField],
-    ) -> R1CSResult<bool> {
-        Groth16::<P>::verify_proof(pvk, proof, public_inputs)
     }
 }
 
 impl<P: Pairing> Rep3CollaborativeGroth16<P>
 where
-    <P as ark_ec::pairing::Pairing>::ScalarField: mpc_core::traits::FFTPostProcessing,
+    P: CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
 {
     /// Create a new [Rep3CollaborativeGroth16] protocol with a given network configuration.
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
@@ -570,8 +514,7 @@ mod test {
     use std::fs::File;
 
     use ark_bn254::Bn254;
-    use circom_types::groth16::witness::Witness;
-    use circom_types::r1cs::R1CS;
+    use circom_types::R1CS;
     use mpc_core::protocols::{
         rep3::{network::Rep3MpcNet, Rep3Protocol},
         shamir::{network::ShamirMpcNet, ShamirProtocol},
@@ -579,6 +522,7 @@ mod test {
     use rand::thread_rng;
 
     use super::SharedWitness;
+    use circom_types::groth16::witness::Witness;
 
     #[ignore]
     #[test]

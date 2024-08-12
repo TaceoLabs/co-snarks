@@ -30,22 +30,71 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_relations::r1cs::ConstraintMatrices;
 use ark_serialize::CanonicalDeserialize;
-use ark_std::log2;
 
 use std::io::Read;
-
-use ark_groth16::{ProvingKey, VerifyingKey};
 
 use crate::{
     binfile::{BinFile, ZKeyParserError, ZKeyParserResult},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
 
+macro_rules! u32_to_usize {
+    ($x: expr) => {
+        usize::try_from($x).expect("u32 fits into usize")
+    };
+}
 /// Represents a zkey in the format defined by circom. Implements [`ZKey::from_reader`] to deserialize a zkey from a reader.
 #[derive(Clone)]
 pub struct ZKey<P: Pairing> {
-    pk: ProvingKey<P>,
-    matrices: ConstraintMatrices<P::ScalarField>,
+    /// amount of public inputs
+    pub n_public: usize,
+    /// The underlying verification key.
+    pub vk: VerifyingKey<P>,
+    /// beta
+    pub beta_g1: P::G1Affine,
+    /// delta
+    pub delta_g1: P::G1Affine,
+    /// a_query
+    pub a_query: Vec<P::G1Affine>,
+    /// b_query in G1
+    pub b_g1_query: Vec<P::G1Affine>,
+    /// b_query in G2
+    pub b_g2_query: Vec<P::G2Affine>,
+    /// h_query
+    pub h_query: Vec<P::G1Affine>,
+    /// l_query
+    pub l_query: Vec<P::G1Affine>,
+    /// The constraint matrices A, B, and C
+    pub matrices: ConstraintMatrices<P::ScalarField>,
+}
+
+/// The verifying key encapsulated in the zkey. This is NOT the key used for verifying (although it has the same values).
+/// You most likely are looking for the [`JsonVerificationKey`](crate::groth16::verification_key::JsonVerificationKey).
+#[derive(Default, Clone, Debug)]
+pub struct VerifyingKey<P: Pairing> {
+    /// alpha
+    pub alpha_g1: P::G1Affine,
+    /// beta
+    pub beta_g2: P::G2Affine,
+    /// gamma
+    pub gamma_g2: P::G2Affine,
+    /// delta
+    pub delta_g2: P::G2Affine,
+    /// delta
+    pub gamma_abc_g1: Vec<P::G1Affine>,
+}
+
+#[derive(Clone, Debug)]
+struct HeaderGroth<P: Pairing> {
+    n_vars: usize,
+    n_public: usize,
+    domain_size: u32,
+    alpha_g1: P::G1Affine,
+    beta_g1: P::G1Affine,
+    beta_g2: P::G2Affine,
+    gamma_g2: P::G2Affine,
+    delta_g1: P::G1Affine,
+    delta_g2: P::G2Affine,
 }
 
 impl<P: Pairing + CircomArkworksPairingBridge> ZKey<P>
@@ -56,11 +105,6 @@ where
     /// Deserializes a [`ZKey`] from a reader.
     pub fn from_reader<R: Read>(mut reader: R) -> ZKeyParserResult<Self> {
         BinFile::<P>::new(&mut reader)?.try_into()
-    }
-
-    /// Splits the zkey into its [`ProvingKey`] and [`ConstraintMatrices`] components
-    pub fn split(self) -> (ProvingKey<P>, ConstraintMatrices<P::ScalarField>) {
-        (self.pk, self.matrices)
     }
 
     fn ic<R: Read>(n_public: usize, reader: R) -> ZKeyParserResult<Vec<P::G1Affine>> {
@@ -126,30 +170,6 @@ where
             s.spawn(|_| h_query = Some(Self::h_query(domain_size as usize, h_section)));
         });
 
-        // this thread automatically joins on the rayon scope, therefore we can
-        // only be here if the scope finished.
-
-        let vk = VerifyingKey::<P> {
-            alpha_g1: header.verifying_key.alpha_g1,
-            beta_g2: header.verifying_key.beta_g2,
-            gamma_g2: header.verifying_key.gamma_g2,
-            delta_g2: header.verifying_key.delta_g2,
-            // unwrap is fine, because we are guaranteed to have a Some value
-            gamma_abc_g1: ic.unwrap()?,
-        };
-
-        let pk = ProvingKey::<P> {
-            vk,
-            beta_g1: header.verifying_key.beta_g1,
-            delta_g1: header.verifying_key.delta_g1,
-            // unwrap is fine, because we are guaranteed to have a Some value
-            a_query: a_query.unwrap()?,
-            b_g1_query: b_g1_query.unwrap()?,
-            b_g2_query: b_g2_query.unwrap()?,
-            h_query: h_query.unwrap()?,
-            l_query: l_query.unwrap()?,
-        };
-
         // parse matrices
 
         let mut matrices_section = binfile.take_section(4);
@@ -195,60 +215,31 @@ where
             b,
             c: vec![],
         };
+        // this thread automatically joins on the rayon scope, therefore we can
+        // only be here if the scope finished.
+        let vk = VerifyingKey {
+            alpha_g1: header.alpha_g1,
+            beta_g2: header.beta_g2,
+            gamma_g2: header.gamma_g2,
+            delta_g2: header.delta_g2,
+            // unwrap is fine, because we are guaranteed to have a Some value (rayon scope)
+            gamma_abc_g1: ic.unwrap()?,
+        };
 
-        Ok(ZKey { pk, matrices })
-    }
-}
-
-#[derive(Default, Clone, Debug)]
-pub(crate) struct ZVerifyingKey<P: Pairing> {
-    alpha_g1: P::G1Affine,
-    beta_g1: P::G1Affine,
-    beta_g2: P::G2Affine,
-    gamma_g2: P::G2Affine,
-    delta_g1: P::G1Affine,
-    delta_g2: P::G2Affine,
-}
-
-impl<P: Pairing + CircomArkworksPairingBridge> ZVerifyingKey<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    fn new<R: Read>(mut reader: R) -> ZKeyParserResult<Self> {
-        let alpha_g1 = P::g1_from_reader(&mut reader)?;
-        let beta_g1 = P::g1_from_reader(&mut reader)?;
-        let beta_g2 = P::g2_from_reader(&mut reader)?;
-        let gamma_g2 = P::g2_from_reader(&mut reader)?;
-        let delta_g1 = P::g1_from_reader(&mut reader)?;
-        let delta_g2 = P::g2_from_reader(&mut reader)?;
-
-        Ok(Self {
-            alpha_g1,
-            beta_g1,
-            beta_g2,
-            gamma_g2,
-            delta_g1,
-            delta_g2,
+        Ok(ZKey {
+            n_public: header.n_public,
+            beta_g1: header.beta_g1,
+            delta_g1: header.delta_g1,
+            // unwrap is fine, because we are guaranteed to have a Some value (rayon scope)
+            a_query: a_query.unwrap()?,
+            b_g1_query: b_g1_query.unwrap()?,
+            b_g2_query: b_g2_query.unwrap()?,
+            h_query: h_query.unwrap()?,
+            l_query: l_query.unwrap()?,
+            matrices,
+            vk,
         })
     }
-}
-
-#[derive(Clone, Debug)]
-struct HeaderGroth<P: Pairing> {
-    #[allow(dead_code)]
-    n8q: u32,
-    #[allow(dead_code)]
-    n8r: u32,
-
-    n_vars: usize,
-    n_public: usize,
-
-    domain_size: u32,
-    #[allow(dead_code)]
-    power: u32,
-
-    verifying_key: ZVerifyingKey<P>,
 }
 
 impl<P: Pairing + CircomArkworksPairingBridge> HeaderGroth<P>
@@ -257,8 +248,7 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn read<R: Read>(mut reader: &mut R) -> ZKeyParserResult<Self> {
-        // TODO: Impl From<u32> in Arkworks
-        let n8q: u32 = u32::deserialize_uncompressed(&mut reader)?;
+        let _n8q: u32 = u32::deserialize_uncompressed(&mut reader)?;
         //modulus of BaseField
         let q = <P::BaseField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
         let modulus = <P::BaseField as PrimeField>::MODULUS;
@@ -266,27 +256,33 @@ where
             return Err(ZKeyParserError::InvalidPrimeInHeader);
         }
         // this function assumes that the values are encoded in little-endian
-        let n8r: u32 = u32::deserialize_uncompressed(&mut reader)?;
+        let _n8r: u32 = u32::deserialize_uncompressed(&mut reader)?;
         //modulus of ScalarField
         let r = <P::ScalarField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
         let modulus = <P::ScalarField as PrimeField>::MODULUS;
         assert_eq!(r, modulus);
 
-        let n_vars = u32::deserialize_uncompressed(&mut reader)? as usize;
-        let n_public = u32::deserialize_uncompressed(&mut reader)? as usize;
+        let n_vars = u32_to_usize!(u32::deserialize_uncompressed(&mut reader)?);
+        let n_public = u32_to_usize!(u32::deserialize_uncompressed(&mut reader)?);
 
-        let domain_size: u32 = u32::deserialize_uncompressed(&mut reader)?;
-        let power = log2(domain_size as usize);
+        let domain_size = u32::deserialize_uncompressed(&mut reader)?;
 
-        let verifying_key = ZVerifyingKey::new(&mut reader)?;
+        let alpha_g1 = P::g1_from_reader(&mut reader)?;
+        let beta_g1 = P::g1_from_reader(&mut reader)?;
+        let beta_g2 = P::g2_from_reader(&mut reader)?;
+        let gamma_g2 = P::g2_from_reader(&mut reader)?;
+        let delta_g1 = P::g1_from_reader(&mut reader)?;
+        let delta_g2 = P::g2_from_reader(&mut reader)?;
         Ok(Self {
-            n8q,
-            n8r,
             n_vars,
             n_public,
             domain_size,
-            power,
-            verifying_key,
+            alpha_g1,
+            beta_g1,
+            beta_g2,
+            gamma_g2,
+            delta_g1,
+            delta_g2,
         })
     }
 }
@@ -311,7 +307,7 @@ mod tests {
     #[test]
     fn can_deser_bls12_381_mult2_key() {
         let zkey = File::open("../test_vectors/Groth16/bls12_381/multiplier2.zkey").unwrap();
-        let (pk, _) = ZKey::<Bls12_381>::from_reader(zkey).unwrap().split();
+        let pk = ZKey::<Bls12_381>::from_reader(zkey).unwrap();
         let beta_g1 = test_utils::to_g1_bls12_381!(
             "3250926845764181697440489887589522470230793318088642572984668490087093900624850910545082127315229930931755140742241",
             "316529275544082453038501392826432978288816226993296382968176983689596132256113795423119530534863639021511852843536"
@@ -428,7 +424,7 @@ mod tests {
     fn can_deser_bn254_mult2_key() {
         let zkey =
             File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.zkey").unwrap();
-        let (pk, matrices) = ZKey::<Bn254>::from_reader(zkey).unwrap().split();
+        let pk = ZKey::<Bn254>::from_reader(zkey).unwrap();
         let beta_g1 = test_utils::to_g1_bn254!(
             "1436132865180440050058953936123839411531217265376140788508003974087015278078",
             "11205704823000238875301065577649453768474753051476131547254697150385247310776"
@@ -549,15 +545,15 @@ mod tests {
             2,
         )]];
         let b = vec![vec![(ark_bn254::Fr::from_str("1").unwrap(), 3)]];
-        assert_eq!(2, matrices.num_instance_variables);
-        assert_eq!(3, matrices.num_witness_variables);
-        assert_eq!(1, matrices.num_constraints);
-        assert_eq!(1, matrices.a_num_non_zero);
-        assert_eq!(1, matrices.b_num_non_zero);
-        assert_eq!(0, matrices.c_num_non_zero);
-        assert_eq!(a, matrices.a);
-        assert_eq!(b, matrices.b);
-        assert!(matrices.c.is_empty());
+        assert_eq!(2, pk.matrices.num_instance_variables);
+        assert_eq!(3, pk.matrices.num_witness_variables);
+        assert_eq!(1, pk.matrices.num_constraints);
+        assert_eq!(1, pk.matrices.a_num_non_zero);
+        assert_eq!(1, pk.matrices.b_num_non_zero);
+        assert_eq!(0, pk.matrices.c_num_non_zero);
+        assert_eq!(a, pk.matrices.a);
+        assert_eq!(b, pk.matrices.b);
+        assert!(pk.matrices.c.is_empty());
     }
     fn fq_from_str(s: &str) -> Fq {
         BigInteger256::try_from(BigUint::from_str(s).unwrap())

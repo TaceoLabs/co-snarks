@@ -185,14 +185,11 @@ mod plonk_utils {
 #[cfg(test)]
 pub mod tests {
     use ark_bn254::Bn254;
-    use circom_types::{
-        groth16::{public_input::JsonPublicInput, witness::Witness},
-        plonk::{JsonVerificationKey, ZKey},
-        r1cs::R1CS,
-    };
-    use collaborative_groth16::{circuit::Circuit, groth16::SharedWitness};
+    use circom_types::groth16::public_input::JsonPublicInput;
+    use circom_types::groth16::witness::Witness;
+    use circom_types::plonk::{JsonVerificationKey, ZKey};
+    use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
-    use num_traits::Zero;
     use std::{fs::File, io::BufReader};
 
     use crate::plonk::Plonk;
@@ -236,17 +233,10 @@ pub mod tests {
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
         let witness_file = File::open("../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let r1cs = R1CS::<Bn254>::from_reader(
-            File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.r1cs").unwrap(),
-        )
-        .unwrap();
-        let circuit = Circuit::new(r1cs, witness);
-        let public_inputs = circuit.public_inputs();
-        let mut public_input = vec![ark_bn254::Fr::zero()];
-        public_input.extend(public_inputs);
+        let public_input = witness.values[..=zkey.n_public].to_vec();
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
-            public_inputs: public_input,
-            witness: circuit.witnesses(),
+            public_inputs: public_input.clone(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
         let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(

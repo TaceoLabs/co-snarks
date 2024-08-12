@@ -2,7 +2,7 @@ use ark_bn254::Bn254;
 use circom_types::{
     groth16::witness::Witness,
     plonk::{JsonVerificationKey, PlonkProof, ZKey},
-    r1cs::R1CS,
+    R1CS,
 };
 use collaborative_groth16::groth16::SharedWitness;
 use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};

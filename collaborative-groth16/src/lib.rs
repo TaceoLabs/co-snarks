@@ -5,23 +5,22 @@ mod circom_reduction;
 pub mod circuit;
 pub mod groth16;
 mod serde_compat;
+#[cfg(feature = "verifier")]
+pub mod verifier;
 
 #[cfg(test)]
+#[cfg(feature = "verifier")]
 mod tests {
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
-    use ark_ec::pairing::Pairing;
-    use ark_ff::UniformRand;
-    use ark_groth16::{prepare_verifying_key, Groth16};
     use circom_types::groth16::{
-        proof::JsonProof, public_input::JsonPublicInput, verification_key::JsonVerificationKey,
+        proof::Groth16Proof, public_input::JsonPublicInput, verification_key::JsonVerificationKey,
         witness::Witness, zkey::ZKey,
     };
-    use circom_types::r1cs::R1CS;
-    use rand::thread_rng;
+    use mpc_core::protocols::plain::PlainDriver;
     use std::fs::{self, File};
 
-    use crate::{circom_reduction::CircomReduction, circuit::Circuit};
+    use crate::groth16::{Groth16, SharedWitness};
 
     #[test]
     fn create_proof_and_verify_bn254() {
@@ -29,54 +28,25 @@ mod tests {
             File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.zkey").unwrap();
         let witness_file =
             File::open("../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
-        let r1cs_file =
-            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.r1cs").unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
-        let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
-        let circuit = Circuit::new(r1cs, witness);
-        let public_inputs = circuit.public_inputs();
-        let mut rng = thread_rng();
-        let r = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
-        let s = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
-        let proof =
-            Groth16::<Bn254, CircomReduction>::create_proof_with_reduction(circuit, &pk, r, s)
-                .expect("proof generation works");
-        let pvk = prepare_verifying_key(&pk.vk);
-        let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(proof)).unwrap();
-        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
-        let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &public_inputs)
-            .expect("can verify");
-        assert!(verified);
-    }
+        let vk_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/verification_key.json").unwrap();
 
-    #[test]
-    fn create_proof_and_verify_bn254_using_zkey_matrices() {
-        let zkey_file =
-            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.zkey").unwrap();
-        let witness_file =
-            File::open("../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
+        let driver = PlainDriver::<ark_bn254::Fr>::default();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let (pk, matrices) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
-        let mut rng = thread_rng();
-        let r = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
-        let s = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
-        let proof = Groth16::<Bn254, CircomReduction>::create_proof_with_reduction_and_matrices(
-            &pk,
-            r,
-            s,
-            &matrices,
-            matrices.num_instance_variables,
-            matrices.num_constraints,
-            &witness.values,
-        )
-        .expect("proof generation works");
-        let public_inputs = &witness.values[1..matrices.num_instance_variables];
-        let pvk = prepare_verifying_key(&pk.vk);
-        let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(proof)).unwrap();
-        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
-        let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), public_inputs)
-            .expect("can verify");
+        let zkey = ZKey::<Bn254>::from_reader(zkey_file).unwrap();
+        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
+        let public_input = witness.values[..=zkey.n_public].to_vec();
+        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+            public_inputs: public_input.clone(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
+        };
+        let mut groth16 = Groth16::<Bn254>::new(driver);
+        let proof = groth16
+            .prove(&zkey, witness)
+            .expect("proof generation works");
+        let ser_proof = serde_json::to_string(&proof).unwrap();
+        let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
+        let verified = Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         assert!(verified);
     }
 
@@ -92,10 +62,9 @@ mod tests {
         let vk = serde_json::from_str::<JsonVerificationKey<Bn254>>(&vk_string).unwrap();
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bn254::Fr>>(public_string).unwrap();
-        let proof = serde_json::from_str::<JsonProof<Bn254>>(&proof_string).unwrap();
-        let pvk = vk.prepare_verifying_key();
-        let verified = Groth16::<Bn254>::verify_proof(&pvk, &proof.into(), &public_input.values)
-            .expect("can verify");
+        let proof = serde_json::from_str::<Groth16Proof<Bn254>>(&proof_string).unwrap();
+        let verified =
+            Groth16::<Bn254>::verify(&vk, &proof, &public_input.values).expect("can verify");
         assert!(verified)
     }
 
@@ -105,25 +74,28 @@ mod tests {
             File::open("../test_vectors/Groth16/bn254/poseidon/circuit_0000.zkey").unwrap();
         let witness_file =
             File::open("../test_vectors/Groth16/bn254/poseidon/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/Groth16/bn254/poseidon/poseidon.r1cs").unwrap();
+        let driver = PlainDriver::<ark_bn254::Fr>::default();
+        let vk_file =
+            File::open("../test_vectors/Groth16/bn254/poseidon/verification_key.json").unwrap();
+
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
-        let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
-        let circuit = Circuit::new(r1cs, witness);
-        let public_inputs = circuit.public_inputs();
-        let mut rng = thread_rng();
-        let r = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
-        let s = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
-        let proof =
-            Groth16::<Bn254, CircomReduction>::create_proof_with_reduction(circuit, &pk, r, s)
-                .expect("proof generation works");
-        let pvk = prepare_verifying_key(&pk.vk);
-        let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(proof)).unwrap();
-        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
-        let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &public_inputs)
-            .expect("can verify");
+        let zkey = ZKey::<Bn254>::from_reader(zkey_file).unwrap();
+        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
+        let public_input = witness.values[..=zkey.n_public].to_vec();
+        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+            public_inputs: public_input.clone(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
+        };
+        let mut groth16 = Groth16::<Bn254>::new(driver);
+        let proof = groth16
+            .prove(&zkey, witness)
+            .expect("proof generation works");
+        let ser_proof = serde_json::to_string(&proof).unwrap();
+        let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
+        let verified = Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         assert!(verified);
     }
+
     #[test]
     fn verify_circom_proof_poseidon_bn254() {
         let vk_string =
@@ -138,10 +110,8 @@ mod tests {
         let vk = serde_json::from_str::<JsonVerificationKey<Bn254>>(&vk_string).unwrap();
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bn254::Fr>>(public_string).unwrap();
-        let proof = serde_json::from_str::<JsonProof<Bn254>>(&proof_string).unwrap();
-        let pvk = vk.prepare_verifying_key();
-        let verified = Groth16::<Bn254>::verify_proof(&pvk, &proof.into(), &public_input.values)
-            .expect("can verify");
+        let proof = serde_json::from_str::<Groth16Proof<Bn254>>(&proof_string).unwrap();
+        let verified = Groth16::verify(&vk, &proof, &public_input.values).expect("can verify");
         assert!(verified)
     }
 
@@ -156,67 +126,39 @@ mod tests {
         let vk = serde_json::from_str::<JsonVerificationKey<Bls12_381>>(&vk_string).unwrap();
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bls12_381::Fr>>(public_string).unwrap();
-        let proof = serde_json::from_str::<JsonProof<Bls12_381>>(&proof_string).unwrap();
-        let pvk = vk.prepare_verifying_key();
+        let proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&proof_string).unwrap();
         let verified =
-            Groth16::<Bls12_381>::verify_proof(&pvk, &proof.into(), &public_input.values)
-                .expect("can verify");
+            Groth16::<Bls12_381>::verify(&vk, &proof, &public_input.values).expect("can verify");
         assert!(verified)
-    }
-    #[test]
-    fn proof_circom_proof_bls12_381_using_zkey_matrices() {
-        let zkey_file = File::open("../test_vectors/Groth16/bls12_381/multiplier2.zkey").unwrap();
-        let witness_file = File::open("../test_vectors/Groth16/bls12_381/witness.wtns").unwrap();
-        let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
-        let (pk, matrices) = ZKey::<Bls12_381>::from_reader(zkey_file).unwrap().split();
-        let mut rng = thread_rng();
-        let r = <Bls12_381 as Pairing>::ScalarField::rand(&mut rng);
-        let s = <Bls12_381 as Pairing>::ScalarField::rand(&mut rng);
-        let proof =
-            Groth16::<Bls12_381, CircomReduction>::create_proof_with_reduction_and_matrices(
-                &pk,
-                r,
-                s,
-                &matrices,
-                matrices.num_instance_variables,
-                matrices.num_constraints,
-                &witness.values,
-            )
-            .expect("proof generation works");
-        let public_inputs = &witness.values[1..matrices.num_instance_variables];
-        let pvk = prepare_verifying_key(&pk.vk);
-        let ser_proof = serde_json::to_string(&JsonProof::<Bls12_381>::from(proof)).unwrap();
-        let der_proof = serde_json::from_str::<JsonProof<Bls12_381>>(&ser_proof).unwrap();
-        let verified = Groth16::<Bls12_381>::verify_proof(&pvk, &der_proof.into(), public_inputs)
-            .expect("can verify");
-        assert!(verified);
     }
 
     #[test]
     fn proof_circom_proof_bls12_381() {
         let zkey_file = File::open("../test_vectors/Groth16/bls12_381/multiplier2.zkey").unwrap();
         let witness_file = File::open("../test_vectors/Groth16/bls12_381/witness.wtns").unwrap();
-        let r1cs_file = File::open("../test_vectors/Groth16/bls12_381/multiplier2.r1cs").unwrap();
+        let vk_file =
+            File::open("../test_vectors/Groth16/bls12_381/verification_key.json").unwrap();
         let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
-        let (pk, _) = ZKey::<Bls12_381>::from_reader(zkey_file).unwrap().split();
-        let r1cs = R1CS::<Bls12_381>::from_reader(r1cs_file).unwrap();
-        let circuit = Circuit::new(r1cs, witness);
-        let public_inputs = circuit.public_inputs();
-        let mut rng = thread_rng();
-        let r = <Bls12_381 as Pairing>::ScalarField::rand(&mut rng);
-        let s = <Bls12_381 as Pairing>::ScalarField::rand(&mut rng);
-        let proof =
-            Groth16::<Bls12_381, CircomReduction>::create_proof_with_reduction(circuit, &pk, r, s)
-                .expect("proof generation works");
-        let pvk = prepare_verifying_key(&pk.vk);
+        let zkey = ZKey::<Bls12_381>::from_reader(zkey_file).unwrap();
+        let vk: JsonVerificationKey<Bls12_381> = serde_json::from_reader(vk_file).unwrap();
+        let public_input = witness.values[..=zkey.n_public].to_vec();
+        let witness = SharedWitness::<PlainDriver<ark_bls12_381::Fr>, Bls12_381> {
+            public_inputs: public_input.clone(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
+        };
+
+        let driver = PlainDriver::<ark_bls12_381::Fr>::default();
+        let mut groth16 = Groth16::<Bls12_381>::new(driver);
+        let proof = groth16
+            .prove(&zkey, witness)
+            .expect("proof generation works");
         let verified =
-            Groth16::<Bls12_381>::verify_proof(&pvk, &proof, &public_inputs).expect("can verify");
+            Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
         assert!(verified);
-        let ser_proof = serde_json::to_string(&JsonProof::<Bls12_381>::from(proof)).unwrap();
-        //fs::write(Path::new("my_cool_proof1.json"), test.clone()).unwrap();
-        let der_proof = serde_json::from_str::<JsonProof<Bls12_381>>(&ser_proof).unwrap();
-        let verified = Groth16::<Bls12_381>::verify_proof(&pvk, &der_proof.into(), &public_inputs)
-            .expect("can verify");
+        let ser_proof = serde_json::to_string(&proof).unwrap();
+        let der_proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&ser_proof).unwrap();
+        let verified =
+            Groth16::<Bls12_381>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         assert!(verified)
     }
 
@@ -226,28 +168,29 @@ mod tests {
             File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.zkey").unwrap();
         let witness_file =
             File::open("../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
-        let r1cs_file =
-            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.r1cs").unwrap();
+        let vk_file =
+            File::open("../test_vectors/Groth16/bn254/multiplier2/verification_key.json").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let (pk, _) = ZKey::<Bn254>::from_reader(zkey_file).unwrap().split();
-        let r1cs = R1CS::<Bn254>::from_reader(r1cs_file).unwrap();
-        let circuit = Circuit::new(r1cs, witness);
-        let public_inputs = circuit.public_inputs();
-        let mut rng = thread_rng();
-        let r = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
-        let s = <Bn254 as Pairing>::ScalarField::rand(&mut rng);
-        let proof =
-            Groth16::<Bn254, CircomReduction>::create_proof_with_reduction(circuit, &pk, r, s)
-                .expect("proof generation works");
-        let pvk = prepare_verifying_key(&pk.vk);
+        let zkey = ZKey::<Bn254>::from_reader(zkey_file).unwrap();
+        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
+        let public_input = witness.values[..=zkey.n_public].to_vec();
+        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+            public_inputs: public_input.clone(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
+        };
+
+        let driver = PlainDriver::<ark_bn254::Fr>::default();
+        let mut groth16 = Groth16::<Bn254>::new(driver);
+        let proof = groth16
+            .prove(&zkey, witness)
+            .expect("proof generation works");
         let verified =
-            Groth16::<Bn254>::verify_proof(&pvk, &proof, &public_inputs).expect("can verify");
+            Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
         assert!(verified);
-        let ser_proof = serde_json::to_string(&JsonProof::<Bn254>::from(proof)).unwrap();
-        //fs::write(Path::new("my_cool_proof1.json"), test.clone()).unwrap();
-        let der_proof = serde_json::from_str::<JsonProof<Bn254>>(&ser_proof).unwrap();
-        let verified = Groth16::<Bn254>::verify_proof(&pvk, &der_proof.into(), &public_inputs)
-            .expect("can verify");
-        assert!(verified);
+        let ser_proof = serde_json::to_string(&proof).unwrap();
+        let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
+        let verified =
+            Groth16::<Bn254>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
+        assert!(verified)
     }
 }
