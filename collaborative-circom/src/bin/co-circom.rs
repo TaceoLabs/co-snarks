@@ -176,6 +176,7 @@ enum Commands {
     /// Evaluates the prover algorithm for the specified circuit and witness share in MPC
     GenerateProof {
         // The proof system to be used
+        #[arg(value_enum)]
         proofsystem: ProofSystem,
         /// The path to the config file
         #[arg(long)]
@@ -205,6 +206,7 @@ enum Commands {
     /// Verification of a Circom proof.
     Verify {
         // The proof system to be used
+        #[arg(value_enum)]
         proofsystem: ProofSystem,
         /// The path to the config file
         #[arg(long)]
