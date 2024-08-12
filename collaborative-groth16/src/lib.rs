@@ -1,8 +1,5 @@
 //! A library for creating and verifying Groth16 proofs in a collaborative fashion using MPC.
 #![warn(missing_docs)]
-#[cfg(test)]
-mod circom_reduction;
-pub mod circuit;
 pub mod groth16;
 mod serde_compat;
 #[cfg(feature = "verifier")]
