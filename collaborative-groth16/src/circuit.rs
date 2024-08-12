@@ -31,7 +31,7 @@ use ark_ec::pairing::Pairing;
 use ark_relations::r1cs::{
     ConstraintSynthesizer, ConstraintSystemRef, LinearCombination, SynthesisError, Variable,
 };
-use circom_types::groth16::witness::Witness;
+use circom_types::groth16::Witness;
 use circom_types::R1CS;
 use num_traits::identities::One;
 

@@ -1,9 +1,16 @@
 //! This module defines types related to Groth16 used in circom and utilities to read these types from files.
-pub mod proof;
-pub mod public_input;
-pub mod verification_key;
-pub mod witness;
-pub mod zkey;
+mod proof;
+mod public_input;
+mod verification_key;
+mod witness;
+mod zkey;
+
+pub use proof::Groth16Proof;
+pub use public_input::JsonPublicInput;
+pub use verification_key::JsonVerificationKey;
+pub use witness::Witness;
+pub use witness::WitnessParserError;
+pub use zkey::ZKey;
 
 #[cfg(test)]
 pub(crate) mod test_utils {

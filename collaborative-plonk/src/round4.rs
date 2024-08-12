@@ -152,7 +152,7 @@ pub mod tests {
     use std::{fs::File, io::BufReader};
 
     use ark_bn254::Bn254;
-    use circom_types::groth16::witness::Witness;
+    use circom_types::groth16::Witness;
     use circom_types::plonk::ZKey;
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;

@@ -1,8 +1,6 @@
 use ark_bn254::Bn254;
 use circom_types::{
-    groth16::{
-        proof::Groth16Proof, verification_key::JsonVerificationKey, witness::Witness, zkey::ZKey,
-    },
+    groth16::{Groth16Proof, JsonVerificationKey, Witness, ZKey},
     R1CS,
 };
 use collaborative_groth16::groth16::{CollaborativeGroth16, Groth16, SharedWitness};

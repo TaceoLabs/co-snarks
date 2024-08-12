@@ -47,7 +47,7 @@ where
     #[serde(serialize_with = "P::serialize_gt::<_>")]
     #[serde(deserialize_with = "P::deserialize_gt_element::<_>")]
     pub alpha_beta_gt: P::TargetField,
-    /// Bind the public inputs to the proof
+    /// Used to bind the public inputs to the proof
     #[serde(rename = "IC")]
     #[serde(serialize_with = "serialize_g1_sequence::<_,P>")]
     #[serde(deserialize_with = "deserialize_g1_sequence::<_,P>")]
@@ -140,61 +140,6 @@ where
         Ok(values)
     }
 }
-/*
-impl<P: Pairing + CircomArkworksPairingBridge> From<PreparedVerifyingKey<P>>
-    for JsonVerificationKey<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    fn from(value: PreparedVerifyingKey<P>) -> Self {
-        let vk = value.vk;
-        Self {
-            n_public: vk.gamma_abc_g1.len() - 1,
-            alpha_1: vk.alpha_g1,
-            beta_2: vk.beta_g2,
-            gamma_2: vk.gamma_g2,
-            delta_2: vk.delta_g2,
-            alpha_beta_gt: value.alpha_g1_beta_g2,
-            ic: vk.gamma_abc_g1,
-            protocol: "groth16".to_owned(),
-        }
-    }
-}
-
-impl<P: Pairing + CircomArkworksPairingBridge> From<JsonVerificationKey<P>>
-    for PreparedVerifyingKey<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    fn from(json_key: JsonVerificationKey<P>) -> Self {
-        Self {
-            vk: VerifyingKey::<P> {
-                alpha_g1: json_key.alpha_1,
-                beta_g2: json_key.beta_2,
-                gamma_g2: json_key.gamma_2,
-                delta_g2: json_key.delta_2,
-                gamma_abc_g1: json_key.ic,
-            },
-            alpha_g1_beta_g2: json_key.alpha_beta_gt,
-            gamma_g2_neg_pc: json_key.gamma_2.into_group().neg().into_affine().into(),
-            delta_g2_neg_pc: json_key.delta_2.into_group().neg().into_affine().into(),
-        }
-    }
-}
-
-impl<P: Pairing + CircomArkworksPairingBridge> JsonVerificationKey<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    /// Converts the [`JsonVerificationKey`] into a [`PreparedVerifyingKey`].
-    pub fn prepare_verifying_key(self) -> PreparedVerifyingKey<P> {
-        PreparedVerifyingKey::<P>::from(self)
-    }
-}
-    */
 
 #[cfg(test)]
 mod test {
