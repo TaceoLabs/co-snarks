@@ -29,11 +29,21 @@ pub mod file_utils;
 
 /// An enum representing the ZK proof system to use.
 #[derive(Clone, ValueEnum)]
+#[clap(rename_all = "lower")]
 pub enum ProofSystem {
     /// The Groth16 proof system.
     Groth16,
     /// The Plonk proof system.
     Plonk,
+}
+
+impl std::fmt::Display for ProofSystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProofSystem::Groth16 => write!(f, "Plonk"),
+            ProofSystem::Plonk => write!(f, "Groth16"),
+        }
+    }
 }
 
 /// An enum representing the MPC protocol to use.
@@ -68,7 +78,8 @@ impl std::fmt::Display for MPCCurve {
 }
 
 /// An enum representing the MPC protocol to use.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, ValueEnum)]
+#[clap(rename_all = "UPPER")]
 pub enum MPCProtocol {
     /// A protocol based on the Replicated Secret Sharing Scheme for 3 parties.
     /// For more information see <https://eprint.iacr.org/2018/403.pdf>.
@@ -76,19 +87,6 @@ pub enum MPCProtocol {
     /// A protocol based on Shamir Secret Sharing Scheme for n parties.
     /// For more information see <https://iacr.org/archive/crypto2007/46220565/46220565.pdf>.
     SHAMIR,
-}
-
-impl ValueEnum for MPCProtocol {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[MPCProtocol::REP3, MPCProtocol::SHAMIR]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        match self {
-            MPCProtocol::REP3 => Some(clap::builder::PossibleValue::new("REP3")),
-            MPCProtocol::SHAMIR => Some(clap::builder::PossibleValue::new("SHAMIR")),
-        }
-    }
 }
 
 impl std::fmt::Display for MPCProtocol {
