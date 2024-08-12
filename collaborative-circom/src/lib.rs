@@ -3,11 +3,10 @@
 use std::{io::Read, path::PathBuf};
 
 use ark_ec::pairing::Pairing;
-use ark_groth16::Proof;
 use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
 use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::{
-    groth16::zkey::ZKey,
+    groth16::{proof::Groth16Proof, zkey::ZKey},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
 use clap::ValueEnum;
@@ -181,7 +180,7 @@ pub fn generate_witness_rep3<P: Pairing>(
     Ok(result_witness_share.into_shared_witness())
 }
 
-/// Invoke the MPC proof generation process. It will return a [Proof] if successful.
+/// Invoke the MPC proof generation process. It will return a [`Groth16Proof`] if successful.
 /// It executes several steps:
 /// 1. Construct a [Rep3Protocol] from the network configuration.
 /// 2. Construct a [CollaborativeGroth16] prover from the protocol.
@@ -190,12 +189,11 @@ pub fn prove_with_matrices_rep3<P: Pairing + CircomArkworksPairingBridge>(
     witness_share: SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>,
     config: NetworkConfig,
     zkey: ZKey<P>,
-) -> color_eyre::Result<Proof<P>>
+) -> color_eyre::Result<Groth16Proof<P>>
 where
     P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
-    let (pk, matrices) = zkey.split();
     tracing::info!("establishing network....");
     // connect to network
     let net = Rep3MpcNet::new(config)?;
@@ -207,5 +205,5 @@ where
     let mut prover = CollaborativeGroth16::<Rep3Protocol<P::ScalarField, _>, P>::new(protocol);
     tracing::info!("starting prover...");
     // execute prover in MPC
-    prover.prove_with_matrices(&pk, &matrices, witness_share)
+    prover.prove(&zkey, witness_share)
 }

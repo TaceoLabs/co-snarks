@@ -277,10 +277,8 @@ pub mod tests {
     use std::fs::File;
 
     use ark_bn254::Bn254;
-    use circom_types::{
-        groth16::public_input::JsonPublicInput,
-        plonk::{JsonVerificationKey, PlonkProof},
-    };
+    use circom_types::groth16::public_input::JsonPublicInput;
+    use circom_types::plonk::{JsonVerificationKey, PlonkProof};
     use itertools::Itertools;
 
     use super::{Plonk, VerifierChallenges};

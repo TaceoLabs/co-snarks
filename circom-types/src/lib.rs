@@ -4,8 +4,11 @@
 mod binfile;
 pub mod groth16;
 pub mod plonk;
-pub mod r1cs;
+mod r1cs;
 pub mod traits;
+
+pub use r1cs::R1CSParserError;
+pub use r1cs::R1CS;
 
 pub(crate) mod reader_utils {
 

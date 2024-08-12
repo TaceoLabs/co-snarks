@@ -295,12 +295,13 @@ pub mod tests {
     use std::{fs::File, io::BufReader};
 
     use ark_bn254::Bn254;
-    use circom_types::{groth16::witness::Witness, plonk::ZKey, r1cs::R1CS};
-    use collaborative_groth16::{circuit::Circuit, groth16::SharedWitness};
+    use circom_types::plonk::ZKey;
+    use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
     use super::{Round1, Round1Challenges};
     use ark_ec::pairing::Pairing;
+    use circom_types::groth16::witness::Witness;
     use num_traits::Zero;
     use std::str::FromStr;
 
@@ -363,18 +364,13 @@ pub mod tests {
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
         let witness_file = File::open("../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let r1cs = R1CS::<Bn254>::from_reader(
-            File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.r1cs").unwrap(),
-        )
-        .unwrap();
-        let circuit = Circuit::new(r1cs, witness);
-        let public_inputs = circuit.public_inputs();
-        let mut extended_zero = vec![ark_bn254::Fr::zero()];
-        extended_zero.extend(public_inputs);
+
+        let public_input = witness.values[..=zkey.n_public].to_vec();
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
-            public_inputs: extended_zero,
-            witness: circuit.witnesses(),
+            public_inputs: public_input.clone(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
+
         let challenges = Round1Challenges::deterministic(&mut driver);
         let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
         round1.challenges = challenges;

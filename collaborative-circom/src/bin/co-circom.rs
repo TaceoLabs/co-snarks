@@ -2,20 +2,21 @@ use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use ark_groth16::{Groth16, Proof as Groth16Proof};
 use circom_mpc_compiler::CompilerBuilder;
-use circom_types::r1cs::R1CS;
-use circom_types::{
-    groth16::{
-        proof::JsonProof as Groth16JsonProof,
-        verification_key::JsonVerificationKey as Groth16JsonVerificationKey, witness::Witness,
-        zkey::ZKey as Groth16ZKey,
-    },
-    plonk::{JsonVerificationKey as PlonkJsonVerificationKey, PlonkProof, ZKey as PlonkZKey},
-    traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
+use circom_types::groth16::zkey::ZKey as Groth16ZKey;
+use circom_types::groth16::{
+    proof::Groth16Proof as Groth16JsonProof,
+    verification_key::JsonVerificationKey as Groth16JsonVerificationKey, witness::Witness,
 };
+use circom_types::plonk::JsonVerificationKey as PlonkJsonVerificationKey;
+use circom_types::plonk::PlonkProof;
+use circom_types::plonk::ZKey as PlonkZKey;
+use circom_types::traits::CircomArkworksPairingBridge;
+use circom_types::traits::CircomArkworksPrimeFieldBridge;
+use circom_types::R1CS;
 use clap::{Parser, Subcommand};
 use collaborative_circom::{file_utils, Config, MPCCurve, MPCProtocol, ProofSystem};
+use collaborative_groth16::groth16::Groth16;
 use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
 use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};
 use color_eyre::eyre::{eyre, Context, ContextCompat};
@@ -283,8 +284,6 @@ fn main_function<P: Pairing + CircomArkworksPairingBridge>(
 where
     P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
-    Groth16JsonProof<P>: From<Groth16Proof<P>>,
-    Groth16Proof<P>: From<Groth16JsonProof<P>>,
 {
     match args.command {
         Commands::SplitWitness {
@@ -605,7 +604,7 @@ where
 
             let public_input = match proofsystem {
                 ProofSystem::Groth16 => {
-                    let (pk, matrices) = Groth16ZKey::<P>::from_reader(zkey_file).unwrap().split();
+                    let zkey = Groth16ZKey::<P>::from_reader(zkey_file).unwrap();
 
                     let (proof, public_input) = match protocol {
                         MPCProtocol::REP3 => {
@@ -625,8 +624,7 @@ where
                             let mut prover = CollaborativeGroth16::new(protocol);
 
                             // execute prover in MPC
-                            let proof =
-                                prover.prove_with_matrices(&pk, &matrices, witness_share)?;
+                            let proof = prover.prove(&zkey, witness_share)?;
                             (proof, public_input)
                         }
                         MPCProtocol::SHAMIR => {
@@ -643,8 +641,7 @@ where
                             let mut prover = CollaborativeGroth16::new(protocol);
 
                             // execute prover in MPC
-                            let proof =
-                                prover.prove_with_matrices(&pk, &matrices, witness_share)?;
+                            let proof = prover.prove(&zkey, witness_share)?;
                             (proof, public_input)
                         }
                     };
@@ -655,7 +652,7 @@ where
                             std::fs::File::create(&out).context("while creating output file")?,
                         );
 
-                        serde_json::to_writer(out_file, &Groth16JsonProof::<P>::from(proof))
+                        serde_json::to_writer(out_file, &proof)
                             .context("while serializing proof to JSON file")?;
                         tracing::info!("Wrote proof to file {}", out.display());
                     }
@@ -769,7 +766,7 @@ where
                 File::open(&public_input).context("while opening public inputs file")?,
             );
             let public_inputs_as_strings: Vec<String> = serde_json::from_reader(public_inputs_file)
-                .context("while parsing public inputs, expect them to be array of stringified field elements")?;
+                  .context("while parsing public inputs, expect them to be array of stringified field elements")?;
             // skip 1 atm
             let public_inputs = public_inputs_as_strings
                 .into_iter()
@@ -785,12 +782,11 @@ where
                 ProofSystem::Groth16 => {
                     let proof: Groth16JsonProof<P> = serde_json::from_reader(proof_file)
                         .context("while deserializing proof from file")?;
-                    let proof = Groth16Proof::<P>::from(proof);
 
                     let vk: Groth16JsonVerificationKey<P> = serde_json::from_reader(vk_file)
                         .context("while deserializing verification key from file")?;
 
-                    Groth16::<P>::verify_proof(&vk.into(), &proof, &public_inputs)
+                    Groth16::<P>::verify(&vk, &proof, &public_inputs)
                         .context("while verifying proof")?
                 }
                 ProofSystem::Plonk => {
