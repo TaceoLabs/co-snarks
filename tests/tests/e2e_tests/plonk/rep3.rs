@@ -1,6 +1,6 @@
 use ark_bn254::Bn254;
 use circom_types::{
-    groth16::witness::Witness,
+    groth16::Witness,
     plonk::{JsonVerificationKey, PlonkProof, ZKey},
     R1CS,
 };

@@ -4,7 +4,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, LegendreSymbol, PrimeField};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::{ConstraintMatrices, SynthesisError};
-use circom_types::groth16::{proof::Groth16Proof, witness::Witness, zkey::ZKey};
+use circom_types::groth16::{Groth16Proof, Witness, ZKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use eyre::{bail, Result};
 use itertools::izip;
@@ -522,7 +522,7 @@ mod test {
     use rand::thread_rng;
 
     use super::SharedWitness;
-    use circom_types::groth16::witness::Witness;
+    use circom_types::groth16::Witness;
 
     #[ignore]
     #[test]

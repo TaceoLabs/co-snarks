@@ -3,10 +3,8 @@ use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use circom_mpc_compiler::CompilerBuilder;
-use circom_types::groth16::zkey::ZKey as Groth16ZKey;
 use circom_types::groth16::{
-    proof::Groth16Proof as Groth16JsonProof,
-    verification_key::JsonVerificationKey as Groth16JsonVerificationKey, witness::Witness,
+    Groth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, Witness, ZKey as Groth16ZKey,
 };
 use circom_types::plonk::JsonVerificationKey as PlonkJsonVerificationKey;
 use circom_types::plonk::PlonkProof;
@@ -780,7 +778,7 @@ where
             // verify proof
             let res = match proofsystem {
                 ProofSystem::Groth16 => {
-                    let proof: Groth16JsonProof<P> = serde_json::from_reader(proof_file)
+                    let proof: Groth16Proof<P> = serde_json::from_reader(proof_file)
                         .context("while deserializing proof from file")?;
 
                     let vk: Groth16JsonVerificationKey<P> = serde_json::from_reader(vk_file)

@@ -185,8 +185,8 @@ mod plonk_utils {
 #[cfg(test)]
 pub mod tests {
     use ark_bn254::Bn254;
-    use circom_types::groth16::public_input::JsonPublicInput;
-    use circom_types::groth16::witness::Witness;
+    use circom_types::groth16::JsonPublicInput;
+    use circom_types::groth16::Witness;
     use circom_types::plonk::{JsonVerificationKey, ZKey};
     use collaborative_groth16::groth16::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;

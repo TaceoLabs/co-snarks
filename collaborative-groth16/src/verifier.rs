@@ -7,7 +7,7 @@ use crate::groth16::Groth16;
 use ark_ec::pairing::Pairing;
 use ark_groth16::Proof;
 use ark_groth16::VerifyingKey;
-use circom_types::groth16::{proof::Groth16Proof, verification_key::JsonVerificationKey};
+use circom_types::groth16::{Groth16Proof, JsonVerificationKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use mpc_core::traits::FFTPostProcessing;
 

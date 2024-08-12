@@ -6,7 +6,7 @@ use ark_ec::pairing::Pairing;
 use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
 use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::{
-    groth16::{proof::Groth16Proof, zkey::ZKey},
+    groth16::{Groth16Proof, ZKey},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
 use clap::ValueEnum;
