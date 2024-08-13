@@ -12,7 +12,7 @@ use circom_types::{
 use clap::Args;
 use clap::ValueEnum;
 use co_circom_snarks::{SharedInput, SharedWitness};
-use collaborative_groth16::groth16::CollaborativeGroth16;
+use co_groth16::CoGroth16;
 use color_eyre::eyre::Context;
 use figment::{
     providers::{Env, Format, Serialized, Toml},
@@ -552,7 +552,7 @@ pub fn generate_witness_rep3<P: Pairing>(
 /// Invoke the MPC proof generation process. It will return a [`Groth16Proof`] if successful.
 /// It executes several steps:
 /// 1. Construct a [Rep3Protocol] from the network configuration.
-/// 2. Construct a [CollaborativeGroth16] prover from the protocol.
+/// 2. Construct a [CoGroth16] prover from the protocol.
 /// 3. Execute the proof in MPC
 pub fn prove_with_matrices_rep3<P: Pairing + CircomArkworksPairingBridge>(
     witness_share: SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>,
@@ -571,7 +571,7 @@ where
     tracing::info!("building protocol...");
     let protocol = Rep3Protocol::<P::ScalarField, _>::new(net)?;
     tracing::info!("done!");
-    let mut prover = CollaborativeGroth16::<Rep3Protocol<P::ScalarField, _>, P>::new(protocol);
+    let mut prover = CoGroth16::<Rep3Protocol<P::ScalarField, _>, P>::new(protocol);
     tracing::info!("starting prover...");
     // execute prover in MPC
     prover.prove(&zkey, witness_share)

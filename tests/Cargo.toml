@@ -11,10 +11,10 @@ ark-ec = { workspace = true }
 ark-serialize = { workspace = true }
 ark-ff = { workspace = true }
 co-circom-snarks = { version = "0.1.0", path = "../co-circom-snarks" }
-collaborative-groth16 = { version = "0.3.0", path = "../collaborative-groth16", features = [
+co-groth16 = { version = "0.3.0", path = "../co-groth16", features = [
     "verifier",
 ] }
-collaborative-plonk = { version = "0.1.0", path = "../collaborative-plonk" }
+co-plonk = { version = "0.1.0", path = "../co-plonk" }
 circom-mpc-compiler = { version = "0.4.0", path = "../circom-mpc-compiler" }
 circom-mpc-vm = { version = "0.3.0", path = "../circom-mpc-vm" }
 circom-types = { version = "0.4.0", path = "../circom-types" }

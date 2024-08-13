@@ -12,8 +12,8 @@ use circom_types::{
 };
 use co_circom_snarks::SharedInput;
 use co_circom_snarks::SharedWitness;
-use collaborative_groth16::groth16::{CollaborativeGroth16, Groth16};
-use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};
+use co_groth16::{CoGroth16, Groth16};
+use co_plonk::{CoPlonk, Plonk};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::izip;
 use mpc_core::{
@@ -77,7 +77,7 @@ where
     let pk = Groth16ZKey::<P>::from_reader(File::open(zkey).unwrap()).unwrap();
 
     let plain = PlainDriver::default();
-    let mut prover = CollaborativeGroth16::new(plain);
+    let mut prover = CoGroth16::new(plain);
     prover.prove(&pk, witness).unwrap()
 }
 
@@ -94,7 +94,7 @@ where
     let pk = PlonkZKey::<P>::from_reader(File::open(zkey).unwrap()).unwrap();
 
     let plain = PlainDriver::default();
-    let prover = CollaborativePlonk::new(plain);
+    let prover = CoPlonk::new(plain);
     prover.prove(&pk, witness).unwrap()
 }
 
@@ -210,7 +210,7 @@ fn groth16_rep3_proof<P>(
 
                     let party = tokio::task::spawn_blocking(move || {
                         let rep3 = Rep3Protocol::new(net).unwrap();
-                        let mut prover = CollaborativeGroth16::new(rep3);
+                        let mut prover = CoGroth16::new(rep3);
                         prover.prove(&pk, witness).unwrap()
                     });
                     parties.push(party);
@@ -261,7 +261,7 @@ fn groth16_shamir_proof<P>(
 
                     let party = tokio::task::spawn_blocking(move || {
                         let shamir = ShamirProtocol::new(degree, net).unwrap();
-                        let mut prover = CollaborativeGroth16::new(shamir);
+                        let mut prover = CoGroth16::new(shamir);
                         prover.prove(&pk, witness).unwrap()
                     });
                     parties.push(party);
@@ -335,7 +335,7 @@ fn plonk_rep3_proof<P>(
 
                     let party = tokio::task::spawn_blocking(move || {
                         let rep3 = Rep3Protocol::new(net).unwrap();
-                        let prover = CollaborativePlonk::new(rep3);
+                        let prover = CoPlonk::new(rep3);
                         prover.prove(&pk, witness).unwrap()
                     });
                     parties.push(party);
@@ -386,7 +386,7 @@ fn plonk_shamir_proof<P>(
 
                     let party = tokio::task::spawn_blocking(move || {
                         let shamir = ShamirProtocol::new(degree, net).unwrap();
-                        let prover = CollaborativePlonk::new(shamir);
+                        let prover = CoPlonk::new(shamir);
                         prover.prove(&pk, witness).unwrap()
                     });
                     parties.push(party);

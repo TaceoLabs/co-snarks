@@ -4,7 +4,7 @@ use circom_types::{
     Witness, R1CS,
 };
 use co_circom_snarks::SharedWitness;
-use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};
+use co_plonk::{CoPlonk, Plonk};
 use mpc_core::protocols::rep3::Rep3Protocol;
 use rand::thread_rng;
 use std::{fs::File, thread};
@@ -38,10 +38,7 @@ fn e2e_proof_poseidon_bn254() {
     {
         threads.push(thread::spawn(move || {
             let rep3 = Rep3Protocol::<ark_bn254::Fr, PartyTestNetwork>::new(net).unwrap();
-            let prover =
-                CollaborativePlonk::<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>::new(
-                    rep3,
-                );
+            let prover = CoPlonk::<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>::new(rep3);
             prover.prove(&pk, x).unwrap()
         }));
     }

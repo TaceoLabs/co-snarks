@@ -1,10 +1,10 @@
 //! This crate defines the plain [Plonk] type. Plain in this context means without MPC. For the
-//! co-PLONK prover, see [CollaborativePlonk].
+//! co-PLONK prover, see [CoPlonk].
 //!
 //! You will most likely need the plain PLONK implementation to verify a proof from co-PLONK. For that
 //! see the [`Plonk::verify`] method.
 
-use crate::{plonk_utils, types::Domains, CollaborativePlonk};
+use crate::{plonk_utils, types::Domains, CoPlonk};
 use ark_ec::{pairing::Pairing, Group};
 use ark_ff::Field;
 use circom_types::{
@@ -19,7 +19,7 @@ use crate::types::Keccak256Transcript;
 
 /// The plain [`Plonk`] type.
 ///
-/// This type is actually the [`CollaborativePlonk`] type initialized with
+/// This type is actually the [`CoPlonk`] type initialized with
 /// the [`PlainDriver`], a single party (you) MPC protocol (i.e., your everyday PLONK).
 /// You can use this instance to create a proof, but we recommend against it for a real use-case.
 /// The co-PLONK prover uses some MPC optimizations (for the product check), which are not optimal
@@ -27,7 +27,7 @@ use crate::types::Keccak256Transcript;
 ///
 /// More interesting is the [`Plonk::verify`] method. You can verify any circom PLONK proof, be it
 /// from snarkjs or one created by this project.
-pub type Plonk<P> = CollaborativePlonk<PlainDriver<<P as Pairing>::ScalarField>, P>;
+pub type Plonk<P> = CoPlonk<PlainDriver<<P as Pairing>::ScalarField>, P>;
 
 pub(crate) struct VerifierChallenges<P: Pairing> {
     pub(super) alpha: P::ScalarField,

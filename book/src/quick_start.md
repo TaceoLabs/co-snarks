@@ -35,7 +35,7 @@ In the first step, we compile an `.r1cs` file using Circom and create a verifica
 circom multiplier2.circom --r1cs
 ```
 
-You will find a file called `multiplier2.r1cs` in your working folder. To create the keys you can either follow the Circom documentation, or download the two keys from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/main/collaborative-circom/examples/test_vectors/multiplier2), where we created the keys already (you will need `multiplier2.zkey` and `verification_key.json`).
+You will find a file called `multiplier2.r1cs` in your working folder. To create the keys you can either follow the Circom documentation, or download the two keys from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/main/co-circom/examples/test_vectors/multiplier2), where we created the keys already (you will need `multiplier2.zkey` and `verification_key.json`).
 
 ## Split the Input
 
@@ -93,7 +93,7 @@ dns_name = "localhost:10002"
 cert_path = "data/cert2.der"
 ```
 
-You can download the TLS certificates from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/a37d24abcc1069e6e30b0e6638870bcd8834451a/collaborative-circom/examples/data) and put them under `data/`.
+You can download the TLS certificates from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/a37d24abcc1069e6e30b0e6638870bcd8834451a/co-circom/examples/data) and put them under `data/`.
 
 We move the `.toml` files to `configs/` and execute the following command (for every party).
 
@@ -142,7 +142,7 @@ $ snarkjs groth16 verify verification_key.json public_input.json proof.0.json
 [INFO]  snarkJS: OK!
 ```
 
-For a full `shell` script executing all of the commands at once, have a look at our [GitHub](collaborative-circom/examples). In this folder you find this exact example, and some more.
+For a full `shell` script executing all of the commands at once, have a look at our [GitHub](co-circom/examples). In this folder you find this exact example, and some more.
 
 **And now you can dive into the rest of the book** 🦀
 

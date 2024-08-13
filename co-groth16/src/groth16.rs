@@ -23,7 +23,7 @@ use std::marker::PhantomData;
 
 /// The plain [`Groth16`] type.
 ///
-/// This type is actually the [`CollaborativeGroth16`] type initialized with
+/// This type is actually the [`CoGroth16`] type initialized with
 /// the [`PlainDriver`], a single party (you) MPC protocol (i.e., your everyday Groth16).
 /// You can use this instance to create a proof, but we recommend against it for a real use-case.
 /// Have a look at the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/)
@@ -31,11 +31,10 @@ use std::marker::PhantomData;
 ///
 /// More interesting is the [`Groth16::verify`] method. You can verify any circom Groth16 proof, be it
 /// from snarkjs or one created by this project. Under the hood we use the arkwork Groth16 project for verifying.
-pub type Groth16<P> = CollaborativeGroth16<PlainDriver<<P as Pairing>::ScalarField>, P>;
+pub type Groth16<P> = CoGroth16<PlainDriver<<P as Pairing>::ScalarField>, P>;
 
-/// A type alias for a [CollaborativeGroth16] protocol using replicated secret sharing.
-pub type Rep3CollaborativeGroth16<P> =
-    CollaborativeGroth16<Rep3Protocol<<P as Pairing>::ScalarField, Rep3MpcNet>, P>;
+/// A type alias for a [CoGroth16] protocol using replicated secret sharing.
+pub type Rep3CoGroth16<P> = CoGroth16<Rep3Protocol<<P as Pairing>::ScalarField, Rep3MpcNet>, P>;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
@@ -66,7 +65,7 @@ fn root_of_unity_for_groth16<F: PrimeField + FftField>(domain: &GeneralEvaluatio
 }
 
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
-pub struct CollaborativeGroth16<T, P: Pairing>
+pub struct CoGroth16<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -79,7 +78,7 @@ where
     phantom_data: PhantomData<P>,
 }
 
-impl<T, P: Pairing> CollaborativeGroth16<T, P>
+impl<T, P: Pairing> CoGroth16<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -90,7 +89,7 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
 {
-    /// Creates a new [CollaborativeGroth16] protocol with a given MPC driver.
+    /// Creates a new [CoGroth16] protocol with a given MPC driver.
     pub fn new(driver: T) -> Self {
         Self {
             driver,
@@ -319,17 +318,17 @@ where
     }
 }
 
-impl<P: Pairing> Rep3CollaborativeGroth16<P>
+impl<P: Pairing> Rep3CoGroth16<P>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
 {
-    /// Create a new [Rep3CollaborativeGroth16] protocol with a given network configuration.
+    /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
         let mpc_net = Rep3MpcNet::new(config)?;
         let driver = Rep3Protocol::<P::ScalarField, Rep3MpcNet>::new(mpc_net)?;
-        Ok(CollaborativeGroth16::new(driver))
+        Ok(CoGroth16::new(driver))
     }
 }
 

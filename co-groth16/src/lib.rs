@@ -1,8 +1,12 @@
 //! A library for creating and verifying Groth16 proofs in a collaborative fashion using MPC.
 #![warn(missing_docs)]
-pub mod groth16;
+mod groth16;
 #[cfg(feature = "verifier")]
-pub mod verifier;
+mod verifier;
+
+pub use groth16::CoGroth16;
+pub use groth16::Groth16;
+pub use groth16::Rep3CoGroth16;
 
 #[cfg(test)]
 #[cfg(feature = "verifier")]

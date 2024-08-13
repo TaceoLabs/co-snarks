@@ -10,7 +10,7 @@ use std::{
     time::Instant,
 };
 
-use collaborative_circom::file_utils::{check_dir_exists, check_file_exists};
+use co_circom::file_utils::{check_dir_exists, check_file_exists};
 
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
