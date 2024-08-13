@@ -21,6 +21,8 @@ pub enum ZKeyParserError {
     /// Error describing that an invalid modulus was found in the header for the chosen curve
     #[error("invalid modulus found in header for chosen curve")]
     InvalidPrimeInHeader,
+    #[error("Unexpected field size for curve in header. Expected {0} but got {1}")]
+    UnexpectedByteSize(u32, u32),
     /// Error during IO operations (reading/opening file, etc.)
     #[error(transparent)]
     IoError(#[from] std::io::Error),

@@ -248,19 +248,29 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn read<R: Read>(mut reader: &mut R) -> ZKeyParserResult<Self> {
-        let _n8q: u32 = u32::deserialize_uncompressed(&mut reader)?;
+        let n8q: u32 = u32::deserialize_uncompressed(&mut reader)?;
         //modulus of BaseField
         let q = <P::BaseField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
+        let expected_n8q = P::BaseField::MODULUS_BIT_SIZE.div_ceil(8);
+        if n8q != expected_n8q {
+            return Err(ZKeyParserError::UnexpectedByteSize(expected_n8q, n8q));
+        }
         let modulus = <P::BaseField as PrimeField>::MODULUS;
         if q != modulus {
             return Err(ZKeyParserError::InvalidPrimeInHeader);
         }
         // this function assumes that the values are encoded in little-endian
-        let _n8r: u32 = u32::deserialize_uncompressed(&mut reader)?;
+        let n8r: u32 = u32::deserialize_uncompressed(&mut reader)?;
         //modulus of ScalarField
         let r = <P::ScalarField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
+        let expected_n8r = P::ScalarField::MODULUS_BIT_SIZE.div_ceil(8);
+        if n8r != expected_n8r {
+            return Err(ZKeyParserError::UnexpectedByteSize(expected_n8r, n8r));
+        }
         let modulus = <P::ScalarField as PrimeField>::MODULUS;
-        assert_eq!(r, modulus);
+        if r != modulus {
+            return Err(ZKeyParserError::InvalidPrimeInHeader);
+        }
 
         let n_vars = u32_to_usize!(u32::deserialize_uncompressed(&mut reader)?);
         let n_public = u32_to_usize!(u32::deserialize_uncompressed(&mut reader)?);
