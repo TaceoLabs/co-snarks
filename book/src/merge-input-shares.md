@@ -18,12 +18,13 @@ The above command takes the two input shares `input0.json.0.shared` and `input1.
 co-circom merge-input-shares --help
 Merge multiple shared inputs received from multiple parties into a single one
 
-Usage: co-circom merge-input-shares [OPTIONS] --protocol <PROTOCOL> --curve <CURVE> --out <OUT>
+Usage: co-circom merge-input-shares [OPTIONS]
 
 Options:
+      --config <CONFIG>      The path to the config file
       --inputs <INPUTS>      The path to the input JSON file
       --protocol <PROTOCOL>  The MPC protocol to be used [possible values: REP3, SHAMIR]
       --curve <CURVE>        The pairing friendly curve to be used [possible values: BN254, BLS12-381]
       --out <OUT>            The output file where the merged input share is written to
-  -h, --help                 Print help
+  -h, --help                 Print help (see more with '--help')
 ```

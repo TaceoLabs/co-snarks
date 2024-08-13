@@ -16,10 +16,10 @@ The above command takes a witness share `test_vectors/poseidon/witness.wtns.0.sh
 $ co-circom generate-proof --help
 Evaluates the prover algorithm for the specified circuit and witness share in MPC
 
-Usage: co-circom generate-proof [OPTIONS] --config <CONFIG> --witness <WITNESS> --zkey <ZKEY> <PROOFSYSTEM>
+Usage: co-circom generate-proof [OPTIONS] <PROOF_SYSTEM>
 
 Arguments:
-  <PROOFSYSTEM>  [possible values: groth16, plonk]
+  <PROOF_SYSTEM>  The proof system to be used [possible values: groth16, plonk]
 
 Options:
       --config <CONFIG>              The path to the config file
