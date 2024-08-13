@@ -13,15 +13,27 @@ use circom_types::{
     Witness,
 };
 use clap::{Parser, Subcommand};
-use collaborative_circom::{
-    file_utils, GenerateProofCli, GenerateProofConfig, GenerateWitnessCli, GenerateWitnessConfig,
-    MPCCurve, MPCProtocol, MergeInputSharesCli, MergeInputSharesConfig, ProofSystem, SplitInputCli,
-    SplitInputConfig, SplitWitnessCli, SplitWitnessConfig, TranslateWitnessCli,
-    TranslateWitnessConfig, VerifyCli, VerifyConfig,
-};
-use collaborative_groth16::groth16::{CollaborativeGroth16, Groth16, SharedInput, SharedWitness};
+use co_circom_snarks::{SharedInput, SharedWitness};
+use collaborative_circom::GenerateProofCli;
+use collaborative_circom::GenerateProofConfig;
+use collaborative_circom::GenerateWitnessCli;
+use collaborative_circom::GenerateWitnessConfig;
+use collaborative_circom::MergeInputSharesCli;
+use collaborative_circom::MergeInputSharesConfig;
+use collaborative_circom::SplitInputCli;
+use collaborative_circom::SplitInputConfig;
+use collaborative_circom::SplitWitnessCli;
+use collaborative_circom::SplitWitnessConfig;
+use collaborative_circom::TranslateWitnessCli;
+use collaborative_circom::TranslateWitnessConfig;
+use collaborative_circom::VerifyCli;
+use collaborative_circom::VerifyConfig;
+use collaborative_circom::{file_utils, MPCCurve, MPCProtocol, ProofSystem};
+use collaborative_groth16::groth16::CollaborativeGroth16;
+use collaborative_groth16::groth16::Groth16;
 use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};
-use color_eyre::eyre::{eyre, Context, ContextCompat};
+use color_eyre::eyre::ContextCompat;
+use color_eyre::eyre::{eyre, Context};
 use mpc_core::{
     protocols::{
         rep3::{self, network::Rep3MpcNet, Rep3Protocol},

@@ -3,6 +3,7 @@ members = [
     "circom-mpc-compiler",
     "circom-mpc-vm",
     "circom-types",
+    "co-circom-snarks",
     "collaborative-circom",
     "collaborative-groth16",
     "collaborative-plonk",

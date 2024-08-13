@@ -1,7 +1,7 @@
 use ark_ec::AffineRepr;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use circom_types::plonk::ZKey;
-use collaborative_groth16::groth16::{roots_of_unity, SharedWitness};
+use co_circom_snarks::SharedWitness;
 use std::marker::PhantomData;
 
 use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult};
@@ -65,7 +65,7 @@ impl<F: PrimeField> Domains<F> {
                 .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
             let extended_domain = GeneralEvaluationDomain::<F>::new(domain_size * 4)
                 .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-            let (_, roots_of_unity) = roots_of_unity();
+            let (_, roots_of_unity) = co_circom_snarks::utils::roots_of_unity();
             let pow = usize::try_from(domain_size.ilog2()).expect("u32 fits into usize");
 
             Ok(Self {

@@ -2,6 +2,7 @@
   "circom-mpc-compiler": "0.3.0",
   "circom-mpc-vm": "0.2.0",
   "circom-types": "0.3.0",
+  "co-circom-snarks": "0.0.0",
   "collaborative-circom": "0.2.1",
   "collaborative-groth16": "0.2.1",
   "collaborative-plonk": "0.0.0",

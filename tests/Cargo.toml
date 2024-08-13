@@ -10,6 +10,7 @@ ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-serialize = { workspace = true }
 ark-ff = { workspace = true }
+co-circom-snarks = { version = "0.1.0", path = "../co-circom-snarks" }
 collaborative-groth16 = { version = "0.2.1", path = "../collaborative-groth16", features = [
     "verifier",
 ] }

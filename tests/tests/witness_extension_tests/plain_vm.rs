@@ -3,7 +3,7 @@ use circom_mpc_compiler::CompilerBuilder;
 use circom_mpc_compiler::CompilerConfig;
 use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::Witness;
-use collaborative_groth16::groth16::SharedWitness;
+use co_circom_snarks::SharedWitness;
 use mpc_core::protocols::plain::PlainDriver;
 use std::{
     fs::{self, File},

@@ -6,7 +6,7 @@ use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
-use collaborative_groth16::groth16::SharedWitness;
+use co_circom_snarks::SharedWitness;
 use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use round1::Round1;
@@ -188,7 +188,7 @@ pub mod tests {
     use circom_types::groth16::JsonPublicInput;
     use circom_types::plonk::{JsonVerificationKey, ZKey};
     use circom_types::Witness;
-    use collaborative_groth16::groth16::SharedWitness;
+    use co_circom_snarks::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
     use std::{fs::File, io::BufReader};
 

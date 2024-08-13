@@ -3,7 +3,7 @@ use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof, ZKey},
     Witness, R1CS,
 };
-use collaborative_groth16::groth16::SharedWitness;
+use co_circom_snarks::SharedWitness;
 use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};
 use itertools::izip;
 use mpc_core::protocols::shamir::ShamirProtocol;
