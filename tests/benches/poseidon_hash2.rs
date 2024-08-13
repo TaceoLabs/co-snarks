@@ -95,7 +95,7 @@ where
 
     let plain = PlainDriver::default();
     let prover = CollaborativePlonk::new(plain);
-    prover.prove(pk, witness).unwrap()
+    prover.prove(&pk, witness).unwrap()
 }
 
 fn rep3_witness_extension<P>(
@@ -336,7 +336,7 @@ fn plonk_rep3_proof<P>(
                     let party = tokio::task::spawn_blocking(move || {
                         let rep3 = Rep3Protocol::new(net).unwrap();
                         let prover = CollaborativePlonk::new(rep3);
-                        prover.prove(pk, witness).unwrap()
+                        prover.prove(&pk, witness).unwrap()
                     });
                     parties.push(party);
                 }
@@ -387,7 +387,7 @@ fn plonk_shamir_proof<P>(
                     let party = tokio::task::spawn_blocking(move || {
                         let shamir = ShamirProtocol::new(degree, net).unwrap();
                         let prover = CollaborativePlonk::new(shamir);
-                        prover.prove(pk, witness).unwrap()
+                        prover.prove(&pk, witness).unwrap()
                     });
                     parties.push(party);
                 }
