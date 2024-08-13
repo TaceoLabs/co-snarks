@@ -64,6 +64,9 @@ struct Cli {
     /// MPC protocol for co-circom
     #[arg(long, default_value = "REP3")]
     protocol: String,
+    /// MPC curve for co-circom
+    #[arg(long, default_value = "BN254")]
+    curve: String,
     /// The path to the co_circom binary
     #[arg(long, default_value = "co_circom")]
     co_circom_bin: String,
@@ -195,6 +198,7 @@ struct Config {
     keep_wtns: bool,
     keep_inp_shr: bool,
     protocol: String,
+    curve: String,
     vkey: PathBuf,
     pub_inp_sjs: PathBuf,
     proof_sjs: PathBuf,
@@ -435,6 +439,7 @@ impl From<Cli> for Config {
             keep_wtns: cli.keep_wtns,
             keep_inp_shr: cli.keep_inp_shr,
             protocol: cli.protocol,
+            curve: cli.curve,
             vkey: cli.vkey,
             pub_inp_sjs: cli.pub_inp_sjs,
             proof_sjs: cli.proof_sjs,
@@ -708,6 +713,8 @@ fn bench_co_circom_prover_one_party(
             .arg(wtns_shr)
             .arg("--zkey")
             .arg(conf.zkey.as_path())
+            .arg("--curve")
+            .arg(&conf.curve)
             .arg("--protocol")
             .arg(&conf.protocol)
             .arg("--config")
@@ -801,6 +808,8 @@ fn bench_co_circom_gen_wtns_one_party(
             .arg(conf.circom.as_ref().expect("gen witness is true").as_path())
             .arg("--protocol")
             .arg(&conf.protocol)
+            .arg("--curve")
+            .arg(&conf.curve)
             .arg("--config")
             .arg(config_toml)
             .arg("--out")
@@ -887,6 +896,8 @@ fn bench_co_circom(conf: &Config) -> color_eyre::Result<BenchResult> {
             .arg(conf.circom.as_ref().expect("gen witness is true").as_path())
             .arg("--protocol")
             .arg(&conf.protocol)
+            .arg("--curve")
+            .arg(&conf.curve)
             .arg("--out-dir")
             .arg(".")
             .args(link_library_to_args(conf, "--link-library")?)
@@ -918,6 +929,8 @@ fn bench_co_circom(conf: &Config) -> color_eyre::Result<BenchResult> {
             .arg(conf.r1cs.as_ref().expect("gen witness is false").as_path())
             .arg("--protocol")
             .arg(&conf.protocol)
+            .arg("--curve")
+            .arg(&conf.curve)
             .arg("--out-dir")
             .arg(
                 conf.witness_path
@@ -944,6 +957,8 @@ fn bench_co_circom(conf: &Config) -> color_eyre::Result<BenchResult> {
     let now = Instant::now();
     let out_co_circom_verifier = Command::new(&conf.co_circom_bin)
         .arg("verify")
+        .arg("--curve")
+        .arg(&conf.curve)
         .arg("--proof")
         .arg(conf.proof_coc_1.as_path())
         .arg("--vk")
