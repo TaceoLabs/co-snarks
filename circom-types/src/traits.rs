@@ -54,7 +54,7 @@ mod $mod_name {
             }
 
             #[inline]
-            fn from_reader_unchecked(mut reader: impl Read) -> IoResult<Self> {
+            fn montgomery_bigint_from_reader(mut reader: impl Read) -> IoResult<Self> {
                 let mut buf = [0u8; Self::SERIALIZED_BYTE_SIZE];
                 reader.read_exact(&mut buf[..])?;
                 Ok(Self::new_unchecked(BigInt::deserialize_uncompressed(
@@ -62,8 +62,8 @@ mod $mod_name {
                 )?))
             }
             #[inline]
-            fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self> {
-                Ok(Self::new_unchecked(Self::from_reader_unchecked(reader)?.into_bigint()))
+            fn from_reader_for_groth16_zkey(reader: impl Read) -> IoResult<Self> {
+                Ok(Self::new_unchecked(Self::montgomery_bigint_from_reader(reader)?.into_bigint()))
             }
 
         }
@@ -77,7 +77,7 @@ mod $mod_name {
             }
 
             #[inline]
-            fn from_reader_unchecked(mut reader: impl Read) -> IoResult<Self> {
+            fn montgomery_bigint_from_reader(mut reader: impl Read) -> IoResult<Self> {
                 let mut buf = [0u8; Self::SERIALIZED_BYTE_SIZE];
                 reader.read_exact(&mut buf[..])?;
                 Ok(Self::new_unchecked(BigInt::deserialize_uncompressed(
@@ -85,8 +85,8 @@ mod $mod_name {
                 )?))
             }
             #[inline]
-            fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self> {
-                Ok(Self::new_unchecked(Self::from_reader_unchecked(reader)?.into_bigint()))
+            fn from_reader_for_groth16_zkey(reader: impl Read) -> IoResult<Self> {
+                Ok(Self::new_unchecked(Self::montgomery_bigint_from_reader(reader)?.into_bigint()))
             }
         }
 
@@ -103,11 +103,11 @@ mod $mod_name {
             }
 
             //Circom serializes its field elements in montgomery form
-            //therefore we use Fq::from_reader_unchecked
+            //therefore we use Fq::montgomery_bigint_from_reader
             fn g1_from_bytes(bytes: &[u8]) -> IoResult<Self::G1Affine> {
                 //already in montgomery form
-                let x = Fq::from_reader_unchecked(&bytes[..Fq::SERIALIZED_BYTE_SIZE])?;
-                let y = Fq::from_reader_unchecked(&bytes[Fq::SERIALIZED_BYTE_SIZE..])?;
+                let x = Fq::montgomery_bigint_from_reader(&bytes[..Fq::SERIALIZED_BYTE_SIZE])?;
+                let y = Fq::montgomery_bigint_from_reader(&bytes[Fq::SERIALIZED_BYTE_SIZE..])?;
 
                 if x.is_zero() && y.is_zero() {
                     return Ok(Self::G1Affine::zero());
@@ -126,14 +126,14 @@ mod $mod_name {
 
             fn g2_from_bytes(bytes: &[u8]) -> IoResult<Self::G2Affine> {
                 //already in montgomery form
-                let x0 = Fq::from_reader_unchecked(&bytes[..Fq::SERIALIZED_BYTE_SIZE])?;
-                let x1 = Fq::from_reader_unchecked(
+                let x0 = Fq::montgomery_bigint_from_reader(&bytes[..Fq::SERIALIZED_BYTE_SIZE])?;
+                let x1 = Fq::montgomery_bigint_from_reader(
                     &bytes[Fq::SERIALIZED_BYTE_SIZE..Fq::SERIALIZED_BYTE_SIZE * 2],
                 )?;
-                let y0 = Fq::from_reader_unchecked(
+                let y0 = Fq::montgomery_bigint_from_reader(
                     &bytes[Fq::SERIALIZED_BYTE_SIZE * 2..Fq::SERIALIZED_BYTE_SIZE * 3],
                 )?;
-                let y1 = Fq::from_reader_unchecked(
+                let y1 = Fq::montgomery_bigint_from_reader(
                     &bytes[Fq::SERIALIZED_BYTE_SIZE * 3..Fq::SERIALIZED_BYTE_SIZE * 4],
                 )?;
 
@@ -629,11 +629,11 @@ pub trait CircomArkworksPrimeFieldBridge: PrimeField {
     const SERIALIZED_BYTE_SIZE: usize;
     /// Deserializes field elements and performs montgomery reduction
     fn from_reader(reader: impl Read) -> IoResult<Self>;
-    /// deserializes field elements that are already in montgomery
-    /// form. DOES NOT perform montgomery reduction
-    fn from_reader_unchecked(reader: impl Read) -> IoResult<Self>;
-    /// deserializes field elements that are multiplied by R^2 already (elements in zkey are of this form)
-    fn from_reader_unchecked_for_zkey(reader: impl Read) -> IoResult<Self>;
+    /// deserializes a big int that is already in montgomery
+    /// form and creates a field element from that big int. DOES NOT perform montgomery reduction
+    fn montgomery_bigint_from_reader(reader: impl Read) -> IoResult<Self>;
+    /// deserializes field elements that are multiplied by R^2 already (elements in Groth16 zkey are of this form)
+    fn from_reader_for_groth16_zkey(reader: impl Read) -> IoResult<Self>;
 }
 
 impl_bn256!();

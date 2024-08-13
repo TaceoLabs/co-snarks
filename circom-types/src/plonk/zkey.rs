@@ -164,8 +164,8 @@ where
         for _ in 0..n_additions {
             let signal_id1 = u32::deserialize_uncompressed(&mut reader)?;
             let signal_id2 = u32::deserialize_uncompressed(&mut reader)?;
-            let factor1 = P::ScalarField::from_reader_unchecked(&mut reader)?;
-            let factor2 = P::ScalarField::from_reader_unchecked(&mut reader)?;
+            let factor1 = P::ScalarField::montgomery_bigint_from_reader(&mut reader)?;
+            let factor2 = P::ScalarField::montgomery_bigint_from_reader(&mut reader)?;
             additions.push(Additions {
                 signal_id1,
                 signal_id2,
@@ -190,12 +190,16 @@ where
     ) -> ZKeyParserResult<CircomPolynomial<P::ScalarField>> {
         let mut coeffs = Vec::with_capacity(domain_size);
         for _ in 0..domain_size {
-            coeffs.push(<P::ScalarField>::from_reader_unchecked(&mut reader)?);
+            coeffs.push(<P::ScalarField>::montgomery_bigint_from_reader(
+                &mut reader,
+            )?);
         }
 
         let mut evaluations = Vec::with_capacity(domain_size * 4);
         for _ in 0..domain_size * 4 {
-            evaluations.push(<P::ScalarField>::from_reader_unchecked(&mut reader)?);
+            evaluations.push(<P::ScalarField>::montgomery_bigint_from_reader(
+                &mut reader,
+            )?);
         }
         Ok(CircomPolynomial {
             coeffs: DensePolynomial { coeffs },
@@ -320,8 +324,8 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn new<R: Read>(mut reader: R) -> ZKeyParserResult<Self> {
-        let k1 = <P::ScalarField>::from_reader_unchecked(&mut reader)?;
-        let k2 = <P::ScalarField>::from_reader_unchecked(&mut reader)?;
+        let k1 = <P::ScalarField>::montgomery_bigint_from_reader(&mut reader)?;
+        let k2 = <P::ScalarField>::montgomery_bigint_from_reader(&mut reader)?;
         let qm = P::g1_from_reader(&mut reader)?;
         let ql = P::g1_from_reader(&mut reader)?;
         let qr = P::g1_from_reader(&mut reader)?;
