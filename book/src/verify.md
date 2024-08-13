@@ -15,10 +15,10 @@ The above command verifies the proof in `proof.json` using the verification key 
 ```txt
 Verification of a Circom proof
 
-Usage: co-circom verify [OPTIONS] --config <CONFIG> --proof <PROOF> --vk <VK> --public-input <PUBLIC_INPUT> <PROOFSYSTEM>
+Usage: co-circom verify [OPTIONS] <PROOF_SYSTEM>
 
 Arguments:
-  <PROOFSYSTEM>  [possible values: groth16, plonk]
+  <PROOF_SYSTEM>  The proof system to be used [possible values: groth16, plonk]
 
 Options:
       --config <CONFIG>              The path to the config file

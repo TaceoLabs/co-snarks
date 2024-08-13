@@ -28,7 +28,7 @@
   - [translate-witness](./translate-witness.md)
   - [generate-proof](./generate-proof.md)
   - [verify](./verify.md)
-  - [Network Config File](./network-config.md)
+  - [Configuration](./config.md)
 - [Examples](./examples.md)
     - [Poseidon](./poseidon.md)
     - [KYC](./kyc.md)

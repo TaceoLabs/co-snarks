@@ -72,21 +72,22 @@ This command secret shares the private inputs (everything that is not explicitly
 
 Now we have to compute the extended witness. In a real-world setting you would have to send the input files from the previous step to the parties.
 
-To achieve that we need another config file for every party, namely the network config (you can read an in-depth explanation about the config at [here](./network-config.md)). You can copy-paste the config from here and call it `party0.toml` for party0 and so on:
+To achieve that we need a network config for every party (you can read an in-depth explanation about the config at [here](./config.md)). You can copy-paste the config from here and call it `party0.toml` for party0 and so on:
 
 ```toml
+[network]
 my_id = 0
 bind_addr = "0.0.0.0:10000"
 key_path = "data/key0.der"
-[[parties]]
+[[network.parties]]
 id = 0
 dns_name = "localhost:10000"
 cert_path = "data/cert0.der"
-[[parties]]
+[[network.parties]]
 id = 1
 dns_name = "localhost:10001"
 cert_path = "data/cert1.der"
-[[parties]]
+[[network.parties]]
 id = 2
 dns_name = "localhost:10002"
 cert_path = "data/cert2.der"
