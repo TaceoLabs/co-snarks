@@ -5,3 +5,5 @@ lint:
 
 test-all:
   cargo test --release --all-features
+
+check-pr: lint test-all
