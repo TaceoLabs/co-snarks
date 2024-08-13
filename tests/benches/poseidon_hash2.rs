@@ -10,7 +10,9 @@ use circom_types::{
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
     Witness,
 };
-use collaborative_groth16::groth16::{CollaborativeGroth16, Groth16, SharedInput, SharedWitness};
+use co_circom_snarks::SharedInput;
+use co_circom_snarks::SharedWitness;
+use collaborative_groth16::groth16::{CollaborativeGroth16, Groth16};
 use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::izip;

@@ -1,7 +1,6 @@
 //! A library for creating and verifying Groth16 proofs in a collaborative fashion using MPC.
 #![warn(missing_docs)]
 pub mod groth16;
-mod serde_compat;
 #[cfg(feature = "verifier")]
 pub mod verifier;
 
@@ -14,10 +13,11 @@ mod tests {
         groth16::{Groth16Proof, JsonPublicInput, JsonVerificationKey, ZKey},
         Witness,
     };
+    use co_circom_snarks::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
     use std::fs::{self, File};
 
-    use crate::groth16::{Groth16, SharedWitness};
+    use crate::groth16::Groth16;
 
     #[test]
     fn create_proof_and_verify_bn254() {

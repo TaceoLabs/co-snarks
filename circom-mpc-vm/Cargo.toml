@@ -13,7 +13,7 @@ readme.workspace = true
 [dependencies]
 ark-ec.workspace = true
 ark-ff.workspace = true
-collaborative-groth16 = { version = "0.2.1", path = "../collaborative-groth16" }
+co-circom-snarks = { version = "0.1.0", path = "../co-circom-snarks" }
 eyre.workspace = true
 itertools.workspace = true
 mpc-core = { version = "0.2.1", path = "../mpc-core" }

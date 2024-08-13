@@ -9,8 +9,10 @@ use circom_types::{
     groth16::{Groth16Proof, ZKey},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
-use clap::{Args, ValueEnum};
-use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
+use clap::Args;
+use clap::ValueEnum;
+use co_circom_snarks::{SharedInput, SharedWitness};
+use collaborative_groth16::groth16::CollaborativeGroth16;
 use color_eyre::eyre::Context;
 use figment::{
     providers::{Env, Format, Serialized, Toml},

@@ -1,6 +1,6 @@
 use ark_ec::pairing::Pairing;
 use circom_types::plonk::ZKey;
-use collaborative_groth16::groth16::SharedWitness;
+use co_circom_snarks::SharedWitness;
 use mpc_core::traits::{
     FFTPostProcessing, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
     PrimeFieldMpcProtocol,
@@ -296,7 +296,7 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::plonk::ZKey;
-    use collaborative_groth16::groth16::SharedWitness;
+    use co_circom_snarks::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
     use super::{Round1, Round1Challenges};

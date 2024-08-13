@@ -9,7 +9,7 @@ use super::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
-use collaborative_groth16::groth16::{SharedInput, SharedWitness};
+use co_circom_snarks::{SharedInput, SharedWitness};
 use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
 use mpc_core::protocols::plain::PlainDriver;

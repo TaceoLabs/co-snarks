@@ -1,7 +1,7 @@
 use ark_bn254::Bn254;
 use circom_mpc_compiler::CompilerBuilder;
 use circom_types::Witness;
-use collaborative_groth16::groth16::SharedWitness;
+use co_circom_snarks::SharedWitness;
 use itertools::izip;
 use mpc_core::protocols::rep3::Rep3Protocol;
 use mpc_core::protocols::rep3::{self};

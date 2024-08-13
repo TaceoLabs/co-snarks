@@ -154,7 +154,7 @@ pub mod tests {
     use ark_bn254::Bn254;
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
-    use collaborative_groth16::groth16::SharedWitness;
+    use co_circom_snarks::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
     use crate::round1::{Round1, Round1Challenges};
