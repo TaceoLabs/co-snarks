@@ -4,13 +4,14 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use circom_mpc_compiler::CompilerBuilder;
 use circom_types::groth16::{
-    Groth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, Witness, ZKey as Groth16ZKey,
+    Groth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, ZKey as Groth16ZKey,
 };
 use circom_types::plonk::JsonVerificationKey as PlonkJsonVerificationKey;
 use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey as PlonkZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
+use circom_types::Witness;
 use circom_types::R1CS;
 use clap::{Parser, Subcommand};
 use collaborative_circom::{file_utils, Config, MPCCurve, MPCProtocol, ProofSystem};

@@ -301,7 +301,7 @@ pub mod tests {
 
     use super::{Round1, Round1Challenges};
     use ark_ec::pairing::Pairing;
-    use circom_types::groth16::Witness;
+    use circom_types::Witness;
     use num_traits::Zero;
     use std::str::FromStr;
 
