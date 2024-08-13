@@ -10,8 +10,9 @@ pub mod verifier;
 mod tests {
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
-    use circom_types::groth16::{
-        Groth16Proof, JsonPublicInput, JsonVerificationKey, Witness, ZKey,
+    use circom_types::{
+        groth16::{Groth16Proof, JsonPublicInput, JsonVerificationKey, ZKey},
+        Witness,
     };
     use mpc_core::protocols::plain::PlainDriver;
     use std::fs::{self, File};

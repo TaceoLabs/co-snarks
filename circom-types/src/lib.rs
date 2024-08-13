@@ -6,9 +6,13 @@ pub mod groth16;
 pub mod plonk;
 mod r1cs;
 pub mod traits;
+mod witness;
 
 pub use r1cs::R1CSParserError;
 pub use r1cs::R1CS;
+
+pub use witness::Witness;
+pub use witness::WitnessParserError;
 
 pub(crate) mod reader_utils {
 

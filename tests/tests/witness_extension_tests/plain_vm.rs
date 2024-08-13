@@ -2,7 +2,7 @@ use ark_bn254::Bn254;
 use circom_mpc_compiler::CompilerBuilder;
 use circom_mpc_compiler::CompilerConfig;
 use circom_mpc_vm::mpc_vm::VMConfig;
-use circom_types::groth16::Witness;
+use circom_types::Witness;
 use collaborative_groth16::groth16::SharedWitness;
 use mpc_core::protocols::plain::PlainDriver;
 use std::{
