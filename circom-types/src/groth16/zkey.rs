@@ -185,7 +185,7 @@ where
             let constraint = u32::deserialize_uncompressed(&mut matrices_section)?;
             let signal = u32::deserialize_uncompressed(&mut matrices_section)?;
 
-            let value = P::ScalarField::from_reader_unchecked_for_zkey(&mut matrices_section)?;
+            let value = P::ScalarField::from_reader_for_groth16_zkey(&mut matrices_section)?;
             max_constraint_index = std::cmp::max(max_constraint_index, constraint);
             matrices[matrix as usize][constraint as usize].push((value, signal as usize));
         }
@@ -643,7 +643,7 @@ mod tests {
     #[test]
     fn can_deser_fq() {
         let buf = fq_buf();
-        let fq = <<Bn254 as Pairing>::BaseField as CircomArkworksPrimeFieldBridge>::from_reader_unchecked(
+        let fq = <<Bn254 as Pairing>::BaseField as CircomArkworksPrimeFieldBridge>::montgomery_bigint_from_reader(
             &mut &buf[..],
         )
         .unwrap();
