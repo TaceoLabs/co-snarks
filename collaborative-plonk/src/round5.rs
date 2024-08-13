@@ -19,7 +19,7 @@ use num_traits::One;
 use num_traits::Zero;
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-pub(super) struct Round5<T, P: Pairing>
+pub(super) struct Round5<'a, T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -33,7 +33,7 @@ where
     pub(super) challenges: Round4Challenges<P>,
     pub(super) proof: Round4Proof<P>,
     pub(super) polys: FinalPolys<T, P>,
-    pub(super) data: PlonkData<T, P>,
+    pub(super) data: PlonkData<'a, T, P>,
 }
 pub(super) struct Round5Challenges<P: Pairing> {
     beta: P::ScalarField,
@@ -84,7 +84,7 @@ where
 }
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-impl<T, P: Pairing> Round5<T, P>
+impl<'a, T, P: Pairing> Round5<'a, T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -390,7 +390,7 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         let round3 = round2.round2().unwrap();

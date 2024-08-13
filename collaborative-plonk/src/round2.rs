@@ -41,7 +41,7 @@ macro_rules! array_prod_mul {
 }
 
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
-pub(super) struct Round2<T, P: Pairing>
+pub(super) struct Round2<'a, T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -55,7 +55,7 @@ where
     pub(super) challenges: Round1Challenges<T, P>,
     pub(super) proof: Round1Proof<P>,
     pub(super) polys: Round1Polys<T, P>,
-    pub(super) data: PlonkData<T, P>,
+    pub(super) data: PlonkData<'a, T, P>,
 }
 
 pub(super) struct Round2Challenges<T, P: Pairing>
@@ -129,7 +129,7 @@ where
 }
 
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
-impl<T, P: Pairing> Round2<T, P>
+impl<'a, T, P: Pairing> Round2<'a, T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -236,7 +236,7 @@ where
     }
 
     // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
-    pub(super) fn round2(self) -> PlonkProofResult<Round3<T, P>> {
+    pub(super) fn round2(self) -> PlonkProofResult<Round3<'a, T, P>> {
         let Self {
             mut driver,
             data,
@@ -331,7 +331,7 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         let round3 = round2.round2().unwrap();

@@ -40,7 +40,7 @@ fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
                 CollaborativePlonk::<ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>::new(
                     shamir,
                 );
-            prover.prove(pk, x).unwrap()
+            prover.prove(&pk, x).unwrap()
         }));
     }
     let mut results = Vec::with_capacity(num_parties);

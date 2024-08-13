@@ -79,7 +79,7 @@ where
     /// Execute the PLONK prover using the internal MPC driver.
     pub fn prove(
         self,
-        zkey: ZKey<P>,
+        zkey: &ZKey<P>,
         witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<PlonkProof<P>> {
         let state = Round1::init_round(self.driver, zkey, witness)?;
@@ -218,7 +218,7 @@ pub mod tests {
         .unwrap();
 
         let plonk = Plonk::<Bn254>::new(driver);
-        let proof = plonk.prove(zkey, witness).unwrap();
+        let proof = plonk.prove(&zkey, witness).unwrap();
         let result = Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
         assert!(result);
         Ok(())
@@ -250,7 +250,7 @@ pub mod tests {
         .unwrap();
 
         let plonk = Plonk::<Bn254>::new(driver);
-        let proof = plonk.prove(zkey, witness).unwrap();
+        let proof = plonk.prove(&zkey, witness).unwrap();
 
         let mut proof_bytes = vec![];
         serde_json::to_writer(&mut proof_bytes, &proof).unwrap();

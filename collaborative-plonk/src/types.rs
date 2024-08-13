@@ -48,12 +48,12 @@ where
     pub(super) addition_witness: Vec<FieldShare<T, P>>,
 }
 
-pub(super) struct PlonkData<T, P: Pairing>
+pub(super) struct PlonkData<'a, T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(super) witness: PlonkWitness<T, P>,
-    pub(super) zkey: ZKey<P>,
+    pub(super) zkey: &'a ZKey<P>,
 }
 
 impl<F: PrimeField> Domains<F> {

@@ -42,7 +42,7 @@ fn e2e_proof_poseidon_bn254() {
                 CollaborativePlonk::<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>::new(
                     rep3,
                 );
-            prover.prove(pk, x).unwrap()
+            prover.prove(&pk, x).unwrap()
         }));
     }
     let result3 = threads.pop().unwrap().join().unwrap();

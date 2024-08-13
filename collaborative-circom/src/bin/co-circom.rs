@@ -533,7 +533,7 @@ where
                     let prover = CollaborativePlonk::new(protocol);
 
                     // execute prover in MPC
-                    let proof = prover.prove(pk, witness_share)?;
+                    let proof = prover.prove(&pk, witness_share)?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -549,7 +549,7 @@ where
                     let prover = CollaborativePlonk::new(protocol);
 
                     // execute prover in MPC
-                    let proof = prover.prove(pk, witness_share)?;
+                    let proof = prover.prove(&pk, witness_share)?;
                     (proof, public_input)
                 }
             };
