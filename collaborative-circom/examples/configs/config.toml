@@ -1,5 +1,0 @@
-[compiler]
-allow_leaky_loops = false
-
-[vm]
-allow_leaky_logs = false
