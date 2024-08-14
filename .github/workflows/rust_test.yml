@@ -28,3 +28,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test with default features
         run: cargo test --workspace --profile ci-dev --all-features
+      - name: Test groth16 examples
+        run: cd co-circom/examples/groth16 && ./run.sh
+      - name: Test plonk examples
+        run: cd co-circom/examples/plonk && ./run.sh

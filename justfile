@@ -6,4 +6,8 @@ lint:
 test-all:
   cargo test --release --all-features
 
-check-pr: lint test-all
+test-examples:
+  cd co-circom/examples/groth16 && ./run.sh
+  cd co-circom/examples/plonk && ./run.sh
+
+check-pr: lint test-all test-examples
