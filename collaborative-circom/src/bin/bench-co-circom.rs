@@ -67,6 +67,9 @@ struct Cli {
     /// MPC curve for co-circom
     #[arg(long, default_value = "BN254")]
     curve: String,
+    /// Proof system
+    #[arg(long, default_value = "groth16")]
+    proof_system: String,
     /// The path to the co_circom binary
     #[arg(long, default_value = "co_circom")]
     co_circom_bin: String,
@@ -199,6 +202,7 @@ struct Config {
     keep_inp_shr: bool,
     protocol: String,
     curve: String,
+    proof_system: String,
     vkey: PathBuf,
     pub_inp_sjs: PathBuf,
     proof_sjs: PathBuf,
@@ -440,6 +444,7 @@ impl From<Cli> for Config {
             keep_inp_shr: cli.keep_inp_shr,
             protocol: cli.protocol,
             curve: cli.curve,
+            proof_system: cli.proof_system,
             vkey: cli.vkey,
             pub_inp_sjs: cli.pub_inp_sjs,
             proof_sjs: cli.proof_sjs,
@@ -579,7 +584,7 @@ fn bench_circom_snarkjs(conf: &Config) -> color_eyre::Result<BenchResult> {
     tracing::trace!("Starting snarkjs prover ..");
     let now = Instant::now();
     let out_prove = Command::new(&conf.snarkjs_bin)
-        .arg("groth16")
+        .arg(&conf.proof_system)
         .arg("prove")
         .arg(conf.zkey.as_path())
         .arg(witness.as_path())
@@ -600,7 +605,7 @@ fn bench_circom_snarkjs(conf: &Config) -> color_eyre::Result<BenchResult> {
     tracing::trace!("Starting snarkjs verifier ..");
     let now = Instant::now();
     let out_prove = Command::new(&conf.snarkjs_bin)
-        .arg("groth16")
+        .arg(&conf.proof_system)
         .arg("verify")
         .arg(conf.vkey.as_path())
         .arg(conf.pub_inp_sjs.as_path())
@@ -623,56 +628,46 @@ fn bench_circom_snarkjs(conf: &Config) -> color_eyre::Result<BenchResult> {
     })
 }
 
-fn create_party_toml_files(conf: &Config) -> color_eyre::Result<()> {
-    tracing::trace!("Creating party TOML files ..");
-    let general_toml = format!(
-        r#"[[parties]]
+macro_rules! party_config {
+    ($id: expr, $port: expr, $key: expr, $conf: expr) => {
+        format!(
+            r#"[network]
+my_id = {}
+bind_addr = "0.0.0.0:{}"
+key_path = "{}"
+[[network.parties]]
 id = 0
 dns_name = "localhost:{}"
 cert_path = "{}"
-[[parties]]
+[[network.parties]]
 id = 1
 dns_name = "localhost:{}"
 cert_path = "{}"
-[[parties]]
+[[network.parties]]
 id = 2
 dns_name = "localhost:{}"
 cert_path = "{}"
 "#,
-        conf.p1_port,
-        conf.p1_cert.to_str().unwrap(),
-        conf.p2_port,
-        conf.p2_cert.to_str().unwrap(),
-        conf.p3_port,
-        conf.p3_cert.to_str().unwrap(),
-    );
-    let party1_toml = format!(
-        r#"my_id = 0
-bind_addr = "0.0.0.0:{}"
-key_path = "{}"
-{}"#,
-        conf.p1_port,
-        conf.p1_key.to_str().unwrap(),
-        general_toml
-    );
-    let party2_toml = format!(
-        r#"my_id = 1
-bind_addr = "0.0.0.0:{}"
-key_path = "{}"
-{}"#,
-        conf.p2_port,
-        conf.p2_key.to_str().unwrap(),
-        general_toml
-    );
-    let party3_toml = format!(
-        r#"my_id = 2
-bind_addr = "0.0.0.0:{}"
-key_path = "{}"
-{}"#,
-        conf.p3_port,
-        conf.p3_key.to_str().unwrap(),
-        general_toml
-    );
+            $id,
+            $port,
+            $key.to_str().unwrap(),
+            $conf.p1_port,
+            $conf.p1_cert.to_str().unwrap(),
+            $conf.p2_port,
+            $conf.p2_cert.to_str().unwrap(),
+            $conf.p3_port,
+            $conf.p3_cert.to_str().unwrap(),
+        )
+    };
+}
+
+fn create_party_toml_files(conf: &Config) -> color_eyre::Result<()> {
+    tracing::trace!("Creating party TOML files ..");
+
+    let party1_toml = party_config!(0, conf.p1_port, conf.p1_key, conf);
+    let party2_toml = party_config!(1, conf.p2_port, conf.p2_key, conf);
+    let party3_toml = party_config!(2, conf.p3_port, conf.p3_key, conf);
+
     let mut out_file =
         BufWriter::new(File::create(&conf.p1_toml).context("while creating output file")?);
     out_file
@@ -709,6 +704,7 @@ fn bench_co_circom_prover_one_party(
         let now = Instant::now();
         let out_co_circom_prove = Command::new(&conf.co_circom_bin)
             .arg("generate-proof")
+            .arg(&conf.proof_system)
             .arg("--witness")
             .arg(wtns_shr)
             .arg("--zkey")
@@ -957,6 +953,7 @@ fn bench_co_circom(conf: &Config) -> color_eyre::Result<BenchResult> {
     let now = Instant::now();
     let out_co_circom_verifier = Command::new(&conf.co_circom_bin)
         .arg("verify")
+        .arg(&conf.proof_system)
         .arg("--curve")
         .arg(&conf.curve)
         .arg("--proof")
