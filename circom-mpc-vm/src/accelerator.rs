@@ -6,11 +6,11 @@ use mpc_core::traits::CircomWitnessExtensionProtocol;
 
 type AcceleratorFunction<P, C> = Box<
     dyn Fn(
-        &mut C,
-        &[<C as CircomWitnessExtensionProtocol<<P as Pairing>::ScalarField>>::VmType],
-    ) -> eyre::Result<
-        Vec<<C as CircomWitnessExtensionProtocol<<P as Pairing>::ScalarField>>::VmType>,
-    >,
+            &mut C,
+            &[<C as CircomWitnessExtensionProtocol<<P as Pairing>::ScalarField>>::VmType],
+        ) -> eyre::Result<
+            Vec<<C as CircomWitnessExtensionProtocol<<P as Pairing>::ScalarField>>::VmType>,
+        > + Send,
 >;
 
 #[derive(Default)]
@@ -34,7 +34,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> MpcAccelerat
     pub fn register_function(
         &mut self,
         name: String,
-        fun: impl Fn(&mut C, &[C::VmType]) -> eyre::Result<Vec<C::VmType>> + 'static,
+        fun: impl Fn(&mut C, &[C::VmType]) -> eyre::Result<Vec<C::VmType>> + Send + 'static,
     ) {
         self.registered_functions.insert(name, Box::new(fun));
     }
