@@ -96,7 +96,7 @@ fn root_of_unity_for_groth16<F: PrimeField + FftField>(domain: &GeneralEvaluatio
 // TODO: maybe move this type to some other crate, as this is the only used type from this crate for many dependencies
 // TODO: if you are at it, move the roots of unity function above also
 /// A shared witness for a Groth16 proof.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SharedWitness<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -116,8 +116,21 @@ where
     pub witness: FieldShareVec<T, P>,
 }
 
+/// We manually implement Clone here since it was not derived correctly and it added bounds on T, P which are not needed
+impl<T, P: Pairing> Clone for SharedWitness<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            public_inputs: self.public_inputs.clone(),
+            witness: self.witness.clone(),
+        }
+    }
+}
+
 /// A shared input for a collaborative Circom-Groth16 witness extension.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SharedInput<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -136,6 +149,19 @@ where
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub shared_inputs: BTreeMap<String, T::FieldShareVec>,
+}
+
+/// We manually implement Clone here since it was not derived correctly and it added bounds on T, P which are not needed
+impl<T, P: Pairing> Clone for SharedInput<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            public_inputs: self.public_inputs.clone(),
+            shared_inputs: self.shared_inputs.clone(),
+        }
+    }
 }
 
 impl<T, P: Pairing> Default for SharedInput<T, P>

@@ -23,7 +23,8 @@ use mpc_core::{
 };
 use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// The mpc-vm configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -62,7 +63,7 @@ pub type PlainWitnessExtension<P> = WitnessExtension<P, PlainDriver<<P as Pairin
 pub type Rep3WitnessExtension<P, N> =
     WitnessExtension<P, Rep3Protocol<<P as Pairing>::ScalarField, N>>;
 
-type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Rc<CodeBlock>, Vec<(T, Vec<T>)>);
+type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Arc<CodeBlock>, Vec<(T, Vec<T>)>);
 
 #[derive(Default, Clone)]
 struct IfCtxStack<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>>(Vec<IfCtx<P, C>>);
@@ -82,7 +83,7 @@ struct Component<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> 
     functions_ctx: Stack<FunctionCtx<C::VmType>>,
     mappings: Vec<usize>,
     sub_components: Vec<Component<P, C>>,
-    component_body: Rc<CodeBlock>,
+    component_body: Arc<CodeBlock>,
     log_buf: String,
 }
 
@@ -200,7 +201,7 @@ struct FunctionCtx<T> {
     ip: usize,
     return_vals: usize,
     vars: Vec<T>,
-    body: Rc<CodeBlock>,
+    body: Arc<CodeBlock>,
     shared_return_vals: Vec<(T, Vec<T>)>,
 }
 
@@ -209,7 +210,7 @@ impl<T> FunctionCtx<T> {
         ip: usize,
         return_vals: usize,
         vars: Vec<T>,
-        body: Rc<CodeBlock>,
+        body: Arc<CodeBlock>,
         shared_return_vals: Vec<(T, Vec<T>)>,
     ) -> Self {
         Self {
@@ -247,7 +248,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
             functions_ctx: Stack::default(),
             mappings: templ_decl.mappings.clone(),
             sub_components: Vec::with_capacity(templ_decl.sub_components),
-            component_body: Rc::clone(&templ_decl.body),
+            component_body: Arc::clone(&templ_decl.body),
             log_buf: String::with_capacity(1024),
         }
     }
@@ -273,7 +274,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
     }
 
     #[allow(dead_code)]
-    fn debug_code_block(code_block: Rc<CodeBlock>) {
+    fn debug_code_block(code_block: Arc<CodeBlock>) {
         for (idx, inst) in code_block.iter().enumerate() {
             tracing::info!("{idx:0>4}|   {inst}");
         }
@@ -285,7 +286,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
         config: &VMConfig,
     ) -> Result<()> {
         let mut ip = 0;
-        let mut current_body = Rc::clone(&self.component_body);
+        let mut current_body = Arc::clone(&self.component_body);
         let mut current_vars = vec![C::VmType::default(); self.amount_vars];
         let mut current_shared_ret_vals = vec![];
         loop {
@@ -386,12 +387,12 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> Component<P,
                             ip,
                             self.current_return_vals,
                             func_vars,
-                            Rc::clone(&current_body),
+                            Arc::clone(&current_body),
                             next_shared_ret_vals,
                         ));
                         //set size of return value
                         self.current_return_vals = *return_vals;
-                        current_body = Rc::clone(&fun_decl.body);
+                        current_body = Arc::clone(&fun_decl.body);
                         ip = 0;
                         continue;
                     }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, sync::Arc};
 
 use ark_ec::pairing::Pairing;
 use mpc_core::protocols::{
@@ -28,7 +28,7 @@ pub struct TemplateDecl {
     pub(crate) sub_components: usize,
     pub(crate) vars: usize,
     pub(crate) mappings: Vec<usize>,
-    pub(crate) body: Rc<CodeBlock>,
+    pub(crate) body: Arc<CodeBlock>,
 }
 
 impl TemplateDecl {
@@ -47,7 +47,7 @@ impl TemplateDecl {
             sub_components,
             vars,
             mappings,
-            body: Rc::new(body),
+            body: Arc::new(body),
         }
     }
 }
@@ -59,10 +59,11 @@ impl TemplateDecl {
 ///
 /// > **Warning**: Users should usually not interact directly with this struct. It is only public because the
 /// > compiler requires these declarations, and the compiler is a separate crate due to licensing constraints.
+#[derive(Clone)]
 pub struct FunDecl {
     pub(crate) num_params: usize,
     pub(crate) vars: usize,
-    pub(crate) body: Rc<CodeBlock>,
+    pub(crate) body: Arc<CodeBlock>,
 }
 
 impl FunDecl {
@@ -71,7 +72,7 @@ impl FunDecl {
         Self {
             num_params,
             vars,
-            body: Rc::new(body),
+            body: Arc::new(body),
         }
     }
 }
@@ -88,6 +89,7 @@ pub(crate) type InputList = Vec<(String, usize, usize)>;
 ///
 /// The struct provides certain methods to consume it and create an
 /// [MPC-VM](WitnessExtension).
+#[derive(Clone)]
 pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
     pub(crate) main: String,
     pub(crate) amount_signals: usize,
