@@ -1,6 +1,6 @@
 [package]
 name = "circom-mpc-vm"
-version = "0.2.0"
+version = "0.3.0"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -16,7 +16,7 @@ ark-ff.workspace = true
 co-circom-snarks = { version = "0.1.0", path = "../co-circom-snarks" }
 eyre.workspace = true
 itertools.workspace = true
-mpc-core = { version = "0.2.1", path = "../mpc-core" }
+mpc-core = { version = "0.3.0", path = "../mpc-core" }
 mpc-net = { workspace = true }
 tracing.workspace = true
 serde.workspace = true

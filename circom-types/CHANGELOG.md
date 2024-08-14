@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.4.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-types-v0.3.0...circom-types-v0.4.0) (2024-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* renamed the method from_reader_unchecked and from_reader_unchecked_for_zkey to better names showing were to use them
+* PLONK uses the witness struct, therefore we moved it from Groth16 to one level higher
+* we hide the modules defining the zkey, proof, vk, and witness and use pub use the re-export them
+* the verifier (and the arkwork dep) is now hidden behind the "verifier" feature. Also we refactored some stuff in Groth16 to mirror PLONK.
+* removed Our* types from groth16 zkey
+* groth16 zkey parsing is now multithreaded, added multithreaded g1/2_vec_from_reader
+* circom-arkworks bridge trait now has a method to return name of curve
+* Adds a method to the ArkworksPairingBridge trait
+
+### Features
+
+* add deserialization of plonk circom types ([d1f0d4d](https://github.com/TaceoLabs/collaborative-circom/commit/d1f0d4dd5ac63e85523c139e573161bd2ff0061a))
+* circom-arkworks bridge trait now has a method to return name of curve ([b1e33dd](https://github.com/TaceoLabs/collaborative-circom/commit/b1e33dd52ccd422ce3197b670b83653c5eafecb9))
+* groth16 zkey parsing is now multithreaded, added multithreaded g1/2_vec_from_reader ([b1e46f7](https://github.com/TaceoLabs/collaborative-circom/commit/b1e46f72df537b73e222b7d0dd7cdf17e549a9f0))
+* plonk support ([9b65797](https://github.com/TaceoLabs/collaborative-circom/commit/9b6579724f6f5ba4fc6af8a98d386b96818dc08b))
+
+
+### Bug Fixes
+
+* clippy 1.80 introduces a wrong warning ([a593904](https://github.com/TaceoLabs/collaborative-circom/commit/a593904c98686f442b747173d70fc3d2aa991566))
+
+
+### Code Refactoring
+
+* Added verifier feature for Groth16 ([489614c](https://github.com/TaceoLabs/collaborative-circom/commit/489614cf9242f63c9f9914aaf0b6cc6555deab4c))
+* clearer name for montgomery reader ([a9582b7](https://github.com/TaceoLabs/collaborative-circom/commit/a9582b713162d43b2de88b9d9ce2f0cfaeb5d9c8))
+* move the groth16 circom types ([fabc5e7](https://github.com/TaceoLabs/collaborative-circom/commit/fabc5e72343f08eea96efde4556dffac60d954cb))
+* moved the witness struct ([9cee70b](https://github.com/TaceoLabs/collaborative-circom/commit/9cee70bc58f1980035d02e46e6ea9082a3368182))
+* removed Our* types from groth16 zkey ([1f1d1bc](https://github.com/TaceoLabs/collaborative-circom/commit/1f1d1bcc80eee037a803661f39cc5c5450ae5c14))
+
 ## [0.3.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-types-v0.2.0...circom-types-v0.3.0) (2024-07-10)
 
 

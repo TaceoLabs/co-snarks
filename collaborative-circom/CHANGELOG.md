@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.3.0](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-circom-v0.2.1...collaborative-circom-v0.3.0) (2024-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* to unify Groth16 and PLONK we now take the zkey as ref in PLONK when calling prove
+* moved common code for PLONK and Groth16 into separate crate. Most notably the SharedWitness and SharedInput
+* PLONK uses the witness struct, therefore we moved it from Groth16 to one level higher
+* we hide the modules defining the zkey, proof, vk, and witness and use pub use the re-export them
+* the verifier (and the arkwork dep) is now hidden behind the "verifier" feature. Also we refactored some stuff in Groth16 to mirror PLONK.
+* Add Plonk to the co-circom binary ([#147](https://github.com/TaceoLabs/collaborative-circom/issues/147))
+* groth16 zkey parsing is now multithreaded, added multithreaded g1/2_vec_from_reader
+* share_rep3 and share_shamir interfaces changed
+* new config implementation, config option to allow leaking of secret values in logs ([#132](https://github.com/TaceoLabs/collaborative-circom/issues/132))
+* Adds a method to the ArkworksPairingBridge trait
+* the function signature of the two run methods of the witness extension now changed. To retrieve the shared witness now another call `into_shared_witness()` is necessary.
+* Add the possibility to specify another curve in the co-circom binary
+* Add possibility to use Shamir secret sharing for proofing and
+
+### Features
+
+* add deserialization of plonk circom types ([d1f0d4d](https://github.com/TaceoLabs/collaborative-circom/commit/d1f0d4dd5ac63e85523c139e573161bd2ff0061a))
+* Add Plonk to the co-circom binary ([#147](https://github.com/TaceoLabs/collaborative-circom/issues/147)) ([ff05a2e](https://github.com/TaceoLabs/collaborative-circom/commit/ff05a2e45fb93f70c0ebb246e287e9302e4a7222))
+* Add possibility to use Shamir secret sharing for proofing and ([6205475](https://github.com/TaceoLabs/collaborative-circom/commit/6205475b78d4654c61f5058befe5d5990da19432))
+* Add runtime information to the co-circom binary ([84f2c6d](https://github.com/TaceoLabs/collaborative-circom/commit/84f2c6dbc1668b9b587729b22695c92700512428))
+* Add the possibility to specify another curve in the co-circom binary ([fdd6bf2](https://github.com/TaceoLabs/collaborative-circom/commit/fdd6bf2f5274da790fd7cbe09ee48563b404d153))
+* can now retrieve certain outputs after witness extension by name ([d9e3399](https://github.com/TaceoLabs/collaborative-circom/commit/d9e33996d10cea5f8197d507a13ed9087f0f4c20))
+* groth16 zkey parsing is now multithreaded, added multithreaded g1/2_vec_from_reader ([b1e46f7](https://github.com/TaceoLabs/collaborative-circom/commit/b1e46f72df537b73e222b7d0dd7cdf17e549a9f0))
+* now co-circom supports hex values ([d004d10](https://github.com/TaceoLabs/collaborative-circom/commit/d004d10b8a9b5c39e77abd37c8b862107aaa14c1))
+* plonk support ([9b65797](https://github.com/TaceoLabs/collaborative-circom/commit/9b6579724f6f5ba4fc6af8a98d386b96818dc08b))
+
+
+### Bug Fixes
+
+* updated bench-co-circom for new config and plonk proof system ([#160](https://github.com/TaceoLabs/collaborative-circom/issues/160)) ([5722928](https://github.com/TaceoLabs/collaborative-circom/commit/5722928028a7ae348fa9c666ce1e7ccc1eb72ae7))
+
+
+### Code Refactoring
+
+* added new crate co-circom-snarks ([ea3190f](https://github.com/TaceoLabs/collaborative-circom/commit/ea3190f4d731893e6fcce71976c32b3bbac6b89b))
+* Added verifier feature for Groth16 ([489614c](https://github.com/TaceoLabs/collaborative-circom/commit/489614cf9242f63c9f9914aaf0b6cc6555deab4c))
+* move the groth16 circom types ([fabc5e7](https://github.com/TaceoLabs/collaborative-circom/commit/fabc5e72343f08eea96efde4556dffac60d954cb))
+* moved the witness struct ([9cee70b](https://github.com/TaceoLabs/collaborative-circom/commit/9cee70bc58f1980035d02e46e6ea9082a3368182))
+* new config implementation, config option to allow leaking of secret values in logs ([#132](https://github.com/TaceoLabs/collaborative-circom/issues/132)) ([964b04f](https://github.com/TaceoLabs/collaborative-circom/commit/964b04f47e8d491ae140cb7c10c596e1c40b6b5c))
+* PLONK now takes zkey as ref for prove ([6f613e6](https://github.com/TaceoLabs/collaborative-circom/commit/6f613e6feffece37435da3960afa4d017fe4baa0))
+* share_rep3 and share_shamir interfaces changed ([5e7420f](https://github.com/TaceoLabs/collaborative-circom/commit/5e7420f95a46466304c2ab80de2069c2feb3432d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-compiler bumped from 0.3.0 to 0.4.0
+    * circom-mpc-vm bumped from 0.2.0 to 0.3.0
+    * circom-types bumped from 0.3.0 to 0.4.0
+    * collaborative-groth16 bumped from 0.2.1 to 0.3.0
+    * mpc-core bumped from 0.2.1 to 0.3.0
+
 ## [0.2.1](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-circom-v0.2.0...collaborative-circom-v0.2.1) (2024-07-10)
 
 

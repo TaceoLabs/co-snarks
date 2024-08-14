@@ -6,6 +6,44 @@
     * mpc-core bumped from 0.2.0 to 0.2.1
     * mpc-net bumped from 0.1.1 to 0.1.2
 
+## [0.3.0](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-groth16-v0.2.1...collaborative-groth16-v0.3.0) (2024-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* moved common code for PLONK and Groth16 into separate crate. Most notably the SharedWitness and SharedInput
+* Make MPC-VM thread safe and implement better Clone for shared inputs and witnesses ([#158](https://github.com/TaceoLabs/collaborative-circom/issues/158))
+* PLONK uses the witness struct, therefore we moved it from Groth16 to one level higher
+* removed files that were used by arkworks groth16
+* we hide the modules defining the zkey, proof, vk, and witness and use pub use the re-export them
+* the verifier (and the arkwork dep) is now hidden behind the "verifier" feature. Also we refactored some stuff in Groth16 to mirror PLONK.
+* share_rep3 and share_shamir interfaces changed
+* Adds a method to the ArkworksPairingBridge trait
+
+### Features
+
+* add deserialization of plonk circom types ([d1f0d4d](https://github.com/TaceoLabs/collaborative-circom/commit/d1f0d4dd5ac63e85523c139e573161bd2ff0061a))
+* Make MPC-VM thread safe and implement better Clone for shared inputs and witnesses ([#158](https://github.com/TaceoLabs/collaborative-circom/issues/158)) ([a7ab3bb](https://github.com/TaceoLabs/collaborative-circom/commit/a7ab3bbecd93b393c08e18d8ea89a64a25bac3a3))
+* plonk support ([9b65797](https://github.com/TaceoLabs/collaborative-circom/commit/9b6579724f6f5ba4fc6af8a98d386b96818dc08b))
+
+
+### Code Refactoring
+
+* added new crate co-circom-snarks ([ea3190f](https://github.com/TaceoLabs/collaborative-circom/commit/ea3190f4d731893e6fcce71976c32b3bbac6b89b))
+* Added verifier feature for Groth16 ([489614c](https://github.com/TaceoLabs/collaborative-circom/commit/489614cf9242f63c9f9914aaf0b6cc6555deab4c))
+* move the groth16 circom types ([fabc5e7](https://github.com/TaceoLabs/collaborative-circom/commit/fabc5e72343f08eea96efde4556dffac60d954cb))
+* moved the witness struct ([9cee70b](https://github.com/TaceoLabs/collaborative-circom/commit/9cee70bc58f1980035d02e46e6ea9082a3368182))
+* removed files that were used by arkworks groth16 ([d38e8a5](https://github.com/TaceoLabs/collaborative-circom/commit/d38e8a576d0f6375f1dc4f4d01d5fd59fa4c1438))
+* share_rep3 and share_shamir interfaces changed ([5e7420f](https://github.com/TaceoLabs/collaborative-circom/commit/5e7420f95a46466304c2ab80de2069c2feb3432d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.3.0 to 0.4.0
+    * mpc-core bumped from 0.2.1 to 0.3.0
+
 ## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-groth16-v0.1.0...collaborative-groth16-v0.2.0) (2024-07-09)
 
 
