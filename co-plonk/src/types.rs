@@ -1,5 +1,5 @@
 use ark_ec::AffineRepr;
-use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
+use ark_poly::{EvaluationDomain, GeneralEvaluationDomain, Radix2EvaluationDomain};
 use circom_types::plonk::ZKey;
 use co_circom_snarks::SharedWitness;
 use std::marker::PhantomData;
@@ -32,8 +32,8 @@ where
 }
 
 pub(super) struct Domains<F: PrimeField> {
-    pub(super) domain: GeneralEvaluationDomain<F>,
-    pub(super) extended_domain: GeneralEvaluationDomain<F>,
+    pub(super) domain: Radix2EvaluationDomain<F>,
+    pub(super) extended_domain: Radix2EvaluationDomain<F>,
     pub(super) root_of_unity_pow: F,
     pub(super) root_of_unity_2: F,
     pub(super) root_of_unity_pow_2: F,
@@ -61,12 +61,19 @@ impl<F: PrimeField> Domains<F> {
         if domain_size & (domain_size - 1) != 0 || domain_size == 0 {
             Err(PlonkProofError::InvalidDomainSize(domain_size))
         } else {
-            let domain = GeneralEvaluationDomain::<F>::new(domain_size)
+            let mut domain = Radix2EvaluationDomain::<F>::new(domain_size)
                 .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-            let extended_domain = GeneralEvaluationDomain::<F>::new(domain_size * 4)
+            let mut extended_domain = Radix2EvaluationDomain::<F>::new(domain_size * 4)
                 .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
             let (_, roots_of_unity) = co_circom_snarks::utils::roots_of_unity();
             let pow = usize::try_from(domain_size.ilog2()).expect("u32 fits into usize");
+
+            //snarkjs and arkworks use different roots of unity to compute (i)fft. 
+            //this doesn't matter for bn254, but for bls12-381 the 
+            domain.group_gen = roots_of_unity[pow];
+            domain.group_gen_inv = roots_of_unity[pow].inverse().unwrap();
+            extended_domain.group_gen = roots_of_unity[pow + 2];
+            extended_domain.group_gen_inv = roots_of_unity[pow + 2].inverse().unwrap();
 
             Ok(Self {
                 domain,

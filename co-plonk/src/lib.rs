@@ -198,8 +198,8 @@ pub mod tests {
 
     #[test]
     pub fn test_multiplier2_bn254() -> eyre::Result<()> {
-        let zkey_file = "../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey";
-        let witness_file = "../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns";
+        let zkey_file = "../test_vectors/Plonk/bn254/multiplier2/circuit.zkey";
+        let witness_file = "../test_vectors/Plonk/bn254/multiplier2/witness.wtns";
         let zkey = ZKey::<Bn254>::from_reader(File::open(zkey_file)?)?;
         let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
         let driver = PlainDriver::<ark_bn254::Fr>::default();
@@ -210,12 +210,12 @@ pub mod tests {
         };
 
         let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/verification_key.json").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/verification_key.json").unwrap(),
         )
         .unwrap();
 
         let public_input: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/public.json").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/public.json").unwrap(),
         )
         .unwrap();
 
@@ -230,7 +230,7 @@ pub mod tests {
     pub fn test_poseidon_bn254() {
         let driver = PlainDriver::<ark_bn254::Fr>::default();
         let mut reader = BufReader::new(
-            File::open("../test_vectors/Plonk/bn254/poseidon/poseidon.zkey").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/poseidon/circuit.zkey").unwrap(),
         );
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
         let witness_file = File::open("../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();

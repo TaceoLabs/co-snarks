@@ -359,7 +359,9 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainD
         data: Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        domain.fft(&data)
+        let mut a = domain.fft(&data);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut a);
+        a
     }
 
     fn fft_in_place<D: ark_poly::EvaluationDomain<F>>(
@@ -368,6 +370,7 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainD
         domain: &D,
     ) {
         domain.fft_in_place(data);
+        crate::traits::FFTPostProcessing::fft_post_processing(data);
     }
 
     fn ifft<D: ark_poly::EvaluationDomain<F>>(
@@ -375,7 +378,9 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainD
         data: &Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        domain.ifft(data)
+        let mut a = domain.ifft(data);
+        crate::traits::FFTPostProcessing::fft_post_processing(&mut a);
+        a
     }
 
     fn ifft_in_place<D: ark_poly::EvaluationDomain<F>>(
@@ -384,6 +389,7 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainD
         domain: &D,
     ) {
         domain.ifft_in_place(data);
+        crate::traits::FFTPostProcessing::fft_post_processing(data);
     }
 
     fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare {

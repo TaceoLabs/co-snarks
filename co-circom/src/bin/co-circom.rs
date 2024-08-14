@@ -4,6 +4,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use circom_mpc_compiler::CompilerBuilder;
 use circom_types::R1CS;
+use mpc_core::traits::FFTPostProcessing;
 use num_traits::Zero;
 
 use circom_types::{
@@ -43,7 +44,7 @@ use mpc_core::{
         rep3::{self, network::Rep3MpcNet, Rep3Protocol},
         shamir::{network::ShamirMpcNet, ShamirProtocol},
     },
-    traits::{FFTPostProcessing, PrimeFieldMpcProtocol},
+    traits::PrimeFieldMpcProtocol,
 };
 use num_bigint::BigUint;
 use num_traits::Num;
@@ -156,7 +157,7 @@ fn run_split_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: SplitWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
 where
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     let witness_path = config.witness;
@@ -253,7 +254,7 @@ fn run_split_input<P: Pairing + CircomArkworksPairingBridge>(
     config: SplitInputConfig,
 ) -> color_eyre::Result<ExitCode>
 where
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     let input = config.input;
@@ -339,7 +340,7 @@ fn run_merge_input_shares<P: Pairing + CircomArkworksPairingBridge>(
     config: MergeInputSharesConfig,
 ) -> color_eyre::Result<ExitCode>
 where
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     let inputs = config.inputs;
@@ -369,7 +370,7 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
 where
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     let input = config.input.clone();
@@ -407,7 +408,7 @@ fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: TranslateWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
 where
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     let witness = config.witness;

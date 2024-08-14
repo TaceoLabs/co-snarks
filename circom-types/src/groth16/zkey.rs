@@ -48,6 +48,8 @@ macro_rules! u32_to_usize {
 pub struct ZKey<P: Pairing> {
     /// amount of public inputs
     pub n_public: usize,
+    /// domain size
+    pub pow: usize,
     /// The underlying verification key.
     pub vk: VerifyingKey<P>,
     /// beta
@@ -89,6 +91,7 @@ struct HeaderGroth<P: Pairing> {
     n_vars: usize,
     n_public: usize,
     domain_size: u32,
+    pow: usize,
     alpha_g1: P::G1Affine,
     beta_g1: P::G1Affine,
     beta_g2: P::G2Affine,
@@ -228,6 +231,7 @@ where
 
         Ok(ZKey {
             n_public: header.n_public,
+            pow: u32_to_usize!(header.pow),
             beta_g1: header.beta_g1,
             delta_g1: header.delta_g1,
             // unwrap is fine, because we are guaranteed to have a Some value (rayon scope)
@@ -276,24 +280,30 @@ where
         let n_public = u32_to_usize!(u32::deserialize_uncompressed(&mut reader)?);
 
         let domain_size = u32::deserialize_uncompressed(&mut reader)?;
-
-        let alpha_g1 = P::g1_from_reader(&mut reader)?;
-        let beta_g1 = P::g1_from_reader(&mut reader)?;
-        let beta_g2 = P::g2_from_reader(&mut reader)?;
-        let gamma_g2 = P::g2_from_reader(&mut reader)?;
-        let delta_g1 = P::g1_from_reader(&mut reader)?;
-        let delta_g2 = P::g2_from_reader(&mut reader)?;
-        Ok(Self {
-            n_vars,
-            n_public,
-            domain_size,
-            alpha_g1,
-            beta_g1,
-            beta_g2,
-            gamma_g2,
-            delta_g1,
-            delta_g2,
-        })
+        if domain_size & (domain_size - 1) == 0 && domain_size > 0 {
+            let alpha_g1 = P::g1_from_reader(&mut reader)?;
+            let beta_g1 = P::g1_from_reader(&mut reader)?;
+            let beta_g2 = P::g2_from_reader(&mut reader)?;
+            let gamma_g2 = P::g2_from_reader(&mut reader)?;
+            let delta_g1 = P::g1_from_reader(&mut reader)?;
+            let delta_g2 = P::g2_from_reader(&mut reader)?;
+            Ok(Self {
+                n_vars,
+                pow: u32_to_usize!(domain_size.ilog2()),
+                n_public,
+                domain_size,
+                alpha_g1,
+                beta_g1,
+                beta_g2,
+                gamma_g2,
+                delta_g1,
+                delta_g2,
+            })
+        } else {
+            Err(ZKeyParserError::CorruptedBinFile(format!(
+                "Invalid domain size {domain_size}. Must be power of 2"
+            )))
+        }
     }
 }
 
@@ -316,7 +326,8 @@ mod tests {
 
     #[test]
     fn can_deser_bls12_381_mult2_key() {
-        let zkey = File::open("../test_vectors/Groth16/bls12_381/multiplier2.zkey").unwrap();
+        let zkey =
+            File::open("../test_vectors/Groth16/bls12_381/multiplier2/circuit.zkey").unwrap();
         let pk = ZKey::<Bls12_381>::from_reader(zkey).unwrap();
         let beta_g1 = test_utils::to_g1_bls12_381!(
             "3250926845764181697440489887589522470230793318088642572984668490087093900624850910545082127315229930931755140742241",
@@ -432,8 +443,7 @@ mod tests {
 
     #[test]
     fn can_deser_bn254_mult2_key() {
-        let zkey =
-            File::open("../test_vectors/Groth16/bn254/multiplier2/multiplier2.zkey").unwrap();
+        let zkey = File::open("../test_vectors/Groth16/bn254/multiplier2/circuit.zkey").unwrap();
         let pk = ZKey::<Bn254>::from_reader(zkey).unwrap();
         let beta_g1 = test_utils::to_g1_bn254!(
             "1436132865180440050058953936123839411531217265376140788508003974087015278078",

@@ -16,13 +16,10 @@ use co_groth16::{CoGroth16, Groth16};
 use co_plonk::{CoPlonk, Plonk};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::izip;
-use mpc_core::{
-    protocols::{
-        plain::PlainDriver,
-        rep3::{self, Rep3Protocol},
-        shamir::ShamirProtocol,
-    },
-    traits::FFTPostProcessing,
+use mpc_core::protocols::{
+    plain::PlainDriver,
+    rep3::{self, Rep3Protocol},
+    shamir::ShamirProtocol,
 };
 use rand::{distributions::Standard, prelude::Distribution, thread_rng, Rng};
 use std::fs::File;
@@ -39,7 +36,7 @@ fn witness_extension_no_bench<P>(
 ) -> SharedWitness<PlainDriver<P::ScalarField>, P>
 where
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + FFTPostProcessing + Clone,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + Clone,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {
@@ -70,7 +67,7 @@ fn groth16_proof_no_bench<P>(
 ) -> Groth16Proof<P>
 where
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + FFTPostProcessing + Clone,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + Clone,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {
@@ -87,7 +84,7 @@ fn plonk_proof_no_bench<P>(
 ) -> PlonkProof<P>
 where
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + FFTPostProcessing + Clone,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + Clone,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {
@@ -106,7 +103,7 @@ fn rep3_witness_extension<P>(
     name: &str,
 ) where
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + FFTPostProcessing + Clone,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + Clone,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {
@@ -181,7 +178,7 @@ fn groth16_rep3_proof<P>(
     name: &str,
 ) where
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + FFTPostProcessing + Clone,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + Clone,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {
@@ -233,7 +230,7 @@ fn groth16_shamir_proof<P>(
     name: &str,
 ) where
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + FFTPostProcessing + Clone,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + Clone,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {
@@ -283,7 +280,7 @@ fn groth16_verify<P>(
     name: &str,
 ) where
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + FFTPostProcessing + Clone,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + Clone,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {
@@ -306,7 +303,7 @@ fn plonk_rep3_proof<P>(
     name: &str,
 ) where
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + FFTPostProcessing + Clone,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + Clone,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {
@@ -358,7 +355,7 @@ fn plonk_shamir_proof<P>(
     name: &str,
 ) where
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + FFTPostProcessing + Clone,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + Clone,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {
@@ -408,7 +405,7 @@ fn plonk_verify<P>(
     name: &str,
 ) where
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + FFTPostProcessing + Clone,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + Clone,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {

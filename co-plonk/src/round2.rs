@@ -8,8 +8,7 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use circom_types::plonk::ZKey;
 use mpc_core::traits::{
-    FFTPostProcessing, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
-    PrimeFieldMpcProtocol,
+    FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
 use num_traits::One;
 
@@ -136,7 +135,7 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: FFTPostProcessing,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     // Computes the permutation polynomial z(X) (see https://eprint.iacr.org/2019/953.pdf)
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
@@ -313,21 +312,21 @@ pub mod tests {
 
     use super::Round1Challenges;
     use ark_ec::pairing::Pairing;
-    use num_traits::Zero;
     use std::str::FromStr;
     #[test]
     fn test_round2_multiplier2() {
         let mut driver = PlainDriver::<ark_bn254::Fr>::default();
         let mut reader = BufReader::new(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
         );
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
         let witness_file =
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns").unwrap();
+            File::open("../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let public_input = witness.values[..=zkey.n_public].to_vec();
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
-            public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
-            witness: vec![witness.values[2], witness.values[3]],
+            public_inputs: public_input.clone(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
@@ -338,8 +337,8 @@ pub mod tests {
         assert_eq!(
             round3.proof.commit_z,
             g1_from_xy!(
-                "5574875111303844252378699672712308687768010327704466055622950556219452742869",
-                "15676589633039825235097971178179209782631253490590073776572459393212028211154"
+                "21851995660159341992573113210608672476110709810652234421585224566450425950906",
+                "9396597540042847815549199092556045933393323370500084953024302516882239981142"
             )
         );
     }

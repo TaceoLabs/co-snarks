@@ -8,8 +8,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use circom_types::plonk::ZKey;
 use mpc_core::traits::{
-    FFTPostProcessing, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
-    PrimeFieldMpcProtocol,
+    FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
 use num_traits::One;
 use num_traits::Zero;
@@ -188,7 +187,7 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: FFTPostProcessing,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     fn get_z1(domains: &Domains<P::ScalarField>) -> [P::ScalarField; 4] {
         let zero = P::ScalarField::zero();
@@ -533,21 +532,21 @@ pub mod tests {
     }
 
     use ark_ec::pairing::Pairing;
-    use num_traits::Zero;
     use std::str::FromStr;
     #[test]
     fn test_round3_multiplier2() {
         let mut driver = PlainDriver::<ark_bn254::Fr>::default();
         let mut reader = BufReader::new(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
         );
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
         let witness_file =
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns").unwrap();
+            File::open("../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let public_input = witness.values[..=zkey.n_public].to_vec();
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
-            public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
-            witness: vec![witness.values[2], witness.values[3]],
+            public_inputs: public_input.clone(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
@@ -559,22 +558,22 @@ pub mod tests {
         assert_eq!(
             round4.proof.commit_t1,
             g1_from_xy!(
-                "10327706816981641898653936867326978572800462904089207833739215636683540834324",
-                "5337656652503503683213667702893053180738744977881846387675513182448211681026"
+                "14195659590223391588638033663362337117591990036333098666602164584829450067964",
+                "3556648023705175372561455635244621029434015848660599980046006090530807598362"
             )
         );
         assert_eq!(
             round4.proof.commit_t2,
             g1_from_xy!(
-                "11760191818256951290303960730312811023524308158422556533432353552006441425656",
-                "2617625258193625857175469343536625880680654033457634077015004216663787850740"
+                "3735872884021926351213137728148437717828227598563721199864822205706753909354",
+                "18937554230046023488342718793325695277505320264073327441600348965411357658388"
             )
         );
         assert_eq!(
             round4.proof.commit_t3,
             g1_from_xy!(
-                "15029731921448230484040702246894010251361328991865488980611537720038923147272",
-                "10245480538259328650381255483852509347189129783689746910480576260940917259993"
+                "16143856432987537130591639896375147783771732347095191085601174356801897211531",
+                "181289684093540268434296060454656362990106137005120511426963659280111589561"
             )
         );
     }

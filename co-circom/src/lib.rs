@@ -1,5 +1,6 @@
 #![warn(missing_docs)]
 //! This crate provides a binary and associated helper library for running collaborative SNARK proofs.
+use mpc_core::traits::FFTPostProcessing;
 use std::{io::Read, path::PathBuf, time::Instant};
 
 use ark_ec::pairing::Pairing;
@@ -23,7 +24,7 @@ use mpc_core::{
         network::{Rep3MpcNet, Rep3Network},
         Rep3Protocol,
     },
-    traits::{FFTPostProcessing, PrimeFieldMpcProtocol},
+    traits::PrimeFieldMpcProtocol,
 };
 use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};

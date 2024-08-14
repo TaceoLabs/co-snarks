@@ -5,9 +5,7 @@ use crate::{
     PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
-use mpc_core::traits::{
-    FFTPostProcessing, FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
-};
+use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 
 // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
 pub(super) struct Round4<'a, T, P: Pairing>
@@ -98,7 +96,7 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: FFTPostProcessing,
+    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
     pub(super) fn round4(self) -> PlonkProofResult<Round5<'a, T, P>> {
@@ -159,21 +157,21 @@ pub mod tests {
 
     use crate::round1::{Round1, Round1Challenges};
 
-    use num_traits::Zero;
     use std::str::FromStr;
     #[test]
     fn test_round4_multiplier2() {
         let mut driver = PlainDriver::<ark_bn254::Fr>::default();
         let mut reader = BufReader::new(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
         );
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
         let witness_file =
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns").unwrap();
+            File::open("../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let public_input = witness.values[..=zkey.n_public].to_vec();
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
-            public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
-            witness: vec![witness.values[2], witness.values[3]],
+            public_inputs: public_input.clone(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
@@ -186,42 +184,42 @@ pub mod tests {
         assert_eq!(
             round5.proof.eval_a,
             ark_bn254::Fr::from_str(
-                "3430011786334600582765929780190661183634261934757573328619865380969138236677"
+                "9577617118727487156038114503197927927393325100881782676071854181913228129519"
             )
             .unwrap()
         );
         assert_eq!(
             round5.proof.eval_b,
             ark_bn254::Fr::from_str(
-                "1699629075446766397944461918145382951019648391577272303690098939545886956042"
+                "20597878711220885145139457487405665380092038394343281979206937623212519986448"
             )
             .unwrap()
         );
         assert_eq!(
             round5.proof.eval_c,
             ark_bn254::Fr::from_str(
-                "2192737627010718547267566060343416780409706320863686367548472523096522236916"
+                "15265494263612694384441473331344570152140354050926476508657731330784430744915"
             )
             .unwrap()
         );
         assert_eq!(
             round5.proof.eval_zw,
             ark_bn254::Fr::from_str(
-                "11737693650123103476561659162132287707878231403214559741701695144617250521467"
+                "13208748067365350181326696119359571057028048827339239951085850234164749233153"
             )
             .unwrap()
         );
         assert_eq!(
             round5.proof.eval_s1,
             ark_bn254::Fr::from_str(
-                "16983004294970120469188027322411312724876163529574499048548162072264083360228"
+                "14333100636430622287126878289812189552775054994479690945797668457655414216377"
             )
             .unwrap()
         );
         assert_eq!(
             round5.proof.eval_s2,
             ark_bn254::Fr::from_str(
-                "19681695700163968683700376354652917952592916721995393420603324391456988690751"
+                "5227675743165392606371559215386333900775466821923985579976650047914227054429"
             )
             .unwrap()
         );
