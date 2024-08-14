@@ -229,8 +229,10 @@ mod test {
 
     #[test]
     fn can_serde_vk_bls12_381() {
-        let vk_string =
-            fs::read_to_string("../test_vectors/Groth16/bls12_381/verification_key.json").unwrap();
+        let vk_string = fs::read_to_string(
+            "../test_vectors/Groth16/bls12_381/multiplier2/verification_key.json",
+        )
+        .unwrap();
         let vk = serde_json::from_str::<JsonVerificationKey<Bls12_381>>(&vk_string).unwrap();
         let alpha_1 = test_utils::to_g1_bls12_381!(
             "573513743870798705896078935465463988747193691665514373553428213826028808426481266659437596949247877550493216010640",

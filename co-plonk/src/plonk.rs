@@ -286,15 +286,15 @@ pub mod tests {
     #[test]
     pub fn calculate_verifier_challenges() {
         let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/verification_key.json").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/verification_key.json").unwrap(),
         )
         .unwrap();
         let proof: PlonkProof<Bn254> = serde_json::from_reader(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/circom.proof").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/circom.proof").unwrap(),
         )
         .unwrap();
         let public_inputs: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/public.json").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/public.json").unwrap(),
         )
         .unwrap();
 
@@ -302,39 +302,39 @@ pub mod tests {
         assert_eq!(
             challenges.alpha,
             ark_bn254::Fr::from_str(
-                "15671686582917654457673979066076453089160319530775888548203655564244609989010"
+                "4763880717866883938312853446651867584882243039496717119981221423729366022837"
             )
             .unwrap()
         );
         assert_eq!(
             challenges.beta,
             ark_bn254::Fr::from_str(
-                "3263596124809895505836166591524490347058299776658091330921253084650986734968"
+                "21441108096646375017416196030970784867168559532405066373711898693160482621553"
             )
             .unwrap()
         );
         assert_eq!(
             challenges.gamma,
             ark_bn254::Fr::from_str(
-                "5067097558220314492899237494212876670476725908978950335663392883732324945306"
+                "18358340056223774859544506185831433076440067236582749990986245668953309272283"
             )
             .unwrap()
         );
         assert_eq!(
             challenges.xi,
             ark_bn254::Fr::from_str(
-                "3112051444889417241969819747591049287576627682236445513762445924191561705445"
+                "7090361968641770615455554153830816431169048885260030244909139672173927785729"
             )
             .unwrap()
         );
         assert_eq!(
             challenges.v.to_vec(),
             vec![
-                "19611229682101317528275240009855809914391062754050500133834153708898530490155",
-                "4748783812041143390637207905098578563169927926236635348130330468945662641652",
-                "5199380753164799358017571952644889432804973357781520358621237112694681049584",
-                "19012210024703196990299057573623189786858603305437590364879974525894752886774",
-                "5385442044724577504962048101695566214714730673101096202581966373431715274981"
+                "20400998993179279999961662359284658174039203383603729825079844045891169320886",
+                "14103303087679005329613195828482967369227712227612956336575014332581057266451",
+                "21001079402417908449694312728019684919907988335857152136145617358865414540686",
+                "4101776369377085261955299986018358717882425962862873747599549657644387577706",
+                "2709069871665560223395972486266890200809234039251701259320531117604850964887"
             ]
             .into_iter()
             .map(|s| ark_bn254::Fr::from_str(s).unwrap())
@@ -343,7 +343,7 @@ pub mod tests {
         assert_eq!(
             challenges.u,
             ark_bn254::Fr::from_str(
-                "13376185761335708482939014433471747421911583656433513500358285265522128506177"
+                "13260637895132000183831258130762201406791497612259050836989270998713858775580"
             )
             .unwrap()
         );
@@ -352,15 +352,15 @@ pub mod tests {
     #[test]
     pub fn verify_multiplier2_from_circom() {
         let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/verification_key.json").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/verification_key.json").unwrap(),
         )
         .unwrap();
         let proof: PlonkProof<Bn254> = serde_json::from_reader(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/circom.proof").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/circom.proof").unwrap(),
         )
         .unwrap();
         let public_inputs: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/public.json").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/public.json").unwrap(),
         )
         .unwrap();
         assert!(Plonk::verify(&vk, &proof, &public_inputs.values).unwrap());

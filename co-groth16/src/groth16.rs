@@ -1,6 +1,7 @@
 //! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::Field;
 use ark_ff::{FftField, PrimeField};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::{ConstraintMatrices, SynthesisError};

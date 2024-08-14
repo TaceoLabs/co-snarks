@@ -9,9 +9,9 @@ use ark_groth16::Proof;
 use ark_groth16::VerifyingKey;
 use circom_types::groth16::{Groth16Proof, JsonVerificationKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
-use mpc_core::traits::FFTPostProcessing;
 
 use ark_groth16::Groth16 as ArkworksGroth16;
+use mpc_core::traits::FFTPostProcessing;
 
 impl<P: Pairing> Groth16<P>
 where

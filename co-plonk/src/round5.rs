@@ -91,10 +91,9 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: FFTPostProcessing,
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
 {
     fn div_by_zerofier(
         driver: &mut T,
@@ -372,21 +371,21 @@ pub mod tests {
     }
 
     use ark_ec::pairing::Pairing;
-    use num_traits::Zero;
     use std::str::FromStr;
     #[test]
     fn test_round5_multiplier2() {
         let mut driver = PlainDriver::<ark_bn254::Fr>::default();
         let mut reader = BufReader::new(
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2.zkey").unwrap(),
+            File::open("../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
         );
         let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
         let witness_file =
-            File::open("../test_vectors/Plonk/bn254/multiplierAdd2/multiplier2_wtns.wtns").unwrap();
+            File::open("../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+        let public_input = witness.values[..=zkey.n_public].to_vec();
         let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
-            public_inputs: vec![ark_bn254::Fr::zero(), witness.values[1]],
-            witness: vec![witness.values[2], witness.values[3]],
+            public_inputs: public_input.clone(),
+            witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
@@ -400,15 +399,15 @@ pub mod tests {
         assert_eq!(
             proof.wxi,
             g1_from_xy!(
-                "3292767214650263304601147575856984083102837722826129302661818970277712707715",
-                "13954529200362613199862523870019450310343466553969542497757926606066516765671"
+                "17714933343167283383757911844657193439824158284537335005582807825912982308761",
+                "10956622068891399683012461981563789956666325407769410657364052444385845871778"
             )
         );
         assert_eq!(
             proof.wxiw,
             g1_from_xy!(
-                "21361126500749286601503180165079414385257920402817118704862447778155277898618",
-                "6092260659479133310714839220330209742662792859500278921811802838486118363006"
+                "11975595019949715918668172153793336705506375746143971491421022814159658028345",
+                "21836122222240321064812409945656239690711148338716835775906941056446809090474"
             )
         );
     }
