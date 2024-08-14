@@ -1,3 +1,5 @@
+export CARGO_TERM_QUIET=true
+
 exit_code=0
 
 for f in run_*.sh; do
