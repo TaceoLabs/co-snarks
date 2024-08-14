@@ -5,6 +5,7 @@
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/gWZW2TANpk)
 
 [![docs.io](https://img.shields.io/badge/coCircom-docs-green)](https://docs.taceo.io/)
+
 <!--[![crates.io](https://img.shields.io/badge/crates.io-v0.1.0-blue)](https://crates.io/)-->
 
 **coCircom** is a tool for building **coSNARKs**, a new technology that enables
@@ -15,7 +16,7 @@ coCircom, all existing circom circuits can be promoted to coSNARKs without any
 modification to the original circuit.
 
 Additionally, coCircom is fully compatible with the **Groth16** and **Plonk** backends of
-[snarkjs](https://github.com/iden3/snarkjs), the native proofing systems for
+[snarkjs](https://github.com/iden3/snarkjs), the native proving systems for
 circom. Proofs built with coCircom can be verified using snarkjs, and vice
 versa.
 
@@ -27,9 +28,9 @@ The project is built with pure Rust and consists of multiple libraries:
   circom file.
 - **circom-types**: A library for serialization and deserialization of snarkjs
   artifacts, such as ZKeys and R1CS files.
-- **co-groth16**: A library for verifying and proofing a Groth16
+- **co-groth16**: A library for verifying and proving a Groth16
   coSNARK, verifiable by snarkjs.
-- **co-plonk**: A library for verifying and proofing a Plonk
+- **co-plonk**: A library for verifying and proving a Plonk
   coSNARK, verifiable by snarkjs.
 - **co-circom-snarks**: A library for the shared code of co-plonk and co-groth16.
 
@@ -239,6 +240,7 @@ For more examples, please refer to the
 there that demonstrate all the necessary steps, as well as scripts for using Plonk instead of Groth16.
 
 ## Contributing
+
 If you would like to contribute to the project, please refer to the [contribution page](CONTRIBUTING.md).
 
 ## License
