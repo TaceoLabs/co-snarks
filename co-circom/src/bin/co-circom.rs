@@ -541,7 +541,7 @@ where
             public_input
         }
         ProofSystem::Plonk => {
-            let pk = PlonkZKey::<P>::from_reader(zkey_file).unwrap();
+            let pk = PlonkZKey::<P>::from_reader(zkey_file).context("while parsing zkey")?;
 
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
