@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.3.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-vm-v0.2.0...circom-mpc-vm-v0.3.0) (2024-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* moved common code for PLONK and Groth16 into separate crate. Most notably the SharedWitness and SharedInput
+* Make MPC-VM thread safe and implement better Clone for shared inputs and witnesses ([#158](https://github.com/TaceoLabs/collaborative-circom/issues/158))
+* new config implementation, config option to allow leaking of secret values in logs ([#132](https://github.com/TaceoLabs/collaborative-circom/issues/132))
+* the function signature of the two run methods of the witness extension now changed. To retrieve the shared witness now another call `into_shared_witness()` is necessary.
+
+### Features
+
+* can now retrieve certain outputs after witness extension by name ([d9e3399](https://github.com/TaceoLabs/collaborative-circom/commit/d9e33996d10cea5f8197d507a13ed9087f0f4c20))
+* Make MPC-VM thread safe and implement better Clone for shared inputs and witnesses ([#158](https://github.com/TaceoLabs/collaborative-circom/issues/158)) ([a7ab3bb](https://github.com/TaceoLabs/collaborative-circom/commit/a7ab3bbecd93b393c08e18d8ea89a64a25bac3a3))
+* plonk support ([9b65797](https://github.com/TaceoLabs/collaborative-circom/commit/9b6579724f6f5ba4fc6af8a98d386b96818dc08b))
+
+
+### Bug Fixes
+
+* **docs:** added &gt; for a block because of clippy ([f054999](https://github.com/TaceoLabs/collaborative-circom/commit/f054999ce60ddb3ef61bfdd5fe0b294919eacf3b))
+
+
+### Code Refactoring
+
+* added new crate co-circom-snarks ([ea3190f](https://github.com/TaceoLabs/collaborative-circom/commit/ea3190f4d731893e6fcce71976c32b3bbac6b89b))
+* new config implementation, config option to allow leaking of secret values in logs ([#132](https://github.com/TaceoLabs/collaborative-circom/issues/132)) ([964b04f](https://github.com/TaceoLabs/collaborative-circom/commit/964b04f47e8d491ae140cb7c10c596e1c40b6b5c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.2.1 to 0.3.0
+
 ## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-vm-v0.1.1...circom-mpc-vm-v0.2.0) (2024-07-10)
 
 
