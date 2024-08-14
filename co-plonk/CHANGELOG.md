@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-plonk-v0.1.0...co-plonk-v0.2.0) (2024-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* We renamed all crate names from collaborative-* to co-* for brevity, and also shortened `Collaborative` to `Co` in many types.
+
+### Code Refactoring
+
+* renamed crates to co-* ([#161](https://github.com/TaceoLabs/collaborative-circom/issues/161)) ([37f3493](https://github.com/TaceoLabs/collaborative-circom/commit/37f3493b25e41b43bbc8a89e281ae2dcb4b95484))
+
 ## 0.1.0 (2024-08-14)
 
 
