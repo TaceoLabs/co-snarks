@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-compiler-v0.4.0...circom-mpc-compiler-v0.5.0) (2024-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* We renamed all crate names from collaborative-* to co-* for brevity, and also shortened `Collaborative` to `Co` in many types.
+
+### Code Refactoring
+
+* renamed crates to co-* ([#161](https://github.com/TaceoLabs/collaborative-circom/issues/161)) ([37f3493](https://github.com/TaceoLabs/collaborative-circom/commit/37f3493b25e41b43bbc8a89e281ae2dcb4b95484))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-vm bumped from 0.3.0 to 0.4.0
+  * dev-dependencies
+    * co-groth16 bumped from 0.3.0 to 0.4.0
+
 ## [0.4.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-compiler-v0.3.0...circom-mpc-compiler-v0.4.0) (2024-08-14)
 
 

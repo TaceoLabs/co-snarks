@@ -6,6 +6,17 @@
     * mpc-core bumped from 0.2.0 to 0.2.1
     * mpc-net bumped from 0.1.1 to 0.1.2
 
+## [0.4.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-groth16-v0.3.0...co-groth16-v0.4.0) (2024-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* We renamed all crate names from collaborative-* to co-* for brevity, and also shortened `Collaborative` to `Co` in many types.
+
+### Code Refactoring
+
+* renamed crates to co-* ([#161](https://github.com/TaceoLabs/collaborative-circom/issues/161)) ([37f3493](https://github.com/TaceoLabs/collaborative-circom/commit/37f3493b25e41b43bbc8a89e281ae2dcb4b95484))
+
 ## [0.3.0](https://github.com/TaceoLabs/collaborative-circom/compare/collaborative-groth16-v0.2.1...collaborative-groth16-v0.3.0) (2024-08-14)
 
 
