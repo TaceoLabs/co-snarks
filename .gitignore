@@ -14,4 +14,4 @@ Cargo.lock
 *.pdb
 
 .vscode
-collaborative-groth16/src/bin/
+co-groth16/src/bin/

@@ -27,9 +27,9 @@ The project is built with pure Rust and consists of multiple libraries:
   circom file.
 - **circom-types**: A library for serialization and deserialization of snarkjs
   artifacts, such as ZKeys and R1CS files.
-- **collaborative-groth16**: A library for verifying and proofing a Groth16
+- **co-groth16**: A library for verifying and proofing a Groth16
   coSNARK, verifiable by snarkjs.
-- **collaborative-plonk**: A library for verifying and proofing a Plonk
+- **co-plonk**: A library for verifying and proofing a Plonk
   coSNARK, verifiable by snarkjs.
 
 The following libraries are agnostic to coCircom and will be used in the future
@@ -39,7 +39,7 @@ for other coSNARKs:
 - **mpc-net**: Network library for MPC protocols.
 
 The binary `co-circom` is a CLI tool that uses the libraries to build a coSNARK
-(source found in the **collaborative-circom** folder).
+(source found in the **co-circom** folder).
 
 ## Installation
 
@@ -73,13 +73,13 @@ chmod +x co-circom
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/TaceoLabs/collaborative-circom.github
+git clone https://github.com/TaceoLabs/co-circom.github
 ```
 
 2. Build the project:
 
 ```bash
-cd collaborative-circom && cargo build --release
+cd co-circom && cargo build --release
 ```
 
 3. You can find the binary in the `target/release` directory.
@@ -197,8 +197,8 @@ To generate the witness, we execute the circuit with the secret-shared input
 obtained from the previous step. Additionally, computing nodes require
 networking configuration files and TLS key material. Examples of these
 configurations can be found in the
-[configs](/collaborative-circom/examples/configs) and key materials in the
-[keys](/collaborative-circom/examples/data) directory. Refer to our
+[configs](/co-circom/examples/configs) and key materials in the
+[keys](/co-circom/examples/data) directory. Refer to our
 [documentation](https://docs.taceo.io/network-config.html) for detailed
 configuration instructions.
 
@@ -234,7 +234,7 @@ for using coCircom:
 **Note**: The `verification_key.json` was generated in Step 2.
 
 For more examples, please refer to the
-[examples folder](/collaborative-circom/examples/). You'll find bash scripts
+[examples folder](/co-circom/examples/). You'll find bash scripts
 there that demonstrate all the necessary steps, as well as scripts for using Plonk instead of Groth16.
 
 ## License
@@ -248,7 +248,7 @@ Select sub-libraries within this project have different licenses, reflecting
 their dependencies on
 [circom](https://github.com/iden3/circom?tab=GPL-3.0-1-ov-file).
 
-- **collaborative-circom**: Licensed under [GPL-3.0](LICENSE.GPL) `SPDX-License-Identifier: GPL-3.0-only`.
+- **co-circom**: Licensed under [GPL-3.0](LICENSE.GPL) `SPDX-License-Identifier: GPL-3.0-only`.
 - **circom-mpc-compiler**: Licensed under [GPL-3.0](LICENSE.GPL) `SPDX-License-Identifier: GPL-3.0-only`.
 
 ## Disclaimer

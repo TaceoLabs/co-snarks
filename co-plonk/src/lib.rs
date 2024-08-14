@@ -13,13 +13,15 @@ use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
 
-pub mod plonk;
+mod plonk;
 mod round1;
 mod round2;
 mod round3;
 mod round4;
 mod round5;
 pub(crate) mod types;
+
+pub use plonk::Plonk;
 
 type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
@@ -44,7 +46,7 @@ pub enum PlonkProofError {
 }
 
 /// A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
-pub struct CollaborativePlonk<T, P: Pairing>
+pub struct CoPlonk<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -57,7 +59,7 @@ where
     phantom_data: PhantomData<P>,
 }
 
-impl<T, P> CollaborativePlonk<T, P>
+impl<T, P> CoPlonk<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -68,7 +70,7 @@ where
     P: Pairing + CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
-    /// Creates a new [CollaborativePlonk] protocol with a given MPC driver.
+    /// Creates a new [CoPlonk] protocol with a given MPC driver.
     pub fn new(driver: T) -> Self {
         Self {
             driver,

@@ -1,13 +1,13 @@
 #![warn(missing_docs)]
-//! This crate defines a [`Compiler`](CollaborativeCircomCompiler), which compiles `.circom` files into proprietary bytecode for the [`circom MPC-VM`](circom_mpc_vm).
+//! This crate defines a [`Compiler`](CoCircomCompiler), which compiles `.circom` files into proprietary bytecode for the [`circom MPC-VM`](circom_mpc_vm).
 //!
-//! The MPC-VM then executes the bytecode and performs the [witness extension](https://docs.circom.io/getting-started/computing-the-witness/) in MPC (Multiparty Computation). This crate provides a [`CompilerBuilder`] for convenient construction of the [`CollaborativeCircomCompiler`].
+//! The MPC-VM then executes the bytecode and performs the [witness extension](https://docs.circom.io/getting-started/computing-the-witness/) in MPC (Multiparty Computation). This crate provides a [`CompilerBuilder`] for convenient construction of the [`CoCircomCompiler`].
 //!
 //! The compiler and the VM are generic over a [`Pairing`](https://docs.rs/ark-ec/latest/ark_ec/pairing/trait.Pairing.html). Currently, we support the curves `bn254` and `bls12-381`.
 //!
 //! # Examples
 //!
-//! To instantiate the [`CollaborativeCircomCompiler`], first create a [`CompilerBuilder`]. In this example, we use the curve `bn254` and link external libraries such as those
+//! To instantiate the [`CoCircomCompiler`], first create a [`CompilerBuilder`]. In this example, we use the curve `bn254` and link external libraries such as those
 //!  from [`circomlib`](https://github.com/iden3/circomlib/).
 //!
 //! Finally, we build the compiler and parse the circuit:
@@ -32,7 +32,7 @@
 //!     .parse();
 //! ```
 //!
-//! The [`parse()`](CollaborativeCircomCompiler::parse) method consumes the compiler and returns an instance of [`CollaborativeCircomCompilerParsed`].
+//! The [`parse()`](CoCircomCompiler::parse) method consumes the compiler and returns an instance of [`CoCircomCompilerParsed`].
 //! Refer to its documentation to learn how to create an MPC-VM for the witness extension.
 use ark_ec::pairing::Pairing;
 use circom_compiler::{
@@ -49,7 +49,7 @@ use circom_compiler::{
 use circom_constraint_generation::BuildConfig;
 use circom_mpc_vm::{
     op_codes::{CodeBlock, MpcOpCode},
-    types::{CollaborativeCircomCompilerParsed, FunDecl, OutputMapping, TemplateDecl},
+    types::{CoCircomCompilerParsed, FunDecl, OutputMapping, TemplateDecl},
 };
 use circom_program_structure::{
     ast::SignalType, error_definition::Report, program_archive::ProgramArchive,
@@ -70,7 +70,7 @@ pub struct CompilerConfig {
     pub allow_leaky_loops: bool,
 }
 
-/// A builder to create a [`CollaborativeCircomCompiler`].
+/// A builder to create a [`CoCircomCompiler`].
 ///
 /// This builder allows configuring the compiler with options such as linking external libraries.
 /// For future releases, additional flags defined by [circom](https://docs.circom.io/getting-started/compilation-options/)
@@ -107,7 +107,7 @@ pub struct CompilerBuilder<P: Pairing> {
 /// The constructed compiler.
 ///
 /// See [`CompilerBuilder`] on how to create the compiler.
-pub struct CollaborativeCircomCompiler<P: Pairing> {
+pub struct CoCircomCompiler<P: Pairing> {
     file: String,
     version: String,
     link_libraries: Vec<PathBuf>,
@@ -166,9 +166,9 @@ impl<P: Pairing> CompilerBuilder<P> {
         self
     }
 
-    /// Consumes the builder and creates a new [CollaborativeCircomCompiler].
-    pub fn build(self) -> CollaborativeCircomCompiler<P> {
-        CollaborativeCircomCompiler {
+    /// Consumes the builder and creates a new [CoCircomCompiler].
+    pub fn build(self) -> CoCircomCompiler<P> {
+        CoCircomCompiler {
             file: self.file,
             version: self.version,
             link_libraries: self.link_libraries,
@@ -181,7 +181,7 @@ impl<P: Pairing> CompilerBuilder<P> {
     }
 }
 
-impl<P: Pairing> CollaborativeCircomCompiler<P> {
+impl<P: Pairing> CoCircomCompiler<P> {
     fn get_program_archive(&self) -> Result<ProgramArchive> {
         match circom_parser::run_parser(
             self.file.clone(),
@@ -621,7 +621,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         }
     }
 
-    /// Consumes the [`CollaborativeCircomCompiler`] and returns a `Result<Vec<String>>`
+    /// Consumes the [`CoCircomCompiler`] and returns a `Result<Vec<String>>`
     /// containing all public inputs from the provided .circom file.
     ///
     /// This method is useful when secret-sharing the input.
@@ -637,16 +637,16 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
         Ok(program_archive.public_inputs)
     }
 
-    /// Consumes the [`CollaborativeCircomCompiler`] and returns a `Result` of [`CollaborativeCircomCompilerParsed`].
+    /// Consumes the [`CoCircomCompiler`] and returns a `Result` of [`CoCircomCompilerParsed`].
     ///
     /// # Returns
     ///
     /// Returns a `Result` where:
     ///
     /// - `Ok(parsed)` contains the parsed compiler, which can be used to construct the MPC-VM.
-    ///   Refer to its [documentation](CollaborativeCircomCompilerParsed) for usage details.
+    ///   Refer to its [documentation](CoCircomCompilerParsed) for usage details.
     /// - `Err(err)` indicates an error occurred during parsing or compilation.
-    pub fn parse(mut self) -> Result<CollaborativeCircomCompilerParsed<P>> {
+    pub fn parse(mut self) -> Result<CoCircomCompilerParsed<P>> {
         let program_archive = self.get_program_archive()?;
         let (circuit, output_mapping) = self.build_circuit(program_archive)?;
         let constant_table = circuit
@@ -704,7 +704,7 @@ impl<P: Pairing> CollaborativeCircomCompiler<P> {
             );
         }
 
-        Ok(CollaborativeCircomCompilerParsed::new(
+        Ok(CoCircomCompilerParsed::new(
             circuit.c_producer.main_header,
             circuit.c_producer.total_number_of_signals,
             constant_table,

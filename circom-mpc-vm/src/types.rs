@@ -90,7 +90,7 @@ pub(crate) type InputList = Vec<(String, usize, usize)>;
 /// The struct provides certain methods to consume it and create an
 /// [MPC-VM](WitnessExtension).
 #[derive(Clone)]
-pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
+pub struct CoCircomCompilerParsed<P: Pairing> {
     pub(crate) main: String,
     pub(crate) amount_signals: usize,
     pub(crate) constant_table: Vec<P::ScalarField>,
@@ -104,7 +104,7 @@ pub struct CollaborativeCircomCompilerParsed<P: Pairing> {
     pub(crate) output_mapping: OutputMapping,
 }
 
-impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
+impl<P: Pairing> CoCircomCompilerParsed<P> {
     /// > **Warning**: DO NOT CALL THIS DIRECTLY! This struct is intended for internal use by the compiler crate
     /// > and should not be instantiated directly. It is publicly visible due to requirements imposed by licensing constraints.
     #[allow(clippy::too_many_arguments)]
@@ -139,7 +139,7 @@ impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
 
 //TODO: Add another builder step here?
 //ParserCompiler -> into Rep3/Shamir -> build
-impl<P: Pairing> CollaborativeCircomCompilerParsed<P> {
+impl<P: Pairing> CoCircomCompilerParsed<P> {
     /// Consumes `self` and constructs an instance of [`PlainWitnessExtension`].
     ///
     /// The plain witness extension allows local execution of the witness extension without

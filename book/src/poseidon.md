@@ -4,7 +4,7 @@
 function optimized for efficiency in ZK. Circom comes with an
 [implementation of Poseidon](https://github.com/iden3/circomlib/blob/master/circuits/poseidon.circom)
 that can be used in
-[your circuits](https://github.com/TaceoLabs/collaborative-circom/blob/main/collaborative-circom/examples/test_vectors/poseidon/circuit.circom).
+[your circuits](https://github.com/TaceoLabs/collaborative-circom/blob/main/co-circom/examples/test_vectors/poseidon/circuit.circom).
 
 The Poseidon sponge construction takes inputs from a prime field and produces a
 single output element from the same field. In this example, we process two field
@@ -13,7 +13,7 @@ inputs originating from the same party.
 
 To quickly get started, we provide a bash script that runs the Poseidon circuit
 using co-circom. After cloning the repository, navigate to the
-`/collaborative-circom/examples` directory and execute the following command:
+`/co-circom/examples` directory and execute the following command:
 
 ```bash
 sh run_full_poseidon.sh

@@ -5,7 +5,7 @@ use circom_types::{
     R1CS,
 };
 use co_circom_snarks::SharedWitness;
-use collaborative_groth16::groth16::{CollaborativeGroth16, Groth16};
+use co_groth16::{CoGroth16, Groth16};
 use itertools::izip;
 use mpc_core::protocols::rep3::Rep3Protocol;
 use rand::thread_rng;
@@ -36,10 +36,8 @@ fn e2e_proof_poseidon_bn254() {
     ) {
         threads.push(thread::spawn(move || {
             let rep3 = Rep3Protocol::<ark_bn254::Fr, PartyTestNetwork>::new(net).unwrap();
-            let mut prover = CollaborativeGroth16::<
-                Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>,
-                Bn254,
-            >::new(rep3);
+            let mut prover =
+                CoGroth16::<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>::new(rep3);
             prover.prove(&zkey, x).unwrap()
         }));
     }

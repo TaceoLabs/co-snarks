@@ -4,6 +4,8 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use circom_mpc_compiler::CompilerBuilder;
 use circom_types::R1CS;
+use num_traits::Zero;
+
 use circom_types::{
     groth16::{
         Groth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, ZKey as Groth16ZKey,
@@ -13,25 +15,26 @@ use circom_types::{
     Witness,
 };
 use clap::{Parser, Subcommand};
+use co_circom::GenerateProofCli;
+use co_circom::GenerateProofConfig;
+use co_circom::GenerateWitnessCli;
+use co_circom::GenerateWitnessConfig;
+use co_circom::MergeInputSharesCli;
+use co_circom::MergeInputSharesConfig;
+use co_circom::SplitInputCli;
+use co_circom::SplitInputConfig;
+use co_circom::SplitWitnessCli;
+use co_circom::SplitWitnessConfig;
+use co_circom::TranslateWitnessCli;
+use co_circom::TranslateWitnessConfig;
+use co_circom::VerifyCli;
+use co_circom::VerifyConfig;
+use co_circom::{file_utils, MPCCurve, MPCProtocol, ProofSystem};
 use co_circom_snarks::{SharedInput, SharedWitness};
-use collaborative_circom::GenerateProofCli;
-use collaborative_circom::GenerateProofConfig;
-use collaborative_circom::GenerateWitnessCli;
-use collaborative_circom::GenerateWitnessConfig;
-use collaborative_circom::MergeInputSharesCli;
-use collaborative_circom::MergeInputSharesConfig;
-use collaborative_circom::SplitInputCli;
-use collaborative_circom::SplitInputConfig;
-use collaborative_circom::SplitWitnessCli;
-use collaborative_circom::SplitWitnessConfig;
-use collaborative_circom::TranslateWitnessCli;
-use collaborative_circom::TranslateWitnessConfig;
-use collaborative_circom::VerifyCli;
-use collaborative_circom::VerifyConfig;
-use collaborative_circom::{file_utils, MPCCurve, MPCProtocol, ProofSystem};
-use collaborative_groth16::groth16::CollaborativeGroth16;
-use collaborative_groth16::groth16::Groth16;
-use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};
+use co_groth16::CoGroth16;
+use co_groth16::Groth16;
+use co_plonk::CoPlonk;
+use co_plonk::Plonk;
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::rep3::network::Rep3Network;
 use mpc_core::protocols::shamir::network::ShamirNetwork;
@@ -43,7 +46,7 @@ use mpc_core::{
     traits::{FFTPostProcessing, PrimeFieldMpcProtocol},
 };
 use num_bigint::BigUint;
-use num_traits::{identities::Zero, Num};
+use num_traits::Num;
 use std::time::Instant;
 use std::{
     fs::File,
@@ -387,15 +390,11 @@ where
     // parse input shares
     let input_share_file =
         BufReader::new(File::open(&input).context("while opening input share file")?);
-    let input_share = collaborative_circom::parse_shared_input(input_share_file)?;
+    let input_share = co_circom::parse_shared_input(input_share_file)?;
 
     // Extend the witness
-    let result_witness_share = collaborative_circom::generate_witness_rep3::<P>(
-        circuit,
-        link_library,
-        input_share,
-        config,
-    )?;
+    let result_witness_share =
+        co_circom::generate_witness_rep3::<P>(circuit, link_library, input_share, config)?;
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -425,7 +424,7 @@ where
     let witness_file =
         BufReader::new(File::open(witness).context("trying to open witness share file")?);
     let witness_share: SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P> =
-        collaborative_circom::parse_witness_share(witness_file)?;
+        co_circom::parse_witness_share(witness_file)?;
 
     // connect to network
     let net = Rep3MpcNet::new(config.network)?;
@@ -487,7 +486,7 @@ where
                         return Err(eyre!("REP3 only allows the threshold to be 1"));
                     }
 
-                    let witness_share = collaborative_circom::parse_witness_share(witness_file)?;
+                    let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
                     // connect to network
                     let net = Rep3MpcNet::new(config.network)?;
@@ -496,7 +495,7 @@ where
                     // init MPC protocol
                     let protocol = Rep3Protocol::new(net)?;
 
-                    let mut prover = CollaborativeGroth16::new(protocol);
+                    let mut prover = CoGroth16::new(protocol);
 
                     // execute prover in MPC
                     let start = Instant::now();
@@ -507,7 +506,7 @@ where
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    let witness_share = collaborative_circom::parse_witness_share(witness_file)?;
+                    let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     // connect to network
@@ -517,7 +516,7 @@ where
                     // init MPC protocol
                     let protocol = ShamirProtocol::new(t, net)?;
 
-                    let mut prover = CollaborativeGroth16::new(protocol);
+                    let mut prover = CoGroth16::new(protocol);
 
                     // execute prover in MPC
                     let start = Instant::now();
@@ -550,7 +549,7 @@ where
                         return Err(eyre!("REP3 only allows the threshold to be 1"));
                     }
 
-                    let witness_share = collaborative_circom::parse_witness_share(witness_file)?;
+                    let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
                     // connect to network
                     let net = Rep3MpcNet::new(config.network)?;
@@ -559,7 +558,7 @@ where
                     // init MPC protocol
                     let protocol = Rep3Protocol::new(net)?;
 
-                    let prover = CollaborativePlonk::new(protocol);
+                    let prover = CoPlonk::new(protocol);
 
                     // execute prover in MPC
                     let start = Instant::now();
@@ -569,7 +568,7 @@ where
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    let witness_share = collaborative_circom::parse_witness_share(witness_file)?;
+                    let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     // connect to network
@@ -579,7 +578,7 @@ where
                     // init MPC protocol
                     let protocol = ShamirProtocol::new(t, net)?;
 
-                    let prover = CollaborativePlonk::new(protocol);
+                    let prover = CoPlonk::new(protocol);
 
                     // execute prover in MPC
                     let start = Instant::now();

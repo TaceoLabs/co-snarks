@@ -1,6 +1,4 @@
-use crate::types::{
-    CollaborativeCircomCompilerParsed, FunDecl, InputList, OutputMapping, TemplateDecl,
-};
+use crate::types::{CoCircomCompilerParsed, FunDecl, InputList, OutputMapping, TemplateDecl};
 
 use super::accelerator::MpcAccelerator;
 use super::{
@@ -35,7 +33,7 @@ pub struct VMConfig {
 
 /// The MPC-VM that performs the witness extension.
 ///
-/// This struct can only be instantiated by constructing it with a [`CollaborativeCircomCompilerParsed`].
+/// This struct can only be instantiated by constructing it with a [`CoCircomCompilerParsed`].
 /// There are two main functions of interest:
 ///
 /// - [`run()`](WitnessExtension::run): Executes the witness extension.
@@ -997,7 +995,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>>
 }
 
 impl<P: Pairing> PlainWitnessExtension<P> {
-    pub(crate) fn new(parser: CollaborativeCircomCompilerParsed<P>, config: VMConfig) -> Self {
+    pub(crate) fn new(parser: CoCircomCompilerParsed<P>, config: VMConfig) -> Self {
         let mut signals = vec![P::ScalarField::default(); parser.amount_signals];
         signals[0] = P::ScalarField::one();
         Self {
@@ -1023,7 +1021,7 @@ impl<P: Pairing> PlainWitnessExtension<P> {
 
 impl<P: Pairing, N: Rep3Network> Rep3WitnessExtension<P, N> {
     pub(crate) fn from_network(
-        parser: CollaborativeCircomCompilerParsed<P>,
+        parser: CoCircomCompilerParsed<P>,
         network: N,
         mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, N>>,
         config: VMConfig,
@@ -1059,7 +1057,7 @@ impl<P: Pairing, N: Rep3Network> Rep3WitnessExtension<P, N> {
 
 impl<P: Pairing> Rep3WitnessExtension<P, Rep3MpcNet> {
     pub(crate) fn new(
-        parser: CollaborativeCircomCompilerParsed<P>,
+        parser: CoCircomCompilerParsed<P>,
         network_config: NetworkConfig,
         mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, Rep3MpcNet>>,
         vm_config: VMConfig,

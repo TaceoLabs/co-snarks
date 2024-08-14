@@ -5,7 +5,7 @@ use circom_types::{
     R1CS,
 };
 use co_circom_snarks::SharedWitness;
-use collaborative_groth16::groth16::{CollaborativeGroth16, Groth16};
+use co_groth16::{CoGroth16, Groth16};
 use itertools::izip;
 use mpc_core::protocols::shamir::ShamirProtocol;
 use rand::thread_rng;
@@ -33,10 +33,8 @@ fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
         threads.push(thread::spawn(move || {
             let shamir =
                 ShamirProtocol::<ark_bn254::Fr, PartyTestNetwork>::new(threshold, net).unwrap();
-            let mut prover = CollaborativeGroth16::<
-                ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>,
-                Bn254,
-            >::new(shamir);
+            let mut prover =
+                CoGroth16::<ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>::new(shamir);
             prover.prove(&zkey, x).unwrap()
         }));
     }

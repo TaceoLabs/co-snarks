@@ -25,6 +25,6 @@ serde.workspace = true
 [dev-dependencies]
 ark-bn254.workspace = true
 circom-types = { version = "0.4.0", path = "../circom-types" }
-collaborative-groth16 = { version = "0.3.0", path = "../collaborative-groth16" }
+co-groth16 = { version = "0.3.0", path = "../co-groth16" }
 mpc-core = { version = "0.3.0", path = "../mpc-core" }
 tracing.workspace = true

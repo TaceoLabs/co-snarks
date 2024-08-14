@@ -30,9 +30,9 @@
   - [verify](./verify.md)
   - [Configuration](./config.md)
 - [Examples](./examples.md)
-    - [Poseidon](./poseidon.md)
-    - [KYC](./kyc.md)
-    - [Multiplier2 from Multiple Parties](./multiplier2.md)
+  - [Poseidon](./poseidon.md)
+  - [KYC](./kyc.md)
+  - [Multiplier2 from Multiple Parties](./multiplier2.md)
 
 # Further Information
 

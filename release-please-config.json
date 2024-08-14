@@ -32,7 +32,7 @@
       "draft": false,
       "prerelease": false
     },
-    "collaborative-circom": {
+    "co-circom": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": true,
@@ -40,7 +40,7 @@
       "draft": false,
       "prerelease": false
     },
-    "collaborative-groth16": {
+    "co-groth16": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": true,
@@ -48,7 +48,7 @@
       "draft": false,
       "prerelease": false
     },
-    "collaborative-plonk": {
+    "co-plonk": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": true,
