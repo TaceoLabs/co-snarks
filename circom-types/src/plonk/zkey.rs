@@ -373,7 +373,7 @@ where
         let n8q: u32 = u32::deserialize_uncompressed(&mut reader)?;
         //modulus of BaseField
         let q = <P::BaseField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
-        let expected_n8q = P::ScalarField::MODULUS_BIT_SIZE.div_ceil(8);
+        let expected_n8q = P::BaseField::MODULUS_BIT_SIZE.div_ceil(8);
         if n8q != expected_n8q {
             return Err(ZKeyParserError::UnexpectedByteSize(expected_n8q, n8q));
         }
