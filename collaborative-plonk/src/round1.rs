@@ -1,6 +1,6 @@
 use ark_ec::pairing::Pairing;
 use circom_types::plonk::ZKey;
-use collaborative_groth16::groth16::SharedWitness;
+use co_circom_snarks::SharedWitness;
 use mpc_core::traits::{
     FFTPostProcessing, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
     PrimeFieldMpcProtocol,
@@ -14,7 +14,7 @@ use crate::{
 };
 
 // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
-pub(super) struct Round1<T, P: Pairing>
+pub(super) struct Round1<'a, T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -26,22 +26,22 @@ where
     pub(super) driver: T,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<T, P>,
-    pub(super) data: PlonkDataRound1<T, P>,
+    pub(super) data: PlonkDataRound1<'a, T, P>,
 }
 
-pub(super) struct PlonkDataRound1<T, P: Pairing>
+pub(super) struct PlonkDataRound1<'a, T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     witness: PlonkWitness<T, P>,
-    zkey: ZKey<P>,
+    zkey: &'a ZKey<P>,
 }
 
-impl<T, P: Pairing> From<PlonkDataRound1<T, P>> for PlonkData<T, P>
+impl<'a, T, P: Pairing> From<PlonkDataRound1<'a, T, P>> for PlonkData<'a, T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    fn from(mut data: PlonkDataRound1<T, P>) -> Self {
+    fn from(mut data: PlonkDataRound1<'a, T, P>) -> Self {
         //when we are done, we remove the leading zero of the public inputs
         data.witness.public_inputs = data.witness.public_inputs[1..].to_vec();
         Self {
@@ -98,7 +98,7 @@ where
 }
 
 // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
-impl<T, P: Pairing> Round1<T, P>
+impl<'a, T, P: Pairing> Round1<'a, T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -223,10 +223,10 @@ where
 
     pub(super) fn init_round(
         mut driver: T,
-        zkey: ZKey<P>,
+        zkey: &'a ZKey<P>,
         private_witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<Self> {
-        let plonk_witness = Self::calculate_additions(&mut driver, private_witness, &zkey)?;
+        let plonk_witness = Self::calculate_additions(&mut driver, private_witness, zkey)?;
 
         Ok(Self {
             challenges: Round1Challenges::random(&mut driver)?,
@@ -240,7 +240,7 @@ where
     }
 
     // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
-    pub(super) fn round1(self) -> PlonkProofResult<Round2<T, P>> {
+    pub(super) fn round1(self) -> PlonkProofResult<Round2<'a, T, P>> {
         let Self {
             mut driver,
             domains,
@@ -296,7 +296,7 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::plonk::ZKey;
-    use collaborative_groth16::groth16::SharedWitness;
+    use co_circom_snarks::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
     use super::{Round1, Round1Challenges};
@@ -329,7 +329,7 @@ pub mod tests {
             witness: vec![witness.values[2], witness.values[3]],
         };
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         assert_eq!(
@@ -372,7 +372,7 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         assert_eq!(

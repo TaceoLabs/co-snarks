@@ -71,7 +71,7 @@ macro_rules! mul4vec_post {
 }
 
 // Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
-pub(super) struct Round3<T, P: Pairing>
+pub(super) struct Round3<'a, T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -85,7 +85,7 @@ where
     pub(super) challenges: Round2Challenges<T, P>,
     pub(super) proof: Round2Proof<P>,
     pub(super) polys: Round2Polys<T, P>,
-    pub(super) data: PlonkData<T, P>,
+    pub(super) data: PlonkData<'a, T, P>,
 }
 
 pub(super) struct Round3Proof<P: Pairing> {
@@ -181,7 +181,7 @@ where
 }
 
 // Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
-impl<T, P: Pairing> Round3<T, P>
+impl<'a, T, P: Pairing> Round3<'a, T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -459,7 +459,7 @@ where
     }
 
     // Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
-    pub(super) fn round3(self) -> PlonkProofResult<Round4<T, P>> {
+    pub(super) fn round3(self) -> PlonkProofResult<Round4<'a, T, P>> {
         let Self {
             mut driver,
             domains,
@@ -477,7 +477,7 @@ where
         let alpha = transcript.get_challenge();
         let alpha2 = alpha.square();
         let challenges = Round3Challenges::new(challenges, alpha, alpha2);
-        let [t1, t2, t3] = Self::compute_t(&mut driver, &domains, &challenges, &data.zkey, &polys)?;
+        let [t1, t2, t3] = Self::compute_t(&mut driver, &domains, &challenges, data.zkey, &polys)?;
 
         // Compute [T1]_1, [T2]_1, [T3]_1
         let commit_t1 = MSMProvider::<P::G1>::msm_public_points(
@@ -519,7 +519,7 @@ pub mod tests {
     use ark_bn254::Bn254;
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
-    use collaborative_groth16::groth16::SharedWitness;
+    use co_circom_snarks::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
     use crate::round1::{Round1, Round1Challenges};
@@ -551,7 +551,7 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         let round3 = round2.round2().unwrap();

@@ -4,7 +4,8 @@ use circom_types::{
     groth16::{Groth16Proof, JsonVerificationKey, ZKey},
     R1CS,
 };
-use collaborative_groth16::groth16::{CollaborativeGroth16, Groth16, SharedWitness};
+use co_circom_snarks::SharedWitness;
+use collaborative_groth16::groth16::{CollaborativeGroth16, Groth16};
 use itertools::izip;
 use mpc_core::protocols::shamir::ShamirProtocol;
 use rand::thread_rng;

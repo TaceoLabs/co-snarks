@@ -10,7 +10,7 @@ use mpc_core::traits::{
 };
 
 // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
-pub(super) struct Round4<T, P: Pairing>
+pub(super) struct Round4<'a, T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -24,7 +24,7 @@ where
     pub(super) challenges: Round3Challenges<T, P>,
     pub(super) proof: Round3Proof<P>,
     pub(super) polys: FinalPolys<T, P>,
-    pub(super) data: PlonkData<T, P>,
+    pub(super) data: PlonkData<'a, T, P>,
 }
 pub(super) struct Round4Challenges<P: Pairing> {
     pub(super) beta: P::ScalarField,
@@ -91,7 +91,7 @@ impl<P: Pairing> Round4Proof<P> {
 }
 
 // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
-impl<T, P: Pairing> Round4<T, P>
+impl<'a, T, P: Pairing> Round4<'a, T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>
         + PairingEcMpcProtocol<P>
@@ -101,7 +101,7 @@ where
     P::ScalarField: FFTPostProcessing,
 {
     // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
-    pub(super) fn round4(self) -> PlonkProofResult<Round5<T, P>> {
+    pub(super) fn round4(self) -> PlonkProofResult<Round5<'a, T, P>> {
         let Self {
             mut driver,
             domains,
@@ -154,7 +154,7 @@ pub mod tests {
     use ark_bn254::Bn254;
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
-    use collaborative_groth16::groth16::SharedWitness;
+    use co_circom_snarks::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
 
     use crate::round1::{Round1, Round1Challenges};
@@ -177,7 +177,7 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         let round3 = round2.round2().unwrap();

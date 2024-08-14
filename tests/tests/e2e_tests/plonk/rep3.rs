@@ -3,7 +3,7 @@ use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof, ZKey},
     Witness, R1CS,
 };
-use collaborative_groth16::groth16::SharedWitness;
+use co_circom_snarks::SharedWitness;
 use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};
 use mpc_core::protocols::rep3::Rep3Protocol;
 use rand::thread_rng;
@@ -42,7 +42,7 @@ fn e2e_proof_poseidon_bn254() {
                 CollaborativePlonk::<Rep3Protocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>::new(
                     rep3,
                 );
-            prover.prove(pk, x).unwrap()
+            prover.prove(&pk, x).unwrap()
         }));
     }
     let result3 = threads.pop().unwrap().join().unwrap();

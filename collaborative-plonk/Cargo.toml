@@ -17,7 +17,7 @@ ark-ff = { workspace = true }
 ark-poly = { workspace = true }
 ark-serialize = { workspace = true }
 circom-types = { version = "0.3.0", path = "../circom-types" }
-collaborative-groth16 = { version = "0.2.1", path = "../collaborative-groth16" }
+co-circom-snarks = { version = "0.1.0", path = "../co-circom-snarks" }
 eyre = { workspace = true }
 itertools = { workspace = true }
 mpc-core = { version = "0.2.1", path = "../mpc-core" }

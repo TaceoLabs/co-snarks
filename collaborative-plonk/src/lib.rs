@@ -6,7 +6,7 @@ use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
-use collaborative_groth16::groth16::SharedWitness;
+use co_circom_snarks::SharedWitness;
 use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use round1::Round1;
@@ -79,7 +79,7 @@ where
     /// Execute the PLONK prover using the internal MPC driver.
     pub fn prove(
         self,
-        zkey: ZKey<P>,
+        zkey: &ZKey<P>,
         witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<PlonkProof<P>> {
         let state = Round1::init_round(self.driver, zkey, witness)?;
@@ -188,7 +188,7 @@ pub mod tests {
     use circom_types::groth16::JsonPublicInput;
     use circom_types::plonk::{JsonVerificationKey, ZKey};
     use circom_types::Witness;
-    use collaborative_groth16::groth16::SharedWitness;
+    use co_circom_snarks::SharedWitness;
     use mpc_core::protocols::plain::PlainDriver;
     use std::{fs::File, io::BufReader};
 
@@ -218,7 +218,7 @@ pub mod tests {
         .unwrap();
 
         let plonk = Plonk::<Bn254>::new(driver);
-        let proof = plonk.prove(zkey, witness).unwrap();
+        let proof = plonk.prove(&zkey, witness).unwrap();
         let result = Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
         assert!(result);
         Ok(())
@@ -250,7 +250,7 @@ pub mod tests {
         .unwrap();
 
         let plonk = Plonk::<Bn254>::new(driver);
-        let proof = plonk.prove(zkey, witness).unwrap();
+        let proof = plonk.prove(&zkey, witness).unwrap();
 
         let mut proof_bytes = vec![];
         serde_json::to_writer(&mut proof_bytes, &proof).unwrap();

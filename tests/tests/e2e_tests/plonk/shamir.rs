@@ -3,7 +3,7 @@ use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof, ZKey},
     Witness, R1CS,
 };
-use collaborative_groth16::groth16::SharedWitness;
+use co_circom_snarks::SharedWitness;
 use collaborative_plonk::{plonk::Plonk, CollaborativePlonk};
 use itertools::izip;
 use mpc_core::protocols::shamir::ShamirProtocol;
@@ -40,7 +40,7 @@ fn e2e_poseidon_bn254_inner(num_parties: usize, threshold: usize) {
                 CollaborativePlonk::<ShamirProtocol<ark_bn254::Fr, PartyTestNetwork>, Bn254>::new(
                     shamir,
                 );
-            prover.prove(pk, x).unwrap()
+            prover.prove(&pk, x).unwrap()
         }));
     }
     let mut results = Vec::with_capacity(num_parties);

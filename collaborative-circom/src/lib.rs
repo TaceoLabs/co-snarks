@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 //! This crate provides a binary and associated helper library for running collaborative SNARK proofs.
-use std::{io::Read, path::PathBuf};
+use std::{io::Read, path::PathBuf, time::Instant};
 
 use ark_ec::pairing::Pairing;
 use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
@@ -9,15 +9,20 @@ use circom_types::{
     groth16::{Groth16Proof, ZKey},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
-use clap::{Args, ValueEnum};
-use collaborative_groth16::groth16::{CollaborativeGroth16, SharedInput, SharedWitness};
+use clap::Args;
+use clap::ValueEnum;
+use co_circom_snarks::{SharedInput, SharedWitness};
+use collaborative_groth16::groth16::CollaborativeGroth16;
 use color_eyre::eyre::Context;
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
 use mpc_core::{
-    protocols::rep3::{network::Rep3MpcNet, Rep3Protocol},
+    protocols::rep3::{
+        network::{Rep3MpcNet, Rep3Network},
+        Rep3Protocol,
+    },
     traits::{FFTPostProcessing, PrimeFieldMpcProtocol},
 };
 use mpc_net::config::NetworkConfig;
@@ -527,6 +532,7 @@ pub fn generate_witness_rep3<P: Pairing>(
 
     // connect to network
     let net = Rep3MpcNet::new(config.network).context("while connecting to network")?;
+    let id = usize::from(net.get_id());
 
     // init MPC protocol
     let rep3_vm = parsed_circom_circuit
@@ -534,9 +540,12 @@ pub fn generate_witness_rep3<P: Pairing>(
         .context("while constructing MPC VM")?;
 
     // execute witness generation in MPC
+    let start = Instant::now();
     let result_witness_share = rep3_vm
         .run(input_share)
         .context("while running witness generation")?;
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Party {}: Witness extension took {} ms", id, duration_ms);
     Ok(result_witness_share.into_shared_witness())
 }
 
