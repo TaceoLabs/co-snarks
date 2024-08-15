@@ -7,7 +7,7 @@ old without accessing their exact birthdate. Additionally, compliance might
 require verifying that the user is not from a blacklisted country.
 
 We provide a
-[simple circuit](https://github.com/TaceoLabs/collaborative-circom/blob/main/co-circom/examples/test_vectors/kyc/circuit.circom)
+[simple circuit](https://github.com/TaceoLabs/collaborative-circom/blob/main/co-circom/examples/groth16/test_vectors/kyc/circuit.circom)
 to demonstrate this use case:
 
 ```c++

@@ -62,19 +62,19 @@ See [co-circom CLI](./co-circom.md)
 
 ## Compiler Configuration
 
-This section is used to configure the co-circom MPC compiler.
+This section configures the co-circom MPC compiler.
 
 ### Keys
 
-* `allow_leaky_loops`: used to allow leaking of secret values in loops, default: `false` (*currently not implemented*).
+* `allow_leaky_loops`: Allows leaking of secret values in loops (default: `false`) (*currently not implemented*).
 
 ## VM Configuration
 
-This section is used to configure the co-circom VM.
+This section configures the co-circom VM.
 
 ### Keys
 
-* `allow_leaky_logs`: used to allow leaking of secret values logs, default: `false`.
+* `allow_leaky_logs`: Allows leaking of secret values in logs (default: `false`).
 
 ## Network Configuration
 

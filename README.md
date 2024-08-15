@@ -31,6 +31,7 @@ The project is built with pure Rust and consists of multiple libraries:
   coSNARK, verifiable by snarkjs.
 - **co-plonk**: A library for verifying and proofing a Plonk
   coSNARK, verifiable by snarkjs.
+- **co-circom-snarks**: A library for the shared code of co-plonk and co-groth16.
 
 The following libraries are agnostic to coCircom and will be used in the future
 for other coSNARKs:
@@ -237,6 +238,9 @@ For more examples, please refer to the
 [examples folder](/co-circom/examples/). You'll find bash scripts
 there that demonstrate all the necessary steps, as well as scripts for using Plonk instead of Groth16.
 
+## Contributing
+If you would like to contribute to the project, please refer to the [contribution page](CONTRIBUTING.md).
+
 ## License
 
 This project is licensed under either the [MIT License](LICENSE-MIT) or the
@@ -248,8 +252,8 @@ Select sub-libraries within this project have different licenses, reflecting
 their dependencies on
 [circom](https://github.com/iden3/circom?tab=GPL-3.0-1-ov-file).
 
-- **co-circom**: Licensed under [GPL-3.0](LICENSE.GPL) `SPDX-License-Identifier: GPL-3.0-only`.
-- **circom-mpc-compiler**: Licensed under [GPL-3.0](LICENSE.GPL) `SPDX-License-Identifier: GPL-3.0-only`.
+- **co-circom**: Licensed under [GPL-3.0](LICENSE-GPL) `SPDX-License-Identifier: GPL-3.0-only`.
+- **circom-mpc-compiler**: Licensed under [GPL-3.0](LICENSE-GPL) `SPDX-License-Identifier: GPL-3.0-only`.
 
 ## Disclaimer
 

@@ -4,7 +4,7 @@ This section will help you setup the co-circom toolchain.
 
 ## Prerequisites
 
-To use co-circom, you need to install Rust, Circom, and SnarkJS. Here's a brief overview of why each tool is necessary:
+To use co-circom, you need to install Rust, circom, and snarkJS. Here's a brief overview of why each tool is necessary:
 
 - **Rust:** Required for building and running components of co-circom.
 - **Circom:** Needed to compile a circuit into a .r1cs file.
@@ -13,7 +13,7 @@ To use co-circom, you need to install Rust, Circom, and SnarkJS. Here's a brief 
 Follow these steps to install the required tools:
 
 - **Install Rust**: Visit the official [Rust site](https://www.rust-lang.org/tools/install) for detailed installation instructions.
-- **Install Circom and SnarkJS**: Refer to the [circom documentation](https://docs.circom.io/getting-started/installation/) for guidance on installing Circom and SnarkJS.
+- **Install circom and snarkJS**: Refer to the [circom documentation](https://docs.circom.io/getting-started/installation/) for guidance on installing circom and snarkJS.
 
 These resources will provide the necessary information to get your environment set up for using co-circom.
 

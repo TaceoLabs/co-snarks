@@ -24,7 +24,7 @@ Options:
       --config <CONFIG>              The path to the config file
       --input <INPUT>                The path to the input JSON file
       --circuit <CIRCUIT>            The path to the circuit file
-      --link-library <LINK_LIBRARY>  The path to Circom library files
+      --link-library <LINK_LIBRARY>  The path to circom library files
       --protocol <PROTOCOL>          The MPC protocol to be used [possible values: REP3, SHAMIR]
       --curve <CURVE>                The pairing friendly curve to be used [possible values: BN254, BLS12-381]
       --out-dir <OUT_DIR>            The path to the (existing) output directory

@@ -1,11 +1,11 @@
 # Quick Start
 
-Collaborative Circom is an implementation of [collaborative SNARKs](./collsnarks.md), with a focus on the [Circom](https://circom.io) framework.
+coCircom is an implementation of [collaborative SNARKs](./collsnarks.md), with a focus on the [circom](https://circom.io) framework.
 In contrast to traditional SNARKs, which are run by a single prover, collaborative SNARKs are executed using a [multiparty computation protocol](./mpc.md).
 
-If you just want to get your hands dirty as fast as possible, here is a run-down on how to collaboratively prove the `Multiplier2` example from the [Circom documentation](https://docs.circom.io/getting-started/installation/) using Groth16.
+If you just want to get your hands dirty as fast as possible, here is a run-down on how to collaboratively prove the `Multiplier2` example from the [circom documentation](https://docs.circom.io/getting-started/installation/) using Groth16.
 
-First of all, here is the relevant Circom file:
+First of all, here is the relevant circom file:
 
 ```c++
 pragma circom 2.0.0;
@@ -29,17 +29,17 @@ This circuit proves that we know two numbers that factor the output number c. We
 
 ## Compile the Circuit
 
-In the first step, we compile an `.r1cs` file using Circom and create a verification/proving key using SnarkJS. To compile the `.r1cs` file open your terminal (after installing Circom) and type:
+In the first step, we compile an `.r1cs` file using circom and create a verification/proving key using [snarkJS](https://github.com/iden3/snarkjs). To compile the `.r1cs` file open your terminal (after installing circom) and type:
 
 ```bash
 circom multiplier2.circom --r1cs
 ```
 
-You will find a file called `multiplier2.r1cs` in your working folder. To create the keys you can either follow the Circom documentation, or download the two keys from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/main/co-circom/examples/test_vectors/multiplier2), where we created the keys already (you will need `multiplier2.zkey` and `verification_key.json`).
+You will find a file called `multiplier2.r1cs` in your working folder. To create the keys you can either follow the circom documentation, or download the two keys from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/c089006f5f17623518c6dc25b344ecfbf987c197/co-circom/examples/groth16/test_vectors/multiplier2), where we created the keys already (you will need `multiplier2.zkey` and `verification_key.json`).
 
 ## Split the Input
 
-Ok, after we finished the setup, we need to prepare the inputs for the witness extension. If you have read the Circom documentation (or used Circom in the past), you will remember a step between compiling the circuits and the actual proving. That is, the witness extension (or "computing the witness" as Circom calls it).
+Ok, after we finished the setup, we need to prepare the inputs for the witness extension. If you have read the circom documentation (or used circom in the past), you will remember a step between compiling the circuits and the actual proving. That is, the witness extension (or "computing the witness" as circom calls it).
 
 We prepare an input file and call it `input.json`:
 
@@ -72,7 +72,7 @@ This command secret shares the private inputs (everything that is not explicitly
 
 Now we have to compute the extended witness. In a real-world setting you would have to send the input files from the previous step to the parties.
 
-To achieve that we need a network config for every party (you can read an in-depth explanation about the config at [here](./config.md)). You can copy-paste the config from here and call it `party0.toml` for party0 and so on:
+To achieve that we need a network config for every party (you can read an in-depth explanation about the config [here](./config.md)). You can copy-paste the config from here and call it `party0.toml` for party0 and so on:
 
 ```toml
 [network]
@@ -93,7 +93,7 @@ dns_name = "localhost:10002"
 cert_path = "data/cert2.der"
 ```
 
-You can download the TLS certificates from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/a37d24abcc1069e6e30b0e6638870bcd8834451a/co-circom/examples/data) and put them under `data/`.
+You can download the TLS certificates from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/c089006f5f17623518c6dc25b344ecfbf987c197/co-circom/examples/data) and put them under `data/`.
 
 We move the `.toml` files to `configs/` and execute the following command (for every party).
 
