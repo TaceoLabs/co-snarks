@@ -66,7 +66,7 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
     let mut i = 0;
     loop {
         if fs::metadata(format!(
-            "../test_vectors/circuits/test-circuits/witness_outputs/{}/witness{}.wtns",
+            "../test_vectors/WitnessExtension/kats/{}/witness{}.wtns",
             fn_name, i
         ))
         .is_err()
@@ -74,14 +74,14 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
             break;
         }
         let witness = File::open(format!(
-            "../test_vectors/circuits/test-circuits/witness_outputs/{}/witness{}.wtns",
+            "../test_vectors/WitnessExtension/kats/{}/witness{}.wtns",
             fn_name, i
         ))
         .unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
         witnesses.push(should_witness);
         let input_file = File::open(format!(
-            "../test_vectors/circuits/test-circuits/witness_outputs/{}/input{}.json",
+            "../test_vectors/WitnessExtension/kats/{}/input{}.json",
             fn_name, i
         ))
         .unwrap();
@@ -112,7 +112,7 @@ macro_rules! run_test {
             threads.push(thread::spawn(move || {
                 let witness_extension =
                     CompilerBuilder::<Bn254>::new(CompilerConfig::default(), $file.to_owned())
-                        .link_library("../test_vectors/circuits/libs/")
+                        .link_library("../test_vectors/WitnessExtension/tests/libs/")
                         .build()
                         .parse()
                         .unwrap()
@@ -140,7 +140,7 @@ macro_rules! witness_extension_test_rep3 {
             for i in 0..inp.inputs.len() {
                 let is_witness = run_test!(
                     format!(
-                        "../test_vectors/circuits/test-circuits/{}.circom",
+                        "../test_vectors/WitnessExtension/tests/{}.circom",
                         stringify!($name)
                     ),
                     &inp.inputs[i]
@@ -168,7 +168,7 @@ macro_rules! witness_extension_test_rep3_ignored {
             for i in 0..inp.inputs.len() {
                 let is_witness = run_test!(
                     format!(
-                        "../test_vectors/circuits/test-circuits/{}.circom",
+                        "../test_vectors/WitnessExtension/tests/{}.circom",
                         stringify!($name)
                     ),
                     &inp.inputs[i]
