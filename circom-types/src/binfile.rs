@@ -50,18 +50,22 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     pub(crate) fn new<R: Read>(reader: &mut R) -> ZKeyParserResult<Self> {
+        tracing::debug!("reading bin file");
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic)?;
         let ftype = std::str::from_utf8(&magic[..])
             .map_err(|_| ZKeyParserError::CorruptedBinFile("cannot parse magic number".to_owned()))?
             .to_string();
+        tracing::debug!("file type for binfile: \"{ftype}\"");
 
         let version = reader.read_u32::<LittleEndian>()?;
+        tracing::debug!("binfile version {}", version);
 
         let num_sections: usize = reader
             .read_u32::<LittleEndian>()?
             .try_into()
             .expect("u32 fits into usize");
+        tracing::debug!("we got {} sections in binfile", num_sections);
         let mut sections = vec![vec![]; num_sections];
 
         for _ in 0..num_sections {
@@ -76,12 +80,14 @@ where
 
             let section = &mut sections[section_id - 1];
             if !section.is_empty() {
-                todo!()
+                return Err(ZKeyParserError::CorruptedBinFile(
+                    "sections are empty!".to_owned(),
+                ));
             }
             section.resize(section_length, 0);
             reader.read_exact(section)?;
         }
-
+        tracing::debug!("successfully read bin file!");
         Ok(Self {
             ftype,
             version,

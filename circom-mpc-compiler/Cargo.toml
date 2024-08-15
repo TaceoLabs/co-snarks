@@ -21,6 +21,7 @@ circom-type_analysis = { version = "2.1.9", git = "https://github.com/TaceoLabs/
 eyre.workspace = true
 itertools.workspace = true
 serde.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 ark-bn254.workspace = true

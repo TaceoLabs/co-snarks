@@ -5,6 +5,7 @@ use crate::{
     FieldShareVec, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use circom_types::plonk::ZKey;
 use mpc_core::traits::{
@@ -137,6 +138,18 @@ where
     pub(super) t2: FieldShareVec<T, P>,
     pub(super) t3: FieldShareVec<T, P>,
 }
+
+impl<P: Pairing> std::fmt::Display for Round3Proof<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "Round3Proof(t1: {}, t2: {}, t2: {})",
+            self.commit_t1.into_affine(),
+            self.commit_t2.into_affine(),
+            self.commit_t3.into_affine()
+        )
+    }
+}
 impl<T, P: Pairing> FinalPolys<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -228,6 +241,7 @@ where
         zkey: &ZKey<P>,
         polys: &Round2Polys<T, P>,
     ) -> PlonkProofResult<[FieldShareVec<T, P>; 3]> {
+        tracing::debug!("computing t polynomial...");
         let z1 = Self::get_z1(domains);
         let z2 = Self::get_z2(domains);
         let z3 = Self::get_z3(domains);
@@ -451,7 +465,7 @@ where
         t2.push(challenges.b[10].to_owned());
 
         t3[0] = driver.sub(&t3[0], &challenges.b[10]);
-
+        tracing::debug!("computing t polynomial done!");
         Ok([t1.into(), t2.into(), t3.into()])
     }
 
@@ -465,6 +479,7 @@ where
             polys,
             data,
         } = self;
+        tracing::debug!("building challenges for round3 with Keccak256..");
         let mut transcript = Keccak256Transcript::<P>::default();
         // STEP 3.1 - Compute evaluation challenge alpha ∈ F
         transcript.add_scalar(challenges.beta);
@@ -473,9 +488,12 @@ where
 
         let alpha = transcript.get_challenge();
         let alpha2 = alpha.square();
+        tracing::debug!("alpha: {alpha}, alpha2: {alpha2}");
         let challenges = Round3Challenges::new(challenges, alpha, alpha2);
+
         let [t1, t2, t3] = Self::compute_t(&mut driver, &domains, &challenges, data.zkey, &polys)?;
 
+        tracing::debug!("committing to poly t (MSMs)");
         // Compute [T1]_1, [T2]_1, [T3]_1
         let commit_t1 = MSMProvider::<P::G1>::msm_public_points(
             &mut driver,
@@ -497,6 +515,7 @@ where
 
         let polys = FinalPolys::new(polys, t1, t2, t3);
         let proof = Round3Proof::new(proof, opened[0], opened[1], opened[2]);
+        tracing::debug!("round3 result: {proof}");
         Ok(Round4 {
             driver,
             domains,

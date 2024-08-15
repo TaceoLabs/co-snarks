@@ -54,6 +54,7 @@ use std::{
     path::PathBuf,
     process::ExitCode,
 };
+use tracing::instrument;
 
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
@@ -152,6 +153,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     }
 }
 
+#[instrument(skip(config))]
 fn run_split_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: SplitWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -249,6 +251,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
+#[instrument(skip(config))]
 fn run_split_input<P: Pairing + CircomArkworksPairingBridge>(
     config: SplitInputConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -335,6 +338,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
+#[instrument(skip(config))]
 fn run_merge_input_shares<P: Pairing + CircomArkworksPairingBridge>(
     config: MergeInputSharesConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -365,6 +369,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
+#[instrument(skip(config))]
 fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -403,6 +408,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
+#[instrument(skip(config))]
 fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: TranslateWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -451,6 +457,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
+#[instrument(skip(config))]
 fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateProofConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -498,6 +505,7 @@ where
                     let mut prover = CoGroth16::new(protocol);
 
                     // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
                     let start = Instant::now();
                     let proof = prover.prove(&zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -519,6 +527,7 @@ where
                     let mut prover = CoGroth16::new(protocol);
 
                     // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
                     let start = Instant::now();
                     let proof = prover.prove(&zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -561,6 +570,7 @@ where
                     let prover = CoPlonk::new(protocol);
 
                     // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
                     let start = Instant::now();
                     let proof = prover.prove(&pk, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -581,6 +591,7 @@ where
                     let prover = CoPlonk::new(protocol);
 
                     // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
                     let start = Instant::now();
                     let proof = prover.prove(&pk, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -631,6 +642,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
+#[instrument(skip(config))]
 fn run_verify<P: Pairing + CircomArkworksPairingBridge>(
     config: VerifyConfig,
 ) -> color_eyre::Result<ExitCode>

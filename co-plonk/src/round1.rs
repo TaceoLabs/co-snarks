@@ -1,4 +1,5 @@
 use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
 use co_circom_snarks::SharedWitness;
 use mpc_core::traits::{
@@ -73,6 +74,18 @@ where
     pub(super) c: PolyEval<T, P>,
 }
 
+impl<P: Pairing> std::fmt::Display for Round1Proof<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "Round1Proof(a: {}, b: {}, c: {})",
+            self.commit_a.into_affine(),
+            self.commit_b.into_affine(),
+            self.commit_c.into_affine()
+        )
+    }
+}
+
 impl<T, P: Pairing> Round1Challenges<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -112,6 +125,7 @@ where
         zkey: &ZKey<P>,
         witness: &PlonkWitness<T, P>,
     ) -> PlonkProofResult<Round1Polys<T, P>> {
+        tracing::debug!("computing wire polynomials...");
         let num_constraints = zkey.n_constraints;
 
         let mut buffer_a = Vec::with_capacity(zkey.domain_size);
@@ -148,16 +162,19 @@ where
         let buffer_b = FieldShareVec::<T, P>::from(buffer_b);
         let buffer_c = FieldShareVec::<T, P>::from(buffer_c);
 
+        tracing::debug!("iffts for buffers..");
         // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
         let poly_a = driver.ifft(&buffer_a, &domains.domain);
         let poly_b = driver.ifft(&buffer_b, &domains.domain);
         let poly_c = driver.ifft(&buffer_c, &domains.domain);
 
+        tracing::debug!("ffts for evals..");
         // Compute extended evaluations of a(X), b(X) and c(X) polynomials
         let eval_a = driver.fft(poly_a.to_owned(), &domains.extended_domain);
         let eval_b = driver.fft(poly_b.to_owned(), &domains.extended_domain);
         let eval_c = driver.fft(poly_c.to_owned(), &domains.extended_domain);
 
+        tracing::debug!("blinding coefficients");
         let poly_a = plonk_utils::blind_coefficients::<T, P>(driver, &poly_a, &challenges.b[..2]);
         let poly_b = plonk_utils::blind_coefficients::<T, P>(driver, &poly_b, &challenges.b[2..4]);
         let poly_c = plonk_utils::blind_coefficients::<T, P>(driver, &poly_c, &challenges.b[4..6]);
@@ -168,7 +185,7 @@ where
         {
             return Err(PlonkProofError::PolynomialDegreeTooLarge);
         }
-
+        tracing::debug!("computing wire polys done!");
         Ok(Round1Polys {
             buffer_a,
             buffer_b,
@@ -194,6 +211,7 @@ where
         witness: SharedWitness<T, P>,
         zkey: &ZKey<P>,
     ) -> PlonkProofResult<PlonkWitness<T, P>> {
+        tracing::debug!("calculating addition {} constraints...", zkey.n_additions);
         let mut witness = PlonkWitness::new(witness, zkey.n_additions);
 
         for addition in zkey.additions.iter() {
@@ -215,6 +233,7 @@ where
             let result = driver.add(&f1, &f2);
             witness.addition_witness.push(result);
         }
+        tracing::debug!("additions done!");
         Ok(witness)
     }
 
@@ -252,6 +271,7 @@ where
         let polys =
             Self::compute_wire_polynomials(&mut driver, &domains, &challenges, zkey, witness)?;
 
+        tracing::debug!("committing to polys (MSMs)");
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
         let commit_a = MSMProvider::<P::G1>::msm_public_points(
             &mut driver,
@@ -276,6 +296,7 @@ where
             commit_b: opened[1],
             commit_c: opened[2],
         };
+        tracing::debug!("round1 result: {proof}");
         Ok(Round2 {
             driver,
             domains,

@@ -82,12 +82,20 @@ where
         zkey: &ZKey<P>,
         witness: SharedWitness<T, P>,
     ) -> PlonkProofResult<PlonkProof<P>> {
+        tracing::debug!("starting PLONK prove..");
         let state = Round1::init_round(self.driver, zkey, witness)?;
+        tracing::debug!("init round done..");
         let state = state.round1()?;
+        tracing::debug!("round 1 done..");
         let state = state.round2()?;
+        tracing::debug!("round 2 done..");
         let state = state.round3()?;
+        tracing::debug!("round 3 done..");
         let state = state.round4()?;
-        state.round5()
+        tracing::debug!("round 4 done..");
+        let result = state.round5();
+        tracing::debug!("round 5 done! We are done!");
+        result
     }
 }
 
@@ -111,13 +119,18 @@ mod plonk_utils {
     where
         T: PrimeFieldMpcProtocol<P::ScalarField>,
     {
+        tracing::trace!("get witness on {index}");
         let result = if index <= zkey.n_public {
+            tracing::trace!("indexing public input!");
             driver.promote_to_trivial_share(witness.public_inputs[index])
         } else if index < zkey.n_vars - zkey.n_additions {
+            tracing::trace!("indexing private input!");
             witness.witness.index(index - zkey.n_public - 1)
         } else if index < zkey.n_vars {
+            tracing::trace!("indexing additions!");
             witness.addition_witness[index + zkey.n_additions - zkey.n_vars].to_owned()
         } else {
+            tracing::trace!("something is broken!");
             return Err(PlonkProofError::CorruptedWitness(index));
         };
         Ok(result)
