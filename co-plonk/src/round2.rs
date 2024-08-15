@@ -47,7 +47,6 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
     pub(super) domains: Domains<P::ScalarField>,
@@ -135,7 +134,6 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     // Computes the permutation polynomial z(X) (see https://eprint.iacr.org/2019/953.pdf)
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.

@@ -15,7 +15,6 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
     pub(super) domains: Domains<P::ScalarField>,
@@ -96,7 +95,6 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
     pub(super) fn round4(self) -> PlonkProofResult<Round5<'a, T, P>> {

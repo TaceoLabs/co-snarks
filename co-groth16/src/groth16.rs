@@ -1,7 +1,6 @@
 //! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::Field;
 use ark_ff::{FftField, PrimeField};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::{ConstraintMatrices, SynthesisError};
@@ -11,7 +10,6 @@ use co_circom_snarks::SharedWitness;
 use eyre::Result;
 use itertools::izip;
 use mpc_core::protocols::plain::PlainDriver;
-use mpc_core::traits::FFTPostProcessing;
 use mpc_core::traits::{EcMpcProtocol, MSMProvider};
 use mpc_core::{
     protocols::rep3::{network::Rep3MpcNet, Rep3Protocol},
@@ -56,8 +54,21 @@ calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) al
 use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
 then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
 */
-fn root_of_unity_for_groth16<F: PrimeField + FftField>(domain: &GeneralEvaluationDomain<F>) -> F {
+fn root_of_unity_for_groth16<F: PrimeField + FftField>(
+    pow: usize,
+    domain: &mut GeneralEvaluationDomain<F>,
+) -> F {
     let (q, roots) = co_circom_snarks::utils::roots_of_unity::<F>();
+    match domain {
+        GeneralEvaluationDomain::Radix2(domain) => {
+            domain.group_gen = roots[pow];
+            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
+        }
+        GeneralEvaluationDomain::MixedRadix(domain) => {
+            domain.group_gen = roots[pow];
+            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
+        }
+    };
     if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
         q.square()
     } else {
@@ -73,7 +84,6 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: FFTPostProcessing,
 {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
@@ -88,7 +98,7 @@ where
         + MSMProvider<P::G2>,
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Creates a new [CoGroth16] protocol with a given MPC driver.
     pub fn new(driver: T) -> Self {
@@ -112,6 +122,7 @@ where
         let private_witness = &private_witness.witness;
         tracing::debug!("calling witness map from matrices...");
         let h = self.witness_map_from_matrices(
+            zkey.pow,
             matrices,
             num_constraints,
             num_inputs,
@@ -129,14 +140,18 @@ where
 
     fn witness_map_from_matrices(
         &mut self,
+        power: usize,
         matrices: &ConstraintMatrices<P::ScalarField>,
         num_constraints: usize,
         num_inputs: usize,
         public_inputs: &[P::ScalarField],
         private_witness: &FieldShareVec<T, P>,
     ) -> Result<FieldShareVec<T, P>> {
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
-            .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let mut domain =
+            GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
+                .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+        let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
+
         let domain_size = domain.size();
         let mut a = vec![FieldShare::<T, P>::default(); domain_size];
         let mut b = vec![FieldShare::<T, P>::default(); domain_size];
@@ -155,7 +170,6 @@ where
 
         let mut b = FieldShareVec::<T, P>::from(b);
         let mut c = self.driver.mul_vec(&a, &b)?;
-        let root_of_unity = root_of_unity_for_groth16(&domain);
         tracing::debug!("ifft");
         self.driver.ifft_in_place(&mut a, &domain);
         self.driver.ifft_in_place(&mut b, &domain);
@@ -323,7 +337,7 @@ impl<P: Pairing> Rep3CoGroth16<P>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {

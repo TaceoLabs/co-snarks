@@ -1,6 +1,5 @@
 #![warn(missing_docs)]
 //! This crate provides a binary and associated helper library for running collaborative SNARK proofs.
-use mpc_core::traits::FFTPostProcessing;
 use std::{io::Read, path::PathBuf, time::Instant};
 
 use ark_ec::pairing::Pairing;
@@ -561,7 +560,7 @@ pub fn prove_with_matrices_rep3<P: Pairing + CircomArkworksPairingBridge>(
     zkey: ZKey<P>,
 ) -> color_eyre::Result<Groth16Proof<P>>
 where
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     tracing::info!("establishing network....");

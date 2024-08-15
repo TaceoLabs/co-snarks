@@ -353,15 +353,13 @@ impl<P: Pairing> PairingEcMpcProtocol<P> for PlainDriver<P::ScalarField> {
     }
 }
 
-impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainDriver<F> {
+impl<F: PrimeField> FFTProvider<F> for PlainDriver<F> {
     fn fft<D: ark_poly::EvaluationDomain<F>>(
         &mut self,
         data: Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        let mut a = domain.fft(&data);
-        crate::traits::FFTPostProcessing::fft_post_processing(&mut a);
-        a
+        domain.fft(&data)
     }
 
     fn fft_in_place<D: ark_poly::EvaluationDomain<F>>(
@@ -370,7 +368,6 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainD
         domain: &D,
     ) {
         domain.fft_in_place(data);
-        crate::traits::FFTPostProcessing::fft_post_processing(data);
     }
 
     fn ifft<D: ark_poly::EvaluationDomain<F>>(
@@ -378,9 +375,7 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainD
         data: &Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
-        let mut a = domain.ifft(data);
-        crate::traits::FFTPostProcessing::fft_post_processing(&mut a);
-        a
+        domain.ifft(data)
     }
 
     fn ifft_in_place<D: ark_poly::EvaluationDomain<F>>(
@@ -389,7 +384,6 @@ impl<F: PrimeField + crate::traits::FFTPostProcessing> FFTProvider<F> for PlainD
         domain: &D,
     ) {
         domain.ifft_in_place(data);
-        crate::traits::FFTPostProcessing::fft_post_processing(data);
     }
 
     fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare {

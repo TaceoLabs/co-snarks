@@ -4,7 +4,6 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use circom_mpc_compiler::CompilerBuilder;
 use circom_types::R1CS;
-use mpc_core::traits::FFTPostProcessing;
 use num_traits::Zero;
 
 use circom_types::{
@@ -456,7 +455,7 @@ fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateProofConfig,
 ) -> color_eyre::Result<ExitCode>
 where
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     let proof_system = config.proof_system;
@@ -636,7 +635,7 @@ fn run_verify<P: Pairing + CircomArkworksPairingBridge>(
     config: VerifyConfig,
 ) -> color_eyre::Result<ExitCode>
 where
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     let proofsystem = config.proof_system;

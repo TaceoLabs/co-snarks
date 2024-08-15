@@ -11,14 +11,12 @@ use circom_types::groth16::{Groth16Proof, JsonVerificationKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 
 use ark_groth16::Groth16 as ArkworksGroth16;
-use mpc_core::traits::FFTPostProcessing;
 
 impl<P: Pairing> Groth16<P>
 where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
     P: Pairing + CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: FFTPostProcessing,
 {
     /// Verify a Groth16 proof.
     /// This method is a wrapper arkworks Groth16 and does not use MPC.
