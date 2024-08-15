@@ -6,6 +6,7 @@ use crate::{
     FieldShare, FieldShareVec, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use circom_types::{
     plonk::PlonkProof,
@@ -146,6 +147,7 @@ where
         data: &PlonkData<T, P>,
         polys: &FinalPolys<T, P>,
     ) -> FieldShareVec<T, P> {
+        tracing::debug!("computing r polynomial...");
         let zkey = &data.zkey;
         let public_inputs = &data.witness.public_inputs;
         let (l, xin) = plonk_utils::calculate_lagrange_evaluations::<P>(
@@ -225,6 +227,7 @@ where
         let r0 = eval_pi - (e3 * (proof.eval_c + challenges.gamma)) - e4;
 
         poly_r_shared[0] = driver.add_with_public(&r0, &poly_r_shared[0]);
+        tracing::debug!("computing r polynomial done!");
         poly_r_shared.into()
     }
 
@@ -237,6 +240,7 @@ where
         polys: &FinalPolys<T, P>,
         poly_r: &FieldShareVec<T, P>,
     ) -> FieldShareVec<T, P> {
+        tracing::debug!("computing wxi polynomial...");
         let s1_poly_coeffs = &data.zkey.s1_poly.coeffs;
         let s2_poly_coeffs = &data.zkey.s2_poly.coeffs;
         let mut res = vec![FieldShare::<T, P>::default(); data.zkey.domain_size + 6];
@@ -277,6 +281,7 @@ where
 
         Self::div_by_zerofier(driver, &mut res, 1, challenges.xi);
 
+        tracing::debug!("computing wxi polynomial done!");
         res.into()
     }
 
@@ -288,12 +293,14 @@ where
         challenges: &Round5Challenges<P>,
         polys: &FinalPolys<T, P>,
     ) -> FieldShareVec<T, P> {
+        tracing::debug!("computing wxiw polynomial...");
         let xiw = challenges.xi * domains.root_of_unity_pow;
 
         let mut res = polys.z.poly.clone().into_iter().collect::<Vec<_>>();
         res[0] = driver.add_with_public(&-proof.eval_zw, &res[0]);
         Self::div_by_zerofier(driver, &mut res, 1, xiw);
 
+        tracing::debug!("computing wxiw polynomial done!");
         res.into()
     }
 
@@ -307,6 +314,7 @@ where
             polys,
             data,
         } = self;
+        tracing::debug!("building challenges for round5 with Keccak256..");
         let mut transcript = Keccak256Transcript::<P>::default();
         // STEP 5.1 - Compute evaluation challenge v \in F_p
         transcript.add_scalar(challenges.xi);
@@ -322,6 +330,11 @@ where
         for i in 1..5 {
             v[i] = v[i - 1] * v[0];
         }
+        tracing::debug!("v[0]: {}", v[0]);
+        tracing::debug!("v[1]: {}", v[1]);
+        tracing::debug!("v[2]: {}", v[2]);
+        tracing::debug!("v[3]: {}", v[3]);
+        tracing::debug!("v[4]: {}", v[4]);
         let challenges = Round5Challenges::new(challenges, v);
 
         // STEP 5.2 Compute linearisation polynomial r(X)
@@ -341,8 +354,13 @@ where
 
         let opened = driver.open_point_many(&[commit_wxi, commit_wxiw])?;
 
-        let commit_wxi = opened[0];
-        let commit_wxiw = opened[1];
+        let commit_wxi: P::G1 = opened[0];
+        let commit_wxiw: P::G1 = opened[1];
+        tracing::debug!(
+            "Round5Proof(commit_wxi: {}, commit_wxiw: {})",
+            commit_wxi.into_affine(),
+            commit_wxiw.into_affine()
+        );
         Ok(proof.into_final_proof(commit_wxi, commit_wxiw))
     }
 }

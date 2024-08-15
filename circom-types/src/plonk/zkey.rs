@@ -232,6 +232,7 @@ where
 {
     type Error = ZKeyParserError;
     fn try_from(mut binfile: BinFile<P>) -> Result<Self, Self::Error> {
+        tracing::debug!("start transforming bin file into zkey...");
         let header = PlonkHeader::<P>::read(&mut binfile.take_section(2))?;
         let n_vars = header.n_vars;
         let n_additions = header.n_additions;
@@ -272,6 +273,7 @@ where
         let mut sigma3 = None;
         let mut lagrange = None;
         let mut p_tau = None;
+        tracing::debug!("parsing zkey sections with rayon...");
         rayon::scope(|s| {
             s.spawn(|_| additions = Some(Self::additions_indices(n_additions, add_section)));
             s.spawn(|_| map_a = Some(Self::id_map(n_constraints, a_section)));
@@ -288,6 +290,7 @@ where
             s.spawn(|_| lagrange = Some(Self::lagrange(n_public, domain_size, l_section)));
             s.spawn(|_| p_tau = Some(Self::taus(domain_size, t_section)));
         });
+        tracing::debug!("we are done with parsing sections!");
         Ok(Self {
             n_vars,
             n_public,
@@ -374,6 +377,7 @@ where
         //modulus of BaseField
         let q = <P::BaseField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
         let expected_n8q = P::BaseField::MODULUS_BIT_SIZE.div_ceil(8);
+        tracing::debug!("base field byte size: {n8q}");
         if n8q != expected_n8q {
             return Err(ZKeyParserError::UnexpectedByteSize(expected_n8q, n8q));
         }
@@ -384,6 +388,7 @@ where
         let n8r = u32::deserialize_uncompressed(&mut reader)?;
         //modulus of ScalarField
         let r = <P::ScalarField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
+        tracing::debug!("scalar field byte size: {n8r}");
         let expected_n8r = P::ScalarField::MODULUS_BIT_SIZE.div_ceil(8);
         if n8r != expected_n8r {
             return Err(ZKeyParserError::UnexpectedByteSize(expected_n8r, n8r));
@@ -397,8 +402,10 @@ where
         let domain_size = u32::deserialize_uncompressed(&mut reader)?;
         let n_additions = u32::deserialize_uncompressed(&mut reader)?;
         let n_constraints = u32::deserialize_uncompressed(&mut reader)?;
+        tracing::debug!("n_vars: {n_vars}; n_public: {n_public}, domain_size: {domain_size}");
         let verifying_key = VerifyingKey::new(&mut reader)?;
         if domain_size & (domain_size - 1) == 0 && domain_size > 0 {
+            tracing::debug!("read header done!");
             Ok(Self {
                 n8r: u32_to_usize!(n8r),
                 n_vars: u32_to_usize!(n_vars),

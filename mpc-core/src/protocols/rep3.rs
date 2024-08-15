@@ -712,14 +712,18 @@ impl<F: PrimeField, N: Rep3Network> FFTProvider<F> for Rep3Protocol<F, N> {
         data: Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
+        tracing::trace!("> FFT for {} elements", data.len());
         let a = domain.fft(&data.a);
         let b = domain.fft(&data.b);
+        tracing::trace!("< FFT for {} elements", data.len());
         Self::FieldShareVec::new(a, b)
     }
 
     fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D) {
+        tracing::trace!("> FFT (in place) for {} elements", data.len());
         domain.fft_in_place(&mut data.a);
         domain.fft_in_place(&mut data.b);
+        tracing::trace!("< FFT (in place) for {} elements", data.len());
     }
 
     fn ifft<D: EvaluationDomain<F>>(
@@ -727,8 +731,10 @@ impl<F: PrimeField, N: Rep3Network> FFTProvider<F> for Rep3Protocol<F, N> {
         data: &Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
+        tracing::trace!("> IFFT (in place) for {} elements", data.len());
         let a = domain.ifft(&data.a);
         let b = domain.ifft(&data.b);
+        tracing::trace!("< IFFT (in place) for {} elements", data.len());
         Self::FieldShareVec::new(a, b)
     }
 
@@ -737,15 +743,19 @@ impl<F: PrimeField, N: Rep3Network> FFTProvider<F> for Rep3Protocol<F, N> {
         data: &mut Self::FieldShareVec,
         domain: &D,
     ) {
+        tracing::trace!("> IFFT (in place) for {} elements", data.len());
         domain.ifft_in_place(&mut data.a);
         domain.ifft_in_place(&mut data.b);
+        tracing::trace!("< IFFT (in place) for {} elements", data.len());
     }
 
     fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare {
+        tracing::trace!("> evaluate poly public");
         let poly_a = DensePolynomial { coeffs: poly.a };
         let poly_b = DensePolynomial { coeffs: poly.b };
         let a = poly_a.evaluate(point);
         let b = poly_b.evaluate(point);
+        tracing::trace!("< evaluate poly public");
         Self::FieldShare::new(a, b)
     }
 }
@@ -756,9 +766,11 @@ impl<C: CurveGroup, N: Rep3Network> MSMProvider<C> for Rep3Protocol<C::ScalarFie
         points: &[C::Affine],
         scalars: &Self::FieldShareVec,
     ) -> Self::PointShare {
+        tracing::trace!("> MSM public points for {} elements", points.len());
         debug_assert_eq!(points.len(), scalars.len());
         let res_a = C::msm_unchecked(points, &scalars.a);
         let res_b = C::msm_unchecked(points, &scalars.b);
+        tracing::trace!("< MSM public points for {} elements", points.len());
         Self::PointShare { a: res_a, b: res_b }
     }
 }

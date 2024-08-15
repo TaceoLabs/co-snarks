@@ -58,6 +58,7 @@ where
 
 impl<F: PrimeField> Domains<F> {
     pub(super) fn new(domain_size: usize) -> PlonkProofResult<Self> {
+        tracing::debug!("building domains/roots of unity for domain size: {domain_size}");
         if domain_size & (domain_size - 1) != 0 || domain_size == 0 {
             Err(PlonkProofError::InvalidDomainSize(domain_size))
         } else {
@@ -68,6 +69,14 @@ impl<F: PrimeField> Domains<F> {
             let (_, roots_of_unity) = co_circom_snarks::utils::roots_of_unity();
             let pow = usize::try_from(domain_size.ilog2()).expect("u32 fits into usize");
 
+            tracing::trace!(
+                "setting arkworks root of unity (domain size) by hand: {}",
+                roots_of_unity[pow]
+            );
+            tracing::trace!(
+                "setting arkworks root of unity (extended) by hand: {}",
+                roots_of_unity[pow + 2]
+            );
             // snarkjs and arkworks use different roots of unity to compute (i)fft.
             // therefore we compute the roots of unity by hand like snarkjs and
             // set the root of unity accordingly by hand

@@ -6,6 +6,7 @@ use crate::{
     FieldShareVec, PlonkProofError, PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
 use mpc_core::traits::{
     FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
@@ -83,6 +84,11 @@ where
     pub(super) z: PolyEval<T, P>,
 }
 
+impl<P: Pairing> std::fmt::Display for Round2Proof<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "Round2Proof(z: {})", self.commit_z.into_affine())
+    }
+}
 impl<T, P: Pairing> Round2Challenges<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -144,6 +150,7 @@ where
         challenges: &Round2Challenges<T, P>,
         polys: &Round1Polys<T, P>,
     ) -> PlonkProofResult<PolyEval<T, P>> {
+        tracing::debug!("computing z polynomial...");
         let pow_root_of_unity = domains.root_of_unity_pow;
         let mut w = P::ScalarField::one();
         let mut n1 = Vec::with_capacity(zkey.domain_size);
@@ -225,6 +232,7 @@ where
         if poly_z.len() > zkey.domain_size + 3 {
             Err(PlonkProofError::PolynomialDegreeTooLarge)
         } else {
+            tracing::debug!("computing z polynomial done!");
             Ok(PolyEval {
                 poly: poly_z.into(),
                 eval: eval_z,
@@ -244,6 +252,7 @@ where
         } = self;
         let zkey = &data.zkey;
         let public_input = &data.witness.public_inputs;
+        tracing::debug!("building challenges for round2 with Keccak256..");
         let mut transcript = Keccak256Transcript::<P>::default();
         transcript.add_point(zkey.verifying_key.qm);
         transcript.add_point(zkey.verifying_key.ql);
@@ -265,16 +274,19 @@ where
         let mut transcript = Keccak256Transcript::<P>::default();
         transcript.add_scalar(beta);
         let gamma = transcript.get_challenge();
+        tracing::debug!("beta: {beta}, gamma: {gamma}");
         let challenges = Round2Challenges::new(challenges, beta, gamma);
         let z = Self::compute_z(&mut driver, zkey, &domains, &challenges, &polys)?;
         // STEP 2.3 - Compute permutation [z]_1
 
+        tracing::debug!("committing to poly z (MSMs)");
         let commit_z = MSMProvider::<P::G1>::msm_public_points(
             &mut driver,
             &zkey.p_tau[..z.poly.get_len()],
             &z.poly,
         );
         let proof = Round2Proof::new(proof, driver.open_point(&commit_z)?);
+        tracing::debug!("round2 result: {proof}");
 
         Ok(Round3 {
             driver,

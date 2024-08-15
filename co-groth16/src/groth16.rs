@@ -155,6 +155,7 @@ where
         let domain_size = domain.size();
         let mut a = vec![FieldShare::<T, P>::default(); domain_size];
         let mut b = vec![FieldShare::<T, P>::default(); domain_size];
+        tracing::debug!("evaluating constraints..");
         for (a, b, at_i, bt_i) in izip!(&mut a, &mut b, &matrices.a, &matrices.b) {
             *a = self
                 .driver
@@ -163,6 +164,7 @@ where
                 .driver
                 .evaluate_constraint(bt_i, public_inputs, private_witness);
         }
+        tracing::debug!("done!");
         let mut a = FieldShareVec::<T, P>::from(a);
         let promoted_public = self.driver.promote_to_trivial_shares(public_inputs);
         self.driver
@@ -170,7 +172,6 @@ where
 
         let mut b = FieldShareVec::<T, P>::from(b);
         let mut c = self.driver.mul_vec(&a, &b)?;
-        tracing::debug!("ifft");
         self.driver.ifft_in_place(&mut a, &domain);
         self.driver.ifft_in_place(&mut b, &domain);
         self.driver.distribute_powers_and_mul_by_const(
@@ -183,7 +184,6 @@ where
             root_of_unity,
             P::ScalarField::one(),
         );
-        tracing::debug!("fft");
         self.driver.fft_in_place(&mut a, &domain);
         self.driver.fft_in_place(&mut b, &domain);
         //this can be in-place so that we do not have to allocate memory
@@ -191,14 +191,12 @@ where
         std::mem::drop(a);
         std::mem::drop(b);
 
-        tracing::debug!("ifft");
         self.driver.ifft_in_place(&mut c, &domain);
         self.driver.distribute_powers_and_mul_by_const(
             &mut c,
             root_of_unity,
             P::ScalarField::one(),
         );
-        tracing::debug!("fft");
         self.driver.fft_in_place(&mut c, &domain);
 
         self.driver.sub_assign_vec(&mut ab, &c);
@@ -217,6 +215,7 @@ where
         T: EcMpcProtocol<C>,
         T: MSMProvider<C>,
     {
+        tracing::debug!("calculate coeffs..");
         let pub_len = input_assignment.len();
         let pub_acc = C::msm_unchecked(&query[1..=pub_len], input_assignment);
         let priv_acc = MSMProvider::<C>::msm_public_points(
@@ -231,6 +230,7 @@ where
         EcMpcProtocol::<C>::add_assign_points_public(&mut self.driver, &mut res, &pub_acc);
         EcMpcProtocol::<C>::add_assign_points(&mut self.driver, &mut res, &priv_acc);
 
+        tracing::debug!("done..");
         res
     }
 
@@ -243,11 +243,10 @@ where
         input_assignment: &[P::ScalarField],
         aux_assignment: &FieldShareVec<T, P>,
     ) -> Result<Groth16Proof<P>> {
-        tracing::debug!("msm");
+        tracing::debug!("create proof with assignment...");
         //let c_acc_time = start_timer!(|| "Compute C");
         let h_acc = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.h_query, h);
 
-        tracing::debug!("msm pubs");
         // Compute C
         let l_aux_acc = MSMProvider::<P::G1>::msm_public_points(
             &mut self.driver,
@@ -257,7 +256,6 @@ where
 
         let delta_g1 = zkey.delta_g1.into_group();
         let rs = self.driver.mul(&r, &s)?;
-        tracing::debug!("scalar_mul_public_point");
         let r_s_delta_g1 = self.driver.scalar_mul_public_point(&delta_g1, &rs);
 
         //end_timer!(c_acc_time);
@@ -266,7 +264,6 @@ where
         // let a_acc_time = start_timer!(|| "Compute A");
         let r_g1 = self.driver.scalar_mul_public_point(&delta_g1, &r);
 
-        tracing::debug!("calc coeff");
         let g_a = self.calculate_coeff::<P::G1>(
             r_g1,
             &zkey.a_query,
@@ -280,12 +277,10 @@ where
         let s_g_a = self.driver.scalar_mul_public_point(&g_a_opened, &s);
         // end_timer!(a_acc_time);
 
-        tracing::debug!("scalar_mul_public_point");
         // Compute B in G1
         // In original implementation this is skipped if r==0, however r is shared in our case
         //  let b_g1_acc_time = start_timer!(|| "Compute B in G1");
         let s_g1 = self.driver.scalar_mul_public_point(&delta_g1, &s);
-        tracing::debug!("calc coeff");
         let g1_b = self.calculate_coeff::<P::G1>(
             s_g1,
             &zkey.b_g1_query,
@@ -293,7 +288,6 @@ where
             input_assignment,
             aux_assignment,
         );
-        tracing::debug!("scalar_mul_public_point");
         let r_g1_b = EcMpcProtocol::<P::G1>::scalar_mul(&mut self.driver, &g1_b, &r)?;
         //  end_timer!(b_g1_acc_time);
 
@@ -301,7 +295,6 @@ where
         let delta_g2 = zkey.vk.delta_g2.into_group();
         //  let b_g2_acc_time = start_timer!(|| "Compute B in G2");
         let s_g2 = self.driver.scalar_mul_public_point(&delta_g2, &s);
-        tracing::debug!("calc coeff");
         let g2_b = self.calculate_coeff::<P::G2>(
             s_g2,
             &zkey.b_g2_query,

@@ -812,12 +812,16 @@ impl<F: PrimeField, N: ShamirNetwork> FFTProvider<F> for ShamirProtocol<F, N> {
         data: Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
+        tracing::trace!("> FFT for {} elements", data.len());
         let a = domain.fft(&data.a);
+        tracing::trace!("< FFT for {} elements", data.len());
         Self::FieldShareVec::new(a)
     }
 
     fn fft_in_place<D: EvaluationDomain<F>>(&mut self, data: &mut Self::FieldShareVec, domain: &D) {
+        tracing::trace!("> FFT (in place) for {} elements", data.len());
         domain.fft_in_place(&mut data.a);
+        tracing::trace!("< FFT (in place) for {} elements", data.len());
     }
 
     fn ifft<D: EvaluationDomain<F>>(
@@ -825,7 +829,9 @@ impl<F: PrimeField, N: ShamirNetwork> FFTProvider<F> for ShamirProtocol<F, N> {
         data: &Self::FieldShareVec,
         domain: &D,
     ) -> Self::FieldShareVec {
+        tracing::trace!("> IFFT for {} elements", data.len());
         let a = domain.ifft(&data.a);
+        tracing::trace!("< IFFT for {} elements", data.len());
         Self::FieldShareVec::new(a)
     }
 
@@ -834,11 +840,15 @@ impl<F: PrimeField, N: ShamirNetwork> FFTProvider<F> for ShamirProtocol<F, N> {
         data: &mut Self::FieldShareVec,
         domain: &D,
     ) {
+        tracing::trace!("> IFFT (in place) for {} elements", data.len());
         domain.ifft_in_place(&mut data.a);
+        tracing::trace!("< IFFT (in place) for {} elements", data.len());
     }
 
     fn evaluate_poly_public(&mut self, poly: Self::FieldShareVec, point: &F) -> Self::FieldShare {
+        tracing::trace!("> evaluate poly public");
         let poly = DensePolynomial { coeffs: poly.a };
+        tracing::trace!("< evaluate poly public");
         Self::FieldShare::new(poly.evaluate(point))
     }
 }
@@ -1003,8 +1013,10 @@ impl<C: CurveGroup, N: ShamirNetwork> MSMProvider<C> for ShamirProtocol<C::Scala
         points: &[C::Affine],
         scalars: &Self::FieldShareVec,
     ) -> Self::PointShare {
+        tracing::trace!("> MSM public points for {} elements", points.len());
         debug_assert_eq!(points.len(), scalars.len());
         let res = C::msm_unchecked(points, &scalars.a);
+        tracing::trace!("< MSM public points for {} elements", points.len());
         Self::PointShare { a: res }
     }
 }

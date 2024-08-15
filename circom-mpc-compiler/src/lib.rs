@@ -378,7 +378,6 @@ impl<P: Pairing> CoCircomCompiler<P> {
     }
 
     fn handle_load_bucket(&mut self, load_bucket: &LoadBucket) {
-        //TODO ContextSize > 1
         let context_size = load_bucket.context.size;
         //first eject for src
         let (mapped, signal_code) = match &load_bucket.src {
@@ -634,6 +633,7 @@ impl<P: Pairing> CoCircomCompiler<P> {
     /// - `Err(err)` indicates an error occurred during parsing or compilation.
     pub fn get_public_inputs(self) -> Result<Vec<String>> {
         let program_archive = self.get_program_archive()?;
+        tracing::debug!("get public inputs: {:?}", program_archive.public_inputs);
         Ok(program_archive.public_inputs)
     }
 
@@ -647,8 +647,10 @@ impl<P: Pairing> CoCircomCompiler<P> {
     ///   Refer to its [documentation](CoCircomCompilerParsed) for usage details.
     /// - `Err(err)` indicates an error occurred during parsing or compilation.
     pub fn parse(mut self) -> Result<CoCircomCompilerParsed<P>> {
+        tracing::debug!("compiler starts parsing..");
         let program_archive = self.get_program_archive()?;
         let (circuit, output_mapping) = self.build_circuit(program_archive)?;
+        tracing::debug!("output mapping: {output_mapping:?}");
         let constant_table = circuit
             .c_producer
             .get_field_constant_list()
@@ -659,6 +661,7 @@ impl<P: Pairing> CoCircomCompiler<P> {
         let string_table = circuit.c_producer.get_string_table().to_owned();
         //build functions
         for fun in circuit.functions.iter() {
+            tracing::debug!("parsing function: {}", fun.header);
             fun.body.iter().for_each(|inst| {
                 self.handle_instruction(inst);
             });
@@ -673,18 +676,22 @@ impl<P: Pairing> CoCircomCompiler<P> {
                 .iter()
                 .map(|p| p.length.iter().product::<usize>())
                 .sum::<usize>();
+            tracing::debug!("# params: {}", params_length);
+            tracing::debug!("function has {} opcodes", new_code_block.len());
             self.fun_decls.insert(
                 fun.header.clone(),
                 FunDecl::new(params_length, fun.max_number_of_vars, new_code_block),
             );
         }
         for templ in circuit.templates.iter() {
+            tracing::debug!("parsing template: {}", templ.header);
             templ.body.iter().for_each(|inst| {
                 self.handle_instruction(inst);
             });
             let mut new_code_block = CodeBlock::default();
             std::mem::swap(&mut new_code_block, &mut self.current_code_block);
             new_code_block.push(MpcOpCode::Return);
+            tracing::debug!("template has {} opcodes", new_code_block.len());
             //check if we need mapping for store bucket
             let mappings = if let Some(mappings) = circuit.c_producer.io_map.get(&templ.id) {
                 mappings.iter().map(|m| m.offset).collect_vec()

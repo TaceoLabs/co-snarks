@@ -49,6 +49,7 @@ pub struct Witness<F> {
 impl<F: CircomArkworksPrimeFieldBridge> Witness<F> {
     /// Deserializes a [`Witness`] from a reader.
     pub fn from_reader<R: Read>(mut reader: R) -> Result<Self> {
+        tracing::trace!("trying to read witness");
         reader_utils::read_header(&mut reader, WITNESS_HEADER)?;
         let version = reader.read_u32::<LittleEndian>()?;
         if version > MAX_VERSION {
@@ -72,6 +73,7 @@ impl<F: CircomArkworksPrimeFieldBridge> Witness<F> {
         let mut buf = vec![0; usize::try_from(n8).expect("u32 fits into usize")];
         reader.read_exact(buf.as_mut_slice())?;
         if F::MODULUS.to_bytes_le() != buf {
+            tracing::trace!("wrong scalar field");
             return Err(WitnessParserError::WrongScalarField);
         }
         let n_witness = reader.read_u32::<LittleEndian>()?;

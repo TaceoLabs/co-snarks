@@ -59,6 +59,21 @@ pub(super) struct Round4Proof<P: Pairing> {
     pub(super) eval_s2: P::ScalarField,
 }
 
+impl<P: Pairing> std::fmt::Display for Round4Proof<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(
+            f,
+            "Round3Proof(eval_a: {}, eval_b: {}, eval_c: {}, eval_s1: {}, eval_s2: {}, eval_zw: {})",
+            self.eval_a,
+            self.eval_b,
+            self.eval_c,
+            self.eval_s1,
+            self.eval_s2,
+            self.eval_zw,
+        )
+    }
+}
+
 impl<P: Pairing> Round4Proof<P> {
     fn new(
         round3_proof: Round3Proof<P>,
@@ -106,6 +121,7 @@ where
             polys,
             data,
         } = self;
+        tracing::debug!("building challenges for round4 with Keccak256..");
         // STEP 4.1 - Compute evaluation challenge xi \in F_p
         let mut transcript = Keccak256Transcript::<P>::default();
         transcript.add_scalar(challenges.alpha);
@@ -115,9 +131,14 @@ where
         let xi = transcript.get_challenge();
         let xiw = xi * domains.root_of_unity_pow;
         let challenges = Round4Challenges::new(challenges, xi);
+        tracing::debug!("xi: {xi}");
+        tracing::debug!("evaluating poly a");
         let eval_a = driver.evaluate_poly_public(polys.a.poly.to_owned(), &challenges.xi);
+        tracing::debug!("evaluating poly b");
         let eval_b = driver.evaluate_poly_public(polys.b.poly.to_owned(), &challenges.xi);
+        tracing::debug!("evaluating poly c");
         let eval_c = driver.evaluate_poly_public(polys.c.poly.to_owned(), &challenges.xi);
+        tracing::debug!("evaluating poly z");
         let eval_z = driver.evaluate_poly_public(polys.z.poly.to_owned(), &xiw);
 
         let opened = driver.open_many(&[eval_a, eval_b, eval_c, eval_z])?;
@@ -130,6 +151,7 @@ where
         let eval_s1 = data.zkey.s1_poly.evaluate(&challenges.xi);
         let eval_s2 = data.zkey.s2_poly.evaluate(&challenges.xi);
         let proof = Round4Proof::new(proof, eval_a, eval_b, eval_c, eval_zw, eval_s1, eval_s2);
+        tracing::debug!("round4 result: {proof}");
 
         Ok(Round5 {
             driver,

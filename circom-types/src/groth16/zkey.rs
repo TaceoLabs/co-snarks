@@ -143,6 +143,7 @@ where
 {
     type Error = ZKeyParserError;
     fn try_from(mut binfile: BinFile<P>) -> Result<Self, Self::Error> {
+        tracing::debug!("start transforming bin file into zkey...");
         let header = HeaderGroth::<P>::read(&mut binfile.take_section(2))?;
         let n_vars = header.n_vars;
         let n_public = header.n_public;
@@ -164,6 +165,7 @@ where
         let mut l_query = None;
         let mut h_query = None;
 
+        tracing::debug!("parsing zkey sections with rayon...");
         rayon::scope(|s| {
             s.spawn(|_| ic = Some(Self::ic(n_public, ic_section)));
             s.spawn(|_| a_query = Some(Self::a_query(n_vars, a_section)));
@@ -172,9 +174,11 @@ where
             s.spawn(|_| l_query = Some(Self::l_query(n_vars - n_public - 1, l_section)));
             s.spawn(|_| h_query = Some(Self::h_query(domain_size as usize, h_section)));
         });
+        tracing::debug!("we are done with parsing sections!");
 
         // parse matrices
 
+        tracing::debug!("reading matrices...");
         let mut matrices_section = binfile.take_section(4);
 
         // this function (an all following uses) assumes that values are encoded in little-endian
@@ -228,7 +232,7 @@ where
             // unwrap is fine, because we are guaranteed to have a Some value (rayon scope)
             gamma_abc_g1: ic.unwrap()?,
         };
-
+        tracing::debug!("groth16 zkey parsing done!");
         Ok(ZKey {
             n_public: header.n_public,
             pow: u32_to_usize!(header.pow),
@@ -252,9 +256,11 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn read<R: Read>(mut reader: &mut R) -> ZKeyParserResult<Self> {
+        tracing::debug!("reading groth16 header..");
         let n8q: u32 = u32::deserialize_uncompressed(&mut reader)?;
         //modulus of BaseField
         let q = <P::BaseField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
+        tracing::debug!("base field byte size: {n8q}");
         let expected_n8q = P::BaseField::MODULUS_BIT_SIZE.div_ceil(8);
         if n8q != expected_n8q {
             return Err(ZKeyParserError::UnexpectedByteSize(expected_n8q, n8q));
@@ -265,6 +271,7 @@ where
         }
         // this function assumes that the values are encoded in little-endian
         let n8r: u32 = u32::deserialize_uncompressed(&mut reader)?;
+        tracing::debug!("scalar field byte size: {n8r}");
         //modulus of ScalarField
         let r = <P::ScalarField as PrimeField>::BigInt::deserialize_uncompressed(&mut reader)?;
         let expected_n8r = P::ScalarField::MODULUS_BIT_SIZE.div_ceil(8);
@@ -278,8 +285,8 @@ where
 
         let n_vars = u32_to_usize!(u32::deserialize_uncompressed(&mut reader)?);
         let n_public = u32_to_usize!(u32::deserialize_uncompressed(&mut reader)?);
-
         let domain_size = u32::deserialize_uncompressed(&mut reader)?;
+        tracing::debug!("n_vars: {n_vars}; n_public: {n_public}, domain_size: {domain_size}");
         if domain_size & (domain_size - 1) == 0 && domain_size > 0 {
             let alpha_g1 = P::g1_from_reader(&mut reader)?;
             let beta_g1 = P::g1_from_reader(&mut reader)?;
@@ -287,6 +294,7 @@ where
             let gamma_g2 = P::g2_from_reader(&mut reader)?;
             let delta_g1 = P::g1_from_reader(&mut reader)?;
             let delta_g2 = P::g2_from_reader(&mut reader)?;
+            tracing::debug!("read header done!");
             Ok(Self {
                 n_vars,
                 pow: u32_to_usize!(domain_size.ilog2()),
