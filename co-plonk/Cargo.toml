@@ -20,7 +20,7 @@ circom-types = { version = "0.4.0", path = "../circom-types" }
 co-circom-snarks = { version = "0.1.0", path = "../co-circom-snarks" }
 eyre = { workspace = true }
 itertools = { workspace = true }
-mpc-core = { version = "0.3.0", path = "../mpc-core", features = ["dangerous"] }
+mpc-core = { version = "0.3.0", path = "../mpc-core" }
 num-traits = { workspace = true }
 sha3 = { workspace = true }
 thiserror = { workspace = true }

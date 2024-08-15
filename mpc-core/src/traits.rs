@@ -2,8 +2,6 @@
 //!
 //! Contains the traits which need to be implemented by the MPC protocols.
 
-use ark_bls12_381::Fr as Bls12_381_ScalarField;
-use ark_bn254::Fr as Bn254_ScalarField;
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
@@ -376,7 +374,7 @@ pub trait PairingEcMpcProtocol<P: Pairing>: EcMpcProtocol<P::G1> + EcMpcProtocol
 }
 
 /// A trait representing the application of the Fast Fourier Transform (FFT) in MPC.
-pub trait FFTProvider<F: PrimeField + FFTPostProcessing>: PrimeFieldMpcProtocol<F> {
+pub trait FFTProvider<F: PrimeField>: PrimeFieldMpcProtocol<F> {
     /// Computes the FFT of a vector of shared field elements.
     fn fft<D: EvaluationDomain<F>>(
         &mut self,
@@ -410,22 +408,3 @@ pub trait MSMProvider<C: CurveGroup>: EcMpcProtocol<C> {
         scalars: &Self::FieldShareVec,
     ) -> Self::PointShare;
 }
-
-/// Implements a custom post-processor for FFT operations. This is required since for BLS12-381, Arkworks FFT returns the vector of size n permuted like this (compared to snarkjs): (0, n - 3 mod n, n - 2 * 3 mod n, ... ,n - 3 * i mod n,...), so we need to rearrange it.
-pub trait FFTPostProcessing: PrimeField {
-    /// Allows to specify a function which gets called after each fft/ifft. Per default this function does nothing. However, for BLS12-381, the function needs to rearrange the vector.
-    fn fft_post_processing(_vec: &mut Vec<Self>) {}
-}
-
-impl FFTPostProcessing for Bls12_381_ScalarField {
-    fn fft_post_processing(vec: &mut Vec<Self>) {
-        let n = vec.len();
-        let mut temp = vec.clone();
-        vec.iter().enumerate().for_each(|(i, &value)| {
-            let original_index = (n + n - 3 * i % n) % n;
-            temp[original_index] = value;
-        });
-        vec.copy_from_slice(&temp);
-    }
-}
-impl FFTPostProcessing for Bn254_ScalarField {}

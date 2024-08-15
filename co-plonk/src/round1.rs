@@ -20,7 +20,6 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
     pub(super) domains: Domains<P::ScalarField>,
@@ -104,7 +103,6 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     // Essentially the fft of the trace columns
     fn compute_wire_polynomials(

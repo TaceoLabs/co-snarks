@@ -12,8 +12,7 @@ use circom_types::{
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
 use mpc_core::traits::{
-    FFTPostProcessing, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
-    PrimeFieldMpcProtocol,
+    FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
 };
 use num_traits::One;
 use num_traits::Zero;
@@ -26,7 +25,6 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
     pub(super) domains: Domains<P::ScalarField>,
@@ -93,7 +91,7 @@ where
         + MSMProvider<P::G2>,
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: FFTPostProcessing + CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn div_by_zerofier(
         driver: &mut T,

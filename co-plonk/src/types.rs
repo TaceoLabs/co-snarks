@@ -1,5 +1,5 @@
 use ark_ec::AffineRepr;
-use ark_poly::{EvaluationDomain, GeneralEvaluationDomain, Radix2EvaluationDomain};
+use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use circom_types::plonk::ZKey;
 use co_circom_snarks::SharedWitness;
 use std::marker::PhantomData;
@@ -68,12 +68,16 @@ impl<F: PrimeField> Domains<F> {
             let (_, roots_of_unity) = co_circom_snarks::utils::roots_of_unity();
             let pow = usize::try_from(domain_size.ilog2()).expect("u32 fits into usize");
 
-            //snarkjs and arkworks use different roots of unity to compute (i)fft. 
-            //this doesn't matter for bn254, but for bls12-381 the 
+            // snarkjs and arkworks use different roots of unity to compute (i)fft.
+            // therefore we compute the roots of unity by hand like snarkjs and
+            // set the root of unity accordingly by hand
             domain.group_gen = roots_of_unity[pow];
-            domain.group_gen_inv = roots_of_unity[pow].inverse().unwrap();
+            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
             extended_domain.group_gen = roots_of_unity[pow + 2];
-            extended_domain.group_gen_inv = roots_of_unity[pow + 2].inverse().unwrap();
+            extended_domain.group_gen_inv = extended_domain
+                .group_gen
+                .inverse()
+                .expect("can compute inverse");
 
             Ok(Self {
                 domain,

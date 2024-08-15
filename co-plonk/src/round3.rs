@@ -77,7 +77,6 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     pub(super) driver: T,
     pub(super) domains: Domains<P::ScalarField>,
@@ -187,7 +186,6 @@ where
         + FFTProvider<P::ScalarField>
         + MSMProvider<P::G1>
         + MSMProvider<P::G2>,
-    P::ScalarField: mpc_core::traits::FFTPostProcessing,
 {
     fn get_z1(domains: &Domains<P::ScalarField>) -> [P::ScalarField; 4] {
         let zero = P::ScalarField::zero();
