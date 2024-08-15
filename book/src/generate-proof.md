@@ -8,7 +8,7 @@ The aim of the `generate-proof` command is to run proof generation in MPC using 
 co-circom generate-proof --witness test_vectors/poseidon/witness.wtns.0.shared --zkey test_vectors/poseidon/poseidon.zkey --protocol REP3 --config configs/party1.toml --out proof.json --public-input public_input.json
 ```
 
-The above command takes a witness share `test_vectors/poseidon/witness.wtns.0.shared`, a traditional Circom `.zkey` file and a [networking config](./network-config.md) and produces a Circom-compatible proof `proof.json`, with a Circom-compatible public input file `public_input.json`.
+The above command takes a witness share `test_vectors/poseidon/witness.wtns.0.shared`, a traditional circom `.zkey` file and a [networking config](./config.md) and produces a circom-compatible proof `proof.json`, with a circom-compatible public input file `public_input.json`.
 
 ## Reference
 

@@ -1,3 +1,3 @@
 # Circom
 
-We refer to the Circom documentation at <https://docs.circom.io/>.
+We refer to the circom documentation at <https://docs.circom.io/>.

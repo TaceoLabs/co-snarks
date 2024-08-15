@@ -1,6 +1,6 @@
 # verify
 
-The aim of the `verify` command is to verify a Groth16 Circom proof using the provided verification key and public inputs.
+The aim of the `verify` command is to verify a Groth16 circom proof using the provided verification key and public inputs.
 
 ## Example
 
@@ -13,7 +13,7 @@ The above command verifies the proof in `proof.json` using the verification key 
 ## Reference
 
 ```txt
-Verification of a Circom proof
+Verification of a circom proof
 
 Usage: co-circom verify [OPTIONS] <PROOF_SYSTEM>
 
