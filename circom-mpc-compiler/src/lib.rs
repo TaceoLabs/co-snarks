@@ -738,7 +738,7 @@ mod tests {
     fn test_get_output_from_finalized_witness() {
         let builder = CompilerBuilder::<Bn254>::new(
             CompilerConfig::default(),
-            "../test_vectors/circuits/test-circuits/bitonic_sort.circom".to_owned(),
+            "../test_vectors/WitnessExtension/tests/bitonic_sort.circom".to_owned(),
         );
 
         let plain_vm = builder

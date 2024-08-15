@@ -38,11 +38,11 @@ macro_rules! witness_extension_test_plain {
                 let builder = CompilerBuilder::<Bn254>::new(
                     CompilerConfig::default(),
                     format!(
-                        "../test_vectors/circuits/test-circuits/{}.circom",
+                        "../test_vectors/WitnessExtension/tests/{}.circom",
                         stringify!($name)
                     ),
                 )
-                .link_library("../test_vectors/circuits/libs/");
+                .link_library("../test_vectors/WitnessExtension/tests/libs/");
                 let is_witness = builder
                     .build()
                     .parse()
@@ -72,7 +72,7 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
     let mut i = 0;
     loop {
         if fs::metadata(format!(
-            "../test_vectors/circuits/test-circuits/witness_outputs/{}/witness{}.wtns",
+            "../test_vectors/WitnessExtension/kats/{}/witness{}.wtns",
             fn_name, i
         ))
         .is_err()
@@ -80,14 +80,14 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
             break;
         }
         let witness = File::open(format!(
-            "../test_vectors/circuits/test-circuits/witness_outputs/{}/witness{}.wtns",
+            "../test_vectors/WitnessExtension/kats/{}/witness{}.wtns",
             fn_name, i
         ))
         .unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
         witnesses.push(should_witness);
         let input_file = File::open(format!(
-            "../test_vectors/circuits/test-circuits/witness_outputs/{}/input{}.json",
+            "../test_vectors/WitnessExtension/kats/{}/input{}.json",
             fn_name, i
         ))
         .unwrap();
