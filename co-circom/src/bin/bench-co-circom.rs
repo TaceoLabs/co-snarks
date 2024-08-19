@@ -796,6 +796,7 @@ fn bench_co_circom_gen_wtns_one_party(
     thread::spawn(move || {
         let conf = conf_tmp;
         let now = Instant::now();
+        set_link_libs_env(&conf);
         let out_coc_gen_wtns = Command::new(&conf.co_circom_bin)
             .arg("generate-witness")
             .arg("--input")
@@ -810,7 +811,6 @@ fn bench_co_circom_gen_wtns_one_party(
             .arg(config_toml)
             .arg("--out")
             .arg(wtns_shr)
-            .args(link_library_to_args(&conf, "--link-library")?)
             .output()
             .context("during executing \"co-circom generate-witness\"")?;
         let res = now.elapsed();
@@ -868,6 +868,17 @@ fn bench_co_circom_gen_wtns(conf: &Config) -> color_eyre::Result<Duration> {
     Ok(std::cmp::min(res_1, std::cmp::min(res_2, res_3)))
 }
 
+fn set_link_libs_env(conf: &Config) {
+    let mut result = Vec::new();
+    if let Some(link_library) = &conf.link_library {
+        for lib in link_library {
+            result.push(lib.clone());
+        }
+    }
+
+    std::env::set_var("COCIRCOM_LINK_LIBRARY", format!("[{}]", result.join(",")));
+}
+
 fn link_library_to_args(conf: &Config, flag: &str) -> color_eyre::Result<Vec<String>> {
     let mut result = Vec::new();
     if let Some(link_library) = &conf.link_library {
@@ -882,6 +893,7 @@ fn link_library_to_args(conf: &Config, flag: &str) -> color_eyre::Result<Vec<Str
 fn bench_co_circom(conf: &Config) -> color_eyre::Result<BenchResult> {
     create_party_toml_files(conf).context("during creating party toml files")?;
     let mut wtns_gen_time = None;
+    set_link_libs_env(conf);
     if conf.do_gen_witness {
         tracing::trace!("Splitting input into shares using co-circom ..");
         let out_coc_split = Command::new(&conf.co_circom_bin)
@@ -896,7 +908,6 @@ fn bench_co_circom(conf: &Config) -> color_eyre::Result<BenchResult> {
             .arg(&conf.curve)
             .arg("--out-dir")
             .arg(".")
-            .args(link_library_to_args(conf, "--link-library")?)
             .output()
             .context("during executing \"co-circom split-input\"")?;
         if !out_coc_split.status.success() {

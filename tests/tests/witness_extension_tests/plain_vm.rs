@@ -1,5 +1,5 @@
 use ark_bn254::Bn254;
-use circom_mpc_compiler::CompilerBuilder;
+use circom_mpc_compiler::CoCircomCompiler;
 use circom_mpc_compiler::CompilerConfig;
 use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::Witness;
@@ -35,18 +35,19 @@ macro_rules! witness_extension_test_plain {
         fn $name() {
             let inp: TestInputs = from_test_name(stringify!($name));
             for i in 0..inp.inputs.len() {
-                let builder = CompilerBuilder::<Bn254>::new(
-                    CompilerConfig::default(),
+                let mut compiler_config = CompilerConfig::default();
+                compiler_config
+                    .link_library
+                    .push("../test_vectors/WitnessExtension/tests/libs/".into());
+                let parsed = CoCircomCompiler::<Bn254>::parse(
                     format!(
                         "../test_vectors/WitnessExtension/tests/{}.circom",
                         stringify!($name)
                     ),
+                    compiler_config,
                 )
-                .link_library("../test_vectors/WitnessExtension/tests/libs/");
-                let is_witness = builder
-                    .build()
-                    .parse()
-                    .unwrap()
+                .unwrap();
+                let is_witness = parsed
                     .to_plain_vm(VMConfig::default())
                     .run_with_flat(inp.inputs[i].to_owned(), 0)
                     .unwrap()

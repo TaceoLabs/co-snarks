@@ -17,6 +17,8 @@ protocol = "REP3"
 curve = "BN254"
 
 [compiler]
+version = "2.0.0"
+link_library = ["circomlibs", "utils"]
 allow_leaky_loops = false
 
 [vm]
@@ -66,6 +68,8 @@ This section configures the co-circom MPC compiler.
 
 ### Keys
 
+* `version`: Allows leaking of secret values in loops (default: "2.0.0")
+* `link_library`: A list of strings that represent paths for circom to look for library files (`-l` flag in circom) (default: `[]`)
 * `allow_leaky_loops`: Allows leaking of secret values in loops (default: `false`) (*currently not implemented*).
 
 ## VM Configuration

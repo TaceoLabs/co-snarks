@@ -3,7 +3,7 @@
 use std::{io::Read, path::PathBuf, time::Instant};
 
 use ark_ec::pairing::Pairing;
-use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
+use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig};
 use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::{
     groth16::{Groth16Proof, ZKey},
@@ -171,9 +171,6 @@ pub struct SplitInputCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub circuit: Option<String>,
-    /// The path to Circom library files
-    #[arg(long)]
-    pub link_library: Vec<String>,
     /// The MPC protocol to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -195,8 +192,6 @@ pub struct SplitInputConfig {
     pub input: PathBuf,
     /// The path to the circuit file
     pub circuit: String,
-    /// The path to Circom library files
-    pub link_library: Vec<String>,
     /// The MPC protocol to be used
     pub protocol: MPCProtocol,
     /// The pairing friendly curve to be used
@@ -260,9 +255,6 @@ pub struct GenerateWitnessCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub circuit: Option<String>,
-    /// The path to Circom library files
-    #[arg(long)]
-    pub link_library: Vec<String>,
     /// The MPC protocol to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -284,8 +276,6 @@ pub struct GenerateWitnessConfig {
     pub input: PathBuf,
     /// The path to the circuit file
     pub circuit: String,
-    /// The path to Circom library files
-    pub link_library: Vec<String>,
     /// The MPC protocol to be used
     pub protocol: MPCProtocol,
     /// The pairing friendly curve to be used
@@ -513,7 +503,6 @@ pub fn parse_shared_input<R: Read, P: Pairing, T: PrimeFieldMpcProtocol<P::Scala
 /// 4. Execute the bytecode on the MPC VM to generate the witness.
 pub fn generate_witness_rep3<P: Pairing>(
     circuit: String,
-    link_library: Vec<String>,
     input_share: SharedInput<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>,
     config: GenerateWitnessConfig,
 ) -> color_eyre::Result<SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>> {
@@ -521,13 +510,7 @@ pub fn generate_witness_rep3<P: Pairing>(
     file_utils::check_file_exists(&circuit_path)?;
 
     // parse circuit file & put through our compiler
-    let mut builder = CompilerBuilder::<P>::new(config.compiler, circuit);
-    for lib in link_library {
-        builder = builder.link_library(lib);
-    }
-    let parsed_circom_circuit = builder
-        .build()
-        .parse()
+    let parsed_circom_circuit = CoCircomCompiler::<P>::parse(circuit, config.compiler)
         .context("while parsing circuit file")?;
 
     // connect to network

@@ -1,5 +1,6 @@
 [compiler]
 allow_leaky_loops = false
+link_library = ["../lib"]
 
 [vm]
 allow_leaky_logs = false
