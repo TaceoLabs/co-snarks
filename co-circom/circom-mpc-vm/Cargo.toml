@@ -1,0 +1,22 @@
+[package]
+name = "circom-mpc-vm"
+version = "0.4.1"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+readme.workspace = true
+
+[dependencies]
+ark-ec.workspace = true
+ark-ff.workspace = true
+co-circom-snarks.workspace = true
+eyre.workspace = true
+itertools.workspace = true
+mpc-core.workspace = true
+mpc-net.workspace = true
+serde.workspace = true
+tracing.workspace = true

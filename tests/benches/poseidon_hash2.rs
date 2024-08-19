@@ -448,11 +448,11 @@ fn shamir_witness_from_plain_witness<P: Pairing>(
 
 fn poseidon_groth16_rep3_bn254(c: &mut Criterion) {
     const NUM_INPUTS: usize = 2;
-    let circuit = "../test_vectors/benches/poseidon_hash2/circuit.circom";
-    let lib = "../test_vectors/benches/poseidon_hash2/bn254/lib";
-    let zkey = "../test_vectors/benches/poseidon_hash2/bn254/groth16/poseidon.zkey";
+    let circuit = "../../test_vectors/benches/poseidon_hash2/circuit.circom";
+    let lib = "../../test_vectors/benches/poseidon_hash2/bn254/lib";
+    let zkey = "../../test_vectors/benches/poseidon_hash2/bn254/groth16/poseidon.zkey";
     let verification_key =
-        "../test_vectors/benches/poseidon_hash2/bn254/groth16/verification_key.json";
+        "../../test_vectors/benches/poseidon_hash2/bn254/groth16/verification_key.json";
     let name = "Bn254";
 
     // Generate without benchmarking
@@ -469,11 +469,11 @@ fn poseidon_groth16_rep3_bn254(c: &mut Criterion) {
 
 fn poseidon_groth16_shamir_bn254(c: &mut Criterion, degree: usize, num_parties: usize) {
     const NUM_INPUTS: usize = 2;
-    let circuit = "../test_vectors/benches/poseidon_hash2/circuit.circom";
-    let lib = "../test_vectors/benches/poseidon_hash2/bn254/lib";
-    let zkey = "../test_vectors/benches/poseidon_hash2/bn254/groth16/poseidon.zkey";
+    let circuit = "../../test_vectors/benches/poseidon_hash2/circuit.circom";
+    let lib = "../../test_vectors/benches/poseidon_hash2/bn254/lib";
+    let zkey = "../../test_vectors/benches/poseidon_hash2/bn254/groth16/poseidon.zkey";
     let verification_key =
-        "../test_vectors/benches/poseidon_hash2/bn254/groth16/verification_key.json";
+        "../../test_vectors/benches/poseidon_hash2/bn254/groth16/verification_key.json";
     let name = "Bn254";
 
     // Generate without benchmarking
@@ -489,11 +489,11 @@ fn poseidon_groth16_shamir_bn254(c: &mut Criterion, degree: usize, num_parties: 
 
 fn poseidon_plonk_rep3_bn254(c: &mut Criterion) {
     const NUM_INPUTS: usize = 2;
-    let circuit = "../test_vectors/benches/poseidon_hash2/circuit.circom";
-    let lib = "../test_vectors/benches/poseidon_hash2/bn254/lib";
-    let zkey = "../test_vectors/benches/poseidon_hash2/bn254/plonk/poseidon.zkey";
+    let circuit = "../../test_vectors/benches/poseidon_hash2/circuit.circom";
+    let lib = "../../test_vectors/benches/poseidon_hash2/bn254/lib";
+    let zkey = "../../test_vectors/benches/poseidon_hash2/bn254/plonk/poseidon.zkey";
     let verification_key =
-        "../test_vectors/benches/poseidon_hash2/bn254/plonk/verification_key.json";
+        "../../test_vectors/benches/poseidon_hash2/bn254/plonk/verification_key.json";
     let name = "Bn254";
 
     // Generate without benchmarking
@@ -510,11 +510,11 @@ fn poseidon_plonk_rep3_bn254(c: &mut Criterion) {
 
 fn poseidon_plonk_shamir_bn254(c: &mut Criterion, degree: usize, num_parties: usize) {
     const NUM_INPUTS: usize = 2;
-    let circuit = "../test_vectors/benches/poseidon_hash2/circuit.circom";
-    let lib = "../test_vectors/benches/poseidon_hash2/bn254/lib";
-    let zkey = "../test_vectors/benches/poseidon_hash2/bn254/plonk/poseidon.zkey";
+    let circuit = "../../test_vectors/benches/poseidon_hash2/circuit.circom";
+    let lib = "../../test_vectors/benches/poseidon_hash2/bn254/lib";
+    let zkey = "../../test_vectors/benches/poseidon_hash2/bn254/plonk/poseidon.zkey";
     let verification_key =
-        "../test_vectors/benches/poseidon_hash2/bn254/plonk/verification_key.json";
+        "../../test_vectors/benches/poseidon_hash2/bn254/plonk/verification_key.json";
     let name = "Bn254";
 
     // Generate without benchmarking
