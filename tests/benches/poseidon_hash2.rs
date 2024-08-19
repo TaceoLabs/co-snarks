@@ -1,6 +1,7 @@
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
-use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
+use circom_mpc_compiler::CoCircomCompiler;
+use circom_mpc_compiler::CompilerConfig;
 use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::{
     groth16::{
@@ -40,13 +41,13 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     Standard: Distribution<P::ScalarField>,
 {
-    let compiler_config = CompilerConfig::default();
+    let mut compiler_config = CompilerConfig::default();
+    compiler_config.link_library.push(link_lib.into());
     let vm_config = VMConfig::default();
 
     // parse circuit file & put through our compiler
-    let mut builder = CompilerBuilder::<P>::new(compiler_config, circuit.to_string());
-    builder = builder.link_library(link_lib);
-    let parsed_circom_circuit = builder.build().parse().unwrap();
+    let parsed_circom_circuit =
+        CoCircomCompiler::<P>::parse(circuit.to_string(), compiler_config).unwrap();
 
     let mut rng = thread_rng();
     let input = (0..num_inputs).map(|_| rng.gen()).collect::<Vec<_>>();
@@ -108,13 +109,13 @@ fn rep3_witness_extension<P>(
     Standard: Distribution<P::ScalarField>,
 {
     const NUM_PARTIES: usize = 3;
-    let compiler_config = CompilerConfig::default();
+    let mut compiler_config = CompilerConfig::default();
+    compiler_config.link_library.push(link_lib.into());
     let vm_config = VMConfig::default();
 
     // parse circuit file & put through our compiler
-    let mut builder = CompilerBuilder::<P>::new(compiler_config, circuit.to_string());
-    builder = builder.link_library(link_lib);
-    let parsed_circom_circuit = builder.build().parse().unwrap();
+    let parsed_circom_circuit =
+        CoCircomCompiler::<P>::parse(circuit.to_string(), compiler_config).unwrap();
 
     let mut rng = thread_rng();
     let input = (0..num_inputs).map(|_| rng.gen()).collect::<Vec<_>>();

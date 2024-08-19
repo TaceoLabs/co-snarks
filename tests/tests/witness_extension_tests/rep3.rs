@@ -1,5 +1,5 @@
 use ark_bn254::Bn254;
-use circom_mpc_compiler::CompilerBuilder;
+use circom_mpc_compiler::CoCircomCompiler;
 use circom_types::Witness;
 use co_circom_snarks::SharedWitness;
 use itertools::izip;
@@ -110,11 +110,12 @@ macro_rules! run_test {
 
         for (net, input) in izip!(test_network.get_party_networks(), inputs) {
             threads.push(thread::spawn(move || {
+                let mut compiler_config = CompilerConfig::default();
+                compiler_config
+                    .link_library
+                    .push("../test_vectors/WitnessExtension/tests/libs/".into());
                 let witness_extension =
-                    CompilerBuilder::<Bn254>::new(CompilerConfig::default(), $file.to_owned())
-                        .link_library("../test_vectors/WitnessExtension/tests/libs/")
-                        .build()
-                        .parse()
+                    CoCircomCompiler::<Bn254>::parse($file.to_owned(), compiler_config)
                         .unwrap()
                         .to_rep3_vm_with_network(net, VMConfig::default())
                         .unwrap();

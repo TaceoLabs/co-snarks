@@ -2,7 +2,7 @@ use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use circom_mpc_compiler::CompilerBuilder;
+use circom_mpc_compiler::CoCircomCompiler;
 use circom_types::R1CS;
 use num_traits::Zero;
 
@@ -261,7 +261,6 @@ where
 {
     let input = config.input;
     let circuit = config.circuit;
-    let link_library = config.link_library;
     let protocol = config.protocol;
     let out_dir = config.out_dir;
 
@@ -276,11 +275,8 @@ where
     file_utils::check_dir_exists(&out_dir)?;
 
     //get the public inputs if any from parser
-    let mut builder = CompilerBuilder::<P>::new(config.compiler, circuit);
-    for lib in link_library {
-        builder = builder.link_library(lib);
-    }
-    let public_inputs = builder.build().get_public_inputs()?;
+    let public_inputs = CoCircomCompiler::<P>::get_public_inputs(circuit, config.compiler)
+        .context("while reading public inputs from circuit")?;
 
     // read the input file
     let input_file = BufReader::new(File::open(&input).context("while opening input file")?);
@@ -379,7 +375,6 @@ where
 {
     let input = config.input.clone();
     let circuit = config.circuit.clone();
-    let link_library = config.link_library.clone();
     let protocol = config.protocol;
     let out = config.out.clone();
 
@@ -398,8 +393,7 @@ where
     let input_share = co_circom::parse_shared_input(input_share_file)?;
 
     // Extend the witness
-    let result_witness_share =
-        co_circom::generate_witness_rep3::<P>(circuit, link_library, input_share, config)?;
+    let result_witness_share = co_circom::generate_witness_rep3::<P>(circuit, input_share, config)?;
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);

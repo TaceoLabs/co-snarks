@@ -1,36 +1,15 @@
 #![warn(missing_docs)]
 //! This crate defines a [`Compiler`](CoCircomCompiler), which compiles `.circom` files into proprietary bytecode for the [`circom MPC-VM`](circom_mpc_vm).
 //!
-//! The MPC-VM then executes the bytecode and performs the [witness extension](https://docs.circom.io/getting-started/computing-the-witness/) in MPC (Multiparty Computation). This crate provides a [`CompilerBuilder`] for convenient construction of the [`CoCircomCompiler`].
+//! The MPC-VM then executes the bytecode and performs the [witness extension](https://docs.circom.io/getting-started/computing-the-witness/) in MPC (Multiparty Computation).
 //!
 //! The compiler and the VM are generic over a [`Pairing`](https://docs.rs/ark-ec/latest/ark_ec/pairing/trait.Pairing.html). Currently, we support the curves `bn254` and `bls12-381`.
 //!
-//! # Examples
+//! The [`CoCircomCompiler`], provides two methods for interacting with circom files
+//!     * [`CoCircomCompiler::parse`] - to parse a circuit
+//!     * [`CoCircomCompiler::get_public_inputs`] - to obtain the name of the public inputs of the circuit
 //!
-//! To instantiate the [`CoCircomCompiler`], first create a [`CompilerBuilder`]. In this example, we use the curve `bn254` and link external libraries such as those
-//!  from [`circomlib`](https://github.com/iden3/circomlib/).
-//!
-//! Finally, we build the compiler and parse the circuit:
-//!
-//! ```
-//! # use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
-//! # use ark_bn254::Bn254;
-//! # let circuit_file = "".to_owned();
-//!
-//! let link_library = vec!["link/to/lib/"];
-//! // Instantiate the compiler with the circuit file
-//! let mut builder = CompilerBuilder::<Bn254>::new(CompilerConfig::default(), circuit_file);
-//!
-//! // Link external circom libraries
-//! for lib in link_library {
-//!     builder = builder.link_library(lib);
-//! }
-//!
-//! // Build the compiler and parse
-//! let parsed_circom_circuit = builder
-//!     .build()
-//!     .parse();
-//! ```
+//! To configure the compiler, have a look at [`CompilerConfig`].
 //!
 //! The [`parse()`](CoCircomCompiler::parse) method consumes the compiler and returns an instance of [`CoCircomCompilerParsed`].
 //! Refer to its documentation to learn how to create an MPC-VM for the witness extension.
@@ -61,132 +40,63 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
-const DEFAULT_VERSION: &str = "2.0.0";
-
 /// The mpc-compiler configuration
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct CompilerConfig {
-    /// Allow leaking of secret values in loops
+    /// The circom version
+    #[serde(default = "default_version")]
+    pub version: String,
+    /// Allow leaking of secret values in loops (not used atm)
     pub allow_leaky_loops: bool,
+    /// The path to Circom library files
+    pub link_library: Vec<PathBuf>,
 }
 
-/// A builder to create a [`CoCircomCompiler`].
-///
-/// This builder allows configuring the compiler with options such as linking external libraries.
-/// For future releases, additional flags defined by [circom](https://docs.circom.io/getting-started/compilation-options/)
-/// will be supported.
-///
-/// # Examples
-///
-/// ```
-/// # use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
-/// # use ark_bn254::Bn254;
-/// # let circuit_file = "".to_owned();
-///
-/// let link_library = vec!["link/to/lib/"];
-/// // Create a new compiler builder for the Bn254 curve
-/// let mut builder = CompilerBuilder::<Bn254>::new(CompilerConfig::default(), circuit_file);
-///
-/// // Link external circom libraries
-/// for lib in link_library {
-///     builder = builder.link_library(lib);
-/// }
-///
-/// // Build the compiler
-/// let compiler = builder.build();
-/// ```
-
-pub struct CompilerBuilder<P: Pairing> {
-    file: String,
-    version: String,
-    link_libraries: Vec<PathBuf>,
-    phantom_data: PhantomData<P>,
-    config: CompilerConfig,
+fn default_version() -> String {
+    "2.0.0".to_owned()
 }
 
-/// The constructed compiler.
-///
-/// See [`CompilerBuilder`] on how to create the compiler.
+impl Default for CompilerConfig {
+    fn default() -> Self {
+        Self {
+            version: default_version(),
+            link_library: vec![],
+            allow_leaky_loops: false,
+        }
+    }
+}
+
+/// The compiler. Can only be initiated internally. Have a look at these two methods for usage:
+///     * [`CoCircomCompiler::parse`]
+///     * [`CoCircomCompiler::get_public_inputs`]
 pub struct CoCircomCompiler<P: Pairing> {
     file: String,
-    version: String,
-    link_libraries: Vec<PathBuf>,
     phantom_data: PhantomData<P>,
-    #[allow(dead_code)]
     config: CompilerConfig,
     pub(crate) fun_decls: HashMap<String, FunDecl>,
     pub(crate) templ_decls: HashMap<String, TemplateDecl>,
     pub(crate) current_code_block: CodeBlock,
 }
 
-impl<P: Pairing> CompilerBuilder<P> {
-    /// Creates a new instance of the [`CompilerBuilder`].
-    ///
-    /// Initializes the builder with no linked libraries and defaults to using circom version "2.0.0".
-    ///
-    /// # Arguments
-    ///
-    /// * `file` - The path to the circom file.
-    pub fn new(config: CompilerConfig, file: String) -> Self {
+impl<P: Pairing> CoCircomCompiler<P> {
+    // only internally to hold the state
+    fn new(file: String, config: CompilerConfig) -> Self {
+        tracing::debug!("creating compiler for circuit {file} with config: {config:?}");
         Self {
             file,
-            version: DEFAULT_VERSION.to_owned(),
-            link_libraries: vec![],
-            phantom_data: PhantomData,
             config,
-        }
-    }
-
-    /// Adds a folder to link during compilation. Call this method multiple times to add multiple folders.
-    ///
-    /// # Arguments
-    ///
-    /// * `link_library` - Something that implements `From<PathBuf>`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use std::path::PathBuf;
-    /// # use circom_mpc_compiler::{CompilerBuilder, CompilerConfig};
-    /// # use ark_bn254::Bn254;
-    ///
-    /// let mut builder = CompilerBuilder::<Bn254>::new(CompilerConfig::default(), "/path/to/your/circom/file.circom".to_owned());
-    ///
-    /// // Add multiple libraries to link during compilation
-    /// builder = builder.link_library(PathBuf::from("/path/to/library1"));
-    /// builder = builder.link_library(PathBuf::from("/path/to/library2"));
-    ///
-    /// // Continue building the compiler...
-    /// ```
-    pub fn link_library<S>(mut self, link_library: S) -> Self
-    where
-        PathBuf: From<S>,
-    {
-        self.link_libraries.push(PathBuf::from(link_library));
-        self
-    }
-
-    /// Consumes the builder and creates a new [CoCircomCompiler].
-    pub fn build(self) -> CoCircomCompiler<P> {
-        CoCircomCompiler {
-            file: self.file,
-            version: self.version,
-            link_libraries: self.link_libraries,
-            config: self.config,
             current_code_block: vec![],
             fun_decls: HashMap::new(),
             templ_decls: HashMap::new(),
             phantom_data: PhantomData,
         }
     }
-}
 
-impl<P: Pairing> CoCircomCompiler<P> {
     fn get_program_archive(&self) -> Result<ProgramArchive> {
         match circom_parser::run_parser(
             self.file.clone(),
-            &self.version,
-            self.link_libraries.clone(),
+            &self.config.version,
+            self.config.link_library.clone(),
         ) {
             Ok((mut program_archive, warnings)) => {
                 Report::print_reports(&warnings, &program_archive.file_library);
@@ -245,7 +155,7 @@ impl<P: Pairing> CoCircomCompiler<P> {
             wat_flag: false,
         };
         Ok((
-            CircomCircuit::build(vcp, flags, &self.version),
+            CircomCircuit::build(vcp, flags, &self.config.version),
             output_mapping,
         ))
     }
@@ -620,24 +530,29 @@ impl<P: Pairing> CoCircomCompiler<P> {
         }
     }
 
-    /// Consumes the [`CoCircomCompiler`] and returns a `Result<Vec<String>>`
+    /// Returns a `Result<Vec<String>>`
     /// containing all public inputs from the provided .circom file.
     ///
     /// This method is useful when secret-sharing the input.
     ///
+    /// # Params
+    /// * **file** - a `String` denoting the path to circom file.
+    /// * **config** - the [CompilerConfig]
     /// # Returns
     ///
     /// Returns a `Result` where:
     ///
     /// - `Ok(inputs)` contains a vector of public inputs as strings.
     /// - `Err(err)` indicates an error occurred during parsing or compilation.
-    pub fn get_public_inputs(self) -> Result<Vec<String>> {
-        let program_archive = self.get_program_archive()?;
-        tracing::debug!("get public inputs: {:?}", program_archive.public_inputs);
-        Ok(program_archive.public_inputs)
+    pub fn get_public_inputs(file: String, config: CompilerConfig) -> Result<Vec<String>> {
+        Self::new(file, config).get_public_inputs_inner()
     }
 
-    /// Consumes the [`CoCircomCompiler`] and returns a `Result` of [`CoCircomCompilerParsed`].
+    /// Parsed the circuit provided by `file` and returns a `Result` of [`CoCircomCompilerParsed`].
+    ///
+    /// # Params
+    /// * **file** - a `String` denoting the path to circom file.
+    /// * **config** - the [CompilerConfig]
     ///
     /// # Returns
     ///
@@ -646,7 +561,17 @@ impl<P: Pairing> CoCircomCompiler<P> {
     /// - `Ok(parsed)` contains the parsed compiler, which can be used to construct the MPC-VM.
     ///   Refer to its [documentation](CoCircomCompilerParsed) for usage details.
     /// - `Err(err)` indicates an error occurred during parsing or compilation.
-    pub fn parse(mut self) -> Result<CoCircomCompilerParsed<P>> {
+    pub fn parse(file: String, config: CompilerConfig) -> Result<CoCircomCompilerParsed<P>> {
+        Self::new(file, config).parse_inner()
+    }
+
+    fn get_public_inputs_inner(self) -> Result<Vec<String>> {
+        let program_archive = self.get_program_archive()?;
+        tracing::debug!("get public inputs: {:?}", program_archive.public_inputs);
+        Ok(program_archive.public_inputs)
+    }
+
+    fn parse_inner(mut self) -> Result<CoCircomCompilerParsed<P>> {
         tracing::debug!("compiler starts parsing..");
         let program_archive = self.get_program_archive()?;
         let (circuit, output_mapping) = self.build_circuit(program_archive)?;
@@ -732,7 +657,7 @@ mod tests {
     use ark_bn254::Bn254;
     use circom_mpc_vm::mpc_vm::VMConfig;
 
-    use crate::{CompilerBuilder, CompilerConfig};
+    use crate::{CoCircomCompiler, CompilerConfig};
     use std::str::FromStr;
     macro_rules! to_field_vec {
         ($vec: expr) => {
@@ -743,16 +668,13 @@ mod tests {
     }
     #[test]
     fn test_get_output_from_finalized_witness() {
-        let builder = CompilerBuilder::<Bn254>::new(
-            CompilerConfig::default(),
+        let parsed = CoCircomCompiler::<Bn254>::parse(
             "../test_vectors/WitnessExtension/tests/bitonic_sort.circom".to_owned(),
-        );
+            CompilerConfig::default(),
+        )
+        .unwrap();
 
-        let plain_vm = builder
-            .build()
-            .parse()
-            .unwrap()
-            .to_plain_vm(VMConfig::default());
+        let plain_vm = parsed.to_plain_vm(VMConfig::default());
         let finalized_witness = plain_vm
             .run_with_flat(
                 to_field_vec!(vec![
