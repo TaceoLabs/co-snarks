@@ -2,12 +2,14 @@
 //!
 //! Contains the traits which need to be implemented by the MPC protocols.
 
+use acir::AcirField;
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use core::fmt;
 use eyre::Result;
+use std::io;
 
 /// A trait representing the basic operations for handling vectors of shares
 pub trait FieldShareVecTrait:
@@ -202,6 +204,50 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         a: &[Self::FieldShare],
         b: &[Self::FieldShare],
     ) -> std::io::Result<Vec<F>>;
+}
+
+/// A trait representing the MPC operations required for extending the secret-shared Noir witness in MPC.
+/// The operations are generic over public and private (i.e., secret-shared) inputs.
+/// In contrast to the other traits, we have to be generic over [`AcirField`], as the ACVM wraps
+/// the [`PrimeField`] of arkworks in another trait. This may be subject to change if we add functionality as
+/// we have to implement a lot of the stuff twice.
+pub trait NoirWitnessExtensionProtocol<F: AcirField> {
+    /// A type representing the values encountered during Circom compilation. It should at least contain public field elements and shared values.
+    type AcvmType: Clone + Default + fmt::Debug + fmt::Display + From<F>;
+
+    /// Returns F::zero() as a ACVM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
+    fn public_zero() -> Self::AcvmType {
+        Self::AcvmType::default()
+    }
+
+    /// Adds a public value to an ACVM-type in place: *\[secret\] += public
+    fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType);
+
+    /// Multiply an ACVM-types with a public value: \[c\] = public * \[secret\].
+    fn acvm_mul_with_public(
+        &mut self,
+        public: F,
+        secret: Self::AcvmType,
+    ) -> io::Result<Self::AcvmType>;
+
+    /// Multiply an ACVM-types with a public value and add_assign with result: \[result\] += q_l * \[w_l\].
+    fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType);
+
+    /// Multiply two acvm-types and a public value and stores them at target: \[*result\] = c * \[lhs\] * \[rhs\].
+    fn solve_mul_term(
+        &mut self,
+        c: F,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        target: &mut Self::AcvmType,
+    ) -> io::Result<()>;
+
+    /// Solves the equation \[q_l\] * w_l + \[c\] = 0, by computing \[-c\]/\[q_l\] and returning the result.
+    fn solve_equation(
+        &mut self,
+        q_l: Self::AcvmType,
+        c: Self::AcvmType,
+    ) -> io::Result<Self::AcvmType>;
 }
 
 /// A trait representing the MPC operations required for extending the secret-shared Circom witness in MPC. The operations are generic over public and private (i.e., secret-shared) inputs.

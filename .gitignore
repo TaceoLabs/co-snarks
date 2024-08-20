@@ -14,4 +14,4 @@ Cargo.lock
 *.pdb
 
 .vscode
-co-groth16/src/bin/
+co-noir/co-acvm/src/bin/

@@ -2,6 +2,8 @@
 //!
 //! This module contains an implementation of semi-honest 3-party [replicated secret sharing](https://eprint.iacr.org/2018/403.pdf).
 
+use acir::AcirField;
+use acvm_impl::Rep3AcvmType;
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, EvaluationDomain, Polynomial};
@@ -15,8 +17,8 @@ use std::marker::PhantomData;
 use crate::traits::CircomWitnessExtensionProtocol;
 use crate::{
     traits::{
-        EcMpcProtocol, FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol,
-        PrimeFieldMpcProtocol,
+        EcMpcProtocol, FFTProvider, FieldShareVecTrait, MSMProvider, NoirWitnessExtensionProtocol,
+        PairingEcMpcProtocol, PrimeFieldMpcProtocol,
     },
     RngType,
 };
@@ -29,6 +31,7 @@ use self::{
 };
 
 pub(crate) mod a2b;
+mod acvm_impl;
 pub mod fieldshare;
 pub mod id;
 pub mod network;
@@ -201,15 +204,53 @@ pub mod utils {
     }
 }
 
+impl<F: AcirField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Protocol<F, N> {
+    type AcvmType = Rep3AcvmType<F>;
+
+    fn acvm_add_assign_with_public(&mut self, _public: F, _secret: &mut Self::AcvmType) {
+        todo!()
+    }
+
+    fn acvm_mul_with_public(
+        &mut self,
+        _public: F,
+        _secret: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        todo!()
+    }
+
+    fn solve_linear_term(&mut self, _q_l: F, _w_l: Self::AcvmType, _result: &mut Self::AcvmType) {
+        todo!()
+    }
+
+    fn solve_mul_term(
+        &mut self,
+        _c: F,
+        _lhs: Self::AcvmType,
+        _rhs: Self::AcvmType,
+        _target: &mut Self::AcvmType,
+    ) -> std::io::Result<()> {
+        todo!()
+    }
+
+    fn solve_equation(
+        &mut self,
+        _q_l: Self::AcvmType,
+        _c: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        todo!()
+    }
+}
+
 /// This struct handles the full Rep3 MPC protocol, including witness extension and proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], [MSMProvider], and [CircomWitnessExtensionProtocol] traits.
 #[derive(Debug)]
-pub struct Rep3Protocol<F: PrimeField, N: Rep3Network> {
+pub struct Rep3Protocol<F, N: Rep3Network> {
     rngs: Rep3CorrelatedRng,
     pub(crate) network: N,
     field: PhantomData<F>,
 }
 
-impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
+impl<F, N: Rep3Network> Rep3Protocol<F, N> {
     fn setup_prf(network: &mut N) -> Result<Rep3Rand, Report> {
         let seed1: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
         network.send_next(seed1)?;
@@ -263,7 +304,9 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
             field: PhantomData,
         })
     }
+}
 
+impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
     /// This algorithm produces asqrt of a shared value. Thereby, no guarantee is given on whether the result is the positive or negative square root (when interpreted as signed field element). This function requires network interaction.
     pub fn sqrt(&mut self, a: &Rep3PrimeFieldShare<F>) -> IoResult<Rep3PrimeFieldShare<F>> {
         let r_squ = self.rand()?;

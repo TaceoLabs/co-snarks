@@ -16,6 +16,7 @@ default = []
 dangerous = []
 
 [dependencies]
+acir = { workspace = true }
 ark-bls12-381 = { workspace = true }
 ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
