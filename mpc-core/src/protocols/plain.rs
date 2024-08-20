@@ -5,10 +5,11 @@
 use crate::{
     traits::{
         CircomWitnessExtensionProtocol, EcMpcProtocol, FFTProvider, FieldShareVecTrait,
-        MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        MSMProvider, NoirWitnessExtensionProtocol, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
     },
     RngType,
 };
+use acir::AcirField;
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{One, PrimeField};
 use ark_poly::{univariate::DensePolynomial, Polynomial};
@@ -57,9 +58,17 @@ macro_rules! to_bigint {
 }
 
 /// The PlainDriver implements implements the MPC traits without MPC. In other words, it implements [PrimeFieldMpcProtocol], [CircomWitnessExtensionProtocol] and can thus be used by the VM to evaluate functions on public values, as well as for testing MPC circuits.
-pub struct PlainDriver<F: PrimeField> {
+pub struct PlainDriver<F> {
     negative_one: F,
 }
+
+impl<F> PlainDriver<F> {
+    /// Creates a new instance of the PlainDriver and sets the negative one to the provided value.
+    pub fn new(negative_one: F) -> Self {
+        PlainDriver { negative_one }
+    }
+}
+
 impl<F: PrimeField> PlainDriver<F> {
     /// Normally F is split into positive and negative numbers in the range [0, p/2] and [p/2 + 1, p)
     /// However, for comparisons, we want the negative numbers to be "lower" than the positive ones.
@@ -584,5 +593,44 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver<F> {
 
     fn public_one(&self) -> Self::VmType {
         F::one()
+    }
+}
+
+impl<F: AcirField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
+    type AcvmType = F;
+
+    fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
+        *secret += public;
+    }
+
+    fn acvm_mul_with_public(
+        &mut self,
+        public: F,
+        secret: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        Ok(secret * public)
+    }
+
+    fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType) {
+        *result += q_l * w_l;
+    }
+
+    fn solve_mul_term(
+        &mut self,
+        c: F,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        target: &mut Self::AcvmType,
+    ) -> std::io::Result<()> {
+        *target = c * lhs * rhs;
+        Ok(())
+    }
+
+    fn solve_equation(
+        &mut self,
+        q_l: Self::AcvmType,
+        c: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        Ok(-c / q_l)
     }
 }
