@@ -501,11 +501,16 @@ pub fn parse_shared_input<R: Read, P: Pairing, T: PrimeFieldMpcProtocol<P::Scala
 /// 2. Compile the circuit to MPC VM bytecode.
 /// 3. Set up a network connection to the MPC network.
 /// 4. Execute the bytecode on the MPC VM to generate the witness.
-pub fn generate_witness_rep3<P: Pairing>(
+pub fn generate_witness_rep3<P>(
     circuit: String,
     input_share: SharedInput<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>,
     config: GenerateWitnessConfig,
-) -> color_eyre::Result<SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>> {
+) -> color_eyre::Result<SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>>
+where
+    P: Pairing + CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
     let circuit_path = PathBuf::from(&circuit);
     file_utils::check_file_exists(&circuit_path)?;
 

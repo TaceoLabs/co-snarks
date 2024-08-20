@@ -12,6 +12,7 @@ readme.workspace = true
 
 [dependencies]
 ark-ec.workspace = true
+circom-types = { version = "0.4.0", path = "../circom-types" }
 circom-compiler = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "compiler", branch = "dev" }
 circom-constraint_generation = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "constraint_generation", branch = "dev" }
 circom-mpc-vm = { version = "0.4.0", path = "../circom-mpc-vm" }
@@ -25,7 +26,6 @@ tracing.workspace = true
 
 [dev-dependencies]
 ark-bn254.workspace = true
-circom-types = { version = "0.4.0", path = "../circom-types" }
 co-groth16 = { version = "0.4.0", path = "../co-groth16" }
 mpc-core = { version = "0.3.0", path = "../mpc-core" }
 tracing.workspace = true
