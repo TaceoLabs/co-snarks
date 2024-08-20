@@ -34,6 +34,8 @@ use circom_program_structure::{
     ast::SignalType, error_definition::Report, program_archive::ProgramArchive,
 };
 use circom_type_analysis::check_types;
+use circom_types::traits::CircomArkworksPairingBridge;
+use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use eyre::eyre;
 use eyre::{bail, Result};
 use itertools::Itertools;
@@ -78,7 +80,12 @@ pub struct CoCircomCompiler<P: Pairing> {
     pub(crate) current_code_block: CodeBlock,
 }
 
-impl<P: Pairing> CoCircomCompiler<P> {
+impl<P: Pairing> CoCircomCompiler<P>
+where
+    P: CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
     // only internally to hold the state
     fn new(file: String, config: CompilerConfig) -> Self {
         tracing::debug!("creating compiler for circuit {file} with config: {config:?}");
@@ -144,7 +151,7 @@ impl<P: Pairing> CoCircomCompiler<P> {
             flag_verbose: false,
             flag_old_heuristics: false,
             inspect_constraints: false,
-            prime: "bn128".to_owned(),
+            prime: P::get_circom_name(),
         };
         let (_, vcp) = circom_constraint_generation::build_circuit(program_archive, build_config)
             .map_err(|_| eyre!("cannot build vcp"))?;
