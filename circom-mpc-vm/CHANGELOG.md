@@ -1,5 +1,10 @@
 # Changelog
 
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-snarks bumped from 0.1.0 to 0.1.1
+    * mpc-core bumped from 0.3.0 to 0.4.0
+
 ## [0.4.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-vm-v0.3.0...circom-mpc-vm-v0.4.0) (2024-08-14)
 
 

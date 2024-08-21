@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-types-v0.4.0...circom-types-v0.5.0) (2024-08-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* we hardcoded bn128 as prime for the compiler. We now give either bn128 or bls12381 depending on curve. Introduces new trait bounds therefore breaking change
+
+### Bug Fixes
+
+* fixed a bug in bls12_381 zkey parsing ([#165](https://github.com/TaceoLabs/collaborative-circom/issues/165)) ([0a8f35e](https://github.com/TaceoLabs/collaborative-circom/commit/0a8f35e4ca641423d73027e42e7b26f955964b8f))
+* fixes prime for the mpc compiler ([5712184](https://github.com/TaceoLabs/collaborative-circom/commit/5712184748488b7bab735b456be25e9cbbdb5ff7))
+
 ## [0.4.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-types-v0.3.0...circom-types-v0.4.0) (2024-08-14)
 
 

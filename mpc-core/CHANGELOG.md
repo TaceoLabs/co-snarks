@@ -2,6 +2,17 @@
 
 
 
+## [0.4.0](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-core-v0.3.0...mpc-core-v0.4.0) (2024-08-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* we fixed a bug, where the (i)ffts for bls12_381 had a different permutation than from snarkjs. We removed our band-aid fix (FFTPostProcessing). Therfore, it is a breaking change.
+
+### Bug Fixes
+
+* fixes the bls12_381 permutation from arkworks ([f100615](https://github.com/TaceoLabs/collaborative-circom/commit/f100615790c51227d89e886ee6977367e4d5a1ce))
+
 ## [0.3.0](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-core-v0.2.1...mpc-core-v0.3.0) (2024-08-14)
 
 
