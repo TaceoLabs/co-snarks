@@ -6,6 +6,26 @@
     * mpc-core bumped from 0.2.0 to 0.2.1
     * mpc-net bumped from 0.1.1 to 0.1.2
 
+## [0.5.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-groth16-v0.4.0...co-groth16-v0.5.0) (2024-08-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* we fixed a bug, where the (i)ffts for bls12_381 had a different permutation than from snarkjs. We removed our band-aid fix (FFTPostProcessing). Therfore, it is a breaking change.
+
+### Bug Fixes
+
+* fixes the bls12_381 permutation from arkworks ([f100615](https://github.com/TaceoLabs/collaborative-circom/commit/f100615790c51227d89e886ee6977367e4d5a1ce))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.4.0 to 0.5.0
+    * co-circom-snarks bumped from 0.1.0 to 0.1.1
+    * mpc-core bumped from 0.3.0 to 0.4.0
+
 ## [0.4.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-groth16-v0.3.0...co-groth16-v0.4.0) (2024-08-14)
 
 

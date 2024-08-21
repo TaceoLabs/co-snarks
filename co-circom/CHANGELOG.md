@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.5.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-circom-v0.4.0...co-circom-v0.5.0) (2024-08-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* we hardcoded bn128 as prime for the compiler. We now give either bn128 or bls12381 depending on curve. Introduces new trait bounds therefore breaking change
+* Removed the builder step for the compiler as we now have a config anyways. Moved some stuff to the config
+* we fixed a bug, where the (i)ffts for bls12_381 had a different permutation than from snarkjs. We removed our band-aid fix (FFTPostProcessing). Therfore, it is a breaking change.
+
+### Bug Fixes
+
+* fixes prime for the mpc compiler ([5712184](https://github.com/TaceoLabs/collaborative-circom/commit/5712184748488b7bab735b456be25e9cbbdb5ff7))
+* fixes the bls12_381 permutation from arkworks ([f100615](https://github.com/TaceoLabs/collaborative-circom/commit/f100615790c51227d89e886ee6977367e4d5a1ce))
+* removed unwrap ([a7dcc03](https://github.com/TaceoLabs/collaborative-circom/commit/a7dcc03b7901f1aaa92d42b93e634f553aa1ff2f))
+
+
+### Code Refactoring
+
+* Removed builder pattern for compiler ([260d5e8](https://github.com/TaceoLabs/collaborative-circom/commit/260d5e89d9ba5e3e4487b9f660bdac455f1fe450))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-compiler bumped from 0.5.0 to 0.6.0
+    * circom-mpc-vm bumped from 0.4.0 to 0.4.1
+    * circom-types bumped from 0.4.0 to 0.5.0
+    * co-circom-snarks bumped from 0.1.0 to 0.1.1
+    * co-groth16 bumped from 0.4.0 to 0.5.0
+    * co-plonk bumped from 0.2.0 to 0.3.0
+    * mpc-core bumped from 0.3.0 to 0.4.0
+
 ## [0.4.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-circom-v0.3.0...co-circom-v0.4.0) (2024-08-14)
 
 
