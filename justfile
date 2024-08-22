@@ -11,3 +11,9 @@ test-examples:
   cd co-circom/co-circom/examples/plonk && ./run.sh
 
 check-pr: lint test-all test-examples
+
+test-circom:
+  cargo test --release --all-features --package tests --test circom
+
+test-noir:
+  cargo test --release --all-features --package tests --test noir

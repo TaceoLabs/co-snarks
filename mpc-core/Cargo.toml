@@ -17,8 +17,6 @@ dangerous = []
 
 [dependencies]
 acir = { workspace = true }
-ark-bls12-381 = { workspace = true }
-ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-poly = { workspace = true }
@@ -35,4 +33,5 @@ tokio = { workspace = true }
 tracing.workspace = true
 
 [dev-dependencies]
+ark-bn254 = { workspace = true }
 ark-std = { workspace = true }

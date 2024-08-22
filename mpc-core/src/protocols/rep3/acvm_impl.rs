@@ -1,6 +1,15 @@
-use acir::AcirField;
+//! This module implements the [`Rep3AcvmType`]. At the moment, this is necessary
+//! because Noir doesn't use the PrimeField trait but the AcirField trait. Therefore,
+//! we have to re-implement everything. We do not like that.
+//!
+//! THIS WILL ALMOST CERTAINLY GET AN OVERHAUL. There is so much duplicated code.
 
-use super::id::PartyID;
+use std::io;
+
+use acir::AcirField;
+use eyre::bail;
+
+use super::{id::PartyID, network::Rep3Network, Rep3Protocol};
 
 //TODO maybe merge this with the VM type? Can be generic over F and then either use AcirField or PrimeField
 /// This type represents the basic type of the coACVM. Thus, it can represent either public or shared values.
@@ -12,6 +21,29 @@ pub enum Rep3AcvmType<F: AcirField> {
     Shared(Rep3AcirFieldShare<F>),
     /// Represents a secret-shared binary value. This type is currently not utilized
     BitShared,
+}
+
+impl<F: AcirField> Rep3AcvmType<F> {
+    /// combines the three shares into one. Inverse operation of share.
+    ///
+    /// # Returns
+    /// The reconstructed element. If the "types" of the three shares do not match
+    /// (e.g., Public and two are Shared), we return an Error.
+    pub fn combine_elements(a: Self, b: Self, c: Self) -> eyre::Result<F> {
+        match (a, b, c) {
+            (Self::Public(a), Self::Public(b), Self::Public(c)) => {
+                if a == b && b == c {
+                    Ok(a)
+                } else {
+                    bail!("combine ACVM type did not work! Not matching public values")
+                }
+            }
+            (Self::Shared(a), Self::Shared(b), Self::Shared(c)) => {
+                Ok(super::utils::combine_acir_element(a, b, c))
+            }
+            _ => unimplemented!(),
+        }
+    }
 }
 
 // THIS IS COPIED FROM [Rep3PrimeFieldShare]! WE NEED TO UNIFY THIS.
@@ -60,6 +92,31 @@ impl<F: AcirField> Rep3AcirFieldShare<F> {
             PartyID::ID1 => Rep3AcirFieldShare::new(F::zero(), *val),
             PartyID::ID2 => Rep3AcirFieldShare::default(),
         }
+    }
+
+    fn add_with_public<N: Rep3Network>(network: &N, public: F, shared: &Self) -> Self {
+        let mut res = shared.to_owned();
+        match network.get_id() {
+            PartyID::ID0 => res.a += public,
+            PartyID::ID1 => res.b += public,
+            PartyID::ID2 => {}
+        }
+        res
+    }
+
+    fn inv<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, shared: &Self) -> io::Result<Self> {
+        let (a, b) = party.rngs.rand.random_acir_fes();
+        let random = Self { a, b };
+        let tmp = party.mul_acir_field(shared, &random)?;
+        let y = party.open_acir_field(&tmp)?;
+        if y.is_zero() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of inverse in MPC: cannot compute inverse of zero",
+            ));
+        }
+        let y_inv = y.inverse();
+        Ok(random * y_inv)
     }
 }
 
@@ -228,5 +285,113 @@ impl<F: AcirField> std::ops::Neg for &Rep3AcirFieldShare<F> {
             a: -self.a,
             b: -self.b,
         }
+    }
+}
+
+impl<F: AcirField> std::ops::Neg for Rep3AcvmType<F> {
+    type Output = Rep3AcvmType<F>;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Rep3AcvmType::Public(a) => Rep3AcvmType::Public(-a),
+            Rep3AcvmType::Shared(a) => Rep3AcvmType::Shared(-a),
+            Rep3AcvmType::BitShared => unimplemented!("bit share not implemented"),
+        }
+    }
+}
+
+impl<F: AcirField> Rep3AcvmType<F> {
+    pub(super) fn add<N: Rep3Network>(network: &N, lhs: Self, rhs: Self) -> Self {
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) => Rep3AcvmType::Public(a + b),
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Shared(b)) => {
+                Rep3AcvmType::Shared(Rep3AcirFieldShare::add_with_public(network, a, &b))
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Public(b)) => {
+                Rep3AcvmType::Shared(Rep3AcirFieldShare::add_with_public(network, b, &a))
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => Rep3AcvmType::Shared(a + b),
+            (_, _) => todo!("BitShared add not yet implemented"),
+        }
+    }
+
+    pub(super) fn add_with_public<N: Rep3Network>(network: &N, a: F, b: Self) -> Self {
+        match b {
+            Rep3AcvmType::Public(public) => Rep3AcvmType::Public(public + a),
+            Rep3AcvmType::Shared(shared) => {
+                Rep3AcvmType::Shared(Rep3AcirFieldShare::add_with_public(network, a, &shared))
+            }
+            Rep3AcvmType::BitShared => todo!("bitshared not implemented at the moment"),
+        }
+    }
+
+    pub(super) fn mul<N: Rep3Network>(
+        party: &mut Rep3Protocol<F, N>,
+        a: Self,
+        b: Self,
+    ) -> io::Result<Self> {
+        let res = match (a, b) {
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) => Rep3AcvmType::Public(a * b),
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Shared(b)) => Rep3AcvmType::Shared(&b * &a),
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Public(b)) => Rep3AcvmType::Shared(&a * &b),
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => {
+                Rep3AcvmType::Shared(party.mul_acir_field(&a, &b)?)
+            }
+            (_, _) => todo!("BitShared mul not yet implemented"),
+        };
+        Ok(res)
+    }
+
+    pub(super) fn mul_with_public(a: F, b: Self) -> Self {
+        match b {
+            Rep3AcvmType::Public(public) => Rep3AcvmType::Public(public * a),
+            Rep3AcvmType::Shared(shared) => Rep3AcvmType::Shared(&shared * &a),
+            Rep3AcvmType::BitShared => unimplemented!("bit share not implemented"),
+        }
+    }
+
+    pub(super) fn div<N: Rep3Network>(
+        party: &mut Rep3Protocol<F, N>,
+        num: Self,
+        den: Self,
+    ) -> io::Result<Self> {
+        let inverse = Self::inv(party, den)?;
+        Self::mul(party, num, inverse)
+    }
+
+    pub(super) fn inv<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> io::Result<Self> {
+        let res = match a {
+            Rep3AcvmType::Public(a) => Rep3AcvmType::Public(a.inverse()),
+            Rep3AcvmType::Shared(a) => {
+                Rep3AcvmType::Shared(Rep3AcirFieldShare::<F>::inv(party, &a)?)
+            }
+            Rep3AcvmType::BitShared => unimplemented!("bit share not implemented"),
+        };
+        Ok(res)
+    }
+}
+
+impl<F: AcirField, N: Rep3Network> Rep3Protocol<F, N> {
+    fn mul_acir_field(
+        &mut self,
+        a: &Rep3AcirFieldShare<F>,
+        b: &Rep3AcirFieldShare<F>,
+    ) -> io::Result<Rep3AcirFieldShare<F>> {
+        let local_a = a * b + self.rngs.rand.masking_acir_field_element::<F>();
+        let bytes_a = local_a.to_be_bytes();
+        self.network.send_next(bytes_a)?;
+        let local_b_bytes: Vec<u8> = self.network.recv_prev()?;
+        Ok(Rep3AcirFieldShare {
+            a: local_a,
+            b: F::from_be_bytes_reduce(&local_b_bytes),
+        })
+    }
+
+    fn open_acir_field(&mut self, a: &Rep3AcirFieldShare<F>) -> std::io::Result<F> {
+        let bytes = a.b.to_be_bytes();
+        self.network.send_next(bytes)?;
+        let bytes = self.network.recv_prev::<Vec<u8>>()?;
+        let c = F::from_be_bytes_reduce(&bytes);
+        Ok(a.a + a.b + c)
     }
 }

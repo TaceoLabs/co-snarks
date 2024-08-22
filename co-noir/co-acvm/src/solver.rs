@@ -3,7 +3,13 @@ use acir::{
     native_types::{WitnessMap, WitnessStack},
     AcirField, FieldElement,
 };
-use mpc_core::{protocols::plain::PlainDriver, traits::NoirWitnessExtensionProtocol};
+use mpc_core::{
+    protocols::{
+        plain::PlainDriver,
+        rep3::{network::Rep3Network, Rep3Protocol},
+    },
+    traits::NoirWitnessExtensionProtocol,
+};
 use noirc_abi::{input_parser::Format, Abi, MAIN_RETURN_NAME};
 use noirc_artifacts::program::ProgramArtifact;
 use num_bigint::BigUint;
@@ -14,6 +20,7 @@ pub(crate) const CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounded
 
 mod assert_zero_solver;
 pub type PlainCoSolver<F> = CoSolver<PlainDriver<F>, F>;
+pub type Rep3CoSolver<F, N> = CoSolver<Rep3Protocol<F, N>, F>;
 
 type CoAcvmResult<T> = std::result::Result<T, CoAcvmError>;
 
@@ -94,6 +101,19 @@ where
     }
 }
 
+impl<N: Rep3Network> Rep3CoSolver<FieldElement, N> {
+    pub fn from_network<P>(
+        network: N,
+        compiled_program: ProgramArtifact,
+        prover_path: P,
+    ) -> eyre::Result<Self>
+    where
+        PathBuf: From<P>,
+    {
+        Self::new(Rep3Protocol::new(network)?, compiled_program, prover_path)
+    }
+}
+
 impl PlainCoSolver<FieldElement> {
     pub fn init_plain_driver<P>(
         compiled_program: ProgramArtifact,
@@ -170,37 +190,3 @@ where
   let binary_packages = workspace.into_iter().filter(|package| package.is_binary());
     for package in binary_packages {
 */
-
-#[cfg(test)]
-pub mod tests {
-    use crate::solver::PlainCoSolver;
-    use acir::{native_types::WitnessStack, FieldElement};
-    use noirc_artifacts::program::ProgramArtifact;
-
-    macro_rules! add_acvm_test {
-        ($name: expr) => {
-            paste::item! {
-                #[test]
-                fn [< test_ $name >]() {
-                    let program = std::fs::read_to_string(format!(
-                        "../../test_vectors/noir/{}/target/{}.json",
-                    $name, $name))
-                    .unwrap();
-                    let program_artifact = serde_json::from_str::<ProgramArtifact>(&program)
-                        .expect("failed to parse program artifact");
-                    let should_witness =
-                        std::fs::read(format!("../../test_vectors/noir/{}/target/{}.gz", $name, $name)).unwrap();
-                    let should_witness =
-                        WitnessStack::<FieldElement>::try_from(should_witness.as_slice()).unwrap();
-                    let prover_toml = format!("../../test_vectors/noir/{}/Prover.toml", $name);
-                    let solver =
-                        PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
-                    let is_witness = solver.solve().unwrap();
-                    assert_eq!(is_witness, should_witness);
-                }
-            }
-        };
-    }
-    add_acvm_test!("addition_multiplication");
-    add_acvm_test!("poseidon");
-}
