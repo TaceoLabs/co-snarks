@@ -1,10 +1,16 @@
-use acir::{circuit::Opcode, AcirField, FieldElement};
+use acir::{
+    circuit::{Circuit, ExpressionWidth, Opcode},
+    native_types::{WitnessMap, WitnessStack},
+    AcirField, FieldElement,
+};
 use mpc_core::{protocols::plain::PlainDriver, traits::NoirWitnessExtensionProtocol};
+use noirc_abi::{input_parser::Format, Abi, MAIN_RETURN_NAME};
+use noirc_artifacts::program::ProgramArtifact;
 use num_bigint::BigUint;
 use num_traits::One;
-use std::io;
-
-use crate::types::{CoWitnessMap, FullWitness};
+use std::{io, path::PathBuf};
+/// The default expression width defined used by the ACVM.
+pub(crate) const CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounded { width: 4 };
 
 mod assert_zero_solver;
 pub type PlainCoSolver<F> = CoSolver<PlainDriver<F>, F>;
@@ -27,26 +33,96 @@ where
     F: AcirField,
 {
     driver: T,
-    //there will a more fields added as we add functionality
-    opcodes: Vec<Opcode<F>>,
-    //maybe this can be an array. lets see..
-    witness_map: CoWitnessMap<T::AcvmType>,
+    abi: Abi,
+    functions: Vec<Circuit<F>>,
+    // maybe this can be an array. lets see..
+    witness_map: Vec<WitnessMap<T::AcvmType>>,
+    // there will a more fields added as we add functionality
+    function_index: usize,
+}
+
+impl<T> CoSolver<T, FieldElement>
+where
+    T: NoirWitnessExtensionProtocol<FieldElement>,
+{
+    pub fn read_abi<P>(path: P, abi: &Abi) -> eyre::Result<WitnessMap<T::AcvmType>>
+    where
+        PathBuf: From<P>,
+    {
+        if abi.is_empty() {
+            Ok(WitnessMap::default())
+        } else {
+            let input_string = std::fs::read_to_string(PathBuf::from(path))?;
+            let mut input_map = Format::Toml.parse(&input_string, abi)?;
+            let return_value = input_map.remove(MAIN_RETURN_NAME);
+            // TODO the return value can be none for the witness extension
+            // do we want to keep it like that? Seems not necessary but maybe
+            // we need it for proving/verifying
+            let initial_witness = abi.encode(&input_map, return_value.clone())?;
+            let mut witnesses = WitnessMap::<T::AcvmType>::default();
+            for (witness, v) in initial_witness.into_iter() {
+                witnesses.insert(witness, T::AcvmType::from(v));
+            }
+            Ok(witnesses)
+        }
+    }
+
+    pub fn new<P>(
+        driver: T,
+        compiled_program: ProgramArtifact,
+        prover_path: P,
+    ) -> eyre::Result<Self>
+    where
+        PathBuf: From<P>,
+    {
+        let mut witness_map =
+            vec![WitnessMap::default(); compiled_program.bytecode.functions.len()];
+        witness_map[0] = Self::read_abi(prover_path, &compiled_program.abi)?;
+        Ok(Self {
+            driver,
+            abi: compiled_program.abi,
+            functions: compiled_program
+                .bytecode
+                .functions
+                .into_iter()
+                // ignore the transformation mapping for now
+                .map(|function| acvm::compiler::transform(function, CO_EXPRESSION_WIDTH).0)
+                .collect::<Vec<_>>(),
+            witness_map,
+            function_index: 0,
+        })
+    }
 }
 
 impl PlainCoSolver<FieldElement> {
-    pub fn new(
-        opcodes: Vec<Opcode<FieldElement>>,
-        initial_witness: CoWitnessMap<FieldElement>,
-    ) -> Self {
+    pub fn init_plain_driver<P>(
+        compiled_program: ProgramArtifact,
+        prover_path: P,
+    ) -> eyre::Result<Self>
+    where
+        PathBuf: From<P>,
+    {
         let modulus = FieldElement::modulus();
         let one = BigUint::one();
         let two = BigUint::from(2u64);
         // FIXME find something better
         let negative_one = FieldElement::from_be_bytes_reduce(&(modulus / two + one).to_bytes_be());
-        Self {
-            driver: PlainDriver::new(negative_one),
-            opcodes,
-            witness_map: initial_witness,
+        Self::new(
+            PlainDriver::new(negative_one),
+            compiled_program,
+            prover_path,
+        )
+    }
+
+    pub fn solve_and_print_output(self) {
+        let abi = self.abi.clone();
+        let result = self.solve().unwrap();
+        let main_witness = result.peek().unwrap();
+        let (_, ret_val) = abi.decode(&main_witness.witness).unwrap();
+        if let Some(ret_val) = ret_val {
+            println!("circuit produced: {ret_val:?}");
+        } else {
+            println!("no output for circuit")
         }
     }
 }
@@ -56,52 +132,75 @@ where
     T: NoirWitnessExtensionProtocol<F>,
     F: AcirField,
 {
-    pub fn solve(mut self) -> CoAcvmResult<Vec<T::AcvmType>> {
-        let opcodes = std::mem::take(&mut self.opcodes);
-        for opcode in opcodes.iter() {
-            match opcode {
-                Opcode::AssertZero(expr) => self.solve_assert_zero(expr)?,
-                _ => todo!("non assert zero opcode detected, not supported yet"),
-            }
-        }
-        // we do not have any unknowns in the CoWitnessMap after we solved everything.
-        // Therefore expect is OK.
-        Ok(FullWitness::try_from(self.witness_map)
-            .expect("must be known at this time")
-            .0)
+    fn witness(&mut self) -> &mut WitnessMap<T::AcvmType> {
+        &mut self.witness_map[self.function_index]
     }
 }
 
+impl<T> CoSolver<T, FieldElement>
+where
+    T: NoirWitnessExtensionProtocol<FieldElement>,
+{
+    pub fn solve(mut self) -> CoAcvmResult<WitnessStack<T::AcvmType>> {
+        let functions = std::mem::take(&mut self.functions);
+
+        for opcode in functions[self.function_index].opcodes.iter() {
+            match opcode {
+                Opcode::AssertZero(expr) => self.solve_assert_zero(expr)?,
+                _ => todo!("non assert zero opcode detected, not supported yet"),
+                //Opcode::Call {
+                //    id,
+                //    inputs,
+                //    outputs,
+                //    predicate,
+                //} => todo!(),
+            }
+        }
+        // TODO this is most likely not correct.
+        // We'll see what happens here.
+        let mut witness_stack = WitnessStack::default();
+        for (idx, witness) in self.witness_map.into_iter().rev().enumerate() {
+            witness_stack.push(u32::try_from(idx).expect("usize fits into u32"), witness);
+        }
+        Ok(witness_stack)
+    }
+}
+
+/*
+  let binary_packages = workspace.into_iter().filter(|package| package.is_binary());
+    for package in binary_packages {
+*/
+
 #[cfg(test)]
 pub mod tests {
-    use crate::{solver::PlainCoSolver, types::CoWitnessMap, CO_EXPRESSION_WIDTH};
+    use crate::solver::PlainCoSolver;
+    use acir::{native_types::WitnessStack, FieldElement};
     use noirc_artifacts::program::ProgramArtifact;
-    use std::str::FromStr;
 
-    #[test]
-    pub fn test_simple_addition_and_multiplication() {
-        let program =
-            std::fs::read_to_string("../../test_vectors/noir/addition_multiplication.json")
-                .unwrap();
-
-        let program_artifact = serde_json::from_str::<ProgramArtifact>(&program)
-            .expect("failed to parse program artifact");
-        let (circuit, _) = crate::transform(
-            program_artifact.bytecode.functions[0].clone(),
-            CO_EXPRESSION_WIDTH,
-        );
-
-        let initial_witness =
-            CoWitnessMap::read_abi("../../test_vectors/noir/inputs.toml", &program_artifact.abi)
-                .unwrap();
-        let solver = PlainCoSolver::new(circuit.opcodes, initial_witness);
-        let result = solver.solve().unwrap();
-        assert_eq!(result.len(), 3);
-        assert_eq!(result[0].into_repr(), ark_bn254::Fr::from_str("1").unwrap());
-        assert_eq!(result[1].into_repr(), ark_bn254::Fr::from_str("1").unwrap());
-        assert_eq!(
-            result[2].into_repr(),
-            ark_bn254::Fr::from_str("359").unwrap()
-        );
+    macro_rules! add_acvm_test {
+        ($name: expr) => {
+            paste::item! {
+                #[test]
+                fn [< test_ $name >]() {
+                    let program = std::fs::read_to_string(format!(
+                        "../../test_vectors/noir/{}/target/{}.json",
+                    $name, $name))
+                    .unwrap();
+                    let program_artifact = serde_json::from_str::<ProgramArtifact>(&program)
+                        .expect("failed to parse program artifact");
+                    let should_witness =
+                        std::fs::read(format!("../../test_vectors/noir/{}/target/{}.gz", $name, $name)).unwrap();
+                    let should_witness =
+                        WitnessStack::<FieldElement>::try_from(should_witness.as_slice()).unwrap();
+                    let prover_toml = format!("../../test_vectors/noir/{}/Prover.toml", $name);
+                    let solver =
+                        PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
+                    let is_witness = solver.solve().unwrap();
+                    assert_eq!(is_witness, should_witness);
+                }
+            }
+        };
     }
+    add_acvm_test!("addition_multiplication");
+    add_acvm_test!("poseidon");
 }

@@ -1,8 +1,6 @@
 use acir::{native_types::Expression, AcirField};
 use mpc_core::traits::NoirWitnessExtensionProtocol;
 
-use crate::types::WitnessState;
-
 use super::{CoAcvmError, CoAcvmResult, CoSolver};
 
 impl<T, F> CoSolver<T, F>
@@ -26,24 +24,27 @@ where
                 tracing::trace!("c is zero. We can skip this mul term");
                 Ok(())
             } else {
-                match (self.witness_map.get(lhs), self.witness_map.get(rhs)) {
+                match (
+                    self.witness().get(lhs).cloned(),
+                    self.witness().get(rhs).cloned(),
+                ) {
                     // we could batch this multiplication but our currently planed network design
                     // should solve this without batching
-                    (WitnessState::Known(lhs), WitnessState::Known(rhs)) => {
+                    (Some(lhs), Some(rhs)) => {
                         tracing::trace!("solving mul term...");
                         self.driver.solve_mul_term(*c, lhs, rhs, &mut acc.q_c)?;
                     }
-                    (WitnessState::Known(lhs), WitnessState::Unknown) => {
+                    (Some(lhs), None) => {
                         tracing::trace!("partially solving mul term...");
                         let partly_solved = self.driver.acvm_mul_with_public(*c, lhs)?;
                         acc.linear_combinations.push((partly_solved, *rhs));
                     }
-                    (WitnessState::Unknown, WitnessState::Known(rhs)) => {
+                    (None, Some(rhs)) => {
                         tracing::trace!("partially solving mul term...");
                         let partly_solved = self.driver.acvm_mul_with_public(*c, rhs)?;
                         acc.linear_combinations.push((partly_solved, *lhs));
                     }
-                    (WitnessState::Unknown, WitnessState::Unknown) => {
+                    (None, None) => {
                         tracing::debug!(
                             "two unknowns in evaluate mul term. Not solvable for expr: {:?}",
                             expr
@@ -64,16 +65,13 @@ where
         for term in expr.linear_combinations.iter() {
             let (q_l, w_l) = term;
             tracing::trace!("looking at linear term: {q_l} * _{}..", w_l.0);
-            match self.witness_map.get(w_l) {
-                WitnessState::Known(w_l) => {
-                    tracing::trace!("is known! reduce it");
-                    self.driver.solve_linear_term(*q_l, w_l, &mut acc.q_c);
-                }
-                WitnessState::Unknown => {
-                    tracing::trace!("is unknown!");
-                    acc.linear_combinations
-                        .push((T::AcvmType::from(*q_l), *w_l))
-                }
+            if let Some(w_l) = self.witness().get(w_l).cloned() {
+                tracing::trace!("is known! reduce it");
+                self.driver.solve_linear_term(*q_l, w_l, &mut acc.q_c);
+            } else {
+                tracing::trace!("is unknown!");
+                acc.linear_combinations
+                    .push((T::AcvmType::from(*q_l), *w_l))
             }
         }
     }
@@ -110,13 +108,15 @@ where
         // also if we are here and have more than one linear combination, we
         // cannot solve the expression
         if simplified.linear_combinations.is_empty() {
-            //I think we are done??????
+            // we are done
+            tracing::trace!("nothing to do for us");
             Ok(())
         } else if simplified.linear_combinations.len() == 1 {
             //we can solve it!
+            tracing::trace!("solving equation...");
             let (q_l, w_l) = simplified.linear_combinations[0].clone();
             let witness = self.driver.solve_equation(q_l, simplified.q_c)?;
-            self.witness_map.insert(&w_l, witness);
+            self.witness().insert(w_l, witness);
             Ok(())
         } else {
             tracing::debug!("too many unknowns. not solvable for expression: {:?}", expr);

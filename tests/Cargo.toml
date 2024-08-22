@@ -27,7 +27,7 @@ tokio = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [dev-dependencies]
-paste = "1.0.15"
+paste.workspace = true
 
 [[bench]]
 name = "poseidon_hash2"

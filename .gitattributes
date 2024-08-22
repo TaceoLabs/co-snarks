@@ -1,1 +1,2 @@
 *.circom linguist-vendored
+*.nr linguist-vendored
