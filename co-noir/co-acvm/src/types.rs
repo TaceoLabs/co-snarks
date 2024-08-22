@@ -4,33 +4,11 @@ use acir::{native_types::Witness, FieldElement};
 use eyre::{bail, Ok};
 use noirc_abi::{input_parser::Format, Abi, MAIN_RETURN_NAME};
 
-#[derive(Default, Debug)]
-pub struct CoWitnessMap<T: Clone> {
-    // we maybe switch the internal working from the witness map. For now take the same as ACVM
-    witnesses: BTreeMap<Witness, WitnessState<T>>,
-}
-
-//remove me this is just for the time being
-pub struct FullWitness<T>(pub(crate) Vec<T>);
-
-impl<T: Clone> TryFrom<CoWitnessMap<T>> for FullWitness<T> {
-    type Error = eyre::Error;
-
-    fn try_from(value: CoWitnessMap<T>) -> Result<Self, Self::Error> {
-        let mut vec = Vec::with_capacity(value.witnesses.len());
-        // This assumes we have an order of the CoWitnessMap. Atm we have BTreeMap which
-        // has an order. If we change impl, we need to change that
-        for witness in value.witnesses.into_values() {
-            match witness {
-                WitnessState::Known(witness) => vec.push(witness),
-                WitnessState::Unknown => {
-                    bail!("cannot build FullWitness from not solved CoWitnessMap")
-                }
-            }
-        }
-        Ok(Self(vec))
-    }
-}
+// we maybe switch the internal working from the witness map. For now take the same as ACVM.
+// we could also just take the WitnessMap from ACVM. For now it may be easier to have a dedicated
+// type so we can implement stuff on it. Maybe change it at some time.
+#[derive(Default, Debug, Clone)]
+pub struct CoWitnessMap<T: Clone>(pub(crate) BTreeMap<Witness, WitnessState<T>>);
 
 #[derive(Debug, Clone)]
 pub(crate) enum WitnessState<T: Clone> {
@@ -60,7 +38,7 @@ where
             let return_value = input_map.remove(MAIN_RETURN_NAME);
             // TODO the return value can be none for the witness extension
             // do we want to keep it like that? Seems not necessary but maybe
-            // we need it for proving/verifiying
+            // we need it for proving/verifying
             let initial_witness = abi.encode(&input_map, return_value.clone())?;
             let mut witnesses = Self::default();
             for (witness, v) in initial_witness.into_iter() {
@@ -73,7 +51,7 @@ where
 
 impl<T: Clone + Default> CoWitnessMap<T> {
     pub(super) fn get(&mut self, witness: &Witness) -> WitnessState<T> {
-        match self.witnesses.get(witness) {
+        match self.0.get(witness) {
             Some(value) => value.clone(),
             None => WitnessState::Unknown,
         }
@@ -84,11 +62,11 @@ impl<T: Clone + Default> CoWitnessMap<T> {
             self.is_unknown(witness),
             "witness must be unknown if you want to set"
         );
-        self.witnesses.insert(*witness, WitnessState::Known(value));
+        self.0.insert(*witness, WitnessState::Known(value));
     }
 
     pub(super) fn is_unknown(&self, witness: &Witness) -> bool {
-        if let Some(value) = self.witnesses.get(witness) {
+        if let Some(value) = self.0.get(witness) {
             matches!(value, WitnessState::Unknown)
         } else {
             true
@@ -109,7 +87,7 @@ impl<T: Clone + Display> std::fmt::Display for CoWitnessMap<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("WitnessMap: [")?;
         let string = self
-            .witnesses
+            .0
             .iter()
             .map(|(k, v)| format!("({}: {v})", k.0))
             .reduce(|x, y| format!("{x}, {y}"))
