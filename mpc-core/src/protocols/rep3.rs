@@ -31,7 +31,7 @@ use self::{
 };
 
 pub(crate) mod a2b;
-mod acvm_impl;
+pub mod acvm_impl;
 pub mod fieldshare;
 pub mod id;
 pub mod network;
@@ -44,14 +44,15 @@ type IoResult<T> = std::io::Result<T>;
 /// # Rep3 Utils
 /// This module contains utility functions to work with replicated secret sharing. I.e., it contains code to share field elements and curve points, as well as code to reconstruct the secret-shares.
 pub mod utils {
+    use acir::AcirField;
     use ark_ec::CurveGroup;
     use ark_ff::{One, PrimeField};
     use num_bigint::BigUint;
     use rand::{CryptoRng, Rng};
 
     use super::{
-        a2b::Rep3BigUintShare, fieldshare::Rep3PrimeFieldShareVec, pointshare::Rep3PointShare,
-        witness_extension_impl::Rep3VmType, Rep3PrimeFieldShare,
+        a2b::Rep3BigUintShare, acvm_impl::Rep3AcirFieldShare, fieldshare::Rep3PrimeFieldShareVec,
+        pointshare::Rep3PointShare, witness_extension_impl::Rep3VmType, Rep3PrimeFieldShare,
     };
 
     /// Secret shares a field element using replicated secret sharing and the provided random number generator. The field element is split into three additive shares, where each party holds two. The outputs are of type [Rep3PrimeFieldShare].
@@ -84,6 +85,15 @@ pub mod utils {
         let share2 = Rep3BigUintShare::new(b.to_owned(), a);
         let share3 = Rep3BigUintShare::new(c, b);
         [share1, share2, share3]
+    }
+
+    /// Reconstructs a field element from its arithmetic replicated shares.
+    pub fn combine_acir_element<F: AcirField>(
+        share1: Rep3AcirFieldShare<F>,
+        share2: Rep3AcirFieldShare<F>,
+        share3: Rep3AcirFieldShare<F>,
+    ) -> F {
+        share1.a + share2.a + share3.a
     }
 
     /// Reconstructs a field element from its arithmetic replicated shares.
@@ -207,38 +217,43 @@ pub mod utils {
 impl<F: AcirField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Protocol<F, N> {
     type AcvmType = Rep3AcvmType<F>;
 
-    fn acvm_add_assign_with_public(&mut self, _public: F, _secret: &mut Self::AcvmType) {
-        todo!()
+    fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
+        let res = Self::AcvmType::add_with_public(&self.network, public, secret.clone());
+        *secret = res;
     }
 
     fn acvm_mul_with_public(
         &mut self,
-        _public: F,
-        _secret: Self::AcvmType,
+        public: F,
+        secret: Self::AcvmType,
     ) -> std::io::Result<Self::AcvmType> {
-        todo!()
+        Ok(Self::AcvmType::mul_with_public(public, secret))
     }
 
-    fn solve_linear_term(&mut self, _q_l: F, _w_l: Self::AcvmType, _result: &mut Self::AcvmType) {
-        todo!()
+    fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType) {
+        let res = Self::AcvmType::mul_with_public(q_l, w_l);
+        let res = Self::AcvmType::add(&self.network, res, result.clone());
+        *result = res;
     }
 
     fn solve_mul_term(
         &mut self,
-        _c: F,
-        _lhs: Self::AcvmType,
-        _rhs: Self::AcvmType,
-        _target: &mut Self::AcvmType,
+        c: F,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        target: &mut Self::AcvmType,
     ) -> std::io::Result<()> {
-        todo!()
+        let res = Self::AcvmType::mul(self, lhs, rhs)?;
+        *target = Self::AcvmType::mul_with_public(c, res);
+        Ok(())
     }
 
     fn solve_equation(
         &mut self,
-        _q_l: Self::AcvmType,
-        _c: Self::AcvmType,
+        q_l: Self::AcvmType,
+        c: Self::AcvmType,
     ) -> std::io::Result<Self::AcvmType> {
-        todo!()
+        Self::AcvmType::div(self, -c, q_l)
     }
 }
 
