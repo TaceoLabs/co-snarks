@@ -234,6 +234,12 @@ pub trait NoirWitnessExtensionProtocol<F: AcirField>: LookupTableProvider<Self::
         Self::AcvmType::default()
     }
 
+    /// Checks whether an ACVM-type is public zero.
+    fn is_public_zero(a: &Self::AcvmType) -> bool;
+
+    /// Checks whether an ACVM-type is public one.
+    fn is_public_one(a: &Self::AcvmType) -> bool;
+
     /// Adds a public value to an ACVM-type in place: *\[secret\] += public
     fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType);
 

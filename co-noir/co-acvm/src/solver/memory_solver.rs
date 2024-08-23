@@ -17,10 +17,12 @@ where
         block_id: BlockId,
         init: &[Witness],
     ) -> CoAcvmResult<()> {
+        tracing::trace!("solving memory init block {}", block_id.0);
         // TODO: should we trust on the compiler here?
         // this should not be possible so maybe we do not need the check?
         if self.memory_access.get(block_id.0.into()).is_some() {
             //there is already a block? This should no be possible
+            tracing::error!("There is already a block for id {}", block_id.0);
             Err(eyre::eyre!(
                 "There is already a block for id {}",
                 block_id.0
@@ -46,14 +48,21 @@ where
         op: &MemOp<F>,
         _predicate: Option<Expression<F>>,
     ) -> CoAcvmResult<()> {
+        tracing::trace!("solving memory op {:?}", op);
         let index = self.evaluate_expression(&op.index)?;
+        tracing::trace!("index is {}", index);
         let value = self.simplify_expression(&op.value)?;
+        tracing::trace!("value is {:?}", value);
         let witness = if value.is_degree_one_univariate() {
             //we can get the witness
-            let (_coef, witness) = &value.linear_combinations[0];
-            let _q_c = value.q_c;
-            Ok(*witness)
-            //todo check if coef is one and q_c is zero!
+            let (coef, witness) = &value.linear_combinations[0];
+            if T::is_public_one(coef) && T::is_public_zero(&value.q_c) {
+                Ok(*witness)
+            } else {
+                Err(eyre::eyre!(
+                    "value for mem op must be a degree one univariate polynomial with coef 1 and constant 0"
+                ))
+            }
         } else {
             Err(eyre::eyre!(
                 "value for mem op must be a degree one univariate polynomial"
@@ -62,6 +71,7 @@ where
         //TODO CHECK PREDICATE - do we need to cmux here?
         if op.operation.q_c.is_zero() {
             // read the value from the LUT
+            tracing::trace!("reading value from LUT");
             let lut = self
                 .memory_access
                 .get(block_id.0.into())
@@ -73,6 +83,7 @@ where
             self.witness().insert(witness, value);
         } else if op.operation.q_c.is_one() {
             // write value to LUT
+            tracing::trace!("writing value to LUT");
             let value = self
                 .witness()
                 .get(&witness)
