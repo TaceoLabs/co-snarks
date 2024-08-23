@@ -2,10 +2,13 @@
 //!
 //! This module contains the reference implementation without MPC. It will be used by the VM for computing on public values and can be used to test MPC circuits.
 
+use std::collections::HashMap;
+
 use crate::{
     traits::{
         CircomWitnessExtensionProtocol, EcMpcProtocol, FFTProvider, FieldShareVecTrait,
-        MSMProvider, NoirWitnessExtensionProtocol, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        LookupTableProvider, MSMProvider, NoirWitnessExtensionProtocol, PairingEcMpcProtocol,
+        PrimeFieldMpcProtocol,
     },
     RngType,
 };
@@ -632,5 +635,25 @@ impl<F: AcirField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
         c: Self::AcvmType,
     ) -> std::io::Result<Self::AcvmType> {
         Ok(-c / q_l)
+    }
+}
+
+impl<F: AcirField> LookupTableProvider<F> for PlainDriver<F> {
+    type LUT = HashMap<F, F>;
+
+    fn init_lut(&mut self, values: Vec<F>) -> Self::LUT {
+        let mut lut = HashMap::with_capacity(values.len());
+        for (idx, value) in values.into_iter().enumerate() {
+            lut.insert(F::from(idx), value);
+        }
+        lut
+    }
+
+    fn get_from_lut(&mut self, index: &F, lut: &Self::LUT) -> F {
+        lut[index]
+    }
+
+    fn write_to_lut(&mut self, index: F, value: F, lut: &mut Self::LUT) {
+        lut.insert(index, value);
     }
 }

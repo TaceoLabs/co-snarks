@@ -3,6 +3,7 @@ use acir::{
     native_types::{WitnessMap, WitnessStack},
     AcirField, FieldElement,
 };
+use intmap::IntMap;
 use mpc_core::{
     protocols::{
         plain::PlainDriver,
@@ -19,6 +20,7 @@ use std::{io, path::PathBuf};
 pub(crate) const CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounded { width: 4 };
 
 mod assert_zero_solver;
+mod memory_solver;
 pub type PlainCoSolver<F> = CoSolver<PlainDriver<F>, F>;
 pub type Rep3CoSolver<F, N> = CoSolver<Rep3Protocol<F, N>, F>;
 
@@ -26,12 +28,10 @@ type CoAcvmResult<T> = std::result::Result<T, CoAcvmError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoAcvmError {
-    #[error("Expected at most one mul term, but got {0}")]
-    TooManyMulTerm(usize),
     #[error(transparent)]
     IOError(#[from] io::Error),
-    #[error("unsolvable, too many unknown terms")]
-    TooManyUnknowns,
+    #[error(transparent)]
+    UnrecoverableError(#[from] eyre::Report),
 }
 
 pub struct CoSolver<T, F>
@@ -46,6 +46,8 @@ where
     witness_map: Vec<WitnessMap<T::AcvmType>>,
     // there will a more fields added as we add functionality
     function_index: usize,
+    // the memory blocks
+    memory_access: IntMap<T::LUT>,
 }
 
 impl<T> CoSolver<T, FieldElement>
@@ -97,6 +99,7 @@ where
                 .collect::<Vec<_>>(),
             witness_map,
             function_index: 0,
+            memory_access: IntMap::new(),
         })
     }
 }
@@ -152,6 +155,7 @@ where
     T: NoirWitnessExtensionProtocol<F>,
     F: AcirField,
 {
+    #[inline(always)]
     fn witness(&mut self) -> &mut WitnessMap<T::AcvmType> {
         &mut self.witness_map[self.function_index]
     }
@@ -167,6 +171,16 @@ where
         for opcode in functions[self.function_index].opcodes.iter() {
             match opcode {
                 Opcode::AssertZero(expr) => self.solve_assert_zero(expr)?,
+                Opcode::MemoryInit {
+                    block_id,
+                    init,
+                    block_type: _, // apparently not used
+                } => self.solve_memory_init_block(*block_id, init)?,
+                Opcode::MemoryOp {
+                    block_id,
+                    op,
+                    predicate,
+                } => self.solve_memory_op(*block_id, op, predicate.to_owned())?,
                 _ => todo!("non assert zero opcode detected, not supported yet"),
                 //Opcode::Call {
                 //    id,

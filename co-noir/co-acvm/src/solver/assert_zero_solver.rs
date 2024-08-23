@@ -1,7 +1,7 @@
 use acir::{native_types::Expression, AcirField};
 use mpc_core::traits::NoirWitnessExtensionProtocol;
 
-use super::{CoAcvmError, CoAcvmResult, CoSolver};
+use super::{CoAcvmResult, CoSolver};
 
 impl<T, F> CoSolver<T, F>
 where
@@ -44,20 +44,16 @@ where
                         let partly_solved = self.driver.acvm_mul_with_public(*c, rhs)?;
                         acc.linear_combinations.push((partly_solved, *lhs));
                     }
-                    (None, None) => {
-                        tracing::debug!(
-                            "two unknowns in evaluate mul term. Not solvable for expr: {:?}",
-                            expr
-                        );
-                        return Err(CoAcvmError::TooManyUnknowns);
-                    }
+                    (None, None) => Err(eyre::eyre!(
+                        "two unknowns in evaluate mul term. Not solvable for expr: {:?}",
+                        expr
+                    ))?,
                 };
                 tracing::trace!("after eval mul term: {acc:?}");
                 Ok(())
             }
         } else {
-            tracing::debug!("more than one mul term found!");
-            Err(CoAcvmError::TooManyMulTerm(expr.mul_terms.len()))
+            Err(eyre::eyre!("more than one mul term found!"))?
         }
     }
 
@@ -76,7 +72,7 @@ where
         }
     }
 
-    fn simplify_expression(
+    pub(crate) fn simplify_expression(
         &mut self,
         expr: &Expression<F>,
     ) -> CoAcvmResult<Expression<T::AcvmType>> {
@@ -119,8 +115,23 @@ where
             self.witness().insert(w_l, witness);
             Ok(())
         } else {
-            tracing::debug!("too many unknowns. not solvable for expression: {:?}", expr);
-            Err(CoAcvmError::TooManyUnknowns)
+            Err(eyre::eyre!(
+                "too many unknowns. not solvable for expression: {:?}",
+                expr
+            ))?
         }
+    }
+
+    pub(crate) fn evaluate_expression(
+        &mut self,
+        expr: &Expression<F>,
+    ) -> CoAcvmResult<T::AcvmType> {
+        Ok(self
+            .simplify_expression(expr)?
+            .to_const()
+            .cloned()
+            .ok_or(eyre::eyre!(
+                "cannot evaluate expression to const - has unknown"
+            ))?)
     }
 }
