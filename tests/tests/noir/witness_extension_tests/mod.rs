@@ -14,13 +14,13 @@ macro_rules! add_plain_acvm_test {
                 #[test]
                 fn [< test_plain_ $name >]() {
                     let program = std::fs::read_to_string(format!(
-                        "../test_vectors/noir/{}/target/{}.json",
+                        "../test_vectors/noir/{}/kat/{}.json",
                     $name, $name))
                     .unwrap();
                     let program_artifact = serde_json::from_str::<ProgramArtifact>(&program)
                         .expect("failed to parse program artifact");
                     let should_witness =
-                        std::fs::read(format!("../test_vectors/noir/{}/target/{}.gz", $name, $name)).unwrap();
+                        std::fs::read(format!("../test_vectors/noir/{}/kat/{}.gz", $name, $name)).unwrap();
                     let should_witness =
                         WitnessStack::<FieldElement>::try_from(should_witness.as_slice()).unwrap();
                     let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", $name);
@@ -39,7 +39,7 @@ macro_rules! add_rep3_acvm_test {
             #[test]
             fn [< test_rep3_ $name >]() {
                 let program = std::fs::read_to_string(format!(
-                    "../test_vectors/noir/{}/target/{}.json",
+                    "../test_vectors/noir/{}/kat/{}.json",
                     $name, $name
                 ))
                 .unwrap();
@@ -47,7 +47,7 @@ macro_rules! add_rep3_acvm_test {
                     .expect("failed to parse program artifact");
 
                 let should_witness =
-                    std::fs::read(format!("../test_vectors/noir/{}/target/{}.gz", $name, $name)).unwrap();
+                    std::fs::read(format!("../test_vectors/noir/{}/kat/{}.gz", $name, $name)).unwrap();
 
                 let should_witness =
                     WitnessStack::<FieldElement>::try_from(should_witness.as_slice()).unwrap();
