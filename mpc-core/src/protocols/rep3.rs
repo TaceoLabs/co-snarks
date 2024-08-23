@@ -255,6 +255,22 @@ impl<F: AcirField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Proto
     ) -> std::io::Result<Self::AcvmType> {
         Self::AcvmType::div(self, -c, q_l)
     }
+
+    fn is_public_zero(a: &Self::AcvmType) -> bool {
+        if let Rep3AcvmType::Public(x) = a {
+            x.is_zero()
+        } else {
+            false
+        }
+    }
+
+    fn is_public_one(a: &Self::AcvmType) -> bool {
+        if let Rep3AcvmType::Public(x) = a {
+            x.is_one()
+        } else {
+            false
+        }
+    }
 }
 
 /// This struct handles the full Rep3 MPC protocol, including witness extension and proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], [MSMProvider], and [CircomWitnessExtensionProtocol] traits.

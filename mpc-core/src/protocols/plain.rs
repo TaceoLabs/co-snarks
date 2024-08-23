@@ -636,6 +636,14 @@ impl<F: AcirField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
     ) -> std::io::Result<Self::AcvmType> {
         Ok(-c / q_l)
     }
+
+    fn is_public_zero(a: &Self::AcvmType) -> bool {
+        a.is_zero()
+    }
+
+    fn is_public_one(a: &Self::AcvmType) -> bool {
+        a.is_one()
+    }
 }
 
 impl<F: AcirField> LookupTableProvider<F> for PlainDriver<F> {
