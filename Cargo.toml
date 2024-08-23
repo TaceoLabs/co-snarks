@@ -53,6 +53,7 @@ eyre = "0.6"
 figment = { version = "0.10.19", features = ["toml", "env"] }
 futures = "0.3.30"
 hex-literal = "0.4.1"
+intmap = "2.0.0"
 itertools = "0.13.0"
 mpc-core = { version = "0.4.0", path = "mpc-core" }
 mpc-net = { version = "0.1.2", path = "mpc-net" }

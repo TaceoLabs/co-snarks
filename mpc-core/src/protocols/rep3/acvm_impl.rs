@@ -9,6 +9,8 @@ use std::io;
 use acir::AcirField;
 use eyre::bail;
 
+use crate::traits::LookupTableProvider;
+
 use super::{id::PartyID, network::Rep3Network, Rep3Protocol};
 
 //TODO maybe merge this with the VM type? Can be generic over F and then either use AcirField or PrimeField
@@ -393,5 +395,26 @@ impl<F: AcirField, N: Rep3Network> Rep3Protocol<F, N> {
         let bytes = self.network.recv_prev::<Vec<u8>>()?;
         let c = F::from_be_bytes_reduce(&bytes);
         Ok(a.a + a.b + c)
+    }
+}
+
+impl<F: AcirField, N: Rep3Network> LookupTableProvider<Rep3AcvmType<F>> for Rep3Protocol<F, N> {
+    type LUT = ();
+
+    fn init_lut(&mut self, _values: Vec<Rep3AcvmType<F>>) -> Self::LUT {
+        todo!()
+    }
+
+    fn get_from_lut(&mut self, _index: &Rep3AcvmType<F>, _lut: &Self::LUT) -> Rep3AcvmType<F> {
+        todo!()
+    }
+
+    fn write_to_lut(
+        &mut self,
+        _index: Rep3AcvmType<F>,
+        _value: Rep3AcvmType<F>,
+        _lut: &mut Self::LUT,
+    ) {
+        todo!()
     }
 }

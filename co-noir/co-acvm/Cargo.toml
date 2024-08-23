@@ -13,6 +13,7 @@ rust-version.workspace = true
 acir.workspace = true
 acvm.workspace = true
 eyre.workspace = true
+intmap.workspace = true
 mpc-core.workspace = true
 noirc-abi.workspace = true
 noirc-artifacts.workspace = true

@@ -206,12 +206,26 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     ) -> std::io::Result<Vec<F>>;
 }
 
+/// This is some place holder definition. This will change most likely
+pub trait LookupTableProvider<F> {
+    /// A type that holds the data of the LUT.
+    type LUT;
+
+    /// Initializes a new LUT from the provided values. The index shall be the order
+    /// of the values in the `Vec`.
+    fn init_lut(&mut self, values: Vec<F>) -> Self::LUT;
+    /// Reads a value from the LUT.
+    fn get_from_lut(&mut self, index: &F, lut: &Self::LUT) -> F;
+    /// Writes a value to the LUT.
+    fn write_to_lut(&mut self, index: F, value: F, lut: &mut Self::LUT);
+}
+
 /// A trait representing the MPC operations required for extending the secret-shared Noir witness in MPC.
 /// The operations are generic over public and private (i.e., secret-shared) inputs.
 /// In contrast to the other traits, we have to be generic over [`AcirField`], as the ACVM wraps
 /// the [`PrimeField`] of arkworks in another trait. This may be subject to change if we add functionality as
 /// we have to implement a lot of the stuff twice.
-pub trait NoirWitnessExtensionProtocol<F: AcirField> {
+pub trait NoirWitnessExtensionProtocol<F: AcirField>: LookupTableProvider<Self::AcvmType> {
     /// A type representing the values encountered during Circom compilation. It should at least contain public field elements and shared values.
     type AcvmType: Clone + Default + fmt::Debug + fmt::Display + From<F>;
 
