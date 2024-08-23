@@ -1,0 +1,6 @@
+use dep::poseidon2;
+
+//-8724675007627701394367576277397137785970603800817593955743442482136808733218
+fn main(plains: [Field; 8]) -> pub Field {
+    poseidon2::bn254::hash_8(plains)
+}
