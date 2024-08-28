@@ -42,6 +42,23 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
+/// The simplification level applied during constraint generation
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub enum Simplification {
+    /// No simplification
+    O0,
+    /// Only applies signal to signal and signal to constant simplification
+    O1,
+    /// Full constraint simplification (applied for n rounds)
+    O2(usize),
+}
+
+impl Default for Simplification {
+    fn default() -> Self {
+        Simplification::O2(usize::MAX)
+    }
+}
+
 /// The mpc-compiler configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct CompilerConfig {
@@ -52,6 +69,13 @@ pub struct CompilerConfig {
     pub allow_leaky_loops: bool,
     /// The path to Circom library files
     pub link_library: Vec<PathBuf>,
+    /// The optimization flag passed to the compiler
+    #[serde(default)]
+    pub simplification: Simplification,
+    /// Shows logs during compilation
+    pub verbose: bool,
+    /// Does an additional check over the constraints produced
+    pub inspect: bool,
 }
 
 fn default_version() -> String {
@@ -64,6 +88,9 @@ impl Default for CompilerConfig {
             version: default_version(),
             link_library: vec![],
             allow_leaky_loops: false,
+            simplification: Simplification::default(),
+            verbose: false,
+            inspect: false,
         }
     }
 }
@@ -142,15 +169,19 @@ where
         program_archive: ProgramArchive,
     ) -> Result<(CircomCircuit, OutputMapping)> {
         let build_config = BuildConfig {
-            no_rounds: usize::MAX, //simplification_style. Use default from their lib
+            no_rounds: if let Simplification::O2(r) = self.config.simplification {
+                r
+            } else {
+                0
+            },
             flag_json_sub: false,
             json_substitutions: String::new(),
-            flag_s: false,
-            flag_f: false,
+            flag_s: self.config.simplification == Simplification::O1,
+            flag_f: self.config.simplification == Simplification::O0,
             flag_p: false,
-            flag_verbose: false,
+            flag_verbose: self.config.verbose,
             flag_old_heuristics: false,
-            inspect_constraints: false,
+            inspect_constraints: self.config.inspect,
             prime: P::get_circom_name(),
         };
         let (_, vcp) = circom_constraint_generation::build_circuit(program_archive, build_config)

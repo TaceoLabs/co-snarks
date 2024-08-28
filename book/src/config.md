@@ -71,6 +71,12 @@ This section configures the co-circom MPC compiler.
 * `version`: Allows leaking of secret values in loops (default: "2.0.0")
 * `link_library`: A list of strings that represent paths for circom to look for library files (`-l` flag in circom) (default: `[]`)
 * `allow_leaky_loops`: Allows leaking of secret values in loops (default: `false`) (*currently not implemented*).
+* `simplification`: Controls the simplification level applied during constraint generation (default: `O3(usize::MAX)`)
+  - `O0`: No simplification
+  - `O1`: Only applies signal to signal and signal to constant simplification
+  - `O2(n)`: Full constraint simplification (applied for n rounds)
+* `verbose`: Shows logs during compilation
+* `inspect`: Does an additional check over the constraints produced
 
 ## VM Configuration
 
