@@ -28,6 +28,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct VMConfig {
     /// Allow leaking of secret values in logs
+    #[serde(default)]
     pub allow_leaky_logs: bool,
 }
 

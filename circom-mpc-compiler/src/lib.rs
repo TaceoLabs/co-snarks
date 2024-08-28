@@ -44,7 +44,7 @@ use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 /// The simplification level applied during constraint generation
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub enum Simplification {
+pub enum SimplificationLevel {
     /// No simplification
     O0,
     /// Only applies signal to signal and signal to constant simplification
@@ -53,9 +53,9 @@ pub enum Simplification {
     O2(usize),
 }
 
-impl Default for Simplification {
+impl Default for SimplificationLevel {
     fn default() -> Self {
-        Simplification::O2(usize::MAX)
+        SimplificationLevel::O2(usize::MAX)
     }
 }
 
@@ -66,15 +66,19 @@ pub struct CompilerConfig {
     #[serde(default = "default_version")]
     pub version: String,
     /// Allow leaking of secret values in loops (not used atm)
+    #[serde(default)]
     pub allow_leaky_loops: bool,
     /// The path to Circom library files
+    #[serde(default)]
     pub link_library: Vec<PathBuf>,
     /// The optimization flag passed to the compiler
     #[serde(default)]
-    pub simplification: Simplification,
+    pub simplification: SimplificationLevel,
     /// Shows logs during compilation
+    #[serde(default)]
     pub verbose: bool,
     /// Does an additional check over the constraints produced
+    #[serde(default)]
     pub inspect: bool,
 }
 
@@ -88,7 +92,7 @@ impl Default for CompilerConfig {
             version: default_version(),
             link_library: vec![],
             allow_leaky_loops: false,
-            simplification: Simplification::default(),
+            simplification: SimplificationLevel::default(),
             verbose: false,
             inspect: false,
         }
@@ -169,15 +173,15 @@ where
         program_archive: ProgramArchive,
     ) -> Result<(CircomCircuit, OutputMapping)> {
         let build_config = BuildConfig {
-            no_rounds: if let Simplification::O2(r) = self.config.simplification {
+            no_rounds: if let SimplificationLevel::O2(r) = self.config.simplification {
                 r
             } else {
                 0
             },
             flag_json_sub: false,
             json_substitutions: String::new(),
-            flag_s: self.config.simplification == Simplification::O1,
-            flag_f: self.config.simplification == Simplification::O0,
+            flag_s: self.config.simplification == SimplificationLevel::O1,
+            flag_f: self.config.simplification == SimplificationLevel::O0,
             flag_p: false,
             flag_verbose: self.config.verbose,
             flag_old_heuristics: false,
