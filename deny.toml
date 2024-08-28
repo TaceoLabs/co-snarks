@@ -81,6 +81,9 @@ exceptions = [
     { crate = "compiler", allow = ["GPL-3.0"] },
     { crate = "code_producers", allow = ["GPL-3.0"] },
     { crate = "circom_algebra", allow = ["GPL-3.0"] },
+    { crate = "sized-chunks", allow = ["MPL-2.0"] },
+    { crate = "bitmaps", allow = ["MPL-2.0"] },
+    { crate = "im", allow = ["MPL-2.0"] },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,
@@ -278,7 +281,7 @@ unknown-git = "deny"
 # if not specified. If it is specified but empty, no registries are allowed.
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # List of URLs for allowed Git repositories
-allow-git = []
+allow-git = ["https://github.com/noir-lang/noir", "https://github.com/jfecher/chumsky"]
 
 [sources.allow-org]
 # 1 or more github.com organizations to allow git sources for
