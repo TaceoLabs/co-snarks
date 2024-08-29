@@ -12,7 +12,6 @@ use crate::{
     },
     RngType,
 };
-use acir::AcirField;
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{One, PrimeField};
 use ark_poly::{univariate::DensePolynomial, Polynomial};
@@ -63,13 +62,6 @@ macro_rules! to_bigint {
 /// The PlainDriver implements implements the MPC traits without MPC. In other words, it implements [PrimeFieldMpcProtocol], [CircomWitnessExtensionProtocol] and can thus be used by the VM to evaluate functions on public values, as well as for testing MPC circuits.
 pub struct PlainDriver<F> {
     negative_one: F,
-}
-
-impl<F> PlainDriver<F> {
-    /// Creates a new instance of the PlainDriver and sets the negative one to the provided value.
-    pub fn new(negative_one: F) -> Self {
-        PlainDriver { negative_one }
-    }
 }
 
 impl<F: PrimeField> PlainDriver<F> {
@@ -599,8 +591,16 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver<F> {
     }
 }
 
-impl<F: AcirField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
+impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
     type AcvmType = F;
+
+    fn is_public_zero(a: &Self::AcvmType) -> bool {
+        a.is_zero()
+    }
+
+    fn is_public_one(a: &Self::AcvmType) -> bool {
+        a.is_one()
+    }
 
     fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
         *secret += public;
@@ -610,7 +610,7 @@ impl<F: AcirField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
         &mut self,
         public: F,
         secret: Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         Ok(secret * public)
     }
 
@@ -624,7 +624,7 @@ impl<F: AcirField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
         target: &mut Self::AcvmType,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         *target = c * lhs * rhs;
         Ok(())
     }
@@ -633,26 +633,38 @@ impl<F: AcirField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
         &mut self,
         q_l: Self::AcvmType,
         c: Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         Ok(-c / q_l)
     }
 
-    fn is_public_zero(a: &Self::AcvmType) -> bool {
-        a.is_zero()
+    fn read_lut_by_acvm_type(&mut self, index: &Self::AcvmType, lut: &Self::LUT) -> F {
+        self.get_from_lut(index, lut)
     }
 
-    fn is_public_one(a: &Self::AcvmType) -> bool {
-        a.is_one()
+    fn write_lut_by_acvm_type(
+        &mut self,
+        index: Self::AcvmType,
+        value: Self::AcvmType,
+        lut: &mut Self::LUT,
+    ) {
+        self.write_to_lut(index, value, lut);
+    }
+
+    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::LUT {
+        self.init_lut(values)
     }
 }
 
-impl<F: AcirField> LookupTableProvider<F> for PlainDriver<F> {
+impl<F: PrimeField> LookupTableProvider<F> for PlainDriver<F> {
     type LUT = HashMap<F, F>;
 
     fn init_lut(&mut self, values: Vec<F>) -> Self::LUT {
         let mut lut = HashMap::with_capacity(values.len());
         for (idx, value) in values.into_iter().enumerate() {
-            lut.insert(F::from(idx), value);
+            lut.insert(
+                F::from(u64::try_from(idx).expect("usize fits into u64")),
+                value,
+            );
         }
         lut
     }
@@ -662,6 +674,14 @@ impl<F: AcirField> LookupTableProvider<F> for PlainDriver<F> {
     }
 
     fn write_to_lut(&mut self, index: F, value: F, lut: &mut Self::LUT) {
+        lut.insert(index, value);
+    }
+
+    fn public_get_from_lut(&mut self, index: &F, lut: &Self::LUT) -> F {
+        lut[index]
+    }
+
+    fn public_write_to_lut(&mut self, index: F, value: Self::FieldShare, lut: &mut Self::LUT) {
         lut.insert(index, value);
     }
 }

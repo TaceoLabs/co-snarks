@@ -1,9 +1,6 @@
-use acir::{
-    native_types::{WitnessMap, WitnessStack},
-    FieldElement,
-};
+use acir::native_types::{WitnessMap, WitnessStack};
+use ark_ff::PrimeField;
 use itertools::izip;
-use mpc_core::protocols::rep3::acvm_impl::Rep3AcvmType;
 
 mod plain_solver;
 mod rep3;
@@ -27,6 +24,7 @@ macro_rules! add_plain_acvm_test {
                     let solver =
                         PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
                     let is_witness = solver.solve().unwrap();
+                    let is_witness = PlainCoSolver::convert_to_plain_acvm_witness(is_witness);
                     assert_eq!(is_witness, should_witness);
                 }
             }
@@ -73,17 +71,19 @@ macro_rules! add_rep3_acvm_test {
                 let result3 = threads.pop().unwrap().join().unwrap().unwrap();
                 let result2 = threads.pop().unwrap().join().unwrap().unwrap();
                 let result1 = threads.pop().unwrap().join().unwrap().unwrap();
-                let is_witness = super::combine_field_elements_for_vm(result1, result2, result3);
+                let is_witness = super::combine_field_elements_for_acvm(result1, result2, result3);
+                let is_witness = PlainCoSolver::convert_to_plain_acvm_witness(is_witness);
                 assert_eq!(should_witness, is_witness)
             }
         }
     };
 }
-fn combine_field_elements_for_vm(
-    mut a: WitnessStack<Rep3AcvmType<FieldElement>>,
-    mut b: WitnessStack<Rep3AcvmType<FieldElement>>,
-    mut c: WitnessStack<Rep3AcvmType<FieldElement>>,
-) -> WitnessStack<FieldElement> {
+
+fn combine_field_elements_for_acvm<F: PrimeField>(
+    mut a: WitnessStack<Rep3VmType<F>>,
+    mut b: WitnessStack<Rep3VmType<F>>,
+    mut c: WitnessStack<Rep3VmType<F>>,
+) -> WitnessStack<F> {
     let mut res = WitnessStack::default();
     assert_eq!(a.length(), b.length());
     assert_eq!(b.length(), c.length());
@@ -100,8 +100,20 @@ fn combine_field_elements_for_vm(
         ) {
             assert_eq!(witness_a, witness_b);
             assert_eq!(witness_b, witness_c);
-            let test = Rep3AcvmType::combine_elements(share_a, share_b, share_c).unwrap();
-            witness_map.insert(witness_a, test);
+            let reconstructed = match (share_a, share_b, share_c) {
+                (Rep3VmType::Public(a), Rep3VmType::Public(b), Rep3VmType::Public(c)) => {
+                    if a == b && b == c {
+                        a
+                    } else {
+                        panic!("must be all public")
+                    }
+                }
+                (Rep3VmType::Shared(a), Rep3VmType::Shared(b), Rep3VmType::Shared(c)) => {
+                    mpc_core::protocols::rep3::utils::combine_field_element(a, b, c)
+                }
+                _ => unimplemented!(),
+            };
+            witness_map.insert(witness_a, reconstructed);
         }
         res.push(stack_item_a.index, witness_map);
     }
@@ -110,3 +122,4 @@ fn combine_field_elements_for_vm(
 
 use add_plain_acvm_test;
 use add_rep3_acvm_test;
+use mpc_core::protocols::rep3::witness_extension_impl::Rep3VmType;

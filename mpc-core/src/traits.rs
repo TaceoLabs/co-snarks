@@ -2,14 +2,12 @@
 //!
 //! Contains the traits which need to be implemented by the MPC protocols.
 
-use acir::AcirField;
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use core::fmt;
 use eyre::Result;
-use std::io;
 
 /// A trait representing the basic operations for handling vectors of shares
 pub trait FieldShareVecTrait:
@@ -207,27 +205,35 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 }
 
 /// This is some place holder definition. This will change most likely
-pub trait LookupTableProvider<F> {
+pub trait LookupTableProvider<F: PrimeField>: PrimeFieldMpcProtocol<F> {
     /// A type that holds the data of the LUT.
     type LUT;
 
     /// Initializes a new LUT from the provided values. The index shall be the order
     /// of the values in the `Vec`.
-    fn init_lut(&mut self, values: Vec<F>) -> Self::LUT;
+    fn init_lut(&mut self, values: Vec<Self::FieldShare>) -> Self::LUT;
     /// Reads a value from the LUT.
-    fn get_from_lut(&mut self, index: &F, lut: &Self::LUT) -> F;
+    fn get_from_lut(&mut self, index: &Self::FieldShare, lut: &Self::LUT) -> Self::FieldShare;
     /// Writes a value to the LUT.
-    fn write_to_lut(&mut self, index: F, value: F, lut: &mut Self::LUT);
+    fn write_to_lut(
+        &mut self,
+        index: Self::FieldShare,
+        value: Self::FieldShare,
+        lut: &mut Self::LUT,
+    );
+    /// Reads a value from the LUT from a public index.
+    fn public_get_from_lut(&mut self, index: &F, lut: &Self::LUT) -> Self::FieldShare;
+    /// Writes a value to the LUT by a public index.
+    fn public_write_to_lut(&mut self, index: F, value: Self::FieldShare, lut: &mut Self::LUT);
 }
 
 /// A trait representing the MPC operations required for extending the secret-shared Noir witness in MPC.
 /// The operations are generic over public and private (i.e., secret-shared) inputs.
-/// In contrast to the other traits, we have to be generic over [`AcirField`], as the ACVM wraps
-/// the [`PrimeField`] of arkworks in another trait. This may be subject to change if we add functionality as
-/// we have to implement a lot of the stuff twice.
-pub trait NoirWitnessExtensionProtocol<F: AcirField>: LookupTableProvider<Self::AcvmType> {
+pub trait NoirWitnessExtensionProtocol<F: PrimeField>:
+    PrimeFieldMpcProtocol<F> + LookupTableProvider<F>
+{
     /// A type representing the values encountered during Circom compilation. It should at least contain public field elements and shared values.
-    type AcvmType: Clone + Default + fmt::Debug + fmt::Display + From<F>;
+    type AcvmType: Clone + Default + fmt::Debug + fmt::Display + From<Self::FieldShare> + From<F>;
 
     /// Returns F::zero() as a ACVM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
     fn public_zero() -> Self::AcvmType {
@@ -248,7 +254,7 @@ pub trait NoirWitnessExtensionProtocol<F: AcirField>: LookupTableProvider<Self::
         &mut self,
         public: F,
         secret: Self::AcvmType,
-    ) -> io::Result<Self::AcvmType>;
+    ) -> eyre::Result<Self::AcvmType>;
 
     /// Multiply an ACVM-types with a public value and add_assign with result: \[result\] += q_l * \[w_l\].
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType);
@@ -260,14 +266,31 @@ pub trait NoirWitnessExtensionProtocol<F: AcirField>: LookupTableProvider<Self::
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
         target: &mut Self::AcvmType,
-    ) -> io::Result<()>;
+    ) -> eyre::Result<()>;
 
     /// Solves the equation \[q_l\] * w_l + \[c\] = 0, by computing \[-c\]/\[q_l\] and returning the result.
     fn solve_equation(
         &mut self,
         q_l: Self::AcvmType,
         c: Self::AcvmType,
-    ) -> io::Result<Self::AcvmType>;
+    ) -> eyre::Result<Self::AcvmType>;
+
+    /// Initializes a new LUT from the provided values. The index shall be the order
+    /// of the values in the `Vec`. This is wrapper around the method from the [`LookupTableProvider`] as
+    /// we create the table from either public or shared values.
+    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::LUT;
+
+    /// Wrapper around reading from a LUT by the [`Self::AcvmType`] as this can either be a
+    /// public or a shared read.
+    fn read_lut_by_acvm_type(&mut self, index: &Self::AcvmType, lut: &Self::LUT) -> Self::AcvmType;
+
+    /// Wrapper around writing a value to a LUT. The index and the value can be shared or public.
+    fn write_lut_by_acvm_type(
+        &mut self,
+        index: Self::AcvmType,
+        value: Self::AcvmType,
+        lut: &mut Self::LUT,
+    );
 }
 
 /// A trait representing the MPC operations required for extending the secret-shared Circom witness in MPC. The operations are generic over public and private (i.e., secret-shared) inputs.

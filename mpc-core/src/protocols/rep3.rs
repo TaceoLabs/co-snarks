@@ -2,8 +2,6 @@
 //!
 //! This module contains an implementation of semi-honest 3-party [replicated secret sharing](https://eprint.iacr.org/2018/403.pdf).
 
-use acir::AcirField;
-use acvm_impl::Rep3AcvmType;
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, EvaluationDomain, Polynomial};
@@ -12,13 +10,14 @@ use itertools::{izip, Itertools};
 use rand::{Rng, SeedableRng};
 use rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp};
 use std::marker::PhantomData;
+use witness_extension_impl::Rep3VmType;
 
 #[cfg(doc)]
 use crate::traits::CircomWitnessExtensionProtocol;
 use crate::{
     traits::{
-        EcMpcProtocol, FFTProvider, FieldShareVecTrait, MSMProvider, NoirWitnessExtensionProtocol,
-        PairingEcMpcProtocol, PrimeFieldMpcProtocol,
+        EcMpcProtocol, FFTProvider, FieldShareVecTrait, LookupTableProvider, MSMProvider,
+        NoirWitnessExtensionProtocol, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
     },
     RngType,
 };
@@ -31,9 +30,9 @@ use self::{
 };
 
 pub(crate) mod a2b;
-pub mod acvm_impl;
 pub mod fieldshare;
 pub mod id;
+pub(crate) mod lut;
 pub mod network;
 pub mod pointshare;
 pub(crate) mod rngs;
@@ -44,15 +43,14 @@ type IoResult<T> = std::io::Result<T>;
 /// # Rep3 Utils
 /// This module contains utility functions to work with replicated secret sharing. I.e., it contains code to share field elements and curve points, as well as code to reconstruct the secret-shares.
 pub mod utils {
-    use acir::AcirField;
     use ark_ec::CurveGroup;
     use ark_ff::{One, PrimeField};
     use num_bigint::BigUint;
     use rand::{CryptoRng, Rng};
 
     use super::{
-        a2b::Rep3BigUintShare, acvm_impl::Rep3AcirFieldShare, fieldshare::Rep3PrimeFieldShareVec,
-        pointshare::Rep3PointShare, witness_extension_impl::Rep3VmType, Rep3PrimeFieldShare,
+        a2b::Rep3BigUintShare, fieldshare::Rep3PrimeFieldShareVec, pointshare::Rep3PointShare,
+        witness_extension_impl::Rep3VmType, Rep3PrimeFieldShare,
     };
 
     /// Secret shares a field element using replicated secret sharing and the provided random number generator. The field element is split into three additive shares, where each party holds two. The outputs are of type [Rep3PrimeFieldShare].
@@ -85,15 +83,6 @@ pub mod utils {
         let share2 = Rep3BigUintShare::new(b.to_owned(), a);
         let share3 = Rep3BigUintShare::new(c, b);
         [share1, share2, share3]
-    }
-
-    /// Reconstructs a field element from its arithmetic replicated shares.
-    pub fn combine_acir_element<F: AcirField>(
-        share1: Rep3AcirFieldShare<F>,
-        share2: Rep3AcirFieldShare<F>,
-        share3: Rep3AcirFieldShare<F>,
-    ) -> F {
-        share1.a + share2.a + share3.a
     }
 
     /// Reconstructs a field element from its arithmetic replicated shares.
@@ -214,11 +203,27 @@ pub mod utils {
     }
 }
 
-impl<F: AcirField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Protocol<F, N> {
-    type AcvmType = Rep3AcvmType<F>;
+impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Protocol<F, N> {
+    type AcvmType = Rep3VmType<F>;
+
+    fn is_public_zero(a: &Self::AcvmType) -> bool {
+        if let Rep3VmType::Public(x) = a {
+            x.is_zero()
+        } else {
+            false
+        }
+    }
+
+    fn is_public_one(a: &Self::AcvmType) -> bool {
+        if let Rep3VmType::Public(x) = a {
+            x.is_one()
+        } else {
+            false
+        }
+    }
 
     fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
-        let res = Self::AcvmType::add_with_public(&self.network, public, secret.clone());
+        let res = Self::AcvmType::add_with_public(self, public, secret.clone());
         *secret = res;
     }
 
@@ -226,13 +231,13 @@ impl<F: AcirField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Proto
         &mut self,
         public: F,
         secret: Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         Ok(Self::AcvmType::mul_with_public(public, secret))
     }
 
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType) {
         let res = Self::AcvmType::mul_with_public(q_l, w_l);
-        let res = Self::AcvmType::add(&self.network, res, result.clone());
+        let res = Self::AcvmType::add(self, res, result.clone());
         *result = res;
     }
 
@@ -242,7 +247,7 @@ impl<F: AcirField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Proto
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
         target: &mut Self::AcvmType,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let res = Self::AcvmType::mul(self, lhs, rhs)?;
         *target = Self::AcvmType::mul_with_public(c, res);
         Ok(())
@@ -252,24 +257,58 @@ impl<F: AcirField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Proto
         &mut self,
         q_l: Self::AcvmType,
         c: Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmType> {
-        Self::AcvmType::div(self, -c, q_l)
+    ) -> eyre::Result<Self::AcvmType> {
+        let neg_c = Self::AcvmType::neg(self, c);
+        Self::AcvmType::div(self, neg_c, q_l)
     }
 
-    fn is_public_zero(a: &Self::AcvmType) -> bool {
-        if let Rep3AcvmType::Public(x) = a {
-            x.is_zero()
-        } else {
-            false
+    fn read_lut_by_acvm_type(&mut self, index: &Self::AcvmType, lut: &Self::LUT) -> Self::AcvmType {
+        let value = match index {
+            Rep3VmType::Public(public) => self.public_get_from_lut(public, lut),
+            Rep3VmType::Shared(shared) => self.get_from_lut(shared, lut),
+            Rep3VmType::BitShared => unreachable!("bit shared not implemented at the moment"),
+        };
+        Rep3VmType::Shared(value)
+    }
+
+    fn write_lut_by_acvm_type(
+        &mut self,
+        index: Self::AcvmType,
+        value: Self::AcvmType,
+        lut: &mut Self::LUT,
+    ) {
+        match (index, value) {
+            (Rep3VmType::Public(index), Rep3VmType::Public(value)) => {
+                let value = self.promote_to_trivial_share(value);
+                self.public_write_to_lut(index, value, lut);
+            }
+            (Rep3VmType::Public(index), Rep3VmType::Shared(value)) => {
+                self.public_write_to_lut(index, value, lut)
+            }
+            (Rep3VmType::Shared(index), Rep3VmType::Public(value)) => {
+                let value = self.promote_to_trivial_share(value);
+                self.write_to_lut(index, value, lut);
+            }
+            (Rep3VmType::Shared(index), Rep3VmType::Shared(value)) => {
+                self.write_to_lut(index, value, lut)
+            }
+            (_, _) => unreachable!("bit shared not implemented at the moment"),
         }
     }
 
-    fn is_public_one(a: &Self::AcvmType) -> bool {
-        if let Rep3AcvmType::Public(x) = a {
-            x.is_one()
-        } else {
-            false
-        }
+    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::LUT {
+        // TODO we collect here. We do not want that.
+        // We will overhaul the LUTProvider shortly but for now we leave it like that
+        // Easiest way is to provide an iterator to init lut and not a vec...
+        let values = values
+            .into_iter()
+            .map(|value| match value {
+                Rep3VmType::Public(public) => self.promote_to_trivial_share(public),
+                Rep3VmType::Shared(shared) => shared,
+                _ => unreachable!("bit shared not implemented at the moment"),
+            })
+            .collect::<Vec<_>>();
+        self.init_lut(values)
     }
 }
 

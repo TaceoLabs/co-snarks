@@ -1,8 +1,9 @@
 use acir::{
+    acir_field::GenericFieldElement,
     circuit::opcodes::{BlockId, MemOp},
     native_types::{Expression, Witness},
-    AcirField,
 };
+use ark_ff::PrimeField;
 use mpc_core::traits::NoirWitnessExtensionProtocol;
 
 use super::{CoAcvmResult, CoSolver};
@@ -10,7 +11,7 @@ use super::{CoAcvmResult, CoSolver};
 impl<T, F> CoSolver<T, F>
 where
     T: NoirWitnessExtensionProtocol<F>,
-    F: AcirField,
+    F: PrimeField,
 {
     pub(super) fn solve_memory_init_block(
         &mut self,
@@ -37,7 +38,7 @@ where
             .ok_or(eyre::eyre!(
                 "tried to write not initialized witness to memory - this is a  bug"
             ))?;
-        let lut = self.driver.init_lut(init);
+        let lut = self.driver.init_lut_by_acvm_type(init);
         self.memory_access.insert(block_id.0.into(), lut);
         Ok(())
     }
@@ -45,8 +46,8 @@ where
     pub(super) fn solve_memory_op(
         &mut self,
         block_id: BlockId,
-        op: &MemOp<F>,
-        _predicate: Option<Expression<F>>,
+        op: &MemOp<GenericFieldElement<F>>,
+        _predicate: Option<Expression<GenericFieldElement<F>>>,
     ) -> CoAcvmResult<()> {
         tracing::trace!("solving memory op {:?}", op);
         let index = self.evaluate_expression(&op.index)?;
@@ -68,8 +69,9 @@ where
                 "value for mem op must be a degree one univariate polynomial"
             ))
         }?;
+        let read_write = op.operation.q_c.into_repr();
         //TODO CHECK PREDICATE - do we need to cmux here?
-        if op.operation.q_c.is_zero() {
+        if read_write.is_zero() {
             // read the value from the LUT
             tracing::trace!("reading value from LUT");
             let lut = self
@@ -79,9 +81,9 @@ where
                     "tried to access block {} but not present",
                     block_id.0
                 ))?;
-            let value = self.driver.get_from_lut(&index, lut);
+            let value = self.driver.read_lut_by_acvm_type(&index, lut);
             self.witness().insert(witness, value);
-        } else if op.operation.q_c.is_one() {
+        } else if read_write.is_one() {
             // write value to LUT
             tracing::trace!("writing value to LUT");
             let value = self
@@ -96,7 +98,7 @@ where
                     "tried to access block {} but not present",
                     block_id.0
                 ))?;
-            self.driver.write_to_lut(index, value, lut);
+            self.driver.write_lut_by_acvm_type(index, value, lut);
         } else {
             Err(eyre::eyre!(
                 "Got unknown operation {} for mem op - this is a bug",
