@@ -1,9 +1,8 @@
 use crate::RngType;
-use acir::AcirField;
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 
 #[derive(Debug)]
 pub(crate) struct Rep3CorrelatedRng {
@@ -38,23 +37,6 @@ impl Rep3Rand {
     pub fn masking_field_element<F: PrimeField>(&mut self) -> F {
         let (a, b) = self.random_fes::<F>();
         a - b
-    }
-
-    pub fn masking_acir_field_element<F: AcirField>(&mut self) -> F {
-        let (a, b) = self.random_acir_fes::<F>();
-        a - b
-    }
-
-    pub fn random_acir_fes<F: AcirField>(&mut self) -> (F, F) {
-        let mut a_bytes =
-            vec![0_u8; usize::try_from(F::max_num_bytes()).expect("u32 fits into usize")];
-        let mut b_bytes = a_bytes.clone();
-        self.rng1.fill_bytes(&mut a_bytes);
-        self.rng2.fill_bytes(&mut b_bytes);
-        (
-            F::from_be_bytes_reduce(&a_bytes),
-            F::from_be_bytes_reduce(&b_bytes),
-        )
     }
 
     pub fn random_fes<F: PrimeField>(&mut self) -> (F, F) {

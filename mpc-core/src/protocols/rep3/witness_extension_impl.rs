@@ -77,7 +77,7 @@ fn val<F: PrimeField, N: Rep3Network>(
 }
 
 impl<F: PrimeField> Rep3VmType<F> {
-    fn add<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Self {
+    pub(super) fn add<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Self {
         match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
@@ -91,6 +91,18 @@ impl<F: PrimeField> Rep3VmType<F> {
             }
             (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => Rep3VmType::Shared(party.add(&a, &b)),
             (_, _) => todo!("BitShared add not yet implemented"),
+        }
+    }
+
+    pub(super) fn add_with_public<N: Rep3Network>(
+        party: &mut Rep3Protocol<F, N>,
+        a: F,
+        b: Self,
+    ) -> Self {
+        match b {
+            Rep3VmType::Public(public) => Rep3VmType::Public(public + a),
+            Rep3VmType::Shared(shared) => Rep3VmType::Shared(party.add_with_public(&a, &shared)),
+            Rep3VmType::BitShared => todo!("bitshared not implemented at the moment"),
         }
     }
 
@@ -111,7 +123,11 @@ impl<F: PrimeField> Rep3VmType<F> {
         }
     }
 
-    fn mul<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    pub(super) fn mul<N: Rep3Network>(
+        party: &mut Rep3Protocol<F, N>,
+        a: Self,
+        b: Self,
+    ) -> Result<Self> {
         let res = match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();
@@ -131,7 +147,15 @@ impl<F: PrimeField> Rep3VmType<F> {
         Ok(res)
     }
 
-    fn neg<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> Self {
+    pub(super) fn mul_with_public(a: F, b: Self) -> Self {
+        match b {
+            Rep3VmType::Public(public) => Rep3VmType::Public(public * a),
+            Rep3VmType::Shared(shared) => Rep3VmType::Shared(&shared * &a),
+            Rep3VmType::BitShared => unimplemented!("bit share not implemented"),
+        }
+    }
+
+    pub(super) fn neg<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self) -> Self {
         match a {
             Rep3VmType::Public(a) => {
                 let mut plain = PlainDriver::default();
@@ -143,7 +167,11 @@ impl<F: PrimeField> Rep3VmType<F> {
     }
 
     // Implemented as a * b^-1
-    fn div<N: Rep3Network>(party: &mut Rep3Protocol<F, N>, a: Self, b: Self) -> Result<Self> {
+    pub(super) fn div<N: Rep3Network>(
+        party: &mut Rep3Protocol<F, N>,
+        a: Self,
+        b: Self,
+    ) -> Result<Self> {
         let res = match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
                 let mut plain = PlainDriver::default();

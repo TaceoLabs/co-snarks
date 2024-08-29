@@ -1,6 +1,7 @@
 use std::thread;
 
 use acir::{native_types::WitnessStack, FieldElement};
+use co_acvm::solver::PlainCoSolver;
 use co_acvm::solver::Rep3CoSolver;
 use itertools::izip;
 use noirc_artifacts::program::ProgramArtifact;
