@@ -262,53 +262,61 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Prot
         Self::AcvmType::div(self, neg_c, q_l)
     }
 
-    fn read_lut_by_acvm_type(&mut self, index: &Self::AcvmType, lut: &Self::LUT) -> Self::AcvmType {
+    fn read_lut_by_acvm_type(
+        &mut self,
+        index: &Self::AcvmType,
+        map: &Self::SecretSharedMap,
+    ) -> eyre::Result<Self::AcvmType> {
         let value = match index {
-            Rep3VmType::Public(public) => self.public_get_from_lut(public, lut),
-            Rep3VmType::Shared(shared) => self.get_from_lut(shared, lut),
+            Rep3VmType::Public(public) => {
+                let promoted_key = self.promote_to_trivial_share(*public);
+                self.get_from_lut(&promoted_key, map)
+            }
+            Rep3VmType::Shared(shared) => self.get_from_lut(shared, map),
             Rep3VmType::BitShared => unreachable!("bit shared not implemented at the moment"),
         };
-        Rep3VmType::Shared(value)
+        Ok(Rep3VmType::Shared(value?))
     }
 
     fn write_lut_by_acvm_type(
         &mut self,
         index: Self::AcvmType,
         value: Self::AcvmType,
-        lut: &mut Self::LUT,
-    ) {
+        map: &mut Self::SecretSharedMap,
+    ) -> eyre::Result<()> {
         match (index, value) {
             (Rep3VmType::Public(index), Rep3VmType::Public(value)) => {
+                let index = self.promote_to_trivial_share(index);
                 let value = self.promote_to_trivial_share(value);
-                self.public_write_to_lut(index, value, lut);
+                self.write_to_lut(index, value, map)?;
             }
             (Rep3VmType::Public(index), Rep3VmType::Shared(value)) => {
-                self.public_write_to_lut(index, value, lut)
+                let index = self.promote_to_trivial_share(index);
+                self.write_to_lut(index, value, map)?;
             }
             (Rep3VmType::Shared(index), Rep3VmType::Public(value)) => {
                 let value = self.promote_to_trivial_share(value);
-                self.write_to_lut(index, value, lut);
+                self.write_to_lut(index, value, map)?;
             }
             (Rep3VmType::Shared(index), Rep3VmType::Shared(value)) => {
-                self.write_to_lut(index, value, lut)
+                self.write_to_lut(index, value, map)?;
             }
             (_, _) => unreachable!("bit shared not implemented at the moment"),
         }
+        Ok(())
     }
 
-    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::LUT {
-        // TODO we collect here. We do not want that.
-        // We will overhaul the LUTProvider shortly but for now we leave it like that
-        // Easiest way is to provide an iterator to init lut and not a vec...
-        let values = values
-            .into_iter()
-            .map(|value| match value {
+    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::SecretSharedMap {
+        let values = values.into_iter().enumerate().map(|(idx, value)| {
+            let idx = F::from(u64::try_from(idx).expect("usize fits into u64"));
+            let value = match value {
                 Rep3VmType::Public(public) => self.promote_to_trivial_share(public),
                 Rep3VmType::Shared(shared) => shared,
                 _ => unreachable!("bit shared not implemented at the moment"),
-            })
-            .collect::<Vec<_>>();
-        self.init_lut(values)
+            };
+            (self.promote_to_trivial_share(idx), value)
+        });
+        self.init_map(values)
     }
 }
 
@@ -424,6 +432,28 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         let a_sqrt = r_squ_inv * y_sq;
 
         Ok(a_sqrt)
+    }
+
+    fn equals(
+        &mut self,
+        lhs: &Rep3PrimeFieldShare<F>,
+        rhs: &Rep3PrimeFieldShare<F>,
+    ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
+        let is_zero_bit = self.equals_bit(lhs, rhs)?;
+        Ok(self.bit_inject(is_zero_bit)?)
+    }
+
+    // Checks whether to prime field shares are equal and return an
+    // binary share of 0 or 1. 1 means they are equal.
+    fn equals_bit(
+        &mut self,
+        lhs: &Rep3PrimeFieldShare<F>,
+        rhs: &Rep3PrimeFieldShare<F>,
+    ) -> eyre::Result<Rep3BigUintShare> {
+        let diff = self.sub(lhs, rhs);
+        let bits = self.a2b(&diff)?;
+        let is_zero = self.is_zero(bits)?;
+        Ok(is_zero)
     }
 }
 

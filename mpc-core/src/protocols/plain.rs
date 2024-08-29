@@ -2,7 +2,7 @@
 //!
 //! This module contains the reference implementation without MPC. It will be used by the VM for computing on public values and can be used to test MPC circuits.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     traits::{
@@ -637,7 +637,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
         Ok(-c / q_l)
     }
 
-    fn read_lut_by_acvm_type(&mut self, index: &Self::AcvmType, lut: &Self::LUT) -> F {
+    fn read_lut_by_acvm_type(
+        &mut self,
+        index: &Self::AcvmType,
+        lut: &Self::SecretSharedMap,
+    ) -> eyre::Result<F> {
         self.get_from_lut(index, lut)
     }
 
@@ -645,43 +649,66 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
         &mut self,
         index: Self::AcvmType,
         value: Self::AcvmType,
-        lut: &mut Self::LUT,
-    ) {
-        self.write_to_lut(index, value, lut);
+        map: &mut Self::SecretSharedMap,
+    ) -> eyre::Result<()> {
+        self.write_to_lut(index, value, map)
     }
 
-    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::LUT {
-        self.init_lut(values)
+    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::SecretSharedMap {
+        self.init_map(values.into_iter().enumerate().map(|(idx, value)| {
+            let promoted_idx = self.promote_to_trivial_share(F::from(
+                u64::try_from(idx).expect("usize fits into u64"),
+            ));
+            (promoted_idx, value)
+        }))
     }
 }
 
 impl<F: PrimeField> LookupTableProvider<F> for PlainDriver<F> {
-    type LUT = HashMap<F, F>;
+    // we could check if a Vec<F> impl may be faster. Depends on the size of the LUT..
+    type SecretSharedSet = HashSet<F>;
 
-    fn init_lut(&mut self, values: Vec<F>) -> Self::LUT {
-        let mut lut = HashMap::with_capacity(values.len());
-        for (idx, value) in values.into_iter().enumerate() {
-            lut.insert(
-                F::from(u64::try_from(idx).expect("usize fits into u64")),
-                value,
-            );
+    type SecretSharedMap = HashMap<F, F>;
+
+    fn init_set(
+        &self,
+        values: impl IntoIterator<Item = Self::FieldShare>,
+    ) -> Self::SecretSharedSet {
+        values.into_iter().collect::<HashSet<_>>()
+    }
+
+    fn contains_set(
+        &mut self,
+        value: &Self::FieldShare,
+        set: &Self::SecretSharedSet,
+    ) -> eyre::Result<F> {
+        if set.contains(value) {
+            Ok(F::one())
+        } else {
+            Ok(F::zero())
         }
-        lut
     }
 
-    fn get_from_lut(&mut self, index: &F, lut: &Self::LUT) -> F {
-        lut[index]
+    fn init_map(
+        &self,
+        values: impl IntoIterator<Item = (Self::FieldShare, Self::FieldShare)>,
+    ) -> Self::SecretSharedMap {
+        values.into_iter().collect::<HashMap<_, _>>()
     }
 
-    fn write_to_lut(&mut self, index: F, value: F, lut: &mut Self::LUT) {
-        lut.insert(index, value);
+    fn get_from_lut(&mut self, key: &F, map: &Self::SecretSharedMap) -> eyre::Result<F> {
+        Ok(map[key])
     }
 
-    fn public_get_from_lut(&mut self, index: &F, lut: &Self::LUT) -> F {
-        lut[index]
-    }
-
-    fn public_write_to_lut(&mut self, index: F, value: Self::FieldShare, lut: &mut Self::LUT) {
-        lut.insert(index, value);
+    fn write_to_lut(
+        &mut self,
+        key: F,
+        value: F,
+        map: &mut Self::SecretSharedMap,
+    ) -> eyre::Result<()> {
+        if map.insert(key, value).is_none() {
+            panic!("we cannot add new keys to the lookup table!")
+        }
+        Ok(())
     }
 }

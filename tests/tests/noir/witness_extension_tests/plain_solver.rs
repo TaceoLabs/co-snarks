@@ -13,3 +13,4 @@ add_plain_acvm_test!("poseidon_stdlib");
 // memory tests
 add_plain_acvm_test!("slice");
 add_plain_acvm_test!("random_access");
+add_plain_acvm_test!("write_access");

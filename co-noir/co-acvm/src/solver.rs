@@ -25,6 +25,26 @@ pub type Rep3CoSolver<F, N> = CoSolver<Rep3Protocol<F, N>, F>;
 
 type CoAcvmResult<T> = std::result::Result<T, CoAcvmError>;
 
+pub(crate) mod solver_utils {
+    use acir::native_types::Expression;
+
+    pub(crate) fn expr_to_string<F: std::fmt::Display>(expr: &Expression<F>) -> String {
+        let mul_terms = expr
+            .mul_terms
+            .iter()
+            .map(|(q_m, w_l, w_r)| format!("({q_m} * _{w_l:?} * _{w_r:?})"))
+            .collect::<Vec<String>>()
+            .join(" + ");
+        let linear_terms = expr
+            .linear_combinations
+            .iter()
+            .map(|(coef, w)| format!("({coef} * _{w:?})"))
+            .collect::<Vec<String>>()
+            .join(" + ");
+        format!("EXPR [({mul_terms}) + ({linear_terms}) + {}]", expr.q_c)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CoAcvmError {
     #[error(transparent)]
@@ -46,7 +66,7 @@ where
     // there will a more fields added as we add functionality
     function_index: usize,
     // the memory blocks
-    memory_access: IntMap<T::LUT>,
+    memory_access: IntMap<T::SecretSharedMap>,
 }
 
 impl<T> CoSolver<T, ark_bn254::Fr>
@@ -209,6 +229,7 @@ where
                 //} => todo!(),
             }
         }
+        tracing::trace!("we are done! Wrap things up.");
         // TODO this is most likely not correct. We just reverse the order of the Vec. Maybe this
         // is fine?
         // We'll see what happens here.
