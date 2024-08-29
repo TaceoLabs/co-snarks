@@ -1,6 +1,7 @@
 use acir::native_types::{WitnessMap, WitnessStack};
 use ark_ff::PrimeField;
 use itertools::izip;
+use mpc_core::protocols::rep3::witness_extension_impl::Rep3VmType;
 
 mod plain_solver;
 mod rep3;
@@ -122,4 +123,3 @@ fn combine_field_elements_for_acvm<F: PrimeField>(
 
 use add_plain_acvm_test;
 use add_rep3_acvm_test;
-use mpc_core::protocols::rep3::witness_extension_impl::Rep3VmType;

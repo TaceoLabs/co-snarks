@@ -79,6 +79,19 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         b: &[Self::FieldShare],
     ) -> std::io::Result<Vec<Self::FieldShare>>;
 
+    /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
+    /// Implementations should not overwrite this method.
+    fn cmux(
+        &mut self,
+        cond: &Self::FieldShare,
+        truthy: &Self::FieldShare,
+        falsy: &Self::FieldShare,
+    ) -> eyre::Result<Self::FieldShare> {
+        let b_min_a = self.sub(truthy, falsy);
+        let d = self.mul(cond, &b_min_a)?;
+        Ok(self.add(falsy, &d))
+    }
+
     /// Multiply a share b by a public value a: c = a * \[b\].
     fn mul_with_public(&mut self, a: &F, b: &Self::FieldShare) -> Self::FieldShare;
 
@@ -206,25 +219,66 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
 
 /// This is some place holder definition. This will change most likely
 pub trait LookupTableProvider<F: PrimeField>: PrimeFieldMpcProtocol<F> {
-    /// A type that holds the data of the LUT.
-    type LUT;
+    /// A LUT for performing membership checks (like `HashSet`). Mostly used for range checks.
+    type SecretSharedSet;
+    /// An input/output LUT (like `HashMap`).
+    type SecretSharedMap;
 
-    /// Initializes a new LUT from the provided values. The index shall be the order
-    /// of the values in the `Vec`.
-    fn init_lut(&mut self, values: Vec<Self::FieldShare>) -> Self::LUT;
-    /// Reads a value from the LUT.
-    fn get_from_lut(&mut self, index: &Self::FieldShare, lut: &Self::LUT) -> Self::FieldShare;
-    /// Writes a value to the LUT.
+    /// Initializes a set for membership checks from the provided values.
+    fn init_set(&self, values: impl IntoIterator<Item = Self::FieldShare>)
+        -> Self::SecretSharedSet;
+
+    /// Checks whether the needle is a member of the provided set.
+    ///
+    /// # Returns
+    /// Returns a secret-shared value. If the reconstructed value is 1, the set
+    /// contained the element. Otherwise, shall return secret-shared 0.
+    ///
+    /// Can fail due to networking problems.
+    ///
+    fn contains_set(
+        &mut self,
+        needle: &Self::FieldShare,
+        set: &Self::SecretSharedSet,
+    ) -> eyre::Result<Self::FieldShare>;
+
+    /// Initializes a map (input/output LUT) from the provided values. The keys and values are
+    /// matched from their order of the iterator.
+    fn init_map(
+        &self,
+        values: impl IntoIterator<Item = (Self::FieldShare, Self::FieldShare)>,
+    ) -> Self::SecretSharedMap;
+
+    /// Reads a value from the map associated with the provided needle. As we work over secret-shared
+    /// values we can not check whether the needle is actually in the set. The caller must ensure that
+    /// the key is in the map.
+    ///
+    /// # Returns
+    /// The secret-shared value associated with the needle. A not known needle results in undefined
+    /// behaviour.
+    ///
+    /// Can fail due to networking problems.
+    ///
+    fn get_from_lut(
+        &mut self,
+        key: &Self::FieldShare,
+        map: &Self::SecretSharedMap,
+    ) -> eyre::Result<Self::FieldShare>;
+
+    /// Writes a value to the map.
+    ///
+    /// **IMPORTANT**: the implementation will NOT add
+    /// the key-value pair to the map, if it is not already registered! The implementation
+    /// overwrites an existing key, but a not-known key will be ignored.
+    ///
+    /// #Returns
+    /// Can fail due to networking problems.
     fn write_to_lut(
         &mut self,
         index: Self::FieldShare,
         value: Self::FieldShare,
-        lut: &mut Self::LUT,
-    );
-    /// Reads a value from the LUT from a public index.
-    fn public_get_from_lut(&mut self, index: &F, lut: &Self::LUT) -> Self::FieldShare;
-    /// Writes a value to the LUT by a public index.
-    fn public_write_to_lut(&mut self, index: F, value: Self::FieldShare, lut: &mut Self::LUT);
+        lut: &mut Self::SecretSharedMap,
+    ) -> eyre::Result<()>;
 }
 
 /// A trait representing the MPC operations required for extending the secret-shared Noir witness in MPC.
@@ -278,19 +332,23 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField>:
     /// Initializes a new LUT from the provided values. The index shall be the order
     /// of the values in the `Vec`. This is wrapper around the method from the [`LookupTableProvider`] as
     /// we create the table from either public or shared values.
-    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::LUT;
+    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::SecretSharedMap;
 
     /// Wrapper around reading from a LUT by the [`Self::AcvmType`] as this can either be a
     /// public or a shared read.
-    fn read_lut_by_acvm_type(&mut self, index: &Self::AcvmType, lut: &Self::LUT) -> Self::AcvmType;
+    fn read_lut_by_acvm_type(
+        &mut self,
+        index: &Self::AcvmType,
+        lut: &Self::SecretSharedMap,
+    ) -> eyre::Result<Self::AcvmType>;
 
     /// Wrapper around writing a value to a LUT. The index and the value can be shared or public.
     fn write_lut_by_acvm_type(
         &mut self,
         index: Self::AcvmType,
         value: Self::AcvmType,
-        lut: &mut Self::LUT,
-    );
+        lut: &mut Self::SecretSharedMap,
+    ) -> eyre::Result<()>;
 }
 
 /// A trait representing the MPC operations required for extending the secret-shared Circom witness in MPC. The operations are generic over public and private (i.e., secret-shared) inputs.

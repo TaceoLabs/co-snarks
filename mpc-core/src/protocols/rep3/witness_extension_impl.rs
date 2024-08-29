@@ -331,8 +331,7 @@ impl<F: PrimeField> Rep3VmType<F> {
             (Rep3VmType::Public(b), Rep3VmType::Shared(a))
             | (Rep3VmType::Shared(a), Rep3VmType::Public(b)) => eq_public(party, a, b),
             (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
-                let eq = party.sub(&a, &b);
-                is_zero(party, eq)
+                Ok(Rep3VmType::Shared(party.equals(&a, &b)?))
             }
             (_, _) => todo!("Shared EQ not implemented"),
         }
@@ -358,15 +357,8 @@ impl<F: PrimeField> Rep3VmType<F> {
                 }
             }
             (Rep3VmType::Shared(a), Rep3VmType::Shared(b)) => {
-                let eq = party.sub(&a, &b);
-                let is_zero = is_zero(party, eq)?;
-                match is_zero {
-                    Rep3VmType::Public(eq) => Ok(Rep3VmType::Public(F::one() - eq)),
-                    Rep3VmType::Shared(eq) => {
-                        Ok(Rep3VmType::Shared(party.add_with_public(&-F::one(), &eq)))
-                    }
-                    _ => unreachable!(),
-                }
+                let eq = party.equals(&a, &b)?;
+                Ok(Rep3VmType::Shared(party.add_with_public(&-F::one(), &eq)))
             }
             (_, _) => todo!("Shared NEQ not implemented"),
         }
@@ -578,15 +570,10 @@ impl<F: PrimeField> Rep3VmType<F> {
                 plain.is_zero(a, false)
             }
             Rep3VmType::Shared(a) => {
-                let res = is_zero(party, a)?;
-                match res {
-                    Rep3VmType::Public(res) => Ok(res.is_one()),
-                    Rep3VmType::Shared(res) => {
-                        let x = party.open(&res)?;
-                        Ok(x.is_one())
-                    }
-                    _ => todo!("BitShared is_zero not implemented"),
-                }
+                let zero_share = Rep3PrimeFieldShare::default();
+                let res = party.equals(&zero_share, &a)?;
+                let x = party.open(&res)?;
+                Ok(x.is_one())
             }
             _ => todo!("BitShared is_zero not implemented"),
         }
@@ -844,16 +831,6 @@ fn eq_public<N: Rep3Network, F: PrimeField>(
     a: Rep3PrimeFieldShare<F>,
     b: F,
 ) -> Result<Rep3VmType<F>> {
-    let val = party.add_with_public(&-b, &a);
-    is_zero(party, val)
-}
-
-fn is_zero<N: Rep3Network, F: PrimeField>(
-    party: &mut Rep3Protocol<F, N>,
-    a: Rep3PrimeFieldShare<F>,
-) -> Result<Rep3VmType<F>> {
-    let bits = party.a2b(&a)?;
-    let is_zero = party.is_zero(bits)?;
-    let is_zero_f = party.bit_inject(is_zero)?;
-    Ok(Rep3VmType::Shared(is_zero_f))
+    let b = party.promote_to_trivial_share(b);
+    Ok(Rep3VmType::Shared(party.equals(&a, &b)?))
 }

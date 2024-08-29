@@ -2,6 +2,8 @@ use acir::{acir_field::GenericFieldElement, native_types::Expression, AcirField}
 use ark_ff::PrimeField;
 use mpc_core::traits::NoirWitnessExtensionProtocol;
 
+use crate::solver::solver_utils;
+
 use super::{CoAcvmResult, CoSolver};
 
 impl<T, F> CoSolver<T, F>
@@ -106,7 +108,10 @@ where
         expr: &Expression<GenericFieldElement<F>>,
     ) -> CoAcvmResult<()> {
         //first evaluate the already existing terms
-        tracing::trace!("solving assert zero: {}", Self::expr_to_string(expr));
+        tracing::trace!(
+            "solving assert zero: {}",
+            solver_utils::expr_to_string(expr)
+        );
         let simplified = self.simplify_expression(expr)?;
         tracing::trace!("simplified expr:     {:?}", simplified);
         // if we are here, we do not have any mul terms
@@ -123,6 +128,7 @@ where
             let (q_l, w_l) = simplified.linear_combinations[0].clone();
             let witness = self.driver.solve_equation(q_l, simplified.q_c)?;
             self.witness().insert(w_l, witness);
+            tracing::trace!("we did it!");
             Ok(())
         } else {
             Err(eyre::eyre!(
@@ -143,24 +149,5 @@ where
             .ok_or(eyre::eyre!(
                 "cannot evaluate expression to const - has unknown"
             ))?)
-    }
-
-    pub(crate) fn expr_to_string(expr: &Expression<GenericFieldElement<F>>) -> String {
-        let mut str = String::with_capacity(128);
-        str.push_str("EXPR [");
-        let mul_terms = expr
-            .mul_terms
-            .iter()
-            .map(|(q_m, w_l, w_r)| format!("({q_m} * _{w_l:?} * _{w_r:?})"))
-            .collect::<Vec<String>>()
-            .join(" + ");
-        let linear_terms = expr
-            .linear_combinations
-            .iter()
-            .map(|(coef, w)| format!("({coef} * _{w:?})"))
-            .collect::<Vec<String>>()
-            .join(" + ");
-        str.push_str(&format!("({mul_terms}) + ({linear_terms}) + {}", expr.q_c));
-        str
     }
 }

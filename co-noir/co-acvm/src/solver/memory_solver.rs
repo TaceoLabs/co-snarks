@@ -6,6 +6,8 @@ use acir::{
 use ark_ff::PrimeField;
 use mpc_core::traits::NoirWitnessExtensionProtocol;
 
+use crate::solver::solver_utils;
+
 use super::{CoAcvmResult, CoSolver};
 
 impl<T, F> CoSolver<T, F>
@@ -53,27 +55,30 @@ where
         let index = self.evaluate_expression(&op.index)?;
         tracing::trace!("index is {}", index);
         let value = self.simplify_expression(&op.value)?;
-        tracing::trace!("value is {:?}", value);
-        let witness = if value.is_degree_one_univariate() {
-            //we can get the witness
-            let (coef, witness) = &value.linear_combinations[0];
-            if T::is_public_one(coef) && T::is_public_zero(&value.q_c) {
-                Ok(*witness)
-            } else {
-                Err(eyre::eyre!(
-                    "value for mem op must be a degree one univariate polynomial with coef 1 and constant 0"
-                ))
-            }
-        } else {
-            Err(eyre::eyre!(
-                "value for mem op must be a degree one univariate polynomial"
-            ))
-        }?;
+        tracing::trace!("value is {}", solver_utils::expr_to_string(&value));
         let read_write = op.operation.q_c.into_repr();
         //TODO CHECK PREDICATE - do we need to cmux here?
         if read_write.is_zero() {
             // read the value from the LUT
             tracing::trace!("reading value from LUT");
+            // this is the to witness method. We cannot call it on because
+            // of AcirField trait bound - maybe put it at some utils method
+            // if we need it more than once
+            let witness = if value.is_degree_one_univariate() {
+                //we can get the witness
+                let (coef, witness) = &value.linear_combinations[0];
+                if T::is_public_one(coef) && T::is_public_zero(&value.q_c) {
+                    Ok(*witness)
+                } else {
+                    Err(eyre::eyre!(
+                    "value for mem op must be a degree one univariate polynomial with coef 1 and constant 0"
+                ))
+                }
+            } else {
+                Err(eyre::eyre!(
+                    "value for mem op must be a degree one univariate polynomial"
+                ))
+            }?;
             let lut = self
                 .memory_access
                 .get(block_id.0.into())
@@ -81,16 +86,11 @@ where
                     "tried to access block {} but not present",
                     block_id.0
                 ))?;
-            let value = self.driver.read_lut_by_acvm_type(&index, lut);
+            let value = self.driver.read_lut_by_acvm_type(&index, lut)?;
             self.witness().insert(witness, value);
         } else if read_write.is_one() {
             // write value to LUT
             tracing::trace!("writing value to LUT");
-            let value = self
-                .witness()
-                .get(&witness)
-                .cloned()
-                .ok_or(eyre::eyre!("Trying to write unknown witness in mem block"))?;
             let lut = self
                 .memory_access
                 .get_mut(block_id.0.into())
@@ -98,7 +98,7 @@ where
                     "tried to access block {} but not present",
                     block_id.0
                 ))?;
-            self.driver.write_lut_by_acvm_type(index, value, lut);
+            self.driver.write_lut_by_acvm_type(index, value.q_c, lut)?;
         } else {
             Err(eyre::eyre!(
                 "Got unknown operation {} for mem op - this is a bug",
