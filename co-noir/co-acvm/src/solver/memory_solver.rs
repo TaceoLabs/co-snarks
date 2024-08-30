@@ -49,19 +49,22 @@ where
         &mut self,
         block_id: BlockId,
         op: &MemOp<GenericFieldElement<F>>,
-        _predicate: Option<Expression<GenericFieldElement<F>>>,
+        predicate: Option<Expression<GenericFieldElement<F>>>,
     ) -> CoAcvmResult<()> {
         tracing::trace!("solving memory op {:?}", op);
         let index = self.evaluate_expression(&op.index)?;
         tracing::trace!("index is {}", index);
         let value = self.simplify_expression(&op.value)?;
         tracing::trace!("value is {}", solver_utils::expr_to_string(&value));
+        let predicate = predicate.map(|expr| {
+            tracing::trace!("evaluating predicate!");
+            self.evaluate_expression(&expr)
+        });
         let read_write = op.operation.q_c.into_repr();
-        //TODO CHECK PREDICATE - do we need to cmux here?
         if read_write.is_zero() {
             // read the value from the LUT
             tracing::trace!("reading value from LUT");
-            // this is the to witness method. We cannot call it on because
+            // this is the to_witness method. We cannot call it on AcvmType because
             // of AcirField trait bound - maybe put it at some utils method
             // if we need it more than once
             let witness = if value.is_degree_one_univariate() {
@@ -87,7 +90,21 @@ where
                     block_id.0
                 ))?;
             let value = self.driver.read_lut_by_acvm_type(&index, lut)?;
-            self.witness().insert(witness, value);
+            if let Some(predicate) = predicate {
+                let predicate = predicate?;
+                if T::is_public_zero(&predicate) {
+                    tracing::trace!("predicate is false - we read zero!");
+                    self.witness().insert(witness, T::public_zero());
+                } else if T::is_public_one(&predicate) {
+                    self.witness().insert(witness, value);
+                } else {
+                    Err(eyre::eyre!(
+                        "predicate must be public and either zero or one"
+                    ))?
+                }
+            } else {
+                self.witness().insert(witness, value);
+            }
         } else if read_write.is_one() {
             // write value to LUT
             tracing::trace!("writing value to LUT");
@@ -98,7 +115,20 @@ where
                     "tried to access block {} but not present",
                     block_id.0
                 ))?;
-            self.driver.write_lut_by_acvm_type(index, value.q_c, lut)?;
+            if let Some(predicate) = predicate {
+                let predicate = predicate?;
+                if T::is_public_zero(&predicate) {
+                    tracing::trace!("predicate is false - we skip!");
+                } else if T::is_public_one(&predicate) {
+                    self.driver.write_lut_by_acvm_type(index, value.q_c, lut)?;
+                } else {
+                    Err(eyre::eyre!(
+                        "predicate must be public and either zero or one"
+                    ))?
+                }
+            } else {
+                self.driver.write_lut_by_acvm_type(index, value.q_c, lut)?;
+            }
         } else {
             Err(eyre::eyre!(
                 "Got unknown operation {} for mem op - this is a bug",

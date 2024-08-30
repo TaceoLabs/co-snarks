@@ -637,6 +637,15 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
         Ok(-c / q_l)
     }
 
+    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::SecretSharedMap {
+        self.init_map(values.into_iter().enumerate().map(|(idx, value)| {
+            let promoted_idx = self.promote_to_trivial_share(F::from(
+                u64::try_from(idx).expect("usize fits into u64"),
+            ));
+            (promoted_idx, value)
+        }))
+    }
+
     fn read_lut_by_acvm_type(
         &mut self,
         index: &Self::AcvmType,
@@ -652,15 +661,6 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
         map: &mut Self::SecretSharedMap,
     ) -> eyre::Result<()> {
         self.write_to_lut(index, value, map)
-    }
-
-    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::SecretSharedMap {
-        self.init_map(values.into_iter().enumerate().map(|(idx, value)| {
-            let promoted_idx = self.promote_to_trivial_share(F::from(
-                u64::try_from(idx).expect("usize fits into u64"),
-            ));
-            (promoted_idx, value)
-        }))
     }
 }
 

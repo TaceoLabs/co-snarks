@@ -57,11 +57,7 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3Protocol<F, N
         tracing::debug!("doing read on LUT-map of size {}", map.len());
         tracing::debug!("get random zeros for blinding..");
         let mut zeros_a = Vec::with_capacity(map.len());
-        zeros_a.resize_with(map.len(), || {
-            // this impl cannot fail
-            let (a, b) = self.rngs.rand.random_fes::<F>();
-            a - b
-        });
+        zeros_a.resize_with(map.len(), || self.rngs.rand.masking_field_element::<F>());
         self.network.send_next_many(&zeros_a)?;
         let zeros_b = self.network.recv_prev_many::<F>()?;
         tracing::debug!("now perform equals and cmux...");
