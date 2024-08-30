@@ -35,7 +35,7 @@ In the first step, we compile an `.r1cs` file using circom and create a verifica
 circom multiplier2.circom --r1cs
 ```
 
-You will find a file called `multiplier2.r1cs` in your working folder. To create the keys you can either follow the circom documentation, or download the two keys from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/c089006f5f17623518c6dc25b344ecfbf987c197/co-circom/examples/groth16/test_vectors/multiplier2), where we created the keys already (you will need `multiplier2.zkey` and `verification_key.json`).
+You will find a file called `multiplier2.r1cs` in your working folder. To create the keys you can either follow the circom documentation, or download the two keys from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/b90e9e61cbb674f274dbd154842b77c1d09275ea/co-circom/examples/groth16/test_vectors/multiplier2), where we created the keys already (you will need `multiplier2.zkey` and `verification_key.json`).
 
 ## Split the Input
 
@@ -142,7 +142,7 @@ $ snarkjs groth16 verify verification_key.json public_input.json proof.0.json
 [INFO]  snarkJS: OK!
 ```
 
-For a full `shell` script executing all of the commands at once, have a look at our [GitHub](co-circom/examples). In this folder you find this exact example, and some more.
+For a full `shell` script executing all of the commands at once, have a look at our [GitHub](https://github.com/TaceoLabs/collaborative-circom/blob/b90e9e61cbb674f274dbd154842b77c1d09275ea/co-circom/examples/groth16/run_full_multiplier2.sh). In this folder you find this exact example, and some more.
 
 **And now you can dive into the rest of the book** 🦀
 
