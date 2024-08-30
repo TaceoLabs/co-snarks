@@ -21,8 +21,6 @@ where
         init: &[Witness],
     ) -> CoAcvmResult<()> {
         tracing::trace!("solving memory init block {}", block_id.0);
-        // TODO: should we trust on the compiler here?
-        // this should not be possible so maybe we do not need the check?
         if self.memory_access.get(block_id.0.into()).is_some() {
             //there is already a block? This should no be possible
             tracing::error!("There is already a block for id {}", block_id.0);

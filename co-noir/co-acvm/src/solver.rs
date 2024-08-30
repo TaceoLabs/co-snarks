@@ -230,9 +230,6 @@ where
             }
         }
         tracing::trace!("we are done! Wrap things up.");
-        // TODO this is most likely not correct. We just reverse the order of the Vec. Maybe this
-        // is fine?
-        // We'll see what happens here.
         let mut witness_stack = WitnessStack::default();
         for (idx, witness) in self.witness_map.into_iter().rev().enumerate() {
             witness_stack.push(u32::try_from(idx).expect("usize fits into u32"), witness);
