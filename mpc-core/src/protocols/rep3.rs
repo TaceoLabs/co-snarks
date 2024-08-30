@@ -262,6 +262,19 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Prot
         Self::AcvmType::div(self, neg_c, q_l)
     }
 
+    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::SecretSharedMap {
+        let values = values.into_iter().enumerate().map(|(idx, value)| {
+            let idx = F::from(u64::try_from(idx).expect("usize fits into u64"));
+            let value = match value {
+                Rep3VmType::Public(public) => self.promote_to_trivial_share(public),
+                Rep3VmType::Shared(shared) => shared,
+                _ => unreachable!("bit shared not implemented at the moment"),
+            };
+            (self.promote_to_trivial_share(idx), value)
+        });
+        self.init_map(values)
+    }
+
     fn read_lut_by_acvm_type(
         &mut self,
         index: &Self::AcvmType,
@@ -304,19 +317,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Prot
             (_, _) => unreachable!("bit shared not implemented at the moment"),
         }
         Ok(())
-    }
-
-    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> Self::SecretSharedMap {
-        let values = values.into_iter().enumerate().map(|(idx, value)| {
-            let idx = F::from(u64::try_from(idx).expect("usize fits into u64"));
-            let value = match value {
-                Rep3VmType::Public(public) => self.promote_to_trivial_share(public),
-                Rep3VmType::Shared(shared) => shared,
-                _ => unreachable!("bit shared not implemented at the moment"),
-            };
-            (self.promote_to_trivial_share(idx), value)
-        });
-        self.init_map(values)
     }
 }
 
