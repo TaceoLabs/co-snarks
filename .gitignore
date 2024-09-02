@@ -15,3 +15,4 @@ Cargo.lock
 
 .vscode
 co-noir/co-acvm/src/bin/
+groth16_tester.rs
