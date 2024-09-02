@@ -340,6 +340,28 @@ where
     }
 }
 
+impl<P: Pairing> Groth16<P>
+where
+    P: CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    /// *Locally* create a `Groth16` proof. This is just the [`CoGroth16`] prover
+    /// initialized with the [`PlainDriver`].
+    ///
+    /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
+    pub fn plain_prove(
+        zkey: &ZKey<P>,
+        private_witness: SharedWitness<PlainDriver<P::ScalarField>, P>,
+    ) -> Result<Groth16Proof<P>> {
+        let mut prover = Self {
+            driver: PlainDriver::default(),
+            phantom_data: PhantomData,
+        };
+        prover.prove(zkey, private_witness)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::fs::File;

@@ -45,10 +45,10 @@ macro_rules! bool_comp_op {
     }};
 }
 
-macro_rules! to_u64 {
+macro_rules! to_u128 {
     ($field: expr) => {{
         let a: BigUint = $field.into();
-        a.to_u64().ok_or(eyre!("Cannot convert var into u64"))?
+        a.to_u128().ok_or(eyre!("Cannot convert var into u64"))?
     }};
 }
 
@@ -411,13 +411,13 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver<F> {
 
     fn vm_add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
         let result = a + b;
-        tracing::debug!("{a}+{b}={result}");
+        tracing::trace!("{a}+{b}={result}");
         result
     }
 
     fn vm_sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
         let result = a - b;
-        tracing::debug!("{a}-{b}={result}");
+        tracing::trace!("{a}-{b}={result}");
         a - b
     }
 
@@ -453,8 +453,9 @@ impl<F: PrimeField> CircomWitnessExtensionProtocol<F> for PlainDriver<F> {
     }
 
     fn vm_int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_u64!(a);
-        let rhs = to_u64!(b);
+        tracing::debug!("trying to divide {a}/{b}");
+        let lhs = to_u128!(a);
+        let rhs = to_u128!(b);
         Ok(F::from(lhs / rhs))
     }
 
