@@ -1,7 +1,10 @@
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-use crate::protocols::rep3::{id::PartyID, rngs::Rep3CorrelatedRng};
+use crate::{
+    protocols::rep3::{id::PartyID, rngs::Rep3CorrelatedRng},
+    traits::FieldShareVecTrait,
+};
 
 /// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
@@ -15,6 +18,22 @@ pub struct Rep3PrimeFieldShare<F: PrimeField> {
 pub struct Rep3PrimeFieldShareVec<F: PrimeField> {
     pub(crate) a: Vec<F>,
     pub(crate) b: Vec<F>,
+}
+
+impl<F: PrimeField> FieldShareVecTrait for Rep3PrimeFieldShareVec<F> {
+    type FieldShare = Rep3PrimeFieldShare<F>;
+
+    fn index(&self, index: usize) -> Self::FieldShare {
+        todo!()
+    }
+
+    fn set_index(&mut self, val: Self::FieldShare, index: usize) {
+        todo!()
+    }
+
+    fn get_len(&self) -> usize {
+        todo!()
+    }
 }
 
 impl<F: PrimeField> Rep3PrimeFieldShare<F> {

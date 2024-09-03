@@ -4,21 +4,23 @@ use ark_ec::pairing::Pairing;
 use eyre::bail;
 use mpc_core::traits::CircomWitnessExtensionProtocol;
 
+use crate::mpc::VmCircomWitnessExtension;
+
 type AcceleratorFunction<P, C> = Box<
     dyn Fn(
             &mut C,
-            &[<C as CircomWitnessExtensionProtocol<<P as Pairing>::ScalarField>>::VmType],
+            &[<C as VmCircomWitnessExtension<<P as Pairing>::ScalarField>>::VmType],
         ) -> eyre::Result<
-            Vec<<C as CircomWitnessExtensionProtocol<<P as Pairing>::ScalarField>>::VmType>,
+            Vec<<C as VmCircomWitnessExtension<<P as Pairing>::ScalarField>>::VmType>,
         > + Send,
 >;
 
 #[derive(Default)]
-pub struct MpcAccelerator<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> {
+pub struct MpcAccelerator<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> {
     registered_functions: HashMap<String, AcceleratorFunction<P, C>>,
 }
 
-impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> MpcAccelerator<P, C> {
+impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> MpcAccelerator<P, C> {
     pub fn empty_accelerator() -> Self {
         Self {
             registered_functions: HashMap::default(),
@@ -49,7 +51,7 @@ impl<P: Pairing, C: CircomWitnessExtensionProtocol<P::ScalarField>> MpcAccelerat
             if args.len() != 1 {
                 bail!("Calling SQRT accelerator with more than one argument!");
             }
-            Ok(vec![protocol.vm_sqrt(args[0].to_owned())?])
+            Ok(vec![protocol.sqrt(args[0].to_owned())?])
         });
     }
 
