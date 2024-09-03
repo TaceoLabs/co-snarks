@@ -57,7 +57,7 @@ impl Rep3Rand {
     }
 
     pub fn random_biguint(&mut self, bitlen: usize) -> (BigUint, BigUint) {
-        let limbsize = (bitlen + 31) / 32;
+        let limbsize = bitlen.div_ceil(8);
         let a = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
         let b = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
         let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();

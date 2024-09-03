@@ -24,6 +24,13 @@ impl std::ops::BitXor<&BigUint> for &Rep3BigUintShare {
     }
 }
 
+impl std::ops::BitXorAssign<&Self> for Rep3BigUintShare {
+    fn bitxor_assign(&mut self, rhs: &Self) {
+        self.a ^= &rhs.a;
+        self.b ^= &rhs.b;
+    }
+}
+
 impl std::ops::BitAnd<&BigUint> for &Rep3BigUintShare {
     type Output = Rep3BigUintShare;
 
@@ -40,6 +47,13 @@ impl std::ops::BitAnd<&Rep3BigUintShare> for &'_ Rep3BigUintShare {
 
     fn bitand(self, rhs: &Rep3BigUintShare) -> Self::Output {
         (&self.a & &rhs.a) ^ (&self.a & &rhs.b) ^ (&self.b & &rhs.a)
+    }
+}
+
+impl std::ops::BitAndAssign<&BigUint> for Rep3BigUintShare {
+    fn bitand_assign(&mut self, rhs: &BigUint) {
+        self.a &= rhs;
+        self.b &= rhs;
     }
 }
 
