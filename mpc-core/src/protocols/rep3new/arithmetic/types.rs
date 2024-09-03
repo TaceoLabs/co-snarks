@@ -23,7 +23,7 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
         Self { a, b }
     }
 
-    pub(super) fn zero_share() -> Self {
+    pub fn zero_share() -> Self {
         Self {
             a: F::zero(),
             b: F::zero(),
