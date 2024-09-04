@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 mod serde_compat;
 
+//TODO THE SECRETSHARED TRAIT IS REALLY BAD. WE DO WANT SOMETHING ELSE!
 /// A shared witness in the circom ecosystem.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SharedWitness<F: PrimeField, S: SecretShared> {

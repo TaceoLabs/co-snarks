@@ -8,6 +8,7 @@ use super::{
 };
 use crate::mpc::plain::PlainDriver;
 use crate::mpc::rep3::Rep3Driver;
+use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_circom_snarks::{SharedInput, SharedWitness};
 use eyre::{bail, eyre, Result};
@@ -56,7 +57,8 @@ pub type PlainWitnessExtension<F> = WitnessExtension<F, PlainDriver<F>>;
 /// Shorthand type for the MPC-VM instantiated with the [`Rep3Protocol`].
 ///
 /// This is the only supported protocol at the moment.
-pub type Rep3WitnessExtension<P, N> = WitnessExtension<P, Rep3Driver<N>>;
+pub type Rep3WitnessExtension<P, N> =
+    WitnessExtension<P, Rep3Driver<<P as Pairing>::ScalarField, N>>;
 
 type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Arc<CodeBlock>, Vec<(T, Vec<T>)>);
 

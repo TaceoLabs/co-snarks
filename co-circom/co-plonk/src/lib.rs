@@ -7,11 +7,13 @@ use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use co_circom_snarks::SharedWitness;
+use mpc::CircomPlonkProver;
 use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
 
+mod mpc;
 mod plonk;
 mod round1;
 mod round2;
@@ -45,27 +47,16 @@ pub enum PlonkProofError {
 }
 
 /// A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
-pub struct CoPlonk<T, P: Pairing>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>
-        + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>
-        + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
-{
+pub struct CoPlonk<P: Pairing, T: CircomPlonkProver<P>> {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
 }
 
-impl<T, P> CoPlonk<T, P>
+impl<P, T> CoPlonk<P, T>
 where
-    T: PrimeFieldMpcProtocol<P::ScalarField>
-        + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>
-        + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
+    T: CircomPlonkProver<P>,
     P: Pairing + CircomArkworksPairingBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     /// Creates a new [CoPlonk] protocol with a given MPC driver.
@@ -80,7 +71,7 @@ where
     pub fn prove(
         self,
         zkey: &ZKey<P>,
-        witness: SharedWitness<T, P>,
+        witness: SharedWitness<P, T>,
     ) -> PlonkProofResult<PlonkProof<P>> {
         tracing::debug!("starting PLONK prove..");
         let state = Round1::init_round(self.driver, zkey, witness)?;
@@ -104,28 +95,26 @@ mod plonk_utils {
     use circom_types::plonk::ZKey;
     use mpc_core::traits::{FieldShareVecTrait, PrimeFieldMpcProtocol};
 
+    use crate::mpc::CircomPlonkProver;
     use crate::types::{Domains, PlonkWitness};
     use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult};
     use ark_ff::Field;
     use num_traits::One;
     use num_traits::Zero;
 
-    pub(crate) fn get_witness<T, P: Pairing>(
+    pub(crate) fn get_witness<P: Pairing, T: CircomPlonkProver<P>>(
         driver: &mut T,
-        witness: &PlonkWitness<T, P>,
+        witness: &PlonkWitness<P, T>,
         zkey: &ZKey<P>,
         index: usize,
-    ) -> PlonkProofResult<FieldShare<T, P>>
-    where
-        T: PrimeFieldMpcProtocol<P::ScalarField>,
-    {
+    ) -> PlonkProofResult<T::ArithmeticShare> {
         tracing::trace!("get witness on {index}");
         let result = if index <= zkey.n_public {
             tracing::trace!("indexing public input!");
             driver.promote_to_trivial_share(witness.public_inputs[index])
         } else if index < zkey.n_vars - zkey.n_additions {
             tracing::trace!("indexing private input!");
-            witness.witness.index(index - zkey.n_public - 1)
+            witness.witness[index - zkey.n_public - 1].clone()
         } else if index < zkey.n_vars {
             tracing::trace!("indexing additions!");
             witness.addition_witness[index + zkey.n_additions - zkey.n_vars].to_owned()
@@ -137,15 +126,12 @@ mod plonk_utils {
     }
 
     // For convenience coeff is given in reverse order
-    pub(crate) fn blind_coefficients<T, P: Pairing>(
+    pub(crate) fn blind_coefficients<P: Pairing, T: CircomPlonkProver<P>>(
         driver: &mut T,
-        poly: &FieldShareVec<T, P>,
-        coeff_rev: &[FieldShare<T, P>],
-    ) -> Vec<FieldShare<T, P>>
-    where
-        T: PrimeFieldMpcProtocol<P::ScalarField>,
-    {
-        let mut res = poly.clone().into_iter().collect::<Vec<_>>();
+        poly: &[T::ArithmeticShare],
+        coeff_rev: &[T::ArithmeticShare],
+    ) -> Vec<T::ArithmeticShare> {
+        let mut res = poly.to_vec();
         for (p, c) in res.iter_mut().zip(coeff_rev.iter().rev()) {
             *p = driver.sub(p, c);
         }
