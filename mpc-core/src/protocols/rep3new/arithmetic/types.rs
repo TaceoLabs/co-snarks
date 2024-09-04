@@ -20,21 +20,21 @@ pub struct Rep3PrimeFieldShareVec<F: PrimeField> {
     pub(crate) b: Vec<F>,
 }
 
-impl<F: PrimeField> FieldShareVecTrait for Rep3PrimeFieldShareVec<F> {
-    type FieldShare = Rep3PrimeFieldShare<F>;
+// impl<F: PrimeField> FieldShareVecTrait for Rep3PrimeFieldShareVec<F> {
+//     type FieldShare = Rep3PrimeFieldShare<F>;
 
-    fn index(&self, index: usize) -> Self::FieldShare {
-        todo!()
-    }
+//     fn index(&self, index: usize) -> Self::FieldShare {
+//         todo!()
+//     }
 
-    fn set_index(&mut self, val: Self::FieldShare, index: usize) {
-        todo!()
-    }
+//     fn set_index(&mut self, val: Self::FieldShare, index: usize) {
+//         todo!()
+//     }
 
-    fn get_len(&self) -> usize {
-        todo!()
-    }
-}
+//     fn get_len(&self) -> usize {
+//         todo!()
+//     }
+// }
 
 impl<F: PrimeField> Rep3PrimeFieldShare<F> {
     /// Constructs the type from two additive shares.

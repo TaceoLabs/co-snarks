@@ -24,7 +24,7 @@ pub mod conversion {
     // Keep in mind: Only works if the input is actually a binary sharing of a valid field element
     // If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
     pub async fn b2a<F: PrimeField, N: Rep3Network>(
-        x: Rep3BigUintShare,
+        x: Rep3BigUintShare<F>,
         io_context: &mut IoContext<N>,
     ) -> IoResult<Rep3PrimeFieldShare<F>> {
         let mut y = Rep3BigUintShare::zero_share();

@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
@@ -17,7 +19,7 @@ type IoResult<T> = std::io::Result<T>;
 pub async fn a2b<F: PrimeField, N: Rep3Network>(
     x: &Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
-) -> IoResult<Rep3BigUintShare> {
+) -> IoResult<Rep3BigUintShare<F>> {
     let mut x01 = Rep3BigUintShare::zero_share();
     let mut x2 = Rep3BigUintShare::zero_share();
 
@@ -50,33 +52,33 @@ pub async fn a2b<F: PrimeField, N: Rep3Network>(
 }
 
 pub(super) async fn low_depth_binary_add_mod_p<F: PrimeField, N: Rep3Network>(
-    x1: Rep3BigUintShare,
-    x2: Rep3BigUintShare,
+    x1: Rep3BigUintShare<F>,
+    x2: Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
     bitlen: usize,
-) -> IoResult<Rep3BigUintShare> {
+) -> IoResult<Rep3BigUintShare<F>> {
     let x = low_depth_binary_add(x1, x2, io_context, bitlen).await?;
     low_depth_sub_p_cmux::<F, N>(x, io_context, bitlen).await
 }
 
-async fn low_depth_binary_add<N: Rep3Network>(
-    x1: Rep3BigUintShare,
-    x2: Rep3BigUintShare,
+async fn low_depth_binary_add<F: PrimeField, N: Rep3Network>(
+    x1: Rep3BigUintShare<F>,
+    x2: Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
     bitlen: usize,
-) -> IoResult<Rep3BigUintShare> {
+) -> IoResult<Rep3BigUintShare<F>> {
     // Add x1 + x2 via a packed Kogge-Stone adder
     let p = &x1 ^ &x2;
     let g = binary::and(&x1, &x2, io_context, bitlen).await?;
     kogge_stone_inner(p, g, io_context, bitlen).await
 }
 
-async fn kogge_stone_inner<N: Rep3Network>(
-    mut p: Rep3BigUintShare,
-    mut g: Rep3BigUintShare,
+async fn kogge_stone_inner<F: PrimeField, N: Rep3Network>(
+    mut p: Rep3BigUintShare<F>,
+    mut g: Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
     bitlen: usize,
-) -> IoResult<Rep3BigUintShare> {
+) -> IoResult<Rep3BigUintShare<F>> {
     let d = ceil_log2(bitlen);
     let s_ = p.to_owned();
 
@@ -101,10 +103,10 @@ async fn kogge_stone_inner<N: Rep3Network>(
 }
 
 async fn low_depth_sub_p_cmux<F: PrimeField, N: Rep3Network>(
-    mut x: Rep3BigUintShare,
+    mut x: Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
     bitlen: usize,
-) -> IoResult<Rep3BigUintShare> {
+) -> IoResult<Rep3BigUintShare<F>> {
     let mask = (BigUint::from(1u64) << bitlen) - BigUint::one();
     let x_msb = &x >> bitlen;
     x &= &mask;
@@ -126,7 +128,7 @@ async fn low_depth_sub_p_cmux<F: PrimeField, N: Rep3Network>(
         BigUint::zero()
     };
     let ov_b = if ov_b == 1 { mask } else { BigUint::zero() };
-    let ov = Rep3BigUintShare::new(ov_a, ov_b);
+    let ov = Rep3BigUintShare::<F>::new(ov_a, ov_b);
 
     // one big multiplexer
     let res = binary::cmux(&ov, &y, &x, io_context, bitlen).await?;
@@ -134,12 +136,12 @@ async fn low_depth_sub_p_cmux<F: PrimeField, N: Rep3Network>(
 }
 
 // Calculates 2^k + x1 - x2
-async fn low_depth_binary_sub<N: Rep3Network>(
-    x1: Rep3BigUintShare,
-    x2: Rep3BigUintShare,
+async fn low_depth_binary_sub<F: PrimeField, N: Rep3Network>(
+    x1: Rep3BigUintShare<F>,
+    x2: Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
     bitlen: usize,
-) -> IoResult<Rep3BigUintShare> {
+) -> IoResult<Rep3BigUintShare<F>> {
     // Let x2' = be the bit_not of x2
     // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
     // This is equivalent to x1 - x2 = x1 + two's complement of x2
@@ -167,13 +169,13 @@ fn ceil_log2(x: usize) -> usize {
     y
 }
 
-async fn and_twice<N: Rep3Network>(
-    a: Rep3BigUintShare,
-    b1: Rep3BigUintShare,
-    b2: Rep3BigUintShare,
+async fn and_twice<F: PrimeField, N: Rep3Network>(
+    a: Rep3BigUintShare<F>,
+    b1: Rep3BigUintShare<F>,
+    b2: Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
     bitlen: usize,
-) -> IoResult<(Rep3BigUintShare, Rep3BigUintShare)> {
+) -> IoResult<(Rep3BigUintShare<F>, Rep3BigUintShare<F>)> {
     debug_assert!(a.a.bits() <= bitlen as u64);
     debug_assert!(b1.a.bits() <= bitlen as u64);
     debug_assert!(b2.a.bits() <= bitlen as u64);
@@ -193,20 +195,22 @@ async fn and_twice<N: Rep3Network>(
     let r1 = Rep3BigUintShare {
         a: local_a1,
         b: local_b1,
+        phantom: PhantomData,
     };
     let r2 = Rep3BigUintShare {
         a: local_a2,
         b: local_b2,
+        phantom: PhantomData,
     };
 
     Ok((r1, r2))
 }
 
 async fn low_depth_binary_sub_p<F: PrimeField, N: Rep3Network>(
-    x: &Rep3BigUintShare,
+    x: &Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
     bitlen: usize,
-) -> IoResult<Rep3BigUintShare> {
+) -> IoResult<Rep3BigUintShare<F>> {
     let p_ = (BigUint::from(1u64) << (bitlen + 1)) - F::MODULUS.into();
 
     // Add x1 + p_ via a packed Kogge-Stone adder

@@ -1,22 +1,31 @@
+use std::marker::PhantomData;
+
+use ark_ff::PrimeField;
 use num_bigint::BigUint;
 
 /// This type represents a packed vector of replicated shared bits. Each additively shared vector is represented as [BigUint]. Thus, this type contains two [BigUint]s.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Rep3BigUintShare {
+pub struct Rep3BigUintShare<F: PrimeField> {
     pub(crate) a: BigUint,
     pub(crate) b: BigUint,
+    pub(crate) phantom: PhantomData<F>,
 }
 
-impl Rep3BigUintShare {
+impl<F: PrimeField> Rep3BigUintShare<F> {
     /// Constructs the type from two additive shares.
     pub fn new(a: BigUint, b: BigUint) -> Self {
-        Self { a, b }
+        Self {
+            a,
+            b,
+            phantom: PhantomData,
+        }
     }
 
     pub fn zero_share() -> Self {
         Self {
             a: BigUint::ZERO,
             b: BigUint::ZERO,
+            phantom: PhantomData,
         }
     }
 

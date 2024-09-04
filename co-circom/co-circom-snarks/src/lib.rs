@@ -127,54 +127,54 @@ impl<F: PrimeField, W: FieldShareVecTrait> SharedInput<F, W> {
     }
 }
 
-impl<F: PrimeField> SharedWitness<F, Rep3PrimeFieldShareVec<F>> {
-    /// Shares a given witness and public input vector using the Rep3 protocol.
-    pub fn share_rep3<R: Rng + CryptoRng>(
-        witness: Witness<F>,
-        num_pub_inputs: usize,
-        rng: &mut R,
-    ) -> [Self; 3] {
-        todo!()
-        //    let public_inputs = &witness.values[..num_pub_inputs];
-        //    let witness = &witness.values[num_pub_inputs..];
-        //    let [share1, share2, share3] = rep3::utils::share_field_elements(witness, rng);
-        //    let witness1 = Self {
-        //        public_inputs: public_inputs.to_vec(),
-        //        witness: share1,
-        //    };
-        //    let witness2 = Self {
-        //        public_inputs: public_inputs.to_vec(),
-        //        witness: share2,
-        //    };
-        //    let witness3 = Self {
-        //        public_inputs: public_inputs.to_vec(),
-        //        witness: share3,
-        //    };
-        //    [witness1, witness2, witness3]
-    }
-}
+// impl<F: PrimeField> SharedWitness<F, Rep3PrimeFieldShareVec<F>> {
+//     /// Shares a given witness and public input vector using the Rep3 protocol.
+//     pub fn share_rep3<R: Rng + CryptoRng>(
+//         witness: Witness<F>,
+//         num_pub_inputs: usize,
+//         rng: &mut R,
+//     ) -> [Self; 3] {
+//         todo!()
+//         //    let public_inputs = &witness.values[..num_pub_inputs];
+//         //    let witness = &witness.values[num_pub_inputs..];
+//         //    let [share1, share2, share3] = rep3::utils::share_field_elements(witness, rng);
+//         //    let witness1 = Self {
+//         //        public_inputs: public_inputs.to_vec(),
+//         //        witness: share1,
+//         //    };
+//         //    let witness2 = Self {
+//         //        public_inputs: public_inputs.to_vec(),
+//         //        witness: share2,
+//         //    };
+//         //    let witness3 = Self {
+//         //        public_inputs: public_inputs.to_vec(),
+//         //        witness: share3,
+//         //    };
+//         //    [witness1, witness2, witness3]
+//     }
+// }
 
-impl<N: ShamirNetwork, P: Pairing> SharedWitness<ShamirProtocol<P::ScalarField, N>, P> {
-    /// Shares a given witness and public input vector using the Shamir protocol.
-    pub fn share_shamir<R: Rng + CryptoRng>(
-        witness: Witness<P::ScalarField>,
-        num_pub_inputs: usize,
-        degree: usize,
-        num_parties: usize,
-        rng: &mut R,
-    ) -> Vec<Self> {
-        let public_inputs = &witness.values[..num_pub_inputs];
-        let witness = &witness.values[num_pub_inputs..];
-        let shares = shamir::utils::share_field_elements(witness, degree, num_parties, rng);
-        shares
-            .into_iter()
-            .map(|share| Self {
-                public_inputs: public_inputs.to_vec(),
-                witness: share,
-            })
-            .collect()
-    }
-}
+// impl<N: ShamirNetwork, P: Pairing> SharedWitness<ShamirProtocol<P::ScalarField, N>, P> {
+//     /// Shares a given witness and public input vector using the Shamir protocol.
+//     pub fn share_shamir<R: Rng + CryptoRng>(
+//         witness: Witness<P::ScalarField>,
+//         num_pub_inputs: usize,
+//         degree: usize,
+//         num_parties: usize,
+//         rng: &mut R,
+//     ) -> Vec<Self> {
+//         let public_inputs = &witness.values[..num_pub_inputs];
+//         let witness = &witness.values[num_pub_inputs..];
+//         let shares = shamir::utils::share_field_elements(witness, degree, num_parties, rng);
+//         shares
+//             .into_iter()
+//             .map(|share| Self {
+//                 public_inputs: public_inputs.to_vec(),
+//                 witness: share,
+//             })
+//             .collect()
+//     }
+// }
 
 /// Gathers utility methods for proving coSNARKs.
 pub mod utils {
