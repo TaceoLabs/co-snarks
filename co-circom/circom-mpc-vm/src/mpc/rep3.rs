@@ -1,19 +1,29 @@
 use ark_ff::PrimeField;
-use mpc_core::protocols::{
-    rep3::network::Rep3Network,
-    rep3new::{network::IoContext, Rep3BigUintShare, Rep3PrimeFieldShare},
+use eyre::bail;
+use mpc_core::{
+    protocols::{
+        rep3::network::Rep3Network,
+        rep3new::{
+            arithmetic::{self, add, add_public, mul, mul_with_public, sub, sub_public, IoContext},
+            binary::{and, and_with_public, xor, xor_public},
+            conversion::{a2b, b2a},
+            network::IoContext,
+            Rep3BigUintShare, Rep3PrimeFieldShare,
+        },
+    },
+    traits::SecretShared,
 };
 
-use super::VmCircomWitnessExtension;
+use super::{plain::PlainDriver, VmCircomWitnessExtension};
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
-type BinaryShare = Rep3BigUintShare;
+type BinaryShare<F> = Rep3BigUintShare<F>;
 
 #[derive(Clone)]
 pub enum Rep3VmType<F: PrimeField> {
     Public(F),
     Arithmetic(ArithmeticShare<F>),
-    Binary(BinaryShare),
+    Binary(BinaryShare<F>),
 }
 
 impl<F: PrimeField> From<F> for Rep3VmType<F> {
@@ -28,45 +38,183 @@ impl<F: PrimeField> From<ArithmeticShare<F>> for Rep3VmType<F> {
     }
 }
 
+impl<F: PrimeField> From<BinaryShare<F>> for Rep3VmType<F> {
+    fn from(value: BinaryShare<F>) -> Self {
+        Self::Binary(value)
+    }
+}
+
 impl<F: PrimeField> Default for Rep3VmType<F> {
     fn default() -> Self {
         Self::Public(F::zero())
     }
 }
 
-pub struct Rep3Driver<N: Rep3Network> {
+pub struct Rep3Driver<F: PrimeField, N: Rep3Network> {
     io_context: IoContext<N>,
+    plain: PlainDriver<F>,
 }
 
-impl<N: Rep3Network> Rep3Driver<N> {
+impl<F: PrimeField, N: Rep3Network> Rep3Driver<F, N> {
     pub fn new(network: N) -> std::io::Result<Self> {
         Ok(Self {
             io_context: IoContext::init(network)?,
+            plain: PlainDriver::default(),
         })
     }
 }
 
-impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F> for Rep3Driver<N> {
+impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
+    for Rep3Driver<F, N>
+{
     type ArithmeticShare = ArithmeticShare<F>;
 
-    type BinaryShare = BinaryShare;
+    type BinaryShare = BinaryShare<F>;
 
     type VmType = Rep3VmType<F>;
 
-    fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+    async fn add(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
+                Ok(self.plain.add(a, b).await?.into())
+            }
+            (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
+            | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                Ok(add_public(&a, b, self.io_context.id).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => Ok(add(&a, &b).into()),
+            (Rep3VmType::Public(b), Rep3VmType::Binary(a))
+            | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                let a = b2a(a, &mut self.io_context).await?;
+                Ok(add_public(&a, b, self.io_context.id).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
+            | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
+                let b = b2a(b, &mut self.io_context).await?;
+                Ok(add(&a, &b).into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
+                let a = b2a(a, &mut self.io_context).await?;
+                let b = b2a(b, &mut self.io_context).await?;
+                Ok(add(&a, &b).into())
+            }
+        }
     }
 
-    fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
-        todo!()
+    async fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
+                Ok(self.plain.sub(a, b).await?.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                Ok(sub_public(&a, b, self.io_context.id).into())
+            }
+            (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
+                Ok(sub_public(&b, a, self.io_context.id).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => Ok(sub(&a, &b).into()),
+            (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
+                let b = b2a(b, &mut self.io_context).await?;
+                Ok(sub_public(&b, a, self.io_context.id).into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                let a = b2a(a, &mut self.io_context).await?;
+                Ok(sub_public(&a, b, self.io_context.id).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
+                let b = b2a(b, &mut self.io_context).await?;
+                Ok(sub(&a, &b).into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
+                let a = b2a(a, &mut self.io_context).await?;
+                Ok(sub(&a, &b).into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
+                let a = b2a(a, &mut self.io_context).await?;
+                let b = b2a(b, &mut self.io_context).await?;
+                Ok(sub(&a, &b).into())
+            }
+        }
     }
 
-    fn mul(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+    async fn mul(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
+                Ok(self.plain.mul(a, b).await?.into())
+            }
+            (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
+            | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                Ok(mul_with_public(&a, b).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+            }
+            (Rep3VmType::Public(b), Rep3VmType::Binary(a))
+            | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                let a = b2a(a, &mut self.io_context).await?;
+                Ok(mul_with_public(&a, b).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
+            | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
+                let b = b2a(b, &mut self.io_context).await?;
+                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
+                let a = b2a(a, &mut self.io_context).await?;
+                let b = b2a(b, &mut self.io_context).await?;
+                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+            }
+        }
     }
 
-    fn div(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+    async fn div(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
+                Ok(self.plain.div(a, b).await?.into())
+            }
+            (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
+                let b = arithmetic::inv(&b, &mut self.io_context).await?;
+                Ok(mul_with_public(&b, a).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                if b.is_zero() {
+                    bail!("Cannot invert zero");
+                }
+                Ok(mul_with_public(&a, b.inverse().unwrap()).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let b = arithmetic::inv(&b, &mut self.io_context).await?;
+                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+            }
+            (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
+                let b = b2a(b, &mut self.io_context).await?;
+                let b = arithmetic::inv(&b, &mut self.io_context).await?;
+                Ok(mul_with_public(&b, a).into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                let a = b2a(a, &mut self.io_context).await?;
+                if b.is_zero() {
+                    bail!("Cannot invert zero");
+                }
+                Ok(mul_with_public(&a, b.inverse().unwrap()).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
+                let b = b2a(b, &mut self.io_context).await?;
+                let b = arithmetic::inv(&b, &mut self.io_context).await?;
+                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
+                let a = b2a(a, &mut self.io_context).await?;
+                let b = arithmetic::inv(&b, &mut self.io_context).await?;
+                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
+                let a = b2a(a, &mut self.io_context).await?;
+                let b = b2a(b, &mut self.io_context).await?;
+                let b = arithmetic::inv(&b, &mut self.io_context).await?;
+                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+            }
+        }
     }
 
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
@@ -142,16 +290,78 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F> for Rep3Driver<N
         todo!()
     }
 
-    fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+    async fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
+                Ok(self.plain.bit_xor(a, b).await?.into())
+            }
+            (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
+            | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let a = a2b(&a, &mut self.io_context).await?;
+                Ok(xor_public(&a, &b.into_bigint().into(), self.io_context.id).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let a = a2b(&a, &mut self.io_context).await?;
+                let b = a2b(&b, &mut self.io_context).await?;
+                Ok(xor(&a, &b).into())
+            }
+            (Rep3VmType::Public(b), Rep3VmType::Binary(a))
+            | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                Ok(xor_public(&a, &b.into_bigint().into(), self.io_context.id).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
+            | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
+                let a = a2b(&a, &mut self.io_context).await?;
+                Ok(xor(&a, &b).into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => Ok(xor(&a, &b).into()),
+        }
     }
 
     fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
         todo!()
     }
 
-    fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+    async fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
+                Ok(self.plain.bit_and(a, b).await?.into())
+            }
+            (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
+            | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let a = a2b(&a, &mut self.io_context).await?;
+                Ok(and_with_public(&a, &b.into_bigint().into()).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let a = a2b(&a, &mut self.io_context).await?;
+                let b = a2b(&b, &mut self.io_context).await?;
+                Ok(
+                    and(&a, &b, &mut self.io_context, F::MODULUS_BIT_SIZE as usize)
+                        .await?
+                        .into(),
+                )
+            }
+            (Rep3VmType::Public(b), Rep3VmType::Binary(a))
+            | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                Ok(and_with_public(&a, &b.into_bigint().into()).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
+            | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
+                let a = a2b(&a, &mut self.io_context).await?;
+                Ok(
+                    and(&a, &b, &mut self.io_context, F::MODULUS_BIT_SIZE as usize)
+                        .await?
+                        .into(),
+                )
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
+                Ok(
+                    and(&a, &b, &mut self.io_context, F::MODULUS_BIT_SIZE as usize)
+                        .await?
+                        .into(),
+                )
+            }
+        }
     }
 
     fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> eyre::Result<bool> {

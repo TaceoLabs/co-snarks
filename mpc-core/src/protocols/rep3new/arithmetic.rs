@@ -18,16 +18,22 @@ pub fn add<F: PrimeField>(a: &FieldShare<F>, b: &FieldShare<F>) -> FieldShare<F>
     a + b
 }
 
-pub fn add_public<F: PrimeField>(shared: &FieldShare<F>, public: F) -> FieldShare<F> {
-    shared + public
+pub fn add_public<F: PrimeField>(shared: &FieldShare<F>, public: F, id: PartyID) -> FieldShare<F> {
+    let mut res = shared.to_owned();
+    match id {
+        PartyID::ID0 => res.a += public,
+        PartyID::ID1 => res.b += public,
+        PartyID::ID2 => {}
+    }
+    res
 }
 
 pub fn sub<F: PrimeField>(a: &FieldShare<F>, b: &FieldShare<F>) -> FieldShare<F> {
     a - b
 }
 
-pub fn sub_public<F: PrimeField>(shared: &FieldShare<F>, public: F) -> FieldShare<F> {
-    shared - public
+pub fn sub_public<F: PrimeField>(shared: &FieldShare<F>, public: F, id: PartyID) -> FieldShare<F> {
+    add_public(shared, -public, id)
 }
 
 pub async fn mul<F: PrimeField, N: Rep3Network>(

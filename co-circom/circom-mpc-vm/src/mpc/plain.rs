@@ -83,19 +83,19 @@ impl<F: PrimeField + SecretShared> VmCircomWitnessExtension<F> for PlainDriver<F
 
     type VmType = F;
 
-    fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    async fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let result = a + b;
         tracing::trace!("{a}+{b}={result}");
-        result
+        Ok(result)
     }
 
-    fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    async fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let result = a - b;
         tracing::trace!("{a}-{b}={result}");
-        a - b
+        Ok(a - b)
     }
 
-    fn mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    async fn mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Ok(a * b)
     }
 
@@ -103,7 +103,7 @@ impl<F: PrimeField + SecretShared> VmCircomWitnessExtension<F> for PlainDriver<F
         -a
     }
 
-    fn div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    async fn div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Ok(a / b)
     }
 
@@ -209,7 +209,7 @@ impl<F: PrimeField + SecretShared> VmCircomWitnessExtension<F> for PlainDriver<F
         }
     }
 
-    fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    async fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let lhs = to_bigint!(a);
         let rhs = to_bigint!(b);
         Ok(F::from(lhs ^ rhs))
@@ -221,7 +221,7 @@ impl<F: PrimeField + SecretShared> VmCircomWitnessExtension<F> for PlainDriver<F
         Ok(F::from(lhs | rhs))
     }
 
-    fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    async fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let lhs = to_bigint!(a);
         let rhs = to_bigint!(b);
         Ok(F::from(lhs & rhs))

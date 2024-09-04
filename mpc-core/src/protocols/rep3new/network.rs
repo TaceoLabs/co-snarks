@@ -12,9 +12,9 @@ use rand::{Rng, SeedableRng};
 
 // this will be moved later
 pub struct IoContext<N: Rep3Network> {
-    pub(crate) id: PartyID,
-    pub(crate) rngs: Rep3CorrelatedRng,
-    pub(crate) network: N,
+    pub id: PartyID,
+    pub rngs: Rep3CorrelatedRng,
+    pub network: N,
 }
 
 impl<N: Rep3Network> IoContext<N> {
