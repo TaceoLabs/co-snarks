@@ -8,12 +8,12 @@ use super::{
 };
 use crate::mpc::plain::PlainDriver;
 use crate::mpc::rep3::Rep3Driver;
-use ark_ec::pairing::Pairing;
-use ark_ff::One;
+use ark_ff::PrimeField;
 use co_circom_snarks::{SharedInput, SharedWitness};
 use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
 use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
+use mpc_core::traits::SecretShared;
 use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -36,9 +36,9 @@ pub struct VMConfig {
 ///
 /// - [`run()`](WitnessExtension::run): Executes the witness extension.
 /// - [`run_with_flat()`](WitnessExtension::run_with_flat): Executes the witness extension with flattened inputs.
-pub struct WitnessExtension<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> {
+pub struct WitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     main: String,
-    ctx: WitnessExtensionCtx<P, C>,
+    ctx: WitnessExtensionCtx<F, C>,
     signal_to_witness: Vec<usize>,
     main_inputs: usize,
     main_outputs: usize,
@@ -51,7 +51,7 @@ pub struct WitnessExtension<P: Pairing, C: VmCircomWitnessExtension<P::ScalarFie
 /// Shorthand type for an instance of the MPC-VM that runs locally on a single machine without MPC.
 ///
 /// This type is mostly used for testing purposes, so use with care in production environments.
-pub type PlainWitnessExtension<P> = WitnessExtension<P, PlainDriver<<P as Pairing>::ScalarField>>;
+pub type PlainWitnessExtension<F> = WitnessExtension<F, PlainDriver<F>>;
 
 /// Shorthand type for the MPC-VM instantiated with the [`Rep3Protocol`].
 ///
@@ -61,10 +61,10 @@ pub type Rep3WitnessExtension<P, N> = WitnessExtension<P, Rep3Driver<N>>;
 type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Arc<CodeBlock>, Vec<(T, Vec<T>)>);
 
 #[derive(Default, Clone)]
-struct IfCtxStack<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>>(Vec<IfCtx<P, C>>);
+struct IfCtxStack<F: PrimeField, C: VmCircomWitnessExtension<F>>(Vec<IfCtx<F, C>>);
 
 #[derive(Default, Clone)]
-struct Component<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> {
+struct Component<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     symbol: String,
     amount_vars: usize,
     provided_input_signals: usize,
@@ -74,30 +74,30 @@ struct Component<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> {
     my_offset: usize,
     field_stack: Stack<C::VmType>,
     index_stack: Stack<usize>,
-    if_stack: IfCtxStack<P, C>,
+    if_stack: IfCtxStack<F, C>,
     functions_ctx: Stack<FunctionCtx<C::VmType>>,
     mappings: Vec<usize>,
-    sub_components: Vec<Component<P, C>>,
+    sub_components: Vec<Component<F, C>>,
     component_body: Arc<CodeBlock>,
     log_buf: String,
 }
 
-struct WitnessExtensionCtx<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> {
+struct WitnessExtensionCtx<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     signals: Vec<C::VmType>,
     fun_decls: HashMap<String, FunDecl>,
     templ_decls: HashMap<String, TemplateDecl>,
     constant_table: Vec<C::VmType>,
     string_table: Vec<String>,
-    mpc_accelerator: MpcAccelerator<P, C>,
+    mpc_accelerator: MpcAccelerator<F, C>,
 }
 
 #[derive(Clone)]
-enum IfCtx<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> {
+enum IfCtx<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     Public,
     Shared(C::VmType, C::VmType, C::VmType),
 }
 
-impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> IfCtxStack<P, C> {
+impl<F: PrimeField, C: VmCircomWitnessExtension<F>> IfCtxStack<F, C> {
     fn new() -> Self {
         Self(vec![])
     }
@@ -121,7 +121,7 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> IfCtxStack<P, C> {
         }
     }
 
-    fn peek(&self) -> &IfCtx<P, C> {
+    fn peek(&self) -> &IfCtx<F, C> {
         self.0.last().expect("must be here")
     }
 
@@ -170,14 +170,14 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> IfCtxStack<P, C> {
     }
 }
 
-impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> WitnessExtensionCtx<P, C> {
+impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtensionCtx<F, C> {
     fn new(
         signals: Vec<C::VmType>,
         constant_table: Vec<C::VmType>,
         fun_decls: HashMap<String, FunDecl>,
         templ_decls: HashMap<String, TemplateDecl>,
         string_table: Vec<String>,
-        mpc_accelerator: MpcAccelerator<P, C>,
+        mpc_accelerator: MpcAccelerator<F, C>,
     ) -> Self {
         Self {
             signals,
@@ -227,7 +227,7 @@ impl<T> FunctionCtx<T> {
     }
 }
 
-impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> Component<P, C> {
+impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
     fn init(templ_decl: &TemplateDecl, signal_offset: usize) -> Self {
         Self {
             symbol: templ_decl.symbol.clone(),
@@ -276,7 +276,7 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> Component<P, C> {
     pub fn run(
         &mut self,
         protocol: &mut C,
-        ctx: &mut WitnessExtensionCtx<P, C>,
+        ctx: &mut WitnessExtensionCtx<F, C>,
         config: &VMConfig,
     ) -> Result<()> {
         let mut ip = 0;
@@ -404,7 +404,7 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> Component<P, C> {
                                 if i != 0 {
                                     offset += offset_jump;
                                 }
-                                Component::<P, C>::init(templ_decl, offset)
+                                Component::<F, C>::init(templ_decl, offset)
                             })
                             .collect_vec()
                     };
@@ -532,7 +532,7 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> Component<P, C> {
                 op_codes::MpcOpCode::Mod => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.modolus(lhs, rhs)?);
+                    self.push_field(protocol.modulo(lhs, rhs)?);
                 }
 
                 op_codes::MpcOpCode::Neg => {
@@ -803,11 +803,11 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> Component<P, C> {
     }
 }
 
-impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> WitnessExtension<P, C> {
+impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     fn post_processing(
         mut self,
         amount_public_inputs: usize,
-    ) -> Result<FinalizedWitnessExtension<P, C>> {
+    ) -> Result<FinalizedWitnessExtension<F, C>> {
         // TODO: capacities
         let mut public_inputs = Vec::new();
         let mut witness = Vec::new();
@@ -822,13 +822,16 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> WitnessExtension<P
         Ok(FinalizedWitnessExtension {
             shared_witness: SharedWitness {
                 public_inputs,
-                witness: witness.into(),
+                witness: witness,
             },
             output_mapping: self.output_mapping,
         })
     }
 
-    fn set_input_signals(&mut self, mut input_signals: SharedInput<C, P>) -> Result<usize> {
+    fn set_input_signals(
+        &mut self,
+        mut input_signals: SharedInput<F, C::ArithmeticShare>,
+    ) -> Result<usize> {
         let mut amount_public_inputs = 0;
         for (name, offset, size) in self.main_input_list.iter() {
             let input_signals =
@@ -893,8 +896,8 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> WitnessExtension<P
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     pub fn run(
         mut self,
-        input_signals: SharedInput<C, P>,
-    ) -> Result<FinalizedWitnessExtension<P, C>> {
+        input_signals: SharedInput<F, C::ArithmeticShare>,
+    ) -> Result<FinalizedWitnessExtension<F, C>> {
         let amount_public_inputs = self.set_input_signals(input_signals)?;
         self.call_main_component()?;
         self.post_processing(amount_public_inputs)
@@ -925,7 +928,7 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> WitnessExtension<P
         mut self,
         input_signals: Vec<C::VmType>,
         amount_public_inputs: usize,
-    ) -> Result<FinalizedWitnessExtension<P, C>> {
+    ) -> Result<FinalizedWitnessExtension<F, C>> {
         self.set_flat_input_signals(input_signals);
         self.call_main_component()?;
         self.post_processing(amount_public_inputs)
@@ -938,22 +941,22 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> WitnessExtension<P
 /// for retrieving one of the outputs of the main component of the circom file.
 ///
 /// If you want to retrieve the shared witness, call [`into_shared_witness()`](FinalizedWitnessExtension::into_shared_witness()).
-pub struct FinalizedWitnessExtension<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> {
-    shared_witness: SharedWitness<C, P>,
+pub struct FinalizedWitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
+    shared_witness: SharedWitness<F, C::ArithmeticShare>,
     output_mapping: OutputMapping,
 }
 
-impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> From<FinalizedWitnessExtension<P, C>>
-    for SharedWitness<C, P>
+impl<F: PrimeField, C: VmCircomWitnessExtension<F>> From<FinalizedWitnessExtension<F, C>>
+    for SharedWitness<F, C::ArithmeticShare>
 {
-    fn from(value: FinalizedWitnessExtension<P, C>) -> Self {
+    fn from(value: FinalizedWitnessExtension<F, C>) -> Self {
         value.shared_witness
     }
 }
 
-impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> FinalizedWitnessExtension<P, C> {
+impl<F: PrimeField, C: VmCircomWitnessExtension<F>> FinalizedWitnessExtension<F, C> {
     /// Consumes self and returns the [`SharedWitness`].
-    pub fn into_shared_witness(self) -> SharedWitness<C, P> {
+    pub fn into_shared_witness(self) -> SharedWitness<F, C::ArithmeticShare> {
         self.shared_witness
     }
 
@@ -978,19 +981,19 @@ impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> FinalizedWitnessEx
     /// - `name`: The name of the signal to retrieve.
     ///
     /// # Returns
-    /// Returns an `Option<Vec<P::ScalarField>>` containing the signals associated with the requested output.
+    /// Returns an `Option<Vec<F>>` containing the signals associated with the requested output.
     /// Returns `None` if the name is not known.
-    pub fn get_output(&self, name: &str) -> Option<Vec<P::ScalarField>> {
+    pub fn get_output(&self, name: &str) -> Option<Vec<F>> {
         self.output_mapping.get(name).map(|(offset, amount)| {
             self.shared_witness.public_inputs[*offset..*offset + *amount].to_vec()
         })
     }
 }
 
-impl<P: Pairing> PlainWitnessExtension<P> {
-    pub(crate) fn new(parser: CoCircomCompilerParsed<P>, config: VMConfig) -> Self {
-        let mut signals = vec![P::ScalarField::default(); parser.amount_signals];
-        signals[0] = P::ScalarField::one();
+impl<F: PrimeField + SecretShared> PlainWitnessExtension<F> {
+    pub(crate) fn new(parser: CoCircomCompilerParsed<F>, config: VMConfig) -> Self {
+        let mut signals = vec![F::default(); parser.amount_signals];
+        signals[0] = F::one();
         Self {
             driver: PlainDriver::default(),
             signal_to_witness: parser.signal_to_witness,
@@ -1012,16 +1015,16 @@ impl<P: Pairing> PlainWitnessExtension<P> {
     }
 }
 
-impl<P: Pairing, N: Rep3Network> Rep3WitnessExtension<P, N> {
+impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
     pub(crate) fn from_network(
-        parser: CoCircomCompilerParsed<P>,
+        parser: CoCircomCompilerParsed<F>,
         network: N,
-        mpc_accelerator: MpcAccelerator<P, Rep3Protocol<P::ScalarField, N>>,
+        mpc_accelerator: MpcAccelerator<F, Rep3Driver<N>>,
         config: VMConfig,
     ) -> Result<Self> {
-        let driver = Rep3Protocol::new(network)?;
+        let driver = Rep3Driver::new(network)?;
         let mut signals = vec![Rep3VmType::default(); parser.amount_signals];
-        signals[0] = Rep3VmType::Public(P::ScalarField::one());
+        signals[0] = Rep3VmType::Public(F::one());
         let constant_table = parser
             .constant_table
             .into_iter()
@@ -1048,11 +1051,11 @@ impl<P: Pairing, N: Rep3Network> Rep3WitnessExtension<P, N> {
     }
 }
 
-impl<P: Pairing> Rep3WitnessExtension<P, Rep3MpcNet> {
+impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
     pub(crate) fn new(
-        parser: CoCircomCompilerParsed<P>,
+        parser: CoCircomCompilerParsed<F>,
         network_config: NetworkConfig,
-        mpc_accelerator: MpcAccelerator<P, Rep3Driver<Rep3MpcNet>>,
+        mpc_accelerator: MpcAccelerator<F, Rep3Driver<Rep3MpcNet>>,
         config: VMConfig,
     ) -> Result<Self> {
         Self::from_network(

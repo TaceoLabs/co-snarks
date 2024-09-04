@@ -1,5 +1,6 @@
 use ark_ff::{One, PrimeField};
 use eyre::eyre;
+use mpc_core::traits::SecretShared;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
@@ -43,7 +44,7 @@ macro_rules! to_bigint {
     }};
 }
 
-pub(crate) struct PlainDriver<F: PrimeField> {
+pub struct PlainDriver<F: PrimeField> {
     negative_one: F,
 }
 
@@ -75,7 +76,7 @@ impl<F: PrimeField> PlainDriver<F> {
     }
 }
 
-impl<F: PrimeField> VmCircomWitnessExtension<F> for PlainDriver<F> {
+impl<F: PrimeField + SecretShared> VmCircomWitnessExtension<F> for PlainDriver<F> {
     type ArithmeticShare = F;
 
     type BinaryShare = F;

@@ -1,4 +1,6 @@
+use ark_ec::pairing::Pairing;
 use eyre::Result;
+use mpc_core::traits::SecretShared;
 use std::fmt;
 
 use ark_ff::PrimeField;
@@ -7,8 +9,8 @@ pub(crate) mod plain;
 pub(crate) mod rep3;
 
 pub trait VmCircomWitnessExtension<F: PrimeField> {
-    type ArithmeticShare;
-    type BinaryShare;
+    type ArithmeticShare: SecretShared;
+    type BinaryShare: SecretShared;
     type VmType: Clone + Default + fmt::Debug + fmt::Display + From<F> + From<Self::ArithmeticShare>;
 
     /// Add two VM-types: c = a + b.

@@ -1,5 +1,6 @@
 //! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 use ark_ec::pairing::Pairing;
+use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, PrimeField};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
@@ -9,16 +10,16 @@ use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeField
 use co_circom_snarks::SharedWitness;
 use eyre::Result;
 use itertools::izip;
-use mpc_core::protocols::plain::PlainDriver;
-use mpc_core::traits::{EcMpcProtocol, MSMProvider};
-use mpc_core::{
-    protocols::rep3::{network::Rep3MpcNet, Rep3Protocol},
-    traits::{FFTProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol},
-};
+use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
+use mpc_core::traits::SecretShared;
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use num_traits::ToPrimitive;
 use std::marker::PhantomData;
+
+use crate::mpc::plain::PlainGroth16Driver;
+use crate::mpc::rep3::Rep3Groth16Driver;
+use crate::mpc::CircomGroth16Prover;
 
 /// The plain [`Groth16`] type.
 ///
@@ -30,17 +31,10 @@ use std::marker::PhantomData;
 ///
 /// More interesting is the [`Groth16::verify`] method. You can verify any circom Groth16 proof, be it
 /// from snarkjs or one created by this project. Under the hood we use the arkwork Groth16 project for verifying.
-pub type Groth16<P> = CoGroth16<PlainDriver<<P as Pairing>::ScalarField>, P>;
+pub type Groth16<P> = CoGroth16<P, PlainGroth16Driver>;
 
 /// A type alias for a [CoGroth16] protocol using replicated secret sharing.
-pub type Rep3CoGroth16<P> = CoGroth16<Rep3Protocol<<P as Pairing>::ScalarField, Rep3MpcNet>, P>;
-
-type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
-type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
-type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
-type CurveFieldShareVec<T, C> = <T as PrimeFieldMpcProtocol<
-    <<C as CurveGroup>::Affine as AffineRepr>::ScalarField,
->>::FieldShareVec;
+pub type Rep3CoGroth16<P, N> = CoGroth16<P, Rep3Groth16Driver<N>>;
 
 /* old way of computing root of unity, does not work for bls12_381:
 let root_of_unity = {
@@ -77,26 +71,13 @@ fn root_of_unity_for_groth16<F: PrimeField + FftField>(
 }
 
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
-pub struct CoGroth16<T, P: Pairing>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>
-        + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>
-        + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
-{
+pub struct CoGroth16<P: Pairing, T: CircomGroth16Prover<P>> {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
 }
 
-impl<T, P: Pairing> CoGroth16<T, P>
+impl<P: Pairing + CircomArkworksPairingBridge, T: CircomGroth16Prover<P>> CoGroth16<P, T>
 where
-    T: PrimeFieldMpcProtocol<P::ScalarField>
-        + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>
-        + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
-    P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
@@ -113,7 +94,7 @@ where
     pub fn prove(
         &mut self,
         zkey: &ZKey<P>,
-        private_witness: SharedWitness<T, P>,
+        private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> Result<Groth16Proof<P>> {
         let matrices = &zkey.matrices;
         let num_inputs = matrices.num_instance_variables;
@@ -131,8 +112,8 @@ where
         )?;
         tracing::debug!("done!");
         tracing::debug!("getting r and s...");
-        let r = self.driver.rand()?;
-        let s = self.driver.rand()?;
+        let r = self.driver.rand();
+        let s = self.driver.rand();
         tracing::debug!("done!");
         tracing::debug!("calling create_proof_with_assignment...");
         self.create_proof_with_assignment(zkey, r, s, &h, &public_inputs[1..], private_witness)
@@ -145,16 +126,16 @@ where
         num_constraints: usize,
         num_inputs: usize,
         public_inputs: &[P::ScalarField],
-        private_witness: &FieldShareVec<T, P>,
-    ) -> Result<FieldShareVec<T, P>> {
+        private_witness: &[T::ArithmeticShare],
+    ) -> Result<Vec<T::ArithmeticShare>> {
         let mut domain =
             GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
                 .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
         let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
 
         let domain_size = domain.size();
-        let mut a = vec![FieldShare::<T, P>::default(); domain_size];
-        let mut b = vec![FieldShare::<T, P>::default(); domain_size];
+        let mut a = vec![T::ArithmeticShare::zero_share(); domain_size];
+        let mut b = vec![T::ArithmeticShare::zero_share(); domain_size];
         tracing::debug!("evaluating constraints..");
         for (a, b, at_i, bt_i) in izip!(&mut a, &mut b, &matrices.a, &matrices.b) {
             *a = self
@@ -165,13 +146,10 @@ where
                 .evaluate_constraint(bt_i, public_inputs, private_witness);
         }
         tracing::debug!("done!");
-        let mut a = FieldShareVec::<T, P>::from(a);
         let promoted_public = self.driver.promote_to_trivial_shares(public_inputs);
-        self.driver
-            .clone_from_slice(&mut a, &promoted_public, num_constraints, 0, num_inputs);
-
-        let mut b = FieldShareVec::<T, P>::from(b);
-        let mut c = self.driver.mul_vec(&a, &b)?;
+        a[num_constraints..].clone_from_slice(&promoted_public[..num_inputs]);
+        //TODO MT ME
+        let mut c = futures::executor::block_on(self.driver.mul_vec(&a, &b))?;
         self.driver.ifft_in_place(&mut a, &domain);
         self.driver.ifft_in_place(&mut b, &domain);
         self.driver.distribute_powers_and_mul_by_const(
@@ -187,7 +165,7 @@ where
         self.driver.fft_in_place(&mut a, &domain);
         self.driver.fft_in_place(&mut b, &domain);
         //this can be in-place so that we do not have to allocate memory
-        let mut ab = self.driver.mul_vec(&a, &b)?;
+        let mut ab = futures::executor::block_on(self.driver.mul_vec(&a, &b))?;
         std::mem::drop(a);
         std::mem::drop(b);
 
@@ -198,37 +176,32 @@ where
             P::ScalarField::one(),
         );
         self.driver.fft_in_place(&mut c, &domain);
-
         self.driver.sub_assign_vec(&mut ab, &c);
         Ok(ab)
     }
 
     fn calculate_coeff<C: CurveGroup>(
         &mut self,
-        initial: PointShare<T, C>,
+        initial: T::PointShare<C>,
         query: &[C::Affine],
         vk_param: C::Affine,
         input_assignment: &[C::ScalarField],
-        aux_assignment: &CurveFieldShareVec<T, C>,
-    ) -> PointShare<T, C>
-    where
-        T: EcMpcProtocol<C>,
-        T: MSMProvider<C>,
-    {
+        aux_assignment: &[T::ArithmeticShare],
+    ) -> T::PointShare<C> {
         tracing::debug!("calculate coeffs..");
         let pub_len = input_assignment.len();
         let pub_acc = C::msm_unchecked(&query[1..=pub_len], input_assignment);
-        let priv_acc = MSMProvider::<C>::msm_public_points(
-            &mut self.driver,
-            &query[1 + pub_len..],
-            aux_assignment,
-        );
+        let priv_acc = self
+            .driver
+            .msm_public_points(&query[1 + pub_len..], aux_assignment);
 
         let mut res = initial;
-        EcMpcProtocol::<C>::add_assign_points_public_affine(&mut self.driver, &mut res, &query[0]);
-        EcMpcProtocol::<C>::add_assign_points_public_affine(&mut self.driver, &mut res, &vk_param);
-        EcMpcProtocol::<C>::add_assign_points_public(&mut self.driver, &mut res, &pub_acc);
-        EcMpcProtocol::<C>::add_assign_points(&mut self.driver, &mut res, &priv_acc);
+        self.driver
+            .add_assign_points_public_affine(&mut res, &query[0]);
+        self.driver
+            .add_assign_points_public_affine(&mut res, &vk_param);
+        self.driver.add_assign_points_public(&mut res, &pub_acc);
+        self.driver.add_assign_points(&mut res, &priv_acc);
 
         tracing::debug!("done..");
         res
@@ -237,25 +210,21 @@ where
     fn create_proof_with_assignment(
         &mut self,
         zkey: &ZKey<P>,
-        r: FieldShare<T, P>,
-        s: FieldShare<T, P>,
-        h: &FieldShareVec<T, P>,
+        r: T::ArithmeticShare,
+        s: T::ArithmeticShare,
+        h: &[T::ArithmeticShare],
         input_assignment: &[P::ScalarField],
-        aux_assignment: &FieldShareVec<T, P>,
+        aux_assignment: &[T::ArithmeticShare],
     ) -> Result<Groth16Proof<P>> {
         tracing::debug!("create proof with assignment...");
         //let c_acc_time = start_timer!(|| "Compute C");
-        let h_acc = MSMProvider::<P::G1>::msm_public_points(&mut self.driver, &zkey.h_query, h);
+        let h_acc = self.driver.msm_public_points(&zkey.h_query, h);
 
         // Compute C
-        let l_aux_acc = MSMProvider::<P::G1>::msm_public_points(
-            &mut self.driver,
-            &zkey.l_query,
-            aux_assignment,
-        );
+        let l_aux_acc = self.driver.msm_public_points(&zkey.l_query, aux_assignment);
 
         let delta_g1 = zkey.delta_g1.into_group();
-        let rs = self.driver.mul(&r, &s)?;
+        let rs = futures::executor::block_on(self.driver.mul(&r, &s))?;
         let r_s_delta_g1 = self.driver.scalar_mul_public_point(&delta_g1, &rs);
 
         //end_timer!(c_acc_time);
@@ -264,7 +233,7 @@ where
         // let a_acc_time = start_timer!(|| "Compute A");
         let r_g1 = self.driver.scalar_mul_public_point(&delta_g1, &r);
 
-        let g_a = self.calculate_coeff::<P::G1>(
+        let g_a = self.calculate_coeff(
             r_g1,
             &zkey.a_query,
             zkey.vk.alpha_g1,
@@ -273,7 +242,7 @@ where
         );
 
         // Open here since g_a is part of proof
-        let g_a_opened = EcMpcProtocol::<P::G1>::open_point(&mut self.driver, &g_a)?;
+        let g_a_opened = futures::executor::block_on(self.driver.open_point(&g_a))?;
         let s_g_a = self.driver.scalar_mul_public_point(&g_a_opened, &s);
         // end_timer!(a_acc_time);
 
@@ -281,14 +250,14 @@ where
         // In original implementation this is skipped if r==0, however r is shared in our case
         //  let b_g1_acc_time = start_timer!(|| "Compute B in G1");
         let s_g1 = self.driver.scalar_mul_public_point(&delta_g1, &s);
-        let g1_b = self.calculate_coeff::<P::G1>(
+        let g1_b = self.calculate_coeff(
             s_g1,
             &zkey.b_g1_query,
             zkey.beta_g1,
             input_assignment,
             aux_assignment,
         );
-        let r_g1_b = EcMpcProtocol::<P::G1>::scalar_mul(&mut self.driver, &g1_b, &r)?;
+        let r_g1_b = futures::executor::block_on(self.driver.scalar_mul(&g1_b, &r))?;
         //  end_timer!(b_g1_acc_time);
 
         // Compute B in G2
@@ -306,15 +275,14 @@ where
 
         //  let c_time = start_timer!(|| "Finish C");
         let mut g_c = s_g_a;
-        EcMpcProtocol::<P::G1>::add_assign_points(&mut self.driver, &mut g_c, &r_g1_b);
-        EcMpcProtocol::<P::G1>::sub_assign_points(&mut self.driver, &mut g_c, &r_s_delta_g1);
-        EcMpcProtocol::<P::G1>::add_assign_points(&mut self.driver, &mut g_c, &l_aux_acc);
-        EcMpcProtocol::<P::G1>::add_assign_points(&mut self.driver, &mut g_c, &h_acc);
+        self.driver.add_assign_points(&mut g_c, &r_g1_b);
+        self.driver.sub_assign_points(&mut g_c, &r_s_delta_g1);
+        self.driver.add_assign_points(&mut g_c, &l_aux_acc);
+        self.driver.add_assign_points(&mut g_c, &h_acc);
         //  end_timer!(c_time);
 
         tracing::debug!("almost done...");
-        let (g_c_opened, g2_b_opened) =
-            PairingEcMpcProtocol::<P>::open_two_points(&mut self.driver, &g_c, &g2_b)?;
+        let (g_c_opened, g2_b_opened) = self.driver.open_two_points(g_c, g2_b)?;
 
         Ok(Groth16Proof {
             pi_a: g_a_opened.into_affine(),
@@ -326,7 +294,7 @@ where
     }
 }
 
-impl<P: Pairing> Rep3CoGroth16<P>
+impl<P: Pairing> Rep3CoGroth16<P, Rep3MpcNet>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -335,7 +303,7 @@ where
     /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
         let mpc_net = Rep3MpcNet::new(config)?;
-        let driver = Rep3Protocol::<P::ScalarField, Rep3MpcNet>::new(mpc_net)?;
+        let driver = Rep3Groth16Driver::new(mpc_net)?;
         Ok(CoGroth16::new(driver))
     }
 }
@@ -344,7 +312,7 @@ impl<P: Pairing> Groth16<P>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge + SecretShared,
 {
     /// *Locally* create a `Groth16` proof. This is just the [`CoGroth16`] prover
     /// initialized with the [`PlainDriver`].
@@ -352,69 +320,12 @@ where
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
     pub fn plain_prove(
         zkey: &ZKey<P>,
-        private_witness: SharedWitness<PlainDriver<P::ScalarField>, P>,
+        private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> Result<Groth16Proof<P>> {
         let mut prover = Self {
-            driver: PlainDriver::default(),
+            driver: PlainGroth16Driver,
             phantom_data: PhantomData,
         };
         prover.prove(zkey, private_witness)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::fs::File;
-
-    use ark_bn254::Bn254;
-    use circom_types::R1CS;
-    use mpc_core::protocols::{
-        rep3::{network::Rep3MpcNet, Rep3Protocol},
-        shamir::{network::ShamirMpcNet, ShamirProtocol},
-    };
-    use rand::thread_rng;
-
-    use super::SharedWitness;
-    use circom_types::Witness;
-
-    #[ignore]
-    #[test]
-    fn test_rep3() {
-        let witness_file = File::open("../../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let r1cs_file =
-            File::open("../../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
-        let r1cs = R1CS::<ark_bn254::Bn254>::from_reader(r1cs_file).unwrap();
-        let mut rng = thread_rng();
-        let [s1, _, _] =
-            SharedWitness::<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>::share_rep3(
-                witness,
-                r1cs.num_inputs,
-                &mut rng,
-            );
-        println!("{}", serde_json::to_string(&s1).unwrap());
-    }
-
-    fn test_shamir_inner(num_parties: usize, threshold: usize) {
-        let witness_file = File::open("../../test_vectors/bn254/multiplier2/witness.wtns").unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let r1cs_file =
-            File::open("../../test_vectors/bn254/multiplier2/multiplier2.r1cs").unwrap();
-        let r1cs = R1CS::<ark_bn254::Bn254>::from_reader(r1cs_file).unwrap();
-        let mut rng = thread_rng();
-        let s1 = SharedWitness::<ShamirProtocol<ark_bn254::Fr, ShamirMpcNet>, Bn254>::share_shamir(
-            witness,
-            r1cs.num_inputs,
-            threshold,
-            num_parties,
-            &mut rng,
-        );
-        println!("{}", serde_json::to_string(&s1[0]).unwrap());
-    }
-
-    #[ignore]
-    #[test]
-    fn test_shamir() {
-        test_shamir_inner(3, 1);
     }
 }

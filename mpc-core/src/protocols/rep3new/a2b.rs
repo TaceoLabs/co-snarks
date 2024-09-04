@@ -5,9 +5,10 @@ use num_bigint::BigUint;
 
 use crate::protocols::rep3::id::PartyID;
 use crate::protocols::rep3::network::Rep3Network;
+use crate::traits::SecretShared;
 
-use super::arithmetic::IoContext;
 use super::binary;
+use super::network::IoContext;
 use super::Rep3BigUintShare;
 use super::Rep3PrimeFieldShare;
 

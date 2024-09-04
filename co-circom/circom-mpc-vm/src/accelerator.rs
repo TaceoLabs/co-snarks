@@ -1,26 +1,24 @@
 use std::collections::HashMap;
 
-use ark_ec::pairing::Pairing;
+use ark_ff::PrimeField;
 use eyre::bail;
-use mpc_core::traits::CircomWitnessExtensionProtocol;
 
 use crate::mpc::VmCircomWitnessExtension;
 
-type AcceleratorFunction<P, C> = Box<
+type AcceleratorFunction<F, C> = Box<
     dyn Fn(
             &mut C,
-            &[<C as VmCircomWitnessExtension<<P as Pairing>::ScalarField>>::VmType],
-        ) -> eyre::Result<
-            Vec<<C as VmCircomWitnessExtension<<P as Pairing>::ScalarField>>::VmType>,
-        > + Send,
+            &[<C as VmCircomWitnessExtension<F>>::VmType],
+        ) -> eyre::Result<Vec<<C as VmCircomWitnessExtension<F>>::VmType>>
+        + Send,
 >;
 
 #[derive(Default)]
-pub struct MpcAccelerator<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> {
-    registered_functions: HashMap<String, AcceleratorFunction<P, C>>,
+pub struct MpcAccelerator<F: PrimeField, C: VmCircomWitnessExtension<F>> {
+    registered_functions: HashMap<String, AcceleratorFunction<F, C>>,
 }
 
-impl<P: Pairing, C: VmCircomWitnessExtension<P::ScalarField>> MpcAccelerator<P, C> {
+impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
     pub fn empty_accelerator() -> Self {
         Self {
             registered_functions: HashMap::default(),

@@ -2,17 +2,11 @@
 //! This crate collects all functionality that is shared between the SNARKs supported by co-circom. At the moment
 //! this is [Groth16](https://eprint.iacr.org/2016/260.pdf) and [PLONK](https://eprint.iacr.org/2019/953.pdf).
 
-use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use circom_types::Witness;
-use mpc_core::protocols::rep3::network::Rep3Network;
-use mpc_core::protocols::rep3::Rep3Protocol;
-use mpc_core::protocols::rep3new::Rep3PrimeFieldShareVec;
-use mpc_core::protocols::shamir;
-use mpc_core::protocols::shamir::network::ShamirNetwork;
-use mpc_core::protocols::shamir::ShamirProtocol;
-use mpc_core::traits::PrimeFieldMpcProtocol;
-use mpc_core::{protocols::rep3, traits::FieldShareVecTrait};
+use mpc_core::protocols::rep3new::{self, Rep3PrimeFieldShare};
+use mpc_core::protocols::shamir::fieldshare::ShamirPrimeFieldShare;
+use mpc_core::traits::SecretShared;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -21,7 +15,7 @@ mod serde_compat;
 
 /// A shared witness in the circom ecosystem.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SharedWitness<F: PrimeField, W: FieldShareVecTrait> {
+pub struct SharedWitness<F: PrimeField, S: SecretShared> {
     #[serde(
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
@@ -34,12 +28,12 @@ pub struct SharedWitness<F: PrimeField, W: FieldShareVecTrait> {
         deserialize_with = "crate::serde_compat::ark_de"
     )]
     /// The secret-shared witness elements.
-    pub witness: W,
+    pub witness: Vec<S>,
 }
 
 /// A shared input for a collaborative circom witness extension.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SharedInput<F: PrimeField, W: FieldShareVecTrait> {
+pub struct SharedInput<F: PrimeField, S: SecretShared> {
     #[serde(
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
@@ -53,11 +47,11 @@ pub struct SharedInput<F: PrimeField, W: FieldShareVecTrait> {
     )]
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub shared_inputs: BTreeMap<String, W>,
+    pub shared_inputs: BTreeMap<String, Vec<S>>,
 }
 
 /// We manually implement Clone here since it was not derived correctly and it added bounds on T, P which are not needed
-impl<F: PrimeField, W: FieldShareVecTrait> Clone for SharedWitness<F, W> {
+impl<F: PrimeField, S: SecretShared> Clone for SharedWitness<F, S> {
     fn clone(&self) -> Self {
         Self {
             public_inputs: self.public_inputs.clone(),
@@ -67,7 +61,7 @@ impl<F: PrimeField, W: FieldShareVecTrait> Clone for SharedWitness<F, W> {
 }
 
 /// We manually implement Clone here since it was not derived correctly and it added bounds on T, P which are not needed
-impl<F: PrimeField, W: FieldShareVecTrait> Clone for SharedInput<F, W> {
+impl<F: PrimeField, S: SecretShared> Clone for SharedInput<F, S> {
     fn clone(&self) -> Self {
         Self {
             public_inputs: self.public_inputs.clone(),
@@ -76,7 +70,7 @@ impl<F: PrimeField, W: FieldShareVecTrait> Clone for SharedInput<F, W> {
     }
 }
 
-impl<F: PrimeField, W: FieldShareVecTrait> Default for SharedInput<F, W> {
+impl<F: PrimeField, S: SecretShared> Default for SharedInput<F, S> {
     fn default() -> Self {
         Self {
             public_inputs: BTreeMap::new(),
@@ -85,14 +79,14 @@ impl<F: PrimeField, W: FieldShareVecTrait> Default for SharedInput<F, W> {
     }
 }
 
-impl<F: PrimeField, W: FieldShareVecTrait> SharedInput<F, W> {
+impl<F: PrimeField, S: SecretShared> SharedInput<F, S> {
     /// Adds a public input with a given name to the [SharedInput].
     pub fn add_public_input(&mut self, key: String, elements: Vec<F>) {
         self.public_inputs.insert(key, elements);
     }
 
     /// Adds a shared input with a given name to the [SharedInput].
-    pub fn add_shared_input(&mut self, key: String, elements: W) {
+    pub fn add_shared_input(&mut self, key: String, elements: Vec<S>) {
         self.shared_inputs.insert(key, elements);
     }
 
@@ -127,52 +121,52 @@ impl<F: PrimeField, W: FieldShareVecTrait> SharedInput<F, W> {
     }
 }
 
-impl<F: PrimeField> SharedWitness<F, Rep3PrimeFieldShareVec<F>> {
+impl<F: PrimeField> SharedWitness<F, Rep3PrimeFieldShare<F>> {
     /// Shares a given witness and public input vector using the Rep3 protocol.
     pub fn share_rep3<R: Rng + CryptoRng>(
         witness: Witness<F>,
         num_pub_inputs: usize,
         rng: &mut R,
     ) -> [Self; 3] {
-        todo!()
-        //    let public_inputs = &witness.values[..num_pub_inputs];
-        //    let witness = &witness.values[num_pub_inputs..];
-        //    let [share1, share2, share3] = rep3::utils::share_field_elements(witness, rng);
-        //    let witness1 = Self {
-        //        public_inputs: public_inputs.to_vec(),
-        //        witness: share1,
-        //    };
-        //    let witness2 = Self {
-        //        public_inputs: public_inputs.to_vec(),
-        //        witness: share2,
-        //    };
-        //    let witness3 = Self {
-        //        public_inputs: public_inputs.to_vec(),
-        //        witness: share3,
-        //    };
-        //    [witness1, witness2, witness3]
+        let public_inputs = &witness.values[..num_pub_inputs];
+        let witness = &witness.values[num_pub_inputs..];
+        let [share1, share2, share3] = rep3new::share_field_elements(witness, rng);
+        let witness1 = Self {
+            public_inputs: public_inputs.to_vec(),
+            witness: share1,
+        };
+        let witness2 = Self {
+            public_inputs: public_inputs.to_vec(),
+            witness: share2,
+        };
+        let witness3 = Self {
+            public_inputs: public_inputs.to_vec(),
+            witness: share3,
+        };
+        [witness1, witness2, witness3]
     }
 }
 
-impl<N: ShamirNetwork, P: Pairing> SharedWitness<ShamirProtocol<P::ScalarField, N>, P> {
+impl<F: PrimeField> SharedWitness<F, ShamirPrimeFieldShare<F>> {
     /// Shares a given witness and public input vector using the Shamir protocol.
     pub fn share_shamir<R: Rng + CryptoRng>(
-        witness: Witness<P::ScalarField>,
-        num_pub_inputs: usize,
-        degree: usize,
-        num_parties: usize,
-        rng: &mut R,
+        _witness: Witness<F>,
+        _num_pub_inputs: usize,
+        _degree: usize,
+        _num_parties: usize,
+        _rng: &mut R,
     ) -> Vec<Self> {
-        let public_inputs = &witness.values[..num_pub_inputs];
-        let witness = &witness.values[num_pub_inputs..];
-        let shares = shamir::utils::share_field_elements(witness, degree, num_parties, rng);
-        shares
-            .into_iter()
-            .map(|share| Self {
-                public_inputs: public_inputs.to_vec(),
-                witness: share,
-            })
-            .collect()
+        todo!()
+        //let public_inputs = &witness.values[..num_pub_inputs];
+        //let witness = &witness.values[num_pub_inputs..];
+        //let shares = shamir::utils::share_field_elements(witness, degree, num_parties, rng);
+        //shares
+        //    .into_iter()
+        //    .map(|share| Self {
+        //        public_inputs: public_inputs.to_vec(),
+        //        witness: share,
+        //    })
+        //    .collect()
     }
 }
 

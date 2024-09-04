@@ -28,6 +28,7 @@ ark-relations = { workspace = true }
 circom-types = { workspace = true }
 co-circom-snarks = { workspace = true }
 eyre = { workspace = true }
+futures = { workspace = true }
 itertools = { workspace = true }
 mpc-core = { workspace = true }
 mpc-net = { workspace = true }

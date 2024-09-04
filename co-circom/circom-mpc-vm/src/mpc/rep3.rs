@@ -1,9 +1,7 @@
 use ark_ff::PrimeField;
 use mpc_core::protocols::{
     rep3::network::Rep3Network,
-    rep3new::{
-        arithmetic::IoContext, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3PrimeFieldShareVec,
-    },
+    rep3new::{network::IoContext, Rep3BigUintShare, Rep3PrimeFieldShare},
 };
 
 use super::VmCircomWitnessExtension;
@@ -12,7 +10,7 @@ type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 type BinaryShare = Rep3BigUintShare;
 
 #[derive(Clone)]
-pub(crate) enum Rep3VmType<F: PrimeField> {
+pub enum Rep3VmType<F: PrimeField> {
     Public(F),
     Arithmetic(ArithmeticShare<F>),
     Binary(BinaryShare),
@@ -38,6 +36,14 @@ impl<F: PrimeField> Default for Rep3VmType<F> {
 
 pub struct Rep3Driver<N: Rep3Network> {
     io_context: IoContext<N>,
+}
+
+impl<N: Rep3Network> Rep3Driver<N> {
+    pub fn new(network: N) -> std::io::Result<Self> {
+        Ok(Self {
+            io_context: IoContext::init(network)?,
+        })
+    }
 }
 
 impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F> for Rep3Driver<N> {

@@ -1,8 +1,11 @@
 use num_bigint::BigUint;
 
-use crate::protocols::rep3::{id::PartyID, network::Rep3Network};
+use crate::{
+    protocols::rep3::{id::PartyID, network::Rep3Network},
+    traits::SecretShared,
+};
 
-use super::arithmetic::IoContext;
+use super::network::IoContext;
 
 mod ops;
 pub(super) mod types;

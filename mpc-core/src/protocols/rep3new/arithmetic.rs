@@ -1,22 +1,18 @@
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
-use types::{Rep3PrimeFieldShare, Rep3PrimeFieldShareVec};
+use types::Rep3PrimeFieldShare;
 
-use crate::protocols::rep3::{id::PartyID, network::Rep3Network, rngs::Rep3CorrelatedRng};
+use crate::{
+    protocols::rep3::{id::PartyID, network::Rep3Network},
+    traits::SecretShared,
+};
+
+use super::{network::IoContext, IoResult};
 
 type FieldShare<F> = Rep3PrimeFieldShare<F>;
-type FieldShareVec<F> = Rep3PrimeFieldShareVec<F>;
-type IoResult<F> = std::io::Result<F>;
 
 mod ops;
 pub(super) mod types;
-
-// this will be moved later
-pub struct IoContext<N: Rep3Network> {
-    pub(crate) id: PartyID,
-    pub(crate) rngs: Rep3CorrelatedRng,
-    pub(crate) network: N,
-}
 
 pub fn add<F: PrimeField>(a: &FieldShare<F>, b: &FieldShare<F>) -> FieldShare<F> {
     a + b
@@ -54,14 +50,17 @@ pub fn mul_with_public<F: PrimeField>(shared: &FieldShare<F>, public: F) -> Fiel
 }
 
 pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
-    a: &FieldShareVec<F>,
-    b: &FieldShareVec<F>,
+    lhs: &Vec<FieldShare<F>>,
+    rhs: &Vec<FieldShare<F>>,
     io_context: &mut IoContext<N>,
-) -> IoResult<FieldShareVec<F>> {
-    //debug_assert_eq!(a.len(), b.len());
-    let local_a = izip!(a.a.iter(), a.b.iter(), b.a.iter(), b.b.iter())
-        .map(|(aa, ab, ba, bb)| {
-            *aa * ba + *aa * bb + *ab * ba + io_context.rngs.rand.masking_field_element::<F>()
+) -> IoResult<Vec<FieldShare<F>>> {
+    debug_assert_eq!(lhs.len(), rhs.len());
+    let local_a = izip!(lhs.iter(), rhs.iter())
+        .map(|(lhs, rhs)| {
+            lhs.a * rhs.a
+                + lhs.a * rhs.b
+                + lhs.b * rhs.a
+                + io_context.rngs.rand.masking_field_element::<F>()
         })
         .collect_vec();
     io_context.network.send_next_many(&local_a)?;
@@ -72,7 +71,9 @@ pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
             "During execution of mul_vec in MPC: Invalid number of elements received",
         ));
     }
-    Ok(FieldShareVec::new(local_a, local_b))
+    Ok(izip!(local_a, local_b)
+        .map(|(a, b)| FieldShare::new(a, b))
+        .collect())
 }
 
 /// Negates a shared value: \[b\] = -\[a\].
@@ -158,8 +159,6 @@ pub async fn mul_open<F: PrimeField, N: Rep3Network>(
         .send(io_context.network.get_id().prev_id(), a.to_owned())?;
 
     let b = io_context.network.recv_prev::<F>()?;
-    let c = io_context
-        .network
-        .recv::<F>(io_context.network.get_id().next_id())?;
+    let c = io_context.network.recv::<F>(io_context.id.next_id())?;
     Ok(a + b + c)
 }

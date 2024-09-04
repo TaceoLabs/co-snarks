@@ -1,20 +1,58 @@
 mod a2b;
 pub mod arithmetic;
 pub mod binary;
+pub mod network;
+pub mod point;
 
 pub use arithmetic::types::Rep3PrimeFieldShare;
-pub use arithmetic::types::Rep3PrimeFieldShareVec;
 
+use ark_ff::PrimeField;
 pub use binary::types::Rep3BigUintShare;
+use rand::{CryptoRng, Rng};
+
+pub(crate) type IoResult<T> = std::io::Result<T>;
+
+/// Secret shares a field element using replicated secret sharing and the provided random number generator. The field element is split into three additive shares, where each party holds two. The outputs are of type [Rep3PrimeFieldShare].
+pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
+    val: F,
+    rng: &mut R,
+) -> [Rep3PrimeFieldShare<F>; 3] {
+    let a = F::rand(rng);
+    let b = F::rand(rng);
+    let c = val - a - b;
+    let share1 = Rep3PrimeFieldShare::new(a, c);
+    let share2 = Rep3PrimeFieldShare::new(b, a);
+    let share3 = Rep3PrimeFieldShare::new(c, b);
+    [share1, share2, share3]
+}
+
+/// Secret shares a vector of field element using replicated secret sharing and the provided random number generator. The field elements are split into three additive shares each, where each party holds two. The outputs are of type [Rep3PrimeFieldShareVec].
+pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
+    vals: &[F],
+    rng: &mut R,
+) -> [Vec<Rep3PrimeFieldShare<F>>; 3] {
+    let mut shares1 = Vec::with_capacity(vals.len());
+    let mut shares2 = Vec::with_capacity(vals.len());
+    let mut shares3 = Vec::with_capacity(vals.len());
+    for val in vals {
+        let [share1, share2, share3] = share_field_element(*val, rng);
+        shares1.push(share1);
+        shares2.push(share2);
+        shares3.push(share3);
+    }
+    [shares1, shares2, shares3]
+}
 
 pub mod conversion {
     use ark_ff::PrimeField;
     use num_bigint::BigUint;
 
-    use crate::protocols::rep3::{id::PartyID, network::Rep3Network};
+    use crate::{
+        protocols::rep3::{id::PartyID, network::Rep3Network},
+        traits::SecretShared,
+    };
 
-    type IoResult<T> = std::io::Result<T>;
-    use super::{a2b, arithmetic::IoContext, Rep3BigUintShare, Rep3PrimeFieldShare};
+    use super::{a2b, network::IoContext, IoResult, Rep3BigUintShare, Rep3PrimeFieldShare};
 
     //re-export a2b
     pub use super::a2b::a2b;

@@ -9,6 +9,10 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use core::fmt;
 use eyre::Result;
 
+pub trait SecretShared: CanonicalSerialize + CanonicalDeserialize + Clone {
+    fn zero_share() -> Self;
+}
+
 /// A trait representing the basic operations for handling vectors of shares
 pub trait FieldShareVecTrait:
     From<Vec<Self::FieldShare>>
