@@ -3,7 +3,7 @@ use eyre::bail;
 use mpc_core::protocols::{
     rep3::network::Rep3Network,
     rep3new::{
-        arithmetic::{self, add, add_public, mul, mul_with_public, sub, sub_public},
+        arithmetic::{self, add, add_public, mul, mul_public, sub, sub_public},
         binary::{and, and_with_public, xor, xor_public},
         conversion::{a2b, b2a},
         network::IoContext,
@@ -38,6 +38,15 @@ impl<F: PrimeField> From<ArithmeticShare<F>> for Rep3VmType<F> {
 impl<F: PrimeField> From<BinaryShare<F>> for Rep3VmType<F> {
     fn from(value: BinaryShare<F>) -> Self {
         Self::Binary(value)
+    }
+}
+
+impl<F: PrimeField> From<arithmetic::FieldShareOrPublic<F>> for Rep3VmType<F> {
+    fn from(value: arithmetic::FieldShareOrPublic<F>) -> Self {
+        match value {
+            arithmetic::FieldShareOrPublic::Share(share) => share.into(),
+            arithmetic::FieldShareOrPublic::Public(public) => public.into(),
+        }
     }
 }
 
@@ -145,7 +154,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                Ok(arithmetic::mul_with_public(&a, b).into())
+                Ok(arithmetic::mul_public(&a, b).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 Ok(arithmetic::mul(&a, &b, &mut self.io_context).await?.into())
@@ -153,7 +162,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
                 let a = conversion::b2a(a, &mut self.io_context).await?;
-                Ok(arithmetic::mul_with_public(&a, b).into())
+                Ok(arithmetic::mul_public(&a, b).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
@@ -175,13 +184,13 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
                 let b = arithmetic::inv(&b, &mut self.io_context).await?;
-                Ok(arithmetic::mul_with_public(&b, a).into())
+                Ok(arithmetic::mul_public(&b, a).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 if b.is_zero() {
                     bail!("Cannot invert zero");
                 }
-                Ok(arithmetic::mul_with_public(&a, b.inverse().unwrap()).into())
+                Ok(arithmetic::mul_public(&a, b.inverse().unwrap()).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let b = arithmetic::inv(&b, &mut self.io_context).await?;
@@ -190,14 +199,14 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
                 let b = conversion::b2a(b, &mut self.io_context).await?;
                 let b = arithmetic::inv(&b, &mut self.io_context).await?;
-                Ok(arithmetic::mul_with_public(&b, a).into())
+                Ok(arithmetic::mul_public(&b, a).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
                 let a = conversion::b2a(a, &mut self.io_context).await?;
                 if b.is_zero() {
                     bail!("Cannot invert zero");
                 }
-                Ok(arithmetic::mul_with_public(&a, b.inverse().unwrap()).into())
+                Ok(arithmetic::mul_public(&a, b.inverse().unwrap()).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
                 let b = conversion::b2a(b, &mut self.io_context).await?;
@@ -219,11 +228,28 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     }
 
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
+                Ok(self.plain.int_div(a, b)?.into())
+            }
+            _ => todo!("Shared int_div not implemented"),
+        }
     }
 
-    fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+    async fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
+                Ok(self.plain.pow(a, b).await?.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                self.pow(a.into(), b.into()).await
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                Ok(arithmetic::pow_public(&a, b, &mut self.io_context)?.into())
+            }
+            _ => todo!("pow with shared exponent not implemented"),
+        }
     }
 
     fn modulo(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
@@ -384,7 +410,11 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     }
 
     fn is_shared(&mut self, a: &Self::VmType) -> eyre::Result<bool> {
-        todo!()
+        match a {
+            Rep3VmType::Public(_) => Ok(false),
+            Rep3VmType::Arithmetic(_) => Ok(true),
+            Rep3VmType::Binary(_) => Ok(true),
+        }
     }
 
     fn to_index(&mut self, a: Self::VmType) -> eyre::Result<usize> {
