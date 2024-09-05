@@ -44,8 +44,8 @@ pub async fn a2b<F: PrimeField, N: Rep3Network>(
     }
 
     // Reshare x01
-    io_context.network.send_next(x01.a.to_owned())?;
-    let local_b = io_context.network.recv_prev()?;
+    io_context.network.send_next(x01.a.to_owned()).await?;
+    let local_b = io_context.network.recv_prev().await?;
     x01.b = local_b;
 
     low_depth_binary_add_mod_p::<F, N>(x01, x2, io_context, bitlen).await
@@ -69,7 +69,7 @@ async fn low_depth_binary_add<F: PrimeField, N: Rep3Network>(
 ) -> IoResult<Rep3BigUintShare<F>> {
     // Add x1 + x2 via a packed Kogge-Stone adder
     let p = &x1 ^ &x2;
-    let g = binary::and(&x1, &x2, io_context, bitlen).await?;
+    let g = binary::and(&x1, &x2, io_context).await?;
     kogge_stone_inner(p, g, io_context, bitlen).await
 }
 
@@ -131,7 +131,7 @@ async fn low_depth_sub_p_cmux<F: PrimeField, N: Rep3Network>(
     let ov = Rep3BigUintShare::<F>::new(ov_a, ov_b);
 
     // one big multiplexer
-    let res = binary::cmux(&ov, &y, &x, io_context, bitlen).await?;
+    let res = binary::cmux(&ov, &y, &x, io_context).await?;
     Ok(res)
 }
 
@@ -150,7 +150,7 @@ async fn low_depth_binary_sub<F: PrimeField, N: Rep3Network>(
     let x2 = binary::xor_public(&x2, &mask, io_context.id);
     // Now start the Kogge-Stone adder
     let p = &x1 ^ &x2;
-    let mut g = binary::and(&x1, &x2, io_context, bitlen).await?;
+    let mut g = binary::and(&x1, &x2, io_context).await?;
     // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
     g ^= &(&p & &BigUint::one());
 
@@ -187,10 +187,10 @@ async fn and_twice<F: PrimeField, N: Rep3Network>(
 
     let local_a1 = (&b1 & &a) ^ mask1;
     let local_a2 = (&a & &b2) ^ mask2;
-    io_context.network.send_next(local_a1.to_owned())?;
-    io_context.network.send_next(local_a2.to_owned())?;
-    let local_b1 = io_context.network.recv_prev()?;
-    let local_b2 = io_context.network.recv_prev()?;
+    io_context.network.send_next(local_a1.to_owned()).await?;
+    io_context.network.send_next(local_a2.to_owned()).await?;
+    let local_b1 = io_context.network.recv_prev().await?;
+    let local_b2 = io_context.network.recv_prev().await?;
 
     let r1 = Rep3BigUintShare {
         a: local_a1,

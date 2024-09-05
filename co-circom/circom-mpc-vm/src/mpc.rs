@@ -84,7 +84,7 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Computes the bitwise OR of the VM-types a and b: c = a | b.
-    fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    async fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Computes the bitwise AND of the VM-types a and b: c = a & b.
     fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;

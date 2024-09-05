@@ -11,10 +11,12 @@ pub(super) mod types;
 type BinaryShare<F> = types::Rep3BigUintShare<F>;
 type IoResult<T> = std::io::Result<T>;
 
+/// Performs a bitwise XOR operation on two shared values.
 pub fn xor<F: PrimeField>(a: &BinaryShare<F>, b: &BinaryShare<F>) -> BinaryShare<F> {
     a ^ b
 }
 
+/// Performs a bitwise XOR operation on a shared value and a public value.
 pub fn xor_public<F: PrimeField>(
     shared: &BinaryShare<F>,
     public: &BigUint,
@@ -29,15 +31,39 @@ pub fn xor_public<F: PrimeField>(
     res
 }
 
+/// Performs a bitwise OR operation on two shared values.
+pub async fn or<F: PrimeField, N: Rep3Network>(
+    a: &BinaryShare<F>,
+    b: &BinaryShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    let xor = a ^ b;
+    let and = and(a, b, io_context).await?;
+    Ok(&xor ^ &and)
+}
+
+/// Performs a bitwise OR operation on a shared value and a public value.
+pub fn or_public<F: PrimeField>(
+    shared: &BinaryShare<F>,
+    public: &BigUint,
+    id: PartyID,
+) -> BinaryShare<F> {
+    let xor = xor_public(shared, public, id);
+    let tmp = shared & public;
+    &xor ^ &tmp
+}
+
 pub async fn and<F: PrimeField, N: Rep3Network>(
     a: &BinaryShare<F>,
     b: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
-    bitlen: usize,
 ) -> IoResult<BinaryShare<F>> {
-    debug_assert!(a.a.bits() <= u64::try_from(bitlen).expect("usize fits into u64"));
-    debug_assert!(b.a.bits() <= u64::try_from(bitlen).expect("usize fits into u64"));
-    let (mut mask, mask_b) = io_context.rngs.rand.random_biguint(bitlen);
+    debug_assert!(a.a.bits() <= u64::from(F::MODULUS_BIT_SIZE));
+    debug_assert!(b.a.bits() <= u64::from(F::MODULUS_BIT_SIZE));
+    let (mut mask, mask_b) = io_context
+        .rngs
+        .rand
+        .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
     mask ^= mask_b;
     let local_a = (a & b) ^ mask;
     io_context.network.send_next(local_a.to_owned())?;
@@ -97,10 +123,9 @@ pub async fn cmux<F: PrimeField, N: Rep3Network>(
     x_t: &BinaryShare<F>,
     x_f: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
-    bitlen: usize,
 ) -> IoResult<BinaryShare<F>> {
     let xor = x_f ^ x_t;
-    let mut and = and(c, &xor, io_context, bitlen).await?;
+    let mut and = and(c, &xor, io_context).await?;
     and ^= x_f;
     Ok(and)
 }

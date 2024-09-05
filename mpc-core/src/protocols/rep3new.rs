@@ -96,24 +96,24 @@ pub mod conversion {
         }
 
         // Reshare y
-        io_context.network.send_next(y.a.to_owned())?;
-        let local_b = io_context.network.recv_prev()?;
+        io_context.network.send_next(y.a.to_owned()).await?;
+        let local_b = io_context.network.recv_prev().await?;
         y.b = local_b;
 
         let z = a2b::low_depth_binary_add_mod_p::<F, N>(x, y, io_context, bitlen).await?;
 
         match io_context.id {
             PartyID::ID0 => {
-                io_context.network.send_next(z.b.to_owned())?;
-                let rcv: BigUint = io_context.network.recv_prev()?;
+                io_context.network.send_next(z.b.to_owned()).await?;
+                let rcv: BigUint = io_context.network.recv_prev().await?;
                 res.a = (z.a ^ z.b ^ rcv).into();
             }
             PartyID::ID1 => {
-                let rcv: BigUint = io_context.network.recv_prev()?;
+                let rcv: BigUint = io_context.network.recv_prev().await?;
                 res.b = (z.a ^ z.b ^ rcv).into();
             }
             PartyID::ID2 => {
-                io_context.network.send_next(z.b)?;
+                io_context.network.send_next(z.b).await?;
             }
         }
         Ok(res)

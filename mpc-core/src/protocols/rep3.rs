@@ -385,7 +385,7 @@ impl<F, N: Rep3Network> Rep3Protocol<F, N> {
 }
 
 impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
-    /// This algorithm produces asqrt of a shared value. Thereby, no guarantee is given on whether the result is the positive or negative square root (when interpreted as signed field element). This function requires network interaction.
+    /// This algorithm produces a sqrt of a shared value. Thereby, no guarantee is given on whether the result is the positive or negative square root (when interpreted as signed field element). This function requires network interaction.
     pub fn sqrt(&mut self, a: &Rep3PrimeFieldShare<F>) -> IoResult<Rep3PrimeFieldShare<F>> {
         let r_squ = self.rand()?;
         let r_inv = self.rand()?;
