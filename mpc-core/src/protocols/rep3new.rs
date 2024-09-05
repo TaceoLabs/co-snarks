@@ -3,13 +3,14 @@ pub mod arithmetic;
 pub mod binary;
 pub mod id;
 pub mod network;
-pub mod point;
+mod pointshare;
 pub mod rngs;
 
 pub use arithmetic::types::Rep3PrimeFieldShare;
+pub use binary::types::Rep3BigUintShare;
+pub use pointshare::Rep3PointShare;
 
 use ark_ff::PrimeField;
-pub use binary::types::Rep3BigUintShare;
 use rand::{CryptoRng, Rng};
 
 pub(crate) type IoResult<T> = std::io::Result<T>;

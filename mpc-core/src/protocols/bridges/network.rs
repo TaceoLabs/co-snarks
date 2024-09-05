@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use crate::protocols::{
     rep3new::network::{Rep3MpcNet, Rep3Network},
-    shamir::network::{ShamirMpcNet, ShamirNetwork},
+    shamirnew::network::{ShamirMpcNet, ShamirNetwork},
 };
 
 /// This trait represents the possibility to transform a network implementation of the [Rep3Network] trait (used for 3-party replicated secret sharing) into a 3-party network implementation of the [ShamirNetwork] trait (used for 3-party Shamir secret sharing).

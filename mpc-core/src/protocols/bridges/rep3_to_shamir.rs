@@ -1,13 +1,8 @@
 use super::network::RepToShamirNetwork;
 use crate::protocols::{
-    rep3new::{
-        fieldshare::Rep3PrimeFieldShareVec, network::Rep3Network, pointshare::Rep3PointShare,
-        Rep3PrimeFieldShare, Rep3Protocol,
-    },
-    shamir::{
-        fieldshare::{ShamirPrimeFieldShare, ShamirPrimeFieldShareVec},
-        network::ShamirNetwork,
-        pointshare::ShamirPointShare,
+    rep3new::{network::Rep3Network, Rep3PointShare, Rep3PrimeFieldShare},
+    shamirnew::{
+        fieldshare::ShamirPrimeFieldShare, network::ShamirNetwork, pointshare::ShamirPointShare,
         ShamirProtocol,
     },
 };
