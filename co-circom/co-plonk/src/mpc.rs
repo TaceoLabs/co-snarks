@@ -1,15 +1,15 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_poly::EvaluationDomain;
-use mpc_core::traits::SecretShared;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-mod plain;
-mod rep3;
-mod shamir;
+pub(crate) mod plain;
+pub(crate) mod rep3;
+pub(crate) mod shamir;
 
 type IoResult<T> = std::io::Result<T>;
 
 pub trait CircomPlonkProver<P: Pairing> {
-    type ArithmeticShare: SecretShared;
+    type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
     type PointShare<C: CurveGroup>;
 
     fn rand(&self) -> Self::ArithmeticShare;
@@ -34,6 +34,9 @@ pub trait CircomPlonkProver<P: Pairing> {
         a: &Self::ArithmeticShare,
         b: &Self::ArithmeticShare,
     ) -> Self::ArithmeticShare;
+
+    /// Negates a vector of shared values: \[b\] = -\[a\] for every element in place.
+    fn neg_vec_in_place(&mut self, a: &mut [Self::ArithmeticShare]);
 
     /// Multiply a share b by a public value a: c = a * \[b\].
     fn mul_with_public(
@@ -74,6 +77,9 @@ pub trait CircomPlonkProver<P: Pairing> {
         b: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<P::ScalarField>>;
 
+    /// Reconstructs many shared values: a = Open(\[a\]).
+    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>>;
+
     /// Computes the inverse of many shared values: \[b\] = \[a\] ^ -1. Requires network communication.
     async fn inv_many(
         &mut self,
@@ -106,4 +112,10 @@ pub trait CircomPlonkProver<P: Pairing> {
         points: &[C::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare<C>;
+
+    fn evaluate_poly_public(
+        &mut self,
+        poly: &[Self::ArithmeticShare],
+        point: P::ScalarField,
+    ) -> Self::ArithmeticShare;
 }

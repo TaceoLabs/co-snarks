@@ -1,10 +1,7 @@
 use ark_ff::PrimeField;
 use num_bigint::BigUint;
 
-use crate::{
-    protocols::rep3::{id::PartyID, network::Rep3Network},
-    traits::SecretShared,
-};
+use crate::protocols::rep3::{id::PartyID, network::Rep3Network};
 
 use super::network::IoContext;
 

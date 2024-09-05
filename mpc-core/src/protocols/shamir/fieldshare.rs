@@ -7,8 +7,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;
 use std::mem::ManuallyDrop;
 
-use crate::traits::SecretShared;
-
 /// This type represents a Shamir-shared value. Since a Shamir-share of a field element is a field element, this is a wrapper over a field element.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 #[repr(transparent)]
@@ -25,6 +23,10 @@ impl<F: PrimeField> ShamirPrimeFieldShare<F> {
     /// Unwraps a ShamirPrimeFieldShare into a field element
     pub fn inner(self) -> F {
         self.a
+    }
+
+    pub fn zero_share() -> Self {
+        todo!()
     }
 }
 
@@ -303,12 +305,5 @@ mod unsafe_test {
 
     test_impl! {
         [ark_bn254::Fr, bn254_test]
-    }
-}
-
-/// TODO REMOVE ME
-impl<F: PrimeField> SecretShared for ShamirPrimeFieldShare<F> {
-    fn zero_share() -> Self {
-        todo!()
     }
 }

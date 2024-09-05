@@ -4,14 +4,13 @@
 //! You will most likely need the plain PLONK implementation to verify a proof from co-PLONK. For that
 //! see the [`Plonk::verify`] method.
 
-use crate::{plonk_utils, types::Domains, CoPlonk};
+use crate::{mpc::plain::PlainPlonkDriver, plonk_utils, types::Domains, CoPlonk};
 use ark_ec::{pairing::Pairing, Group};
 use ark_ff::Field;
 use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
-use mpc_core::protocols::plain::PlainDriver;
 use num_traits::One;
 use num_traits::Zero;
 
@@ -27,7 +26,7 @@ use crate::types::Keccak256Transcript;
 ///
 /// More interesting is the [`Plonk::verify`] method. You can verify any circom PLONK proof, be it
 /// from snarkjs or one created by this project.
-pub type Plonk<P> = CoPlonk<PlainDriver<<P as Pairing>::ScalarField>, P>;
+pub type Plonk<P> = CoPlonk<P, PlainPlonkDriver>;
 
 pub(crate) struct VerifierChallenges<P: Pairing> {
     pub(super) alpha: P::ScalarField,

@@ -1,9 +1,10 @@
 use crate::{
+    mpc::CircomPlonkProver,
     plonk_utils,
     round3::FinalPolys,
     round4::{Round4Challenges, Round4Proof},
     types::{Domains, Keccak256Transcript, PlonkData},
-    FieldShare, FieldShareVec, PlonkProofResult,
+    PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
@@ -12,27 +13,17 @@ use circom_types::{
     plonk::PlonkProof,
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
-use mpc_core::traits::{
-    FFTProvider, FieldShareVecTrait, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol,
-};
 use num_traits::One;
 use num_traits::Zero;
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-pub(super) struct Round5<'a, T, P: Pairing>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>
-        + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>
-        + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
-{
+pub(super) struct Round5<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) driver: T,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round4Challenges<P>,
     pub(super) proof: Round4Proof<P>,
-    pub(super) polys: FinalPolys<T, P>,
-    pub(super) data: PlonkData<'a, T, P>,
+    pub(super) polys: FinalPolys<P, T>,
+    pub(super) data: PlonkData<'a, P, T>,
 }
 pub(super) struct Round5Challenges<P: Pairing> {
     beta: P::ScalarField,
@@ -83,20 +74,15 @@ where
 }
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-impl<'a, T, P: Pairing> Round5<'a, T, P>
+impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round5<'a, P, T>
 where
-    T: PrimeFieldMpcProtocol<P::ScalarField>
-        + PairingEcMpcProtocol<P>
-        + FFTProvider<P::ScalarField>
-        + MSMProvider<P::G1>
-        + MSMProvider<P::G2>,
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn div_by_zerofier(
         driver: &mut T,
-        inout: &mut Vec<FieldShare<T, P>>,
+        inout: &mut Vec<T::ArithmeticShare>,
         n: usize,
         beta: P::ScalarField,
     ) {
@@ -111,7 +97,7 @@ where
             inout[i] = driver.mul_with_public(&inv_beta, &element);
         }
         // We cannot check whether the polyonmial is divisible by the zerofier, but we resize accordingly
-        inout.resize(inout.len() - n, FieldShare::<T, P>::default());
+        inout.resize(inout.len() - n, T::ArithmeticShare::default());
     }
 
     fn add_poly(inout: &mut Vec<P::ScalarField>, add_poly: &[P::ScalarField]) {
@@ -144,9 +130,9 @@ where
         domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
-        data: &PlonkData<T, P>,
-        polys: &FinalPolys<T, P>,
-    ) -> FieldShareVec<T, P> {
+        data: &PlonkData<P, T>,
+        polys: &FinalPolys<P, T>,
+    ) -> Vec<T::ArithmeticShare> {
         tracing::debug!("computing r polynomial...");
         let zkey = &data.zkey;
         let public_inputs = &data.witness.public_inputs;
@@ -191,7 +177,7 @@ where
 
         let len = zkey.domain_size + 6;
 
-        let mut poly_r_shared = vec![FieldShare::<T, P>::default(); len];
+        let mut poly_r_shared = vec![T::ArithmeticShare::default(); len];
 
         for (inout, add) in poly_r_shared
             .iter_mut()
@@ -204,7 +190,7 @@ where
             *inout = driver.add_with_public(add, inout);
         }
 
-        let mut tmp_poly = vec![FieldShare::<T, P>::default(); len];
+        let mut tmp_poly = vec![T::ArithmeticShare::default(); len];
         let xin2 = xin.square();
         for (inout, add) in tmp_poly.iter_mut().zip(polys.t3.clone().into_iter()) {
             *inout = driver.mul_with_public(&xin2, &add);
@@ -236,18 +222,18 @@ where
         driver: &mut T,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
-        data: &PlonkData<T, P>,
-        polys: &FinalPolys<T, P>,
-        poly_r: &FieldShareVec<T, P>,
-    ) -> FieldShareVec<T, P> {
+        data: &PlonkData<P, T>,
+        polys: &FinalPolys<P, T>,
+        poly_r: &[T::ArithmeticShare],
+    ) -> Vec<T::ArithmeticShare> {
         tracing::debug!("computing wxi polynomial...");
         let s1_poly_coeffs = &data.zkey.s1_poly.coeffs;
         let s2_poly_coeffs = &data.zkey.s2_poly.coeffs;
-        let mut res = vec![FieldShare::<T, P>::default(); data.zkey.domain_size + 6];
+        let mut res = vec![T::ArithmeticShare::default(); data.zkey.domain_size + 6];
 
         // R
         for (inout, add) in res.iter_mut().zip(poly_r.clone().into_iter()) {
-            *inout = add;
+            *inout = add.clone();
         }
         // A
         for (inout, add) in res.iter_mut().zip(polys.a.poly.clone().into_iter()) {
@@ -291,8 +277,8 @@ where
         domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
-        polys: &FinalPolys<T, P>,
-    ) -> FieldShareVec<T, P> {
+        polys: &FinalPolys<P, T>,
+    ) -> Vec<T::ArithmeticShare> {
         tracing::debug!("computing wxiw polynomial...");
         let xiw = challenges.xi * domains.root_of_unity_pow;
 
@@ -347,10 +333,8 @@ where
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         let p_tau = &data.zkey.p_tau;
-        let commit_wxi =
-            MSMProvider::<P::G1>::msm_public_points(&mut driver, &p_tau[..wxi.get_len()], &wxi);
-        let commit_wxiw =
-            MSMProvider::<P::G1>::msm_public_points(&mut driver, &p_tau[..wxiw.get_len()], &wxiw);
+        let commit_wxi = driver.msm_public_points(&p_tau[..wxi.len()], &wxi);
+        let commit_wxiw = driver.msm_public_points(&p_tau[..wxiw.len()], &wxiw);
 
         let opened = driver.open_point_many(&[commit_wxi, commit_wxiw])?;
 
@@ -374,9 +358,11 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
-    use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::round1::{Round1, Round1Challenges};
+    use crate::{
+        mpc::plain::PlainPlonkDriver,
+        round1::{Round1, Round1Challenges},
+    };
     macro_rules! g1_from_xy {
         ($x: expr,$y: expr) => {
             <ark_bn254::Bn254 as Pairing>::G1Affine::new(
@@ -390,7 +376,7 @@ pub mod tests {
     use std::str::FromStr;
     #[test]
     fn test_round5_multiplier2() {
-        let mut driver = PlainDriver::<ark_bn254::Fr>::default();
+        let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
         );
@@ -399,7 +385,7 @@ pub mod tests {
             File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+        let witness = SharedWitness {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };

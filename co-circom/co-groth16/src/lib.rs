@@ -22,7 +22,7 @@ mod tests {
     use mpc_core::protocols::plain::PlainDriver;
     use std::fs::{self, File};
 
-    use crate::groth16::Groth16;
+    use crate::{groth16::Groth16, mpc::plain::PlainGroth16Driver};
 
     #[test]
     fn create_proof_and_verify_bn254() {
@@ -34,12 +34,12 @@ mod tests {
             File::open("../../test_vectors/Groth16/bn254/multiplier2/verification_key.json")
                 .unwrap();
 
-        let driver = PlainDriver::<ark_bn254::Fr>::default();
+        let driver = PlainGroth16Driver;
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let zkey = ZKey::<Bn254>::from_reader(zkey_file).unwrap();
         let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
         let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+        let witness = SharedWitness {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
@@ -79,7 +79,7 @@ mod tests {
             File::open("../../test_vectors/Groth16/bn254/poseidon/circuit.zkey").unwrap();
         let witness_file =
             File::open("../../test_vectors/Groth16/bn254/poseidon/witness.wtns").unwrap();
-        let driver = PlainDriver::<ark_bn254::Fr>::default();
+        let driver = PlainGroth16Driver;
         let vk_file =
             File::open("../../test_vectors/Groth16/bn254/poseidon/verification_key.json").unwrap();
 
@@ -87,7 +87,7 @@ mod tests {
         let zkey = ZKey::<Bn254>::from_reader(zkey_file).unwrap();
         let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
         let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+        let witness = SharedWitness {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
@@ -153,12 +153,12 @@ mod tests {
         let zkey = ZKey::<Bls12_381>::from_reader(zkey_file).unwrap();
         let vk: JsonVerificationKey<Bls12_381> = serde_json::from_reader(vk_file).unwrap();
         let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness::<PlainDriver<ark_bls12_381::Fr>, Bls12_381> {
+        let witness = SharedWitness {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
-        let driver = PlainDriver::<ark_bls12_381::Fr>::default();
+        let driver = PlainGroth16Driver;
         let mut groth16 = Groth16::<Bls12_381>::new(driver);
         let proof = groth16
             .prove(&zkey, witness)
@@ -186,12 +186,12 @@ mod tests {
         let zkey = ZKey::<Bn254>::from_reader(zkey_file).unwrap();
         let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
         let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+        let witness = SharedWitness {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
-        let driver = PlainDriver::<ark_bn254::Fr>::default();
+        let driver = PlainGroth16Driver;
         let mut groth16 = Groth16::<Bn254>::new(driver);
         let proof = groth16
             .prove(&zkey, witness)

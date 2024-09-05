@@ -8,7 +8,6 @@ use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use co_circom_snarks::SharedWitness;
 use mpc::CircomPlonkProver;
-use mpc_core::traits::{FFTProvider, MSMProvider, PairingEcMpcProtocol, PrimeFieldMpcProtocol};
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
@@ -23,9 +22,6 @@ mod round5;
 pub(crate) mod types;
 
 pub use plonk::Plonk;
-
-type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
-type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
 
 type PlonkProofResult<T> = std::result::Result<T, PlonkProofError>;
 
@@ -201,7 +197,7 @@ pub mod tests {
         let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
         let driver = PlainDriver::<ark_bn254::Fr>::default();
 
-        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+        let witness = SharedWitness {
             public_inputs: witness.values[..=zkey.n_public].to_vec(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };

@@ -89,7 +89,10 @@ impl<F: PrimeField> Domains<F> {
     }
 }
 impl<P: Pairing, T: CircomPlonkProver<P>> PlonkWitness<P, T> {
-    pub(super) fn new(mut shared_witness: SharedWitness<P, T>, n_additions: usize) -> Self {
+    pub(super) fn new(
+        mut shared_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
+        n_additions: usize,
+    ) -> Self {
         // we have a Groth16 witness, therefore there is a leading one in the witness.
         // we just write zero here instead of one to mirror snarkjs.
         shared_witness.public_inputs[0] = P::ScalarField::zero();

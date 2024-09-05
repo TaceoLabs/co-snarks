@@ -1,15 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
 use ark_ff::PrimeField;
-use mpc_core::{
-    protocols::rep3::network::{Rep3MpcNet, Rep3Network},
-    traits::SecretShared,
-};
+use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
 use mpc_net::config::NetworkConfig;
 
 use crate::{
     accelerator::MpcAccelerator,
-    mpc::plain::PlainDriver,
+    mpc::plain::CircomPlainVmWitnessExtension,
     mpc_vm::{PlainWitnessExtension, Rep3WitnessExtension, VMConfig, WitnessExtension},
     op_codes::CodeBlock,
 };
@@ -140,7 +137,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
 
 //TODO: Add another builder step here?
 //ParserCompiler -> into Rep3/Shamir -> build
-impl<F: PrimeField + SecretShared> CoCircomCompilerParsed<F> {
+impl<F: PrimeField> CoCircomCompilerParsed<F> {
     /// Consumes `self` and constructs an instance of [`PlainWitnessExtension`].
     ///
     /// The plain witness extension allows local execution of the witness extension without
@@ -148,7 +145,10 @@ impl<F: PrimeField + SecretShared> CoCircomCompilerParsed<F> {
     /// witness and input will not be protected. Do not share sensitive data when using this feature.
     ///
     /// This method is primarily intended for testing purposes.
-    pub fn to_plain_vm(self, vm_config: VMConfig) -> WitnessExtension<F, PlainDriver<F>> {
+    pub fn to_plain_vm(
+        self,
+        vm_config: VMConfig,
+    ) -> WitnessExtension<F, CircomPlainVmWitnessExtension<F>> {
         PlainWitnessExtension::new(self, vm_config)
     }
 

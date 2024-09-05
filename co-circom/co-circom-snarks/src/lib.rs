@@ -3,10 +3,10 @@
 //! this is [Groth16](https://eprint.iacr.org/2016/260.pdf) and [PLONK](https://eprint.iacr.org/2019/953.pdf).
 
 use ark_ff::PrimeField;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_types::Witness;
 use mpc_core::protocols::rep3new::{self, Rep3PrimeFieldShare};
 use mpc_core::protocols::shamir::fieldshare::ShamirPrimeFieldShare;
-use mpc_core::traits::SecretShared;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -16,7 +16,10 @@ mod serde_compat;
 //TODO THE SECRETSHARED TRAIT IS REALLY BAD. WE DO WANT SOMETHING ELSE!
 /// A shared witness in the circom ecosystem.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SharedWitness<F: PrimeField, S: SecretShared> {
+pub struct SharedWitness<F: PrimeField, S>
+where
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
     #[serde(
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
@@ -34,7 +37,10 @@ pub struct SharedWitness<F: PrimeField, S: SecretShared> {
 
 /// A shared input for a collaborative circom witness extension.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SharedInput<F: PrimeField, S: SecretShared> {
+pub struct SharedInput<F: PrimeField, S>
+where
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
     #[serde(
         serialize_with = "crate::serde_compat::ark_se",
         deserialize_with = "crate::serde_compat::ark_de"
@@ -52,7 +58,10 @@ pub struct SharedInput<F: PrimeField, S: SecretShared> {
 }
 
 /// We manually implement Clone here since it was not derived correctly and it added bounds on T, P which are not needed
-impl<F: PrimeField, S: SecretShared> Clone for SharedWitness<F, S> {
+impl<F: PrimeField, S> Clone for SharedWitness<F, S>
+where
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
     fn clone(&self) -> Self {
         Self {
             public_inputs: self.public_inputs.clone(),
@@ -62,7 +71,10 @@ impl<F: PrimeField, S: SecretShared> Clone for SharedWitness<F, S> {
 }
 
 /// We manually implement Clone here since it was not derived correctly and it added bounds on T, P which are not needed
-impl<F: PrimeField, S: SecretShared> Clone for SharedInput<F, S> {
+impl<F: PrimeField, S> Clone for SharedInput<F, S>
+where
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
     fn clone(&self) -> Self {
         Self {
             public_inputs: self.public_inputs.clone(),
@@ -71,7 +83,10 @@ impl<F: PrimeField, S: SecretShared> Clone for SharedInput<F, S> {
     }
 }
 
-impl<F: PrimeField, S: SecretShared> Default for SharedInput<F, S> {
+impl<F: PrimeField, S> Default for SharedInput<F, S>
+where
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
     fn default() -> Self {
         Self {
             public_inputs: BTreeMap::new(),
@@ -80,7 +95,10 @@ impl<F: PrimeField, S: SecretShared> Default for SharedInput<F, S> {
     }
 }
 
-impl<F: PrimeField, S: SecretShared> SharedInput<F, S> {
+impl<F: PrimeField, S> SharedInput<F, S>
+where
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
     /// Adds a public input with a given name to the [SharedInput].
     pub fn add_public_input(&mut self, key: String, elements: Vec<F>) {
         self.public_inputs.insert(key, elements);

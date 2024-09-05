@@ -11,7 +11,6 @@ use co_circom_snarks::SharedWitness;
 use eyre::Result;
 use itertools::izip;
 use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
-use mpc_core::traits::SecretShared;
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use num_traits::ToPrimitive;
@@ -134,8 +133,8 @@ where
         let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
 
         let domain_size = domain.size();
-        let mut a = vec![T::ArithmeticShare::zero_share(); domain_size];
-        let mut b = vec![T::ArithmeticShare::zero_share(); domain_size];
+        let mut a = vec![T::ArithmeticShare::default(); domain_size];
+        let mut b = vec![T::ArithmeticShare::default(); domain_size];
         tracing::debug!("evaluating constraints..");
         for (a, b, at_i, bt_i) in izip!(&mut a, &mut b, &matrices.a, &matrices.b) {
             *a = self
@@ -312,7 +311,7 @@ impl<P: Pairing> Groth16<P>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge + SecretShared,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// *Locally* create a `Groth16` proof. This is just the [`CoGroth16`] prover
     /// initialized with the [`PlainDriver`].

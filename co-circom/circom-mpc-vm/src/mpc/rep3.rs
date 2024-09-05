@@ -1,20 +1,17 @@
 use ark_ff::PrimeField;
 use eyre::bail;
-use mpc_core::{
-    protocols::{
-        rep3::network::Rep3Network,
-        rep3new::{
-            arithmetic::{self, add, add_public, mul, mul_with_public, sub, sub_public, IoContext},
-            binary::{and, and_with_public, xor, xor_public},
-            conversion::{a2b, b2a},
-            network::IoContext,
-            Rep3BigUintShare, Rep3PrimeFieldShare,
-        },
+use mpc_core::protocols::{
+    rep3::network::Rep3Network,
+    rep3new::{
+        arithmetic::{self, add, add_public, mul, mul_with_public, sub, sub_public},
+        binary::{and, and_with_public, xor, xor_public},
+        conversion::{a2b, b2a},
+        network::IoContext,
+        Rep3BigUintShare, Rep3PrimeFieldShare,
     },
-    traits::SecretShared,
 };
 
-use super::{plain::PlainDriver, VmCircomWitnessExtension};
+use super::{plain::CircomPlainVmWitnessExtension, VmCircomWitnessExtension};
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 type BinaryShare<F> = Rep3BigUintShare<F>;
@@ -50,22 +47,22 @@ impl<F: PrimeField> Default for Rep3VmType<F> {
     }
 }
 
-pub struct Rep3Driver<F: PrimeField, N: Rep3Network> {
+pub struct CircomRep3VmWitnessExtension<F: PrimeField, N: Rep3Network> {
     io_context: IoContext<N>,
-    plain: PlainDriver<F>,
+    plain: CircomPlainVmWitnessExtension<F>,
 }
 
-impl<F: PrimeField, N: Rep3Network> Rep3Driver<F, N> {
+impl<F: PrimeField, N: Rep3Network> CircomRep3VmWitnessExtension<F, N> {
     pub fn new(network: N) -> std::io::Result<Self> {
         Ok(Self {
             io_context: IoContext::init(network)?,
-            plain: PlainDriver::default(),
+            plain: CircomPlainVmWitnessExtension::default(),
         })
     }
 }
 
-impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
-    for Rep3Driver<F, N>
+impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
+    for CircomRep3VmWitnessExtension<F, N>
 {
     type ArithmeticShare = ArithmeticShare<F>;
 

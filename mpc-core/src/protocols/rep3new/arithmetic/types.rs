@@ -1,10 +1,7 @@
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-use crate::{
-    protocols::rep3::{id::PartyID, rngs::Rep3CorrelatedRng},
-    traits::SecretShared,
-};
+use crate::protocols::rep3::{id::PartyID, rngs::Rep3CorrelatedRng};
 
 /// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
@@ -13,10 +10,23 @@ pub struct Rep3PrimeFieldShare<F: PrimeField> {
     pub(crate) b: F,
 }
 
+impl<F: PrimeField> Default for Rep3PrimeFieldShare<F> {
+    fn default() -> Self {
+        Self::zero_share()
+    }
+}
+
 impl<F: PrimeField> Rep3PrimeFieldShare<F> {
     /// Constructs the type from two additive shares.
     pub fn new(a: F, b: F) -> Self {
         Self { a, b }
+    }
+
+    pub fn zero_share() -> Self {
+        Self {
+            a: F::zero(),
+            b: F::zero(),
+        }
     }
 
     /// Unwraps the type into two additive shares.
@@ -40,15 +50,6 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
             PartyID::ID0 => Self::new(*val, F::zero()),
             PartyID::ID1 => Self::new(F::zero(), *val),
             PartyID::ID2 => Self::zero_share(),
-        }
-    }
-}
-
-impl<F: PrimeField> SecretShared for Rep3PrimeFieldShare<F> {
-    fn zero_share() -> Self {
-        Self {
-            a: F::zero(),
-            b: F::zero(),
         }
     }
 }

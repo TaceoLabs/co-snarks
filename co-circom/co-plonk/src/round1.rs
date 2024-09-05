@@ -2,7 +2,6 @@ use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
 use co_circom_snarks::SharedWitness;
-use mpc_core::traits::SecretShared;
 
 use crate::{
     mpc::CircomPlonkProver,
@@ -70,7 +69,7 @@ impl<P: Pairing> std::fmt::Display for Round1Proof<P> {
 
 impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
     pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
-        let mut b = core::array::from_fn(|_| T::ArithmeticShare::zero_share());
+        let mut b = core::array::from_fn(|_| T::ArithmeticShare::default());
         for x in b.iter_mut() {
             *x = driver.rand();
         }
@@ -124,9 +123,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
                 zkey.map_c[i],
             )?);
         }
-        buffer_a.resize(zkey.domain_size, T::ArithmeticShare::zero_share());
-        buffer_b.resize(zkey.domain_size, T::ArithmeticShare::zero_share());
-        buffer_c.resize(zkey.domain_size, T::ArithmeticShare::zero_share());
+        buffer_a.resize(zkey.domain_size, T::ArithmeticShare::default());
+        buffer_b.resize(zkey.domain_size, T::ArithmeticShare::default());
+        buffer_c.resize(zkey.domain_size, T::ArithmeticShare::default());
 
         //TODO MULTITHREAD ME
         tracing::debug!("iffts for buffers..");
@@ -175,7 +174,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
     // Calculate the witnesses for the additions, since they are not part of the SharedWitness
     fn calculate_additions(
         driver: &mut T,
-        witness: SharedWitness<P, T>,
+        witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
         zkey: &ZKey<P>,
     ) -> PlonkProofResult<PlonkWitness<P, T>> {
         tracing::debug!("calculating addition {} constraints...", zkey.n_additions);
@@ -207,7 +206,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
     pub(super) fn init_round(
         mut driver: T,
         zkey: &'a ZKey<P>,
-        private_witness: SharedWitness<P, T>,
+        private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
         let plonk_witness = Self::calculate_additions(&mut driver, private_witness, zkey)?;
 
@@ -240,15 +239,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
 
         tracing::debug!("committing to polys (MSMs)");
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let commit_a = self
-            .driver
-            .msm_public_points(&p_tau[..polys.a.poly.len()], &polys.a.poly);
-        let commit_b = self
-            .driver
-            .msm_public_points(&p_tau[..polys.b.poly.len()], &polys.b.poly);
-        let commit_c = self
-            .driver
-            .msm_public_points(&p_tau[..polys.c.poly.len()], &polys.c.poly);
+        let commit_a = driver.msm_public_points(&p_tau[..polys.a.poly.len()], &polys.a.poly);
+        let commit_b = driver.msm_public_points(&p_tau[..polys.b.poly.len()], &polys.b.poly);
+        let commit_c = driver.msm_public_points(&p_tau[..polys.c.poly.len()], &polys.c.poly);
 
         let opened = driver.open_point_many(&[commit_a, commit_b, commit_c])?;
 
@@ -271,17 +264,17 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
 
 #[cfg(test)]
 pub mod tests {
-    use ark_ec::CurveGroup;
     use std::{fs::File, io::BufReader};
 
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
     use circom_types::plonk::ZKey;
     use co_circom_snarks::SharedWitness;
-    use mpc_core::protocols::plain::PlainDriver;
+
+    use crate::mpc::plain::PlainPlonkDriver;
 
     use super::{Round1, Round1Challenges};
-    use ark_ec::pairing::Pairing;
+    use ark_ec::{pairing::Pairing, CurveGroup};
     use circom_types::Witness;
     use std::str::FromStr;
 
@@ -305,7 +298,7 @@ pub mod tests {
 
     #[test]
     fn test_round1_multiplier2() {
-        let mut driver = PlainDriver::<ark_bn254::Fr>::default();
+        let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
         );
@@ -313,7 +306,7 @@ pub mod tests {
         let witness_file =
             File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+        let witness = SharedWitness {
             public_inputs: witness.values[..=zkey.n_public].to_vec(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
@@ -346,7 +339,7 @@ pub mod tests {
 
     #[test]
     fn test_round1_poseidon_bls12_381() {
-        let mut driver = PlainDriver::<ark_bls12_381::Fr>::default();
+        let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bls12_381/poseidon/circuit.zkey").unwrap(),
         );
@@ -356,7 +349,7 @@ pub mod tests {
         let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
 
         let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness::<PlainDriver<ark_bls12_381::Fr>, Bls12_381> {
+        let witness = SharedWitness {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };

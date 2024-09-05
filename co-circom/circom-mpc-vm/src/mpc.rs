@@ -1,29 +1,28 @@
-use ark_ec::pairing::Pairing;
 use eyre::Result;
-use mpc_core::traits::SecretShared;
 use std::fmt;
 
 use ark_ff::PrimeField;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 pub(crate) mod plain;
 pub(crate) mod rep3;
 
 pub trait VmCircomWitnessExtension<F: PrimeField> {
-    type ArithmeticShare: SecretShared;
-    type BinaryShare: SecretShared;
+    type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
+    type BinaryShare;
     type VmType: Clone + Default + fmt::Debug + fmt::Display + From<F> + From<Self::ArithmeticShare>;
 
     /// Add two VM-types: c = a + b.
-    async fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
 
     /// Subtract the VM-type b from the VM-type a: c = a - b.
-    async fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
 
     /// Multiply two VM-types: c = a * b.
-    async fn mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Divide the VM-type a by the VM-type b: c = a / b. In finite fields, this is equivalent to multiplying a by the inverse of b.
-    async fn div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Integer division of the VM-type a by the VM-type b: c = a \ b.
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
@@ -82,13 +81,13 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     ) -> Result<Self::VmType>;
 
     /// Computes the bitwise XOR of the VM-types a and b: c = a ^ b.
-    async fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Computes the bitwise OR of the VM-types a and b: c = a | b.
     fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Computes the bitwise AND of the VM-types a and b: c = a & b.
-    async fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Outputs whether a is zero (true) or not (false). This values is output in plain! Thus, if a is secret shared, the result is opened.
     fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool>;

@@ -1,14 +1,10 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
-use mpc_core::traits::SecretShared;
 
 use super::CircomGroth16Prover;
 
 pub(crate) struct PlainGroth16Driver;
 
-impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver
-where
-    P::ScalarField: SecretShared,
-{
+impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     type ArithmeticShare = P::ScalarField;
 
     type PointShare<C: CurveGroup> = C;

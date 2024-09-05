@@ -9,7 +9,7 @@ use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use circom_types::plonk::ZKey;
-use mpc_core::traits::SecretShared;
+use itertools::izip;
 use num_traits::One;
 use num_traits::Zero;
 
@@ -53,11 +53,11 @@ macro_rules! mul4vec {
 macro_rules! mul4vec_post {
     ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$i: expr, $z1: expr, $z2: expr, $z3: expr) => {{
         let mod_i = $i % 4;
-        let mut rz = $a[$i];
+        let mut rz = $a[$i].clone();
         if mod_i != 0 {
-            let b = $b[$i];
-            let c = $c[$i];
-            let d = $d[$i];
+            let b = &$b[$i];
+            let c = &$c[$i];
+            let d = &$d[$i];
             let tmp = $driver.mul_with_public(&$z1[mod_i], &b);
             rz = $driver.add(&rz, &tmp);
             let tmp = $driver.mul_with_public(&$z2[mod_i], &c);
@@ -259,10 +259,10 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
         let mut w = P::ScalarField::one();
         // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
         (0..zkey.domain_size * 4).for_each(|i| {
-            let a = polys.poly_eval_a.eval[i];
-            let b = polys.poly_eval_b.eval[i];
-            let c = polys.poly_eval_c.eval[i];
-            let z = polys.z.eval[i];
+            let a = &polys.poly_eval_a.eval[i];
+            let b = &polys.poly_eval_b.eval[i];
+            let c = &polys.poly_eval_c.eval[i];
+            let z = &polys.z.eval[i];
             let qm = zkey.qm_poly.evaluations[i];
             let ql = zkey.ql_poly.evaluations[i];
             let qr = zkey.qr_poly.evaluations[i];
@@ -271,11 +271,11 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
             let s1 = zkey.s1_poly.evaluations[i];
             let s2 = zkey.s2_poly.evaluations[i];
             let s3 = zkey.s3_poly.evaluations[i];
-            let a_bp = a_bp[i];
-            let a_b = a_b[i];
-            let ap_b = ap_b[i];
-            let ap = ap[i];
-            let bp = bp[i];
+            let a_bp = &a_bp[i];
+            let a_b = &a_b[i];
+            let ap_b = &ap_b[i];
+            let ap = &ap[i];
+            let bp = &bp[i];
 
             let w2 = w.square();
             let zp_lhs = driver.mul_with_public(&w2, &challenges.b[6]);
@@ -286,7 +286,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
 
             let w_w = w * pow_root_of_unity;
             let w_w2 = w_w.square();
-            let zw = polys.z.eval[(zkey.domain_size * 4 + 4 + i) % (zkey.domain_size * 4)];
+            let zw = polys.z.eval[(zkey.domain_size * 4 + 4 + i) % (zkey.domain_size * 4)].clone();
             let zwp_lhs = driver.mul_with_public(&w_w2, &challenges.b[6]);
             let zwp_rhs = driver.mul_with_public(&w_w, &challenges.b[7]);
             let zwp_ = driver.add(&zwp_lhs, &zwp_rhs);
@@ -297,12 +297,12 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
             let mod_i = i % 4;
             if mod_i != 0 {
                 let z1 = z1[mod_i];
-                let ap_bp = ap_bp[i];
+                let ap_bp = ap_bp[i].clone();
                 let tmp = driver.mul_with_public(&z1, &ap_bp);
                 a0 = driver.add(&a0, &tmp);
             }
 
-            let (mut e1_, mut e1z_) = (a_b, a0);
+            let (mut e1_, mut e1z_) = (a_b.to_owned(), a0.to_owned());
             e1_ = driver.mul_with_public(&qm, &e1_);
             e1z_ = driver.mul_with_public(&qm, &e1z_);
 
@@ -315,10 +315,10 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
             e1_ = driver.add_mul_public(&e1_, &c, &qo);
             e1z_ = driver.add_mul_public(&e1z_, &cp[i], &qo);
 
-            let mut pi = T::ArithmeticShare::zero_share();
+            let mut pi = T::ArithmeticShare::default();
             for (j, lagrange) in zkey.lagrange.iter().enumerate() {
                 let l_eval = lagrange.evaluations[i];
-                let a_val = polys.buffer_a[j];
+                let a_val = polys.buffer_a[j].clone();
                 let tmp = driver.mul_with_public(&l_eval, &a_val);
                 pi = driver.sub(&pi, &tmp);
             }
@@ -355,13 +355,13 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
         let mut tz_vec = Vec::with_capacity(zkey.domain_size * 4);
         // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
         (0..zkey.domain_size * 4).for_each(|i| {
-            let mut e2 = e2[i];
+            let mut e2 = e2[i].clone();
             let mut e2z = mul4vec_post!(driver, e2z_0, e2z_1, e2z_2, e2z_3, i, z1, z2, z3);
-            let mut e3 = e3[i];
+            let mut e3 = e3[i].clone();
             let mut e3z = mul4vec_post!(driver, e3z_0, e3z_1, e3z_2, e3z_3, i, z1, z2, z3);
 
-            let z = polys.z.eval[i];
-            let zp = zp[i];
+            let z = polys.z.eval[i].clone();
+            let zp = zp[i].clone();
 
             e2 = driver.mul_with_public(&challenges.alpha, &e2);
             e2z = driver.mul_with_public(&challenges.alpha, &e2z);
@@ -388,20 +388,21 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
             tz_vec.push(tz);
         });
         let mut coefficients_t = driver.ifft(&t_vec, &domains.extended_domain);
-        driver.neg_vec_in_place_limit(&mut coefficients_t, zkey.domain_size);
+        driver.neg_vec_in_place(&mut coefficients_t[..zkey.domain_size]);
 
         // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
         (zkey.domain_size..zkey.domain_size * 4).for_each(|i| {
-            let a_lhs = coefficients_t.index(i - zkey.domain_size);
-            let a_rhs = coefficients_t[i];
+            let a_lhs = &coefficients_t[i - zkey.domain_size];
+            let a_rhs = &coefficients_t[i];
             let a = driver.sub(&a_lhs, &a_rhs);
-            coefficients_t.set_index(a, i);
+            coefficients_t[i] = a;
             // Snarkjs is checking whether the poly was divisble by Zh, but we cannot do this here
         });
 
-        let coefficients_tz = driver.ifft(&tz_vec.into(), &domains.extended_domain);
-        let t_final = driver.add_vec(&coefficients_t, &coefficients_tz);
-        let mut t_final = t_final.into_iter();
+        let coefficients_tz = driver.ifft(&tz_vec, &domains.extended_domain);
+
+        let mut t_final = izip!(coefficients_t.iter(), coefficients_tz.iter())
+            .map(|(lhs, rhs)| driver.add(lhs, rhs));
         let mut t1 = Vec::with_capacity(zkey.domain_size + 1);
         let mut t2 = Vec::with_capacity(zkey.domain_size + 1);
         for _ in 0..zkey.domain_size {
@@ -447,21 +448,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
 
         tracing::debug!("committing to poly t (MSMs)");
         // Compute [T1]_1, [T2]_1, [T3]_1
-        let commit_t1 = MSMProvider::<P::G1>::msm_public_points(
-            &mut driver,
-            &data.zkey.p_tau[..t1.get_len()],
-            &t1,
-        );
-        let commit_t2 = MSMProvider::<P::G1>::msm_public_points(
-            &mut driver,
-            &data.zkey.p_tau[..t2.get_len()],
-            &t2,
-        );
-        let commit_t3 = MSMProvider::<P::G1>::msm_public_points(
-            &mut driver,
-            &data.zkey.p_tau[..t3.get_len()],
-            &t3,
-        );
+        let commit_t1 = driver.msm_public_points(&data.zkey.p_tau[..t1.len()], &t1);
+        let commit_t2 = driver.msm_public_points(&data.zkey.p_tau[..t2.len()], &t2);
+        let commit_t3 = driver.msm_public_points(&data.zkey.p_tau[..t3.len()], &t3);
 
         let opened = driver.open_point_many(&[commit_t1, commit_t2, commit_t3])?;
 
@@ -488,9 +477,14 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
-    use mpc_core::protocols::plain::PlainDriver;
 
-    use crate::round1::{Round1, Round1Challenges};
+    use crate::{
+        mpc::plain::PlainPlonkDriver,
+        round1::{Round1, Round1Challenges},
+    };
+
+    use ark_ec::pairing::Pairing;
+    use std::str::FromStr;
     macro_rules! g1_from_xy {
         ($x: expr,$y: expr) => {
             <ark_bn254::Bn254 as Pairing>::G1Affine::new(
@@ -500,11 +494,9 @@ pub mod tests {
         };
     }
 
-    use ark_ec::pairing::Pairing;
-    use std::str::FromStr;
     #[test]
     fn test_round3_multiplier2() {
-        let mut driver = PlainDriver::<ark_bn254::Fr>::default();
+        let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
         );
@@ -513,7 +505,7 @@ pub mod tests {
             File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+        let witness = SharedWitness {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };

@@ -2,10 +2,7 @@ use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
 use types::Rep3PrimeFieldShare;
 
-use crate::{
-    protocols::rep3::{id::PartyID, network::Rep3Network},
-    traits::SecretShared,
-};
+use crate::protocols::rep3::{id::PartyID, network::Rep3Network};
 
 use super::{network::IoContext, IoResult};
 

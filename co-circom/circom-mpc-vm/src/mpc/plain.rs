@@ -1,6 +1,5 @@
 use ark_ff::{One, PrimeField};
 use eyre::eyre;
-use mpc_core::traits::SecretShared;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
@@ -44,11 +43,11 @@ macro_rules! to_bigint {
     }};
 }
 
-pub struct PlainDriver<F: PrimeField> {
+pub struct CircomPlainVmWitnessExtension<F: PrimeField> {
     negative_one: F,
 }
 
-impl<F: PrimeField> Default for PlainDriver<F> {
+impl<F: PrimeField> Default for CircomPlainVmWitnessExtension<F> {
     fn default() -> Self {
         let modulus = to_bigint!(F::MODULUS);
         let one = BigUint::one();
@@ -59,7 +58,7 @@ impl<F: PrimeField> Default for PlainDriver<F> {
     }
 }
 
-impl<F: PrimeField> PlainDriver<F> {
+impl<F: PrimeField> CircomPlainVmWitnessExtension<F> {
     /// Normally F is split into positive and negative numbers in the range [0, p/2] and [p/2 + 1, p)
     /// However, for comparisons, we want the negative numbers to be "lower" than the positive ones.
     /// Therefore we shift the input by p/2 + 1 to the left, which results in a mapping of [negative, 0, positive] into F.
@@ -76,26 +75,26 @@ impl<F: PrimeField> PlainDriver<F> {
     }
 }
 
-impl<F: PrimeField + SecretShared> VmCircomWitnessExtension<F> for PlainDriver<F> {
+impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtension<F> {
     type ArithmeticShare = F;
 
     type BinaryShare = F;
 
     type VmType = F;
 
-    async fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
         let result = a + b;
         tracing::trace!("{a}+{b}={result}");
-        Ok(result)
+        result
     }
 
-    async fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
         let result = a - b;
         tracing::trace!("{a}-{b}={result}");
-        Ok(a - b)
+        a - b
     }
 
-    async fn mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    fn mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Ok(a * b)
     }
 
@@ -103,7 +102,7 @@ impl<F: PrimeField + SecretShared> VmCircomWitnessExtension<F> for PlainDriver<F
         -a
     }
 
-    async fn div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    fn div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Ok(a / b)
     }
 
@@ -209,7 +208,7 @@ impl<F: PrimeField + SecretShared> VmCircomWitnessExtension<F> for PlainDriver<F
         }
     }
 
-    async fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let lhs = to_bigint!(a);
         let rhs = to_bigint!(b);
         Ok(F::from(lhs ^ rhs))
@@ -221,7 +220,7 @@ impl<F: PrimeField + SecretShared> VmCircomWitnessExtension<F> for PlainDriver<F
         Ok(F::from(lhs | rhs))
     }
 
-    async fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let lhs = to_bigint!(a);
         let rhs = to_bigint!(b);
         Ok(F::from(lhs & rhs))

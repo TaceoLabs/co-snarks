@@ -1,4 +1,5 @@
-use crate::mpc::rep3::Rep3VmType;
+use crate::mpc::plain::CircomPlainVmWitnessExtension;
+use crate::mpc::rep3::{CircomRep3VmWitnessExtension, Rep3VmType};
 use crate::types::{CoCircomCompilerParsed, FunDecl, InputList, OutputMapping, TemplateDecl};
 
 use super::accelerator::MpcAccelerator;
@@ -6,15 +7,11 @@ use super::{
     op_codes::{self, CodeBlock},
     stack::Stack,
 };
-use crate::mpc::plain::PlainDriver;
-use crate::mpc::rep3::Rep3Driver;
-use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_circom_snarks::{SharedInput, SharedWitness};
 use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
 use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
-use mpc_core::traits::SecretShared;
 use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -52,13 +49,12 @@ pub struct WitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
 /// Shorthand type for an instance of the MPC-VM that runs locally on a single machine without MPC.
 ///
 /// This type is mostly used for testing purposes, so use with care in production environments.
-pub type PlainWitnessExtension<F> = WitnessExtension<F, PlainDriver<F>>;
+pub type PlainWitnessExtension<F> = WitnessExtension<F, CircomPlainVmWitnessExtension<F>>;
 
 /// Shorthand type for the MPC-VM instantiated with the [`Rep3Protocol`].
 ///
 /// This is the only supported protocol at the moment.
-pub type Rep3WitnessExtension<P, N> =
-    WitnessExtension<P, Rep3Driver<<P as Pairing>::ScalarField, N>>;
+pub type Rep3WitnessExtension<F, N> = WitnessExtension<F, CircomRep3VmWitnessExtension<F, N>>;
 
 type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Arc<CodeBlock>, Vec<(T, Vec<T>)>);
 
@@ -992,12 +988,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> FinalizedWitnessExtension<F,
     }
 }
 
-impl<F: PrimeField + SecretShared> PlainWitnessExtension<F> {
+impl<F: PrimeField> PlainWitnessExtension<F> {
     pub(crate) fn new(parser: CoCircomCompilerParsed<F>, config: VMConfig) -> Self {
         let mut signals = vec![F::default(); parser.amount_signals];
         signals[0] = F::one();
         Self {
-            driver: PlainDriver::default(),
+            driver: CircomPlainVmWitnessExtension::default(),
             signal_to_witness: parser.signal_to_witness,
             main: parser.main,
             ctx: WitnessExtensionCtx::new(
@@ -1021,10 +1017,10 @@ impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
     pub(crate) fn from_network(
         parser: CoCircomCompilerParsed<F>,
         network: N,
-        mpc_accelerator: MpcAccelerator<F, Rep3Driver<N>>,
+        mpc_accelerator: MpcAccelerator<F, CircomRep3VmWitnessExtension<F, N>>,
         config: VMConfig,
     ) -> Result<Self> {
-        let driver = Rep3Driver::new(network)?;
+        let driver = CircomRep3VmWitnessExtension::new(network)?;
         let mut signals = vec![Rep3VmType::default(); parser.amount_signals];
         signals[0] = Rep3VmType::Public(F::one());
         let constant_table = parser
@@ -1057,7 +1053,7 @@ impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
     pub(crate) fn new(
         parser: CoCircomCompilerParsed<F>,
         network_config: NetworkConfig,
-        mpc_accelerator: MpcAccelerator<F, Rep3Driver<Rep3MpcNet>>,
+        mpc_accelerator: MpcAccelerator<F, CircomRep3VmWitnessExtension<F, Rep3MpcNet>>,
         config: VMConfig,
     ) -> Result<Self> {
         Self::from_network(

@@ -1,6 +1,6 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_poly::EvaluationDomain;
-use mpc_core::traits::SecretShared;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 pub(crate) mod plain;
 pub(crate) mod rep3;
@@ -9,7 +9,7 @@ pub(crate) mod shamir;
 type IoResult<T> = std::io::Result<T>;
 
 pub trait CircomGroth16Prover<P: Pairing> {
-    type ArithmeticShare: SecretShared;
+    type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
     type PointShare<C: CurveGroup>;
 
     fn rand(&self) -> Self::ArithmeticShare;
