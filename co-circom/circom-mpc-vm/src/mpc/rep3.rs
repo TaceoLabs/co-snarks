@@ -56,9 +56,9 @@ pub struct Rep3Driver<F: PrimeField, N: Rep3Network> {
 }
 
 impl<F: PrimeField, N: Rep3Network> Rep3Driver<F, N> {
-    pub fn new(network: N) -> std::io::Result<Self> {
+    pub async fn new(network: N) -> std::io::Result<Self> {
         Ok(Self {
-            io_context: IoContext::init(network)?,
+            io_context: IoContext::init(network).await?,
             plain: PlainDriver::default(),
         })
     }

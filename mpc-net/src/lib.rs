@@ -246,13 +246,36 @@ impl MpcNetworkHandler {
     }
 
     /// Shutdown all connections, and call [`quinn::Endpoint::wait_idle`] on all of them
-    pub async fn shutdown(self) {
-        for conn in self.connections.into_values() {
-            conn.close(0u32.into(), b"");
+    pub async fn shutdown(self) -> std::io::Result<()> {
+        tracing::debug!(
+            "party {} shutting down, conns = {:?}",
+            self.my_id,
+            self.connections.keys()
+        );
+
+        for (id, conn) in self.connections.iter() {
+            if self.my_id < *id {
+                let mut send = conn.open_uni().await?;
+                send.write_all(b"done").await?;
+            } else {
+                let mut recv = conn.accept_uni().await?;
+                let mut buffer = vec![0u8; b"done".len()];
+                recv.read_exact(&mut buffer).await.map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::BrokenPipe, "failed to recv done msg")
+                })?;
+
+                tracing::debug!("party {} closing conn = {id}", self.my_id);
+
+                conn.close(
+                    0u32.into(),
+                    format!("close from party {}", self.my_id).as_bytes(),
+                );
+            }
         }
         for endpoint in self.endpoints {
             endpoint.wait_idle().await;
             endpoint.close(VarInt::from_u32(0), &[]);
         }
+        Ok(())
     }
 }
