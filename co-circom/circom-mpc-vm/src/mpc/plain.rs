@@ -215,7 +215,7 @@ impl<F: PrimeField + SecretShared> VmCircomWitnessExtension<F> for PlainDriver<F
         Ok(F::from(lhs ^ rhs))
     }
 
-    fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    async fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let lhs = to_bigint!(a);
         let rhs = to_bigint!(b);
         Ok(F::from(lhs | rhs))

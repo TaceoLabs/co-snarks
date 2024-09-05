@@ -5,7 +5,7 @@ use mpc_core::{
         rep3::network::Rep3Network,
         rep3new::{
             arithmetic::{self, add, add_public, mul, mul_with_public, sub, sub_public, IoContext},
-            binary::{and, and_with_public, xor, xor_public},
+            binary::{and, and_with_public, or, or_public, xor, xor_public},
             conversion::{a2b, b2a},
             network::IoContext,
             Rep3BigUintShare, Rep3PrimeFieldShare,
@@ -318,8 +318,34 @@ impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
         }
     }
 
-    fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+    async fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
+                Ok(self.plain.bit_or(a, b).await?.into())
+            }
+            (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
+            | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let a = a2b(&a, &mut self.io_context).await?;
+                self.bit_or(a.into(), b.into()).await
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let a = a2b(&a, &mut self.io_context).await?;
+                let b = a2b(&b, &mut self.io_context).await?;
+                self.bit_or(a.into(), b.into()).await
+            }
+            (Rep3VmType::Public(b), Rep3VmType::Binary(a))
+            | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                Ok(or_public(&a, &b.into_bigint().into(), self.io_context.id).into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
+            | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
+                let a = a2b(&a, &mut self.io_context).await?;
+                self.bit_or(a.into(), b.into()).await
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
+                Ok(or(&a, &b, &mut self.io_context).await?.into())
+            }
+        }
     }
 
     async fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
@@ -335,11 +361,7 @@ impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let a = a2b(&a, &mut self.io_context).await?;
                 let b = a2b(&b, &mut self.io_context).await?;
-                Ok(
-                    and(&a, &b, &mut self.io_context, F::MODULUS_BIT_SIZE as usize)
-                        .await?
-                        .into(),
-                )
+                Ok(and(&a, &b, &mut self.io_context).await?.into())
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
@@ -348,18 +370,10 @@ impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
                 let a = a2b(&a, &mut self.io_context).await?;
-                Ok(
-                    and(&a, &b, &mut self.io_context, F::MODULUS_BIT_SIZE as usize)
-                        .await?
-                        .into(),
-                )
+                Ok(and(&a, &b, &mut self.io_context).await?.into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                Ok(
-                    and(&a, &b, &mut self.io_context, F::MODULUS_BIT_SIZE as usize)
-                        .await?
-                        .into(),
-                )
+                Ok(and(&a, &b, &mut self.io_context).await?.into())
             }
         }
     }

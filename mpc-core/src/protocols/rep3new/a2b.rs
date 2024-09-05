@@ -70,7 +70,7 @@ async fn low_depth_binary_add<F: PrimeField, N: Rep3Network>(
 ) -> IoResult<Rep3BigUintShare<F>> {
     // Add x1 + x2 via a packed Kogge-Stone adder
     let p = &x1 ^ &x2;
-    let g = binary::and(&x1, &x2, io_context, bitlen).await?;
+    let g = binary::and(&x1, &x2, io_context).await?;
     kogge_stone_inner(p, g, io_context, bitlen).await
 }
 
@@ -132,7 +132,7 @@ async fn low_depth_sub_p_cmux<F: PrimeField, N: Rep3Network>(
     let ov = Rep3BigUintShare::<F>::new(ov_a, ov_b);
 
     // one big multiplexer
-    let res = binary::cmux(&ov, &y, &x, io_context, bitlen).await?;
+    let res = binary::cmux(&ov, &y, &x, io_context).await?;
     Ok(res)
 }
 
@@ -151,7 +151,7 @@ async fn low_depth_binary_sub<F: PrimeField, N: Rep3Network>(
     let x2 = binary::xor_public(&x2, &mask, io_context.id);
     // Now start the Kogge-Stone adder
     let p = &x1 ^ &x2;
-    let mut g = binary::and(&x1, &x2, io_context, bitlen).await?;
+    let mut g = binary::and(&x1, &x2, io_context).await?;
     // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
     g ^= &(&p & &BigUint::one());
 
