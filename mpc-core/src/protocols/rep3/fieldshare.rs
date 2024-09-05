@@ -4,11 +4,12 @@
 
 use super::id::PartyID;
 use ark_ff::PrimeField;
+use ark_poly::domain::DomainCoeff;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;
 
 /// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Rep3PrimeFieldShare<F: PrimeField> {
     pub(crate) a: F,
     pub(crate) b: F,
@@ -37,6 +38,19 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
             PartyID::ID1 => Rep3PrimeFieldShare::new(F::zero(), *val),
             PartyID::ID2 => Rep3PrimeFieldShare::default(),
         }
+    }
+}
+
+impl<F: PrimeField> ark_ff::Zero for Rep3PrimeFieldShare<F> {
+    fn zero() -> Self {
+        Self {
+            a: F::zero(),
+            b: F::zero(),
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        panic!("is_zero is not a meaningful operation for Rep3PrimeFieldShare, use interative zero check instead");
     }
 }
 
@@ -80,6 +94,13 @@ impl<F: PrimeField> std::ops::AddAssign<&Rep3PrimeFieldShare<F>> for Rep3PrimeFi
     }
 }
 
+impl<F: PrimeField> std::ops::AddAssign<Rep3PrimeFieldShare<F>> for Rep3PrimeFieldShare<F> {
+    fn add_assign(&mut self, rhs: Self) {
+        self.a += rhs.a;
+        self.b += rhs.b;
+    }
+}
+
 impl<F: PrimeField> std::ops::Sub for Rep3PrimeFieldShare<F> {
     type Output = Self;
 
@@ -104,6 +125,13 @@ impl<F: PrimeField> std::ops::Sub<&Rep3PrimeFieldShare<F>> for Rep3PrimeFieldSha
 
 impl<F: PrimeField> std::ops::SubAssign<&Rep3PrimeFieldShare<F>> for Rep3PrimeFieldShare<F> {
     fn sub_assign(&mut self, rhs: &Self) {
+        self.a -= rhs.a;
+        self.b -= rhs.b;
+    }
+}
+
+impl<F: PrimeField> std::ops::SubAssign<Rep3PrimeFieldShare<F>> for Rep3PrimeFieldShare<F> {
+    fn sub_assign(&mut self, rhs: Self) {
         self.a -= rhs.a;
         self.b -= rhs.b;
     }
@@ -166,6 +194,13 @@ impl<F: PrimeField> std::ops::Mul<F> for Rep3PrimeFieldShare<F> {
             a: self.a * rhs,
             b: self.b * rhs,
         }
+    }
+}
+
+impl<F: PrimeField> std::ops::MulAssign<F> for Rep3PrimeFieldShare<F> {
+    fn mul_assign(&mut self, rhs: F) {
+        self.a *= rhs;
+        self.b *= rhs;
     }
 }
 
