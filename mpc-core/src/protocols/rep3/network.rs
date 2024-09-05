@@ -8,6 +8,7 @@ use eyre::{bail, eyre, Report};
 use futures::{SinkExt, StreamExt};
 use mpc_net::{channel::Channel, config::NetworkConfig, MpcNetworkHandler};
 use quinn::{RecvStream, SendStream};
+use std::sync::Arc;
 use tokio_util::codec::LengthDelimitedCodec;
 
 use super::id::PartyID;
@@ -72,6 +73,11 @@ pub trait Rep3Network {
         self.recv_many(self.get_id().prev_id()).await
     }
 
+    /// Fork the network into two separate instances with their own connections
+    async fn fork(self) -> std::io::Result<(Self, Self)>
+    where
+        Self: Sized;
+
     /// Shutdown the network
     async fn shutdown(self) -> std::io::Result<()>;
 }
@@ -81,7 +87,7 @@ pub trait Rep3Network {
 #[derive(Debug)]
 pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
-    pub(crate) net_handler: MpcNetworkHandler,
+    pub(crate) net_handler: Arc<MpcNetworkHandler>,
     pub(crate) chan_next: Channel<RecvStream, SendStream, LengthDelimitedCodec>,
     pub(crate) chan_prev: Channel<RecvStream, SendStream, LengthDelimitedCodec>,
 }
@@ -93,7 +99,7 @@ impl Rep3MpcNet {
             bail!("REP3 protocol requires exactly 3 parties")
         }
         let id = PartyID::try_from(config.my_id)?;
-        let mut net_handler = MpcNetworkHandler::establish(config).await?;
+        let net_handler = MpcNetworkHandler::establish(config).await?;
         let mut channels = net_handler.get_byte_channels().await?;
         let chan_next = channels
             .remove(&id.next_id().into())
@@ -107,7 +113,7 @@ impl Rep3MpcNet {
 
         Ok(Self {
             id,
-            net_handler,
+            net_handler: Arc::new(net_handler),
             chan_next,
             chan_prev,
         })
@@ -177,7 +183,27 @@ impl Rep3Network for Rep3MpcNet {
         Ok(res)
     }
 
+    async fn fork(self) -> std::io::Result<(Self, Self)> {
+        let id = self.id;
+        let net_handler = Arc::clone(&self.net_handler);
+        let mut channels = net_handler.get_byte_channels().await?;
+
+        Ok((
+            self,
+            Self {
+                id,
+                net_handler,
+                chan_next: channels.remove(&id.next_id().into()).unwrap(),
+                chan_prev: channels.remove(&id.prev_id().into()).unwrap(),
+            },
+        ))
+    }
+
     async fn shutdown(self) -> std::io::Result<()> {
-        self.net_handler.shutdown().await
+        if let Some(net_handler) = Arc::into_inner(self.net_handler) {
+            net_handler.shutdown().await
+        } else {
+            Ok(())
+        }
     }
 }
