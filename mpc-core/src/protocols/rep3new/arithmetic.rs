@@ -249,3 +249,23 @@ pub async fn pow_public<F: PrimeField, N: Rep3Network>(
     }
     Ok(FieldShareOrPublic::Share(mul(res, shared, io_context).await?))
 }
+
+/// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal.
+pub fn eq<F: PrimeField, N: Rep3Network>(
+    a: &FieldShare<F>,
+    b: &FieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<FieldShare<F>> {
+    todo!()
+}
+
+/// Outputs whether a shared value is zero (true) or not (false). Note that **the shared value gets opened**.
+pub fn is_zero<F: PrimeField, N: Rep3Network>(
+    a: &FieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<bool> {
+    let zero_share = FieldShare::default();
+    let res = eq(&zero_share, a, io_context)?;
+    let x = open(&res, io_context)?;
+    Ok(x.is_one())
+}

@@ -3,11 +3,8 @@ use eyre::bail;
 use mpc_core::protocols::{
     rep3::network::Rep3Network,
     rep3new::{
-        arithmetic::{self, add, add_public, mul, mul_public, sub, sub_public},
-        binary::{and, and_with_public, xor, xor_public},
-        conversion::{a2b, b2a},
-        network::IoContext,
-        Rep3BigUintShare, Rep3PrimeFieldShare,
+        arithmetic::{self, IoContext},
+        binary, conversion, Rep3BigUintShare, Rep3PrimeFieldShare,
     },
 };
 
@@ -229,9 +226,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
 
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
         match (a, b) {
-            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
-                Ok(self.plain.int_div(a, b)?.into())
-            }
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.int_div(a, b)?.into()),
             _ => todo!("Shared int_div not implemented"),
         }
     }
@@ -405,8 +400,18 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         }
     }
 
-    fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> eyre::Result<bool> {
-        todo!()
+    async fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> eyre::Result<bool> {
+        if !allow_secret_inputs && self.is_shared(&a)? {
+            bail!("allow_secret_inputs is false and input is shared");
+        }
+        match a {
+            Rep3VmType::Public(a) => Ok(self.plain.is_zero(a, allow_secret_inputs).await?),
+            Rep3VmType::Arithmetic(a) => Ok(arithmetic::is_zero(&a, &mut self.io_context)?.into()),
+            Rep3VmType::Binary(a) => {
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                self.is_zero(a.into(), allow_secret_inputs).await
+            }
+        }
     }
 
     fn is_shared(&mut self, a: &Self::VmType) -> eyre::Result<bool> {

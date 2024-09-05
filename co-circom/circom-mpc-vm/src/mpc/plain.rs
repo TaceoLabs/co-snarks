@@ -132,7 +132,7 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok(F::from(lhs / rhs))
     }
 
-    fn is_zero(&mut self, a: Self::VmType, _: bool) -> Result<bool> {
+    async fn is_zero(&mut self, a: Self::VmType, _: bool) -> Result<bool> {
         Ok(a.is_zero())
     }
 
