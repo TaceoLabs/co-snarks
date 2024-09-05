@@ -81,11 +81,11 @@ impl<F: PrimeField> std::ops::SubAssign<Rep3PrimeFieldShare<F>> for Rep3PrimeFie
     }
 }
 
-impl<F: PrimeField> std::ops::Mul<&Rep3PrimeFieldShare<F>> for &'_ Rep3PrimeFieldShare<F> {
+impl<F: PrimeField> std::ops::Mul for Rep3PrimeFieldShare<F> {
     type Output = F;
 
     // Local part of mul only
-    fn mul(self, rhs: &Rep3PrimeFieldShare<F>) -> Self::Output {
+    fn mul(self, rhs: Rep3PrimeFieldShare<F>) -> Self::Output {
         self.a * rhs.a + self.a * rhs.b + self.b * rhs.a
     }
 }

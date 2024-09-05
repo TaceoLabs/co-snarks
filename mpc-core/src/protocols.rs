@@ -4,6 +4,7 @@
 
 pub mod bridges;
 pub mod plain;
-pub mod rep3;
+//pub mod rep3;
 pub mod rep3new;
 pub mod shamir;
+pub mod shamirnew;

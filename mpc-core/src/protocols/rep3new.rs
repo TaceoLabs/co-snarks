@@ -1,8 +1,10 @@
 mod a2b;
 pub mod arithmetic;
 pub mod binary;
+pub mod id;
 pub mod network;
 pub mod point;
+pub mod rngs;
 
 pub use arithmetic::types::Rep3PrimeFieldShare;
 
@@ -47,7 +49,7 @@ pub mod conversion {
     use ark_ff::PrimeField;
     use num_bigint::BigUint;
 
-    use crate::protocols::rep3::{id::PartyID, network::Rep3Network};
+    use crate::protocols::rep3new::{id::PartyID, network::Rep3Network};
 
     use super::{a2b, network::IoContext, IoResult, Rep3BigUintShare, Rep3PrimeFieldShare};
 

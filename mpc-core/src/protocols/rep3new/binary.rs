@@ -1,7 +1,7 @@
 use ark_ff::PrimeField;
 use num_bigint::BigUint;
 
-use crate::protocols::rep3::{id::PartyID, network::Rep3Network};
+use crate::protocols::rep3new::{id::PartyID, network::Rep3Network};
 
 use super::network::IoContext;
 
@@ -66,8 +66,7 @@ pub async fn and<F: PrimeField, N: Rep3Network>(
         .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
     mask ^= mask_b;
     let local_a = (a & b) ^ mask;
-    io_context.network.send_next(local_a.to_owned())?;
-    let local_b = io_context.network.recv_prev()?;
+    let local_b = io_context.network.reshare(local_a.clone()).await?;
     Ok(BinaryShare::new(local_a, local_b))
 }
 
@@ -101,8 +100,7 @@ pub async fn open<F: PrimeField, N: Rep3Network>(
     a: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BigUint> {
-    io_context.network.send_next(a.b.clone())?;
-    let c = io_context.network.recv_prev::<BigUint>()?;
+    let c = io_context.network.reshare(a.b.clone()).await?;
     Ok(&a.a ^ &a.b ^ c)
 }
 

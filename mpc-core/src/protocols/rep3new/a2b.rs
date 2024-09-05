@@ -5,8 +5,8 @@ use ark_ff::PrimeField;
 use ark_ff::Zero;
 use num_bigint::BigUint;
 
-use crate::protocols::rep3::id::PartyID;
-use crate::protocols::rep3::network::Rep3Network;
+use crate::protocols::rep3new::id::PartyID;
+use crate::protocols::rep3new::network::Rep3Network;
 
 use super::binary;
 use super::network::IoContext;

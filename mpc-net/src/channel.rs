@@ -43,6 +43,11 @@ impl<R, W, C> Channel<R, W, C> {
         (self.write_conn, self.read_conn)
     }
 
+    /// Returns mutable reference to the ([`WriteChannel`],[`ReadChannel`]) pair.
+    pub fn inner_ref(&mut self) -> (&mut WriteChannel<W, C>, &mut ReadChannel<R, C>) {
+        (&mut self.write_conn, &mut self.read_conn)
+    }
+
     /// Closes the channel, flushing the write buffer and checking that there is no unread data.
     pub async fn close<MSend>(self) -> Result<(), io::Error>
     where

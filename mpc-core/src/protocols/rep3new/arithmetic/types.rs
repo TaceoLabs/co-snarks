@@ -1,13 +1,13 @@
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-use crate::protocols::rep3::{id::PartyID, rngs::Rep3CorrelatedRng};
+use crate::protocols::rep3new::{id::PartyID, rngs::Rep3CorrelatedRng};
 
 /// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Rep3PrimeFieldShare<F: PrimeField> {
-    pub(crate) a: F,
-    pub(crate) b: F,
+    pub a: F,
+    pub b: F,
 }
 
 impl<F: PrimeField> Default for Rep3PrimeFieldShare<F> {

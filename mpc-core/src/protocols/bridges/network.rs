@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use crate::protocols::{
-    rep3::network::{Rep3MpcNet, Rep3Network},
+    rep3new::network::{Rep3MpcNet, Rep3Network},
     shamir::network::{ShamirMpcNet, ShamirNetwork},
 };
 
