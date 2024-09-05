@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "co-circom/circom-graph",
     "co-circom/circom-mpc-compiler",
     "co-circom/circom-mpc-vm",
     "co-circom/circom-types",

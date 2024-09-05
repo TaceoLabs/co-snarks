@@ -1,0 +1,28 @@
+[package]
+name = "circom-graph"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+readme.workspace = true
+
+[dependencies]
+witness = { git = "https://github.com/philsippl/circom-witness-rs" }
+ark-bn254.workspace = true
+ark-ec.workspace = true
+ark-ff.workspace = true
+eyre.workspace = true
+itertools.workspace = true
+mpc-core.workspace = true
+mpc-net.workspace = true
+num-bigint.workspace = true
+serde.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+futures.workspace = true
+ruint = "1.12.3"
+serde_json.workspace = true
