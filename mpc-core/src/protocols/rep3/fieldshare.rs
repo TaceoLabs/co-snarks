@@ -8,7 +8,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::Itertools;
 
 /// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Rep3PrimeFieldShare<F: PrimeField> {
     pub(crate) a: F,
     pub(crate) b: F,
@@ -80,6 +80,13 @@ impl<F: PrimeField> std::ops::AddAssign<&Rep3PrimeFieldShare<F>> for Rep3PrimeFi
     }
 }
 
+impl<F: PrimeField> std::ops::AddAssign<Rep3PrimeFieldShare<F>> for Rep3PrimeFieldShare<F> {
+    fn add_assign(&mut self, rhs: Self) {
+        self.a += rhs.a;
+        self.b += rhs.b;
+    }
+}
+
 impl<F: PrimeField> std::ops::Sub for Rep3PrimeFieldShare<F> {
     type Output = Self;
 
@@ -104,6 +111,13 @@ impl<F: PrimeField> std::ops::Sub<&Rep3PrimeFieldShare<F>> for Rep3PrimeFieldSha
 
 impl<F: PrimeField> std::ops::SubAssign<&Rep3PrimeFieldShare<F>> for Rep3PrimeFieldShare<F> {
     fn sub_assign(&mut self, rhs: &Self) {
+        self.a -= rhs.a;
+        self.b -= rhs.b;
+    }
+}
+
+impl<F: PrimeField> std::ops::SubAssign<Rep3PrimeFieldShare<F>> for Rep3PrimeFieldShare<F> {
+    fn sub_assign(&mut self, rhs: Self) {
         self.a -= rhs.a;
         self.b -= rhs.b;
     }
@@ -169,6 +183,13 @@ impl<F: PrimeField> std::ops::Mul<F> for Rep3PrimeFieldShare<F> {
     }
 }
 
+impl<F: PrimeField> std::ops::MulAssign<F> for Rep3PrimeFieldShare<F> {
+    fn mul_assign(&mut self, rhs: F) {
+        self.a *= rhs;
+        self.b *= rhs;
+    }
+}
+
 impl<F: PrimeField> std::ops::Neg for Rep3PrimeFieldShare<F> {
     type Output = Self;
 
@@ -190,11 +211,24 @@ impl<F: PrimeField> std::ops::Neg for &Rep3PrimeFieldShare<F> {
     }
 }
 
+impl<F: PrimeField> ark_ff::Zero for Rep3PrimeFieldShare<F> {
+    fn zero() -> Self {
+        Self {
+            a: F::zero(),
+            b: F::zero(),
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        panic!("Not implemented");
+    }
+}
+
 /// This type represents a vector of replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two vectors of field elements.
 #[derive(Debug, Clone, Default, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Rep3PrimeFieldShareVec<F: PrimeField> {
-    pub(crate) a: Vec<F>,
-    pub(crate) b: Vec<F>,
+    pub a: Vec<F>,
+    pub b: Vec<F>,
 }
 
 impl<F: PrimeField> Rep3PrimeFieldShareVec<F> {

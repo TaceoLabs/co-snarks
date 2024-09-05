@@ -35,3 +35,9 @@ tracing.workspace = true
 [dev-dependencies]
 ark-bn254 = { workspace = true }
 ark-std = { workspace = true }
+criterion.workspace = true
+
+
+[[bench]]
+name = "share_fft"
+harness = false
