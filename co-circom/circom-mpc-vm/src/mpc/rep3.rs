@@ -4,11 +4,8 @@ use mpc_core::{
     protocols::{
         rep3::network::Rep3Network,
         rep3new::{
-            arithmetic::{self, add, add_public, mul, mul_with_public, sub, sub_public, IoContext},
-            binary::{and, and_with_public, or, or_public, xor, xor_public},
-            conversion::{a2b, b2a},
-            network::IoContext,
-            Rep3BigUintShare, Rep3PrimeFieldShare,
+            arithmetic, binary, conversion, network::IoContext, Rep3BigUintShare,
+            Rep3PrimeFieldShare,
         },
     },
     traits::SecretShared,
@@ -80,23 +77,25 @@ impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                Ok(add_public(&a, b, self.io_context.id).into())
+                Ok(arithmetic::add_public(&a, b, self.io_context.id).into())
             }
-            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => Ok(add(&a, &b).into()),
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                Ok(arithmetic::add(&a, &b).into())
+            }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = b2a(a, &mut self.io_context).await?;
-                Ok(add_public(&a, b, self.io_context.id).into())
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                Ok(arithmetic::add_public(&a, b, self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
-                let b = b2a(b, &mut self.io_context).await?;
-                Ok(add(&a, &b).into())
+                let b = conversion::b2a(b, &mut self.io_context).await?;
+                Ok(arithmetic::add(&a, &b).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                let a = b2a(a, &mut self.io_context).await?;
-                let b = b2a(b, &mut self.io_context).await?;
-                Ok(add(&a, &b).into())
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                let b = conversion::b2a(b, &mut self.io_context).await?;
+                Ok(arithmetic::add(&a, &b).into())
             }
         }
     }
@@ -107,32 +106,34 @@ impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
                 Ok(self.plain.sub(a, b).await?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                Ok(sub_public(&a, b, self.io_context.id).into())
+                Ok(arithmetic::sub_public(&a, b, self.io_context.id).into())
             }
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
-                Ok(sub_public(&b, a, self.io_context.id).into())
+                Ok(arithmetic::sub_public(&b, a, self.io_context.id).into())
             }
-            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => Ok(sub(&a, &b).into()),
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                Ok(arithmetic::sub(&a, &b).into())
+            }
             (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
-                let b = b2a(b, &mut self.io_context).await?;
-                Ok(sub_public(&b, a, self.io_context.id).into())
+                let b = conversion::b2a(b, &mut self.io_context).await?;
+                Ok(arithmetic::sub_public(&b, a, self.io_context.id).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = b2a(a, &mut self.io_context).await?;
-                Ok(sub_public(&a, b, self.io_context.id).into())
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                Ok(arithmetic::sub_public(&a, b, self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
-                let b = b2a(b, &mut self.io_context).await?;
-                Ok(sub(&a, &b).into())
+                let b = conversion::b2a(b, &mut self.io_context).await?;
+                Ok(arithmetic::sub(&a, &b).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
-                let a = b2a(a, &mut self.io_context).await?;
-                Ok(sub(&a, &b).into())
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                Ok(arithmetic::sub(&a, &b).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                let a = b2a(a, &mut self.io_context).await?;
-                let b = b2a(b, &mut self.io_context).await?;
-                Ok(sub(&a, &b).into())
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                let b = conversion::b2a(b, &mut self.io_context).await?;
+                Ok(arithmetic::sub(&a, &b).into())
             }
         }
     }
@@ -144,25 +145,25 @@ impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                Ok(mul_with_public(&a, b).into())
+                Ok(arithmetic::mul_with_public(&a, b).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+                Ok(arithmetic::mul(&a, &b, &mut self.io_context).await?.into())
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = b2a(a, &mut self.io_context).await?;
-                Ok(mul_with_public(&a, b).into())
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                Ok(arithmetic::mul_with_public(&a, b).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
-                let b = b2a(b, &mut self.io_context).await?;
-                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+                let b = conversion::b2a(b, &mut self.io_context).await?;
+                Ok(arithmetic::mul(&a, &b, &mut self.io_context).await?.into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                let a = b2a(a, &mut self.io_context).await?;
-                let b = b2a(b, &mut self.io_context).await?;
-                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                let b = conversion::b2a(b, &mut self.io_context).await?;
+                Ok(arithmetic::mul(&a, &b, &mut self.io_context).await?.into())
             }
         }
     }
@@ -174,45 +175,45 @@ impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
                 let b = arithmetic::inv(&b, &mut self.io_context).await?;
-                Ok(mul_with_public(&b, a).into())
+                Ok(arithmetic::mul_with_public(&b, a).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 if b.is_zero() {
                     bail!("Cannot invert zero");
                 }
-                Ok(mul_with_public(&a, b.inverse().unwrap()).into())
+                Ok(arithmetic::mul_with_public(&a, b.inverse().unwrap()).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let b = arithmetic::inv(&b, &mut self.io_context).await?;
-                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+                Ok(arithmetic::mul(&a, &b, &mut self.io_context).await?.into())
             }
             (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
-                let b = b2a(b, &mut self.io_context).await?;
+                let b = conversion::b2a(b, &mut self.io_context).await?;
                 let b = arithmetic::inv(&b, &mut self.io_context).await?;
-                Ok(mul_with_public(&b, a).into())
+                Ok(arithmetic::mul_with_public(&b, a).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = b2a(a, &mut self.io_context).await?;
+                let a = conversion::b2a(a, &mut self.io_context).await?;
                 if b.is_zero() {
                     bail!("Cannot invert zero");
                 }
-                Ok(mul_with_public(&a, b.inverse().unwrap()).into())
+                Ok(arithmetic::mul_with_public(&a, b.inverse().unwrap()).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
-                let b = b2a(b, &mut self.io_context).await?;
+                let b = conversion::b2a(b, &mut self.io_context).await?;
                 let b = arithmetic::inv(&b, &mut self.io_context).await?;
-                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+                Ok(arithmetic::mul(&a, &b, &mut self.io_context).await?.into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
-                let a = b2a(a, &mut self.io_context).await?;
+                let a = conversion::b2a(a, &mut self.io_context).await?;
                 let b = arithmetic::inv(&b, &mut self.io_context).await?;
-                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+                Ok(arithmetic::mul(&a, &b, &mut self.io_context).await?.into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                let a = b2a(a, &mut self.io_context).await?;
-                let b = b2a(b, &mut self.io_context).await?;
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                let b = conversion::b2a(b, &mut self.io_context).await?;
                 let b = arithmetic::inv(&b, &mut self.io_context).await?;
-                Ok(mul(&a, &b, &mut self.io_context).await?.into())
+                Ok(arithmetic::mul(&a, &b, &mut self.io_context).await?.into())
             }
         }
     }
@@ -297,24 +298,24 @@ impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                let a = a2b(&a, &mut self.io_context).await?;
-                Ok(xor_public(&a, &b.into_bigint().into(), self.io_context.id).into())
+                let a = conversion::a2b(&a, &mut self.io_context).await?;
+                Ok(binary::xor_public(&a, &b.into_bigint().into(), self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let a = a2b(&a, &mut self.io_context).await?;
-                let b = a2b(&b, &mut self.io_context).await?;
-                Ok(xor(&a, &b).into())
+                let a = conversion::a2b(&a, &mut self.io_context).await?;
+                let b = conversion::a2b(&b, &mut self.io_context).await?;
+                Ok(binary::xor(&a, &b).into())
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                Ok(xor_public(&a, &b.into_bigint().into(), self.io_context.id).into())
+                Ok(binary::xor_public(&a, &b.into_bigint().into(), self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
-                let a = a2b(&a, &mut self.io_context).await?;
-                Ok(xor(&a, &b).into())
+                let a = conversion::a2b(&a, &mut self.io_context).await?;
+                Ok(binary::xor(&a, &b).into())
             }
-            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => Ok(xor(&a, &b).into()),
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => Ok(binary::xor(&a, &b).into()),
         }
     }
 
@@ -325,25 +326,25 @@ impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                let a = a2b(&a, &mut self.io_context).await?;
+                let a = conversion::a2b(&a, &mut self.io_context).await?;
                 self.bit_or(a.into(), b.into()).await
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let a = a2b(&a, &mut self.io_context).await?;
-                let b = a2b(&b, &mut self.io_context).await?;
+                let a = conversion::a2b(&a, &mut self.io_context).await?;
+                let b = conversion::a2b(&b, &mut self.io_context).await?;
                 self.bit_or(a.into(), b.into()).await
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                Ok(or_public(&a, &b.into_bigint().into(), self.io_context.id).into())
+                Ok(binary::or_public(&a, &b.into_bigint().into(), self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
-                let a = a2b(&a, &mut self.io_context).await?;
+                let a = conversion::a2b(&a, &mut self.io_context).await?;
                 self.bit_or(a.into(), b.into()).await
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                Ok(or(&a, &b, &mut self.io_context).await?.into())
+                Ok(binary::or(&a, &b, &mut self.io_context).await?.into())
             }
         }
     }
@@ -355,25 +356,25 @@ impl<F: PrimeField + SecretShared, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                let a = a2b(&a, &mut self.io_context).await?;
-                Ok(and_with_public(&a, &b.into_bigint().into()).into())
+                let a = conversion::a2b(&a, &mut self.io_context).await?;
+                Ok(binary::and_with_public(&a, &b.into_bigint().into()).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let a = a2b(&a, &mut self.io_context).await?;
-                let b = a2b(&b, &mut self.io_context).await?;
-                Ok(and(&a, &b, &mut self.io_context).await?.into())
+                let a = conversion::a2b(&a, &mut self.io_context).await?;
+                let b = conversion::a2b(&b, &mut self.io_context).await?;
+                Ok(binary::and(&a, &b, &mut self.io_context).await?.into())
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                Ok(and_with_public(&a, &b.into_bigint().into()).into())
+                Ok(binary::and_with_public(&a, &b.into_bigint().into()).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
-                let a = a2b(&a, &mut self.io_context).await?;
-                Ok(and(&a, &b, &mut self.io_context).await?.into())
+                let a = conversion::a2b(&a, &mut self.io_context).await?;
+                Ok(binary::and(&a, &b, &mut self.io_context).await?.into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                Ok(and(&a, &b, &mut self.io_context).await?.into())
+                Ok(binary::and(&a, &b, &mut self.io_context).await?.into())
             }
         }
     }
