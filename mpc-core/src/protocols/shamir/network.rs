@@ -8,7 +8,7 @@ use eyre::{bail, Report};
 use futures::{SinkExt, StreamExt};
 use mpc_net::{channel::Channel, config::NetworkConfig, MpcNetworkHandler};
 use quinn::{RecvStream, SendStream};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use tokio_util::codec::LengthDelimitedCodec;
 
 /// This trait defines the network interface for the Shamir protocol.
@@ -60,6 +60,11 @@ pub trait ShamirNetwork {
         num: usize,
     ) -> std::io::Result<Vec<F>>;
 
+    /// Fork the network into two separate instances with their own connections
+    async fn fork(self) -> std::io::Result<(Self, Self)>
+    where
+        Self: Sized;
+
     /// Shutdown the network
     async fn shutdown(self) -> std::io::Result<()>;
 }
@@ -68,7 +73,7 @@ pub trait ShamirNetwork {
 pub struct ShamirMpcNet {
     pub(crate) id: usize, // 0 <= id < num_parties
     pub(crate) num_parties: usize,
-    pub(crate) net_handler: MpcNetworkHandler,
+    pub(crate) net_handler: Arc<MpcNetworkHandler>,
     pub(crate) channels: HashMap<usize, Channel<RecvStream, SendStream, LengthDelimitedCodec>>,
 }
 
@@ -85,13 +90,13 @@ impl ShamirMpcNet {
             bail!("Invalid party id={} for {} parties", id, num_parties)
         }
 
-        let mut net_handler = MpcNetworkHandler::establish(config).await?;
+        let net_handler = MpcNetworkHandler::establish(config).await?;
         let channels = net_handler.get_byte_channels().await?;
 
         Ok(Self {
             id,
             num_parties,
-            net_handler,
+            net_handler: Arc::new(net_handler),
             channels,
         })
     }
@@ -234,7 +239,28 @@ impl ShamirNetwork for ShamirMpcNet {
         Ok(res)
     }
 
+    async fn fork(self) -> std::io::Result<(Self, Self)> {
+        let id = self.id;
+        let num_parties = self.num_parties;
+        let net_handler = Arc::clone(&self.net_handler);
+        let channels = net_handler.get_byte_channels().await?;
+
+        Ok((
+            self,
+            Self {
+                id,
+                num_parties,
+                net_handler,
+                channels,
+            },
+        ))
+    }
+
     async fn shutdown(self) -> std::io::Result<()> {
-        self.net_handler.shutdown().await
+        if let Some(net_handler) = Arc::into_inner(self.net_handler) {
+            net_handler.shutdown().await
+        } else {
+            Ok(())
+        }
     }
 }
