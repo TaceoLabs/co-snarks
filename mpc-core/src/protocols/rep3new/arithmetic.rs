@@ -1,5 +1,7 @@
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
+use num_bigint::BigUint;
+use num_traits::Zero;
 use types::Rep3PrimeFieldShare;
 
 use crate::protocols::rep3new::{id::PartyID, network::Rep3Network};
@@ -11,6 +13,12 @@ type BinaryShare<F> = Rep3BigUintShare<F>;
 
 mod ops;
 pub(super) mod types;
+
+/// Some computations return a shared value or a public value.
+pub enum FieldShareOrPublic<F: PrimeField> {
+    Share(FieldShare<F>),
+    Public(F),
+}
 
 pub fn add<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>) -> FieldShare<F> {
     a + b
@@ -48,7 +56,7 @@ pub async fn mul<F: PrimeField, N: Rep3Network>(
 }
 
 /// Multiply a share b by a public value a: c = a * \[b\].
-pub fn mul_with_public<F: PrimeField>(shared: FieldShare<F>, public: F) -> FieldShare<F> {
+pub fn mul_public<F: PrimeField>(shared: FieldShare<F>, public: F) -> FieldShare<F> {
     shared * public
 }
 
@@ -94,7 +102,7 @@ pub fn div_by_public<F: PrimeField>(
         eyre::bail!("Cannot invert zero");
     }
     let b_inv = public.inverse().unwrap();
-    Ok(mul_with_public(shared, b_inv))
+    Ok(mul_public(shared, b_inv))
 }
 
 pub async fn div_public_by_shared<F: PrimeField, N: Rep3Network>(
@@ -102,7 +110,7 @@ pub async fn div_public_by_shared<F: PrimeField, N: Rep3Network>(
     shared: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    Ok(mul_with_public(inv(shared, io_context).await?, public))
+    Ok(mul_public(inv(shared, io_context).await?, public))
 }
 
 /// Negates a shared value: \[b\] = -\[a\].
@@ -151,7 +159,7 @@ pub async fn cmux<F: PrimeField, N: Rep3Network>(
 
 /// Convenience method for \[a\] + \[b\] * c
 pub fn add_mul_public<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>, c: F) -> FieldShare<F> {
-    add(a, mul_with_public(b, c))
+    add(a, mul_public(b, c))
 }
 
 /// Convenience method for \[a\] + \[b\] * \[c\]
@@ -195,8 +203,7 @@ pub async fn equals<F: PrimeField, N: Rep3Network>(
     //Ok(self.bit_inject(is_zero_bit)?)
 }
 
-// Checks whether to prime field shares are equal and return an
-// binary share of 0 or 1. 1 means they are equal.
+// Checks whether to prime field shares are equal and return a binary share of 0 or 1. 1 means they are equal.
 pub async fn equals_bit<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
@@ -206,4 +213,27 @@ pub async fn equals_bit<F: PrimeField, N: Rep3Network>(
     let bits = conversion::a2b(&diff, io_context).await?;
     let is_zero = binary::is_zero(bits, io_context).await?;
     Ok(is_zero)
+}
+
+pub async fn pow_public<F: PrimeField, N: Rep3Network>(
+    shared: &FieldShare<F>,
+    public: F,
+    io_context: &mut IoContext<N>,
+) -> IoResult<FieldShareOrPublic<F>> {
+    if public.is_zero() {
+        return Ok(FieldShareOrPublic::Public(F::one()));
+    }
+    // TODO: are negative exponents allowed in circom?
+    let mut res = promote_to_trivial_share(io_context.id, F::one());
+    let mut public: BigUint = public.into_bigint().into();
+    let mut shared: FieldShare<F> = shared.to_owned();
+    while !public.is_zero() {
+        if public.bit(0) {
+            public -= 1u64;
+            res = mul(res, shared, io_context).await?;
+        }
+        shared = mul(shared, shared, io_context).await?;
+        public >>= 1;
+    }
+    Ok(FieldShareOrPublic::Share(mul(res, shared, io_context).await?))
 }

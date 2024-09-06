@@ -106,7 +106,7 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok(a / b)
     }
 
-    fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    async fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Ok(a.pow(b.into_bigint()))
     }
 

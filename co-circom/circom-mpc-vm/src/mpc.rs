@@ -28,7 +28,7 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Compute c = a ^ b, where a and b ar VM-types.
-    fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    async fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Compute the modulo of the VM-type a by the VM-type b: c = a % b.
     fn modulo(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
