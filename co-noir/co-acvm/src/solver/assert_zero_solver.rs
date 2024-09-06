@@ -1,8 +1,7 @@
 use acir::{acir_field::GenericFieldElement, native_types::Expression, AcirField};
 use ark_ff::PrimeField;
-use mpc_core::traits::NoirWitnessExtensionProtocol;
 
-use crate::solver::solver_utils;
+use crate::{mpc::NoirWitnessExtensionProtocol, solver::solver_utils};
 
 use super::{CoAcvmResult, CoSolver};
 

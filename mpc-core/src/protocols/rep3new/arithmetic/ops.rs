@@ -119,7 +119,7 @@ impl<F: PrimeField> std::ops::MulAssign<F> for Rep3PrimeFieldShare<F> {
     }
 }
 
-impl<F: PrimeField> std::ops::Neg for &Rep3PrimeFieldShare<F> {
+impl<F: PrimeField> std::ops::Neg for Rep3PrimeFieldShare<F> {
     type Output = Rep3PrimeFieldShare<F>;
 
     fn neg(self) -> Self::Output {

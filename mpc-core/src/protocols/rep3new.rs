@@ -2,6 +2,7 @@ mod a2b;
 pub mod arithmetic;
 pub mod binary;
 pub mod id;
+pub mod lut;
 pub mod network;
 mod pointshare;
 pub mod rngs;

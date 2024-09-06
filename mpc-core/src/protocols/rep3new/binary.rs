@@ -1,14 +1,17 @@
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
+use itertools::izip;
 use num_bigint::BigUint;
+use types::Rep3BigUintShare;
 
 use crate::protocols::rep3new::{id::PartyID, network::Rep3Network};
 
-use super::network::IoContext;
+use super::{network::IoContext, Rep3PrimeFieldShare};
 
 mod ops;
 pub(super) mod types;
 
-type BinaryShare<F> = types::Rep3BigUintShare<F>;
+type FieldShare<F> = Rep3PrimeFieldShare<F>;
+type BinaryShare<F> = Rep3BigUintShare<F>;
 type IoResult<T> = std::io::Result<T>;
 
 /// Performs a bitwise XOR operation on two shared values.
@@ -126,4 +129,69 @@ pub async fn cmux<F: PrimeField, N: Rep3Network>(
     let mut and = and(c, &xor, io_context).await?;
     and ^= x_f;
     Ok(and)
+}
+
+pub async fn or_tree<F: PrimeField, N: Rep3Network>(
+    mut inputs: Vec<BinaryShare<F>>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    let mut num = inputs.len();
+
+    tracing::debug!("starting or tree over {} elements", inputs.len());
+    while num > 1 {
+        tracing::trace!("binary tree still has {} elements", num);
+        let mod_ = num & 1;
+        num >>= 1;
+
+        let (a_vec, tmp) = inputs.split_at(num);
+        let (b_vec, leftover) = tmp.split_at(num);
+
+        let mut res = Vec::with_capacity(num);
+        // TODO WE WANT THIS BATCHED!!!
+        // THIS IS SUPER BAD
+        for (a, b) in izip!(a_vec.iter(), b_vec.iter()) {
+            res.push(or(a, b, io_context).await?);
+        }
+
+        res.extend_from_slice(leftover);
+        inputs = res;
+
+        num += mod_;
+    }
+    let result = inputs[0].clone();
+    tracing::debug!("we did it!");
+    Ok(result)
+}
+
+/// Computes a binary circuit to check whether the replicated binary-shared input x is zero or not. The output is a binary sharing of one bit.
+pub async fn is_zero<F: PrimeField, N: Rep3Network>(
+    x: BinaryShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    let bit_len = usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize");
+    let mask = (BigUint::from(1u64) << bit_len) - BigUint::one();
+
+    // negate
+    let mut x = &x ^ &mask;
+
+    // do ands in a tree
+    // TODO: Make and tree more communication efficient, ATM we send the full element for each level, even though they halve in size
+    let mut len = bit_len;
+    while len > 1 {
+        if len % 2 == 1 {
+            len += 1;
+            // pad with a 1 (= 1 xor 1 xor 1) in MSB position
+            // since this is publicly known we just set the bit in each party's share and its replication
+            x.a.set_bit(len as u64 - 1, true);
+            x.b.set_bit(len as u64 - 1, true);
+        }
+        len /= 2;
+        let mask = (BigUint::from(1u64) << len) - BigUint::one();
+        let y = &x >> len;
+        // TODO remove the 100 references...
+        x = and(&(&x & &mask), &(&y & &mask), io_context).await?;
+    }
+    // extract LSB
+    let x = &x & &BigUint::one();
+    Ok(x)
 }

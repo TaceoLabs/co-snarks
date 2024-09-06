@@ -1,0 +1,218 @@
+use std::marker::PhantomData;
+
+use ark_ff::PrimeField;
+use mpc_core::protocols::rep3new::arithmetic;
+use mpc_core::{
+    lut::LookupTableProvider,
+    protocols::rep3new::{
+        lut::NaiveRep3LookupTable,
+        network::{IoContext, Rep3Network},
+        Rep3PrimeFieldShare,
+    },
+};
+
+use super::plain::PlainAcvmSolver;
+use super::NoirWitnessExtensionProtocol;
+type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
+
+pub(crate) struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
+    lut_provider: NaiveRep3LookupTable<N>,
+    io_context: IoContext<N>,
+    plain_solver: PlainAcvmSolver<F>,
+    phantom_data: PhantomData<F>,
+}
+
+impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
+    pub(crate) fn new(network: N) -> Self {
+        todo!()
+    }
+}
+
+// TODO maybe we want to merge that with the Rep3VmType?? Atm we do not need
+// binary shares so maybe it is ok..
+#[derive(Clone)]
+pub enum Rep3AcvmType<F: PrimeField> {
+    Public(F),
+    Shared(ArithmeticShare<F>),
+}
+
+impl<F: PrimeField> std::fmt::Debug for Rep3AcvmType<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(field) => f.debug_tuple("Public").field(field).finish(),
+            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+        }
+    }
+}
+
+impl<F: PrimeField> std::fmt::Display for Rep3AcvmType<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(field) => f.write_str(&format!("Public ({field})")),
+            Self::Shared(arithmetic) => {
+                let (a, b) = arithmetic.clone().ab();
+                f.write_str(&format!("Arithmetic (a: {}, b: {})", a, b))
+            }
+        }
+    }
+}
+
+impl<F: PrimeField> Default for Rep3AcvmType<F> {
+    fn default() -> Self {
+        Self::Public(F::zero())
+    }
+}
+
+impl<F: PrimeField> From<F> for Rep3AcvmType<F> {
+    fn from(value: F) -> Self {
+        Self::Public(value)
+    }
+}
+
+impl<F: PrimeField> From<ArithmeticShare<F>> for Rep3AcvmType<F> {
+    fn from(value: ArithmeticShare<F>) -> Self {
+        Self::Shared(value)
+    }
+}
+
+impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<F, N> {
+    type Lookup = NaiveRep3LookupTable<N>;
+
+    type ArithmeticShare = Rep3PrimeFieldShare<F>;
+
+    type AcvmType = Rep3AcvmType<F>;
+
+    fn is_public_zero(a: &Self::AcvmType) -> bool {
+        if let Rep3AcvmType::Public(x) = a {
+            x.is_zero()
+        } else {
+            false
+        }
+    }
+
+    fn is_public_one(a: &Self::AcvmType) -> bool {
+        if let Rep3AcvmType::Public(x) = a {
+            x.is_one()
+        } else {
+            false
+        }
+    }
+
+    fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
+        todo!()
+    }
+
+    fn acvm_mul_with_public(
+        &mut self,
+        public: F,
+        secret: Self::AcvmType,
+    ) -> eyre::Result<Self::AcvmType> {
+        todo!()
+    }
+
+    fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType) {
+        todo!()
+    }
+
+    fn solve_mul_term(
+        &mut self,
+        c: F,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        target: &mut Self::AcvmType,
+    ) -> std::io::Result<()> {
+        todo!()
+    }
+
+    fn solve_equation(
+        &mut self,
+        q_l: Self::AcvmType,
+        c: Self::AcvmType,
+    ) -> eyre::Result<Self::AcvmType> {
+        //-c/q_l
+        let io_context = &mut self.io_context;
+        let result = match (q_l, c) {
+            (Rep3AcvmType::Public(q_l), Rep3AcvmType::Public(c)) => {
+                Rep3AcvmType::Public(self.plain_solver.solve_equation(q_l, c)?)
+            }
+            (Rep3AcvmType::Public(q_l), Rep3AcvmType::Shared(c)) => {
+                Rep3AcvmType::Shared(arithmetic::div_by_public(arithmetic::neg(c), q_l)?)
+            }
+            (Rep3AcvmType::Shared(q_l), Rep3AcvmType::Public(c)) => {
+                let future = arithmetic::div_public_by_shared(-c, q_l, io_context);
+                let result = futures::executor::block_on(future)?;
+                Rep3AcvmType::Shared(result)
+            }
+            (Rep3AcvmType::Shared(q_l), Rep3AcvmType::Shared(c)) => {
+                let future = arithmetic::div(arithmetic::neg(c), q_l, io_context);
+                let result = futures::executor::block_on(future)?;
+                Rep3AcvmType::Shared(result)
+            }
+        };
+        todo!()
+        //let neg_c = Self::AcvmType::neg(self, c);
+        //Self::AcvmType::div(self, neg_c, q_l)
+    }
+
+    fn init_lut_by_acvm_type(
+        &mut self,
+        values: Vec<Self::AcvmType>,
+    ) -> <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap {
+        let id = self.io_context.id;
+        let values = values.into_iter().enumerate().map(|(idx, value)| {
+            let idx = F::from(u64::try_from(idx).expect("usize fits into u64"));
+            let value = match value {
+                Rep3AcvmType::Public(public) => arithmetic::promote_to_trivial_share(id, public),
+                Rep3AcvmType::Shared(shared) => shared,
+            };
+            (arithmetic::promote_to_trivial_share(id, idx), value)
+        });
+        self.lut_provider.init_map(values)
+    }
+
+    fn read_lut_by_acvm_type(
+        &mut self,
+        index: &Self::AcvmType,
+        lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap,
+    ) -> std::io::Result<Self::AcvmType> {
+        let value = match index {
+            Rep3AcvmType::Public(public) => {
+                let id = self.io_context.id;
+                let promoted_key = arithmetic::promote_to_trivial_share(id, *public);
+                self.lut_provider.get_from_lut(promoted_key, lut)
+            }
+            Rep3AcvmType::Shared(shared) => self.lut_provider.get_from_lut(*shared, lut),
+        };
+        let value = futures::executor::block_on(value)?;
+        Ok(Rep3AcvmType::Shared(value))
+    }
+
+    fn write_lut_by_acvm_type(
+        &mut self,
+        index: Self::AcvmType,
+        value: Self::AcvmType,
+        lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap,
+    ) -> std::io::Result<()> {
+        let id = self.io_context.id;
+        let future = match (index, value) {
+            (Rep3AcvmType::Public(index), Rep3AcvmType::Public(value)) => {
+                let index = arithmetic::promote_to_trivial_share(id, index);
+                let value = arithmetic::promote_to_trivial_share(id, value);
+                self.lut_provider.write_to_lut(index, value, lut)
+            }
+            (Rep3AcvmType::Public(index), Rep3AcvmType::Shared(value)) => {
+                let index = arithmetic::promote_to_trivial_share(id, index);
+                self.lut_provider.write_to_lut(index, value, lut)
+            }
+            (Rep3AcvmType::Shared(index), Rep3AcvmType::Public(value)) => {
+                let value = arithmetic::promote_to_trivial_share(id, value);
+                self.lut_provider.write_to_lut(index, value, lut)
+            }
+            (Rep3AcvmType::Shared(index), Rep3AcvmType::Shared(value)) => {
+                self.lut_provider.write_to_lut(index, value, lut)
+            }
+        };
+        futures::executor::block_on(future)?;
+        Ok(())
+    }
+}

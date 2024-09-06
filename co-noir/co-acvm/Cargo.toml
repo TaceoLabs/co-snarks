@@ -15,6 +15,7 @@ acvm.workspace = true
 ark-bn254.workspace = true
 ark-ff.workspace = true
 eyre.workspace = true
+futures.workspace = true
 intmap.workspace = true
 mpc-core.workspace = true
 noirc-abi.workspace = true

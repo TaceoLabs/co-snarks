@@ -4,9 +4,10 @@ use types::Rep3PrimeFieldShare;
 
 use crate::protocols::rep3new::{id::PartyID, network::Rep3Network};
 
-use super::{network::IoContext, IoResult};
+use super::{binary, conversion, network::IoContext, IoResult, Rep3BigUintShare};
 
 type FieldShare<F> = Rep3PrimeFieldShare<F>;
+type BinaryShare<F> = Rep3BigUintShare<F>;
 
 mod ops;
 pub(super) mod types;
@@ -77,8 +78,35 @@ pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
         .collect())
 }
 
+pub async fn div<F: PrimeField, N: Rep3Network>(
+    a: FieldShare<F>,
+    b: FieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<FieldShare<F>> {
+    mul(a, inv(b, io_context).await?, io_context).await
+}
+
+pub fn div_by_public<F: PrimeField>(
+    shared: FieldShare<F>,
+    public: F,
+) -> eyre::Result<FieldShare<F>> {
+    if public.is_zero() {
+        eyre::bail!("Cannot invert zero");
+    }
+    let b_inv = public.inverse().unwrap();
+    Ok(mul_with_public(shared, b_inv))
+}
+
+pub async fn div_public_by_shared<F: PrimeField, N: Rep3Network>(
+    public: F,
+    shared: FieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<FieldShare<F>> {
+    Ok(mul_with_public(inv(shared, io_context).await?, public))
+}
+
 /// Negates a shared value: \[b\] = -\[a\].
-pub fn neg<F: PrimeField>(a: &FieldShare<F>) -> FieldShare<F> {
+pub fn neg<F: PrimeField>(a: FieldShare<F>) -> FieldShare<F> {
     -a
 }
 
@@ -155,4 +183,27 @@ pub async fn mul_open<F: PrimeField, N: Rep3Network>(
     let a = a * b + io_context.rngs.rand.masking_field_element::<F>();
     let (b, c) = io_context.network.broadcast(a).await?;
     Ok(a + b + c)
+}
+
+pub async fn equals<F: PrimeField, N: Rep3Network>(
+    lhs: FieldShare<F>,
+    rhs: FieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3PrimeFieldShare<F>> {
+    let _is_zero_bit = equals_bit(lhs, rhs, io_context).await?;
+    todo!("add bit inject if it is done")
+    //Ok(self.bit_inject(is_zero_bit)?)
+}
+
+// Checks whether to prime field shares are equal and return an
+// binary share of 0 or 1. 1 means they are equal.
+pub async fn equals_bit<F: PrimeField, N: Rep3Network>(
+    lhs: FieldShare<F>,
+    rhs: FieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    let diff = sub(lhs, rhs);
+    let bits = conversion::a2b(&diff, io_context).await?;
+    let is_zero = binary::is_zero(bits, io_context).await?;
+    Ok(is_zero)
 }
