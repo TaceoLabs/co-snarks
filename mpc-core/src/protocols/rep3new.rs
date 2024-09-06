@@ -53,7 +53,9 @@ pub mod conversion {
 
     use crate::protocols::rep3new::{id::PartyID, network::Rep3Network};
 
-    use super::{a2b, network::IoContext, IoResult, Rep3BigUintShare, Rep3PrimeFieldShare};
+    use super::{
+        a2b, arithmetic, network::IoContext, IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
+    };
 
     //re-export a2b
     pub use super::a2b::a2b;
@@ -121,5 +123,50 @@ pub mod conversion {
             }
         }
         Ok(res)
+    }
+
+    /// Translates one shared bit into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
+    pub async fn bit_inject<F: PrimeField, N: Rep3Network>(
+        x: &Rep3BigUintShare<F>,
+        io_context: &mut IoContext<N>,
+    ) -> IoResult<Rep3PrimeFieldShare<F>> {
+        // standard bit inject
+        assert!(x.a.bits() <= 1);
+
+        let mut b0 = Rep3PrimeFieldShare::<F>::default();
+        let mut b1 = Rep3PrimeFieldShare::<F>::default();
+        let mut b2 = Rep3PrimeFieldShare::<F>::default();
+
+        match io_context.id {
+            PartyID::ID0 => {
+                b0.a = x.a.to_owned().into();
+                b2.b = x.b.to_owned().into();
+            }
+            PartyID::ID1 => {
+                b1.a = x.a.to_owned().into();
+                b0.b = x.b.to_owned().into();
+            }
+            PartyID::ID2 => {
+                b2.a = x.a.to_owned().into();
+                b1.b = x.b.to_owned().into();
+            }
+        };
+
+        let d = arithmetic_xor(b0, b1, io_context).await?;
+        let e = arithmetic_xor(d, b2, io_context).await?;
+        Ok(e)
+    }
+
+    /// computes XOR using arithmetic operations, only valid when x and y are known to be 0 or 1.
+    async fn arithmetic_xor<F: PrimeField, N: Rep3Network>(
+        x: Rep3PrimeFieldShare<F>,
+        y: Rep3PrimeFieldShare<F>,
+        io_context: &mut IoContext<N>,
+    ) -> IoResult<Rep3PrimeFieldShare<F>> {
+        let d = arithmetic::mul(x, y, io_context).await?;
+        let d = arithmetic::add(d, d);
+        let e = arithmetic::add(x, y);
+        let d = arithmetic::sub(e, d);
+        Ok(d)
     }
 }
