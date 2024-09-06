@@ -1,5 +1,5 @@
 use ark_ff::PrimeField;
-use itertools::izip;
+use itertools::{izip, Itertools};
 
 use crate::RngType;
 use rand::SeedableRng;
@@ -56,7 +56,7 @@ impl<F: PrimeField> ShamirRng<F> {
     }
 
     // Generates amount * (self.threshold + 1) random double shares
-    pub(super) fn buffer_triples<N: ShamirNetwork>(
+    pub(super) async fn buffer_triples<N: ShamirNetwork>(
         &mut self,
         network: &mut N,
         amount: usize,
@@ -90,7 +90,7 @@ impl<F: PrimeField> ShamirRng<F> {
             if my_id == other_id {
                 my_send = shares;
             } else {
-                network.send_many(other_id, &shares)?;
+                network.send_many(other_id, &shares).await?;
             }
         }
         // Receive
@@ -110,7 +110,7 @@ impl<F: PrimeField> ShamirRng<F> {
                     des_r2.push(src[1]);
                 }
             } else {
-                let r = network.recv_many::<F>(other_id)?;
+                let r = network.recv_many::<F>(other_id).await?;
                 if r.len() != 2 * amount {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
@@ -145,12 +145,12 @@ impl<F: PrimeField> ShamirRng<F> {
         Ok(())
     }
 
-    pub(super) fn get_pair<N: ShamirNetwork>(
+    pub(super) async fn get_pair<N: ShamirNetwork>(
         &mut self,
         network: &mut N,
     ) -> std::io::Result<(F, F)> {
         if self.remaining == 0 {
-            self.buffer_triples(network, Self::BATCH_SIZE)?;
+            self.buffer_triples(network, Self::BATCH_SIZE).await?;
             debug_assert_eq!(self.remaining, Self::BATCH_SIZE * (self.threshold + 1));
             debug_assert_eq!(self.r_t.len(), Self::BATCH_SIZE * (self.threshold + 1));
             debug_assert_eq!(self.r_2t.len(), Self::BATCH_SIZE * (self.threshold + 1));

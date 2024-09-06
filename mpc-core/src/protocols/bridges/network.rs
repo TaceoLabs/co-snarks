@@ -2,7 +2,7 @@
 //!
 //! This module contains code to translate networks used for different MPC protocols into each other.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::protocols::{
     rep3new::network::{Rep3MpcNet, Rep3Network},
@@ -31,7 +31,8 @@ impl RepToShamirNetwork<ShamirMpcNet> for Rep3MpcNet {
         ShamirMpcNet {
             id: id.into(),
             num_parties: 3,
-            net_handler,
+            //TODO shouldnt it also be an Arc for Rep3MpcNet?
+            net_handler: Arc::new(net_handler),
             channels,
         }
     }
