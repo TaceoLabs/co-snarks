@@ -7,7 +7,7 @@ use network::ShamirNetwork;
 use pointshare::ShamirPointShare;
 use rngs::ShamirRng;
 
-use rand::{Rng, SeedableRng};
+use rand::{CryptoRng, Rng, SeedableRng};
 
 use crate::RngType;
 
@@ -18,6 +18,152 @@ pub mod pointshare;
 mod rngs;
 
 type ShamirShare<F> = fieldshare::ShamirPrimeFieldShare<F>;
+
+pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
+    val: F,
+    degree: usize,
+    num_parties: usize,
+    rng: &mut R,
+) -> Vec<ShamirShare<F>> {
+    let shares = core::share(val, num_parties, degree, rng);
+    ShamirShare::convert_vec_rev(shares)
+}
+
+/// Reconstructs a field element from its Shamir shares and lagrange coefficients. Thereby at least `degree` + 1 shares need to be present.
+pub fn combine_field_element<F: PrimeField>(
+    shares: &[ShamirShare<F>],
+    coeffs: &[usize],
+    degree: usize,
+) -> eyre::Result<F> {
+    if shares.len() != coeffs.len() {
+        eyre::bail!(
+            "Number of shares ({}) does not match number of party indices ({})",
+            shares.len(),
+            coeffs.len()
+        );
+    }
+    if shares.len() <= degree {
+        eyre::bail!(
+            "Not enough shares to reconstruct the secret. Expected {}, got {}",
+            degree + 1,
+            shares.len()
+        );
+    }
+
+    let lagrange = core::lagrange_from_coeff(&coeffs[..=degree]);
+    let shares = ShamirShare::convert_slice(shares);
+    let rec = core::reconstruct(&shares[..=degree], &lagrange);
+    Ok(rec)
+}
+
+/// Secret shares a vector of field element using Shamir secret sharing and the provided random number generator. The field elements are split into num_parties shares each, where each party holds just one. The outputs are of type [ShamirShareVec]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
+pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
+    vals: &[F],
+    degree: usize,
+    num_parties: usize,
+    rng: &mut R,
+) -> Vec<ShamirShare<F>> {
+    let mut result = (0..num_parties)
+        .map(|_| Vec::with_capacity(vals.len()))
+        .collect::<Vec<_>>();
+
+    for val in vals {
+        let shares = core::share(*val, num_parties, degree, rng);
+
+        for (r, s) in izip!(&mut result, shares) {
+            r.push(s);
+        }
+    }
+
+    result
+}
+
+/// Reconstructs a vector of field elements from its Shamir shares and lagrange coefficients. The input is structured as one [ShamirShareVec] per party. Thus, shares\[i\]\[j\] represents the j-th share of party i. Thereby at least `degree` + 1 shares need to be present per field element (i.e., i > degree).
+pub fn combine_field_elements<F: PrimeField>(
+    shares: &[ShamirShareVec<F>],
+    coeffs: &[usize],
+    degree: usize,
+) -> Result<Vec<F>, Report> {
+    if shares.len() != coeffs.len() {
+        bail!(
+            "Number of shares ({}) does not match number of party indices ({})",
+            shares.len(),
+            coeffs.len()
+        );
+    }
+    if shares.len() <= degree {
+        bail!(
+            "Not enough shares to reconstruct the secret. Expected {}, got {}",
+            degree + 1,
+            shares.len()
+        );
+    }
+
+    let num_vals = shares[0].len();
+    for share in shares.iter().skip(1) {
+        if share.len() != num_vals {
+            bail!(
+                "Number of shares ({}) does not match number of shares in first party ({})",
+                share.len(),
+                num_vals
+            );
+        }
+    }
+    let mut result = Vec::with_capacity(num_vals);
+
+    let lagrange = ShamirCore::lagrange_from_coeff(&coeffs[..=degree]);
+
+    for i in 0..num_vals {
+        let s = shares
+            .iter()
+            .take(degree + 1)
+            .map(|s| s.a[i])
+            .collect::<Vec<_>>();
+        let rec = ShamirCore::reconstruct(&s, &lagrange);
+        result.push(rec);
+    }
+    Ok(result)
+}
+
+/// Secret shares a curve point using Shamir secret sharing and the provided random number generator. The point is split into num_parties shares, where each party holds just one. The outputs are of type [ShamirPointShare]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
+pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
+    val: C,
+    degree: usize,
+    num_parties: usize,
+    rng: &mut R,
+) -> Vec<ShamirPointShare<C>> {
+    let shares = ShamirCore::share_point(val, num_parties, degree, rng);
+
+    ShamirPointShare::convert_vec_rev(shares)
+}
+
+/// Reconstructs a curve point from its Shamir shares and lagrange coefficients. Thereby at least `degree` + 1 shares need to be present.
+pub fn combine_curve_point<C: CurveGroup>(
+    shares: &[ShamirPointShare<C>],
+    coeffs: &[usize],
+    degree: usize,
+) -> Result<C, Report> {
+    if shares.len() != coeffs.len() {
+        bail!(
+            "Number of shares ({}) does not match number of party indices ({})",
+            shares.len(),
+            coeffs.len()
+        );
+    }
+    if shares.len() <= degree {
+        bail!(
+            "Not enough shares to reconstruct the secret. Expected {}, got {}",
+            degree + 1,
+            shares.len()
+        );
+    }
+
+    let lagrange = ShamirCore::lagrange_from_coeff(&coeffs[..=degree]);
+    let shares = ShamirPointShare::convert_slice(shares);
+    let rec = ShamirCore::reconstruct_point(&shares[..=degree], &lagrange);
+
+    Ok(rec)
+}
 
 /// This struct handles the Shamir MPC protocol, including proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], and [MSMProvider] traits.
 pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {

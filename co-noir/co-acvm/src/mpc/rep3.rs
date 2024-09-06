@@ -98,20 +98,45 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
-        todo!()
+    fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType) {
+        let id = self.io_context.id;
+        let result = match target.to_owned() {
+            Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public + secret),
+            Rep3AcvmType::Shared(secret) => {
+                Rep3AcvmType::Shared(arithmetic::add_public(secret, public, id))
+            }
+        };
+        *target = result;
     }
 
-    fn acvm_mul_with_public(
-        &mut self,
-        public: F,
-        secret: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmType> {
-        todo!()
+    fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
+        match secret {
+            Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public * secret),
+            Rep3AcvmType::Shared(secret) => {
+                Rep3AcvmType::Shared(arithmetic::mul_with_public(secret, public))
+            }
+        }
     }
 
-    fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType) {
-        todo!()
+    fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, target: &mut Self::AcvmType) {
+        let id = self.io_context.id;
+        let result = match (w_l, target.to_owned()) {
+            (Rep3AcvmType::Public(w_l), Rep3AcvmType::Public(result)) => {
+                Rep3AcvmType::Public(q_l * w_l + result)
+            }
+            (Rep3AcvmType::Public(w_l), Rep3AcvmType::Shared(result)) => {
+                Rep3AcvmType::Shared(arithmetic::add_public(result, q_l * w_l, id))
+            }
+            (Rep3AcvmType::Shared(w_l), Rep3AcvmType::Public(result)) => {
+                let mul = arithmetic::mul_with_public(w_l, q_l);
+                Rep3AcvmType::Shared(arithmetic::add_public(mul, result, id))
+            }
+            (Rep3AcvmType::Shared(w_l), Rep3AcvmType::Shared(result)) => {
+                let mul = arithmetic::mul_with_public(w_l, q_l);
+                Rep3AcvmType::Shared(arithmetic::add(mul, result))
+            }
+        };
+        *target = result;
     }
 
     fn solve_mul_term(
@@ -121,7 +146,22 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         rhs: Self::AcvmType,
         target: &mut Self::AcvmType,
     ) -> std::io::Result<()> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                Rep3AcvmType::Public(lhs * rhs * c)
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Rep3AcvmType::Shared(arithmetic::mul_with_public(shared, public))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                let future = arithmetic::mul(lhs, rhs, &mut self.io_context);
+                let shared_mul = futures::executor::block_on(future)?;
+                Rep3AcvmType::Shared(arithmetic::mul_with_public(shared_mul, c))
+            }
+        };
+        *target = result;
+        Ok(())
     }
 
     fn solve_equation(
@@ -149,9 +189,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Shared(result)
             }
         };
-        todo!()
-        //let neg_c = Self::AcvmType::neg(self, c);
-        //Self::AcvmType::div(self, neg_c, q_l)
+        Ok(result)
     }
 
     fn init_lut_by_acvm_type(

@@ -30,12 +30,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         *secret += public;
     }
 
-    fn acvm_mul_with_public(
-        &mut self,
-        public: F,
-        secret: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmType> {
-        Ok(secret * public)
+    fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
+        secret * public
     }
 
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType) {
@@ -74,7 +70,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         index: &Self::AcvmType,
         lut: &HashMap<F, F>,
     ) -> io::Result<F> {
-        futures::executor::block_on(self.plain_lut.get_from_lut(index, lut))
+        futures::executor::block_on(self.plain_lut.get_from_lut(*index, lut))
     }
 
     fn write_lut_by_acvm_type(

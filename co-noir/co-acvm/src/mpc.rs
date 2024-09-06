@@ -30,15 +30,11 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Checks whether an ACVM-type is public one.
     fn is_public_one(a: &Self::AcvmType) -> bool;
 
-    /// Adds a public value to an ACVM-type in place: *\[secret\] += public
-    fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType);
+    /// Adds a public value to an ACVM-type in place: *\[target\] += public
+    fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
 
     /// Multiply an ACVM-types with a public value: \[c\] = public * \[secret\].
-    fn acvm_mul_with_public(
-        &mut self,
-        public: F,
-        secret: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmType>;
+    fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType;
 
     /// Multiply an ACVM-types with a public value and add_assign with result: \[result\] += q_l * \[w_l\].
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType);

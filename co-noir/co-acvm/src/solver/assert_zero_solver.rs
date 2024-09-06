@@ -39,12 +39,12 @@ where
                     }
                     (Some(lhs), None) => {
                         tracing::trace!("partially solving mul term...");
-                        let partly_solved = self.driver.acvm_mul_with_public(c.into_repr(), lhs)?;
+                        let partly_solved = self.driver.acvm_mul_with_public(c.into_repr(), lhs);
                         acc.linear_combinations.push((partly_solved, *rhs));
                     }
                     (None, Some(rhs)) => {
                         tracing::trace!("partially solving mul term...");
-                        let partly_solved = self.driver.acvm_mul_with_public(c.into_repr(), rhs)?;
+                        let partly_solved = self.driver.acvm_mul_with_public(c.into_repr(), rhs);
                         acc.linear_combinations.push((partly_solved, *lhs));
                     }
                     (None, None) => Err(eyre::eyre!(

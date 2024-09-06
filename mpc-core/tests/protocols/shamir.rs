@@ -215,10 +215,7 @@ mod field_share {
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
     use itertools::{izip, Itertools};
-    use mpc_core::{
-        protocols::shamir::{self, ShamirProtocol},
-        traits::PrimeFieldMpcProtocol,
-    };
+    use mpc_core::protocols::shamirnew::{self, ShamirProtocol};
     use rand::thread_rng;
     use std::{str::FromStr, thread};
     use tokio::sync::oneshot;
@@ -228,8 +225,8 @@ mod field_share {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = shamir::utils::share_field_element(x, threshold, num_parties, &mut rng);
-        let y_shares = shamir::utils::share_field_element(y, threshold, num_parties, &mut rng);
+        let x_shares = shamirnew::share_field_element(x, threshold, num_parties, &mut rng);
+        let y_shares = shamirnew::share_field_element(y, threshold, num_parties, &mut rng);
         let should_result = x + y;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -610,10 +607,7 @@ mod curve_share {
     use crate::protocols::shamir::ShamirTestNetwork;
     use ark_ff::UniformRand;
     use itertools::{izip, Itertools};
-    use mpc_core::{
-        protocols::shamir::{self, ShamirProtocol},
-        traits::EcMpcProtocol,
-    };
+    use mpc_core::protocols::shamirnew::{self, ShamirProtocol};
     use rand::thread_rng;
     use tokio::sync::oneshot;
 
