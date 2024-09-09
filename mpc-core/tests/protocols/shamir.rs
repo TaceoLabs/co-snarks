@@ -1,6 +1,6 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
-use mpc_core::protocols::shamir::network::ShamirNetwork;
+use mpc_core::protocols::shamirnew::network::ShamirNetwork;
 use std::{cmp::Ordering, collections::HashMap};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -85,7 +85,11 @@ impl ShamirNetwork for PartyTestNetwork {
         self.num_parties
     }
 
-    fn send_many<F: CanonicalSerialize>(
+    async fn send<F: CanonicalSerialize>(&mut self, target: usize, data: F) -> std::io::Result<()> {
+        self.send_many(target, &[data]).await
+    }
+
+    async fn send_many<F: CanonicalSerialize>(
         &mut self,
         mut target: usize,
         data: &[F],
@@ -112,7 +116,22 @@ impl ShamirNetwork for PartyTestNetwork {
         Ok(())
     }
 
-    fn recv_many<F: CanonicalDeserialize>(&mut self, mut from: usize) -> std::io::Result<Vec<F>> {
+    async fn recv<F: CanonicalDeserialize>(&mut self, from: usize) -> std::io::Result<F> {
+        let mut res = self.recv_many(from).await?;
+        if res.len() != 1 {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Expected 1 element, got more",
+            ))
+        } else {
+            Ok(res.pop().unwrap())
+        }
+    }
+
+    async fn recv_many<F: CanonicalDeserialize>(
+        &mut self,
+        mut from: usize,
+    ) -> std::io::Result<Vec<F>> {
         if from >= self.num_parties || from == self.id {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -127,7 +146,7 @@ impl ShamirNetwork for PartyTestNetwork {
         Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
     }
 
-    fn broadcast<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
+    async fn broadcast<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
         &mut self,
         data: F,
     ) -> std::io::Result<Vec<F>> {
@@ -163,7 +182,7 @@ impl ShamirNetwork for PartyTestNetwork {
         Ok(res)
     }
 
-    fn broadcast_next<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
+    async fn broadcast_next<F: CanonicalSerialize + CanonicalDeserialize + Clone>(
         &mut self,
         data: F,
         num: usize,
@@ -207,6 +226,17 @@ impl ShamirNetwork for PartyTestNetwork {
         }
 
         Ok(res)
+    }
+
+    async fn fork(self) -> std::io::Result<(Self, Self)>
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+
+    async fn shutdown(self) -> std::io::Result<()> {
+        todo!()
     }
 }
 

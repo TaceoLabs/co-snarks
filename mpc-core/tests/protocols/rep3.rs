@@ -110,11 +110,15 @@ impl Rep3Network for PartyTestNetwork {
         &mut self,
         data: F,
     ) -> std::io::Result<(F, F)> {
-        self.send_many(target, data)
-        todo!()
+        let data = [data];
+        self.send_many(self.id.next_id(), &data).await?;
+        self.send_many(self.id.prev_id(), &data).await?;
+        let prev = self.recv_many(self.id.prev_id()).await?;
+        let next = self.recv_many(self.id.next_id()).await?;
+        Ok((next, prev))
     }
 
-    fn send_many<F: CanonicalSerialize>(
+    async fn send_many<F: CanonicalSerialize>(
         &mut self,
         target: PartyID,
         data: &[F],
