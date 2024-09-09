@@ -1,7 +1,7 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
-use mpc_core::protocols::rep3::id::PartyID;
-use mpc_core::protocols::rep3::network::Rep3Network;
+use mpc_core::protocols::rep3new::id::PartyID;
+use mpc_core::protocols::rep3new::network::Rep3Network;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 pub struct Rep3TestNetwork {
@@ -98,6 +98,22 @@ impl Rep3Network for PartyTestNetwork {
         self.id
     }
 
+    async fn reshare_many<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: &[F],
+    ) -> std::io::Result<Vec<F>> {
+        self.send_next_many(data).await?;
+        self.recv_prev_many().await
+    }
+
+    async fn broadcast<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: F,
+    ) -> std::io::Result<(F, F)> {
+        self.send_many(target, data)
+        todo!()
+    }
+
     fn send_many<F: CanonicalSerialize>(
         &mut self,
         target: PartyID,
@@ -130,6 +146,10 @@ impl Rep3Network for PartyTestNetwork {
         } else {
             panic!("You want to read from yourself?")
         }
+    }
+
+    async fn shutdown(self) -> std::io::Result<()> {
+        todo!()
     }
 }
 mod field_share {

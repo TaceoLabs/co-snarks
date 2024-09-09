@@ -751,8 +751,7 @@ mod curve_share {
         let mut rng = thread_rng();
         let point = ark_bn254::G1Projective::rand(&mut rng);
         let public_scalar = ark_bn254::Fr::rand(&mut rng);
-        let point_shares =
-            shamir::utils::share_curve_point(point, threshold, num_parties, &mut rng);
+        let point_shares = shamirnew::share_curve_point(point, threshold, num_parties, &mut rng);
         let should_result = point * public_scalar;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -775,12 +774,9 @@ mod curve_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = shamir::utils::combine_curve_point(
-            &results,
-            &(1..=num_parties).collect_vec(),
-            threshold,
-        )
-        .unwrap();
+        let is_result =
+            shamirnew::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
 
         assert_eq!(is_result, should_result);
     }

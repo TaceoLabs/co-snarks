@@ -62,17 +62,15 @@ pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
     degree: usize,
     num_parties: usize,
     rng: &mut R,
-) -> Vec<ShamirShare<F>> {
+) -> Vec<Vec<ShamirShare<F>>> {
     let mut result = (0..num_parties)
         .map(|_| Vec::with_capacity(vals.len()))
         .collect::<Vec<_>>();
 
     for val in vals {
         let shares = core::share(*val, num_parties, degree, rng);
-
-        for (r, s) in izip!(&mut result, shares) {
-            r.push(s);
-        }
+        let shares = ShamirShare::convert_vec_rev(shares);
+        result.push(shares);
     }
 
     result
@@ -80,19 +78,19 @@ pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
 
 /// Reconstructs a vector of field elements from its Shamir shares and lagrange coefficients. The input is structured as one [ShamirShareVec] per party. Thus, shares\[i\]\[j\] represents the j-th share of party i. Thereby at least `degree` + 1 shares need to be present per field element (i.e., i > degree).
 pub fn combine_field_elements<F: PrimeField>(
-    shares: &[ShamirShareVec<F>],
+    shares: &[Vec<ShamirShare<F>>],
     coeffs: &[usize],
     degree: usize,
-) -> Result<Vec<F>, Report> {
+) -> eyre::Result<Vec<F>> {
     if shares.len() != coeffs.len() {
-        bail!(
+        eyre::bail!(
             "Number of shares ({}) does not match number of party indices ({})",
             shares.len(),
             coeffs.len()
         );
     }
     if shares.len() <= degree {
-        bail!(
+        eyre::bail!(
             "Not enough shares to reconstruct the secret. Expected {}, got {}",
             degree + 1,
             shares.len()
@@ -102,7 +100,7 @@ pub fn combine_field_elements<F: PrimeField>(
     let num_vals = shares[0].len();
     for share in shares.iter().skip(1) {
         if share.len() != num_vals {
-            bail!(
+            eyre::bail!(
                 "Number of shares ({}) does not match number of shares in first party ({})",
                 share.len(),
                 num_vals
@@ -111,15 +109,15 @@ pub fn combine_field_elements<F: PrimeField>(
     }
     let mut result = Vec::with_capacity(num_vals);
 
-    let lagrange = ShamirCore::lagrange_from_coeff(&coeffs[..=degree]);
+    let lagrange = core::lagrange_from_coeff(&coeffs[..=degree]);
 
     for i in 0..num_vals {
         let s = shares
             .iter()
             .take(degree + 1)
-            .map(|s| s.a[i])
+            .map(|s| s[i].a)
             .collect::<Vec<_>>();
-        let rec = ShamirCore::reconstruct(&s, &lagrange);
+        let rec = core::reconstruct(&s, &lagrange);
         result.push(rec);
     }
     Ok(result)
@@ -132,7 +130,7 @@ pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
     num_parties: usize,
     rng: &mut R,
 ) -> Vec<ShamirPointShare<C>> {
-    let shares = ShamirCore::share_point(val, num_parties, degree, rng);
+    let shares = core::share_point(val, num_parties, degree, rng);
 
     ShamirPointShare::convert_vec_rev(shares)
 }
@@ -142,25 +140,25 @@ pub fn combine_curve_point<C: CurveGroup>(
     shares: &[ShamirPointShare<C>],
     coeffs: &[usize],
     degree: usize,
-) -> Result<C, Report> {
+) -> eyre::Result<C> {
     if shares.len() != coeffs.len() {
-        bail!(
+        eyre::bail!(
             "Number of shares ({}) does not match number of party indices ({})",
             shares.len(),
             coeffs.len()
         );
     }
     if shares.len() <= degree {
-        bail!(
+        eyre::bail!(
             "Not enough shares to reconstruct the secret. Expected {}, got {}",
             degree + 1,
             shares.len()
         );
     }
 
-    let lagrange = ShamirCore::lagrange_from_coeff(&coeffs[..=degree]);
+    let lagrange = core::lagrange_from_coeff(&coeffs[..=degree]);
     let shares = ShamirPointShare::convert_slice(shares);
-    let rec = ShamirCore::reconstruct_point(&shares[..=degree], &lagrange);
+    let rec = core::reconstruct_point(&shares[..=degree], &lagrange);
 
     Ok(rec)
 }

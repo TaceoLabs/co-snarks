@@ -5,8 +5,10 @@
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_types::Witness;
-use mpc_core::protocols::rep3new::{self, Rep3PrimeFieldShare};
-use mpc_core::protocols::shamir::fieldshare::ShamirPrimeFieldShare;
+use mpc_core::protocols::{
+    rep3new::{self, Rep3PrimeFieldShare},
+    shamirnew::{self, fieldshare::ShamirPrimeFieldShare},
+};
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -169,23 +171,22 @@ impl<F: PrimeField> SharedWitness<F, Rep3PrimeFieldShare<F>> {
 impl<F: PrimeField> SharedWitness<F, ShamirPrimeFieldShare<F>> {
     /// Shares a given witness and public input vector using the Shamir protocol.
     pub fn share_shamir<R: Rng + CryptoRng>(
-        _witness: Witness<F>,
-        _num_pub_inputs: usize,
-        _degree: usize,
-        _num_parties: usize,
-        _rng: &mut R,
+        witness: Witness<F>,
+        num_pub_inputs: usize,
+        degree: usize,
+        num_parties: usize,
+        rng: &mut R,
     ) -> Vec<Self> {
-        todo!()
-        //let public_inputs = &witness.values[..num_pub_inputs];
-        //let witness = &witness.values[num_pub_inputs..];
-        //let shares = shamir::utils::share_field_elements(witness, degree, num_parties, rng);
-        //shares
-        //    .into_iter()
-        //    .map(|share| Self {
-        //        public_inputs: public_inputs.to_vec(),
-        //        witness: share,
-        //    })
-        //    .collect()
+        let public_inputs = &witness.values[..num_pub_inputs];
+        let witness = &witness.values[num_pub_inputs..];
+        let shares = shamirnew::share_field_elements(witness, degree, num_parties, rng);
+        shares
+            .into_iter()
+            .map(|share| Self {
+                public_inputs: public_inputs.to_vec(),
+                witness: share,
+            })
+            .collect()
     }
 }
 

@@ -1,7 +1,7 @@
 use super::rep3::PartyTestNetwork as Rep3TestNetworkParty;
 use super::shamir::PartyTestNetwork as ShamirTestNetworkParty;
 use mpc_core::protocols::bridges::network::RepToShamirNetwork;
-use mpc_core::protocols::rep3::id::PartyID;
+use mpc_core::protocols::rep3new::id::PartyID;
 
 impl RepToShamirNetwork<ShamirTestNetworkParty> for Rep3TestNetworkParty {
     fn to_shamir_net(self) -> ShamirTestNetworkParty {
