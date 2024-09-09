@@ -1,13 +1,5 @@
 use ark_ff::PrimeField;
 use eyre::bail;
-use mpc_core::protocols::{
-    rep3new::{
-        arithmetic, conversion,
-        network::{IoContext, Rep3Network},
-        Rep3BigUintShare, Rep3PrimeFieldShare,
-    },
-    shamirnew::{network::ShamirNetwork, ShamirProtocol},
-};
 
 use super::{plain::CircomPlainVmWitnessExtension, VmCircomWitnessExtension};
 
@@ -398,8 +390,18 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         }
     }
 
-    fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> eyre::Result<bool> {
-        todo!()
+    async fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> eyre::Result<bool> {
+        if !allow_secret_inputs && self.is_shared(&a)? {
+            bail!("allow_secret_inputs is false and input is shared");
+        }
+        match a {
+            Rep3VmType::Public(a) => Ok(self.plain.is_zero(a, allow_secret_inputs).await?),
+            Rep3VmType::Arithmetic(a) => Ok(arithmetic::is_zero(&a, &mut self.io_context)?.into()),
+            Rep3VmType::Binary(a) => {
+                let a = conversion::b2a(a, &mut self.io_context).await?;
+                self.is_zero(a.into(), allow_secret_inputs).await
+            }
+        }
     }
 
     fn is_shared(&mut self, a: &Self::VmType) -> eyre::Result<bool> {

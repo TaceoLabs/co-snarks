@@ -90,7 +90,7 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Outputs whether a is zero (true) or not (false). This values is output in plain! Thus, if a is secret shared, the result is opened.
-    fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool>;
+    async fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool>;
 
     /// Returns whether the VM-type represents a shared value (true) or a public one (false).
     fn is_shared(&mut self, a: &Self::VmType) -> Result<bool>;

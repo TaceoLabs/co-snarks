@@ -56,6 +56,7 @@ pub fn or_public<F: PrimeField>(
     &xor ^ &tmp
 }
 
+/// Performs a bitwise AND operation on two shared values.
 pub async fn and<F: PrimeField, N: Rep3Network>(
     a: &BinaryShare<F>,
     b: &BinaryShare<F>,
@@ -73,6 +74,7 @@ pub async fn and<F: PrimeField, N: Rep3Network>(
     Ok(BinaryShare::new(local_a, local_b))
 }
 
+/// Performs a bitwise AND operation on a shared value and a public value.
 pub fn and_with_public<F: PrimeField>(shared: &BinaryShare<F>, public: &BigUint) -> BinaryShare<F> {
     shared & public
 }
@@ -99,6 +101,7 @@ pub fn and_with_public<F: PrimeField>(shared: &BinaryShare<F>, public: &BigUint)
 //    Ok(FieldShareVec::new(local_a, local_b))
 //}
 
+/// Performs the opening of a shared value and returns the equivalent public value.
 pub async fn open<F: PrimeField, N: Rep3Network>(
     a: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
@@ -119,6 +122,7 @@ pub fn promote_to_trivial_share<F: PrimeField>(
     }
 }
 
+/// Computes a CMUX: If `c` is `1`, returns `x_t`, otherwise returns `x_f`.
 pub async fn cmux<F: PrimeField, N: Rep3Network>(
     c: &BinaryShare<F>,
     x_t: &BinaryShare<F>,

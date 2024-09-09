@@ -20,10 +20,12 @@ pub enum FieldShareOrPublic<F: PrimeField> {
     Public(F),
 }
 
+/// Performs addition between two shared values.
 pub fn add<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>) -> FieldShare<F> {
     a + b
 }
 
+/// Performs addition between a shared value and a public value.
 pub fn add_public<F: PrimeField>(shared: FieldShare<F>, public: F, id: PartyID) -> FieldShare<F> {
     let mut res = shared;
     match id {
@@ -34,14 +36,17 @@ pub fn add_public<F: PrimeField>(shared: FieldShare<F>, public: F, id: PartyID) 
     res
 }
 
+/// Performs subtraction between two shared values, returning a - b.
 pub fn sub<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>) -> FieldShare<F> {
     a - b
 }
 
+/// Performs subtraction between a shared value and a public value, returning shared - public.
 pub fn sub_public<F: PrimeField>(shared: FieldShare<F>, public: F, id: PartyID) -> FieldShare<F> {
     add_public(shared, -public, id)
 }
 
+/// Performs multiplication of two shared values.
 pub async fn mul<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
@@ -55,11 +60,12 @@ pub async fn mul<F: PrimeField, N: Rep3Network>(
     })
 }
 
-/// Multiply a share b by a public value a: c = a * \[b\].
+/// Performs multiplication of a shared value and a public value.
 pub fn mul_public<F: PrimeField>(shared: FieldShare<F>, public: F) -> FieldShare<F> {
     shared * public
 }
 
+/// Performs element-wise multiplication of two vectors of shared values.
 pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
     lhs: &Vec<FieldShare<F>>,
     rhs: &Vec<FieldShare<F>>,
@@ -86,6 +92,7 @@ pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
         .collect())
 }
 
+/// Performs division of two shared values, returning a / b.
 pub async fn div<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
@@ -94,6 +101,7 @@ pub async fn div<F: PrimeField, N: Rep3Network>(
     mul(a, inv(b, io_context).await?, io_context).await
 }
 
+/// Performs division of a shared value by a public value, returning shared / public.
 pub fn div_by_public<F: PrimeField>(
     shared: FieldShare<F>,
     public: F,
@@ -105,6 +113,7 @@ pub fn div_by_public<F: PrimeField>(
     Ok(mul_public(shared, b_inv))
 }
 
+/// Performs division of a public value by a shared value, returning public / shared.
 pub async fn div_public_by_shared<F: PrimeField, N: Rep3Network>(
     public: F,
     shared: FieldShare<F>,
@@ -113,11 +122,12 @@ pub async fn div_public_by_shared<F: PrimeField, N: Rep3Network>(
     Ok(mul_public(inv(shared, io_context).await?, public))
 }
 
-/// Negates a shared value: \[b\] = -\[a\].
+/// Negates a shared value.
 pub fn neg<F: PrimeField>(a: FieldShare<F>) -> FieldShare<F> {
     -a
 }
 
+/// Computes the inverse of a shared value.
 pub async fn inv<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     io_context: &mut IoContext<N>,
@@ -132,10 +142,11 @@ pub async fn inv<F: PrimeField, N: Rep3Network>(
     }
     let y_inv = y
         .inverse()
-        .expect("we checked if y is zero. Must be possible to inverse.");
+        .expect("we checked if y is zero. Must be possible to invert.");
     Ok(r * y_inv)
 }
 
+/// Performs the opening of a shared value and returns the equivalent public value.
 pub async fn open<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     io_context: &mut IoContext<N>,
@@ -203,7 +214,7 @@ pub async fn equals<F: PrimeField, N: Rep3Network>(
     //Ok(self.bit_inject(is_zero_bit)?)
 }
 
-// Checks whether to prime field shares are equal and return a binary share of 0 or 1. 1 means they are equal.
+// Checks whether two prime field shares are equal and return a binary share of 0 or 1. 1 means they are equal.
 pub async fn equals_bit<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
@@ -222,6 +233,7 @@ pub async fn sqrt<F: PrimeField, N: Rep3Network>(
     todo!()
 }
 
+/// Performs a pow operation using a shared value as base and a public value as exponent.
 pub async fn pow_public<F: PrimeField, N: Rep3Network>(
     shared: &FieldShare<F>,
     public: F,
@@ -309,4 +321,28 @@ pub async fn ge_public<F: PrimeField, N: Rep3Network>(
     _io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
     todo!()
+}
+
+/// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
+pub async fn eq<F: PrimeField, N: Rep3Network>(
+    a: FieldShare<F>,
+    b: FieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<FieldShare<F>> {
+    let diff = sub(a, b);
+    let bits = conversion::a2b(&diff, io_context).await?;
+    let is_zero = binary::is_zero(bits, io_context).await?;
+    let res = conversion::bit_inject(&is_zero, io_context).await?;
+    Ok(res)
+}
+
+/// Outputs whether a shared value is zero (true) or not (false).
+pub async fn is_zero<F: PrimeField, N: Rep3Network>(
+    a: FieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<bool> {
+    let zero_share = FieldShare::default();
+    let res = eq(zero_share, a, io_context).await?;
+    let x = open(res, io_context).await?;
+    Ok(x.is_one())
 }

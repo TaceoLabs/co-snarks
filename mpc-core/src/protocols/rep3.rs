@@ -443,7 +443,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3Protocol<F, N> {
         Ok(self.bit_inject(is_zero_bit)?)
     }
 
-    // Checks whether to prime field shares are equal and return an
+    // Checks whether two prime field shares are equal and return an
     // binary share of 0 or 1. 1 means they are equal.
     fn equals_bit(
         &mut self,
