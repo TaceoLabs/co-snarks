@@ -19,6 +19,10 @@ pub fn add<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>) -> FieldShare<F> {
     a + b
 }
 
+pub fn add_assign<F: PrimeField>(shared: &mut FieldShare<F>, b: FieldShare<F>) {
+    *shared += b;
+}
+
 /// Performs addition between a shared value and a public value.
 pub fn add_public<F: PrimeField>(shared: FieldShare<F>, public: F, id: PartyID) -> FieldShare<F> {
     let mut res = shared;
@@ -28,6 +32,14 @@ pub fn add_public<F: PrimeField>(shared: FieldShare<F>, public: F, id: PartyID) 
         PartyID::ID2 => {}
     }
     res
+}
+
+pub fn add_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F, id: PartyID) {
+    match id {
+        PartyID::ID0 => shared.a += public,
+        PartyID::ID1 => shared.b += public,
+        PartyID::ID2 => {}
+    }
 }
 
 /// Performs subtraction between two shared values, returning a - b.

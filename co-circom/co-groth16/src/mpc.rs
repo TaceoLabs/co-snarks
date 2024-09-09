@@ -9,10 +9,10 @@ pub(crate) mod shamir;
 type IoResult<T> = std::io::Result<T>;
 
 pub trait CircomGroth16Prover<P: Pairing> {
-    type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
+    type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Copy + Clone + Default;
     type PointShare<C: CurveGroup>;
 
-    fn rand(&self) -> Self::ArithmeticShare;
+    fn rand(&mut self) -> Self::ArithmeticShare;
     /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint(
         &mut self,
@@ -32,8 +32,8 @@ pub trait CircomGroth16Prover<P: Pairing> {
 
     async fn mul(
         &mut self,
-        a: &Self::ArithmeticShare,
-        b: &Self::ArithmeticShare,
+        a: Self::ArithmeticShare,
+        b: Self::ArithmeticShare,
     ) -> IoResult<Self::ArithmeticShare>;
 
     /// Elementwise multiplication of two vectors of shares: \[c_i\] = \[a_i\] * \[b_i\].

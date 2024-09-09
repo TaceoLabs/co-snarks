@@ -23,3 +23,5 @@ mpc-core.workspace = true
 mpc-net.workspace = true
 serde.workspace = true
 tracing.workspace = true
+tokio.workspace = true
+futures.workspace = true

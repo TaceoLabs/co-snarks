@@ -9,7 +9,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
 
     type PointShare<C: CurveGroup> = C;
 
-    fn rand(&self) -> Self::ArithmeticShare {
+    fn rand(&mut self) -> Self::ArithmeticShare {
         todo!()
     }
 

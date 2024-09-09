@@ -1,9 +1,11 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
 use itertools::izip;
-use mpc_core::protocols::{
-    rep3new::network::Rep3Network,
-    rep3new::{self, network::IoContext, Rep3PointShare, Rep3PrimeFieldShare},
+use mpc_core::protocols::rep3new::{
+    self, arithmetic,
+    network::{IoContext, Rep3Network},
+    Rep3PointShare, Rep3PrimeFieldShare,
 };
+
 use tokio::runtime::{self, Runtime};
 
 use super::CircomGroth16Prover;
@@ -44,10 +46,10 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
             if index < &public_inputs.len() {
                 let val = public_inputs[*index];
                 let mul_result = val * coeff;
-                acc = self.add_with_public(&mul_result, &acc);
+                arithmetic::add_assign_public(&mut acc, mul_result, self.io_context.id);
             } else {
-                acc.a += *coeff * private_witness.a[*index - public_inputs.len()];
-                acc.b += *coeff * private_witness.b[*index - public_inputs.len()];
+                acc.a += *coeff * private_witness[*index - public_inputs.len()].a;
+                acc.b += *coeff * private_witness[*index - public_inputs.len()].b;
             }
         }
         acc
@@ -71,10 +73,10 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
 
     async fn mul(
         &mut self,
-        a: &Self::ArithmeticShare,
-        b: &Self::ArithmeticShare,
+        a: Self::ArithmeticShare,
+        b: Self::ArithmeticShare,
     ) -> IoResult<Self::ArithmeticShare> {
-        rep3new::arithmetic::mul(a, b, io_context)
+        rep3new::arithmetic::mul(a, b, &mut self.io_context)
     }
 
     async fn mul_vec(

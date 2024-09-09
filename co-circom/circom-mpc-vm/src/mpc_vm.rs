@@ -501,12 +501,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                 op_codes::MpcOpCode::Add => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.add(lhs, rhs));
+                    self.push_field(protocol.add(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Sub => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.sub(lhs, rhs));
+                    self.push_field(protocol.sub(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Mul => {
                     let rhs = self.pop_field();
@@ -791,7 +791,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     //maybe we should do that???
                     .collect::<Result<Vec<_>, _>>()?
             ) {
-                *acc = protocol.add(acc.to_owned(), x);
+                *acc = protocol.add(acc.to_owned(), x)?;
             }
         }
         for shared_ret_val in acc {
@@ -1020,7 +1020,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
         mpc_accelerator: MpcAccelerator<F, CircomRep3VmWitnessExtension<F, N>>,
         config: VMConfig,
     ) -> Result<Self> {
-        let driver = CircomRep3VmWitnessExtension::new(network)?;
+        let driver = CircomRep3VmWitnessExtension::from_network(network)?;
         let mut signals = vec![Rep3VmType::default(); parser.amount_signals];
         signals[0] = Rep3VmType::Public(F::one());
         let constant_table = parser
@@ -1056,11 +1056,7 @@ impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
         mpc_accelerator: MpcAccelerator<F, CircomRep3VmWitnessExtension<F, Rep3MpcNet>>,
         config: VMConfig,
     ) -> Result<Self> {
-        Self::from_network(
-            parser,
-            Rep3MpcNet::new(network_config)?,
-            mpc_accelerator,
-            config,
-        )
+        let network = futures::executor::block_on(Rep3MpcNet::new(network_config))?;
+        Self::from_network(parser, network, mpc_accelerator, config)
     }
 }

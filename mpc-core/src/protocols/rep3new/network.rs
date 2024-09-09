@@ -1,5 +1,6 @@
 use std::{io, sync::Arc};
 
+use crate::protocols::bridges::network::RepToShamirNetwork;
 use crate::RngType;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
