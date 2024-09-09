@@ -1,5 +1,3 @@
-use std::io;
-
 use super::network::RepToShamirNetwork;
 use crate::protocols::{
     rep3new::{
@@ -7,7 +5,7 @@ use crate::protocols::{
         Rep3PointShare, Rep3PrimeFieldShare,
     },
     shamirnew::{
-        fieldshare::ShamirPrimeFieldShare, network::ShamirNetwork, pointshare::ShamirPointShare,
+        fieldshare::ShamirPrimeFieldShare, network::ShamirNetwork, point::ShamirPointShare,
         ShamirProtocol,
     },
 };

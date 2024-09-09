@@ -113,7 +113,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         match secret {
             Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public * secret),
             Rep3AcvmType::Shared(secret) => {
-                Rep3AcvmType::Shared(arithmetic::mul_with_public(secret, public))
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret, public))
             }
         }
     }
@@ -128,11 +128,11 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Shared(arithmetic::add_public(result, q_l * w_l, id))
             }
             (Rep3AcvmType::Shared(w_l), Rep3AcvmType::Public(result)) => {
-                let mul = arithmetic::mul_with_public(w_l, q_l);
+                let mul = arithmetic::mul_public(w_l, q_l);
                 Rep3AcvmType::Shared(arithmetic::add_public(mul, result, id))
             }
             (Rep3AcvmType::Shared(w_l), Rep3AcvmType::Shared(result)) => {
-                let mul = arithmetic::mul_with_public(w_l, q_l);
+                let mul = arithmetic::mul_public(w_l, q_l);
                 Rep3AcvmType::Shared(arithmetic::add(mul, result))
             }
         };
@@ -152,12 +152,12 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
             | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
-                Rep3AcvmType::Shared(arithmetic::mul_with_public(shared, public))
+                Rep3AcvmType::Shared(arithmetic::mul_public(shared, public))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
                 let future = arithmetic::mul(lhs, rhs, &mut self.io_context);
                 let shared_mul = futures::executor::block_on(future)?;
-                Rep3AcvmType::Shared(arithmetic::mul_with_public(shared_mul, c))
+                Rep3AcvmType::Shared(arithmetic::mul_public(shared_mul, c))
             }
         };
         *target = result;

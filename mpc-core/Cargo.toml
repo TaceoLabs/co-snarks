@@ -38,3 +38,4 @@ tracing.workspace = true
 [dev-dependencies]
 ark-bn254 = { workspace = true }
 ark-std = { workspace = true }
+paste.workspace = true

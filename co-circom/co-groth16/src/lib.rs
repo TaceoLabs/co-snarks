@@ -19,7 +19,6 @@ mod tests {
         Witness,
     };
     use co_circom_snarks::SharedWitness;
-    use mpc_core::protocols::plain::PlainDriver;
     use std::fs::{self, File};
 
     use crate::{groth16::Groth16, mpc::plain::PlainGroth16Driver};

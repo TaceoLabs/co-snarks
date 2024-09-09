@@ -10,7 +10,7 @@ use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeField
 use co_circom_snarks::SharedWitness;
 use eyre::Result;
 use itertools::izip;
-use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
+use mpc_core::protocols::rep3new::network::Rep3MpcNet;
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use num_traits::ToPrimitive;

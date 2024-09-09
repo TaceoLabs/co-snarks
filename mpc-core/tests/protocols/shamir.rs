@@ -232,11 +232,13 @@ impl ShamirNetwork for PartyTestNetwork {
     where
         Self: Sized,
     {
+        // TODO this is a problem
         todo!()
     }
 
     async fn shutdown(self) -> std::io::Result<()> {
-        todo!()
+        // we do not care about gracefull shutdown
+        Ok(())
     }
 }
 
@@ -691,8 +693,8 @@ mod curve_share {
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = shamir::utils::share_curve_point(x, threshold, num_parties, &mut rng);
-        let y_shares = shamir::utils::share_curve_point(y, threshold, num_parties, &mut rng);
+        let x_shares = shamirnew::share_curve_point(x, threshold, num_parties, &mut rng);
+        let y_shares = shamirnew::share_curve_point(y, threshold, num_parties, &mut rng);
         let should_result = x - y;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -715,12 +717,9 @@ mod curve_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = shamir::utils::combine_curve_point(
-            &results,
-            &(1..=num_parties).collect_vec(),
-            threshold,
-        )
-        .unwrap();
+        let is_result =
+            shamirnew::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
 
         assert_eq!(is_result, should_result);
     }
@@ -737,7 +736,7 @@ mod curve_share {
         let public_point = ark_bn254::G1Projective::rand(&mut rng);
         let scalar = ark_bn254::Fr::rand(&mut rng);
         let scalar_shares =
-            shamir::utils::share_field_element(scalar, threshold, num_parties, &mut rng);
+            shamirnew::share_field_element(scalar, threshold, num_parties, &mut rng);
         let should_result = public_point * scalar;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -760,12 +759,9 @@ mod curve_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = shamir::utils::combine_curve_point(
-            &results,
-            &(1..=num_parties).collect_vec(),
-            threshold,
-        )
-        .unwrap();
+        let is_result =
+            shamirnew::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
 
         assert_eq!(is_result, should_result);
     }

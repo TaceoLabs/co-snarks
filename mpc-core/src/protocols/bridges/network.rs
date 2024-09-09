@@ -31,8 +31,7 @@ impl RepToShamirNetwork<ShamirMpcNet> for Rep3MpcNet {
         ShamirMpcNet {
             id: id.into(),
             num_parties: 3,
-            //TODO shouldnt it also be an Arc for Rep3MpcNet?
-            net_handler: Arc::new(net_handler),
+            net_handler,
             channels,
         }
     }

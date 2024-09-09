@@ -1,14 +1,12 @@
 use ark_ff::PrimeField;
 use eyre::bail;
 use mpc_core::protocols::{
-    rep3::network::Rep3Network,
     rep3new::{
-        arithmetic::{self, add, add_public, mul, mul_public, sub, sub_public},
-        binary::{and, and_with_public, xor, xor_public},
-        conversion::{a2b, b2a},
-        network::IoContext,
+        arithmetic, conversion,
+        network::{IoContext, Rep3Network},
         Rep3BigUintShare, Rep3PrimeFieldShare,
     },
+    shamirnew::{network::ShamirNetwork, ShamirProtocol},
 };
 
 use super::{plain::CircomPlainVmWitnessExtension, VmCircomWitnessExtension};
@@ -61,12 +59,9 @@ pub struct CircomRep3VmWitnessExtension<F: PrimeField, N: Rep3Network> {
     plain: CircomPlainVmWitnessExtension<F>,
 }
 
-impl<F: PrimeField, N: Rep3Network> Rep3Driver<F, N> {
-    pub async fn new(network: N) -> std::io::Result<Self> {
-        Ok(Self {
-            io_context: IoContext::init(network).await?,
-            plain: CircomPlainVmWitnessExtension::default(),
-        })
+impl<F: PrimeField, N1: Rep3Network> CircomRep3VmWitnessExtension<F, N1> {
+    pub fn into_shamir<N2: ShamirNetwork>(self) -> ShamirProtocol<F, N2> {
+        ShamirProtocol::try_from(self.io_context)
     }
 }
 
@@ -229,9 +224,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
 
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
         match (a, b) {
-            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => {
-                Ok(self.plain.int_div(a, b)?.into())
-            }
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.int_div(a, b)?.into()),
             _ => todo!("Shared int_div not implemented"),
         }
     }

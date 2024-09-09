@@ -17,7 +17,7 @@ type IoResult<T> = std::io::Result<T>;
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
 pub async fn a2b<F: PrimeField, N: Rep3Network>(
-    x: &Rep3PrimeFieldShare<F>,
+    x: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3BigUintShare<F>> {
     let mut x01 = Rep3BigUintShare::zero_share();

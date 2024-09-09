@@ -7,7 +7,7 @@ use std::mem::ManuallyDrop;
 use ark_ec::CurveGroup;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-use super::fieldshare::ShamirPrimeFieldShare;
+use crate::protocols::shamirnew::fieldshare::ShamirPrimeFieldShare;
 
 /// This type represents a Shamir-shared EC point. Since a Shamir-share of a point is a point, this is a wrapper over a point.
 #[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]

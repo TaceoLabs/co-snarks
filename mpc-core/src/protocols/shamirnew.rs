@@ -4,7 +4,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use itertools::izip;
 use network::ShamirNetwork;
-use pointshare::ShamirPointShare;
+use point::types::ShamirPointShare;
 use rngs::ShamirRng;
 
 use rand::{CryptoRng, Rng, SeedableRng};
@@ -14,7 +14,7 @@ use crate::RngType;
 mod core;
 pub mod fieldshare;
 pub mod network;
-pub mod pointshare;
+pub mod point;
 mod rngs;
 
 type ShamirShare<F> = fieldshare::ShamirPrimeFieldShare<F>;
@@ -131,7 +131,6 @@ pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> Vec<ShamirPointShare<C>> {
     let shares = core::share_point(val, num_parties, degree, rng);
-
     ShamirPointShare::convert_vec_rev(shares)
 }
 

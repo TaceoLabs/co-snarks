@@ -52,8 +52,8 @@ mod translate_share {
     use ark_std::UniformRand;
     use itertools::Itertools;
     use mpc_core::protocols::{
-        rep3::{self, Rep3Protocol},
-        shamir,
+        rep3new::{self, network::IoContext},
+        shamirnew::{self, ShamirProtocol},
     };
     use rand::thread_rng;
     use std::thread;
@@ -66,7 +66,7 @@ mod translate_share {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::utils::share_field_element(x, &mut rng);
+        let x_shares = rep3new::share_field_element(x, &mut rng);
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         let (tx3, rx3) = oneshot::channel();
@@ -77,17 +77,17 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let rep3 = Rep3Protocol::new(net).unwrap();
-                let mut shamir = rep3.get_shamir_protocol().unwrap();
-                let share = shamir.translate_primefield_repshare(x).unwrap();
-                tx.send(share)
+                let rep3 = futures::executor::block_on(IoContext::init(net)).unwrap();
+                let mut shamir = ShamirProtocol::try_from(rep3).unwrap();
+                let share = futures::executor::block_on(shamir.translate_primefield_repshare(x));
+                tx.send(share.unwrap())
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
 
-        let is_result = shamir::utils::combine_field_element(
+        let is_result = shamirnew::combine_field_element(
             &[result1, result2, result3],
             &(1..=3).collect_vec(),
             1,
@@ -104,7 +104,7 @@ mod translate_share {
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
             .collect_vec();
-        let x_shares = rep3::utils::share_field_elements(&x, &mut rng);
+        let x_shares = rep3new::share_field_elements(&x, &mut rng);
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         let (tx3, rx3) = oneshot::channel();
@@ -115,17 +115,18 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let rep3 = Rep3Protocol::new(net).unwrap();
-                let mut shamir = rep3.get_shamir_protocol().unwrap();
-                let share = shamir.translate_primefield_repshare_vec(x).unwrap();
-                tx.send(share)
+                let rep3 = futures::executor::block_on(IoContext::init(net)).unwrap();
+                let mut shamir = ShamirProtocol::try_from(rep3).unwrap();
+                let share =
+                    futures::executor::block_on(shamir.translate_primefield_repshare_vec(x));
+                tx.send(share.unwrap())
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
 
-        let is_result = shamir::utils::combine_field_elements(
+        let is_result = shamirnew::combine_field_elements(
             &[result1, result2, result3],
             &(1..=3).collect_vec(),
             1,
@@ -140,7 +141,7 @@ mod translate_share {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = rep3::utils::share_curve_point(x, &mut rng);
+        let x_shares = rep3new::share_curve_point(x, &mut rng);
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         let (tx3, rx3) = oneshot::channel();
@@ -151,22 +152,19 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let rep3 = Rep3Protocol::<ark_bn254::Fr, _>::new(net).unwrap();
-                let mut shamir = rep3.get_shamir_protocol().unwrap();
-                let share = shamir.translate_point_repshare(x).unwrap();
-                tx.send(share)
+                let rep3 = futures::executor::block_on(IoContext::init(net)).unwrap();
+                let mut shamir = ShamirProtocol::try_from(rep3).unwrap();
+                let share = futures::executor::block_on(shamir.translate_point_repshare(x));
+                tx.send(share.unwrap())
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
 
-        let is_result = shamir::utils::combine_curve_point(
-            &[result1, result2, result3],
-            &(1..=3).collect_vec(),
-            1,
-        )
-        .unwrap();
+        let is_result =
+            shamirnew::combine_curve_point(&[result1, result2, result3], &(1..=3).collect_vec(), 1)
+                .unwrap();
 
         assert_eq!(is_result, x);
     }

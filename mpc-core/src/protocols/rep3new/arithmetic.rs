@@ -210,9 +210,16 @@ pub async fn equals_bit<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
     let diff = sub(lhs, rhs);
-    let bits = conversion::a2b(&diff, io_context).await?;
+    let bits = conversion::a2b(diff, io_context).await?;
     let is_zero = binary::is_zero(bits, io_context).await?;
     Ok(is_zero)
+}
+
+pub async fn sqrt<F: PrimeField, N: Rep3Network>(
+    _share: FieldShare<F>,
+    _io_context: &mut IoContext<N>,
+) -> IoResult<FieldShare<F>> {
+    todo!()
 }
 
 pub async fn pow_public<F: PrimeField, N: Rep3Network>(
@@ -235,5 +242,71 @@ pub async fn pow_public<F: PrimeField, N: Rep3Network>(
         shared = mul(shared, shared, io_context).await?;
         public >>= 1;
     }
-    Ok(FieldShareOrPublic::Share(mul(res, shared, io_context).await?))
+    Ok(FieldShareOrPublic::Share(
+        mul(res, shared, io_context).await?,
+    ))
+}
+
+pub async fn lt<F: PrimeField, N: Rep3Network>(
+    _lhs: FieldShare<F>,
+    _rhs: FieldShare<F>,
+    _io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    todo!()
+}
+
+pub async fn lt_public<F: PrimeField, N: Rep3Network>(
+    _lhs: FieldShare<F>,
+    _rhs: F,
+    _io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    todo!()
+}
+
+pub async fn le<F: PrimeField, N: Rep3Network>(
+    _lhs: FieldShare<F>,
+    _rhs: FieldShare<F>,
+    _io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    todo!()
+}
+
+pub async fn le_public<F: PrimeField, N: Rep3Network>(
+    _lhs: FieldShare<F>,
+    _rhs: F,
+    _io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    todo!()
+}
+
+pub async fn gt<F: PrimeField, N: Rep3Network>(
+    _lhs: FieldShare<F>,
+    _rhs: FieldShare<F>,
+    _io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    todo!()
+}
+
+pub async fn gt_public<F: PrimeField, N: Rep3Network>(
+    _lhs: FieldShare<F>,
+    _rhs: F,
+    _io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    todo!()
+}
+
+pub async fn ge<F: PrimeField, N: Rep3Network>(
+    _lhs: FieldShare<F>,
+    _rhs: FieldShare<F>,
+    _io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    todo!()
+}
+
+pub async fn ge_public<F: PrimeField, N: Rep3Network>(
+    _lhs: FieldShare<F>,
+    _rhs: F,
+    _io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    todo!()
 }
