@@ -31,15 +31,6 @@ impl<F: PrimeField> From<BinaryShare<F>> for Rep3VmType<F> {
     }
 }
 
-impl<F: PrimeField> From<arithmetic::FieldShareOrPublic<F>> for Rep3VmType<F> {
-    fn from(value: arithmetic::FieldShareOrPublic<F>) -> Self {
-        match value {
-            arithmetic::FieldShareOrPublic::Share(share) => share.into(),
-            arithmetic::FieldShareOrPublic::Public(public) => public.into(),
-        }
-    }
-}
-
 impl<F: PrimeField> Default for Rep3VmType<F> {
     fn default() -> Self {
         Self::Public(F::zero())
@@ -231,6 +222,9 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 self.pow(a.into(), b.into()).await
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                if b.is_zero() {
+                    return Rep3VmType::Public(F::one());
+                }
                 Ok(arithmetic::pow_public(&a, b, &mut self.io_context)?.into())
             }
             _ => todo!("pow with shared exponent not implemented"),

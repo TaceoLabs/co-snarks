@@ -23,9 +23,10 @@ pub async fn a2b<F: PrimeField, N: Rep3Network>(
     let mut x01 = Rep3BigUintShare::zero_share();
     let mut x2 = Rep3BigUintShare::zero_share();
 
-    let bitlen = usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize");
-
-    let (mut r, r2) = io_context.rngs.rand.random_biguint(bitlen);
+    let (mut r, r2) = io_context
+        .rngs
+        .rand
+        .random_biguint(F::MODULUS_BIT_SIZE as usize);
     r ^= r2;
 
     match io_context.id {
@@ -43,12 +44,12 @@ pub async fn a2b<F: PrimeField, N: Rep3Network>(
         }
     }
 
-    // Reshare x01
+    // reshare x01
     io_context.network.send_next(x01.a.to_owned()).await?;
     let local_b = io_context.network.recv_prev().await?;
     x01.b = local_b;
 
-    low_depth_binary_add_mod_p::<F, N>(x01, x2, io_context, bitlen).await
+    low_depth_binary_add_mod_p::<F, N>(x01, x2, io_context, F::MODULUS_BIT_SIZE as usize).await
 }
 
 pub(super) async fn low_depth_binary_add_mod_p<F: PrimeField, N: Rep3Network>(
@@ -69,7 +70,7 @@ async fn low_depth_binary_add<F: PrimeField, N: Rep3Network>(
 ) -> IoResult<Rep3BigUintShare<F>> {
     // Add x1 + x2 via a packed Kogge-Stone adder
     let p = &x1 ^ &x2;
-    let g = binary::and(&x1, &x2, io_context).await?;
+    let g = binary::and(x1, x2, io_context).await?;
     kogge_stone_inner(p, g, io_context, bitlen).await
 }
 
@@ -110,7 +111,7 @@ async fn low_depth_sub_p_cmux<F: PrimeField, N: Rep3Network>(
     let mask = (BigUint::from(1u64) << bitlen) - BigUint::one();
     let x_msb = &x >> bitlen;
     x &= &mask;
-    let mut y = low_depth_binary_sub_p::<F, N>(&x, io_context, bitlen).await?;
+    let mut y = low_depth_binary_sub_p::<F, N>(x.clone(), io_context, bitlen).await?;
     let y_msb = &y >> (bitlen + 1);
     y &= &mask;
 
@@ -131,7 +132,7 @@ async fn low_depth_sub_p_cmux<F: PrimeField, N: Rep3Network>(
     let ov = Rep3BigUintShare::<F>::new(ov_a, ov_b);
 
     // one big multiplexer
-    let res = binary::cmux(&ov, &y, &x, io_context).await?;
+    let res = binary::cmux(ov, y, x, io_context).await?;
     Ok(res)
 }
 
@@ -147,15 +148,15 @@ async fn low_depth_binary_sub<F: PrimeField, N: Rep3Network>(
     // This is equivalent to x1 - x2 = x1 + two's complement of x2
     let mask = (BigUint::from(1u64) << bitlen) - BigUint::one();
     // bitnot of x2
-    let x2 = binary::xor_public(&x2, &mask, io_context.id);
+    let x2 = binary::xor_public(x2, mask.clone(), io_context.id);
     // Now start the Kogge-Stone adder
     let p = &x1 ^ &x2;
-    let mut g = binary::and(&x1, &x2, io_context).await?;
+    let mut g = binary::and(x1, x2, io_context).await?;
     // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
     g ^= &(&p & &BigUint::one());
 
     let res = kogge_stone_inner(p, g, io_context, bitlen).await?;
-    let res = binary::xor_public(&res, &BigUint::one(), io_context.id); // cin=1
+    let res = binary::xor_public(res, BigUint::one(), io_context.id); // cin=1
     Ok(res)
 }
 
@@ -207,14 +208,14 @@ async fn and_twice<F: PrimeField, N: Rep3Network>(
 }
 
 async fn low_depth_binary_sub_p<F: PrimeField, N: Rep3Network>(
-    x: &Rep3BigUintShare<F>,
+    x: Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
     bitlen: usize,
 ) -> IoResult<Rep3BigUintShare<F>> {
     let p_ = (BigUint::from(1u64) << (bitlen + 1)) - F::MODULUS.into();
 
     // Add x1 + p_ via a packed Kogge-Stone adder
-    let p = binary::xor_public(&x, &p_, io_context.id);
-    let g = x & &p_;
+    let g = &x & &p_;
+    let p = binary::xor_public(x, p_, io_context.id);
     kogge_stone_inner(p, g, io_context, bitlen + 1).await
 }
