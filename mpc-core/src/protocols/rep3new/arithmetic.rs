@@ -14,12 +14,6 @@ type BinaryShare<F> = Rep3BigUintShare<F>;
 mod ops;
 pub(super) mod types;
 
-/// Some computations return a shared value or a public value.
-pub enum FieldShareOrPublic<F: PrimeField> {
-    Share(FieldShare<F>),
-    Public(F),
-}
-
 /// Performs addition between two shared values.
 pub fn add<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>) -> FieldShare<F> {
     a + b
@@ -221,24 +215,21 @@ pub async fn equals_bit<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
     let diff = sub(lhs, rhs);
-    let bits = conversion::a2b(&diff, io_context).await?;
+    let bits = conversion::a2b(diff, io_context).await?;
     let is_zero = binary::is_zero(bits, io_context).await?;
     Ok(is_zero)
 }
 
 /// Performs a pow operation using a shared value as base and a public value as exponent.
 pub async fn pow_public<F: PrimeField, N: Rep3Network>(
-    shared: &FieldShare<F>,
+    shared: FieldShare<F>,
     public: F,
     io_context: &mut IoContext<N>,
-) -> IoResult<FieldShareOrPublic<F>> {
-    if public.is_zero() {
-        return Ok(FieldShareOrPublic::Public(F::one()));
-    }
+) -> IoResult<Rep3PrimeFieldShare<F>> {
     // TODO: are negative exponents allowed in circom?
     let mut res = promote_to_trivial_share(io_context.id, F::one());
     let mut public: BigUint = public.into_bigint().into();
-    let mut shared: FieldShare<F> = shared.to_owned();
+    let mut shared: FieldShare<F> = shared;
     while !public.is_zero() {
         if public.bit(0) {
             public -= 1u64;
@@ -247,7 +238,7 @@ pub async fn pow_public<F: PrimeField, N: Rep3Network>(
         shared = mul(shared, shared, io_context).await?;
         public >>= 1;
     }
-    Ok(FieldShareOrPublic::Share(mul(res, shared, io_context).await?))
+    Ok(mul(res, shared, io_context).await?)
 }
 
 /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
@@ -257,9 +248,9 @@ pub async fn eq<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let diff = sub(a, b);
-    let bits = conversion::a2b(&diff, io_context).await?;
+    let bits = conversion::a2b(diff, io_context).await?;
     let is_zero = binary::is_zero(bits, io_context).await?;
-    let res = conversion::bit_inject(&is_zero, io_context).await?;
+    let res = conversion::bit_inject(is_zero, io_context).await?;
     Ok(res)
 }
 

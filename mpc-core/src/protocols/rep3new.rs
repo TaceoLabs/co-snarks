@@ -71,8 +71,10 @@ pub mod conversion {
         let mut y = Rep3BigUintShare::zero_share();
         let mut res = Rep3PrimeFieldShare::zero_share();
 
-        let bitlen = usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize");
-        let (mut r, r2) = io_context.rngs.rand.random_biguint(bitlen);
+        let (mut r, r2) = io_context
+            .rngs
+            .rand
+            .random_biguint(F::MODULUS_BIT_SIZE as usize);
         r ^= r2;
 
         match io_context.id {
@@ -101,12 +103,14 @@ pub mod conversion {
             }
         }
 
-        // Reshare y
+        // reshare y
         io_context.network.send_next(y.a.to_owned()).await?;
         let local_b = io_context.network.recv_prev().await?;
         y.b = local_b;
 
-        let z = a2b::low_depth_binary_add_mod_p::<F, N>(x, y, io_context, bitlen).await?;
+        let z =
+            a2b::low_depth_binary_add_mod_p::<F, N>(x, y, io_context, F::MODULUS_BIT_SIZE as usize)
+                .await?;
 
         match io_context.id {
             PartyID::ID0 => {
@@ -127,7 +131,7 @@ pub mod conversion {
 
     /// Translates one shared bit into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
     pub async fn bit_inject<F: PrimeField, N: Rep3Network>(
-        x: &Rep3BigUintShare<F>,
+        x: Rep3BigUintShare<F>,
         io_context: &mut IoContext<N>,
     ) -> IoResult<Rep3PrimeFieldShare<F>> {
         // standard bit inject
