@@ -176,7 +176,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Public(self.plain_solver.solve_equation(q_l, c)?)
             }
             (Rep3AcvmType::Public(q_l), Rep3AcvmType::Shared(c)) => {
-                Rep3AcvmType::Shared(arithmetic::div_by_public(arithmetic::neg(c), q_l)?)
+                Rep3AcvmType::Shared(arithmetic::div_shared_by_public(arithmetic::neg(c), q_l)?)
             }
             (Rep3AcvmType::Shared(q_l), Rep3AcvmType::Public(c)) => {
                 let future = arithmetic::div_public_by_shared(-c, q_l, io_context);
