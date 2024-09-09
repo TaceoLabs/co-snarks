@@ -1,7 +1,7 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
-use mpc_core::protocols::{
-    rep3::network::Rep3Network,
-    rep3new::{self, network::IoContext, point::types::Rep3PointShare, Rep3PrimeFieldShare},
+use mpc_core::protocols::rep3new::{
+    self, network::IoContext, network::Rep3Network, point::types::Rep3PointShare,
+    Rep3PrimeFieldShare,
 };
 use tokio::runtime;
 

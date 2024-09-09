@@ -82,16 +82,16 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
 
     type VmType = F;
 
-    fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let result = a + b;
         tracing::trace!("{a}+{b}={result}");
-        result
+        Ok(result)
     }
 
-    fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType {
+    fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let result = a - b;
         tracing::trace!("{a}-{b}={result}");
-        a - b
+        Ok(a - b)
     }
 
     fn mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
@@ -106,7 +106,7 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok(a / b)
     }
 
-    async fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Ok(a.pow(b.into_bigint()))
     }
 
@@ -132,7 +132,7 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok(F::from(lhs / rhs))
     }
 
-    async fn is_zero(&mut self, a: Self::VmType, _: bool) -> Result<bool> {
+    fn is_zero(&mut self, a: Self::VmType, _: bool) -> Result<bool> {
         Ok(a.is_zero())
     }
 
@@ -214,7 +214,7 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok(F::from(lhs ^ rhs))
     }
 
-    async fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+    fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let lhs = to_bigint!(a);
         let rhs = to_bigint!(b);
         Ok(F::from(lhs | rhs))

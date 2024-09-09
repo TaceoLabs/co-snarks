@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use ark_ff::PrimeField;
-use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
+use mpc_core::protocols::rep3new::network::{Rep3MpcNet, Rep3Network};
 use mpc_net::config::NetworkConfig;
 
 use crate::{

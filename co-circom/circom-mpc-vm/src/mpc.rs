@@ -13,10 +13,10 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     type VmType: Clone + Default + fmt::Debug + fmt::Display + From<F> + From<Self::ArithmeticShare>;
 
     /// Add two VM-types: c = a + b.
-    fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
+    fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Subtract the VM-type b from the VM-type a: c = a - b.
-    fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Self::VmType;
+    fn sub(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Multiply two VM-types: c = a * b.
     fn mul(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
@@ -28,7 +28,7 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Compute c = a ^ b, where a and b ar VM-types.
-    async fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Compute the modulo of the VM-type a by the VM-type b: c = a % b.
     fn modulo(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
@@ -84,13 +84,13 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Computes the bitwise OR of the VM-types a and b: c = a | b.
-    async fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
+    fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Computes the bitwise AND of the VM-types a and b: c = a & b.
     fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
 
     /// Outputs whether a is zero (true) or not (false). This values is output in plain! Thus, if a is secret shared, the result is opened.
-    async fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool>;
+    fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> Result<bool>;
 
     /// Returns whether the VM-type represents a shared value (true) or a public one (false).
     fn is_shared(&mut self, a: &Self::VmType) -> Result<bool>;

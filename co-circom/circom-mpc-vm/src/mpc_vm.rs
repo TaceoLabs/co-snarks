@@ -11,7 +11,7 @@ use ark_ff::PrimeField;
 use co_circom_snarks::{SharedInput, SharedWitness};
 use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
-use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
+use mpc_core::protocols::rep3new::network::{Rep3MpcNet, Rep3Network};
 use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -501,12 +501,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                 op_codes::MpcOpCode::Add => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.add(lhs, rhs));
+                    self.push_field(protocol.add(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Sub => {
                     let rhs = self.pop_field();
                     let lhs = self.pop_field();
-                    self.push_field(protocol.sub(lhs, rhs));
+                    self.push_field(protocol.sub(lhs, rhs)?);
                 }
                 op_codes::MpcOpCode::Mul => {
                     let rhs = self.pop_field();
@@ -791,7 +791,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     //maybe we should do that???
                     .collect::<Result<Vec<_>, _>>()?
             ) {
-                *acc = protocol.add(acc.to_owned(), x);
+                *acc = protocol.add(acc.to_owned(), x)?;
             }
         }
         for shared_ret_val in acc {
