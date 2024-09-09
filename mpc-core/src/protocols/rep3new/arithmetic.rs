@@ -312,9 +312,12 @@ pub async fn ge_public<F: PrimeField, N: Rep3Network>(
     todo!()
 }
 
-//TODO FN REMARK - I think we can skip the bit_inject by storing
-//the len in the binary share. We leave it be like that and come back
-//to that later. Maybe it doesn't matter...
+//TODO FN REMARK - I think we can skip the bit_inject.
+//Circom has dedicated op codes for bool ops so we would know
+//for bool_and/bool_or etc that we are a boolean value (and therefore
+//bit len 1).
+//
+//We leave it like that and come back to that later. Maybe it doesn't matter...
 
 /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
 pub async fn eq<F: PrimeField, N: Rep3Network>(
