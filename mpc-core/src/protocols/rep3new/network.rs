@@ -1,6 +1,7 @@
 use std::{io, sync::Arc};
 
 use crate::RngType;
+use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
@@ -23,7 +24,7 @@ use rand::{Rng, SeedableRng};
 // this will be moved later
 pub struct IoContext<N: Rep3Network> {
     pub id: PartyID,
-    pub rngs: Rep3CorrelatedRng,
+    pub(crate) rngs: Rep3CorrelatedRng,
     pub network: N,
 }
 
@@ -78,6 +79,10 @@ impl<N: Rep3Network> IoContext<N> {
             network,
             rngs,
         })
+    }
+
+    pub async fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
+        self.rngs.rand.random_fes()
     }
 }
 

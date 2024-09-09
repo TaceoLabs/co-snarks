@@ -1,7 +1,7 @@
 use ark_ec::pairing::Pairing;
-use mpc_core::protocols::{
-    rep3::network::Rep3Network,
-    rep3new::{network::IoContext, point::types::Rep3PointShare, Rep3PrimeFieldShare},
+use mpc_core::protocols::rep3new::{
+    network::{IoContext, Rep3Network},
+    Rep3PointShare, Rep3PrimeFieldShare,
 };
 
 use super::CircomPlonkProver;

@@ -1,9 +1,10 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
+use itertools::izip;
 use mpc_core::protocols::{
-    rep3::network::Rep3Network,
-    rep3new::{self, network::IoContext, point::types::Rep3PointShare, Rep3PrimeFieldShare},
+    rep3new::network::Rep3Network,
+    rep3new::{self, network::IoContext, Rep3PointShare, Rep3PrimeFieldShare},
 };
-use tokio::runtime;
+use tokio::runtime::{self, Runtime};
 
 use super::CircomGroth16Prover;
 
@@ -14,9 +15,11 @@ pub(crate) struct Rep3Groth16Driver<N: Rep3Network> {
 
 impl<N: Rep3Network> Rep3Groth16Driver<N> {
     pub fn new(network: N) -> std::io::Result<Self> {
+        let runtime = runtime::Builder::new_current_thread().build()?;
+        let io_context = runtime.block_on(IoContext::init(network))?;
         Ok(Self {
-            io_context: IoContext::init(network)?,
-            runtime: runtime::Builder::new_current_thread().build()?,
+            io_context,
+            runtime,
         })
     }
 }
@@ -26,9 +29,8 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
 
     type PointShare<C: CurveGroup> = Rep3PointShare<C>;
 
-    fn rand(&self) -> Self::ArithmeticShare {
-        let (a, b) = self.rngs.rand.random_fes();
-        Ok(Self::ArithmeticShare::new(a, b))
+    fn rand(&mut self) -> Self::ArithmeticShare {
+        Self::ArithmeticShare::rand(&mut self.io_context)
     }
 
     fn evaluate_constraint(

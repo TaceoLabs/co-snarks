@@ -1,7 +1,11 @@
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-use crate::protocols::rep3new::{id::PartyID, rngs::Rep3CorrelatedRng};
+use crate::protocols::rep3new::{
+    id::PartyID,
+    network::{IoContext, Rep3Network},
+    rngs::Rep3CorrelatedRng,
+};
 
 /// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
@@ -39,8 +43,8 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
         self.b.double_in_place();
     }
 
-    pub(super) fn rand(rngs: &mut Rep3CorrelatedRng) -> Self {
-        let (a, b) = rngs.rand.random_fes();
+    pub fn rand<N: Rep3Network>(io_context: &mut IoContext<N>) -> Self {
+        let (a, b) = io_context.rngs.rand.random_fes();
         Self::new(a, b)
     }
 

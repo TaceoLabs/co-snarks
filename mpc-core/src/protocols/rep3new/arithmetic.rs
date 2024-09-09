@@ -126,7 +126,7 @@ pub async fn inv<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let r = FieldShare::rand(&mut io_context.rngs);
+    let r = FieldShare::rand(io_context);
     let y = mul_open(a, r, io_context).await?;
     if y.is_zero() {
         return Err(std::io::Error::new(

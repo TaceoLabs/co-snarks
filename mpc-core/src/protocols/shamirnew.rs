@@ -4,20 +4,23 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use itertools::izip;
 use network::ShamirNetwork;
-use point::types::ShamirPointShare;
 use rngs::ShamirRng;
 
 use rand::{CryptoRng, Rng, SeedableRng};
 
 use crate::RngType;
 
+pub mod arithmetic;
 mod core;
-pub mod fieldshare;
 pub mod network;
-pub mod point;
+pub mod pointshare;
 mod rngs;
 
-type ShamirShare<F> = fieldshare::ShamirPrimeFieldShare<F>;
+pub use arithmetic::types::ShamirPrimeFieldShare;
+pub use pointshare::types::ShamirPointShare;
+
+type IoResult<T> = std::io::Result<T>;
+type ShamirShare<F> = ShamirPrimeFieldShare<F>;
 
 pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
     val: F,
@@ -218,6 +221,11 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         self.rng_buffer
             .buffer_triples(&mut self.network, amount)
             .await
+    }
+
+    pub(crate) async fn rand(&mut self) -> IoResult<ShamirPrimeFieldShare<F>> {
+        let (r, _) = self.rng_buffer.get_pair(&mut self.network).await?;
+        Ok(ShamirPrimeFieldShare::new(r))
     }
 
     pub(crate) async fn degree_reduce(&mut self, mut input: F) -> std::io::Result<ShamirShare<F>> {

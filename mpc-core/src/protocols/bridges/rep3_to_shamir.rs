@@ -4,10 +4,7 @@ use crate::protocols::{
         network::{IoContext, Rep3Network},
         Rep3PointShare, Rep3PrimeFieldShare,
     },
-    shamirnew::{
-        fieldshare::ShamirPrimeFieldShare, network::ShamirNetwork, point::ShamirPointShare,
-        ShamirProtocol,
-    },
+    shamirnew::{network::ShamirNetwork, ShamirPointShare, ShamirPrimeFieldShare, ShamirProtocol},
 };
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;

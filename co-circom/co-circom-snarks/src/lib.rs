@@ -7,7 +7,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_types::Witness;
 use mpc_core::protocols::{
     rep3new::{self, Rep3PrimeFieldShare},
-    shamirnew::{self, fieldshare::ShamirPrimeFieldShare},
+    shamirnew::{self, ShamirPrimeFieldShare},
 };
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};

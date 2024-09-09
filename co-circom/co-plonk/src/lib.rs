@@ -67,7 +67,7 @@ where
     pub fn prove(
         self,
         zkey: &ZKey<P>,
-        witness: SharedWitness<P, T>,
+        witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<PlonkProof<P>> {
         tracing::debug!("starting PLONK prove..");
         let state = Round1::init_round(self.driver, zkey, witness)?;
@@ -89,11 +89,10 @@ where
 mod plonk_utils {
     use ark_ec::pairing::Pairing;
     use circom_types::plonk::ZKey;
-    use mpc_core::traits::{FieldShareVecTrait, PrimeFieldMpcProtocol};
 
     use crate::mpc::CircomPlonkProver;
     use crate::types::{Domains, PlonkWitness};
-    use crate::{FieldShare, FieldShareVec, PlonkProofError, PlonkProofResult};
+    use crate::{PlonkProofError, PlonkProofResult};
     use ark_ff::Field;
     use num_traits::One;
     use num_traits::Zero;
@@ -184,9 +183,9 @@ pub mod tests {
     use circom_types::plonk::{JsonVerificationKey, ZKey};
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
-    use mpc_core::protocols::plain::PlainDriver;
     use std::{fs::File, io::BufReader};
 
+    use crate::mpc::plain::PlainPlonkDriver;
     use crate::plonk::Plonk;
 
     #[test]
@@ -195,7 +194,7 @@ pub mod tests {
         let witness_file = "../../test_vectors/Plonk/bn254/multiplier2/witness.wtns";
         let zkey = ZKey::<Bn254>::from_reader(File::open(zkey_file)?)?;
         let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
-        let driver = PlainDriver::<ark_bn254::Fr>::default();
+        let driver = PlainPlonkDriver;
 
         let witness = SharedWitness {
             public_inputs: witness.values[..=zkey.n_public].to_vec(),
@@ -221,7 +220,7 @@ pub mod tests {
 
     #[test]
     pub fn test_poseidon_bn254() {
-        let driver = PlainDriver::<ark_bn254::Fr>::default();
+        let driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/poseidon/circuit.zkey").unwrap(),
         );
@@ -230,7 +229,7 @@ pub mod tests {
             File::open("../../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+        let witness = SharedWitness {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };

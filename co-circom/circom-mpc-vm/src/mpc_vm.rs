@@ -11,7 +11,7 @@ use ark_ff::PrimeField;
 use co_circom_snarks::{SharedInput, SharedWitness};
 use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
-use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
+use mpc_core::protocols::rep3new::network::{Rep3MpcNet, Rep3Network};
 use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

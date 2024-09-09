@@ -104,6 +104,19 @@ pub trait CircomPlonkProver<P: Pairing> {
     ) -> Vec<Self::ArithmeticShare>;
 
     /// Reconstructs many shared points: A = Open(\[A\]).
+    fn open_point<C: CurveGroup>(&mut self, a: Self::PointShare<C>) -> IoResult<C> {
+        let mut result = self.open_point_many(&[a])?;
+        if result.len() != 1 {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of degree_reduce_vec in MPC: Invalid number of elements received",
+            ))
+        } else {
+            Ok(result.pop().expect("we checked for len above"))
+        }
+    }
+
+    /// Reconstructs many shared points: A = Open(\[A\]).
     fn open_point_many<C: CurveGroup>(&mut self, a: &[Self::PointShare<C>]) -> IoResult<Vec<C>>;
 
     // WE NEED THIS ALSO FOR GROTH16

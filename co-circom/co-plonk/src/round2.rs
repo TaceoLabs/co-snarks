@@ -9,7 +9,6 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
-use mpc_core::protocols::rep3new::arithmetic::mul_vec;
 use num_traits::One;
 
 // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
@@ -251,10 +250,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         // STEP 2.3 - Compute permutation [z]_1
 
         tracing::debug!("committing to poly z (MSMs)");
-        let commit_z = self
-            .driver
-            .msm_public_points(&zkey.p_tau[..z.poly.len()], &z.poly);
-        let proof = Round2Proof::new(proof, driver.open_point(&commit_z)?);
+        let commit_z = driver.msm_public_points(&zkey.p_tau[..z.poly.len()], &z.poly);
+        let proof = Round2Proof::new(proof, driver.open_point(commit_z)?);
         tracing::debug!("round2 result: {proof}");
 
         Ok(Round3 {
@@ -277,8 +274,8 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
-    use mpc_core::protocols::plain::PlainDriver;
 
+    use crate::mpc::plain::PlainPlonkDriver;
     use crate::round1::Round1;
     macro_rules! g1_from_xy {
         ($x: expr,$y: expr) => {
@@ -292,9 +289,10 @@ pub mod tests {
     use super::Round1Challenges;
     use ark_ec::pairing::Pairing;
     use std::str::FromStr;
+
     #[test]
     fn test_round2_multiplier2() {
-        let mut driver = PlainDriver::<ark_bn254::Fr>::default();
+        let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
         );
@@ -303,7 +301,7 @@ pub mod tests {
             File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness::<PlainDriver<ark_bn254::Fr>, Bn254> {
+        let witness = SharedWitness {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };

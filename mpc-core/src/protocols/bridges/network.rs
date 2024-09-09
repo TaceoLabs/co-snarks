@@ -2,7 +2,7 @@
 //!
 //! This module contains code to translate networks used for different MPC protocols into each other.
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use crate::protocols::{
     rep3new::network::{Rep3MpcNet, Rep3Network},

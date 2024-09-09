@@ -514,7 +514,7 @@ mod field_share {
                         let results2 = rx2.await.unwrap();
                         let results3 = rx3.await.unwrap();
                         for (a, b, c) in izip!(results1, results2, results3) {
-                            let is_result = rep3new::combine_binary_element(a, b, c);
+                            let is_result = rep3new::combine_field_element(a, b, c);
                             println!("{constant_number} {} {compare} = {is_result}", stringify!($op));
                             assert_eq!(is_result, should_result.into());
                         }

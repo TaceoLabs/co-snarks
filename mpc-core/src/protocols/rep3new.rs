@@ -7,14 +7,15 @@ pub mod network;
 pub mod pointshare;
 pub mod rngs;
 
-pub use arithmetic::types::Rep3PrimeFieldShare;
 use ark_ec::CurveGroup;
-pub use binary::types::Rep3BigUintShare;
 use num_bigint::BigUint;
-pub use pointshare::Rep3PointShare;
 
 use ark_ff::{One, PrimeField};
 use rand::{CryptoRng, Rng};
+
+pub use arithmetic::types::Rep3PrimeFieldShare;
+pub use binary::types::Rep3BigUintShare;
+pub use pointshare::Rep3PointShare;
 
 pub(crate) type IoResult<T> = std::io::Result<T>;
 
