@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, sync::Arc};
 
 use crate::RngType;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -170,6 +170,11 @@ pub trait Rep3Network {
         self.recv_many(self.get_id().prev_id()).await
     }
 
+    /// Fork the network into two separate instances with their own connections
+    async fn fork(self) -> std::io::Result<(Self, Self)>
+    where
+        Self: Sized;
+
     /// Shutdown the network
     async fn shutdown(self) -> std::io::Result<()>;
 }
@@ -179,7 +184,7 @@ pub trait Rep3Network {
 #[derive(Debug)]
 pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
-    pub(crate) net_handler: MpcNetworkHandler,
+    pub(crate) net_handler: Arc<MpcNetworkHandler>,
     pub(crate) chan_next: Channel<RecvStream, SendStream, LengthDelimitedCodec>,
     pub(crate) chan_prev: Channel<RecvStream, SendStream, LengthDelimitedCodec>,
 }
@@ -191,7 +196,7 @@ impl Rep3MpcNet {
             bail!("REP3 protocol requires exactly 3 parties")
         }
         let id = PartyID::try_from(config.my_id)?;
-        let mut net_handler = MpcNetworkHandler::establish(config).await?;
+        let net_handler = Arc::new(MpcNetworkHandler::establish(config).await?);
         let mut channels = net_handler.get_byte_channels().await?;
         let chan_next = channels
             .remove(&id.next_id().into())
@@ -212,36 +217,38 @@ impl Rep3MpcNet {
     }
 
     async fn send_raw<F: CanonicalSerialize>(
-        data: &F,
+        data: &[F],
         write: &mut WriteChannel<SendStream, LengthDelimitedCodec>,
     ) -> io::Result<()> {
+        let mut bytes = Vec::with_capacity(data.serialized_size(ark_serialize::Compress::No));
+        data.serialize_uncompressed(&mut bytes);
+        write.send(Bytes::from(bytes)).await?;
         Ok(())
     }
 
     async fn recv_raw<F: CanonicalDeserialize>(
-        write: &mut ReadChannel<RecvStream, LengthDelimitedCodec>,
-    ) -> io::Result<F> {
-        todo!()
+        read: &mut ReadChannel<RecvStream, LengthDelimitedCodec>,
+    ) -> io::Result<Vec<F>> {
+        let bytes = read.next().await.expect("recv none")?;
+        let res = Vec::<F>::deserialize_uncompressed(&bytes[..])
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        Ok(res)
     }
 
     async fn reshare_send_many<F: CanonicalSerialize>(
         data: &[F],
         chan_next: &mut Channel<RecvStream, SendStream, LengthDelimitedCodec>,
     ) -> io::Result<()> {
-        let mut bytes = Vec::with_capacity(data.serialized_size(ark_serialize::Compress::No));
-        data.serialize_uncompressed(&mut bytes);
-        chan_next.send(Bytes::from(bytes)).await?;
-        Ok(())
+        let (write, _) = chan_next.inner_ref();
+        Self::send_raw(data, write).await
     }
 
     async fn reshare_recv_many<F: CanonicalDeserialize>(
         chan_prev: &mut Channel<RecvStream, SendStream, LengthDelimitedCodec>,
     ) -> io::Result<Vec<F>> {
-        let bytes = chan_prev.next().await.expect("recv none")?;
-        let res = Vec::<F>::deserialize_uncompressed(&bytes[..])
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-
-        Ok(res)
+        let (_, read) = chan_prev.inner_ref();
+        Self::recv_raw(read).await
     }
 
     /// Sends bytes over the network to the target party.
@@ -274,9 +281,6 @@ impl Rep3MpcNet {
             ));
         }
     }
-    pub(crate) fn _id(&self) -> PartyID {
-        self.id
-    }
 }
 
 impl Rep3Network for Rep3MpcNet {
@@ -300,6 +304,7 @@ impl Rep3Network for Rep3MpcNet {
         &mut self,
         data: F,
     ) -> std::io::Result<(F, F)> {
+        let data = [data];
         let (send_next, recv_next) = self.chan_next.inner_ref();
         let (send_prev, recv_prev) = self.chan_prev.inner_ref();
         let (a, b, c, d) = tokio::join!(
@@ -310,7 +315,28 @@ impl Rep3Network for Rep3MpcNet {
         );
         a?;
         b?;
-        Ok((c?, d?))
+        let mut c = c?;
+        let mut d = d?;
+        let c = if c.len() != 1 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Expected 1 element, got more",
+            ));
+        } else {
+            // checked that there is one element
+            c.pop().unwrap()
+        };
+
+        let d = if d.len() != 1 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Expected 1 element, got more",
+            ));
+        } else {
+            // checked that there is one element
+            d.pop().unwrap()
+        };
+        Ok((c, d))
     }
 
     async fn send_many<F: CanonicalSerialize>(
@@ -337,7 +363,27 @@ impl Rep3Network for Rep3MpcNet {
         Ok(res)
     }
 
+    async fn fork(self) -> std::io::Result<(Self, Self)> {
+        let id = self.id;
+        let net_handler = Arc::clone(&self.net_handler);
+        let mut channels = net_handler.get_byte_channels().await?;
+
+        Ok((
+            self,
+            Self {
+                id,
+                net_handler,
+                chan_next: channels.remove(&id.next_id().into()).unwrap(),
+                chan_prev: channels.remove(&id.prev_id().into()).unwrap(),
+            },
+        ))
+    }
+
     async fn shutdown(self) -> std::io::Result<()> {
-        self.net_handler.shutdown().await
+        if let Some(net_handler) = Arc::into_inner(self.net_handler) {
+            net_handler.shutdown().await
+        } else {
+            Ok(())
+        }
     }
 }
