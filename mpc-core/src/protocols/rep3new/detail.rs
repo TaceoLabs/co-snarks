@@ -9,6 +9,7 @@ use crate::protocols::rep3new::id::PartyID;
 use crate::protocols::rep3new::network::Rep3Network;
 
 use super::binary;
+use super::conversion;
 use super::network::IoContext;
 use super::Rep3BigUintShare;
 use super::Rep3PrimeFieldShare;
@@ -190,9 +191,10 @@ async fn unsigned_ge<F: PrimeField, N: Rep3Network>(
     y: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3BigUintShare<F>> {
-    let a_bits = a2b(x, io_context).await?;
-    let b_bits = a2b(y, io_context).await?;
-    let diff = low_depth_binary_sub(&a_bits, &b_bits, io_context, F::MODULUS_BIT_SIZE as usize).await?;
+    let a_bits = conversion::a2b(x, io_context).await?;
+    let b_bits = conversion::a2b(y, io_context).await?;
+    let diff =
+        low_depth_binary_sub(&a_bits, &b_bits, io_context, F::MODULUS_BIT_SIZE as usize).await?;
 
     Ok(&(&diff >> F::MODULUS_BIT_SIZE as usize) & &BigUint::one())
 }
@@ -203,7 +205,7 @@ async fn unsigned_ge_const_lhs<F: PrimeField, N: Rep3Network>(
     y: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3BigUintShare<F>> {
-    let b_bits = a2b(y, io_context).await?;
+    let b_bits = conversion::a2b(y, io_context).await?;
     let diff = low_depth_binary_sub_from_const(&x.into(), &b_bits, io_context).await?;
 
     Ok(&(&diff >> F::MODULUS_BIT_SIZE as usize) & &BigUint::one())
@@ -215,7 +217,7 @@ async fn unsigned_ge_const_rhs<F: PrimeField, N: Rep3Network>(
     y: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3BigUintShare<F>> {
-    let a_bits = a2b(x, io_context).await?;
+    let a_bits = conversion::a2b(x, io_context).await?;
     let diff = low_depth_binary_sub_by_const(&a_bits, &y.into(), io_context).await?;
 
     Ok(&(&diff >> F::MODULUS_BIT_SIZE as usize) & &BigUint::one())

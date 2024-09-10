@@ -445,3 +445,16 @@ pub async fn is_zero<F: PrimeField, N: Rep3Network>(
     let x = open(res, io_context).await?;
     Ok(x.is_one())
 }
+
+/// computes XOR using arithmetic operations, only valid when x and y are known to be 0 or 1.
+pub(crate) async fn arithmetic_xor<F: PrimeField, N: Rep3Network>(
+    x: Rep3PrimeFieldShare<F>,
+    y: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3PrimeFieldShare<F>> {
+    let d = mul(x, y, io_context).await?;
+    let d = add(d, d);
+    let e = add(x, y);
+    let d = sub(e, d);
+    Ok(d)
+}
