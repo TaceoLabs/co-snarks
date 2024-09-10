@@ -1,6 +1,6 @@
-mod a2b;
 pub mod arithmetic;
 pub mod binary;
+mod detail;
 pub mod id;
 pub mod lut;
 pub mod network;
@@ -133,11 +133,51 @@ pub mod conversion {
     use crate::protocols::rep3new::{id::PartyID, network::Rep3Network};
 
     use super::{
-        a2b, arithmetic, network::IoContext, IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
+        arithmetic, detail, network::IoContext, IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
     };
 
-    //re-export a2b
-    pub use super::a2b::a2b;
+    /// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
+    pub async fn a2b<F: PrimeField, N: Rep3Network>(
+        x: Rep3PrimeFieldShare<F>,
+        io_context: &mut IoContext<N>,
+    ) -> IoResult<Rep3BigUintShare<F>> {
+        let mut x01 = Rep3BigUintShare::zero_share();
+        let mut x2 = Rep3BigUintShare::zero_share();
+
+        let (mut r, r2) = io_context
+            .rngs
+            .rand
+            .random_biguint(F::MODULUS_BIT_SIZE as usize);
+        r ^= r2;
+
+        match io_context.id {
+            PartyID::ID0 => {
+                x01.a = r;
+                x2.b = x.b.into();
+            }
+            PartyID::ID1 => {
+                let val: BigUint = (x.a + x.b).into();
+                x01.a = val ^ r;
+            }
+            PartyID::ID2 => {
+                x01.a = r;
+                x2.a = x.a.into();
+            }
+        }
+
+        // reshare x01
+        io_context.network.send_next(x01.a.to_owned()).await?;
+        let local_b = io_context.network.recv_prev().await?;
+        x01.b = local_b;
+
+        detail::low_depth_binary_add_mod_p::<F, N>(
+            &x01,
+            &x2,
+            io_context,
+            F::MODULUS_BIT_SIZE as usize,
+        )
+        .await
+    }
 
     /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
 
@@ -187,9 +227,13 @@ pub mod conversion {
         let local_b = io_context.network.recv_prev().await?;
         y.b = local_b;
 
-        let z =
-            a2b::low_depth_binary_add_mod_p::<F, N>(x, &y, io_context, F::MODULUS_BIT_SIZE as usize)
-                .await?;
+        let z = detail::low_depth_binary_add_mod_p::<F, N>(
+            x,
+            &y,
+            io_context,
+            F::MODULUS_BIT_SIZE as usize,
+        )
+        .await?;
 
         match io_context.id {
             PartyID::ID0 => {

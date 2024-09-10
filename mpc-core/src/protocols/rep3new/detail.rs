@@ -15,43 +15,6 @@ use super::Rep3PrimeFieldShare;
 
 type IoResult<T> = std::io::Result<T>;
 
-/// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
-pub async fn a2b<F: PrimeField, N: Rep3Network>(
-    x: Rep3PrimeFieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<Rep3BigUintShare<F>> {
-    let mut x01 = Rep3BigUintShare::zero_share();
-    let mut x2 = Rep3BigUintShare::zero_share();
-
-    let (mut r, r2) = io_context
-        .rngs
-        .rand
-        .random_biguint(F::MODULUS_BIT_SIZE as usize);
-    r ^= r2;
-
-    match io_context.id {
-        PartyID::ID0 => {
-            x01.a = r;
-            x2.b = x.b.into();
-        }
-        PartyID::ID1 => {
-            let val: BigUint = (x.a + x.b).into();
-            x01.a = val ^ r;
-        }
-        PartyID::ID2 => {
-            x01.a = r;
-            x2.a = x.a.into();
-        }
-    }
-
-    // reshare x01
-    io_context.network.send_next(x01.a.to_owned()).await?;
-    let local_b = io_context.network.recv_prev().await?;
-    x01.b = local_b;
-
-    low_depth_binary_add_mod_p::<F, N>(&x01, &x2, io_context, F::MODULUS_BIT_SIZE as usize).await
-}
-
 pub(super) async fn low_depth_binary_add_mod_p<F: PrimeField, N: Rep3Network>(
     x1: &Rep3BigUintShare<F>,
     x2: &Rep3BigUintShare<F>,
@@ -219,4 +182,81 @@ async fn low_depth_binary_sub_p<F: PrimeField, N: Rep3Network>(
     let g = x & &p_;
     let p = binary::xor_public(x, &p_, io_context.id);
     kogge_stone_inner(&p, &g, io_context, bitlen + 1).await
+}
+
+/// Computes a binary circuit to compare two shared values \[x\] > \[y\]. Thus, the inputs x and y are transformed from arithmetic to binary sharings using [Rep3Protocol::a2b] first. The output is a binary sharing of one bit.
+async fn unsigned_ge<F: PrimeField, N: Rep3Network>(
+    x: Rep3PrimeFieldShare<F>,
+    y: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3BigUintShare<F>> {
+    let a_bits = a2b(x, io_context).await?;
+    let b_bits = a2b(y, io_context).await?;
+    let diff = low_depth_binary_sub(&a_bits, &b_bits, io_context, F::MODULUS_BIT_SIZE as usize).await?;
+
+    Ok(&(&diff >> F::MODULUS_BIT_SIZE as usize) & &BigUint::one())
+}
+
+/// Computes a binary circuit to compare the shared value y to the public value x, i.e., x > \[y\]. Thus, the input y is transformed from arithmetic to binary sharings using [Rep3Protocol::a2b] first. The output is a binary sharing of one bit.
+async fn unsigned_ge_const_lhs<F: PrimeField, N: Rep3Network>(
+    x: F,
+    y: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3BigUintShare<F>> {
+    let b_bits = a2b(y, io_context).await?;
+    let diff = low_depth_binary_sub_from_const(&x.into(), &b_bits, io_context).await?;
+
+    Ok(&(&diff >> F::MODULUS_BIT_SIZE as usize) & &BigUint::one())
+}
+
+/// Computes a binary circuit to compare the shared value x to the public value y, i.e., \[x\] > y. Thus, the input x is transformed from arithmetic to binary sharings using [Rep3Protocol::a2b] first. The output is a binary sharing of one bit.
+async fn unsigned_ge_const_rhs<F: PrimeField, N: Rep3Network>(
+    x: Rep3PrimeFieldShare<F>,
+    y: F,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3BigUintShare<F>> {
+    let a_bits = a2b(x, io_context).await?;
+    let diff = low_depth_binary_sub_by_const(&a_bits, &y.into(), io_context).await?;
+
+    Ok(&(&diff >> F::MODULUS_BIT_SIZE as usize) & &BigUint::one())
+}
+
+// Calculates 2^k + x1 - x2
+async fn low_depth_binary_sub_by_const<F: PrimeField, N: Rep3Network>(
+    x1: &Rep3BigUintShare<F>,
+    x2: &BigUint,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3BigUintShare<F>> {
+    // two's complement
+    let x2_ = (BigUint::from(1u64) << F::MODULUS_BIT_SIZE as usize) - x2;
+
+    // Add x1 + x2_ via a packed Kogge-Stone adder
+    let p = binary::xor_public(x1, &x2_, io_context.id);
+    let g = x1 & &x2_;
+
+    let res = kogge_stone_inner(&p, &g, io_context, F::MODULUS_BIT_SIZE as usize).await?;
+    Ok(res)
+}
+
+// Calculates 2^k + x1 - x2
+async fn low_depth_binary_sub_from_const<F: PrimeField, N: Rep3Network>(
+    x1: &BigUint,
+    x2: &Rep3BigUintShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3BigUintShare<F>> {
+    // Let x2' = be the bit_not of x2
+    // Add x1 + x2' via a packed Kogge-Stone adder, where carry_in = 1
+    // This is equivalent to x1 - x2 = x1 + two's complement of x2
+    let mask = (BigUint::from(1u64) << F::MODULUS_BIT_SIZE as usize) - BigUint::one();
+    // bitnot of x2
+    let x2 = binary::xor_public(x2, &mask, io_context.id);
+    // Now start the Kogge-Stone adder
+    let p = binary::xor_public(&x2, x1, io_context.id);
+    let mut g = &x2 & x1;
+    // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
+    g ^= &p & &BigUint::one();
+
+    let res = kogge_stone_inner(&p, &g, io_context, F::MODULUS_BIT_SIZE as usize).await?;
+    let res = binary::xor_public(&res, &BigUint::one(), io_context.id);
+    Ok(res)
 }
