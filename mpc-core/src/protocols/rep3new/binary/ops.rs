@@ -67,6 +67,20 @@ impl<F: PrimeField> std::ops::BitXorAssign<&Self> for Rep3BigUintShare<F> {
     }
 }
 
+impl<F: PrimeField> std::ops::BitXorAssign<BigUint> for Rep3BigUintShare<F> {
+    fn bitxor_assign(&mut self, rhs: BigUint) {
+        self.a ^= &rhs;
+        self.b ^= &rhs;
+    }
+}
+
+impl<F: PrimeField> std::ops::BitXorAssign<&BigUint> for Rep3BigUintShare<F> {
+    fn bitxor_assign(&mut self, rhs: &BigUint) {
+        self.a ^= rhs;
+        self.b ^= rhs;
+    }
+}
+
 impl<F: PrimeField> std::ops::BitAnd<BigUint> for Rep3BigUintShare<F> {
     type Output = Rep3BigUintShare<F>;
 
@@ -109,6 +123,13 @@ impl<F: PrimeField> std::ops::BitAnd<&Rep3BigUintShare<F>> for &'_ Rep3BigUintSh
 
 impl<F: PrimeField> std::ops::BitAndAssign<&BigUint> for Rep3BigUintShare<F> {
     fn bitand_assign(&mut self, rhs: &BigUint) {
+        self.a &= rhs;
+        self.b &= rhs;
+    }
+}
+
+impl<F: PrimeField> std::ops::BitAndAssign<BigUint> for Rep3BigUintShare<F> {
+    fn bitand_assign(&mut self, rhs: BigUint) {
         self.a &= rhs;
         self.b &= rhs;
     }

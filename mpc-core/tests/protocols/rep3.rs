@@ -4,19 +4,43 @@ use mpc_core::protocols::rep3new::id::PartyID;
 use mpc_core::protocols::rep3new::network::Rep3Network;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
+#[derive(Debug)]
+pub enum Msg {
+    Data(Bytes),
+    Recv(UnboundedReceiver<Msg>),
+}
+
+impl Msg {
+    fn to_recv(self) -> Option<UnboundedReceiver<Msg>> {
+        if let Msg::Recv(x) = self {
+            Some(x)
+        } else {
+            None
+        }
+    }
+
+    fn to_data(self) -> Option<Bytes> {
+        if let Msg::Data(x) = self {
+            Some(x)
+        } else {
+            None
+        }
+    }
+}
+
 pub struct Rep3TestNetwork {
-    p1_p2_sender: UnboundedSender<Bytes>,
-    p1_p3_sender: UnboundedSender<Bytes>,
-    p2_p3_sender: UnboundedSender<Bytes>,
-    p2_p1_sender: UnboundedSender<Bytes>,
-    p3_p1_sender: UnboundedSender<Bytes>,
-    p3_p2_sender: UnboundedSender<Bytes>,
-    p1_p2_receiver: UnboundedReceiver<Bytes>,
-    p1_p3_receiver: UnboundedReceiver<Bytes>,
-    p2_p3_receiver: UnboundedReceiver<Bytes>,
-    p2_p1_receiver: UnboundedReceiver<Bytes>,
-    p3_p1_receiver: UnboundedReceiver<Bytes>,
-    p3_p2_receiver: UnboundedReceiver<Bytes>,
+    p1_p2_sender: UnboundedSender<Msg>,
+    p1_p3_sender: UnboundedSender<Msg>,
+    p2_p3_sender: UnboundedSender<Msg>,
+    p2_p1_sender: UnboundedSender<Msg>,
+    p3_p1_sender: UnboundedSender<Msg>,
+    p3_p2_sender: UnboundedSender<Msg>,
+    p1_p2_receiver: UnboundedReceiver<Msg>,
+    p1_p3_receiver: UnboundedReceiver<Msg>,
+    p2_p3_receiver: UnboundedReceiver<Msg>,
+    p2_p1_receiver: UnboundedReceiver<Msg>,
+    p3_p1_receiver: UnboundedReceiver<Msg>,
+    p3_p2_receiver: UnboundedReceiver<Msg>,
 }
 
 impl Default for Rep3TestNetwork {
@@ -86,10 +110,10 @@ impl Rep3TestNetwork {
 #[derive(Debug)]
 pub struct PartyTestNetwork {
     pub(crate) id: PartyID,
-    pub(crate) send_prev: UnboundedSender<Bytes>,
-    pub(crate) send_next: UnboundedSender<Bytes>,
-    pub(crate) recv_prev: UnboundedReceiver<Bytes>,
-    pub(crate) recv_next: UnboundedReceiver<Bytes>,
+    pub(crate) send_prev: UnboundedSender<Msg>,
+    pub(crate) send_next: UnboundedSender<Msg>,
+    pub(crate) recv_prev: UnboundedReceiver<Msg>,
+    pub(crate) recv_next: UnboundedReceiver<Msg>,
     pub(crate) _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
 }
 
@@ -131,11 +155,11 @@ impl Rep3Network for PartyTestNetwork {
         data.serialize_uncompressed(&mut to_send).unwrap();
         if self.id.next_id() == target {
             self.send_next
-                .send(Bytes::from(to_send))
+                .send(Msg::Data(Bytes::from(to_send)))
                 .expect("can send to next")
         } else if self.id.prev_id() == target {
             self.send_prev
-                .send(Bytes::from(to_send))
+                .send(Msg::Data(Bytes::from(to_send)))
                 .expect("can send to next");
         } else {
             panic!("You want to send to yourself?")
@@ -148,10 +172,10 @@ impl Rep3Network for PartyTestNetwork {
         from: PartyID,
     ) -> std::io::Result<Vec<F>> {
         if self.id.next_id() == from {
-            let data = Vec::from(self.recv_next.blocking_recv().unwrap());
+            let data = Vec::from(self.recv_next.recv().await.unwrap().to_data().unwrap());
             Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         } else if self.id.prev_id() == from {
-            let data = Vec::from(self.recv_prev.blocking_recv().unwrap());
+            let data = Vec::from(self.recv_prev.recv().await.unwrap().to_data().unwrap());
             Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         } else {
             panic!("You want to read from yourself?")
@@ -162,13 +186,34 @@ impl Rep3Network for PartyTestNetwork {
     where
         Self: Sized,
     {
-        todo!()
+        let ch_prev = mpsc::unbounded_channel();
+        let ch_next = mpsc::unbounded_channel();
+
+        self.send_next.send(Msg::Recv(ch_next.1)).unwrap();
+        self.send_prev.send(Msg::Recv(ch_prev.1)).unwrap();
+
+        let recv_prev = self.recv_prev.recv().await.unwrap().to_recv().unwrap();
+        let recv_next = self.recv_next.recv().await.unwrap().to_recv().unwrap();
+
+        let id = self.id;
+
+        let other = Self {
+            id,
+            send_prev: ch_prev.0,
+            send_next: ch_next.0,
+            recv_prev,
+            recv_next,
+            _stats: [0; 4],
+        };
+
+        Ok((self, other))
     }
 
     async fn shutdown(self) -> std::io::Result<()> {
-        todo!()
+        Ok(())
     }
 }
+
 mod field_share {
     use crate::protocols::rep3::Rep3TestNetwork;
     use ark_ff::Field;
@@ -177,7 +222,9 @@ mod field_share {
     use mpc_core::protocols::rep3new::conversion;
     use mpc_core::protocols::rep3new::{self, arithmetic, network::IoContext};
     use rand::thread_rng;
+    use rep3new::arithmetic;
     use std::thread;
+    use std::{collections::HashSet, thread};
     use tokio::sync::oneshot;
 
     #[tokio::test]
@@ -221,6 +268,80 @@ mod field_share {
         let is_result = rep3new::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
+
+    #[tokio::test]
+    async fn rep3_mul() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let y = ark_bn254::Fr::rand(&mut rng);
+        let x_shares = rep3new::share_field_element(x, &mut rng);
+        let y_shares = rep3new::share_field_element(y, &mut rng);
+        let should_result = x * y;
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+        let (tx3, rx3) = oneshot::channel();
+        for (net, tx, x, y) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter()
+        ) {
+            tokio::spawn(async move {
+                let mut ctx = IoContext::init(net).await.unwrap();
+                let mul = arithmetic::mul(x, y, &mut ctx).await.unwrap();
+                tx.send(mul)
+            });
+        }
+        let result1 = rx1.await.unwrap();
+        let result2 = rx2.await.unwrap();
+        let result3 = rx3.await.unwrap();
+        let is_result = rep3new::combine_field_element(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[tokio::test]
+    async fn rep3_fork_mul() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x0 = ark_bn254::Fr::rand(&mut rng);
+        let x1 = ark_bn254::Fr::rand(&mut rng);
+        let y0 = ark_bn254::Fr::rand(&mut rng);
+        let y1 = ark_bn254::Fr::rand(&mut rng);
+        let x_shares0 = rep3new::share_field_element(x0, &mut rng);
+        let x_shares1 = rep3new::share_field_element(x1, &mut rng);
+        let y_shares0 = rep3new::share_field_element(y0, &mut rng);
+        let y_shares1 = rep3new::share_field_element(y1, &mut rng);
+        let should_result0 = x0 * y0;
+        let should_result1 = x1 * y1;
+        let (tx1, rx1) = oneshot::channel();
+        let (tx2, rx2) = oneshot::channel();
+        let (tx3, rx3) = oneshot::channel();
+        for (net, tx, (x0, y0), (x1, y1)) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares0.into_iter().zip(y_shares0),
+            x_shares1.into_iter().zip(y_shares1)
+        ) {
+            tokio::spawn(async move {
+                let ctx = IoContext::init(net).await.unwrap();
+                let (ctx0, ctx1) = ctx.fork().await.unwrap();
+                let (res0, res1) = tokio::join!(
+                    arithmetic::mul(x0, y0, &mut ctx0),
+                    arithmetic::mul(x1, y1, &mut ctx1)
+                );
+                tx.send((res0.unwrap(), res1.unwrap()))
+            });
+        }
+        let result1 = rx1.await.unwrap();
+        let result2 = rx2.await.unwrap();
+        let result3 = rx3.await.unwrap();
+        let is_result0 = rep3new::combine_field_element(result1.0, result2.0, result3.0);
+        let is_result1 = rep3new::combine_field_element(result1.1, result2.1, result3.1);
+        assert_eq!(is_result0, should_result0);
+        assert_eq!(is_result1, should_result1);
+    }
+
     #[tokio::test]
     async fn rep3_mul2_then_add() {
         let test_network = Rep3TestNetwork::default();
@@ -233,12 +354,12 @@ mod field_share {
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         let (tx3, rx3) = oneshot::channel();
-        for ((net, tx), (x, y)) in test_network
-            .get_party_networks()
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter().zip(y_shares))
-        {
+        for (net, tx, x, y) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter()
+        ) {
             tokio::spawn(async move {
                 let mut rep3 = IoContext::init(net).await.unwrap();
                 let mul = arithmetic::mul(x, y, &mut rep3).await.unwrap();

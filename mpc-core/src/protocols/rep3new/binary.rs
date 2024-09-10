@@ -15,14 +15,14 @@ type BinaryShare<F> = Rep3BigUintShare<F>;
 type IoResult<T> = std::io::Result<T>;
 
 /// Performs a bitwise XOR operation on two shared values.
-pub fn xor<F: PrimeField>(a: BinaryShare<F>, b: BinaryShare<F>) -> BinaryShare<F> {
+pub fn xor<F: PrimeField>(a: &BinaryShare<F>, b: &BinaryShare<F>) -> BinaryShare<F> {
     a ^ b
 }
 
 /// Performs a bitwise XOR operation on a shared value and a public value.
 pub fn xor_public<F: PrimeField>(
-    shared: BinaryShare<F>,
-    public: BigUint,
+    shared: &BinaryShare<F>,
+    public: &BigUint,
     id: PartyID,
 ) -> BinaryShare<F> {
     let mut res = shared.to_owned();
@@ -36,30 +36,30 @@ pub fn xor_public<F: PrimeField>(
 
 /// Performs a bitwise OR operation on two shared values.
 pub async fn or<F: PrimeField, N: Rep3Network>(
-    a: BinaryShare<F>,
-    b: BinaryShare<F>,
+    a: &BinaryShare<F>,
+    b: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
-    let xor = &a ^ &b;
+    let xor = a ^ b;
     let and = and(a, b, io_context).await?;
-    Ok(&xor ^ &and)
+    Ok(xor ^ and)
 }
 
 /// Performs a bitwise OR operation on a shared value and a public value.
 pub fn or_public<F: PrimeField>(
-    shared: BinaryShare<F>,
-    public: BigUint,
+    shared: &BinaryShare<F>,
+    public: &BigUint,
     id: PartyID,
 ) -> BinaryShare<F> {
-    let tmp = &shared & &public;
+    let tmp = shared & public;
     let xor = xor_public(shared, public, id);
     xor ^ tmp
 }
 
 /// Performs a bitwise AND operation on two shared values.
 pub async fn and<F: PrimeField, N: Rep3Network>(
-    a: BinaryShare<F>,
-    b: BinaryShare<F>,
+    a: &BinaryShare<F>,
+    b: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
     debug_assert!(a.a.bits() <= u64::from(F::MODULUS_BIT_SIZE));
@@ -75,7 +75,7 @@ pub async fn and<F: PrimeField, N: Rep3Network>(
 }
 
 /// Performs a bitwise AND operation on a shared value and a public value.
-pub fn and_with_public<F: PrimeField>(shared: BinaryShare<F>, public: BigUint) -> BinaryShare<F> {
+pub fn and_with_public<F: PrimeField>(shared: &BinaryShare<F>, public: &BigUint) -> BinaryShare<F> {
     shared & public
 }
 
@@ -103,7 +103,7 @@ pub fn and_with_public<F: PrimeField>(shared: BinaryShare<F>, public: BigUint) -
 
 /// Performs the opening of a shared value and returns the equivalent public value.
 pub async fn open<F: PrimeField, N: Rep3Network>(
-    a: BinaryShare<F>,
+    a: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BigUint> {
     let c = io_context.network.reshare(a.b.clone()).await?;
@@ -113,7 +113,7 @@ pub async fn open<F: PrimeField, N: Rep3Network>(
 /// Transforms a public value into a shared value: \[a\] = a.
 pub fn promote_to_trivial_share<F: PrimeField>(
     id: PartyID,
-    public_value: BigUint,
+    public_value: &BigUint,
 ) -> BinaryShare<F> {
     match id {
         PartyID::ID0 => BinaryShare::new(public_value, BigUint::ZERO),
@@ -124,13 +124,13 @@ pub fn promote_to_trivial_share<F: PrimeField>(
 
 /// Computes a CMUX: If `c` is `1`, returns `x_t`, otherwise returns `x_f`.
 pub async fn cmux<F: PrimeField, N: Rep3Network>(
-    c: BinaryShare<F>,
-    x_t: BinaryShare<F>,
-    x_f: BinaryShare<F>,
+    c: &BinaryShare<F>,
+    x_t: &BinaryShare<F>,
+    x_f: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
-    let xor = &x_f ^ &x_t;
-    let mut and = and(c, xor, io_context).await?;
+    let xor = x_f ^ x_t;
+    let mut and = and(c, &xor, io_context).await?;
     and ^= x_f;
     Ok(and)
 }
@@ -158,7 +158,7 @@ pub async fn or_tree<F: PrimeField, N: Rep3Network>(
         // TODO WE WANT THIS BATCHED!!!
         // THIS IS SUPER BAD
         for (a, b) in izip!(a_vec.iter(), b_vec.iter()) {
-            res.push(or(a.to_owned(), b.to_owned(), io_context).await?);
+            res.push(or(&a, &b, io_context).await?);
         }
 
         res.extend_from_slice(leftover);
@@ -173,14 +173,14 @@ pub async fn or_tree<F: PrimeField, N: Rep3Network>(
 
 /// Computes a binary circuit to check whether the replicated binary-shared input x is zero or not. The output is a binary sharing of one bit.
 pub async fn is_zero<F: PrimeField, N: Rep3Network>(
-    x: BinaryShare<F>,
+    x: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
-    let bit_len = usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize");
+    let bit_len = F::MODULUS_BIT_SIZE as usize;
     let mask = (BigUint::from(1u64) << bit_len) - BigUint::one();
 
     // negate
-    let mut x = x ^ mask;
+    let mut x = x ^ &mask;
 
     // do ands in a tree
     // TODO: Make and tree more communication efficient, ATM we send the full element for each level, even though they halve in size
@@ -196,7 +196,7 @@ pub async fn is_zero<F: PrimeField, N: Rep3Network>(
         len /= 2;
         let mask = (BigUint::from(1u64) << len) - BigUint::one();
         let y = &x >> len;
-        x = and(x & mask.clone(), y & mask, io_context).await?;
+        x = and(&(&x & &mask), &(&y & &mask), io_context).await?;
     }
     // extract LSB
     Ok(x & BigUint::one())

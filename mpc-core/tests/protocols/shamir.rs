@@ -4,10 +4,34 @@ use mpc_core::protocols::shamirnew::network::ShamirNetwork;
 use std::{cmp::Ordering, collections::HashMap};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
+#[derive(Debug)]
+pub enum Msg {
+    Data(Bytes),
+    Recv(UnboundedReceiver<Msg>),
+}
+
+impl Msg {
+    fn to_recv(self) -> Option<UnboundedReceiver<Msg>> {
+        if let Msg::Recv(x) = self {
+            Some(x)
+        } else {
+            None
+        }
+    }
+
+    fn to_data(self) -> Option<Bytes> {
+        if let Msg::Data(x) = self {
+            Some(x)
+        } else {
+            None
+        }
+    }
+}
+
 pub struct ShamirTestNetwork {
     num_parties: usize,
-    sender: HashMap<(usize, usize), UnboundedSender<Bytes>>,
-    receiver: HashMap<(usize, usize), UnboundedReceiver<Bytes>>,
+    sender: HashMap<(usize, usize), UnboundedSender<Msg>>,
+    receiver: HashMap<(usize, usize), UnboundedReceiver<Msg>>,
 }
 
 impl ShamirTestNetwork {
@@ -72,8 +96,8 @@ impl ShamirTestNetwork {
 pub struct PartyTestNetwork {
     pub(crate) id: usize,
     pub(crate) num_parties: usize,
-    pub(crate) send: Vec<UnboundedSender<Bytes>>,
-    pub(crate) recv: Vec<UnboundedReceiver<Bytes>>,
+    pub(crate) send: Vec<UnboundedSender<Msg>>,
+    pub(crate) recv: Vec<UnboundedReceiver<Msg>>,
 }
 
 impl ShamirNetwork for PartyTestNetwork {
@@ -110,7 +134,7 @@ impl ShamirNetwork for PartyTestNetwork {
         data.serialize_uncompressed(&mut to_send).unwrap();
 
         self.send[target]
-            .send(Bytes::from(to_send))
+            .send(Msg::Data(Bytes::from(to_send)))
             .expect("can send");
 
         Ok(())
@@ -142,7 +166,7 @@ impl ShamirNetwork for PartyTestNetwork {
             // to get index for the Vec
             from -= 1;
         }
-        let data = Vec::from(self.recv[from].blocking_recv().unwrap());
+        let data = Vec::from(self.recv[from].blocking_recv().unwrap().to_data().unwrap());
         Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
     }
 
@@ -160,7 +184,8 @@ impl ShamirNetwork for PartyTestNetwork {
 
         // Send
         for send in self.send.iter_mut() {
-            send.send(send_data.to_owned()).expect("can send");
+            send.send(Msg::Data(send_data.to_owned()))
+                .expect("can send");
         }
 
         // Receive
@@ -171,7 +196,7 @@ impl ShamirNetwork for PartyTestNetwork {
                 res.push(data.to_owned());
             }
 
-            let data = Vec::from(recv.blocking_recv().unwrap());
+            let data = Vec::from(recv.blocking_recv().unwrap().to_data().unwrap());
             res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
         }
         if self.id == self.num_parties - 1 {
@@ -204,7 +229,7 @@ impl ShamirNetwork for PartyTestNetwork {
                 Ordering::Equal => continue,
             }
             self.send[other_id]
-                .send(send_data.to_owned())
+                .send(Msg::Data(send_data.to_owned()))
                 .expect("can send");
         }
 
@@ -221,19 +246,48 @@ impl ShamirNetwork for PartyTestNetwork {
                     continue;
                 }
             }
-            let data = Vec::from(self.recv[other_id].blocking_recv().unwrap());
+            let data = Vec::from(
+                self.recv[other_id]
+                    .blocking_recv()
+                    .unwrap()
+                    .to_data()
+                    .unwrap(),
+            );
             res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
         }
 
         Ok(res)
     }
 
-    async fn fork(self) -> std::io::Result<(Self, Self)>
+    async fn fork(mut self) -> std::io::Result<(Self, Self)>
     where
         Self: Sized,
     {
-        // TODO this is a problem
-        todo!()
+        let mut send = Vec::with_capacity(self.num_parties - 1);
+        for sender in self.send.iter() {
+            let (s, r) = mpsc::unbounded_channel();
+            sender.send(Msg::Recv(r)).unwrap();
+            send.push(s);
+        }
+
+        let mut recv = Vec::with_capacity(self.num_parties - 1);
+        for recveiver in self.recv.iter_mut() {
+            let r = recveiver.recv().await.unwrap().to_recv().unwrap();
+            recv.push(r);
+        }
+
+        let id = self.id;
+        let num_parties = self.num_parties;
+
+        Ok((
+            self,
+            Self {
+                id,
+                num_parties,
+                send,
+                recv,
+            },
+        ))
     }
 
     async fn shutdown(self) -> std::io::Result<()> {

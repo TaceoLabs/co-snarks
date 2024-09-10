@@ -85,6 +85,25 @@ impl<N: Rep3Network> IoContext<N> {
     pub async fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
         self.rngs.rand.random_fes()
     }
+
+    pub async fn fork(self) -> IoResult<(Self, Self)> {
+        let (net0, net1) = self.network.fork().await?;
+        let (rngs0, rngs1) = self.rngs.fork();
+        let id = self.id;
+
+        Ok((
+            Self {
+                id,
+                rngs: rngs0,
+                network: net0,
+            },
+            Self {
+                id,
+                rngs: rngs1,
+                network: net1,
+            },
+        ))
+    }
 }
 
 /// This trait defines the network interface for the REP3 protocol.
