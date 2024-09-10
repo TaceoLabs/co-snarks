@@ -116,8 +116,8 @@ pub fn promote_to_trivial_share<F: PrimeField>(
     public_value: &BigUint,
 ) -> BinaryShare<F> {
     match id {
-        PartyID::ID0 => BinaryShare::new(public_value, BigUint::ZERO),
-        PartyID::ID1 => BinaryShare::new(BigUint::ZERO, public_value),
+        PartyID::ID0 => BinaryShare::new(public_value.to_owned(), BigUint::ZERO),
+        PartyID::ID1 => BinaryShare::new(BigUint::ZERO, public_value.to_owned()),
         PartyID::ID2 => BinaryShare::zero_share(),
     }
 }

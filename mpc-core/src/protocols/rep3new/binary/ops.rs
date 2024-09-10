@@ -130,8 +130,8 @@ impl<F: PrimeField> std::ops::BitAndAssign<&BigUint> for Rep3BigUintShare<F> {
 
 impl<F: PrimeField> std::ops::BitAndAssign<BigUint> for Rep3BigUintShare<F> {
     fn bitand_assign(&mut self, rhs: BigUint) {
-        self.a &= rhs;
-        self.b &= rhs;
+        self.a &= &rhs;
+        self.b &= &rhs;
     }
 }
 
