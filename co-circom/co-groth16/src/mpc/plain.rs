@@ -1,4 +1,6 @@
-use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ec::pairing::Pairing;
+use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
+use itertools::izip;
 
 use super::CircomGroth16Prover;
 
@@ -23,27 +25,37 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     }
 
     fn fork(&mut self) -> Self {
-        todo!()
+        PlainGroth16Driver
     }
 
     fn evaluate_constraint(
-        party_id: Self::PartyID,
-        lhs: &[(<P as Pairing>::ScalarField, usize)],
-        public_inputs: &[<P as Pairing>::ScalarField],
+        _: Self::PartyID,
+        lhs: &[(P::ScalarField, usize)],
+        public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
     ) -> Self::ArithmeticShare {
-        todo!()
+        let mut acc = P::ScalarField::default();
+        for (coeff, index) in lhs {
+            if index < &public_inputs.len() {
+                acc += *coeff * public_inputs[*index];
+            } else {
+                acc += *coeff * private_witness[*index - public_inputs.len()];
+            }
+        }
+        acc
     }
 
     fn promote_to_trivial_shares(
-        id: Self::PartyID,
-        public_values: &[<P as Pairing>::ScalarField],
+        _: Self::PartyID,
+        public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
-        todo!()
+        public_values.to_vec()
     }
 
     fn sub_assign_vec(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
-        todo!()
+        for (a, b) in izip!(a.iter_mut(), b.iter()) {
+            *a -= b;
+        }
     }
 
     async fn mul(
@@ -51,7 +63,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         a: Self::ArithmeticShare,
         b: Self::ArithmeticShare,
     ) -> super::IoResult<Self::ArithmeticShare> {
-        todo!()
+        Ok(a * b)
     }
 
     async fn mul_vec(
@@ -59,76 +71,70 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> super::IoResult<Vec<Self::ArithmeticShare>> {
-        todo!()
+        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
-    fn fft_in_place<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+    fn fft_in_place<D: ark_poly::EvaluationDomain<P::ScalarField>>(
         data: &mut Vec<Self::ArithmeticShare>,
         domain: &D,
     ) {
-        todo!()
+        domain.fft_in_place(data);
     }
 
-    fn ifft_in_place<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+    fn ifft_in_place<D: ark_poly::EvaluationDomain<P::ScalarField>>(
         data: &mut Vec<Self::ArithmeticShare>,
         domain: &D,
     ) {
-        todo!()
+        domain.ifft_in_place(data);
     }
 
-    fn ifft<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+    fn ifft<D: ark_poly::EvaluationDomain<P::ScalarField>>(
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare> {
-        todo!()
+        domain.ifft(data)
     }
 
     fn distribute_powers_and_mul_by_const(
         coeffs: &mut [Self::ArithmeticShare],
-        g: <P as Pairing>::ScalarField,
-        c: <P as Pairing>::ScalarField,
+        g: P::ScalarField,
+        c: P::ScalarField,
     ) {
-        todo!()
+        let mut pow = c;
+        for c in coeffs.iter_mut() {
+            *c *= pow;
+            pow *= g;
+        }
     }
 
     fn msm_public_points_g1(
-        points: &[<P as Pairing>::G1Affine],
+        points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1 {
-        todo!()
+        P::G1::msm_unchecked(points, scalars)
     }
 
     fn msm_public_points_g2(
-        points: &[<P as Pairing>::G2Affine],
+        points: &[P::G2Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG2 {
-        todo!()
+        P::G2::msm_unchecked(points, scalars)
     }
 
-    fn scalar_mul_public_point_g1(
-        a: &<P as Pairing>::G1,
-        b: Self::ArithmeticShare,
-    ) -> Self::PointShareG1 {
-        todo!()
+    fn scalar_mul_public_point_g1(a: &P::G1, b: Self::ArithmeticShare) -> Self::PointShareG1 {
+        *a * b
     }
 
     fn add_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1) {
-        todo!()
+        *a += b;
     }
 
-    fn add_assign_points_public_g1(
-        id: Self::PartyID,
-        a: &mut Self::PointShareG1,
-        b: &<P as Pairing>::G1,
-    ) {
-        todo!()
+    fn add_assign_points_public_g1(_: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1) {
+        *a += b;
     }
 
-    async fn open_point_g1(
-        &mut self,
-        a: &Self::PointShareG1,
-    ) -> super::IoResult<<P as Pairing>::G1> {
-        todo!()
+    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> super::IoResult<P::G1> {
+        Ok(*a)
     }
 
     async fn scalar_mul_g1(
@@ -136,37 +142,30 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         a: &Self::PointShareG1,
         b: Self::ArithmeticShare,
     ) -> super::IoResult<Self::PointShareG1> {
-        todo!()
+        Ok(*a * b)
     }
 
     fn sub_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1) {
-        todo!()
+        *a -= b;
     }
 
-    fn scalar_mul_public_point_g2(
-        a: &<P as Pairing>::G2,
-        b: Self::ArithmeticShare,
-    ) -> Self::PointShareG2 {
-        todo!()
+    fn scalar_mul_public_point_g2(a: &P::G2, b: Self::ArithmeticShare) -> Self::PointShareG2 {
+        *a * b
     }
 
     fn add_assign_points_g2(a: &mut Self::PointShareG2, b: &Self::PointShareG2) {
-        todo!()
+        *a += b;
     }
 
-    fn add_assign_points_public_g2(
-        id: Self::PartyID,
-        a: &mut Self::PointShareG2,
-        b: &<P as Pairing>::G2,
-    ) {
-        todo!()
+    fn add_assign_points_public_g2(_: Self::PartyID, a: &mut Self::PointShareG2, b: &P::G2) {
+        *a += b;
     }
 
     async fn open_two_points(
         &mut self,
         a: Self::PointShareG1,
         b: Self::PointShareG2,
-    ) -> std::io::Result<(<P as Pairing>::G1, <P as Pairing>::G2)> {
-        todo!()
+    ) -> std::io::Result<(P::G1, P::G2)> {
+        Ok((a, b))
     }
 }
