@@ -37,7 +37,7 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     fn sqrt(&mut self, a: Self::VmType) -> Result<Self::VmType>;
 
     /// Compute the negation of the VM-type a: c = -a.
-    fn neg(&mut self, a: Self::VmType) -> Self::VmType;
+    fn neg(&mut self, a: Self::VmType) -> Result<Self::VmType>;
 
     /// Compute the less than operation of two VM-types: a < b. Outputs 1 if a < b, 0 otherwise.
     fn lt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
