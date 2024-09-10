@@ -306,7 +306,7 @@ pub async fn pow_public<F: PrimeField, N: Rep3Network>(
         shared = mul(shared, shared, io_context).await?;
         public >>= 1;
     }
-    Ok(mul(res, shared, io_context).await?)
+    mul(res, shared, io_context).await
 }
 
 pub async fn lt<F: PrimeField, N: Rep3Network>(

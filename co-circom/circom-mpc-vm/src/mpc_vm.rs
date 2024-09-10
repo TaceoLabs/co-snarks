@@ -535,7 +535,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
 
                 op_codes::MpcOpCode::Neg => {
                     let x = self.pop_field();
-                    self.push_field(protocol.neg(x));
+                    self.push_field(protocol.neg(x)?);
                 }
                 op_codes::MpcOpCode::IntDiv => {
                     let rhs = self.pop_field();
