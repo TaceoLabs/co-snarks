@@ -186,7 +186,7 @@ async fn low_depth_binary_sub_p<F: PrimeField, N: Rep3Network>(
 }
 
 /// Computes a binary circuit to compare two shared values \[x\] > \[y\]. Thus, the inputs x and y are transformed from arithmetic to binary sharings using [Rep3Protocol::a2b] first. The output is a binary sharing of one bit.
-async fn unsigned_ge<F: PrimeField, N: Rep3Network>(
+pub(crate) async fn unsigned_ge<F: PrimeField, N: Rep3Network>(
     x: Rep3PrimeFieldShare<F>,
     y: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
@@ -200,7 +200,7 @@ async fn unsigned_ge<F: PrimeField, N: Rep3Network>(
 }
 
 /// Computes a binary circuit to compare the shared value y to the public value x, i.e., x > \[y\]. Thus, the input y is transformed from arithmetic to binary sharings using [Rep3Protocol::a2b] first. The output is a binary sharing of one bit.
-async fn unsigned_ge_const_lhs<F: PrimeField, N: Rep3Network>(
+pub(crate) async fn unsigned_ge_const_lhs<F: PrimeField, N: Rep3Network>(
     x: F,
     y: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
@@ -212,7 +212,7 @@ async fn unsigned_ge_const_lhs<F: PrimeField, N: Rep3Network>(
 }
 
 /// Computes a binary circuit to compare the shared value x to the public value y, i.e., \[x\] > y. Thus, the input x is transformed from arithmetic to binary sharings using [Rep3Protocol::a2b] first. The output is a binary sharing of one bit.
-async fn unsigned_ge_const_rhs<F: PrimeField, N: Rep3Network>(
+pub(crate) async fn unsigned_ge_const_rhs<F: PrimeField, N: Rep3Network>(
     x: Rep3PrimeFieldShare<F>,
     y: F,
     io_context: &mut IoContext<N>,

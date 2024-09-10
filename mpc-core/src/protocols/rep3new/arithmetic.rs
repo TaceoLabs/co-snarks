@@ -4,7 +4,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use types::Rep3PrimeFieldShare;
 
-use crate::protocols::rep3new::{id::PartyID, network::Rep3Network};
+use crate::protocols::rep3new::{detail, id::PartyID, network::Rep3Network};
 
 use super::{binary, conversion, network::IoContext, IoResult, Rep3BigUintShare};
 
@@ -237,6 +237,7 @@ async fn rand<F: PrimeField, N: Rep3Network>(io_context: &mut IoContext<N>) -> F
     FieldShare::new(a, b)
 }
 
+/// Computes the square root of a shared value.
 pub async fn sqrt<F: PrimeField, N: Rep3Network>(
     share: FieldShare<F>,
     io_context: &mut IoContext<N>,
@@ -309,68 +310,88 @@ pub async fn pow_public<F: PrimeField, N: Rep3Network>(
     mul(res, shared, io_context).await
 }
 
+/// Returns 1 if lhs < rhs and 0 otherwise. Checks if one shared value is less than another shared value. The result is a shared value that has value 1 if the first shared value is less than the second shared value and 0 otherwise.
 pub async fn lt<F: PrimeField, N: Rep3Network>(
-    _lhs: FieldShare<F>,
-    _rhs: FieldShare<F>,
-    _io_context: &mut IoContext<N>,
+    lhs: FieldShare<F>,
+    rhs: FieldShare<F>,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    todo!()
+    // a < b is equivalent to !(a >= b)
+    let tmp = ge(lhs, rhs, io_context).await?;
+    Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
 }
 
+/// Returns 1 if lhs < rhs and 0 otherwise. Checks if a shared value is less than the public value. The result is a shared value that has value 1 if the shared value is less than the public value and 0 otherwise.
 pub async fn lt_public<F: PrimeField, N: Rep3Network>(
-    _lhs: FieldShare<F>,
-    _rhs: F,
-    _io_context: &mut IoContext<N>,
+    lhs: FieldShare<F>,
+    rhs: F,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    todo!()
+    // a < b is equivalent to !(a >= b)
+    let tmp = ge_public(lhs, rhs, io_context).await?;
+    Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
 }
 
+/// Returns 1 if lhs <= rhs and 0 otherwise. Checks if one shared value is less than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is less than or equal to the second shared value and 0 otherwise.
 pub async fn le<F: PrimeField, N: Rep3Network>(
-    _lhs: FieldShare<F>,
-    _rhs: FieldShare<F>,
-    _io_context: &mut IoContext<N>,
+    lhs: FieldShare<F>,
+    rhs: FieldShare<F>,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    todo!()
+    // a <= b is equivalent to b >= a
+    ge(rhs, lhs, io_context).await
 }
 
+/// Returns 1 if lhs <= rhs and 0 otherwise. Checks if a shared value is less than or equal to a public value. The result is a shared value that has value 1 if the shared value is less than or equal to the public value and 0 otherwise.
 pub async fn le_public<F: PrimeField, N: Rep3Network>(
-    _lhs: FieldShare<F>,
-    _rhs: F,
-    _io_context: &mut IoContext<N>,
+    lhs: FieldShare<F>,
+    rhs: F,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    todo!()
+    let res = detail::unsigned_ge_const_lhs(rhs, lhs, io_context).await?;
+    conversion::bit_inject(&res, io_context).await
 }
 
+/// Returns 1 if lhs > rhs and 0 otherwise. Checks if one shared value is greater than another shared value. The result is a shared value that has value 1 if the first shared value is greater than the second shared value and 0 otherwise.
 pub async fn gt<F: PrimeField, N: Rep3Network>(
-    _lhs: FieldShare<F>,
-    _rhs: FieldShare<F>,
-    _io_context: &mut IoContext<N>,
+    lhs: FieldShare<F>,
+    rhs: FieldShare<F>,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    todo!()
+    // a > b is equivalent to !(a <= b)
+    let tmp = le(lhs, rhs, io_context).await?;
+    Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
 }
 
+/// Returns 1 if lhs > rhs and 0 otherwise. Checks if a shared value is greater than the public value. The result is a shared value that has value 1 if the shared value is greater than the public value and 0 otherwise.
 pub async fn gt_public<F: PrimeField, N: Rep3Network>(
-    _lhs: FieldShare<F>,
-    _rhs: F,
-    _io_context: &mut IoContext<N>,
+    lhs: FieldShare<F>,
+    rhs: F,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    todo!()
+    // a > b is equivalent to !(a <= b)
+    let tmp = le_public(lhs, rhs, io_context).await?;
+    Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
 }
 
+/// Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
 pub async fn ge<F: PrimeField, N: Rep3Network>(
-    _lhs: FieldShare<F>,
-    _rhs: FieldShare<F>,
-    _io_context: &mut IoContext<N>,
+    lhs: FieldShare<F>,
+    rhs: FieldShare<F>,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    todo!()
+    let res = detail::unsigned_ge(lhs, rhs, io_context).await?;
+    conversion::bit_inject(&res, io_context).await
 }
 
+/// Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.
 pub async fn ge_public<F: PrimeField, N: Rep3Network>(
-    _lhs: FieldShare<F>,
-    _rhs: F,
-    _io_context: &mut IoContext<N>,
+    lhs: FieldShare<F>,
+    rhs: F,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    todo!()
+    let res = detail::unsigned_ge_const_rhs(lhs, rhs, io_context).await?;
+    conversion::bit_inject(&res, io_context).await
 }
 
 //TODO FN REMARK - I think we can skip the bit_inject.
