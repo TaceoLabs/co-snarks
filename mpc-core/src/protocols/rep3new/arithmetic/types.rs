@@ -38,7 +38,7 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
         (self.a, self.b)
     }
 
-    pub(crate) fn double(&mut self) {
+    pub fn double(&mut self) {
         self.a.double_in_place();
         self.b.double_in_place();
     }

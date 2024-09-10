@@ -232,11 +232,60 @@ pub async fn mul_open<F: PrimeField, N: Rep3Network>(
     Ok(a + b + c)
 }
 
+async fn rand<F: PrimeField, N: Rep3Network>(io_context: &mut IoContext<N>) -> FieldShare<F> {
+    let (a, b) = io_context.random_fes().await;
+    FieldShare::new(a, b)
+}
+
 pub async fn sqrt<F: PrimeField, N: Rep3Network>(
-    _share: FieldShare<F>,
-    _io_context: &mut IoContext<N>,
+    share: FieldShare<F>,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    todo!()
+    let r_squ = rand(io_context).await;
+    let r_inv = rand(io_context).await;
+
+    let rr = mul(r_squ, r_squ, io_context).await?;
+
+    // parallel mul of rr with a and r_squ with r_inv
+    let lhs = vec![rr, r_squ];
+    let rhs = vec![share, r_inv];
+    let mul = mul_vec(&lhs, &rhs, io_context).await?;
+
+    // Open mul
+    io_context.network.send_next_many(&mul).await?;
+    let c = io_context.network.recv_prev::<Vec<F>>().await?;
+    if c.len() != 2 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "During execution of square root in MPC: invalid number of elements received",
+        ));
+    }
+    let y_sq = (mul[0].a + mul[0].b + c[0]).sqrt();
+    let y_inv = mul[1].a + mul[1].b + c[1];
+
+    // postprocess the square and inverse
+    let y_sq = match y_sq {
+        Some(y) => y,
+        None => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of square root in MPC: cannot compute square root",
+            ));
+        }
+    };
+
+    if y_inv.is_zero() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "During execution of square root in MPC: cannot compute inverse of zero",
+        ));
+    }
+    let y_inv = y_inv.inverse().unwrap();
+
+    let r_squ_inv = r_inv * y_inv;
+    let a_sqrt = r_squ_inv * y_sq;
+
+    Ok(a_sqrt)
 }
 
 /// Performs a pow operation using a shared value as base and a public value as exponent.

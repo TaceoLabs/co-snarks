@@ -98,8 +98,8 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok(a * b)
     }
 
-    fn neg(&mut self, a: Self::VmType) -> Self::VmType {
-        -a
+    fn neg(&mut self, a: Self::VmType) -> Result<Self::VmType> {
+        Ok(-a)
     }
 
     fn div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
