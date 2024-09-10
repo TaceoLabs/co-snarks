@@ -66,6 +66,20 @@ impl<F: PrimeField, N: Rep3Network> CircomRep3VmWitnessExtension<F, N> {
             plain: CircomPlainVmWitnessExtension::default(),
         })
     }
+
+    /// Normally F is split into positive and negative numbers in the range [0, p/2] and [p/2 + 1, p)
+    /// However, for comparisons, we want the negative numbers to be "lower" than the positive ones.
+    /// Therefore we shift the input by p/2 + 1 to the left, which results in a mapping of [negative, 0, positive] into F.
+    /// We can then compare the numbers as if they were unsigned.
+    /// While this could be done easier by just comparing the numbers as BigInt, we do it this way because this is easier to replicate in MPC later.
+    #[inline(always)]
+    fn val(&mut self, z: ArithmeticShare<F>) -> ArithmeticShare<F> {
+        let modulus: BigUint = F::MODULUS.into();
+        let one = BigUint::one();
+        let two = BigUint::from(2u64);
+        let p_half_plus_one = F::from(modulus / two + one);
+        arithmetic::sub_shared_by_public(z, p_half_plus_one, self.io_context.id)
+    }
 }
 
 impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
@@ -313,19 +327,195 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     }
 
     fn lt(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.lt(a, b)?.into()),
+            (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
+                let a = self.plain.val(a);
+                let b = self.val(b);
+                Ok(
+                    futures::executor::block_on(arithmetic::gt_public(b, a, &mut self.io_context))?
+                        .into(),
+                )
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let a = self.val(a);
+                let b = self.plain.val(b);
+                Ok(
+                    futures::executor::block_on(arithmetic::lt_public(a, b, &mut self.io_context))?
+                        .into(),
+                )
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let a = self.val(a);
+                let b = self.val(b);
+                Ok(futures::executor::block_on(arithmetic::lt(a, b, &mut self.io_context))?.into())
+            }
+            (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.lt(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                self.lt(a.into(), b.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.lt(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                self.lt(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.lt(a.into(), b.into())
+            }
+        }
     }
 
     fn le(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.le(a, b)?.into()),
+            (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
+                let a = self.plain.val(a);
+                let b = self.val(b);
+                Ok(
+                    futures::executor::block_on(arithmetic::ge_public(b, a, &mut self.io_context))?
+                        .into(),
+                )
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let a = self.val(a);
+                let b = self.plain.val(b);
+                Ok(
+                    futures::executor::block_on(arithmetic::le_public(a, b, &mut self.io_context))?
+                        .into(),
+                )
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let a = self.val(a);
+                let b = self.val(b);
+                Ok(futures::executor::block_on(arithmetic::le(a, b, &mut self.io_context))?.into())
+            }
+            (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.le(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                self.le(a.into(), b.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.le(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                self.le(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.le(a.into(), b.into())
+            }
+        }
     }
 
     fn gt(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.gt(a, b)?.into()),
+            (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
+                let a = self.plain.val(a);
+                let b = self.val(b);
+                Ok(
+                    futures::executor::block_on(arithmetic::lt_public(b, a, &mut self.io_context))?
+                        .into(),
+                )
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let a = self.val(a);
+                let b = self.plain.val(b);
+                Ok(
+                    futures::executor::block_on(arithmetic::gt_public(a, b, &mut self.io_context))?
+                        .into(),
+                )
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let a = self.val(a);
+                let b = self.val(b);
+                Ok(futures::executor::block_on(arithmetic::gt(a, b, &mut self.io_context))?.into())
+            }
+            (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.gt(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                self.gt(a.into(), b.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.gt(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                self.gt(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.gt(a.into(), b.into())
+            }
+        }
     }
 
     fn ge(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
-        todo!()
+        match (a, b) {
+            (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.ge(a, b)?.into()),
+            (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
+                let a = self.plain.val(a);
+                let b = self.val(b);
+                Ok(
+                    futures::executor::block_on(arithmetic::le_public(b, a, &mut self.io_context))?
+                        .into(),
+                )
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let a = self.val(a);
+                let b = self.plain.val(b);
+                Ok(
+                    futures::executor::block_on(arithmetic::ge_public(a, b, &mut self.io_context))?
+                        .into(),
+                )
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let a = self.val(a);
+                let b = self.val(b);
+                Ok(futures::executor::block_on(arithmetic::ge(a, b, &mut self.io_context))?.into())
+            }
+            (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.ge(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                self.ge(a.into(), b.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.ge(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                self.ge(a.into(), b.into())
+            }
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                self.ge(a.into(), b.into())
+            }
+        }
     }
 
     fn eq(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
