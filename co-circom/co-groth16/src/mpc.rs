@@ -1,5 +1,4 @@
-use ark_ec::{pairing::Pairing, CurveGroup};
-use ark_ff::PrimeField;
+use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
@@ -13,7 +12,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send {
     type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Copy + Clone + Default + Send;
     type PointShareG1: Send;
     type PointShareG2: Send;
-    type PartyID: Send + Sync;
+    type PartyID: Send + Sync + Copy;
 
     fn rand(&mut self) -> Self::ArithmeticShare;
 
@@ -23,7 +22,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send {
 
     /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint(
-        party_id: &Self::PartyID,
+        party_id: Self::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -31,7 +30,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send {
 
     /// Elementwise transformation of a vector of public values into a vector of shared values: \[a_i\] = a_i.
     fn promote_to_trivial_shares(
-        id: &Self::PartyID,
+        id: Self::PartyID,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
 
@@ -90,7 +89,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send {
 
     /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
     fn add_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1);
-    fn add_assign_points_public_g1(id: &Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1);
+    fn add_assign_points_public_g1(id: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1);
 
     /// Reconstructs a shared point: A = Open(\[A\]).
     async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1>;
@@ -107,7 +106,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send {
 
     fn scalar_mul_public_point_g2(a: &P::G2, b: Self::ArithmeticShare) -> Self::PointShareG2;
     fn add_assign_points_g2(a: &mut Self::PointShareG2, b: &Self::PointShareG2);
-    fn add_assign_points_public_g2(a: &mut Self::PointShareG2, b: &P::G2);
+    fn add_assign_points_public_g2(id: Self::PartyID, a: &mut Self::PointShareG2, b: &P::G2);
 
     async fn open_two_points(
         &mut self,

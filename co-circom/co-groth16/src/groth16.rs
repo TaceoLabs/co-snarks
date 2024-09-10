@@ -124,7 +124,7 @@ where
     }
 
     fn evaluate_constraint(
-        party_id: &T::PartyID,
+        party_id: T::PartyID,
         domain_size: usize,
         matrix: &Matrix<P::ScalarField>,
         public_inputs: &[P::ScalarField],
@@ -151,7 +151,6 @@ where
                 .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
         let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
         let domain_size = domain.size();
-        //TODO why has this to be sync?
         let party_id = self.driver.get_party_id();
         let mut a = Option::None;
         let mut b = Option::None;
@@ -160,19 +159,19 @@ where
         rayon::scope(|s| {
             s.spawn(|_| {
                 let mut inner_a = Self::evaluate_constraint(
-                    &party_id,
+                    party_id,
                     domain_size,
                     &matrices.a,
                     public_inputs,
                     private_witness,
                 );
-                let promoted_public = T::promote_to_trivial_shares(&party_id, public_inputs);
+                let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
                 inner_a[num_constraints..].clone_from_slice(&promoted_public[..num_inputs]);
                 a = Some(inner_a);
             });
             s.spawn(|_| {
                 let inner_b = Self::evaluate_constraint(
-                    &party_id,
+                    party_id,
                     domain_size,
                     &matrices.b,
                     public_inputs,
@@ -192,7 +191,6 @@ where
         // The FFTs not in place and there parallel to mul_vec?
         // Or having them in place but therefore not mt?
 
-        let mut driver_fork = self.driver.fork();
         let mut a_dist_pow = Option::None;
         let mut b_dist_pow = Option::None;
         let mut c_dist_pow = Option::None;
@@ -202,7 +200,7 @@ where
         rayon::scope(|s| {
             s.spawn(|_| {
                 let mul_vec_span = tracing::debug_span!("groth16 - mul vec in dist pows").entered();
-                match self.runtime.block_on(driver_fork.mul_vec(&a, &b)) {
+                match self.runtime.block_on(self.driver.mul_vec(&a, &b)) {
                     Ok(mut ab) => {
                         let ifft_span =
                             tracing::debug_span!("groth16 - ifft in dist pows").entered();
@@ -248,8 +246,6 @@ where
         //drop the old values!
         std::mem::drop(a);
         std::mem::drop(b);
-        //maybe we need it once more
-        std::mem::drop(driver_fork);
         //rayon finished therefore we must have some value
         let a = a_dist_pow.unwrap();
         let b = b_dist_pow.unwrap();
@@ -267,6 +263,7 @@ where
     }
 
     fn calculate_coeff_g1(
+        id: T::PartyID,
         initial: T::PointShareG1,
         query: &[P::G1Affine],
         vk_param: P::G1Affine,
@@ -280,9 +277,9 @@ where
         let priv_acc = T::msm_public_points_g1(&query[1 + pub_len..], aux_assignment);
 
         let mut res = initial;
-        T::add_assign_points_public_g1(&mut res, &query[0].into_group());
-        T::add_assign_points_public_g1(&mut res, &vk_param.into_group());
-        T::add_assign_points_public_g1(&mut res, &pub_acc);
+        T::add_assign_points_public_g1(id, &mut res, &query[0].into_group());
+        T::add_assign_points_public_g1(id, &mut res, &vk_param.into_group());
+        T::add_assign_points_public_g1(id, &mut res, &pub_acc);
         T::add_assign_points_g1(&mut res, &priv_acc);
 
         tracing::debug!("done..");
@@ -290,6 +287,7 @@ where
     }
 
     fn calculate_coeff_g2(
+        id: T::PartyID,
         initial: T::PointShareG2,
         query: &[P::G2Affine],
         vk_param: P::G2Affine,
@@ -303,9 +301,9 @@ where
         let priv_acc = T::msm_public_points_g2(&query[1 + pub_len..], aux_assignment);
 
         let mut res = initial;
-        T::add_assign_points_public_g2(&mut res, &query[0].into_group());
-        T::add_assign_points_public_g2(&mut res, &vk_param.into_group());
-        T::add_assign_points_public_g2(&mut res, &pub_acc);
+        T::add_assign_points_public_g2(id, &mut res, &query[0].into_group());
+        T::add_assign_points_public_g2(id, &mut res, &vk_param.into_group());
+        T::add_assign_points_public_g2(id, &mut res, &pub_acc);
         T::add_assign_points_g2(&mut res, &priv_acc);
 
         tracing::debug!("done..");
@@ -349,12 +347,13 @@ where
         let mut g_a = None;
         let mut g1_b = None;
         let mut g2_b = None;
-
+        let party_id = self.driver.get_party_id();
         rayon::scope(|scope| {
             scope.spawn(|_| {
                 // Compute A
                 let r_g1 = T::scalar_mul_public_point_g1(&delta_g1, r);
                 g_a = Some(Self::calculate_coeff_g1(
+                    party_id,
                     r_g1,
                     &zkey.a_query,
                     zkey.vk.alpha_g1,
@@ -367,6 +366,7 @@ where
                 // In original implementation this is skipped if r==0, however r is shared in our case
                 let s_g1 = T::scalar_mul_public_point_g1(&delta_g1, s);
                 g1_b = Some(Self::calculate_coeff_g1(
+                    party_id,
                     s_g1,
                     &zkey.b_g1_query,
                     zkey.beta_g1,
@@ -378,6 +378,7 @@ where
                 // Compute B in G2
                 let s_g2 = T::scalar_mul_public_point_g2(&zkey.vk.delta_g2.into_group(), s);
                 g2_b = Some(Self::calculate_coeff_g2(
+                    party_id,
                     s_g2,
                     &zkey.b_g2_query,
                     zkey.vk.beta_g2,

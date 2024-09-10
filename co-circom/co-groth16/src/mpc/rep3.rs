@@ -1,4 +1,4 @@
-use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ec::pairing::Pairing;
 use itertools::izip;
 use mpc_core::protocols::rep3new::{
     self, arithmetic,
@@ -39,7 +39,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
     }
 
     fn evaluate_constraint(
-        party_id: &Self::PartyID,
+        party_id: Self::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -49,7 +49,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
             if index < &public_inputs.len() {
                 let val = public_inputs[*index];
                 let mul_result = val * coeff;
-                arithmetic::add_assign_public(&mut acc, mul_result, *party_id);
+                arithmetic::add_assign_public(&mut acc, mul_result, party_id);
             } else {
                 let current_witness = private_witness[*index - public_inputs.len()];
                 arithmetic::add_assign(&mut acc, arithmetic::mul_public(current_witness, *coeff));
@@ -59,7 +59,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
     }
 
     fn promote_to_trivial_shares(
-        id: &Self::PartyID,
+        id: Self::PartyID,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         public_values
@@ -149,7 +149,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         rep3new::pointshare::add_assign(a, b)
     }
 
-    fn add_assign_points_public_g1(id: &Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1) {
+    fn add_assign_points_public_g1(id: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1) {
         rep3new::pointshare::add_assign_public(a, b, *id)
     }
 
@@ -171,22 +171,27 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
     }
 
     fn scalar_mul_public_point_g2(a: &P::G2, b: Self::ArithmeticShare) -> Self::PointShareG2 {
-        todo!()
+        rep3new::pointshare::scalar_mul_public_point(a, b)
     }
 
     fn add_assign_points_g2(a: &mut Self::PointShareG2, b: &Self::PointShareG2) {
-        todo!()
+        rep3new::pointshare::add_assign(a, b)
     }
 
-    fn add_assign_points_public_g2(a: &mut Self::PointShareG2, b: &P::G2) {
-        todo!()
+    fn add_assign_points_public_g2(id: Self::PartyID, a: &mut Self::PointShareG2, b: &P::G2) {
+        rep3new::pointshare::add_assign_public(a, b, *id)
     }
 
     async fn open_two_points(
         &mut self,
         a: Self::PointShareG1,
         b: Self::PointShareG2,
-    ) -> std::io::Result<(<P as Pairing>::G1, <P as Pairing>::G2)> {
-        todo!()
+    ) -> std::io::Result<(P::G1, P::G2)> {
+        let s1 = a.b;
+        let s2 = b.b;
+        let (mut r1, mut r2) = self.io_context.network.reshare((s1, s2)).await?;
+        r1 += a.a + a.b;
+        r2 += b.a + b.b;
+        Ok((r1, r2))
     }
 }
