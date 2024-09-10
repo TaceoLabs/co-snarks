@@ -84,17 +84,17 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
                 Ok(arithmetic::add_public(a, b, self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 Ok(arithmetic::add(a, b).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 Ok(arithmetic::add(a, b).into())
             }
         }
@@ -113,24 +113,24 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 Ok(arithmetic::sub(a, b).into())
             }
             (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 Ok(arithmetic::sub_shared_by_public(b, a, self.io_context.id).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
                 Ok(arithmetic::sub_shared_by_public(a, b, self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 Ok(arithmetic::sub(a, b).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
                 Ok(arithmetic::sub(a, b).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 Ok(arithmetic::sub(a, b).into())
             }
         }
@@ -148,20 +148,20 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             ),
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
                 Ok(arithmetic::mul_public(a, b).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 Ok(
                     futures::executor::block_on(arithmetic::mul(a, b, &mut self.io_context))?
                         .into(),
                 )
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 Ok(
                     futures::executor::block_on(arithmetic::mul(a, b, &mut self.io_context))?
                         .into(),
@@ -191,19 +191,19 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 )
             }
             (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 let b = futures::executor::block_on(arithmetic::inv(b, &mut self.io_context))?;
                 Ok(arithmetic::mul_public(b, a).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
                 if b.is_zero() {
                     bail!("Cannot invert zero");
                 }
                 Ok(arithmetic::mul_public(a, b.inverse().unwrap()).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b)) => {
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 let b = futures::executor::block_on(arithmetic::inv(b, &mut self.io_context))?;
                 Ok(
                     futures::executor::block_on(arithmetic::mul(a, b, &mut self.io_context))?
@@ -211,7 +211,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 )
             }
             (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
                 let b = futures::executor::block_on(arithmetic::inv(b, &mut self.io_context))?;
                 Ok(
                     futures::executor::block_on(arithmetic::mul(a, b, &mut self.io_context))?
@@ -219,8 +219,8 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 )
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 let b = futures::executor::block_on(arithmetic::inv(b, &mut self.io_context))?;
                 Ok(
                     futures::executor::block_on(arithmetic::mul(a, b, &mut self.io_context))?
@@ -241,7 +241,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.pow(a, b)?.into()),
             (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
                 self.pow(a.into(), b.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
@@ -302,17 +302,17 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
                 self.eq(a, b)
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 self.eq(a, b)
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 self.eq(a, b)
             }
         }
@@ -331,17 +331,17 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             ),
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
                 self.neq(a, b)
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 self.neq(a, b)
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
-                let b = futures::executor::block_on(conversion::b2a(b, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
                 self.neq(a, b)
             }
         }
@@ -382,23 +382,23 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = futures::executor::block_on(conversion::a2b(a, &mut self.io_context))?;
-                Ok(binary::xor_public(a, b.into_bigint().into(), self.io_context.id).into())
+                Ok(binary::xor_public(&a, b.into_bigint().into(), self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let a = futures::executor::block_on(conversion::a2b(a, &mut self.io_context))?;
                 let b = futures::executor::block_on(conversion::a2b(b, &mut self.io_context))?;
-                Ok(binary::xor(a, b).into())
+                Ok(binary::xor(&a, &b).into())
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                Ok(binary::xor_public(a, b.into_bigint().into(), self.io_context.id).into())
+                Ok(binary::xor_public(&a, b.into_bigint().into(), self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
                 let a = futures::executor::block_on(conversion::a2b(a, &mut self.io_context))?;
-                Ok(binary::xor(a, b).into())
+                Ok(binary::xor(&a, &b).into())
             }
-            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => Ok(binary::xor(a, b).into()),
+            (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => Ok(binary::xor(&a, &b).into()),
         }
     }
 
@@ -417,7 +417,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                Ok(binary::or_public(a, b.into_bigint().into(), self.io_context.id).into())
+                Ok(binary::or_public(&a, b.into_bigint().into(), self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
@@ -425,7 +425,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 self.bit_or(a.into(), b.into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                Ok(futures::executor::block_on(binary::or(a, b, &mut self.io_context))?.into())
+                Ok(futures::executor::block_on(binary::or(&a, &b, &mut self.io_context))?.into())
             }
         }
     }
@@ -436,24 +436,24 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = futures::executor::block_on(conversion::a2b(a, &mut self.io_context))?;
-                Ok(binary::and_with_public(a, b.into_bigint().into()).into())
+                Ok(binary::and_with_public(&a, b.into_bigint().into()).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let a = futures::executor::block_on(conversion::a2b(a, &mut self.io_context))?;
                 let b = futures::executor::block_on(conversion::a2b(b, &mut self.io_context))?;
-                Ok(futures::executor::block_on(binary::and(a, b, &mut self.io_context))?.into())
+                Ok(futures::executor::block_on(binary::and(&a, &b, &mut self.io_context))?.into())
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                Ok(binary::and_with_public(a, b.into_bigint().into()).into())
+                Ok(binary::and_with_public(&a, b.into_bigint().into()).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
                 let a = futures::executor::block_on(conversion::a2b(a, &mut self.io_context))?;
-                Ok(futures::executor::block_on(binary::and(a, b, &mut self.io_context))?.into())
+                Ok(futures::executor::block_on(binary::and(&a, &b, &mut self.io_context))?.into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {
-                Ok(futures::executor::block_on(binary::and(a, b, &mut self.io_context))?.into())
+                Ok(futures::executor::block_on(binary::and(&a, &b, &mut self.io_context))?.into())
             }
         }
     }
@@ -470,7 +470,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             ))?
             .into()),
             Rep3VmType::Binary(a) => {
-                let a = futures::executor::block_on(conversion::b2a(a, &mut self.io_context))?;
+                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
                 self.is_zero(a.into(), allow_secret_inputs)
             }
         }

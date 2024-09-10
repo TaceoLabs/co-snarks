@@ -330,8 +330,8 @@ pub async fn eq<F: PrimeField, N: Rep3Network>(
 ) -> IoResult<FieldShare<F>> {
     let diff = sub(a, b);
     let bits = conversion::a2b(diff, io_context).await?;
-    let is_zero = binary::is_zero(bits, io_context).await?;
-    let res = conversion::bit_inject(is_zero, io_context).await?;
+    let is_zero = binary::is_zero(&bits, io_context).await?;
+    let res = conversion::bit_inject(&is_zero, io_context).await?;
     Ok(res)
 }
 
@@ -353,7 +353,7 @@ pub async fn eq_bit<F: PrimeField, N: Rep3Network>(
 ) -> IoResult<BinaryShare<F>> {
     let diff = sub(a, b);
     let bits = conversion::a2b(diff, io_context).await?;
-    let is_zero = binary::is_zero(bits, io_context).await?;
+    let is_zero = binary::is_zero(&bits, io_context).await?;
     Ok(is_zero)
 }
 

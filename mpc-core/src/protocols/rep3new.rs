@@ -110,9 +110,9 @@ pub fn combine_field_elements<F: PrimeField>(
 
 /// Reconstructs a value (represented as [BigUint]) from its binary replicated shares. Since binary operations can lead to results >= p, the result is not guaranteed to be a valid field element.
 pub fn combine_binary_element<F: PrimeField>(
-    share1: Rep3BigUintShare<F>,
-    share2: Rep3BigUintShare<F>,
-    share3: Rep3BigUintShare<F>,
+    share1: &Rep3BigUintShare<F>,
+    share2: &Rep3BigUintShare<F>,
+    share3: &Rep3BigUintShare<F>,
 ) -> BigUint {
     share1.a ^ share2.a ^ share3.a
 }
@@ -144,7 +144,7 @@ pub mod conversion {
     // Keep in mind: Only works if the input is actually a binary sharing of a valid field element
     // If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
     pub async fn b2a<F: PrimeField, N: Rep3Network>(
-        x: Rep3BigUintShare<F>,
+        x: &Rep3BigUintShare<F>,
         io_context: &mut IoContext<N>,
     ) -> IoResult<Rep3PrimeFieldShare<F>> {
         let mut y = Rep3BigUintShare::zero_share();
@@ -188,7 +188,7 @@ pub mod conversion {
         y.b = local_b;
 
         let z =
-            a2b::low_depth_binary_add_mod_p::<F, N>(x, y, io_context, F::MODULUS_BIT_SIZE as usize)
+            a2b::low_depth_binary_add_mod_p::<F, N>(x, &y, io_context, F::MODULUS_BIT_SIZE as usize)
                 .await?;
 
         match io_context.id {
@@ -210,7 +210,7 @@ pub mod conversion {
 
     /// Translates one shared bit into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
     pub async fn bit_inject<F: PrimeField, N: Rep3Network>(
-        x: Rep3BigUintShare<F>,
+        x: &Rep3BigUintShare<F>,
         io_context: &mut IoContext<N>,
     ) -> IoResult<Rep3PrimeFieldShare<F>> {
         // standard bit inject
