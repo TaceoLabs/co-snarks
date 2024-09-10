@@ -19,6 +19,24 @@ impl Rep3CorrelatedRng {
             bitcomp2,
         }
     }
+
+    pub fn fork(self) -> (Self, Self) {
+        let (rand0, rand1) = self.rand.fork();
+        let (bitcomp10, bitcomp11) = self.bitcomp1.fork();
+        let (bitcomp20, bitcomp21) = self.bitcomp2.fork();
+        (
+            Self {
+                rand: rand0,
+                bitcomp1: bitcomp10,
+                bitcomp2: bitcomp20,
+            },
+            Self {
+                rand: rand1,
+                bitcomp1: bitcomp11,
+                bitcomp2: bitcomp21,
+            },
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -32,6 +50,12 @@ impl Rep3Rand {
         let rng1 = RngType::from_seed(seed1);
         let rng2 = RngType::from_seed(seed2);
         Self { rng1, rng2 }
+    }
+
+    pub fn fork(mut self) -> (Self, Self) {
+        let (seed1, seed2) = self.random_seeds();
+        let other = Self::new(seed1, seed2);
+        (self, other)
     }
 
     pub fn masking_field_element<F: PrimeField>(&mut self) -> F {
@@ -109,5 +133,16 @@ impl Rep3RandBitComp {
             unreachable!()
         };
         (a, b, c)
+    }
+
+    pub fn fork(mut self) -> (Self, Self) {
+        let rng1 = RngType::from_seed(self.rng1.gen());
+        let rng2 = RngType::from_seed(self.rng2.gen());
+        let rng3 = if let Some(rng) = &mut self.rng3 {
+            Some(RngType::from_seed(rng.gen()))
+        } else {
+            None
+        };
+        (self, Self { rng1, rng2, rng3 })
     }
 }

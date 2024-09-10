@@ -324,10 +324,8 @@ mod field_share {
             x_shares1.into_iter().zip(y_shares1)
         ) {
             tokio::spawn(async move {
-                let (net0, net1) = net.fork().await.unwrap();
-                let (ctx0, ctx1) = tokio::join!(IoContext::init(net0), IoContext::init(net1));
-                let mut ctx0 = ctx0.unwrap();
-                let mut ctx1 = ctx1.unwrap();
+                let ctx = IoContext::init(net).await.unwrap();
+                let (ctx0, ctx1) = ctx.fork().await.unwrap();
                 let (res0, res1) = tokio::join!(
                     arithmetic::mul(x0, y0, &mut ctx0),
                     arithmetic::mul(x1, y1, &mut ctx1)
