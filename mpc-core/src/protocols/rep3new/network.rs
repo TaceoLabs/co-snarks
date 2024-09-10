@@ -88,7 +88,7 @@ impl<N: Rep3Network> IoContext<N> {
 }
 
 /// This trait defines the network interface for the REP3 protocol.
-pub trait Rep3Network {
+pub trait Rep3Network: Send {
     /// Returns the id of the party. The id is in the range 0 <= id < 3
     fn get_id(&self) -> PartyID;
 

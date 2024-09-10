@@ -2,7 +2,9 @@ mod ops;
 mod types;
 
 use ark_ec::CurveGroup;
+use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
+use rayon::prelude::*;
 pub use types::Rep3PointShare;
 
 use super::{
@@ -39,22 +41,6 @@ pub fn add_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: PartyI
 }
 
 pub fn sub_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: PartyID) {
-    match id {
-        PartyID::ID0 => a.a -= b,
-        PartyID::ID1 => a.b -= b,
-        PartyID::ID2 => {}
-    }
-}
-
-pub fn add_assign_public_affine<C: CurveGroup>(a: &mut PointShare<C>, b: &C::Affine, id: PartyID) {
-    match id {
-        PartyID::ID0 => a.a += b,
-        PartyID::ID1 => a.b += b,
-        PartyID::ID2 => {}
-    }
-}
-
-pub fn sub_assign_public_affine<C: CurveGroup>(a: &mut PointShare<C>, b: &C::Affine, id: PartyID) {
     match id {
         PartyID::ID0 => a.a -= b,
         PartyID::ID1 => a.b -= b,
@@ -107,4 +93,25 @@ pub async fn open_point_many<C: CurveGroup, N: Rep3Network>(
     let bs = a.iter().map(|x| x.b).collect_vec();
     let cs = io_context.network.reshare(bs).await?;
     Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
+}
+
+pub fn msm_public_points<C: CurveGroup>(
+    points: &[C::Affine],
+    scalars: &[FieldShare<C::ScalarField>],
+) -> PointShare<C> {
+    tracing::trace!("> MSM public points for {} elements", points.len());
+    debug_assert_eq!(points.len(), scalars.len());
+    let (a_bigints, b_bigints) = scalars
+        .into_par_iter()
+        .map(|share| (share.a.into_bigint(), share.b.into_bigint()))
+        .collect::<(Vec<_>, Vec<_>)>();
+    let mut res_a = None;
+    let mut res_b = None;
+    rayon::scope(|s| {
+        s.spawn(|_| res_a = Some(C::msm_bigint(points, &a_bigints)));
+        s.spawn(|_| res_b = Some(C::msm_bigint(points, &b_bigints)));
+    });
+    tracing::trace!("< MSM public points for {} elements", points.len());
+    //we can unwrap as the we have Some values after rayon scope
+    PointShare::new(res_a.unwrap(), res_b.unwrap())
 }

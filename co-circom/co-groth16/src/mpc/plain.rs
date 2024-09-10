@@ -5,79 +5,95 @@ use super::CircomGroth16Prover;
 pub(crate) struct PlainGroth16Driver;
 
 impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
-    type ArithmeticShare = P::ScalarField;
+    type ArithmeticShare<F: ark_ff::PrimeField> = F;
 
     type PointShare<C: CurveGroup> = C;
 
-    fn rand(&mut self) -> Self::ArithmeticShare {
+    type PartyID = usize;
+
+    fn rand(&mut self) -> Self::ArithmeticShare<<P as Pairing>::ScalarField> {
+        todo!()
+    }
+
+    fn get_party_id(&self) -> Self::PartyID {
+        todo!()
+    }
+
+    fn fork(&mut self) -> Self {
         todo!()
     }
 
     fn evaluate_constraint(
-        &mut self,
-        lhs: &[(P::ScalarField, usize)],
-        public_inputs: &[P::ScalarField],
-        private_witness: &[Self::ArithmeticShare],
-    ) -> Self::ArithmeticShare {
+        party_id: &Self::PartyID,
+        lhs: &[(<P as Pairing>::ScalarField, usize)],
+        public_inputs: &[<P as Pairing>::ScalarField],
+        private_witness: &[Self::ArithmeticShare<<P as Pairing>::ScalarField>],
+    ) -> Self::ArithmeticShare<<P as Pairing>::ScalarField> {
         todo!()
     }
 
     fn promote_to_trivial_shares(
-        &self,
-        public_values: &[P::ScalarField],
-    ) -> Vec<Self::ArithmeticShare> {
+        id: &Self::PartyID,
+        public_values: &[<P as Pairing>::ScalarField],
+    ) -> Vec<Self::ArithmeticShare<<P as Pairing>::ScalarField>> {
         todo!()
     }
 
-    fn sub_assign_vec(&mut self, a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
+    fn sub_assign_vec(
+        a: &mut [Self::ArithmeticShare<<P as Pairing>::ScalarField>],
+        b: &[Self::ArithmeticShare<<P as Pairing>::ScalarField>],
+    ) {
         todo!()
     }
 
     async fn mul(
         &mut self,
-        a: &Self::ArithmeticShare,
-        b: &Self::ArithmeticShare,
-    ) -> super::IoResult<Self::ArithmeticShare> {
+        a: Self::ArithmeticShare<<P as Pairing>::ScalarField>,
+        b: Self::ArithmeticShare<<P as Pairing>::ScalarField>,
+    ) -> super::IoResult<Self::ArithmeticShare<<P as Pairing>::ScalarField>> {
         todo!()
     }
 
     async fn mul_vec(
         &mut self,
-        a: &[Self::ArithmeticShare],
-        b: &[Self::ArithmeticShare],
-    ) -> super::IoResult<Vec<Self::ArithmeticShare>> {
+        a: &[Self::ArithmeticShare<<P as Pairing>::ScalarField>],
+        b: &[Self::ArithmeticShare<<P as Pairing>::ScalarField>],
+    ) -> super::IoResult<Vec<Self::ArithmeticShare<<P as Pairing>::ScalarField>>> {
         todo!()
     }
 
-    fn fft_in_place<D: ark_poly::EvaluationDomain<P::ScalarField>>(
-        &mut self,
-        data: &mut [Self::ArithmeticShare],
+    fn fft_in_place<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+        data: &mut Vec<Self::ArithmeticShare<<P as Pairing>::ScalarField>>,
         domain: &D,
     ) {
         todo!()
     }
 
-    fn ifft_in_place<D: ark_poly::EvaluationDomain<P::ScalarField>>(
-        &mut self,
-        data: &mut [Self::ArithmeticShare],
+    fn ifft_in_place<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+        data: &mut Vec<Self::ArithmeticShare<<P as Pairing>::ScalarField>>,
         domain: &D,
     ) {
+        todo!()
+    }
+
+    fn ifft<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+        data: &[Self::ArithmeticShare<<P as Pairing>::ScalarField>],
+        domain: &D,
+    ) -> Vec<Self::ArithmeticShare<<P as Pairing>::ScalarField>> {
         todo!()
     }
 
     fn distribute_powers_and_mul_by_const(
-        &mut self,
-        coeffs: &mut [Self::ArithmeticShare],
-        g: P::ScalarField,
-        c: P::ScalarField,
+        coeffs: &mut [Self::ArithmeticShare<<P as Pairing>::ScalarField>],
+        g: <P as Pairing>::ScalarField,
+        c: <P as Pairing>::ScalarField,
     ) {
         todo!()
     }
 
     fn msm_public_points<C: CurveGroup>(
-        &mut self,
         points: &[C::Affine],
-        scalars: &[Self::ArithmeticShare],
+        scalars: &[Self::ArithmeticShare<C::ScalarField>],
     ) -> Self::PointShare<C> {
         todo!()
     }
@@ -105,7 +121,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     fn scalar_mul_public_point<C: CurveGroup>(
         &mut self,
         a: &C,
-        b: &Self::ArithmeticShare,
+        b: &Self::ArithmeticShare<C::ScalarField>,
     ) -> Self::PointShare<C> {
         todo!()
     }
@@ -117,7 +133,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     async fn scalar_mul<C: CurveGroup>(
         &mut self,
         a: &Self::PointShare<C>,
-        b: &Self::ArithmeticShare,
+        b: &Self::ArithmeticShare<C::ScalarField>,
     ) -> super::IoResult<Self::PointShare<C>> {
         todo!()
     }

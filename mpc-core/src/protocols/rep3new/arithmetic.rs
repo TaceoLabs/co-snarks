@@ -47,6 +47,10 @@ pub fn sub<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>) -> FieldShare<F> {
     a - b
 }
 
+pub fn sub_assign<F: PrimeField>(shared: &mut FieldShare<F>, b: FieldShare<F>) {
+    *shared -= b;
+}
+
 /// Performs subtraction between a shared value and a public value, returning shared - public.
 pub fn sub_shared_by_public<F: PrimeField>(
     shared: FieldShare<F>,
@@ -82,6 +86,11 @@ pub async fn mul<F: PrimeField, N: Rep3Network>(
 /// Performs multiplication of a shared value and a public value.
 pub fn mul_public<F: PrimeField>(shared: FieldShare<F>, public: F) -> FieldShare<F> {
     shared * public
+}
+
+/// Performs multiplication of a shared value and a public value.
+pub fn mul_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F) {
+    *shared *= public;
 }
 
 /// Performs element-wise multiplication of two vectors of shared values.

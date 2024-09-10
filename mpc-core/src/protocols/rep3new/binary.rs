@@ -135,6 +135,10 @@ pub async fn cmux<F: PrimeField, N: Rep3Network>(
     Ok(and)
 }
 
+//TODO most likely the inputs here are only one bit therefore we
+//do not have to perform an or over the whole length of prime field
+//but only one bit.
+//Do we want that to be configurable? Semms like a waste?
 pub async fn or_tree<F: PrimeField, N: Rep3Network>(
     mut inputs: Vec<BinaryShare<F>>,
     io_context: &mut IoContext<N>,

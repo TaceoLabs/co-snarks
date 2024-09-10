@@ -1,4 +1,5 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
@@ -8,14 +9,21 @@ pub(crate) mod shamir;
 
 type IoResult<T> = std::io::Result<T>;
 
-pub trait CircomGroth16Prover<P: Pairing> {
-    type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Copy + Clone + Default;
-    type PointShare<C: CurveGroup>;
+pub trait CircomGroth16Prover<P: Pairing>: Send {
+    type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Copy + Clone + Default + Send;
+    type PointShareG1: Send;
+    type PointShareG2: Send;
+    type PartyID: Send + Sync;
 
     fn rand(&mut self) -> Self::ArithmeticShare;
+
+    fn get_party_id(&self) -> Self::PartyID;
+
+    fn fork(&mut self) -> Self;
+
     /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint(
-        &mut self,
+        party_id: &Self::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -23,12 +31,12 @@ pub trait CircomGroth16Prover<P: Pairing> {
 
     /// Elementwise transformation of a vector of public values into a vector of shared values: \[a_i\] = a_i.
     fn promote_to_trivial_shares(
-        &self,
+        id: &Self::PartyID,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
 
     /// Elementwise subtraction of two vectors of shares in place: \[a_i\] -= \[b_i\]
-    fn sub_assign_vec(&mut self, a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]);
+    fn sub_assign_vec(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]);
 
     async fn mul(
         &mut self,
@@ -44,78 +52,66 @@ pub trait CircomGroth16Prover<P: Pairing> {
     ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     fn fft_in_place<D: EvaluationDomain<P::ScalarField>>(
-        &mut self,
-        data: &mut [Self::ArithmeticShare],
+        data: &mut Vec<Self::ArithmeticShare>,
         domain: &D,
     );
 
     /// Computes the inverse FFT of a vector of shared field elements in place.
     fn ifft_in_place<D: EvaluationDomain<P::ScalarField>>(
-        &mut self,
-        data: &mut [Self::ArithmeticShare],
+        data: &mut Vec<Self::ArithmeticShare>,
         domain: &D,
     );
 
+    /// Computes the inverse FFT of a vector of shared field elements in place.
+    fn ifft<D: EvaluationDomain<P::ScalarField>>(
+        data: &[Self::ArithmeticShare],
+        domain: &D,
+    ) -> Vec<Self::ArithmeticShare>;
+
     /// Computes the \[coeffs_i\] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     fn distribute_powers_and_mul_by_const(
-        &mut self,
         coeffs: &mut [Self::ArithmeticShare],
         g: P::ScalarField,
         c: P::ScalarField,
     );
 
-    fn msm_public_points<C: CurveGroup>(
-        &mut self,
-        points: &[C::Affine],
+    fn msm_public_points_g1(
+        points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShare<C>;
+    ) -> Self::PointShareG1;
 
-    //TODO DO WE NEED PROJECTIVE AND AFFINE METHODS????
-
-    /// Add a public point B to the shared point A in place: \[A\] += B
-    fn add_assign_points_public<C: CurveGroup>(&mut self, a: &mut Self::PointShare<C>, b: &C);
-
-    /// Add a public affine point B to the shared point A in place: \[A\] += B
-    fn add_assign_points_public_affine<C: CurveGroup>(
-        &mut self,
-        a: &mut Self::PointShare<C>,
-        b: &C::Affine,
-    );
-
-    /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
-    fn add_assign_points<C: CurveGroup>(
-        &mut self,
-        a: &mut Self::PointShare<C>,
-        b: &Self::PointShare<C>,
-    );
+    fn msm_public_points_g2(
+        points: &[P::G2Affine],
+        scalars: &[Self::ArithmeticShare],
+    ) -> Self::PointShareG2;
 
     /// Multiplies a public point B to the shared point A in place: \[A\] *= B
-    fn scalar_mul_public_point<C: CurveGroup>(
-        &mut self,
-        a: &C,
-        b: &Self::ArithmeticShare,
-    ) -> Self::PointShare<C>;
+    fn scalar_mul_public_point_g1(a: &P::G1, b: Self::ArithmeticShare) -> Self::PointShareG1;
+
+    /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
+    fn add_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1);
+    fn add_assign_points_public_g1(id: &Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1);
 
     /// Reconstructs a shared point: A = Open(\[A\]).
-    async fn open_point<C: CurveGroup>(&mut self, a: &Self::PointShare<C>) -> IoResult<C>;
+    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1>;
 
     /// Multiplies a share b to the shared point A: \[A\] *= \[b\]. Requires network communication.
-    async fn scalar_mul<C: CurveGroup>(
+    async fn scalar_mul_g1(
         &mut self,
-        a: &Self::PointShare<C>,
-        b: &Self::ArithmeticShare,
-    ) -> IoResult<Self::PointShare<C>>;
+        a: &Self::PointShareG1,
+        b: Self::ArithmeticShare,
+    ) -> IoResult<Self::PointShareG1>;
 
     /// Subtract a shared point B in place from the shared point A: \[A\] -= \[B\]
-    fn sub_assign_points<C: CurveGroup>(
-        &mut self,
-        a: &mut Self::PointShare<C>,
-        b: &Self::PointShare<C>,
-    );
+    fn sub_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1);
 
-    fn open_two_points<C1: CurveGroup, C2: CurveGroup>(
+    fn scalar_mul_public_point_g2(a: &P::G2, b: Self::ArithmeticShare) -> Self::PointShareG2;
+    fn add_assign_points_g2(a: &mut Self::PointShareG2, b: &Self::PointShareG2);
+    fn add_assign_points_public_g2(a: &mut Self::PointShareG2, b: &P::G2);
+
+    async fn open_two_points(
         &mut self,
-        a: Self::PointShare<C1>,
-        b: Self::PointShare<C2>,
-    ) -> std::io::Result<(C1, C2)>;
+        a: Self::PointShareG1,
+        b: Self::PointShareG2,
+    ) -> std::io::Result<(P::G1, P::G2)>;
 }
