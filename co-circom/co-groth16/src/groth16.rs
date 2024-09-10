@@ -187,10 +187,6 @@ where
         let b = b.unwrap();
         tracing::debug!("done!");
 
-        // TODO what is faster?
-        // The FFTs not in place and there parallel to mul_vec?
-        // Or having them in place but therefore not mt?
-
         let mut a_dist_pow = Option::None;
         let mut b_dist_pow = Option::None;
         let mut c_dist_pow = Option::None;
@@ -270,11 +266,24 @@ where
         input_assignment: &[P::ScalarField],
         aux_assignment: &[T::ArithmeticShare],
     ) -> T::PointShareG1 {
-        tracing::debug!("calculate coeffs..");
         let pub_len = input_assignment.len();
 
-        let pub_acc = P::G1::msm_unchecked(&query[1..=pub_len], input_assignment);
-        let priv_acc = T::msm_public_points_g1(&query[1 + pub_len..], aux_assignment);
+        let mut pub_acc = None;
+        let mut priv_acc = None;
+        rayon::scope(|s| {
+            s.spawn(|_| {
+                pub_acc = Some(P::G1::msm_unchecked(&query[1..=pub_len], input_assignment))
+            });
+            s.spawn(|_| {
+                priv_acc = Some(T::msm_public_points_g1(
+                    &query[1 + pub_len..],
+                    aux_assignment,
+                ))
+            });
+        });
+        // must be terminated after rayon scope
+        let pub_acc = pub_acc.unwrap();
+        let priv_acc = priv_acc.unwrap();
 
         let mut res = initial;
         T::add_assign_points_public_g1(id, &mut res, &query[0].into_group());
@@ -282,7 +291,6 @@ where
         T::add_assign_points_public_g1(id, &mut res, &pub_acc);
         T::add_assign_points_g1(&mut res, &priv_acc);
 
-        tracing::debug!("done..");
         res
     }
 
@@ -294,11 +302,25 @@ where
         input_assignment: &[P::ScalarField],
         aux_assignment: &[T::ArithmeticShare],
     ) -> T::PointShareG2 {
-        tracing::debug!("calculate coeffs..");
+        let calculate_coeff_span = tracing::debug_span!("groth16 - calculate coeff").entered();
         let pub_len = input_assignment.len();
 
-        let pub_acc = P::G2::msm_unchecked(&query[1..=pub_len], input_assignment);
-        let priv_acc = T::msm_public_points_g2(&query[1 + pub_len..], aux_assignment);
+        let mut pub_acc = None;
+        let mut priv_acc = None;
+        rayon::scope(|s| {
+            s.spawn(|_| {
+                pub_acc = Some(P::G2::msm_unchecked(&query[1..=pub_len], input_assignment))
+            });
+            s.spawn(|_| {
+                priv_acc = Some(T::msm_public_points_g2(
+                    &query[1 + pub_len..],
+                    aux_assignment,
+                ))
+            });
+        });
+        // must be terminated after rayon scope
+        let pub_acc = pub_acc.unwrap();
+        let priv_acc = priv_acc.unwrap();
 
         let mut res = initial;
         T::add_assign_points_public_g2(id, &mut res, &query[0].into_group());
@@ -306,7 +328,7 @@ where
         T::add_assign_points_public_g2(id, &mut res, &pub_acc);
         T::add_assign_points_g2(&mut res, &priv_acc);
 
-        tracing::debug!("done..");
+        calculate_coeff_span.exit();
         res
     }
 
@@ -325,7 +347,7 @@ where
         let mut r_s_delta_g1 = None;
         let mut forked_driver1 = self.driver.fork();
         let delta_g1 = zkey.delta_g1.into_group();
-        let msm_create_proof = tracing::debug_span!("groth16 - create proof first msms").entered();
+        let msm_create_proof = tracing::debug_span!("groth16 - create proof first MSMs").entered();
         rayon::scope(|scope| {
             scope.spawn(|_| h_acc = Some(T::msm_public_points_g1(&zkey.h_query, h)));
             scope.spawn(|_| {
@@ -348,6 +370,7 @@ where
         let mut g1_b = None;
         let mut g2_b = None;
         let party_id = self.driver.get_party_id();
+        let calculate_coeff_span = tracing::debug_span!("groth16 - calculate coeff").entered();
         rayon::scope(|scope| {
             scope.spawn(|_| {
                 // Compute A
@@ -387,10 +410,14 @@ where
                 ));
             });
         });
-
+        // must be there after rayon scope
         let g_a = g_a.unwrap();
         let g1_b = g1_b.unwrap();
         let g2_b = g2_b.unwrap();
+        calculate_coeff_span.exit();
+
+        let network_round =
+            tracing::debug_span!("groth16 - network round after calc coeff").entered();
         let mut g_a_opened = None;
         let mut r_g1_b = None;
         self.runtime.block_on(async {
@@ -404,6 +431,10 @@ where
 
         let g_a_opened = g_a_opened.unwrap()?;
         let r_g1_b = r_g1_b.unwrap()?;
+        network_round.exit();
+
+        let last_round =
+            tracing::debug_span!("groth16 - finish open two points and some adds").entered();
         let s_g_a = T::scalar_mul_public_point_g1(&g_a_opened, s);
 
         let mut g_c = s_g_a;
@@ -416,6 +447,7 @@ where
         let (g_c_opened, g2_b_opened) = self
             .runtime
             .block_on(self.driver.open_two_points(g_c, g2_b))?;
+        last_round.exit();
 
         Ok(Groth16Proof {
             pi_a: g_a_opened.into_affine(),
