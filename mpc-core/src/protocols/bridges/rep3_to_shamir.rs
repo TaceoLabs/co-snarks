@@ -1,28 +1,10 @@
 use super::network::RepToShamirNetwork;
 use crate::protocols::{
-    rep3::{
-        network::{IoContext, Rep3Network},
-        Rep3PointShare, Rep3PrimeFieldShare,
-    },
+    rep3::{network::Rep3Network, Rep3PointShare, Rep3PrimeFieldShare},
     shamir::{network::ShamirNetwork, ShamirPointShare, ShamirPrimeFieldShare, ShamirProtocol},
 };
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-
-impl<F, N1, N2> TryFrom<IoContext<N1>> for ShamirProtocol<F, N2>
-where
-    F: PrimeField,
-    N1: Rep3Network + RepToShamirNetwork<N2>,
-    N2: ShamirNetwork,
-{
-    type Error = eyre::Report;
-
-    fn try_from(value: IoContext<N1>) -> Result<Self, Self::Error> {
-        let threshold = 1;
-        let network = value.network.to_shamir_net();
-        Ok(ShamirProtocol::new(threshold, network)?)
-    }
-}
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     /// Translate a Rep3 prime field share into a 3-party Shamir prime field share, where the underlying sharing polynomial is of degree 1 (i.e., the threshold t = 1).

@@ -1,7 +1,15 @@
 use std::{io, sync::Arc};
 
-use crate::protocols::bridges::network::RepToShamirNetwork;
-use crate::RngType;
+use crate::{
+    protocols::{
+        bridges::network::RepToShamirNetwork,
+        shamir::{
+            network::{ShamirMpcNet, ShamirNetwork},
+            ShamirProtocol,
+        },
+    },
+    RngType,
+};
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
@@ -396,5 +404,18 @@ impl Rep3Network for Rep3MpcNet {
         } else {
             Ok(())
         }
+    }
+}
+
+impl<F> TryFrom<Rep3MpcNet> for ShamirProtocol<F, ShamirMpcNet>
+where
+    F: PrimeField,
+{
+    type Error = eyre::Report;
+
+    fn try_from(value: Rep3MpcNet) -> Result<Self, Self::Error> {
+        let threshold = 1;
+        let network = value.to_shamir_net();
+        Ok(ShamirProtocol::new(threshold, network)?)
     }
 }

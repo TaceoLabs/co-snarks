@@ -6,8 +6,14 @@ use mpc_core::protocols::rep3::{
 
 use super::CircomPlonkProver;
 
-pub(crate) struct Rep3PlonkDriver<N: Rep3Network> {
+pub struct Rep3PlonkDriver<N: Rep3Network> {
     io_context: IoContext<N>,
+}
+
+impl<N: Rep3Network> Rep3PlonkDriver<N> {
+    pub fn new(io_context: IoContext<N>) -> Self {
+        Self { io_context }
+    }
 }
 
 impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {

@@ -2,9 +2,11 @@ use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_mpc_compiler::CoCircomCompiler;
 use circom_types::R1CS;
 use num_traits::Zero;
+use tokio::runtime;
 
 use circom_types::{
     groth16::{
@@ -31,19 +33,18 @@ use co_circom::VerifyCli;
 use co_circom::VerifyConfig;
 use co_circom::{file_utils, MPCCurve, MPCProtocol, ProofSystem};
 use co_circom_snarks::{SharedInput, SharedWitness};
-use co_groth16::CoGroth16;
 use co_groth16::Groth16;
-use co_plonk::CoPlonk;
+use co_groth16::Rep3CoGroth16;
 use co_plonk::Plonk;
+use co_plonk::Rep3CoPlonk;
 use color_eyre::eyre::{eyre, Context, ContextCompat};
-use mpc_core::protocols::rep3::network::Rep3Network;
-use mpc_core::protocols::shamir::network::ShamirNetwork;
-use mpc_core::{
-    protocols::{
-        rep3::{self, network::Rep3MpcNet, Rep3Protocol},
-        shamir::{network::ShamirMpcNet, ShamirProtocol},
-    },
-    traits::PrimeFieldMpcProtocol,
+use mpc_core::protocols::{
+    rep3::{self, network::Rep3MpcNet},
+    shamir::{network::ShamirMpcNet, ShamirProtocol},
+};
+use mpc_core::protocols::{
+    rep3::{network::Rep3Network, Rep3PrimeFieldShare},
+    shamir::ShamirPrimeFieldShare,
 };
 use num_bigint::BigUint;
 use num_traits::Num;
@@ -194,11 +195,12 @@ where
             }
             // create witness shares
             let start = Instant::now();
-            let shares = SharedWitness::<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>::share_rep3(
-                witness,
-                r1cs.num_inputs,
-                &mut rng,
-            );
+            let shares =
+                SharedWitness::<P::ScalarField, Rep3PrimeFieldShare<P::ScalarField>>::share_rep3(
+                    witness,
+                    r1cs.num_inputs,
+                    &mut rng,
+                );
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Sharing took {} ms", duration_ms);
 
@@ -221,7 +223,7 @@ where
             // create witness shares
             let start = Instant::now();
             let shares =
-                SharedWitness::<ShamirProtocol<P::ScalarField, ShamirMpcNet>, P>::share_shamir(
+                SharedWitness::<P::ScalarField, ShamirPrimeFieldShare<P::ScalarField>>::share_shamir(
                     witness,
                     r1cs.num_inputs,
                     t,
@@ -286,9 +288,9 @@ where
 
     // create input shares
     let mut shares = [
-        SharedInput::<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>::default(),
-        SharedInput::<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>::default(),
-        SharedInput::<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P>::default(),
+        SharedInput::<P::ScalarField, Rep3PrimeFieldShare<P::ScalarField>>::default(),
+        SharedInput::<P::ScalarField, Rep3PrimeFieldShare<P::ScalarField>>::default(),
+        SharedInput::<P::ScalarField, Rep3PrimeFieldShare<P::ScalarField>>::default(),
     ];
 
     let mut rng = rand::thread_rng();
@@ -308,8 +310,7 @@ where
                 .insert(name.clone(), parsed_vals.clone());
             shares[2].public_inputs.insert(name.clone(), parsed_vals);
         } else {
-            let [share0, share1, share2] =
-                rep3::utils::share_field_elements(&parsed_vals, &mut rng);
+            let [share0, share1, share2] = rep3::share_field_elements(&parsed_vals, &mut rng);
             shares[0].shared_inputs.insert(name.clone(), share0);
             shares[1].shared_inputs.insert(name.clone(), share1);
             shares[2].shared_inputs.insert(name.clone(), share2);
@@ -355,10 +356,12 @@ where
 
     match protocol {
         MPCProtocol::REP3 => {
-            merge_input_shares::<P, Rep3Protocol<P::ScalarField, Rep3MpcNet>>(inputs, out)?;
+            merge_input_shares::<P::ScalarField, Rep3PrimeFieldShare<P::ScalarField>>(inputs, out)?;
         }
         MPCProtocol::SHAMIR => {
-            merge_input_shares::<P, ShamirProtocol<P::ScalarField, ShamirMpcNet>>(inputs, out)?;
+            merge_input_shares::<P::ScalarField, ShamirPrimeFieldShare<P::ScalarField>>(
+                inputs, out,
+            )?;
         }
     }
 
@@ -423,23 +426,30 @@ where
     // parse witness shares
     let witness_file =
         BufReader::new(File::open(witness).context("trying to open witness share file")?);
-    let witness_share: SharedWitness<Rep3Protocol<P::ScalarField, Rep3MpcNet>, P> =
+    let witness_share: SharedWitness<P::ScalarField, Rep3PrimeFieldShare<P::ScalarField>> =
         co_circom::parse_witness_share(witness_file)?;
 
+    let runtime = runtime::Builder::new_multi_thread()
+        .build()
+        .context("while building async runtime")?;
     // connect to network
-    let net = Rep3MpcNet::new(config.network)?;
+    let net = runtime
+        .block_on(Rep3MpcNet::new(config.network))
+        .context("while connecting to network")?;
     let id = usize::from(net.get_id());
 
     // init MPC protocol
-    let protocol = Rep3Protocol::new(net)?;
-    let mut protocol = protocol.get_shamir_protocol()?;
-
+    let mut protocol = ShamirProtocol::<P::ScalarField, ShamirMpcNet>::try_from(net)
+        .context("while building shamir protocol")?;
     // Translate witness to shamir shares
     let start = Instant::now();
-    let shamir_witness_share: SharedWitness<ShamirProtocol<P::ScalarField, ShamirMpcNet>, P> =
+    let translated_witness = runtime
+        .block_on(protocol.translate_primefield_repshare_vec(witness_share.witness))
+        .context("while translating witness")?;
+    let shamir_witness_share: SharedWitness<P::ScalarField, ShamirPrimeFieldShare<P::ScalarField>> =
         SharedWitness {
             public_inputs: witness_share.public_inputs,
-            witness: protocol.translate_primefield_repshare_vec(witness_share.witness)?,
+            witness: translated_witness,
         };
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Translating witness took {} ms", id, duration_ms);
@@ -490,13 +500,9 @@ where
                     let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
                     // connect to network
-                    let net = Rep3MpcNet::new(config.network)?;
-                    let id = usize::from(net.get_id());
-
-                    // init MPC protocol
-                    let protocol = Rep3Protocol::new(net)?;
-
-                    let mut prover = CoGroth16::new(protocol);
+                    let id = config.network.my_id;
+                    let mut prover = Rep3CoGroth16::with_network_config(config.network)
+                        .context("while building prover")?;
 
                     // execute prover in MPC
                     tracing::info!("Party {}: starting proof generation..", id);
@@ -508,26 +514,27 @@ where
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    let witness_share = co_circom::parse_witness_share(witness_file)?;
-                    let public_input = witness_share.public_inputs.clone();
+                    todo!("shamir prover")
+                    //let witness_share = co_circom::parse_witness_share(witness_file)?;
+                    //let public_input = witness_share.public_inputs.clone();
 
-                    // connect to network
-                    let net = ShamirMpcNet::new(config.network)?;
-                    let id = net.get_id();
+                    //// connect to network
+                    //let net = ShamirMpcNet::new(config.network)?;
+                    //let id = net.get_id();
 
-                    // init MPC protocol
-                    let protocol = ShamirProtocol::new(t, net)?;
+                    //// init MPC protocol
+                    //let protocol = ShamirProtocol::new(t, net)?;
 
-                    let mut prover = CoGroth16::new(protocol);
+                    //let mut prover = CoGroth16::new(protocol);
 
-                    // execute prover in MPC
-                    tracing::info!("Party {}: starting proof generation..", id);
-                    let start = Instant::now();
-                    let proof = prover.prove(&zkey, witness_share)?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    //// execute prover in MPC
+                    //tracing::info!("Party {}: starting proof generation..", id);
+                    //let start = Instant::now();
+                    //let proof = prover.prove(&zkey, witness_share)?;
+                    //let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    //tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
 
-                    (proof, public_input)
+                    //(proof, public_input)
                 }
             };
 
@@ -555,13 +562,11 @@ where
                     let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
                     // connect to network
-                    let net = Rep3MpcNet::new(config.network)?;
-                    let id = usize::from(net.get_id());
+                    let id = config.network.my_id;
 
-                    // init MPC protocol
-                    let protocol = Rep3Protocol::new(net)?;
-
-                    let prover = CoPlonk::new(protocol);
+                    //init prover
+                    let prover = Rep3CoPlonk::with_network_config(config.network)
+                        .context("while building prover")?;
 
                     // execute prover in MPC
                     tracing::info!("Party {}: starting proof generation..", id);
@@ -572,25 +577,26 @@ where
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    let witness_share = co_circom::parse_witness_share(witness_file)?;
-                    let public_input = witness_share.public_inputs.clone();
-
-                    // connect to network
-                    let net = ShamirMpcNet::new(config.network)?;
-                    let id = net.get_id();
-
-                    // init MPC protocol
-                    let protocol = ShamirProtocol::new(t, net)?;
-
-                    let prover = CoPlonk::new(protocol);
-
-                    // execute prover in MPC
-                    tracing::info!("Party {}: starting proof generation..", id);
-                    let start = Instant::now();
-                    let proof = prover.prove(&pk, witness_share)?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-                    (proof, public_input)
+                    todo!("shamir")
+                    //                   let witness_share = co_circom::parse_witness_share(witness_file)?;
+                    //                   let public_input = witness_share.public_inputs.clone();
+                    //
+                    //                   // connect to network
+                    //                   let net = ShamirMpcNet::new(config.network)?;
+                    //                   let id = net.get_id();
+                    //
+                    //                   // init MPC protocol
+                    //                   let protocol = ShamirProtocol::new(t, net)?;
+                    //
+                    //                   let prover = CoPlonk::new(protocol);
+                    //
+                    //                   // execute prover in MPC
+                    //                   tracing::info!("Party {}: starting proof generation..", id);
+                    //                   let start = Instant::now();
+                    //                   let proof = prover.prove(&pk, witness_share)?;
+                    //                   let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    //                   tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    //                   (proof, public_input)
                 }
             };
 
@@ -769,17 +775,20 @@ fn parse_array<F: PrimeField>(val: &serde_json::Value) -> color_eyre::Result<Vec
     Ok(field_elements)
 }
 
-fn merge_input_shares<P: Pairing, T: PrimeFieldMpcProtocol<P::ScalarField>>(
+fn merge_input_shares<F: PrimeField, S>(
     inputs: Vec<PathBuf>,
     out: PathBuf,
-) -> color_eyre::Result<()> {
+) -> color_eyre::Result<()>
+where
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
     let start = Instant::now();
     let mut input_shares = inputs
         .iter()
         .map(|input| {
             let input_share_file =
                 BufReader::new(File::open(input).context("while opening input share file")?);
-            let input_share: SharedInput<T, P> = bincode::deserialize_from(input_share_file)
+            let input_share: SharedInput<F, S> = bincode::deserialize_from(input_share_file)
                 .context("trying to parse input share file")?;
             color_eyre::Result::<_>::Ok(input_share)
         })

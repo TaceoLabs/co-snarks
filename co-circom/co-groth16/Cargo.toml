@@ -29,7 +29,7 @@ ark-serialize = { workspace = true }
 circom-types = { workspace = true }
 co-circom-snarks = { workspace = true }
 eyre = { workspace = true }
-futures = { workspace = true }
+futures = { workspace = true, features = ["executor"] }
 itertools = { workspace = true }
 mpc-core = { workspace = true }
 mpc-net = { workspace = true }

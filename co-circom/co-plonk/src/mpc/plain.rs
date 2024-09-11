@@ -2,7 +2,7 @@ use ark_ec::pairing::Pairing;
 
 use super::CircomPlonkProver;
 
-pub(crate) struct PlainPlonkDriver;
+pub struct PlainPlonkDriver;
 
 impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
     type ArithmeticShare = P::ScalarField;

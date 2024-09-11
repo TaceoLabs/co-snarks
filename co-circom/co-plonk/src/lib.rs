@@ -7,10 +7,15 @@ use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use co_circom_snarks::SharedWitness;
+use mpc::rep3::Rep3PlonkDriver;
 use mpc::CircomPlonkProver;
+use mpc_core::protocols::rep3::network::IoContext;
+use mpc_core::protocols::rep3::network::Rep3MpcNet;
+use mpc_net::config::NetworkConfig;
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
+use tokio::runtime;
 
 mod mpc;
 mod plonk;
@@ -24,6 +29,8 @@ pub(crate) mod types;
 pub use plonk::Plonk;
 
 type PlonkProofResult<T> = std::result::Result<T, PlonkProofError>;
+
+pub type Rep3CoPlonk<P> = CoPlonk<P, Rep3PlonkDriver<Rep3MpcNet>>;
 
 /// The errors that may arise during the computation of a co-PLONK proof.
 #[derive(Debug, thiserror::Error)]
@@ -173,6 +180,21 @@ mod plonk_utils {
             pi -= *l * val;
         }
         pi
+    }
+}
+
+impl<P: Pairing> Rep3CoPlonk<P> {
+    /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
+    pub fn with_network_config(config: NetworkConfig) -> eyre::Result<Self> {
+        let runtime = runtime::Builder::new_current_thread().build()?;
+        let mpc_net = runtime.block_on(Rep3MpcNet::new(config))?;
+        let io_context = runtime.block_on(IoContext::init(mpc_net))?;
+        let driver = Rep3PlonkDriver::new(io_context);
+        Ok(CoPlonk {
+            driver,
+            //runtime,
+            phantom_data: PhantomData,
+        })
     }
 }
 
