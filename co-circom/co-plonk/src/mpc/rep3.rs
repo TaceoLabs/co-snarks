@@ -1,5 +1,5 @@
 use ark_ec::pairing::Pairing;
-use mpc_core::protocols::rep3new::{
+use mpc_core::protocols::rep3::{
     network::{IoContext, Rep3Network},
     Rep3PointShare, Rep3PrimeFieldShare,
 };

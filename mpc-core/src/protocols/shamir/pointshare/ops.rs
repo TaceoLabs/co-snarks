@@ -1,6 +1,6 @@
 use ark_ec::CurveGroup;
 
-use crate::protocols::shamirnew::ShamirPrimeFieldShare;
+use crate::protocols::shamir::ShamirPrimeFieldShare;
 
 use super::ShamirPointShare;
 

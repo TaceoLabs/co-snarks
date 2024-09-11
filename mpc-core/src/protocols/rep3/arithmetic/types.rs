@@ -1,7 +1,7 @@
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-use crate::protocols::rep3new::{
+use crate::protocols::rep3::{
     id::PartyID,
     network::{IoContext, Rep3Network},
     rngs::Rep3CorrelatedRng,

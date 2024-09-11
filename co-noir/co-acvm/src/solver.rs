@@ -5,7 +5,7 @@ use acir::{
 };
 use ark_ff::PrimeField;
 use intmap::IntMap;
-use mpc_core::{lut::LookupTableProvider, protocols::rep3new::network::Rep3Network};
+use mpc_core::{lut::LookupTableProvider, protocols::rep3::network::Rep3Network};
 use noirc_abi::{input_parser::Format, Abi, MAIN_RETURN_NAME};
 use noirc_artifacts::program::ProgramArtifact;
 use std::{collections::BTreeMap, io, path::PathBuf};

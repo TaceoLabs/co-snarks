@@ -1,6 +1,6 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
-use mpc_core::protocols::shamirnew::network::ShamirNetwork;
+use mpc_core::protocols::shamir::network::ShamirNetwork;
 use std::{cmp::Ordering, collections::HashMap};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -301,7 +301,7 @@ mod field_share {
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
     use itertools::{izip, Itertools};
-    use mpc_core::protocols::shamirnew::{self, arithmetic, ShamirProtocol};
+    use mpc_core::protocols::shamir::{self, arithmetic, ShamirProtocol};
     use rand::thread_rng;
     use std::{str::FromStr, thread};
     use tokio::sync::oneshot;
@@ -310,8 +310,8 @@ mod field_share {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = shamirnew::share_field_element(x, threshold, num_parties, &mut rng);
-        let y_shares = shamirnew::share_field_element(y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::share_field_element(x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::share_field_element(y, threshold, num_parties, &mut rng);
         let should_result = x + y;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -332,7 +332,7 @@ mod field_share {
         }
 
         let is_result =
-            shamirnew::combine_field_element(&results, &(1..=num_parties).collect_vec(), threshold)
+            shamir::combine_field_element(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
 
         assert_eq!(is_result, should_result);
@@ -348,8 +348,8 @@ mod field_share {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = shamirnew::share_field_element(x, threshold, num_parties, &mut rng);
-        let y_shares = shamirnew::share_field_element(y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::share_field_element(x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::share_field_element(y, threshold, num_parties, &mut rng);
         let should_result = x - y;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -370,7 +370,7 @@ mod field_share {
         }
 
         let is_result =
-            shamirnew::combine_field_element(&results, &(1..=num_parties).collect_vec(), threshold)
+            shamir::combine_field_element(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
 
         assert_eq!(is_result, should_result);
@@ -387,8 +387,8 @@ mod field_share {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = shamirnew::share_field_element(x, threshold, num_parties, &mut rng);
-        let y_shares = shamirnew::share_field_element(y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::share_field_element(x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::share_field_element(y, threshold, num_parties, &mut rng);
         let should_result = ((x * y) * y) + x;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -414,7 +414,7 @@ mod field_share {
         }
 
         let is_result =
-            shamirnew::combine_field_element(&results, &(1..=num_parties).collect_vec(), threshold)
+            shamir::combine_field_element(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
 
         assert_eq!(is_result, should_result);
@@ -484,8 +484,8 @@ mod field_share {
             .unwrap(),
         ];
 
-        let x_shares = shamirnew::share_field_elements(&x, threshold, num_parties, &mut rng);
-        let y_shares = shamirnew::share_field_elements(&y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::share_field_elements(&x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::share_field_elements(&y, threshold, num_parties, &mut rng);
 
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
@@ -508,12 +508,9 @@ mod field_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = shamirnew::combine_field_elements(
-            &results,
-            &(1..=num_parties).collect_vec(),
-            threshold,
-        )
-        .unwrap();
+        let is_result =
+            shamir::combine_field_elements(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
 
         assert_eq!(is_result, should_result);
     }
@@ -539,8 +536,8 @@ mod field_share {
             should_result.push((x * y) * y);
         }
 
-        let x_shares = shamirnew::share_field_elements(&x, threshold, num_parties, &mut rng);
-        let y_shares = shamirnew::share_field_elements(&y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::share_field_elements(&x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::share_field_elements(&y, threshold, num_parties, &mut rng);
 
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
@@ -564,12 +561,9 @@ mod field_share {
             results.push(r.await.unwrap());
         }
 
-        let is_result = shamirnew::combine_field_elements(
-            &results,
-            &(1..=num_parties).collect_vec(),
-            threshold,
-        )
-        .unwrap();
+        let is_result =
+            shamir::combine_field_elements(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
 
         assert_eq!(is_result, should_result);
     }
@@ -583,7 +577,7 @@ mod field_share {
     async fn shamir_neg_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = shamirnew::share_field_element(x, threshold, num_parties, &mut rng);
+        let x_shares = shamir::share_field_element(x, threshold, num_parties, &mut rng);
         let should_result = -x;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -604,7 +598,7 @@ mod field_share {
         }
 
         let is_result =
-            shamirnew::combine_field_element(&results, &(1..=num_parties).collect_vec(), threshold)
+            shamir::combine_field_element(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
 
         assert_eq!(is_result, should_result);
@@ -623,7 +617,7 @@ mod field_share {
         while x.is_zero() {
             x = ark_bn254::Fr::rand(&mut rng);
         }
-        let x_shares = shamirnew::share_field_element(x, threshold, num_parties, &mut rng);
+        let x_shares = shamir::share_field_element(x, threshold, num_parties, &mut rng);
         let should_result = x.inverse().unwrap();
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -647,7 +641,7 @@ mod field_share {
         }
 
         let is_result =
-            shamirnew::combine_field_element(&results, &(1..=num_parties).collect_vec(), threshold)
+            shamir::combine_field_element(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
 
         assert_eq!(is_result, should_result);
@@ -665,7 +659,7 @@ mod curve_share {
 
     use ark_ff::UniformRand;
     use itertools::{izip, Itertools};
-    use mpc_core::protocols::shamirnew::{self, pointshare};
+    use mpc_core::protocols::shamir::{self, pointshare};
     use rand::thread_rng;
     use tokio::sync::oneshot;
 
@@ -673,8 +667,8 @@ mod curve_share {
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = shamirnew::share_curve_point(x, threshold, num_parties, &mut rng);
-        let y_shares = shamirnew::share_curve_point(y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::share_curve_point(x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::share_curve_point(y, threshold, num_parties, &mut rng);
         let should_result = x + y;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -695,7 +689,7 @@ mod curve_share {
         }
 
         let is_result =
-            shamirnew::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
+            shamir::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
 
         assert_eq!(is_result, should_result);
@@ -711,8 +705,8 @@ mod curve_share {
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = shamirnew::share_curve_point(x, threshold, num_parties, &mut rng);
-        let y_shares = shamirnew::share_curve_point(y, threshold, num_parties, &mut rng);
+        let x_shares = shamir::share_curve_point(x, threshold, num_parties, &mut rng);
+        let y_shares = shamir::share_curve_point(y, threshold, num_parties, &mut rng);
         let should_result = x - y;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -733,7 +727,7 @@ mod curve_share {
         }
 
         let is_result =
-            shamirnew::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
+            shamir::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
 
         assert_eq!(is_result, should_result);
@@ -749,8 +743,7 @@ mod curve_share {
         let mut rng = thread_rng();
         let public_point = ark_bn254::G1Projective::rand(&mut rng);
         let scalar = ark_bn254::Fr::rand(&mut rng);
-        let scalar_shares =
-            shamirnew::share_field_element(scalar, threshold, num_parties, &mut rng);
+        let scalar_shares = shamir::share_field_element(scalar, threshold, num_parties, &mut rng);
         let should_result = public_point * scalar;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -773,7 +766,7 @@ mod curve_share {
         }
 
         let is_result =
-            shamirnew::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
+            shamir::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
 
         assert_eq!(is_result, should_result);
@@ -789,7 +782,7 @@ mod curve_share {
         let mut rng = thread_rng();
         let point = ark_bn254::G1Projective::rand(&mut rng);
         let public_scalar = ark_bn254::Fr::rand(&mut rng);
-        let point_shares = shamirnew::share_curve_point(point, threshold, num_parties, &mut rng);
+        let point_shares = shamir::share_curve_point(point, threshold, num_parties, &mut rng);
         let should_result = point * public_scalar;
 
         let mut tx = Vec::with_capacity(num_parties);
@@ -812,7 +805,7 @@ mod curve_share {
         }
 
         let is_result =
-            shamirnew::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
+            shamir::combine_curve_point(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
 
         assert_eq!(is_result, should_result);

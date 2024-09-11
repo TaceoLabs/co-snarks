@@ -10,11 +10,10 @@ use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeField
 use co_circom_snarks::SharedWitness;
 use eyre::Result;
 use itertools::izip;
-use mpc_core::protocols::rep3new::network::{IoContext, Rep3MpcNet};
+use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet};
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use num_traits::ToPrimitive;
-use rayon::Scope;
 use std::marker::PhantomData;
 use tokio::runtime::{self, Runtime};
 
@@ -261,7 +260,6 @@ where
 
     fn calculate_coeff_g1(
         id: T::PartyID,
-        rayon_scope: &Scope,
         initial: T::PointShareG1,
         query: &[P::G1Affine],
         vk_param: P::G1Affine,
@@ -272,7 +270,7 @@ where
 
         let mut pub_acc = None;
         let mut priv_acc = None;
-        rayon_scope.scope(|s| {
+        rayon::scope(|s| {
             s.spawn(|_| {
                 pub_acc = Some(P::G1::msm_unchecked(&query[1..=pub_len], input_assignment))
             });
@@ -297,7 +295,6 @@ where
 
     fn calculate_coeff_g2(
         id: T::PartyID,
-        rayon_scope: &Scope,
         initial: T::PointShareG2,
         query: &[P::G2Affine],
         vk_param: P::G2Affine,
@@ -308,7 +305,7 @@ where
 
         let mut pub_acc = None;
         let mut priv_acc = None;
-        rayon_scope.scope(|s| {
+        rayon::scope(|s| {
             s.spawn(|_| {
                 pub_acc = Some(P::G2::msm_unchecked(&query[1..=pub_len], input_assignment))
             });
@@ -371,12 +368,11 @@ where
         let party_id = self.driver.get_party_id();
         let calculate_coeff_span = tracing::debug_span!("groth16 - calculate coeff").entered();
         rayon::scope(|scope| {
-            scope.spawn(|scope| {
+            scope.spawn(|_| {
                 // Compute A
                 let r_g1 = T::scalar_mul_public_point_g1(&delta_g1, r);
                 g_a = Some(Self::calculate_coeff_g1(
                     party_id,
-                    scope,
                     r_g1,
                     &zkey.a_query,
                     zkey.vk.alpha_g1,
@@ -384,13 +380,12 @@ where
                     aux_assignment,
                 ));
             });
-            scope.spawn(|scope| {
+            scope.spawn(|_| {
                 // Compute B in G1
                 // In original implementation this is skipped if r==0, however r is shared in our case
                 let s_g1 = T::scalar_mul_public_point_g1(&delta_g1, s);
                 g1_b = Some(Self::calculate_coeff_g1(
                     party_id,
-                    scope,
                     s_g1,
                     &zkey.b_g1_query,
                     zkey.beta_g1,
@@ -398,12 +393,11 @@ where
                     aux_assignment,
                 ));
             });
-            scope.spawn(|scope| {
+            scope.spawn(|_| {
                 // Compute B in G2
                 let s_g2 = T::scalar_mul_public_point_g2(&zkey.vk.delta_g2.into_group(), s);
                 g2_b = Some(Self::calculate_coeff_g2(
                     party_id,
-                    scope,
                     s_g2,
                     &zkey.b_g2_query,
                     zkey.vk.beta_g2,

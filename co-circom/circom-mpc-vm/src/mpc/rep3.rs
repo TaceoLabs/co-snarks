@@ -2,7 +2,7 @@ use std::io;
 
 use ark_ff::{One, PrimeField};
 use eyre::{bail, eyre};
-use mpc_core::protocols::rep3new::{
+use mpc_core::protocols::rep3::{
     arithmetic, binary, conversion,
     network::{IoContext, Rep3Network},
     Rep3BigUintShare, Rep3PrimeFieldShare,

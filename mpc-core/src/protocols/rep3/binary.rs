@@ -3,7 +3,7 @@ use itertools::izip;
 use num_bigint::BigUint;
 use types::Rep3BigUintShare;
 
-use crate::protocols::rep3new::{id::PartyID, network::Rep3Network};
+use crate::protocols::rep3::{id::PartyID, network::Rep3Network};
 
 use super::{network::IoContext, Rep3PrimeFieldShare};
 

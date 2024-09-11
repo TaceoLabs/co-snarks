@@ -97,7 +97,7 @@ impl Rep3Network for PartyTestNetwork {
         self.id
     }
 
-    fn send_many<F: CanonicalSerialize>(
+    async fn send_many<F: CanonicalSerialize>(
         &mut self,
         target: PartyID,
         data: &[F],
@@ -118,7 +118,10 @@ impl Rep3Network for PartyTestNetwork {
         Ok(())
     }
 
-    fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
+    async fn recv_many<F: CanonicalDeserialize>(
+        &mut self,
+        from: PartyID,
+    ) -> std::io::Result<Vec<F>> {
         if self.id.next_id() == from {
             let data = Vec::from(self.recv_next.recv().unwrap());
             Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
@@ -130,20 +133,24 @@ impl Rep3Network for PartyTestNetwork {
         }
     }
 
-    fn send<F: CanonicalSerialize>(&mut self, target: PartyID, data: F) -> std::io::Result<()> {
-        self.send_many(target, &[data])
+    async fn send<F: CanonicalSerialize>(
+        &mut self,
+        target: PartyID,
+        data: F,
+    ) -> std::io::Result<()> {
+        self.send_many(target, &[data]).await
     }
 
-    fn send_next<F: CanonicalSerialize>(&mut self, data: F) -> std::io::Result<()> {
-        self.send(self.get_id().next_id(), data)
+    async fn send_next<F: CanonicalSerialize>(&mut self, data: F) -> std::io::Result<()> {
+        self.send(self.get_id().next_id(), data).await
     }
 
-    fn send_next_many<F: CanonicalSerialize>(&mut self, data: &[F]) -> std::io::Result<()> {
-        self.send_many(self.get_id().next_id(), data)
+    async fn send_next_many<F: CanonicalSerialize>(&mut self, data: &[F]) -> std::io::Result<()> {
+        self.send_many(self.get_id().next_id(), data).await
     }
 
-    fn recv<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<F> {
-        let mut res = self.recv_many(from)?;
+    async fn recv<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<F> {
+        let mut res = self.recv_many(from).await?;
         if res.len() != 1 {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -154,11 +161,11 @@ impl Rep3Network for PartyTestNetwork {
         }
     }
 
-    fn recv_prev<F: CanonicalDeserialize>(&mut self) -> std::io::Result<F> {
-        self.recv(self.get_id().prev_id())
+    async fn recv_prev<F: CanonicalDeserialize>(&mut self) -> std::io::Result<F> {
+        self.recv(self.get_id().prev_id()).await
     }
 
-    fn recv_prev_many<F: CanonicalDeserialize>(&mut self) -> std::io::Result<Vec<F>> {
-        self.recv_many(self.get_id().prev_id())
+    async fn recv_prev_many<F: CanonicalDeserialize>(&mut self) -> std::io::Result<Vec<F>> {
+        self.recv_many(self.get_id().prev_id()).await
     }
 }

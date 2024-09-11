@@ -1,6 +1,6 @@
 use ark_ec::CurveGroup;
 
-use crate::protocols::rep3new::Rep3PrimeFieldShare;
+use crate::protocols::rep3::Rep3PrimeFieldShare;
 
 use super::Rep3PointShare;
 

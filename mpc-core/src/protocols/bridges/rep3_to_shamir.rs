@@ -1,10 +1,10 @@
 use super::network::RepToShamirNetwork;
 use crate::protocols::{
-    rep3new::{
+    rep3::{
         network::{IoContext, Rep3Network},
         Rep3PointShare, Rep3PrimeFieldShare,
     },
-    shamirnew::{network::ShamirNetwork, ShamirPointShare, ShamirPrimeFieldShare, ShamirProtocol},
+    shamir::{network::ShamirNetwork, ShamirPointShare, ShamirPrimeFieldShare, ShamirProtocol},
 };
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;

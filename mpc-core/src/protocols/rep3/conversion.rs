@@ -1,7 +1,7 @@
 use ark_ff::PrimeField;
 use num_bigint::BigUint;
 
-use crate::protocols::rep3new::{id::PartyID, network::Rep3Network};
+use crate::protocols::rep3::{id::PartyID, network::Rep3Network};
 
 use super::{
     arithmetic, detail, network::IoContext, IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,

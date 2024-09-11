@@ -6,8 +6,8 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_types::Witness;
 use mpc_core::protocols::{
-    rep3new::{self, Rep3PrimeFieldShare},
-    shamirnew::{self, ShamirPrimeFieldShare},
+    rep3::{self, Rep3PrimeFieldShare},
+    shamir::{self, ShamirPrimeFieldShare},
 };
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
@@ -151,7 +151,7 @@ impl<F: PrimeField> SharedWitness<F, Rep3PrimeFieldShare<F>> {
     ) -> [Self; 3] {
         let public_inputs = &witness.values[..num_pub_inputs];
         let witness = &witness.values[num_pub_inputs..];
-        let [share1, share2, share3] = rep3new::share_field_elements(witness, rng);
+        let [share1, share2, share3] = rep3::share_field_elements(witness, rng);
         let witness1 = Self {
             public_inputs: public_inputs.to_vec(),
             witness: share1,
@@ -179,7 +179,7 @@ impl<F: PrimeField> SharedWitness<F, ShamirPrimeFieldShare<F>> {
     ) -> Vec<Self> {
         let public_inputs = &witness.values[..num_pub_inputs];
         let witness = &witness.values[num_pub_inputs..];
-        let shares = shamirnew::share_field_elements(witness, degree, num_parties, rng);
+        let shares = shamir::share_field_elements(witness, degree, num_parties, rng);
         shares
             .into_iter()
             .map(|share| Self {

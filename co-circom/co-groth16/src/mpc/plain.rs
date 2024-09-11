@@ -4,7 +4,7 @@ use itertools::izip;
 
 use super::CircomGroth16Prover;
 
-pub(crate) struct PlainGroth16Driver;
+pub struct PlainGroth16Driver;
 
 impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     type ArithmeticShare = P::ScalarField;

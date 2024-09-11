@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
 use ark_ff::PrimeField;
-use mpc_core::protocols::rep3new::arithmetic;
+use mpc_core::protocols::rep3::arithmetic;
 use mpc_core::{
     lut::LookupTableProvider,
-    protocols::rep3new::{
+    protocols::rep3::{
         lut::NaiveRep3LookupTable,
         network::{IoContext, Rep3Network},
         Rep3PrimeFieldShare,

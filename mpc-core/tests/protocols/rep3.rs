@@ -1,7 +1,7 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
-use mpc_core::protocols::rep3new::id::PartyID;
-use mpc_core::protocols::rep3new::network::Rep3Network;
+use mpc_core::protocols::rep3::id::PartyID;
+use mpc_core::protocols::rep3::network::Rep3Network;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 #[derive(Debug)]
@@ -219,12 +219,10 @@ mod field_share {
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
     use itertools::izip;
-    use mpc_core::protocols::rep3new::conversion;
-    use mpc_core::protocols::rep3new::{self, arithmetic, network::IoContext};
+    use mpc_core::protocols::rep3::conversion;
+    use mpc_core::protocols::rep3::{self, arithmetic, network::IoContext};
     use rand::thread_rng;
-    use rep3new::arithmetic;
     use std::thread;
-    use std::{collections::HashSet, thread};
     use tokio::sync::oneshot;
 
     #[tokio::test]
@@ -232,8 +230,8 @@ mod field_share {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3new::share_field_element(x, &mut rng);
-        let y_shares = rep3new::share_field_element(y, &mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
+        let y_shares = rep3::share_field_element(y, &mut rng);
         let should_result = x + y;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -244,7 +242,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_field_element(result1, result2, result3);
+        let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -253,8 +251,8 @@ mod field_share {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3new::share_field_element(x, &mut rng);
-        let y_shares = rep3new::share_field_element(y, &mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
+        let y_shares = rep3::share_field_element(y, &mut rng);
         let should_result = x - y;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -265,7 +263,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_field_element(result1, result2, result3);
+        let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -275,8 +273,8 @@ mod field_share {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3new::share_field_element(x, &mut rng);
-        let y_shares = rep3new::share_field_element(y, &mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
+        let y_shares = rep3::share_field_element(y, &mut rng);
         let should_result = x * y;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -296,7 +294,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_field_element(result1, result2, result3);
+        let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -308,10 +306,10 @@ mod field_share {
         let x1 = ark_bn254::Fr::rand(&mut rng);
         let y0 = ark_bn254::Fr::rand(&mut rng);
         let y1 = ark_bn254::Fr::rand(&mut rng);
-        let x_shares0 = rep3new::share_field_element(x0, &mut rng);
-        let x_shares1 = rep3new::share_field_element(x1, &mut rng);
-        let y_shares0 = rep3new::share_field_element(y0, &mut rng);
-        let y_shares1 = rep3new::share_field_element(y1, &mut rng);
+        let x_shares0 = rep3::share_field_element(x0, &mut rng);
+        let x_shares1 = rep3::share_field_element(x1, &mut rng);
+        let y_shares0 = rep3::share_field_element(y0, &mut rng);
+        let y_shares1 = rep3::share_field_element(y1, &mut rng);
         let should_result0 = x0 * y0;
         let should_result1 = x1 * y1;
         let (tx1, rx1) = oneshot::channel();
@@ -336,8 +334,8 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result0 = rep3new::combine_field_element(result1.0, result2.0, result3.0);
-        let is_result1 = rep3new::combine_field_element(result1.1, result2.1, result3.1);
+        let is_result0 = rep3::combine_field_element(result1.0, result2.0, result3.0);
+        let is_result1 = rep3::combine_field_element(result1.1, result2.1, result3.1);
         assert_eq!(is_result0, should_result0);
         assert_eq!(is_result1, should_result1);
     }
@@ -348,8 +346,8 @@ mod field_share {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3new::share_field_element(x, &mut rng);
-        let y_shares = rep3new::share_field_element(y, &mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
+        let y_shares = rep3::share_field_element(y, &mut rng);
         let should_result = ((x * y) * y) + x;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -370,7 +368,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_field_element(result1, result2, result3);
+        let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -440,8 +438,8 @@ mod field_share {
         let mut y_shares2 = vec![];
         let mut y_shares3 = vec![];
         for (x, y) in x.iter().zip(y.iter()) {
-            let [x1, x2, x3] = rep3new::share_field_element(*x, &mut rng);
-            let [y1, y2, y3] = rep3new::share_field_element(*y, &mut rng);
+            let [x1, x2, x3] = rep3::share_field_element(*x, &mut rng);
+            let [y1, y2, y3] = rep3::share_field_element(*y, &mut rng);
             x_shares1.push(x1);
             x_shares2.push(x2);
             x_shares3.push(x3);
@@ -468,7 +466,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_field_elements(result1, result2, result3);
+        let is_result = rep3::combine_field_elements(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -490,8 +488,8 @@ mod field_share {
         let mut y_shares3 = vec![];
         let mut should_result = vec![];
         for (x, y) in x.iter().zip(y.iter()) {
-            let [x1, x2, x3] = rep3new::share_field_element(*x, &mut rng);
-            let [y1, y2, y3] = rep3new::share_field_element(*y, &mut rng);
+            let [x1, x2, x3] = rep3::share_field_element(*x, &mut rng);
+            let [y1, y2, y3] = rep3::share_field_element(*y, &mut rng);
             x_shares1.push(x1);
             x_shares2.push(x2);
             x_shares3.push(x3);
@@ -520,7 +518,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_field_elements(result1, result2, result3);
+        let is_result = rep3::combine_field_elements(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -528,7 +526,7 @@ mod field_share {
     async fn rep3_neg() {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3new::share_field_element(x, &mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
         let should_result = -x;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -539,7 +537,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_field_element(result1, result2, result3);
+        let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -551,7 +549,7 @@ mod field_share {
         while x.is_zero() {
             x = ark_bn254::Fr::rand(&mut rng);
         }
-        let x_shares = rep3new::share_field_element(x, &mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
         let should_result = x.inverse().unwrap();
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -570,7 +568,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_field_element(result1, result2, result3);
+        let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -580,7 +578,7 @@ mod field_share {
         let mut rng = thread_rng();
         let x_ = ark_bn254::Fr::rand(&mut rng);
         let x = x_.square(); // Guarantees a square root exists
-        let x_shares = rep3new::share_field_element(x, &mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         let (tx3, rx3) = oneshot::channel();
@@ -593,7 +591,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_field_element(result1, result2, result3);
+        let is_result = rep3::combine_field_element(result1, result2, result3);
         assert!(is_result == x_ || is_result == -x_);
     }
 
@@ -611,8 +609,8 @@ mod field_share {
                         let compare = constant_number + ark_bn254::Fr::from(i);
                         let test_network = Rep3TestNetwork::default();
                         let mut rng = thread_rng();
-                        let x_shares = rep3new::share_field_element(constant_number, &mut rng);
-                        let y_shares = rep3new::share_field_element(compare, &mut rng);
+                        let x_shares = rep3::share_field_element(constant_number, &mut rng);
+                        let y_shares = rep3::share_field_element(compare, &mut rng);
                         let should_result = ark_bn254::Fr::from(constant_number $op compare);
                         let (tx1, rx1) = oneshot::channel();
                         let (tx2, rx2) = oneshot::channel();
@@ -635,7 +633,7 @@ mod field_share {
                         let results2 = rx2.await.unwrap();
                         let results3 = rx3.await.unwrap();
                         for (a, b, c) in izip!(results1, results2, results3) {
-                            let is_result = rep3new::combine_field_element(a, b, c);
+                            let is_result = rep3::combine_field_element(a, b, c);
                             println!("{constant_number} {} {compare} = {is_result}", stringify!($op));
                             assert_eq!(is_result, should_result.into());
                         }
@@ -654,7 +652,7 @@ mod field_share {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::zero();
-        let x_shares = rep3new::share_field_element(x, &mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
 
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -673,7 +671,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_binary_element(result1, result2, result3);
+        let is_result = rep3::combine_binary_element(result1, result2, result3);
         let should_result = x.into();
         assert_eq!(is_result, should_result);
         let is_result_f: ark_bn254::Fr = is_result.into();
@@ -684,7 +682,7 @@ mod field_share {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3new::share_field_element(x, &mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
 
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -703,7 +701,7 @@ mod field_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_binary_element(result1, result2, result3);
+        let is_result = rep3::combine_binary_element(result1, result2, result3);
 
         let should_result = x.into();
         assert_eq!(is_result, should_result);
@@ -716,7 +714,7 @@ mod field_share {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3new::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_biguint(x, &mut rng);
 
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -729,13 +727,13 @@ mod field_share {
         {
             tokio::spawn(async move {
                 let mut rep3 = IoContext::init(net).await.unwrap();
-                tx.send(conversion::b2a(x, &mut rep3).await.unwrap())
+                tx.send(conversion::b2a(&x, &mut rep3).await.unwrap())
             });
         }
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_field_element(result1, result2, result3);
+        let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, x);
     }
 }
@@ -744,7 +742,7 @@ mod curve_share {
     use ark_std::UniformRand;
     use itertools::izip;
 
-    use mpc_core::protocols::rep3new::{self, pointshare};
+    use mpc_core::protocols::rep3::{self, pointshare};
     use rand::thread_rng;
     use tokio::sync::oneshot;
 
@@ -753,8 +751,8 @@ mod curve_share {
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = rep3new::share_curve_point(x, &mut rng);
-        let y_shares = rep3new::share_curve_point(y, &mut rng);
+        let x_shares = rep3::share_curve_point(x, &mut rng);
+        let y_shares = rep3::share_curve_point(y, &mut rng);
         let should_result = x + y;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -766,7 +764,7 @@ mod curve_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_curve_point(result1, result2, result3);
+        let is_result = rep3::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -775,8 +773,8 @@ mod curve_share {
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = rep3new::share_curve_point(x, &mut rng);
-        let y_shares = rep3new::share_curve_point(y, &mut rng);
+        let x_shares = rep3::share_curve_point(x, &mut rng);
+        let y_shares = rep3::share_curve_point(y, &mut rng);
         let should_result = x - y;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -787,7 +785,7 @@ mod curve_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_curve_point(result1, result2, result3);
+        let is_result = rep3::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -796,7 +794,7 @@ mod curve_share {
         let mut rng = thread_rng();
         let public_point = ark_bn254::G1Projective::rand(&mut rng);
         let scalar = ark_bn254::Fr::rand(&mut rng);
-        let scalar_shares = rep3new::share_field_element(scalar, &mut rng);
+        let scalar_shares = rep3::share_field_element(scalar, &mut rng);
         let should_result = public_point * scalar;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -811,7 +809,7 @@ mod curve_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_curve_point(result1, result2, result3);
+        let is_result = rep3::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -820,7 +818,7 @@ mod curve_share {
         let mut rng = thread_rng();
         let point = ark_bn254::G1Projective::rand(&mut rng);
         let public_scalar = ark_bn254::Fr::rand(&mut rng);
-        let point_shares = rep3new::share_curve_point(point, &mut rng);
+        let point_shares = rep3::share_curve_point(point, &mut rng);
         let should_result = point * public_scalar;
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
@@ -834,7 +832,7 @@ mod curve_share {
         let result1 = rx1.await.unwrap();
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
-        let is_result = rep3new::combine_curve_point(result1, result2, result3);
+        let is_result = rep3::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 }

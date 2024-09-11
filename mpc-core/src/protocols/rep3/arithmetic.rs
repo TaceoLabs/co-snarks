@@ -4,7 +4,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use types::Rep3PrimeFieldShare;
 
-use crate::protocols::rep3new::{detail, id::PartyID, network::Rep3Network};
+use crate::protocols::rep3::{detail, id::PartyID, network::Rep3Network};
 
 use super::{binary, conversion, network::IoContext, IoResult, Rep3BigUintShare};
 
