@@ -15,7 +15,7 @@ use super::plain::PlainAcvmSolver;
 use super::NoirWitnessExtensionProtocol;
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
-pub(crate) struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
+pub struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
     lut_provider: NaiveRep3LookupTable<N>,
     io_context: IoContext<N>,
     plain_solver: PlainAcvmSolver<F>,

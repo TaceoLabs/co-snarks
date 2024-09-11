@@ -1,54 +1,4 @@
-use super::rep3::PartyTestNetwork as Rep3TestNetworkParty;
-use super::shamir::PartyTestNetwork as ShamirTestNetworkParty;
-use mpc_core::protocols::bridges::network::RepToShamirNetwork;
-use mpc_core::protocols::rep3::id::PartyID;
-
-impl RepToShamirNetwork<ShamirTestNetworkParty> for Rep3TestNetworkParty {
-    fn to_shamir_net(self) -> ShamirTestNetworkParty {
-        let Self {
-            id,
-            send_prev,
-            send_next,
-            recv_prev,
-            recv_next,
-            _stats,
-        } = self;
-
-        let mut send = Vec::with_capacity(2);
-        let mut recv = Vec::with_capacity(2);
-
-        match id {
-            PartyID::ID0 => {
-                send.push(send_next);
-                send.push(send_prev);
-                recv.push(recv_next);
-                recv.push(recv_prev);
-            }
-            PartyID::ID1 => {
-                send.push(send_prev);
-                send.push(send_next);
-                recv.push(recv_prev);
-                recv.push(recv_next);
-            }
-            PartyID::ID2 => {
-                send.push(send_next);
-                send.push(send_prev);
-                recv.push(recv_next);
-                recv.push(recv_prev);
-            }
-        }
-
-        ShamirTestNetworkParty {
-            id: id.into(),
-            num_parties: 3,
-            send,
-            recv,
-        }
-    }
-}
-
 mod translate_share {
-    use crate::protocols::rep3::Rep3TestNetwork;
     use ark_std::UniformRand;
     use itertools::Itertools;
     use mpc_core::protocols::{
@@ -57,6 +7,7 @@ mod translate_share {
     };
     use rand::thread_rng;
     use std::thread;
+    use tests::rep3_network::Rep3TestNetwork;
     use tokio::sync::oneshot;
 
     const VEC_SIZE: usize = 10;

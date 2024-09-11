@@ -8,8 +8,8 @@ use crate::protocols::rep3::{detail, id::PartyID, network::Rep3Network};
 
 use super::{binary, conversion, network::IoContext, IoResult, Rep3BigUintShare};
 
-type FieldShare<F> = Rep3PrimeFieldShare<F>;
-type BinaryShare<F> = Rep3BigUintShare<F>;
+pub type FieldShare<F> = Rep3PrimeFieldShare<F>;
+pub type BinaryShare<F> = Rep3BigUintShare<F>;
 
 mod ops;
 pub(super) mod types;

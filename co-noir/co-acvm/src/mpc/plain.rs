@@ -8,7 +8,7 @@ use mpc_core::lut::{LookupTableProvider, PlainLookupTableProvider};
 use super::NoirWitnessExtensionProtocol;
 
 #[derive(Default)]
-pub(crate) struct PlainAcvmSolver<F: PrimeField> {
+pub struct PlainAcvmSolver<F: PrimeField> {
     plain_lut: PlainLookupTableProvider<F>,
     phantom_data: PhantomData<F>,
 }
@@ -82,4 +82,3 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         futures::executor::block_on(self.plain_lut.write_to_lut(index, value, map))
     }
 }
-

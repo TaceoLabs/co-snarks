@@ -22,3 +22,5 @@ pub mod op_codes;
 mod stack;
 /// Defines the types for the MPC-VM, including [template declaration](types::TemplateDecl) and [function declarations](types::FunDecl).
 pub mod types;
+
+pub use mpc::rep3::Rep3VmType;

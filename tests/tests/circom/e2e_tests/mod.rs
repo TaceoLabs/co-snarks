@@ -12,7 +12,6 @@ use co_groth16::{CoGroth16, Groth16};
 use co_plonk::CoPlonk;
 use co_plonk::Plonk;
 use itertools::izip;
-use mpc_core::protocols::rep3::Rep3Protocol;
 use rand::thread_rng;
 use std::{fs::File, thread};
 use tests::rep3_network::{PartyTestNetwork, Rep3TestNetwork};
