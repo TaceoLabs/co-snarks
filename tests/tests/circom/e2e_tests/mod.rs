@@ -55,13 +55,12 @@ macro_rules! add_test_impl {
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
                     threads.push(thread::spawn(move || {
-                        let rep3 = Rep3Protocol::<[< ark_ $curve:lower >]::Fr, PartyTestNetwork>::new(net).unwrap();
-                        #[allow(unused_mut)]
+                        let runtime = runtime::Builder::new_current_thread().build().unwrap();
+                        let io_context = runtime.block_on(IoContext::init(net)).unwrap();
+                        let rep3 = [< Rep3 $proof_system Driver>]::new(io_context);
                         let mut prover = [< Co $proof_system>]::<
-                            Rep3Protocol<[< ark_ $curve:lower >]::Fr, PartyTestNetwork>,
-                            $curve,
-                        >::new(rep3);
-                        prover.prove(&zkey, x).unwrap()
+                            $curve, [< Rep3 $proof_system Driver>]>,
+                        >::new(rep3, runtime);
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();

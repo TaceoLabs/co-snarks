@@ -87,12 +87,9 @@ mod translate_share {
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
 
-        let is_result = shamir::combine_field_element(
-            &[result1, result2, result3],
-            &(1..=3).collect_vec(),
-            1,
-        )
-        .unwrap();
+        let is_result =
+            shamir::combine_field_element(&[result1, result2, result3], &(1..=3).collect_vec(), 1)
+                .unwrap();
 
         assert_eq!(is_result, x);
     }
@@ -126,12 +123,9 @@ mod translate_share {
         let result2 = rx2.await.unwrap();
         let result3 = rx3.await.unwrap();
 
-        let is_result = shamir::combine_field_elements(
-            &[result1, result2, result3],
-            &(1..=3).collect_vec(),
-            1,
-        )
-        .unwrap();
+        let is_result =
+            shamir::combine_field_elements(&[result1, result2, result3], &(1..=3).collect_vec(), 1)
+                .unwrap();
 
         assert_eq!(is_result, x);
     }
@@ -152,8 +146,7 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let rep3 = futures::executor::block_on(IoContext::init(net)).unwrap();
-                let mut shamir = ShamirProtocol::try_from(rep3).unwrap();
+                let mut shamir = ShamirProtocol::try_from(net).unwrap();
                 let share = futures::executor::block_on(shamir.translate_point_repshare(x));
                 tx.send(share.unwrap())
             });

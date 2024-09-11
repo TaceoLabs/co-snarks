@@ -16,6 +16,7 @@ use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
 use tokio::runtime;
+use tokio::runtime::Runtime;
 
 mod mpc;
 mod plonk;
@@ -53,6 +54,7 @@ pub enum PlonkProofError {
 pub struct CoPlonk<P: Pairing, T: CircomPlonkProver<P>> {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
+    runtime: Runtime,
 }
 
 impl<P, T> CoPlonk<P, T>
@@ -63,9 +65,10 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     /// Creates a new [CoPlonk] protocol with a given MPC driver.
-    pub fn new(driver: T) -> Self {
+    pub fn new(driver: T, runtime: Runtime) -> Self {
         Self {
             driver,
+            runtime,
             phantom_data: PhantomData,
         }
     }
