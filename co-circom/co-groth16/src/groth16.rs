@@ -164,7 +164,8 @@ where
                     private_witness,
                 );
                 let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
-                inner_a[num_constraints..].clone_from_slice(&promoted_public[..num_inputs]);
+                inner_a[num_constraints..num_constraints + num_inputs]
+                    .clone_from_slice(&promoted_public[..num_inputs]);
                 a = Some(inner_a);
             });
             s.spawn(|_| {
@@ -194,6 +195,8 @@ where
         rayon::scope(|s| {
             s.spawn(|_| {
                 let mul_vec_span = tracing::debug_span!("groth16 - mul vec in dist pows").entered();
+                // TODO this is a very large multiplication - do we want to do that on the runtime
+                // or maybe on rayon and only sending on the runtime?
                 match self.runtime.block_on(self.driver.mul_vec(&a, &b)) {
                     Ok(mut ab) => {
                         let ifft_span =

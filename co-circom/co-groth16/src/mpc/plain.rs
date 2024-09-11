@@ -1,6 +1,8 @@
 use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
+use ark_ff::UniformRand;
 use itertools::izip;
+use rand::thread_rng;
 
 use super::CircomGroth16Prover;
 
@@ -16,7 +18,8 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     type PartyID = usize;
 
     fn rand(&mut self) -> Self::ArithmeticShare {
-        todo!()
+        let mut rng = thread_rng();
+        Self::ArithmeticShare::rand(&mut rng)
     }
 
     fn get_party_id(&self) -> Self::PartyID {
