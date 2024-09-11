@@ -61,7 +61,7 @@ pub trait ShamirNetwork {
     ) -> std::io::Result<Vec<F>>;
 
     /// Fork the network into two separate instances with their own connections
-    async fn fork(self) -> std::io::Result<(Self, Self)>
+    async fn fork(&mut self) -> std::io::Result<Self>
     where
         Self: Sized;
 
@@ -239,21 +239,18 @@ impl ShamirNetwork for ShamirMpcNet {
         Ok(res)
     }
 
-    async fn fork(self) -> std::io::Result<(Self, Self)> {
+    async fn fork(&mut self) -> std::io::Result<Self> {
         let id = self.id;
         let num_parties = self.num_parties;
         let net_handler = Arc::clone(&self.net_handler);
         let channels = net_handler.get_byte_channels().await?;
 
-        Ok((
-            self,
-            Self {
-                id,
-                num_parties,
-                net_handler,
-                channels,
-            },
-        ))
+        Ok(Self {
+            id,
+            num_parties,
+            net_handler,
+            channels,
+        })
     }
 
     async fn shutdown(self) -> std::io::Result<()> {

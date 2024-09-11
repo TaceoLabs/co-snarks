@@ -86,23 +86,12 @@ impl<N: Rep3Network> IoContext<N> {
         self.rngs.rand.random_fes()
     }
 
-    pub async fn fork(self) -> IoResult<(Self, Self)> {
-        let (net0, net1) = self.network.fork().await?;
-        let (rngs0, rngs1) = self.rngs.fork();
+    pub async fn fork(&mut self) -> IoResult<Self> {
+        let network = self.network.fork().await?;
+        let rngs = self.rngs.fork();
         let id = self.id;
 
-        Ok((
-            Self {
-                id,
-                rngs: rngs0,
-                network: net0,
-            },
-            Self {
-                id,
-                rngs: rngs1,
-                network: net1,
-            },
-        ))
+        Ok(Self { id, rngs, network })
     }
 }
 
@@ -196,7 +185,7 @@ pub trait Rep3Network: Send {
     }
 
     /// Fork the network into two separate instances with their own connections
-    async fn fork(self) -> std::io::Result<(Self, Self)>
+    async fn fork(&mut self) -> std::io::Result<Self>
     where
         Self: Sized;
 
@@ -388,20 +377,17 @@ impl Rep3Network for Rep3MpcNet {
         Ok(res)
     }
 
-    async fn fork(self) -> std::io::Result<(Self, Self)> {
+    async fn fork(&mut self) -> std::io::Result<Self> {
         let id = self.id;
         let net_handler = Arc::clone(&self.net_handler);
         let mut channels = net_handler.get_byte_channels().await?;
 
-        Ok((
-            self,
-            Self {
-                id,
-                net_handler,
-                chan_next: channels.remove(&id.next_id().into()).unwrap(),
-                chan_prev: channels.remove(&id.prev_id().into()).unwrap(),
-            },
-        ))
+        Ok(Self {
+            id,
+            net_handler,
+            chan_next: channels.remove(&id.next_id().into()).unwrap(),
+            chan_prev: channels.remove(&id.prev_id().into()).unwrap(),
+        })
     }
 
     async fn shutdown(self) -> std::io::Result<()> {

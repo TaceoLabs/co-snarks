@@ -259,7 +259,7 @@ impl ShamirNetwork for PartyTestNetwork {
         Ok(res)
     }
 
-    async fn fork(mut self) -> std::io::Result<(Self, Self)>
+    async fn fork(&mut self) -> std::io::Result<Self>
     where
         Self: Sized,
     {
@@ -279,15 +279,12 @@ impl ShamirNetwork for PartyTestNetwork {
         let id = self.id;
         let num_parties = self.num_parties;
 
-        Ok((
-            self,
-            Self {
-                id,
-                num_parties,
-                send,
-                recv,
-            },
-        ))
+        Ok(Self {
+            id,
+            num_parties,
+            send,
+            recv,
+        })
     }
 
     async fn shutdown(self) -> std::io::Result<()> {

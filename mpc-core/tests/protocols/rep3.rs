@@ -182,7 +182,7 @@ impl Rep3Network for PartyTestNetwork {
         }
     }
 
-    async fn fork(self) -> std::io::Result<(Self, Self)>
+    async fn fork(&mut self) -> std::io::Result<Self>
     where
         Self: Sized,
     {
@@ -197,16 +197,14 @@ impl Rep3Network for PartyTestNetwork {
 
         let id = self.id;
 
-        let other = Self {
+        Ok(Self {
             id,
             send_prev: ch_prev.0,
             send_next: ch_next.0,
             recv_prev,
             recv_next,
             _stats: [0; 4],
-        };
-
-        Ok((self, other))
+        })
     }
 
     async fn shutdown(self) -> std::io::Result<()> {
@@ -222,9 +220,7 @@ mod field_share {
     use mpc_core::protocols::rep3new::conversion;
     use mpc_core::protocols::rep3new::{self, arithmetic, network::IoContext};
     use rand::thread_rng;
-    use rep3new::arithmetic;
     use std::thread;
-    use std::{collections::HashSet, thread};
     use tokio::sync::oneshot;
 
     #[tokio::test]
@@ -324,8 +320,8 @@ mod field_share {
             x_shares1.into_iter().zip(y_shares1)
         ) {
             tokio::spawn(async move {
-                let ctx = IoContext::init(net).await.unwrap();
-                let (ctx0, ctx1) = ctx.fork().await.unwrap();
+                let mut ctx0 = IoContext::init(net).await.unwrap();
+                let mut ctx1 = ctx0.fork().await.unwrap();
                 let (res0, res1) = tokio::join!(
                     arithmetic::mul(x0, y0, &mut ctx0),
                     arithmetic::mul(x1, y1, &mut ctx1)
