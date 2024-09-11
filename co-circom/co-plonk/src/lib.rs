@@ -195,7 +195,7 @@ impl<P: Pairing> Rep3CoPlonk<P> {
         let driver = Rep3PlonkDriver::new(io_context);
         Ok(CoPlonk {
             driver,
-            //runtime,
+            runtime,
             phantom_data: PhantomData,
         })
     }
@@ -219,7 +219,6 @@ pub mod tests {
         let witness_file = "../../test_vectors/Plonk/bn254/multiplier2/witness.wtns";
         let zkey = ZKey::<Bn254>::from_reader(File::open(zkey_file)?)?;
         let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
-        let driver = PlainPlonkDriver;
 
         let witness = SharedWitness {
             public_inputs: witness.values[..=zkey.n_public].to_vec(),
@@ -236,8 +235,7 @@ pub mod tests {
         )
         .unwrap();
 
-        let plonk = Plonk::<Bn254>::new(driver);
-        let proof = plonk.prove(&zkey, witness).unwrap();
+        let proof = Plonk::<Bn254>::plain_prove(&zkey, witness).unwrap();
         let result = Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
         assert!(result);
         Ok(())
@@ -245,7 +243,6 @@ pub mod tests {
 
     #[test]
     pub fn test_poseidon_bn254() {
-        let driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/poseidon/circuit.zkey").unwrap(),
         );
@@ -269,8 +266,7 @@ pub mod tests {
         )
         .unwrap();
 
-        let plonk = Plonk::<Bn254>::new(driver);
-        let proof = plonk.prove(&zkey, witness).unwrap();
+        let proof = Plonk::<Bn254>::plain_prove(&zkey, witness).unwrap();
 
         let mut proof_bytes = vec![];
         serde_json::to_writer(&mut proof_bytes, &proof).unwrap();
