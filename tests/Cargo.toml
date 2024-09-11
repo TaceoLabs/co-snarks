@@ -22,6 +22,7 @@ co-circom-snarks = { workspace = true }
 co-groth16 = { workspace = true, features = ["verifier"] }
 co-plonk = { workspace = true }
 criterion = { workspace = true }
+eyre = { workspace = true }
 futures.workspace = true
 itertools = { workspace = true }
 mpc-core = { workspace = true }

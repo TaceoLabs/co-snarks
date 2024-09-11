@@ -6,6 +6,9 @@ pub(crate) mod plain;
 pub(crate) mod rep3;
 pub(crate) mod shamir;
 
+pub use plain::PlainPlonkDriver;
+pub use rep3::Rep3PlonkDriver;
+
 type IoResult<T> = std::io::Result<T>;
 
 pub trait CircomPlonkProver<P: Pairing> {

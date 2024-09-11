@@ -1,7 +1,7 @@
 //! A library for creating and verifying Groth16 proofs in a collaborative fashion using MPC.
 #![warn(missing_docs)]
 mod groth16;
-mod mpc;
+pub mod mpc;
 #[cfg(feature = "verifier")]
 mod verifier;
 
@@ -21,7 +21,7 @@ mod tests {
     use co_circom_snarks::SharedWitness;
     use std::fs::{self, File};
 
-    use crate::{groth16::Groth16, mpc::plain::PlainGroth16Driver};
+    use crate::groth16::Groth16;
 
     #[test]
     fn create_proof_and_verify_bn254() {
@@ -33,7 +33,6 @@ mod tests {
             File::open("../../test_vectors/Groth16/bn254/multiplier2/verification_key.json")
                 .unwrap();
 
-        let driver = PlainGroth16Driver;
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
         let zkey = ZKey::<Bn254>::from_reader(zkey_file).unwrap();
         let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
@@ -42,10 +41,7 @@ mod tests {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
-        let mut groth16 = Groth16::<Bn254>::new(driver);
-        let proof = groth16
-            .prove(&zkey, witness)
-            .expect("proof generation works");
+        let proof = Groth16::<Bn254>::plain_prove(&zkey, witness).expect("proof generation works");
         let ser_proof = serde_json::to_string(&proof).unwrap();
         let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
         let verified = Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
@@ -78,7 +74,6 @@ mod tests {
             File::open("../../test_vectors/Groth16/bn254/poseidon/circuit.zkey").unwrap();
         let witness_file =
             File::open("../../test_vectors/Groth16/bn254/poseidon/witness.wtns").unwrap();
-        let driver = PlainGroth16Driver;
         let vk_file =
             File::open("../../test_vectors/Groth16/bn254/poseidon/verification_key.json").unwrap();
 
@@ -90,10 +85,7 @@ mod tests {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
-        let mut groth16 = Groth16::<Bn254>::new(driver);
-        let proof = groth16
-            .prove(&zkey, witness)
-            .expect("proof generation works");
+        let proof = Groth16::<Bn254>::plain_prove(&zkey, witness).expect("proof generation works");
         let ser_proof = serde_json::to_string(&proof).unwrap();
         let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
         let verified = Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
@@ -157,11 +149,8 @@ mod tests {
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
-        let driver = PlainGroth16Driver;
-        let mut groth16 = Groth16::<Bls12_381>::new(driver);
-        let proof = groth16
-            .prove(&zkey, witness)
-            .expect("proof generation works");
+        let proof =
+            Groth16::<Bls12_381>::plain_prove(&zkey, witness).expect("proof generation works");
         let verified =
             Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
         assert!(verified);
@@ -190,11 +179,7 @@ mod tests {
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
-        let driver = PlainGroth16Driver;
-        let mut groth16 = Groth16::<Bn254>::new(driver);
-        let proof = groth16
-            .prove(&zkey, witness)
-            .expect("proof generation works");
+        let proof = Groth16::<Bn254>::plain_prove(&zkey, witness).expect("proof generation works");
         let verified =
             Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
         assert!(verified);

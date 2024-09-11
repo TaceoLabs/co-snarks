@@ -6,6 +6,9 @@ pub(crate) mod plain;
 pub(crate) mod rep3;
 pub(crate) mod shamir;
 
+pub use plain::PlainGroth16Driver;
+pub use rep3::Rep3Groth16Driver;
+
 type IoResult<T> = std::io::Result<T>;
 
 pub trait CircomGroth16Prover<P: Pairing>: Send {

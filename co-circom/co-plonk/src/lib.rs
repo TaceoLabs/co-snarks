@@ -18,7 +18,7 @@ use std::marker::PhantomData;
 use tokio::runtime;
 use tokio::runtime::Runtime;
 
-mod mpc;
+pub mod mpc;
 mod plonk;
 mod round1;
 mod round2;

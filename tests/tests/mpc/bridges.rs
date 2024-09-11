@@ -28,8 +28,7 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let rep3 = futures::executor::block_on(IoContext::init(net)).unwrap();
-                let mut shamir = ShamirProtocol::try_from(rep3).unwrap();
+                let mut shamir = ShamirProtocol::try_from(net).unwrap();
                 let share = futures::executor::block_on(shamir.translate_primefield_repshare(x));
                 tx.send(share.unwrap())
             });
@@ -63,8 +62,7 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let rep3 = futures::executor::block_on(IoContext::init(net)).unwrap();
-                let mut shamir = ShamirProtocol::try_from(rep3).unwrap();
+                let mut shamir = ShamirProtocol::try_from(net).unwrap();
                 let share =
                     futures::executor::block_on(shamir.translate_primefield_repshare_vec(x));
                 tx.send(share.unwrap())

@@ -83,12 +83,10 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Creates a new [CoGroth16] protocol with a given MPC driver.
-    pub fn new(driver: T) -> Self {
+    pub fn new(driver: T, runtime: Runtime) -> Self {
         Self {
             driver,
-            runtime: runtime::Builder::new_current_thread()
-                .build()
-                .expect("todo"),
+            runtime,
             phantom_data: PhantomData,
         }
     }

@@ -1,9 +1,11 @@
 use super::shamir_network::PartyTestNetwork as ShamirPartyTestNetwork;
+use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
     rep3::{id::PartyID, network::Rep3Network},
+    shamir::ShamirProtocol,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -234,5 +236,18 @@ impl RepToShamirNetwork<ShamirPartyTestNetwork> for PartyTestNetwork {
             send,
             recv,
         }
+    }
+}
+
+impl<F> TryFrom<PartyTestNetwork> for ShamirProtocol<F, ShamirPartyTestNetwork>
+where
+    F: PrimeField,
+{
+    type Error = eyre::Report;
+
+    fn try_from(value: PartyTestNetwork) -> Result<Self, Self::Error> {
+        let threshold = 1;
+        let network = value.to_shamir_net();
+        Ok(ShamirProtocol::new(threshold, network)?)
     }
 }

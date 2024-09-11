@@ -7,14 +7,20 @@ use circom_types::{
     plonk::{JsonVerificationKey as PlonkVK, ZKey as PlonkZK},
     R1CS,
 };
+use mpc_core::protocols::rep3::network::IoContext;
+
 use co_circom_snarks::SharedWitness;
-use co_groth16::{CoGroth16, Groth16};
+use co_groth16::mpc::Rep3Groth16Driver;
+use co_groth16::CoGroth16;
+use co_groth16::Groth16;
+use co_plonk::mpc::Rep3PlonkDriver;
 use co_plonk::CoPlonk;
 use co_plonk::Plonk;
 use itertools::izip;
 use rand::thread_rng;
 use std::{fs::File, thread};
 use tests::rep3_network::{PartyTestNetwork, Rep3TestNetwork};
+use tokio::runtime;
 
 macro_rules! e2e_test {
     ($name: expr) => {
@@ -56,10 +62,13 @@ macro_rules! add_test_impl {
                     threads.push(thread::spawn(move || {
                         let runtime = runtime::Builder::new_current_thread().build().unwrap();
                         let io_context = runtime.block_on(IoContext::init(net)).unwrap();
+
                         let rep3 = [< Rep3 $proof_system Driver>]::new(io_context);
+                        #[allow(unused_mut)]
                         let mut prover = [< Co $proof_system>]::<
-                            $curve, [< Rep3 $proof_system Driver>]>,
+                            $curve, [< Rep3 $proof_system Driver>]<PartyTestNetwork>
                         >::new(rep3, runtime);
+                        prover.prove(&zkey, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();
