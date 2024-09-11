@@ -135,7 +135,25 @@ pub trait Rep3Network: Send {
     async fn broadcast<F: CanonicalSerialize + CanonicalDeserialize>(
         &mut self,
         data: F,
-    ) -> std::io::Result<(F, F)>;
+    ) -> std::io::Result<(F, F)> {
+        let (mut prev, mut next) = self.broadcast_many(&[data]).await?;
+        if prev.len() != 1 || next.len() != 1 {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Expected 1 element, got more",
+            ))
+        } else {
+            //we checked that there is really one element
+            let prev = prev.pop().unwrap();
+            let next = next.pop().unwrap();
+            Ok((prev, next))
+        }
+    }
+
+    async fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: &[F],
+    ) -> std::io::Result<(Vec<F>, Vec<F>)>;
 
     /// Sends data to the target party. This function has a default implementation for calling [Rep3Network::send_many].
     async fn send<F: CanonicalSerialize>(
@@ -322,43 +340,21 @@ impl Rep3Network for Rep3MpcNet {
         recv
     }
 
-    async fn broadcast<F: CanonicalSerialize + CanonicalDeserialize>(
+    async fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
         &mut self,
-        data: F,
-    ) -> std::io::Result<(F, F)> {
-        let data = [data];
+        data: &[F],
+    ) -> std::io::Result<(Vec<F>, Vec<F>)> {
         let (send_next, recv_next) = self.chan_next.inner_ref();
         let (send_prev, recv_prev) = self.chan_prev.inner_ref();
         let (a, b, c, d) = tokio::join!(
-            Self::send_raw(&data, send_next),
-            Self::send_raw(&data, send_prev),
+            Self::send_raw(data, send_next),
+            Self::send_raw(data, send_prev),
             Self::recv_raw::<F>(recv_prev),
             Self::recv_raw::<F>(recv_next),
         );
         a?;
         b?;
-        let mut c = c?;
-        let mut d = d?;
-        let c = if c.len() != 1 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Expected 1 element, got more",
-            ));
-        } else {
-            // checked that there is one element
-            c.pop().unwrap()
-        };
-
-        let d = if d.len() != 1 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Expected 1 element, got more",
-            ));
-        } else {
-            // checked that there is one element
-            d.pop().unwrap()
-        };
-        Ok((c, d))
+        Ok((c?, d?))
     }
 
     async fn send_many<F: CanonicalSerialize>(

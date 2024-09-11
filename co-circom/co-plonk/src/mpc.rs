@@ -12,40 +12,38 @@ pub use rep3::Rep3PlonkDriver;
 type IoResult<T> = std::io::Result<T>;
 
 pub trait CircomPlonkProver<P: Pairing> {
-    type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
-    type PointShare<C: CurveGroup>;
+    type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Copy + Clone + Default + Send;
+    type PointShareG1: Send;
+    type PointShareG2: Send;
 
-    fn rand(&self) -> Self::ArithmeticShare;
+    type PartyID: Send + Sync + Copy;
+
+    fn rand(&mut self) -> Self::ArithmeticShare;
+
+    fn get_party_id(&self) -> Self::PartyID {
+        self.io_context.id
+    }
 
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
-    fn add(
-        &mut self,
-        a: &Self::ArithmeticShare,
-        b: &Self::ArithmeticShare,
-    ) -> Self::ArithmeticShare;
+    fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
     /// Add a public value a to the share b: \[c\] = a + \[b\]
     fn add_with_public(
-        &mut self,
-        a: &P::ScalarField,
-        b: &Self::ArithmeticShare,
+        party_id: Self::PartyID,
+        shared: Self::ArithmeticShare,
+        public: P::ScalarField,
     ) -> Self::ArithmeticShare;
 
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
-    fn sub(
-        &mut self,
-        a: &Self::ArithmeticShare,
-        b: &Self::ArithmeticShare,
-    ) -> Self::ArithmeticShare;
+    fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
     /// Negates a vector of shared values: \[b\] = -\[a\] for every element in place.
     fn neg_vec_in_place(&mut self, a: &mut [Self::ArithmeticShare]);
 
     /// Multiply a share b by a public value a: c = a * \[b\].
     fn mul_with_public(
-        &mut self,
-        a: &P::ScalarField,
-        b: &Self::ArithmeticShare,
+        shared: Self::ArithmeticShare,
+        public: P::ScalarField,
     ) -> Self::ArithmeticShare;
 
     async fn mul_vec(
@@ -74,63 +72,50 @@ pub trait CircomPlonkProver<P: Pairing> {
     }
 
     /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
-    fn mul_open_many(
+    async fn mul_open_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<P::ScalarField>>;
 
     /// Reconstructs many shared values: a = Open(\[a\]).
-    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>>;
+    async fn open_vec(&mut self, a: Vec<Self::ArithmeticShare>) -> IoResult<Vec<P::ScalarField>>;
 
     /// Computes the inverse of many shared values: \[b\] = \[a\] ^ -1. Requires network communication.
-    async fn inv_many(
+    async fn inv_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Transforms a public value into a shared value: \[a\] = a.
-    fn promote_to_trivial_share(&self, public_values: P::ScalarField) -> Self::ArithmeticShare;
+    fn promote_to_trivial_share(
+        party_id: Self::PartyID,
+        public_value: P::ScalarField,
+    ) -> Self::ArithmeticShare;
 
     /// Computes the FFT of a vector of shared field elements.
     fn fft<D: EvaluationDomain<P::ScalarField>>(
-        &mut self,
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare>;
 
     /// Computes the inverse FFT of a vector of shared field elements.
     fn ifft<D: EvaluationDomain<P::ScalarField>>(
-        &mut self,
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare>;
 
     /// Reconstructs many shared points: A = Open(\[A\]).
-    fn open_point<C: CurveGroup>(&mut self, a: Self::PointShare<C>) -> IoResult<C> {
-        let mut result = self.open_point_many(&[a])?;
-        if result.len() != 1 {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "During execution of degree_reduce_vec in MPC: Invalid number of elements received",
-            ))
-        } else {
-            Ok(result.pop().expect("we checked for len above"))
-        }
-    }
-
-    /// Reconstructs many shared points: A = Open(\[A\]).
-    fn open_point_many<C: CurveGroup>(&mut self, a: &[Self::PointShare<C>]) -> IoResult<Vec<C>>;
+    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1>;
+    async fn open_point_vec_g1(&mut self, a: &[Self::PointShareG1]) -> IoResult<Vec<P::G1>>;
 
     // WE NEED THIS ALSO FOR GROTH16
-    fn msm_public_points<C: CurveGroup>(
-        &mut self,
-        points: &[C::Affine],
+    fn msm_public_points_g1(
+        points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShare<C>;
+    ) -> Self::PointShareG1;
 
     fn evaluate_poly_public(
-        &mut self,
         poly: &[Self::ArithmeticShare],
         point: P::ScalarField,
     ) -> Self::ArithmeticShare;

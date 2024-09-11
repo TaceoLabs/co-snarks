@@ -2,6 +2,7 @@ use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
 use co_circom_snarks::SharedWitness;
+use tokio::runtime::Runtime;
 
 use crate::{
     mpc::CircomPlonkProver,
@@ -17,6 +18,7 @@ pub(super) struct Round1<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<P, T>,
     pub(super) data: PlonkDataRound1<'a, P, T>,
+    pub(super) runtime: Runtime,
 }
 
 pub(super) struct PlonkDataRound1<'a, P: Pairing, T: CircomPlonkProver<P>> {
@@ -70,7 +72,8 @@ impl<P: Pairing> std::fmt::Display for Round1Proof<P> {
 impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
     pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::ArithmeticShare::default());
-        for x in b.iter_mut() {
+        #[allow(unused_mut)]
+        for mut x in b.iter_mut() {
             *x = driver.rand();
         }
         Ok(Self { b })
@@ -78,9 +81,10 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
 
     #[cfg(test)]
     pub(super) fn deterministic(driver: &mut T) -> Self {
+        let party_id = driver.get_party_id();
         Self {
             b: core::array::from_fn(|i| {
-                driver.promote_to_trivial_share(P::ScalarField::from(i as u64))
+                T::promote_to_trivial_share(party_id, P::ScalarField::from(i as u64))
             }),
         }
     }
@@ -96,6 +100,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         zkey: &ZKey<P>,
         witness: &PlonkWitness<P, T>,
     ) -> PlonkProofResult<Round1Polys<P, T>> {
+        let party_id = driver.get_party_id();
         tracing::debug!("computing wire polynomials...");
         let num_constraints = zkey.n_constraints;
 
@@ -105,19 +110,19 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
 
         for i in 0..num_constraints {
             buffer_a.push(plonk_utils::get_witness(
-                driver,
+                party_id,
                 witness,
                 zkey,
                 zkey.map_a[i],
             )?);
             buffer_b.push(plonk_utils::get_witness(
-                driver,
+                party_id,
                 witness,
                 zkey,
                 zkey.map_b[i],
             )?);
             buffer_c.push(plonk_utils::get_witness(
-                driver,
+                party_id,
                 witness,
                 zkey,
                 zkey.map_c[i],
@@ -130,20 +135,20 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         //TODO MULTITHREAD ME
         tracing::debug!("iffts for buffers..");
         // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
-        let poly_a = driver.ifft(&buffer_a, &domains.domain);
-        let poly_b = driver.ifft(&buffer_b, &domains.domain);
-        let poly_c = driver.ifft(&buffer_c, &domains.domain);
+        let poly_a = T::ifft(&buffer_a, &domains.domain);
+        let poly_b = T::ifft(&buffer_b, &domains.domain);
+        let poly_c = T::ifft(&buffer_c, &domains.domain);
 
         tracing::debug!("ffts for evals..");
         // Compute extended evaluations of a(X), b(X) and c(X) polynomials
-        let eval_a = driver.fft(&poly_a, &domains.extended_domain);
-        let eval_b = driver.fft(&poly_b, &domains.extended_domain);
-        let eval_c = driver.fft(&poly_c, &domains.extended_domain);
+        let eval_a = T::fft(&poly_a, &domains.extended_domain);
+        let eval_b = T::fft(&poly_b, &domains.extended_domain);
+        let eval_c = T::fft(&poly_c, &domains.extended_domain);
 
         tracing::debug!("blinding coefficients");
-        let poly_a = plonk_utils::blind_coefficients::<P, T>(driver, &poly_a, &challenges.b[..2]);
-        let poly_b = plonk_utils::blind_coefficients::<P, T>(driver, &poly_b, &challenges.b[2..4]);
-        let poly_c = plonk_utils::blind_coefficients::<P, T>(driver, &poly_c, &challenges.b[4..6]);
+        let poly_a = plonk_utils::blind_coefficients::<P, T>(&poly_a, &challenges.b[..2]);
+        let poly_b = plonk_utils::blind_coefficients::<P, T>(&poly_b, &challenges.b[2..4]);
+        let poly_c = plonk_utils::blind_coefficients::<P, T>(&poly_c, &challenges.b[4..6]);
 
         if poly_a.len() > zkey.domain_size + 2
             || poly_b.len() > zkey.domain_size + 2
@@ -178,25 +183,26 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         zkey: &ZKey<P>,
     ) -> PlonkProofResult<PlonkWitness<P, T>> {
         tracing::debug!("calculating addition {} constraints...", zkey.n_additions);
+        let party_id = driver.get_party_id();
         let mut witness = PlonkWitness::new(witness, zkey.n_additions);
 
         for addition in zkey.additions.iter() {
             let witness1 = plonk_utils::get_witness(
-                driver,
+                party_id,
                 &witness,
                 zkey,
                 addition.signal_id1.try_into().expect("u32 fits into usize"),
             )?;
             let witness2 = plonk_utils::get_witness(
-                driver,
+                party_id,
                 &witness,
                 zkey,
                 addition.signal_id2.try_into().expect("u32 fits into usize"),
             )?;
 
-            let f1 = driver.mul_with_public(&addition.factor1, &witness1);
-            let f2 = driver.mul_with_public(&addition.factor2, &witness2);
-            let result = driver.add(&f1, &f2);
+            let f1 = T::mul_with_public(witness1, addition.factor1);
+            let f2 = T::mul_with_public(witness2, addition.factor2);
+            let result = T::add(f1, f2);
             witness.addition_witness.push(result);
         }
         tracing::debug!("additions done!");
@@ -205,6 +211,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
 
     pub(super) fn init_round(
         mut driver: T,
+        runtime: Runtime,
         zkey: &'a ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
@@ -213,6 +220,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         Ok(Self {
             challenges: Round1Challenges::random(&mut driver)?,
             driver,
+            runtime,
             domains: Domains::new(zkey.domain_size)?,
             data: PlonkDataRound1 {
                 witness: plonk_witness,
@@ -225,6 +233,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
     pub(super) fn round1(self) -> PlonkProofResult<Round2<'a, P, T>> {
         let Self {
             mut driver,
+            runtime,
             domains,
             challenges,
             data,
@@ -239,11 +248,11 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
 
         tracing::debug!("committing to polys (MSMs)");
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let commit_a = driver.msm_public_points(&p_tau[..polys.a.poly.len()], &polys.a.poly);
-        let commit_b = driver.msm_public_points(&p_tau[..polys.b.poly.len()], &polys.b.poly);
-        let commit_c = driver.msm_public_points(&p_tau[..polys.c.poly.len()], &polys.c.poly);
+        let commit_a = T::msm_public_points_g1(&p_tau[..polys.a.poly.len()], &polys.a.poly);
+        let commit_b = T::msm_public_points_g1(&p_tau[..polys.b.poly.len()], &polys.b.poly);
+        let commit_c = T::msm_public_points_g1(&p_tau[..polys.c.poly.len()], &polys.c.poly);
 
-        let opened = driver.open_point_many(&[commit_a, commit_b, commit_c])?;
+        let opened = runtime.block_on(driver.open_point_vec_g1(&[commit_a, commit_b, commit_c]))?;
 
         let proof = Round1Proof::<P> {
             commit_a: opened[0],
@@ -253,6 +262,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         tracing::debug!("round1 result: {proof}");
         Ok(Round2 {
             driver,
+            runtime,
             domains,
             challenges,
             proof,
@@ -270,6 +280,7 @@ pub mod tests {
     use ark_bn254::Bn254;
     use circom_types::plonk::ZKey;
     use co_circom_snarks::SharedWitness;
+    use tokio::runtime;
 
     use crate::mpc::plain::PlainPlonkDriver;
 
@@ -310,8 +321,9 @@ pub mod tests {
             public_inputs: witness.values[..=zkey.n_public].to_vec(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
+        let runtime = runtime::Builder::new_current_thread().build().unwrap();
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         assert_eq!(
@@ -354,8 +366,9 @@ pub mod tests {
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
+        let runtime = runtime::Builder::new_current_thread().build().unwrap();
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         assert_eq!(

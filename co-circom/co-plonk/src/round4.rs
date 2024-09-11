@@ -6,10 +6,12 @@ use crate::{
     PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
+use tokio::runtime::Runtime;
 
 // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
 pub(super) struct Round4<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) driver: T,
+    pub(super) runtime: Runtime,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round3Challenges<P, T>,
     pub(super) proof: Round3Proof<P>,

@@ -15,10 +15,12 @@ use circom_types::{
 };
 use num_traits::One;
 use num_traits::Zero;
+use tokio::runtime::Runtime;
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
 pub(super) struct Round5<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) driver: T,
+    pub(super) runtime: Runtime,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round4Challenges<P>,
     pub(super) proof: Round4Proof<P>,

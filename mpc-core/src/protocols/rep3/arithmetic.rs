@@ -1,7 +1,7 @@
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
 use num_bigint::BigUint;
-use num_traits::Zero;
+use num_traits::{PrimInt, Zero};
 use types::Rep3PrimeFieldShare;
 
 use crate::protocols::rep3::{detail, id::PartyID, network::Rep3Network};
@@ -39,6 +39,12 @@ pub fn add_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F, i
         PartyID::ID0 => shared.a += public,
         PartyID::ID1 => shared.b += public,
         PartyID::ID2 => {}
+    }
+}
+
+pub fn add_vec_assign<F: PrimeField>(lhs: &mut [FieldShare<F>], rhs: &[FieldShare<F>]) {
+    for (a, b) in izip!(lhs.iter_mut(), rhs.iter()) {
+        *a += b;
     }
 }
 
@@ -174,6 +180,25 @@ pub async fn inv<F: PrimeField, N: Rep3Network>(
     Ok(r * y_inv)
 }
 
+pub async fn inv_vec<F: PrimeField, N: Rep3Network>(
+    a: &[FieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<FieldShare<F>>> {
+    let r = (0..a.len())
+        .map(|_| FieldShare::rand(io_context))
+        .collect_vec();
+    let y = mul_open_vec(a, &r, io_context).await?;
+    if y.iter().any(|y| y.is_zero()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "During execution of inverse in MPC: cannot compute inverse of zero",
+        ));
+    }
+
+    // we can unwrap as we checked that none of the y is zero
+    Ok(izip!(r, y).map(|(r, y)| r * y.inverse().unwrap()).collect())
+}
+
 /// Performs the opening of a shared value and returns the equivalent public value.
 pub async fn open<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
@@ -181,6 +206,22 @@ pub async fn open<F: PrimeField, N: Rep3Network>(
 ) -> IoResult<F> {
     let c = io_context.network.reshare(a.b).await?;
     Ok(a.a + a.b + c)
+}
+
+/// Performs the opening of a shared value and returns the equivalent public value.
+pub async fn open_vec<F: PrimeField, N: Rep3Network>(
+    a: Vec<FieldShare<F>>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<F>> {
+    // TODO think about something better... it is not so bad
+    // because we use it exactly once in PLONK where we do it for 4
+    // shares..
+    let (a, b) = a
+        .into_iter()
+        .map(|share| (share.a, share.b))
+        .collect::<(Vec<F>, Vec<F>)>();
+    let c = io_context.network.reshare_many(&b).await?;
+    Ok(izip!(a, b, c).map(|(a, b, c)| a + b + c).collect_vec())
 }
 
 /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
@@ -230,6 +271,19 @@ pub async fn mul_open<F: PrimeField, N: Rep3Network>(
     let a = a * b + io_context.rngs.rand.masking_field_element::<F>();
     let (b, c) = io_context.network.broadcast(a).await?;
     Ok(a + b + c)
+}
+
+pub async fn mul_open_vec<F: PrimeField, N: Rep3Network>(
+    a: &[FieldShare<F>],
+    b: &[FieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<F>> {
+    let mut a = izip!(a, b)
+        .map(|(a, b)| a * b + io_context.rngs.rand.masking_field_element::<F>())
+        .collect_vec();
+    let (b, c) = io_context.network.broadcast_many(&a).await?;
+    izip!(a.iter_mut(), b, c).for_each(|(a, b, c)| *a += b + c);
+    Ok(a)
 }
 
 async fn rand<F: PrimeField, N: Rep3Network>(io_context: &mut IoContext<N>) -> FieldShare<F> {

@@ -4,7 +4,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use crate::protocols::rep3::{
     id::PartyID,
     network::{IoContext, Rep3Network},
-    rngs::Rep3CorrelatedRng,
 };
 
 /// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.

@@ -12,6 +12,7 @@ use circom_types::plonk::ZKey;
 use itertools::izip;
 use num_traits::One;
 use num_traits::Zero;
+use tokio::runtime::Runtime;
 
 // TODO parallelize these? With a different network structure this might not be needed though
 macro_rules! mul4vec {
@@ -72,6 +73,7 @@ macro_rules! mul4vec_post {
 // Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
 pub(super) struct Round3<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) driver: T,
+    pub(super) runtime: Runtime,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round2Challenges<P, T>,
     pub(super) proof: Round2Proof<P>,

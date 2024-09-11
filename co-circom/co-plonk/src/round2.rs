@@ -10,6 +10,7 @@ use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
 use num_traits::One;
+use tokio::runtime::Runtime;
 
 // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
 // TODO parallelize these? With a different network structure this might not be needed though
@@ -39,6 +40,7 @@ macro_rules! array_prod_mul {
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
 pub(super) struct Round2<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) driver: T,
+    pub(super) runtime: Runtime,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<P, T>,
     pub(super) proof: Round1Proof<P>,
@@ -129,6 +131,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         let mut d1 = Vec::with_capacity(zkey.domain_size);
         let mut d2 = Vec::with_capacity(zkey.domain_size);
         let mut d3 = Vec::with_capacity(zkey.domain_size);
+        let party_id = driver.get_party_id();
         for i in 0..zkey.domain_size {
             let a = &polys.buffer_a[i];
             let b = &polys.buffer_b[i];
@@ -138,16 +141,16 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
             // numArr := (a + beta·ω + gamma)(b + beta·ω·k1 + gamma)(c + beta·ω·k2 + gamma)
             let betaw = challenges.beta * w;
 
-            let n1_ = driver.add_with_public(&betaw, a);
-            let n1_ = driver.add_with_public(&challenges.gamma, &n1_);
+            let n1_ = T::add_with_public(party_id, *a, betaw);
+            let n1_ = T::add_with_public(party_id, n1_, challenges.gamma);
 
             let tmp = zkey.verifying_key.k1 * betaw;
-            let n2_ = driver.add_with_public(&tmp, b);
-            let n2_ = driver.add_with_public(&challenges.gamma, &n2_);
+            let n2_ = T::add_with_public(party_id, *b, tmp);
+            let n2_ = T::add_with_public(party_id, n2_, challenges.gamma);
 
             let tmp = zkey.verifying_key.k2 * betaw;
-            let n3_ = driver.add_with_public(&tmp, c);
-            let n3_ = driver.add_with_public(&challenges.gamma, &n3_);
+            let n3_ = T::add_with_public(party_id, *c, tmp);
+            let n3_ = T::add_with_public(party_id, n3_, challenges.gamma);
 
             n1.push(n1_);
             n2.push(n2_);
@@ -186,7 +189,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
 
         // Compute the inverse of denArr to compute in the next command the
         // division numArr/denArr by multiplying num · 1/denArr
-        let den = futures::executor::block_on(driver.inv_many(&den))?;
+        let den = futures::executor::block_on(driver.inv_vec(&den))?;
         let mut buffer_z = futures::executor::block_on(driver.mul_vec(&num, &den))?;
 
         buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
@@ -214,6 +217,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
     pub(super) fn round2(self) -> PlonkProofResult<Round3<'a, P, T>> {
         let Self {
             mut driver,
+            runtime,
             data,
             proof,
             challenges,
@@ -250,12 +254,14 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         // STEP 2.3 - Compute permutation [z]_1
 
         tracing::debug!("committing to poly z (MSMs)");
-        let commit_z = driver.msm_public_points(&zkey.p_tau[..z.poly.len()], &z.poly);
-        let proof = Round2Proof::new(proof, driver.open_point(commit_z)?);
+        let commit_z = T::msm_public_points_g1(&zkey.p_tau[..z.poly.len()], &z.poly);
+        let commit_z = runtime.block_on(driver.open_point_g1(commit_z))?;
+        let proof = Round2Proof::new(proof, commit_z);
         tracing::debug!("round2 result: {proof}");
 
         Ok(Round3 {
             driver,
+            runtime,
             domains,
             challenges,
             proof,

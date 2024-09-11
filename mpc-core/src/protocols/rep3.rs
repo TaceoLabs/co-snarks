@@ -6,6 +6,7 @@ pub mod id;
 pub mod lut;
 pub mod network;
 pub mod pointshare;
+pub mod poly;
 pub mod rngs;
 
 use ark_ec::CurveGroup;

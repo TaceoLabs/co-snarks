@@ -80,7 +80,7 @@ where
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<PlonkProof<P>> {
         tracing::debug!("starting PLONK prove..");
-        let state = Round1::init_round(self.driver, zkey, witness)?;
+        let state = Round1::init_round(self.driver, self.runtime, zkey, witness)?;
         tracing::debug!("init round done..");
         let state = state.round1()?;
         tracing::debug!("round 1 done..");
@@ -108,7 +108,7 @@ mod plonk_utils {
     use num_traits::Zero;
 
     pub(crate) fn get_witness<P: Pairing, T: CircomPlonkProver<P>>(
-        driver: &mut T,
+        party_id: T::PartyID,
         witness: &PlonkWitness<P, T>,
         zkey: &ZKey<P>,
         index: usize,
@@ -116,7 +116,7 @@ mod plonk_utils {
         tracing::trace!("get witness on {index}");
         let result = if index <= zkey.n_public {
             tracing::trace!("indexing public input!");
-            driver.promote_to_trivial_share(witness.public_inputs[index])
+            T::promote_to_trivial_share(party_id, witness.public_inputs[index])
         } else if index < zkey.n_vars - zkey.n_additions {
             tracing::trace!("indexing private input!");
             witness.witness[index - zkey.n_public - 1].clone()
@@ -132,13 +132,13 @@ mod plonk_utils {
 
     // For convenience coeff is given in reverse order
     pub(crate) fn blind_coefficients<P: Pairing, T: CircomPlonkProver<P>>(
-        driver: &mut T,
         poly: &[T::ArithmeticShare],
         coeff_rev: &[T::ArithmeticShare],
     ) -> Vec<T::ArithmeticShare> {
         let mut res = poly.to_vec();
-        for (p, c) in res.iter_mut().zip(coeff_rev.iter().rev()) {
-            *p = driver.sub(p, c);
+        #[allow(unused_mut)]
+        for (mut p, c) in res.iter_mut().zip(coeff_rev.iter().rev()) {
+            *p = T::sub(*p, *c);
         }
         // Extend
         res.reserve(coeff_rev.len());
@@ -210,7 +210,6 @@ pub mod tests {
     use co_circom_snarks::SharedWitness;
     use std::{fs::File, io::BufReader};
 
-    use crate::mpc::plain::PlainPlonkDriver;
     use crate::plonk::Plonk;
 
     #[test]

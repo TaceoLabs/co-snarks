@@ -137,10 +137,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         rep3::pointshare::msm_public_points(points, scalars)
     }
 
-    fn scalar_mul_public_point_g1(
-        a: &<P as Pairing>::G1,
-        b: Self::ArithmeticShare,
-    ) -> Self::PointShareG1 {
+    fn scalar_mul_public_point_g1(a: &P::G1, b: Self::ArithmeticShare) -> Self::PointShareG1 {
         rep3::pointshare::scalar_mul_public_point(a, b)
     }
 
@@ -153,9 +150,8 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         rep3::pointshare::add_assign_public(a, b, id)
     }
 
-    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<<P as Pairing>::G1> {
-        let c = self.io_context.network.reshare(a.b).await?;
-        Ok(a.a + a.b + c)
+    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1> {
+        rep3::pointshare::open_point(a, &mut self.io_context).await
     }
 
     async fn scalar_mul_g1(
