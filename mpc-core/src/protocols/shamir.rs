@@ -172,7 +172,7 @@ pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
     pub(crate) open_lagrange_2t: Vec<F>,
     mul_lagrange_2t: Vec<F>,
     rng_buffer: ShamirRng<F>,
-    network: N,
+    pub network: N,
     field: PhantomData<F>,
 }
 
@@ -223,7 +223,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             .await
     }
 
-    pub(crate) async fn rand(&mut self) -> IoResult<ShamirPrimeFieldShare<F>> {
+    pub async fn rand(&mut self) -> IoResult<ShamirPrimeFieldShare<F>> {
         let (r, _) = self.rng_buffer.get_pair(&mut self.network).await?;
         Ok(ShamirPrimeFieldShare::new(r))
     }

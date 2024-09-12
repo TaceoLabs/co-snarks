@@ -200,7 +200,7 @@ mod field_share {
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             tokio::spawn(async move {
                 let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
-                let mul = arithmetic::mul_many(&x, &y, &mut shamir).await.unwrap();
+                let mul = arithmetic::mul_vec(&x, &y, &mut shamir).await.unwrap();
                 tx.send(mul)
             });
         }
@@ -252,8 +252,8 @@ mod field_share {
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             tokio::spawn(async move {
                 let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
-                let mul = arithmetic::mul_many(&x, &y, &mut shamir).await.unwrap();
-                let mul = arithmetic::mul_many(&mul, &y, &mut shamir).await.unwrap();
+                let mul = arithmetic::mul_vec(&x, &y, &mut shamir).await.unwrap();
+                let mul = arithmetic::mul_vec(&mul, &y, &mut shamir).await.unwrap();
                 tx.send(mul)
             });
         }

@@ -2,38 +2,48 @@ mod ops;
 pub(super) mod types;
 
 use ark_ec::CurveGroup;
+use ark_ff::PrimeField;
+use rayon::prelude::*;
 
 use super::{
-    core, network::ShamirNetwork, IoResult, ShamirPrimeFieldShare, ShamirProtocol, ShamirShare,
+    core, network::ShamirNetwork, IoResult, ShamirPointShare, ShamirPrimeFieldShare,
+    ShamirProtocol, ShamirShare,
 };
 
-pub use types::ShamirPointShare;
-type PointShare<C> = types::ShamirPointShare<C>;
+type FieldShare<C> = ShamirPrimeFieldShare<C>;
+type PointShare<C> = ShamirPointShare<C>;
 
+/// Performs addition between two shares.
 pub fn add<C: CurveGroup>(a: &PointShare<C>, b: &PointShare<C>) -> PointShare<C> {
     a + b
 }
 
+/// Performs subtraction between two shares.
 pub fn sub<C: CurveGroup>(a: &PointShare<C>, b: &PointShare<C>) -> PointShare<C> {
     a - b
 }
 
+/// Performs addition between two shares and stores the result in `a`.
 pub fn add_assign<C: CurveGroup>(a: &mut PointShare<C>, b: &PointShare<C>) {
     *a += b;
 }
 
+/// Performs subtraction between two shares and stores the result in `a`.
 pub fn sub_assign<C: CurveGroup>(a: &mut PointShare<C>, b: &PointShare<C>) {
     *a -= b;
 }
 
+/// Performs addition between a share and a public value and stores the result in `a`.
 pub fn add_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C) {
     a.a += b
 }
 
+/// Performs subtraction between a share and a public value and stores the result in `a`.
 pub fn sub_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C) {
     a.a -= b
 }
 
+/// Performs addition between a share and a public affine value and stores the result in `a`.
 pub fn add_assign_public_affine<C: CurveGroup>(
     a: &mut PointShare<C>,
     b: &<C as CurveGroup>::Affine,
@@ -41,6 +51,7 @@ pub fn add_assign_public_affine<C: CurveGroup>(
     a.a += b
 }
 
+/// Performs subtraction between a share and a public affine value and stores the result in `a`.
 pub fn sub_assign_public_affine<C: CurveGroup>(
     a: &mut PointShare<C>,
     b: &<C as CurveGroup>::Affine,
@@ -48,6 +59,7 @@ pub fn sub_assign_public_affine<C: CurveGroup>(
     a.a -= b
 }
 
+/// Performs multiplication between a field share and a public curve group value and stores the result in `a`.
 pub fn scalar_mul_public_point<C: CurveGroup>(
     shared: ShamirPrimeFieldShare<C::ScalarField>,
     public: &C,
@@ -57,6 +69,7 @@ pub fn scalar_mul_public_point<C: CurveGroup>(
     }
 }
 
+/// Performs scalar multiplication between a point share and a public scalar.
 pub fn scalar_mul_public_scalar<C: CurveGroup>(
     a: &PointShare<C>,
     b: &C::ScalarField,
@@ -64,6 +77,7 @@ pub fn scalar_mul_public_scalar<C: CurveGroup>(
     a * b
 }
 
+/// Performs scalar multiplication between a point share and a field share.
 pub async fn scalar_mul<C: CurveGroup, N: ShamirNetwork>(
     a: &PointShare<C>,
     b: ShamirShare<C::ScalarField>,
@@ -73,6 +87,7 @@ pub async fn scalar_mul<C: CurveGroup, N: ShamirNetwork>(
     shamir.degree_reduce_point(mul).await
 }
 
+/// Performs opening of a point share.
 pub async fn open_point<C: CurveGroup, N: ShamirNetwork>(
     a: &PointShare<C>,
     shamir: &mut ShamirProtocol<C::ScalarField, N>,
@@ -85,6 +100,7 @@ pub async fn open_point<C: CurveGroup, N: ShamirNetwork>(
     Ok(res)
 }
 
+/// Performs opening of a vector of point shares.
 pub async fn open_point_many<C: CurveGroup, N: ShamirNetwork>(
     a: &[PointShare<C>],
     shamir: &mut ShamirProtocol<C::ScalarField, N>,
@@ -109,4 +125,25 @@ pub async fn open_point_many<C: CurveGroup, N: ShamirNetwork>(
         .map(|r| core::reconstruct_point(&r, &shamir.open_lagrange_t))
         .collect();
     Ok(res)
+}
+
+/// Perfoms MSM between curve points and field shares.
+pub fn msm_public_points<C: CurveGroup>(
+    points: &[C::Affine],
+    scalars: &[FieldShare<C::ScalarField>],
+) -> PointShare<C> {
+    // TODO is this fn correct?
+    tracing::trace!("> MSM public points for {} elements", points.len());
+    debug_assert_eq!(points.len(), scalars.len());
+    let a_bigints = scalars
+        .into_par_iter()
+        .map(|share| share.a.into_bigint())
+        .collect::<Vec<_>>();
+    let mut res_a = None;
+    rayon::scope(|s| {
+        s.spawn(|_| res_a = Some(C::msm_bigint(points, &a_bigints)));
+    });
+    tracing::trace!("< MSM public points for {} elements", points.len());
+    //we can unwrap as the we have Some values after rayon scope
+    PointShare::new(res_a.unwrap())
 }

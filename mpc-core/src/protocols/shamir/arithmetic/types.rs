@@ -23,6 +23,7 @@ impl<F: PrimeField> ShamirPrimeFieldShare<F> {
         self.a
     }
 
+    /// Returns a zero share.
     pub fn zero_share() -> Self {
         Self { a: F::zero() }
     }

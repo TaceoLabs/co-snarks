@@ -10,6 +10,12 @@ impl<F: PrimeField> std::ops::Add for ShamirPrimeFieldShare<F> {
     }
 }
 
+impl<F: PrimeField> std::ops::AddAssign for ShamirPrimeFieldShare<F> {
+    fn add_assign(&mut self, rhs: Self) {
+        self.a += rhs.a;
+    }
+}
+
 impl<F: PrimeField> std::ops::Add<&ShamirPrimeFieldShare<F>> for ShamirPrimeFieldShare<F> {
     type Output = Self;
 
@@ -42,11 +48,23 @@ impl<F: PrimeField> std::ops::Add<F> for ShamirPrimeFieldShare<F> {
     }
 }
 
+impl<F: PrimeField> std::ops::AddAssign<F> for ShamirPrimeFieldShare<F> {
+    fn add_assign(&mut self, rhs: F) {
+        self.a += rhs;
+    }
+}
+
 impl<F: PrimeField> std::ops::Sub for ShamirPrimeFieldShare<F> {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
         Self { a: self.a - rhs.a }
+    }
+}
+
+impl<F: PrimeField> std::ops::SubAssign for ShamirPrimeFieldShare<F> {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.a -= rhs.a;
     }
 }
 
@@ -109,6 +127,12 @@ impl<F: PrimeField> std::ops::Mul<F> for ShamirPrimeFieldShare<F> {
     }
 }
 
+impl<F: PrimeField> std::ops::MulAssign<F> for ShamirPrimeFieldShare<F> {
+    fn mul_assign(&mut self, rhs: F) {
+        self.a *= rhs;
+    }
+}
+
 impl<F: PrimeField> std::ops::Neg for ShamirPrimeFieldShare<F> {
     type Output = Self;
 
@@ -121,5 +145,17 @@ impl<F: PrimeField> std::ops::Neg for &ShamirPrimeFieldShare<F> {
 
     fn neg(self) -> Self::Output {
         ShamirPrimeFieldShare::<F> { a: -self.a }
+    }
+}
+
+impl<F: PrimeField> ark_ff::Zero for ShamirPrimeFieldShare<F> {
+    fn zero() -> Self {
+        Self {
+            a: F::zero(),
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        panic!("is_zero is not a meaningful operation for Rep3PrimeFieldShare, use interative zero check instead");
     }
 }

@@ -6,6 +6,8 @@ use rand::thread_rng;
 
 use super::CircomGroth16Prover;
 
+type IoResult<T> = std::io::Result<T>;
+
 pub struct PlainGroth16Driver;
 
 impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
@@ -17,9 +19,9 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
 
     type PartyID = usize;
 
-    fn rand(&mut self) -> Self::ArithmeticShare {
+    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         let mut rng = thread_rng();
-        Self::ArithmeticShare::rand(&mut rng)
+        Ok(Self::ArithmeticShare::rand(&mut rng))
     }
 
     fn get_party_id(&self) -> Self::PartyID {

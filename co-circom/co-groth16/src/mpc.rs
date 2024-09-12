@@ -17,7 +17,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send {
     type PointShareG2: Send;
     type PartyID: Send + Sync + Copy;
 
-    fn rand(&mut self) -> Self::ArithmeticShare;
+    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
 
     fn get_party_id(&self) -> Self::PartyID;
 
