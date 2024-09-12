@@ -806,12 +806,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
         mut self,
         amount_public_inputs: usize,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
-        // TODO: capacities
-        let mut public_inputs = Vec::new();
-        let mut witness = Vec::new();
+        let total_public_amount = self.main_outputs + amount_public_inputs + 1;
+        let mut public_inputs = Vec::with_capacity(total_public_amount);
+        let mut witness = Vec::with_capacity(self.signal_to_witness.len() - total_public_amount);
         for (count, idx) in self.signal_to_witness.into_iter().enumerate() {
             // the +1 here is for the constant 1 which always is at position 0.
-            if count < self.main_outputs + amount_public_inputs + 1 {
+            if count < total_public_amount {
                 public_inputs.push(self.driver.open(self.ctx.signals[idx].clone())?);
             } else {
                 witness.push(self.driver.to_share(self.ctx.signals[idx].clone())?);
