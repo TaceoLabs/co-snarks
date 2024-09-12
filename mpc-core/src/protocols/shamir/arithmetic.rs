@@ -7,18 +7,37 @@ pub(super) mod types;
 
 type ShamirShare<F> = types::ShamirPrimeFieldShare<F>;
 
+/// Performs addition between two shares.
 pub fn add<F: PrimeField>(a: ShamirShare<F>, b: ShamirShare<F>) -> ShamirShare<F> {
     a + b
 }
 
+/// Performs addition between two shares where the result is stored in `a`.
+pub fn add_assign<F: PrimeField>(a: &mut ShamirShare<F>, b: ShamirShare<F>) {
+    *a += b;
+}
+
+/// Performs subtraction between two shares.
 pub fn sub<F: PrimeField>(a: ShamirShare<F>, b: ShamirShare<F>) -> ShamirShare<F> {
     a - b
 }
 
+/// Performs subtraction between two shares where the result is stored in `a`.
+pub fn sub_assign<F: PrimeField>(a: &mut ShamirShare<F>, b: ShamirShare<F>) {
+    *a -= b;
+}
+
+/// Performs addition between a share and a public value.
 pub fn add_public<F: PrimeField>(shared: ShamirShare<F>, public: F) -> ShamirShare<F> {
     shared + public
 }
 
+/// Performs addition between a share and a public value where the result is stored in `shared`.
+pub fn add_assign_public<F: PrimeField>(shared: &mut ShamirShare<F>, public: F) {
+    *shared += public;
+}
+
+/// Performs multiplication between two shares.
 pub async fn mul<F: PrimeField, N: ShamirNetwork>(
     a: ShamirShare<F>,
     b: ShamirShare<F>,
@@ -28,7 +47,8 @@ pub async fn mul<F: PrimeField, N: ShamirNetwork>(
     shamir.degree_reduce(mul).await
 }
 
-pub async fn mul_many<F: PrimeField, N: ShamirNetwork>(
+/// Performs element-wise multiplication of two slices of shares.
+pub async fn mul_vec<F: PrimeField, N: ShamirNetwork>(
     a: &[ShamirShare<F>],
     b: &[ShamirShare<F>],
     shamir: &mut ShamirProtocol<F, N>,
@@ -41,10 +61,17 @@ pub async fn mul_many<F: PrimeField, N: ShamirNetwork>(
     shamir.degree_reduce_vec(mul).await
 }
 
-pub fn mul_with_public<F: PrimeField>(shared: ShamirShare<F>, public: F) -> ShamirShare<F> {
+/// Performs multiplication between a share and a public value.
+pub fn mul_public<F: PrimeField>(shared: ShamirShare<F>, public: F) -> ShamirShare<F> {
     shared * public
 }
 
+/// Performs multiplication between a share and a public value where the result is stored in `shared`.
+pub fn mul_assign_public<F: PrimeField>(shared: &mut ShamirShare<F>, public: F) {
+    *shared *= public;
+}
+
+/// Computes the inverse of a shared field element 
 pub async fn inv<F: PrimeField, N: ShamirNetwork>(
     a: ShamirShare<F>,
     shamir: &mut ShamirProtocol<F, N>,
@@ -61,6 +88,7 @@ pub async fn inv<F: PrimeField, N: ShamirNetwork>(
     Ok(r * y_inv)
 }
 
+/// Computes the inverse of a vector of shared field elements
 pub async fn inv_many<F: PrimeField, N: ShamirNetwork>(
     a: &[ShamirShare<F>],
     shamir: &mut ShamirProtocol<F, N>,
@@ -81,10 +109,12 @@ pub async fn inv_many<F: PrimeField, N: ShamirNetwork>(
     //Ok(res)
 }
 
+/// Performs negation of a share
 pub fn neg<F: PrimeField>(a: ShamirShare<F>) -> ShamirShare<F> {
     -a
 }
 
+/// Opens a shared value and returns the corresponding field element.
 pub async fn open<F: PrimeField, N: ShamirNetwork>(
     a: ShamirShare<F>,
     shamir: &mut ShamirProtocol<F, N>,
@@ -97,6 +127,7 @@ pub async fn open<F: PrimeField, N: ShamirNetwork>(
     Ok(res)
 }
 
+/// Opens a vector of shared values and returns the corresponding field elements.
 pub async fn open_many<F: PrimeField, N: ShamirNetwork>(
     a: &[ShamirShare<F>],
     shamir: &mut ShamirProtocol<F, N>,

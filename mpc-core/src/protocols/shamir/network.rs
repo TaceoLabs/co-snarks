@@ -12,7 +12,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio_util::codec::LengthDelimitedCodec;
 
 /// This trait defines the network interface for the Shamir protocol.
-pub trait ShamirNetwork {
+pub trait ShamirNetwork: Send {
     /// Returns the id of the party. The id is in the range 0 <= id < num_parties
     fn get_id(&self) -> usize;
 
