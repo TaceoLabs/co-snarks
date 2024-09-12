@@ -1,10 +1,10 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use mpc_core::protocols::rep3::{
-    self,
+    arithmetic,
     id::PartyID,
     network::{IoContext, Rep3Network},
-    Rep3PointShare, Rep3PrimeFieldShare,
+    pointshare, poly, Rep3PointShare, Rep3PrimeFieldShare,
 };
 
 use super::{CircomPlonkProver, IoResult};
@@ -30,8 +30,8 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         todo!()
     }
 
-    fn rand(&mut self) -> Self::ArithmeticShare {
-        Self::ArithmeticShare::rand(&mut self.io_context)
+    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
+        Ok(Self::ArithmeticShare::rand(&mut self.io_context))
     }
 
     fn get_party_id(&self) -> Self::PartyID {
@@ -43,7 +43,7 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
     }
 
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
-        rep3::arithmetic::add(a, b)
+        arithmetic::add(a, b)
     }
 
     fn add_with_public(
@@ -51,17 +51,16 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         shared: Self::ArithmeticShare,
         public: P::ScalarField,
     ) -> Self::ArithmeticShare {
-        rep3::arithmetic::add_public(shared, public, party_id)
+        arithmetic::add_public(shared, public, party_id)
     }
 
     fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
-        rep3::arithmetic::sub(a, b)
+        arithmetic::sub(a, b)
     }
 
     fn neg_vec_in_place(&mut self, vec: &mut [Self::ArithmeticShare]) {
-        #[allow(unused_mut)]
-        for mut a in vec.iter_mut() {
-            *a = rep3::arithmetic::neg(*a);
+        for a in vec.iter_mut() {
+            *a = arithmetic::neg(*a);
         }
     }
 
@@ -69,7 +68,7 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         shared: Self::ArithmeticShare,
         public: P::ScalarField,
     ) -> Self::ArithmeticShare {
-        rep3::arithmetic::mul_public(shared, public)
+        arithmetic::mul_public(shared, public)
     }
 
     async fn mul_vec(
@@ -77,7 +76,7 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         lhs: &[Self::ArithmeticShare],
         rhs: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        rep3::arithmetic::mul_vec(lhs, rhs, &mut self.io_context).await
+        arithmetic::mul_vec(lhs, rhs, &mut self.io_context).await
     }
 
     async fn mul_vecs(
@@ -95,8 +94,8 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        let mut result = rep3::arithmetic::mul_vec(b, c, &mut self.io_context).await?;
-        rep3::arithmetic::add_vec_assign(&mut result, a);
+        let mut result = arithmetic::mul_vec(b, c, &mut self.io_context).await?;
+        arithmetic::add_vec_assign(&mut result, a);
         Ok(result)
     }
 
@@ -105,18 +104,18 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<P::ScalarField>> {
-        rep3::arithmetic::mul_open_vec(a, b, &mut self.io_context).await
+        arithmetic::mul_open_vec(a, b, &mut self.io_context).await
     }
 
     async fn open_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>> {
-        rep3::arithmetic::open_vec(a, &mut self.io_context).await
+        arithmetic::open_vec(a, &mut self.io_context).await
     }
 
     async fn inv_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        rep3::arithmetic::inv_vec(a, &mut self.io_context).await
+        arithmetic::inv_vec(a, &mut self.io_context).await
     }
 
     fn promote_to_trivial_share(
@@ -141,24 +140,24 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
     }
 
     async fn open_point_g1(&mut self, a: Self::PointShareG1) -> IoResult<P::G1> {
-        rep3::pointshare::open_point(&a, &mut self.io_context).await
+        pointshare::open_point(&a, &mut self.io_context).await
     }
 
     async fn open_point_vec_g1(&mut self, a: &[Self::PointShareG1]) -> IoResult<Vec<P::G1>> {
-        rep3::pointshare::open_point_many(a, &mut self.io_context).await
+        pointshare::open_point_many(a, &mut self.io_context).await
     }
 
     fn msm_public_points_g1(
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1 {
-        rep3::pointshare::msm_public_points(points, scalars)
+        pointshare::msm_public_points(points, scalars)
     }
 
     fn evaluate_poly_public(
         coeffs: &[Self::ArithmeticShare],
         point: P::ScalarField,
     ) -> Self::ArithmeticShare {
-        rep3::poly::eval_poly(coeffs, point)
+        poly::eval_poly(coeffs, point)
     }
 }
