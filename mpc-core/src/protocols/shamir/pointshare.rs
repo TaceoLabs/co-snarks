@@ -132,18 +132,9 @@ pub fn msm_public_points<C: CurveGroup>(
     points: &[C::Affine],
     scalars: &[FieldShare<C::ScalarField>],
 ) -> PointShare<C> {
-    // TODO is this fn correct?
     tracing::trace!("> MSM public points for {} elements", points.len());
     debug_assert_eq!(points.len(), scalars.len());
-    let a_bigints = scalars
-        .into_par_iter()
-        .map(|share| share.a.into_bigint())
-        .collect::<Vec<_>>();
-    let mut res_a = None;
-    rayon::scope(|s| {
-        s.spawn(|_| res_a = Some(C::msm_bigint(points, &a_bigints)));
-    });
+    let res = C::msm_unchecked(points, &scalars.iter().map(|s| s.a).collect::<Vec<_>>());
     tracing::trace!("< MSM public points for {} elements", points.len());
-    //we can unwrap as the we have Some values after rayon scope
-    PointShare::new(res_a.unwrap())
+    PointShare::<C> { a: res }
 }
