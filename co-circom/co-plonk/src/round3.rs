@@ -52,19 +52,19 @@ macro_rules! mul4vec {
 }
 
 macro_rules! mul4vec_post {
-    ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$i: expr, $z1: expr, $z2: expr, $z3: expr) => {{
+    ($party_id: expr, $a: expr,$b: expr,$c: expr,$d: expr,$i: expr, $z1: expr, $z2: expr, $z3: expr) => {{
         let mod_i = $i % 4;
         let mut rz = $a[$i].clone();
         if mod_i != 0 {
             let b = &$b[$i];
             let c = &$c[$i];
             let d = &$d[$i];
-            let tmp = $driver.mul_with_public(&$z1[mod_i], &b);
-            rz = $driver.add(&rz, &tmp);
-            let tmp = $driver.mul_with_public(&$z2[mod_i], &c);
-            rz = $driver.add(&rz, &tmp);
-            let tmp = $driver.mul_with_public(&$z3[mod_i], &d);
-            rz = $driver.add(&rz, &tmp);
+            let tmp = T::mul_with_public(*b, $z1[mod_i]);
+            rz = T::add(tmp, rz);
+            let tmp = T::mul_with_public(*c, $z2[mod_i]);
+            rz = T::add(rz, tmp);
+            let tmp = T::mul_with_public(*d, $z3[mod_i]);
+            rz = T::add(rz, tmp);
         }
         rz
     }};
@@ -224,14 +224,15 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
         let mut ap = Vec::with_capacity(zkey.domain_size * 4);
         let mut bp = Vec::with_capacity(zkey.domain_size * 4);
         let mut cp = Vec::with_capacity(zkey.domain_size * 4);
+        let party_id = driver.get_party_id();
 
         let pow_root_of_unity = domains.root_of_unity_pow;
         let pow_plus2_root_of_unity = domains.root_of_unity_pow_2;
         // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
         (0..zkey.domain_size * 4).for_each(|_| {
-            ap.push(driver.add_mul_public(&challenges.b[1], &challenges.b[0], &w));
-            bp.push(driver.add_mul_public(&challenges.b[3], &challenges.b[2], &w));
-            cp.push(driver.add_mul_public(&challenges.b[5], &challenges.b[4], &w));
+            ap.push(driver.add_mul_public(challenges.b[1], challenges.b[0], w));
+            bp.push(driver.add_mul_public(challenges.b[3], challenges.b[2], w));
+            cp.push(driver.add_mul_public(challenges.b[5], challenges.b[4], w));
             w *= &pow_plus2_root_of_unity;
         });
 
@@ -280,69 +281,83 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
             let bp = &bp[i];
 
             let w2 = w.square();
-            let zp_lhs = driver.mul_with_public(&w2, &challenges.b[6]);
-            let zp_rhs = driver.mul_with_public(&w, &challenges.b[7]);
-            let zp_ = driver.add(&zp_lhs, &zp_rhs);
-            let zp_ = driver.add(&challenges.b[8], &zp_);
+            let zp_lhs = T::mul_with_public(challenges.b[6], w2);
+            let zp_rhs = T::mul_with_public(challenges.b[7], w);
+            let zp_ = T::add(zp_lhs, zp_rhs);
+            let zp_ = T::add(challenges.b[8], zp_);
             zp.push(zp_);
 
             let w_w = w * pow_root_of_unity;
             let w_w2 = w_w.square();
             let zw = polys.z.eval[(zkey.domain_size * 4 + 4 + i) % (zkey.domain_size * 4)].clone();
-            let zwp_lhs = driver.mul_with_public(&w_w2, &challenges.b[6]);
-            let zwp_rhs = driver.mul_with_public(&w_w, &challenges.b[7]);
-            let zwp_ = driver.add(&zwp_lhs, &zwp_rhs);
-            let zwp_ = driver.add(&challenges.b[8], &zwp_);
+            let zwp_lhs = T::mul_with_public(challenges.b[6], w_w2);
+            let zwp_rhs = T::mul_with_public(challenges.b[7], w_w);
+            let zwp_ = T::add(zwp_lhs, zwp_rhs);
+            let zwp_ = T::add(challenges.b[8], zwp_);
             zwp.push(zwp_);
 
-            let mut a0 = driver.add(&a_bp, &ap_b);
+            let mut a0 = T::add(*a_bp, *ap_b);
             let mod_i = i % 4;
             if mod_i != 0 {
                 let z1 = z1[mod_i];
                 let ap_bp = ap_bp[i].clone();
-                let tmp = driver.mul_with_public(&z1, &ap_bp);
-                a0 = driver.add(&a0, &tmp);
+                let tmp = T::mul_with_public(ap_bp, z1);
+                a0 = T::add(a0, tmp);
             }
 
             let (mut e1_, mut e1z_) = (a_b.to_owned(), a0.to_owned());
-            e1_ = driver.mul_with_public(&qm, &e1_);
-            e1z_ = driver.mul_with_public(&qm, &e1z_);
+            e1_ = T::mul_with_public(e1_, qm);
+            e1z_ = T::mul_with_public(e1z_, qm);
 
-            e1_ = driver.add_mul_public(&e1_, &a, &ql);
-            e1z_ = driver.add_mul_public(&e1z_, &ap, &ql);
+            e1_ = driver.add_mul_public(e1_, *a, ql);
+            e1z_ = driver.add_mul_public(e1z_, *ap, ql);
 
-            e1_ = driver.add_mul_public(&e1_, &b, &qr);
-            e1z_ = driver.add_mul_public(&e1z_, &bp, &qr);
+            e1_ = driver.add_mul_public(e1_, *b, qr);
+            e1z_ = driver.add_mul_public(e1z_, *bp, qr);
 
-            e1_ = driver.add_mul_public(&e1_, &c, &qo);
-            e1z_ = driver.add_mul_public(&e1z_, &cp[i], &qo);
+            e1_ = driver.add_mul_public(e1_, *c, qo);
+            e1z_ = driver.add_mul_public(e1z_, cp[i], qo);
 
             let mut pi = T::ArithmeticShare::default();
             for (j, lagrange) in zkey.lagrange.iter().enumerate() {
-                let l_eval = lagrange.evaluations[i];
-                let a_val = polys.buffer_a[j].clone();
-                let tmp = driver.mul_with_public(&l_eval, &a_val);
-                pi = driver.sub(&pi, &tmp);
+                let tmp = T::mul_with_public(polys.buffer_a[j], lagrange.evaluations[i]);
+                pi = T::sub(pi, tmp);
             }
 
-            e1_ = driver.add(&e1_, &pi);
-            e1_ = driver.add_with_public(&qc, &e1_);
+            e1_ = T::add(e1_, pi);
+            e1_ = T::add_with_public(party_id, e1_, qc);
             e1.push(e1_);
             e1z.push(e1z_);
 
             let betaw = challenges.beta * w;
-            e2a.push(driver.add_with_public(&(betaw + challenges.gamma), &a));
-            e2b.push(
-                driver.add_with_public(&(betaw * zkey.verifying_key.k1 + challenges.gamma), &b),
-            );
-            e2c.push(
-                driver.add_with_public(&(betaw * zkey.verifying_key.k2 + challenges.gamma), &c),
-            );
+            e2a.push(T::add_with_public(party_id, *a, betaw + challenges.gamma));
+            e2b.push(T::add_with_public(
+                party_id,
+                *b,
+                betaw * zkey.verifying_key.k1 + challenges.gamma,
+            ));
+            e2c.push(T::add_with_public(
+                party_id,
+                *c,
+                betaw * zkey.verifying_key.k2 + challenges.gamma,
+            ));
 
-            e2d.push(z.clone());
-            e3a.push(driver.add_with_public(&(s1 * challenges.beta + challenges.gamma), &a));
-            e3b.push(driver.add_with_public(&(s2 * challenges.beta + challenges.gamma), &b));
-            e3c.push(driver.add_with_public(&(s3 * challenges.beta + challenges.gamma), &c));
+            e2d.push(*z);
+            e3a.push(T::add_with_public(
+                party_id,
+                *a,
+                s1 * challenges.beta + challenges.gamma,
+            ));
+            e3b.push(T::add_with_public(
+                party_id,
+                *b,
+                s2 * challenges.beta + challenges.gamma,
+            ));
+            e3c.push(T::add_with_public(
+                party_id,
+                *c,
+                s3 * challenges.beta + challenges.gamma,
+            ));
             e3d.push(zw);
             w *= pow_plus2_root_of_unity;
         });
@@ -358,53 +373,53 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
         // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
         (0..zkey.domain_size * 4).for_each(|i| {
             let mut e2 = e2[i].clone();
-            let mut e2z = mul4vec_post!(driver, e2z_0, e2z_1, e2z_2, e2z_3, i, z1, z2, z3);
+            let mut e2z = mul4vec_post!(party_id, e2z_0, e2z_1, e2z_2, e2z_3, i, z1, z2, z3);
             let mut e3 = e3[i].clone();
-            let mut e3z = mul4vec_post!(driver, e3z_0, e3z_1, e3z_2, e3z_3, i, z1, z2, z3);
+            let mut e3z = mul4vec_post!(party_id, e3z_0, e3z_1, e3z_2, e3z_3, i, z1, z2, z3);
 
             let z = polys.z.eval[i].clone();
             let zp = zp[i].clone();
 
-            e2 = driver.mul_with_public(&challenges.alpha, &e2);
-            e2z = driver.mul_with_public(&challenges.alpha, &e2z);
+            e2 = T::mul_with_public(e2, challenges.alpha);
+            e2z = T::mul_with_public(e2z, challenges.alpha);
 
-            e3 = driver.mul_with_public(&challenges.alpha, &e3);
-            e3z = driver.mul_with_public(&challenges.alpha, &e3z);
+            e3 = T::mul_with_public(e3, challenges.alpha);
+            e3z = T::mul_with_public(e3z, challenges.alpha);
 
-            let mut e4 = driver.add_with_public(&-P::ScalarField::one(), &z);
-            e4 = driver.mul_with_public(&zkey.lagrange[0].evaluations[i], &e4);
-            e4 = driver.mul_with_public(&challenges.alpha2, &e4);
+            let mut e4 = T::add_with_public(party_id, z, -P::ScalarField::one());
+            e4 = T::mul_with_public(e4, zkey.lagrange[0].evaluations[i]);
+            e4 = T::mul_with_public(e4, challenges.alpha2);
 
-            let mut e4z = driver.mul_with_public(&zkey.lagrange[0].evaluations[i], &zp);
-            e4z = driver.mul_with_public(&challenges.alpha2, &e4z);
+            let mut e4z = T::mul_with_public(zp, zkey.lagrange[0].evaluations[i]);
+            e4z = T::mul_with_public(e4z, challenges.alpha2);
 
-            let mut t = driver.add(&e1[i], &e2);
-            t = driver.sub(&t, &e3);
-            t = driver.add(&t, &e4);
+            let mut t = T::add(e1[i], e2);
+            t = T::sub(t, e3);
+            t = T::add(t, e4);
 
-            let mut tz = driver.add(&e1z[i], &e2z);
-            tz = driver.sub(&tz, &e3z);
-            tz = driver.add(&tz, &e4z);
+            let mut tz = T::add(e1z[i], e2z);
+            tz = T::sub(tz, e3z);
+            tz = T::add(tz, e4z);
 
             t_vec.push(t);
             tz_vec.push(tz);
         });
-        let mut coefficients_t = driver.ifft(&t_vec, &domains.extended_domain);
+        let mut coefficients_t = T::ifft(&t_vec, &domains.extended_domain);
         driver.neg_vec_in_place(&mut coefficients_t[..zkey.domain_size]);
 
         // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
         (zkey.domain_size..zkey.domain_size * 4).for_each(|i| {
             let a_lhs = &coefficients_t[i - zkey.domain_size];
             let a_rhs = &coefficients_t[i];
-            let a = driver.sub(&a_lhs, &a_rhs);
+            let a = T::sub(*a_lhs, *a_rhs);
             coefficients_t[i] = a;
             // Snarkjs is checking whether the poly was divisble by Zh, but we cannot do this here
         });
 
-        let coefficients_tz = driver.ifft(&tz_vec, &domains.extended_domain);
+        let coefficients_tz = T::ifft(&tz_vec, &domains.extended_domain);
 
         let mut t_final = izip!(coefficients_t.iter(), coefficients_tz.iter())
-            .map(|(lhs, rhs)| driver.add(lhs, rhs));
+            .map(|(lhs, rhs)| T::add(*lhs, *rhs));
         let mut t1 = Vec::with_capacity(zkey.domain_size + 1);
         let mut t2 = Vec::with_capacity(zkey.domain_size + 1);
         for _ in 0..zkey.domain_size {
@@ -416,10 +431,10 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
         let mut t3 = t_final.take(zkey.domain_size + 6).collect::<Vec<_>>();
         t1.push(challenges.b[9].to_owned());
 
-        t2[0] = driver.sub(&t2[0], &challenges.b[9]);
+        t2[0] = T::sub(t2[0], challenges.b[9]);
         t2.push(challenges.b[10].to_owned());
 
-        t3[0] = driver.sub(&t3[0], &challenges.b[10]);
+        t3[0] = T::sub(t3[0], challenges.b[10]);
         tracing::debug!("computing t polynomial done!");
         Ok([t1.into(), t2.into(), t3.into()])
     }
@@ -428,6 +443,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
     pub(super) fn round3(self) -> PlonkProofResult<Round4<'a, P, T>> {
         let Self {
             mut driver,
+            runtime,
             domains,
             challenges,
             proof,
@@ -450,17 +466,19 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
 
         tracing::debug!("committing to poly t (MSMs)");
         // Compute [T1]_1, [T2]_1, [T3]_1
-        let commit_t1 = driver.msm_public_points(&data.zkey.p_tau[..t1.len()], &t1);
-        let commit_t2 = driver.msm_public_points(&data.zkey.p_tau[..t2.len()], &t2);
-        let commit_t3 = driver.msm_public_points(&data.zkey.p_tau[..t3.len()], &t3);
+        let commit_t1 = T::msm_public_points_g1(&data.zkey.p_tau[..t1.len()], &t1);
+        let commit_t2 = T::msm_public_points_g1(&data.zkey.p_tau[..t2.len()], &t2);
+        let commit_t3 = T::msm_public_points_g1(&data.zkey.p_tau[..t3.len()], &t3);
 
-        let opened = driver.open_point_many(&[commit_t1, commit_t2, commit_t3])?;
+        let opened =
+            runtime.block_on(driver.open_point_vec_g1(&[commit_t1, commit_t2, commit_t3]))?;
 
         let polys = FinalPolys::new(polys, t1, t2, t3);
         let proof = Round3Proof::new(proof, opened[0], opened[1], opened[2]);
         tracing::debug!("round3 result: {proof}");
         Ok(Round4 {
             driver,
+            runtime,
             domains,
             challenges,
             proof,
@@ -479,6 +497,7 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
+    use tokio::runtime;
 
     use crate::{
         mpc::plain::PlainPlonkDriver,
@@ -513,7 +532,8 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+        let runtime = runtime::Builder::new_current_thread().build().unwrap();
+        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         let round3 = round2.round2().unwrap();

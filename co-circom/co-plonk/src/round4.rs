@@ -103,6 +103,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
     pub(super) fn round4(self) -> PlonkProofResult<Round5<'a, P, T>> {
         let Self {
             mut driver,
+            runtime,
             domains,
             challenges,
             proof,
@@ -121,15 +122,15 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
         let challenges = Round4Challenges::new(challenges, xi);
         tracing::debug!("xi: {xi}");
         tracing::debug!("evaluating poly a");
-        let eval_a = driver.evaluate_poly_public(&polys.a.poly, challenges.xi);
+        let eval_a = T::evaluate_poly_public(&polys.a.poly, challenges.xi);
         tracing::debug!("evaluating poly b");
-        let eval_b = driver.evaluate_poly_public(&polys.b.poly, challenges.xi);
+        let eval_b = T::evaluate_poly_public(&polys.b.poly, challenges.xi);
         tracing::debug!("evaluating poly c");
-        let eval_c = driver.evaluate_poly_public(&polys.c.poly, challenges.xi);
+        let eval_c = T::evaluate_poly_public(&polys.c.poly, challenges.xi);
         tracing::debug!("evaluating poly z");
-        let eval_z = driver.evaluate_poly_public(&polys.z.poly, xiw);
+        let eval_z = T::evaluate_poly_public(&polys.z.poly, xiw);
 
-        let opened = driver.open_many(&[eval_a, eval_b, eval_c, eval_z])?;
+        let opened = runtime.block_on(driver.open_vec(&[eval_a, eval_b, eval_c, eval_z]))?;
 
         let eval_a = opened[0];
         let eval_b = opened[1];
@@ -143,6 +144,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
 
         Ok(Round5 {
             driver,
+            runtime,
             domains,
             challenges,
             proof,
@@ -161,6 +163,7 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
+    use tokio::runtime;
 
     use crate::{
         mpc::plain::PlainPlonkDriver,
@@ -185,7 +188,8 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+        let runtime = runtime::Builder::new_current_thread().build().unwrap();
+        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         let round3 = round2.round2().unwrap();

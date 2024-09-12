@@ -19,19 +19,19 @@ macro_rules! array_prod_mul {
         // Do the multiplications of inp[i] * inp[i-1] in constant rounds
         let len = $inp.len();
         let r = (0..=len).map(|_| $driver.rand()).collect::<Vec<_>>();
-        let r_inv = futures::executor::block_on($driver.inv_many(&r))?;
+        let r_inv = futures::executor::block_on($driver.inv_vec(&r))?;
         let r_inv0 = vec![r_inv[0].clone(); len];
         let mut unblind = futures::executor::block_on($driver.mul_vec(&r_inv0, &r[1..]))?;
 
         let mul = futures::executor::block_on($driver.mul_vec(&r[..len], &$inp))?;
-        let mut open = $driver.mul_open_many(&mul, &r_inv[1..])?;
+        let mut open = futures::executor::block_on($driver.mul_open_vec(&mul, &r_inv[1..]))?;
 
         for i in 1..open.len() {
             open[i] = open[i] * open[i - 1];
         }
 
-        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
-            *unblind = $driver.mul_with_public(open, unblind);
+        for (unblind, open) in unblind.iter_mut().zip(open.into_iter()) {
+            *unblind = T::mul_with_public(*unblind, open);
         }
         unblind
     }};
@@ -117,6 +117,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     fn compute_z(
         driver: &mut T,
+        runtime: &mut Runtime,
         zkey: &ZKey<P>,
         domains: &Domains<P::ScalarField>,
         challenges: &Round2Challenges<P, T>,
@@ -157,17 +158,26 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
             n3.push(n3_);
 
             // denArr := (a + beta·sigma1 + gamma)(b + beta·sigma2 + gamma)(c + beta·sigma3 + gamma)
-            let d1_ =
-                driver.add_with_public(&(challenges.beta * zkey.s1_poly.evaluations[i * 4]), a);
-            let d1_ = driver.add_with_public(&challenges.gamma, &d1_);
+            let d1_ = T::add_with_public(
+                party_id,
+                *a,
+                challenges.beta * zkey.s1_poly.evaluations[i * 4],
+            );
+            let d1_ = T::add_with_public(party_id, d1_, challenges.gamma);
 
-            let d2_ =
-                driver.add_with_public(&(challenges.beta * zkey.s2_poly.evaluations[i * 4]), b);
-            let d2_ = driver.add_with_public(&challenges.gamma, &d2_);
+            let d2_ = T::add_with_public(
+                party_id,
+                *b,
+                challenges.beta * zkey.s2_poly.evaluations[i * 4],
+            );
+            let d2_ = T::add_with_public(party_id, d2_, challenges.gamma);
 
-            let d3_ =
-                driver.add_with_public(&(challenges.beta * zkey.s3_poly.evaluations[i * 4]), c);
-            let d3_ = driver.add_with_public(&challenges.gamma, &d3_);
+            let d3_ = T::add_with_public(
+                party_id,
+                *c,
+                challenges.beta * zkey.s3_poly.evaluations[i * 4],
+            );
+            let d3_ = T::add_with_public(party_id, d3_, challenges.gamma);
 
             d1.push(d1_);
             d2.push(d2_);
@@ -177,10 +187,10 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         }
 
         // TODO parallelize these? With a different network structure this might not be needed though
-        let num = futures::executor::block_on(driver.mul_vec(&n1, &n2))?;
-        let num = futures::executor::block_on(driver.mul_vec(&num, &n3))?;
-        let den = futures::executor::block_on(driver.mul_vec(&d1, &d2))?;
-        let den = futures::executor::block_on(driver.mul_vec(&den, &d3))?;
+        let num = runtime.block_on(driver.mul_vec(&n1, &n2))?;
+        let num = runtime.block_on(driver.mul_vec(&num, &n3))?;
+        let den = runtime.block_on(driver.mul_vec(&d1, &d2))?;
+        let den = runtime.block_on(driver.mul_vec(&den, &d3))?;
 
         // TODO parallelize these? With a different network structure this might not be needed though
         // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
@@ -195,12 +205,12 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
 
         // Compute polynomial coefficients z(X) from buffer_z
-        let poly_z = driver.ifft(&buffer_z, &domains.domain);
+        let poly_z = T::ifft(&buffer_z, &domains.domain);
 
         // Compute extended evaluations of z(X) polynomial
-        let eval_z = driver.fft(&poly_z, &domains.extended_domain);
+        let eval_z = T::fft(&poly_z, &domains.extended_domain);
 
-        let poly_z = plonk_utils::blind_coefficients::<P, T>(driver, &poly_z, &challenges.b[6..9]);
+        let poly_z = plonk_utils::blind_coefficients::<P, T>(&poly_z, &challenges.b[6..9]);
 
         if poly_z.len() > zkey.domain_size + 3 {
             Err(PlonkProofError::PolynomialDegreeTooLarge)
@@ -217,7 +227,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
     pub(super) fn round2(self) -> PlonkProofResult<Round3<'a, P, T>> {
         let Self {
             mut driver,
-            runtime,
+            mut runtime,
             data,
             proof,
             challenges,
@@ -250,7 +260,14 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         let gamma = transcript.get_challenge();
         tracing::debug!("beta: {beta}, gamma: {gamma}");
         let challenges = Round2Challenges::new(challenges, beta, gamma);
-        let z = Self::compute_z(&mut driver, zkey, &domains, &challenges, &polys)?;
+        let z = Self::compute_z(
+            &mut driver,
+            &mut runtime,
+            zkey,
+            &domains,
+            &challenges,
+            &polys,
+        )?;
         // STEP 2.3 - Compute permutation [z]_1
 
         tracing::debug!("committing to poly z (MSMs)");
@@ -280,6 +297,7 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
+    use tokio::runtime;
 
     use crate::mpc::plain::PlainPlonkDriver;
     use crate::round1::Round1;
@@ -313,7 +331,8 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+        let runtime = runtime::Builder::new_current_thread().build().unwrap();
+        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         let round3 = round2.round2().unwrap();

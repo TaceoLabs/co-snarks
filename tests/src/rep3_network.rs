@@ -125,7 +125,18 @@ impl Rep3Network for PartyTestNetwork {
         if next.len() != 1 || prev.len() != 1 {
             panic!("got more than one from next or prev");
         }
-        Ok((next.pop().unwrap(), prev.pop().unwrap()))
+        Ok((prev.pop().unwrap(), next.pop().unwrap()))
+    }
+
+    async fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: &[F],
+    ) -> std::io::Result<(Vec<F>, Vec<F>)> {
+        self.send_many(self.id.next_id(), &data).await?;
+        self.send_many(self.id.prev_id(), &data).await?;
+        let prev = self.recv_many(self.id.prev_id()).await?;
+        let next = self.recv_many(self.id.next_id()).await?;
+        Ok((prev, next))
     }
 
     async fn send_many<F: CanonicalSerialize>(

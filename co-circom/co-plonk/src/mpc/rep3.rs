@@ -26,6 +26,10 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
 
     type PartyID = PartyID;
 
+    fn debug_print(a: Self::ArithmeticShare) {
+        todo!()
+    }
+
     fn rand(&mut self) -> Self::ArithmeticShare {
         Self::ArithmeticShare::rand(&mut self.io_context)
     }
@@ -91,7 +95,7 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         rep3::arithmetic::mul_open_vec(a, b, &mut self.io_context).await
     }
 
-    async fn open_vec(&mut self, a: Vec<Self::ArithmeticShare>) -> IoResult<Vec<P::ScalarField>> {
+    async fn open_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>> {
         rep3::arithmetic::open_vec(a, &mut self.io_context).await
     }
 
@@ -123,8 +127,8 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         domain.ifft(&data)
     }
 
-    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1> {
-        rep3::pointshare::open_point(a, &mut self.io_context).await
+    async fn open_point_g1(&mut self, a: Self::PointShareG1) -> IoResult<P::G1> {
+        rep3::pointshare::open_point(&a, &mut self.io_context).await
     }
 
     async fn open_point_vec_g1(&mut self, a: &[Self::PointShareG1]) -> IoResult<Vec<P::G1>> {

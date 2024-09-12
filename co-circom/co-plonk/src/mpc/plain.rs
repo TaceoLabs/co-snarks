@@ -1,10 +1,12 @@
 use super::IoResult;
 use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
+use ark_ff::Field;
 use ark_ff::UniformRand;
 use ark_poly::univariate::DensePolynomial;
 use ark_poly::Polynomial;
 use itertools::izip;
+use num_traits::Zero;
 
 use super::CircomPlonkProver;
 use rand::thread_rng;
@@ -20,6 +22,10 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
 
     //doesn't matter
     type PartyID = usize;
+
+    fn debug_print(a: Self::ArithmeticShare) {
+        println!("{a}")
+    }
 
     fn rand(&mut self) -> Self::ArithmeticShare {
         let mut rng = thread_rng();
@@ -66,7 +72,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        Ok(izip!(a, b).map(|(a, b)| *a + *b).collect())
+        Ok(izip!(a, b).map(|(a, b)| *a * *b).collect())
     }
 
     async fn add_mul_vec(
@@ -86,15 +92,25 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         Ok(izip!(a, b).map(|(a, b)| *a * *b).collect())
     }
 
-    async fn open_vec(&mut self, a: Vec<Self::ArithmeticShare>) -> IoResult<Vec<P::ScalarField>> {
-        Ok(a)
+    async fn open_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>> {
+        Ok(a.to_vec())
     }
 
     async fn inv_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        Ok(a.iter().map(|a| -*a).collect())
+        let mut res = Vec::with_capacity(a.len());
+        for a in a {
+            if a.is_zero() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Cannot invert zero",
+                ));
+            }
+            res.push(a.inverse().unwrap());
+        }
+        Ok(res)
     }
 
     fn promote_to_trivial_share(
@@ -118,8 +134,8 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         domain.ifft(data)
     }
 
-    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1> {
-        Ok(*a)
+    async fn open_point_g1(&mut self, a: Self::PointShareG1) -> IoResult<P::G1> {
+        Ok(a)
     }
 
     async fn open_point_vec_g1(&mut self, a: &[Self::PointShareG1]) -> IoResult<Vec<P::G1>> {

@@ -103,12 +103,16 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             }
             (Rep3VmType::Public(b), Rep3VmType::Binary(a))
             | (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
-                let a = futures::executor::block_on(conversion::b2a(&a, &mut self.io_context))?;
+                let a = self
+                    .runtime
+                    .block_on(conversion::b2a(&a, &mut self.io_context))?;
                 Ok(arithmetic::add_public(a, b, self.io_context.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Binary(b))
             | (Rep3VmType::Binary(b), Rep3VmType::Arithmetic(a)) => {
-                let b = futures::executor::block_on(conversion::b2a(&b, &mut self.io_context))?;
+                let b = self
+                    .runtime
+                    .block_on(conversion::b2a(&b, &mut self.io_context))?;
                 Ok(arithmetic::add(a, b).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Binary(b)) => {

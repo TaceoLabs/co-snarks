@@ -1,3 +1,5 @@
+use std::{future::Future, process::Output};
+
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -18,12 +20,11 @@ pub trait CircomPlonkProver<P: Pairing> {
 
     type PartyID: Send + Sync + Copy;
 
+    fn debug_print(a: Self::ArithmeticShare);
+
     fn rand(&mut self) -> Self::ArithmeticShare;
 
-    fn get_party_id(&self) -> Self::PartyID {
-        self.io_context.id
-    }
-
+    fn get_party_id(&self) -> Self::PartyID;
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
@@ -46,29 +47,28 @@ pub trait CircomPlonkProver<P: Pairing> {
         public: P::ScalarField,
     ) -> Self::ArithmeticShare;
 
-    async fn mul_vec(
+    fn mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<Self::ArithmeticShare>>;
+    ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
 
     /// Convenience method for \[a\] + \[b\] * \[c\]
-    async fn add_mul_vec(
+    fn add_mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<Self::ArithmeticShare>>;
+    ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
 
     /// Convenience method for \[a\] + \[b\] * c
     fn add_mul_public(
         &mut self,
-        a: &Self::ArithmeticShare,
-        b: &Self::ArithmeticShare,
-        c: &P::ScalarField,
+        a: Self::ArithmeticShare,
+        b: Self::ArithmeticShare,
+        c: P::ScalarField,
     ) -> Self::ArithmeticShare {
-        let tmp = self.mul_with_public(c, b);
-        self.add(a, &tmp)
+        Self::add(a, Self::mul_with_public(b, c))
     }
 
     /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
@@ -79,7 +79,7 @@ pub trait CircomPlonkProver<P: Pairing> {
     ) -> IoResult<Vec<P::ScalarField>>;
 
     /// Reconstructs many shared values: a = Open(\[a\]).
-    async fn open_vec(&mut self, a: Vec<Self::ArithmeticShare>) -> IoResult<Vec<P::ScalarField>>;
+    async fn open_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>>;
 
     /// Computes the inverse of many shared values: \[b\] = \[a\] ^ -1. Requires network communication.
     async fn inv_vec(
@@ -106,7 +106,7 @@ pub trait CircomPlonkProver<P: Pairing> {
     ) -> Vec<Self::ArithmeticShare>;
 
     /// Reconstructs many shared points: A = Open(\[A\]).
-    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1>;
+    async fn open_point_g1(&mut self, a: Self::PointShareG1) -> IoResult<P::G1>;
     async fn open_point_vec_g1(&mut self, a: &[Self::PointShareG1]) -> IoResult<Vec<P::G1>>;
 
     // WE NEED THIS ALSO FOR GROTH16

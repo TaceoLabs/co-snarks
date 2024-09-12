@@ -1,7 +1,7 @@
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
 use num_bigint::BigUint;
-use num_traits::{PrimInt, Zero};
+use num_traits::Zero;
 use types::Rep3PrimeFieldShare;
 
 use crate::protocols::rep3::{detail, id::PartyID, network::Rep3Network};
@@ -210,7 +210,7 @@ pub async fn open<F: PrimeField, N: Rep3Network>(
 
 /// Performs the opening of a shared value and returns the equivalent public value.
 pub async fn open_vec<F: PrimeField, N: Rep3Network>(
-    a: Vec<FieldShare<F>>,
+    a: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<F>> {
     // TODO think about something better... it is not so bad

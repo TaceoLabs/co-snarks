@@ -1,3 +1,5 @@
+use core::panic;
+
 use crate::{
     mpc::CircomPlonkProver,
     plonk_utils,
@@ -82,21 +84,17 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    fn div_by_zerofier(
-        driver: &mut T,
-        inout: &mut Vec<T::ArithmeticShare>,
-        n: usize,
-        beta: P::ScalarField,
-    ) {
+    fn div_by_zerofier(inout: &mut Vec<T::ArithmeticShare>, n: usize, beta: P::ScalarField) {
         let inv_beta = beta.inverse().expect("Highly unlikely to be zero");
         let inv_beta_neg = -inv_beta;
 
-        for el in inout.iter_mut().take(n) {
-            *el = driver.mul_with_public(&inv_beta_neg, el);
+        #[allow(unused_mut)]
+        for mut el in inout.iter_mut().take(n) {
+            *el = T::mul_with_public(*el, inv_beta_neg);
         }
         for i in n..inout.len() {
-            let element = driver.sub(&inout[i - n], &inout[i]);
-            inout[i] = driver.mul_with_public(&inv_beta, &element);
+            let element = T::sub(inout[i - n], inout[i]);
+            inout[i] = T::mul_with_public(element, inv_beta);
         }
         // We cannot check whether the polyonmial is divisible by the zerofier, but we resize accordingly
         inout.resize(inout.len() - n, T::ArithmeticShare::default());
@@ -107,7 +105,8 @@ where
             inout.resize(add_poly.len(), P::ScalarField::zero());
         }
 
-        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+        #[allow(unused_mut)]
+        for (mut inout, add) in inout.iter_mut().zip(add_poly.iter()) {
             *inout += *add;
         }
     }
@@ -121,14 +120,15 @@ where
             inout.resize(add_poly.len(), P::ScalarField::zero());
         }
 
-        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+        #[allow(unused_mut)]
+        for (mut inout, add) in inout.iter_mut().zip(add_poly.iter()) {
             *inout += *add * factor;
         }
     }
 
     // The linearisation polynomial R(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_r(
-        driver: &mut T,
+        party_id: T::PartyID,
         domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
@@ -164,7 +164,8 @@ where
         let e24 = e2 + e4;
 
         let mut poly_r = zkey.qm_poly.coeffs.clone();
-        for coeff in poly_r.iter_mut() {
+        #[allow(unused_mut)]
+        for mut coeff in poly_r.iter_mut() {
             *coeff *= coef_ab;
         }
         Self::add_factor_poly(&mut poly_r.coeffs, &zkey.ql_poly.coeffs, proof.eval_a);
@@ -181,47 +182,54 @@ where
 
         let mut poly_r_shared = vec![T::ArithmeticShare::default(); len];
 
-        for (inout, add) in poly_r_shared
+        #[allow(unused_mut)]
+        for (mut inout, add) in poly_r_shared
             .iter_mut()
             .zip(polys.z.poly.clone().into_iter())
         {
-            *inout = driver.mul_with_public(&e24, &add)
+            *inout = T::mul_with_public(add, e24);
         }
 
-        for (inout, add) in poly_r_shared.iter_mut().zip(poly_r.iter()) {
-            *inout = driver.add_with_public(add, inout);
+        #[allow(unused_mut)]
+        for (mut inout, add) in poly_r_shared.iter_mut().zip(poly_r.iter()) {
+            *inout = T::add_with_public(party_id, *inout, *add);
         }
 
         let mut tmp_poly = vec![T::ArithmeticShare::default(); len];
         let xin2 = xin.square();
-        for (inout, add) in tmp_poly.iter_mut().zip(polys.t3.clone().into_iter()) {
-            *inout = driver.mul_with_public(&xin2, &add);
+        #[allow(unused_mut)]
+        for (mut inout, add) in tmp_poly.iter_mut().zip(polys.t3.clone().into_iter()) {
+            *inout = T::mul_with_public(add, xin2);
         }
-        for (inout, add) in tmp_poly.iter_mut().zip(polys.t2.clone().into_iter()) {
-            let tmp = driver.mul_with_public(&xin, &add);
-            *inout = driver.add(&tmp, inout);
+        #[allow(unused_mut)]
+        for (mut inout, add) in tmp_poly.iter_mut().zip(polys.t2.clone().into_iter()) {
+            let tmp = T::mul_with_public(add, xin);
+            *inout = T::add(*inout, tmp);
         }
-        for (inout, add) in tmp_poly.iter_mut().zip(polys.t1.clone().into_iter()) {
-            *inout = driver.add(inout, &add);
+        #[allow(unused_mut)]
+        for (mut inout, add) in tmp_poly.iter_mut().zip(polys.t1.clone().into_iter()) {
+            *inout = T::add(*inout, add);
         }
-        for inout in tmp_poly.iter_mut() {
-            *inout = driver.mul_with_public(&zh, inout);
+        #[allow(unused_mut)]
+        for mut inout in tmp_poly.iter_mut() {
+            *inout = T::mul_with_public(*inout, zh);
         }
 
-        for (inout, sub) in poly_r_shared.iter_mut().zip(tmp_poly.iter()) {
-            *inout = driver.sub(inout, sub);
+        #[allow(unused_mut)]
+        for (mut inout, sub) in poly_r_shared.iter_mut().zip(tmp_poly.iter()) {
+            *inout = T::sub(*inout, *sub);
         }
 
         let r0 = eval_pi - (e3 * (proof.eval_c + challenges.gamma)) - e4;
 
-        poly_r_shared[0] = driver.add_with_public(&r0, &poly_r_shared[0]);
+        poly_r_shared[0] = T::add_with_public(party_id, poly_r_shared[0], r0);
         tracing::debug!("computing r polynomial done!");
-        poly_r_shared.into()
+        poly_r_shared
     }
 
     // The opening proof polynomial W_xi(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_wxi(
-        driver: &mut T,
+        party_id: T::PartyID,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
         data: &PlonkData<P, T>,
@@ -234,43 +242,43 @@ where
         let mut res = vec![T::ArithmeticShare::default(); data.zkey.domain_size + 6];
 
         // R
-        for (inout, add) in res.iter_mut().zip(poly_r.clone().into_iter()) {
+        for (inout, add) in res.iter_mut().zip(poly_r.into_iter()) {
             *inout = add.clone();
         }
         // A
         for (inout, add) in res.iter_mut().zip(polys.a.poly.clone().into_iter()) {
-            let tmp = driver.mul_with_public(&challenges.v[0], &add);
-            *inout = driver.add(&tmp, inout);
+            let tmp = T::mul_with_public(add, challenges.v[0]);
+            *inout = T::add(tmp, *inout);
         }
         // B
         for (inout, add) in res.iter_mut().zip(polys.b.poly.clone().into_iter()) {
-            let tmp = driver.mul_with_public(&challenges.v[1], &add);
-            *inout = driver.add(&tmp, inout);
+            let tmp = T::mul_with_public(add, challenges.v[1]);
+            *inout = T::add(tmp, *inout);
         }
         // C
         for (inout, add) in res.iter_mut().zip(polys.c.poly.clone().into_iter()) {
-            let tmp = driver.mul_with_public(&challenges.v[2], &add);
-            *inout = driver.add(&tmp, inout);
+            let tmp = T::mul_with_public(add, challenges.v[2]);
+            *inout = T::add(tmp, *inout);
         }
         // Sigma1
         for (inout, add) in res.iter_mut().zip(s1_poly_coeffs.iter()) {
-            *inout = driver.add_with_public(&(challenges.v[3] * add), inout);
+            *inout = T::add_with_public(party_id, *inout, challenges.v[3] * add);
         }
         // Sigma2
         for (inout, add) in res.iter_mut().zip(s2_poly_coeffs.iter()) {
-            *inout = driver.add_with_public(&(challenges.v[4] * add), inout);
+            *inout = T::add_with_public(party_id, *inout, challenges.v[4] * add);
         }
 
-        res[0] = driver.add_with_public(&-(challenges.v[0] * proof.eval_a), &res[0]);
-        res[0] = driver.add_with_public(&-(challenges.v[1] * proof.eval_b), &res[0]);
-        res[0] = driver.add_with_public(&-(challenges.v[2] * proof.eval_c), &res[0]);
-        res[0] = driver.add_with_public(&-(challenges.v[3] * proof.eval_s1), &res[0]);
-        res[0] = driver.add_with_public(&-(challenges.v[4] * proof.eval_s2), &res[0]);
+        res[0] = T::add_with_public(party_id, res[0], -challenges.v[0] * proof.eval_a);
+        res[0] = T::add_with_public(party_id, res[0], -challenges.v[1] * proof.eval_b);
+        res[0] = T::add_with_public(party_id, res[0], -challenges.v[2] * proof.eval_c);
+        res[0] = T::add_with_public(party_id, res[0], -challenges.v[3] * proof.eval_s1);
+        res[0] = T::add_with_public(party_id, res[0], -challenges.v[4] * proof.eval_s2);
 
-        Self::div_by_zerofier(driver, &mut res, 1, challenges.xi);
+        Self::div_by_zerofier(&mut res, 1, challenges.xi);
 
         tracing::debug!("computing wxi polynomial done!");
-        res.into()
+        res
     }
 
     // The opening proof polynomial W_xiw(X) (see https://eprint.iacr.org/2019/953.pdf)
@@ -285,8 +293,8 @@ where
         let xiw = challenges.xi * domains.root_of_unity_pow;
 
         let mut res = polys.z.poly.clone().into_iter().collect::<Vec<_>>();
-        res[0] = driver.add_with_public(&-proof.eval_zw, &res[0]);
-        Self::div_by_zerofier(driver, &mut res, 1, xiw);
+        res[0] = T::add_with_public(driver.get_party_id(), res[0], -proof.eval_zw);
+        Self::div_by_zerofier(&mut res, 1, xiw);
 
         tracing::debug!("computing wxiw polynomial done!");
         res.into()
@@ -296,6 +304,7 @@ where
     pub(super) fn round5(self) -> PlonkProofResult<PlonkProof<P>> {
         let Self {
             mut driver,
+            runtime,
             domains,
             challenges,
             proof,
@@ -324,21 +333,22 @@ where
         tracing::debug!("v[3]: {}", v[3]);
         tracing::debug!("v[4]: {}", v[4]);
         let challenges = Round5Challenges::new(challenges, v);
+        let party_id = driver.get_party_id();
 
         // STEP 5.2 Compute linearisation polynomial r(X)
-        let r = Self::compute_r(&mut driver, &domains, &proof, &challenges, &data, &polys);
+        let r = Self::compute_r(party_id, &domains, &proof, &challenges, &data, &polys);
         //STEP 5.3 Compute opening proof polynomial Wxi(X)
-        let wxi = Self::compute_wxi(&mut driver, &proof, &challenges, &data, &polys, &r);
+        let wxi = Self::compute_wxi(party_id, &proof, &challenges, &data, &polys, &r);
 
         //STEP 5.4 Compute opening proof polynomial Wxiw(X)
         let wxiw = Self::compute_wxiw(&mut driver, &domains, &proof, &challenges, &polys);
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         let p_tau = &data.zkey.p_tau;
-        let commit_wxi = driver.msm_public_points(&p_tau[..wxi.len()], &wxi);
-        let commit_wxiw = driver.msm_public_points(&p_tau[..wxiw.len()], &wxiw);
+        let commit_wxi = T::msm_public_points_g1(&p_tau[..wxi.len()], &wxi);
+        let commit_wxiw = T::msm_public_points_g1(&p_tau[..wxiw.len()], &wxiw);
 
-        let opened = driver.open_point_many(&[commit_wxi, commit_wxiw])?;
+        let opened = runtime.block_on(driver.open_point_vec_g1(&[commit_wxi, commit_wxiw]))?;
 
         let commit_wxi: P::G1 = opened[0];
         let commit_wxiw: P::G1 = opened[1];
@@ -360,6 +370,7 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
+    use tokio::runtime;
 
     use crate::{
         mpc::plain::PlainPlonkDriver,
@@ -393,7 +404,8 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+        let runtime = runtime::Builder::new_current_thread().build().unwrap();
+        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
         round1.challenges = challenges;
         let round2 = round1.round1().unwrap();
         let round3 = round2.round2().unwrap();
