@@ -1,3 +1,6 @@
+use core::panic;
+use num_traits::cast::ToPrimitive;
+
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
 use num_bigint::BigUint;
@@ -519,6 +522,28 @@ pub async fn is_zero<F: PrimeField, N: Rep3Network>(
     let res = eq(zero_share, a, io_context).await?;
     let x = open(res, io_context).await?;
     Ok(x.is_one())
+}
+
+/// Computes `shared*2^public`. This is the same as `shared << public`.
+///
+/// #Panics
+/// If public is larger than the bit size of the modulus of the underlying `PrimeField`.
+pub fn pow_2_public<F: PrimeField>(shared: FieldShare<F>, public: F) -> FieldShare<F> {
+    if public.is_zero() {
+        shared
+    } else {
+        let shift: BigUint = public.into();
+        let shift = shift.to_u32().expect("can cast shift operand to u32");
+        if shift >= F::MODULUS_BIT_SIZE {
+            panic!(
+                "Expected left shift to be maximal {}, but was {}",
+                F::MODULUS_BIT_SIZE,
+                shift
+            );
+        } else {
+            mul_public(shared, F::from(2u64).pow(public.into_bigint()))
+        }
+    }
 }
 
 /// computes XOR using arithmetic operations, only valid when x and y are known to be 0 or 1.

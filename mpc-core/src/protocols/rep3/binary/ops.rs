@@ -154,6 +154,18 @@ impl<F: PrimeField> std::ops::Shl<usize> for Rep3BigUintShare<F> {
     }
 }
 
+impl<F: PrimeField> std::ops::Shl<usize> for &Rep3BigUintShare<F> {
+    type Output = Rep3BigUintShare<F>;
+
+    fn shl(self, rhs: usize) -> Self::Output {
+        Rep3BigUintShare {
+            a: &self.a << rhs,
+            b: &self.b << rhs,
+            phantom: PhantomData,
+        }
+    }
+}
+
 impl<F: PrimeField> std::ops::Shr<usize> for Rep3BigUintShare<F> {
     type Output = Rep3BigUintShare<F>;
 

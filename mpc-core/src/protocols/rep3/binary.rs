@@ -1,16 +1,23 @@
 use ark_ff::{One, PrimeField};
+use futures::{stream::FuturesOrdered, StreamExt};
 use itertools::izip;
 use num_bigint::BigUint;
 use types::Rep3BigUintShare;
 
-use crate::protocols::rep3::{id::PartyID, network::Rep3Network};
+use crate::protocols::rep3::{
+    arithmetic::{self},
+    conversion,
+    id::PartyID,
+    network::Rep3Network,
+};
 
 use super::{network::IoContext, Rep3PrimeFieldShare};
+use num_traits::cast::ToPrimitive;
 
 mod ops;
 pub(super) mod types;
 
-type FieldShare<F> = Rep3PrimeFieldShare<F>;
+type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 type BinaryShare<F> = Rep3BigUintShare<F>;
 type IoResult<T> = std::io::Result<T>;
 
@@ -77,6 +84,99 @@ pub async fn and<F: PrimeField, N: Rep3Network>(
 /// Performs a bitwise AND operation on a shared value and a public value.
 pub fn and_with_public<F: PrimeField>(shared: &BinaryShare<F>, public: &BigUint) -> BinaryShare<F> {
     shared & public
+}
+
+/// Shifts a share by a public value `F` to the right.
+///
+/// # Panics
+/// This method panics if `public` is larger than the of bits of
+/// the underlying `PrimeField`'s modulus'.
+pub fn shift_r_public<F: PrimeField>(shared: &BinaryShare<F>, public: F) -> BinaryShare<F> {
+    // some special casing
+    if public.is_zero() {
+        return shared.to_owned();
+    }
+    let shift: BigUint = public.into();
+    let shift = shift.to_usize().expect("can cast shift operand to usize");
+    shared >> shift
+}
+
+/// Shifts a share by a public value `F` to the left.
+///
+/// # Panics
+/// This method panics if `public` is larger than the of bits of
+/// the underlying `PrimeField`'s modulus'.
+pub fn shift_l_public<F: PrimeField>(shared: &BinaryShare<F>, public: F) -> BinaryShare<F> {
+    // some special casing
+    if public.is_zero() {
+        return shared.to_owned();
+    }
+    let shift: BigUint = public.into();
+    let shift = shift.to_usize().expect("can cast shift operand to usize");
+    shared << shift
+}
+
+pub async fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
+    public: F,
+    shared: &BinaryShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<ArithmeticShare<F>> {
+    // This case is equivalent to a*2^b
+    // Strategy: limit size of b to k bits
+    // bit-decompose b into bits b_i
+
+    // TODO: this sucks... we need something better here...
+    let io_0 = io_context.fork().await?;
+    let io_1 = io_context.fork().await?;
+    let io_2 = io_context.fork().await?;
+    let io_3 = io_context.fork().await?;
+    let io_4 = io_context.fork().await?;
+    let io_5 = io_context.fork().await?;
+    let io_6 = io_context.fork().await?;
+    let io_7 = io_context.fork().await?;
+    let mut contexts = vec![io_0, io_1, io_2, io_3, io_4, io_5, io_6, io_7];
+    let party_id = io_context.id;
+    let mut futures_ordered = FuturesOrdered::new();
+    for (i, context) in izip!((0..8), contexts.iter_mut()) {
+        let bit = Rep3BigUintShare::new(
+            (shared.a.clone() >> i) & BigUint::one(),
+            (shared.b.clone() >> i) & BigUint::one(),
+        );
+        futures_ordered.push_back(conversion::b2a_consume(bit, context));
+    }
+    let mut individual_bit_shares = Vec::with_capacity(8);
+    while let Some(result) = futures_ordered.next().await {
+        individual_bit_shares.push(result?);
+    }
+    // v_i = 2^2^i * <b_i> + 1 - <b_i>
+    let mut vs: Vec<_> = individual_bit_shares
+        .into_iter()
+        .enumerate()
+        .map(|(i, b_i)| {
+            let two = F::from(2u64);
+            // i is 8 at most there `as u32` is ok
+            let two_to_two_to_i = two.pow([2u64.pow(i as u32)]);
+            let v = arithmetic::mul_public(b_i, two_to_two_to_i);
+            let v = arithmetic::add_public(v, F::one(), party_id);
+            arithmetic::sub(v, b_i)
+        })
+        .collect();
+
+    // v = \prod v_i
+    // TODO: This should be done in a multiplication tree
+    let mut v = vs.pop().unwrap();
+    for v_i in vs {
+        v = arithmetic::mul(v, v_i, io_context).await?;
+    }
+    // TODO could use try_fold from futures::stream
+    // let last = vs.pop().unwrap();
+    // let v = self.runtime.block_on(
+    //     futures::stream::iter(vs.into_iter().map(|v| Ok(v)))
+    //         .try_fold(last, |a, b| async move {
+    //             arithmetic::mul(a, b, &mut self.io_context).await
+    //         }),
+    // )?;
+    Ok(arithmetic::mul_public(v, public))
 }
 
 //pub async fn and_vec(

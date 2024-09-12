@@ -814,13 +814,13 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
             if count < self.main_outputs + amount_public_inputs + 1 {
                 public_inputs.push(self.driver.open(self.ctx.signals[idx].clone())?);
             } else {
-                witness.push(self.driver.to_share(self.ctx.signals[idx].clone()));
+                witness.push(self.driver.to_share(self.ctx.signals[idx].clone())?);
             }
         }
         Ok(FinalizedWitnessExtension {
             shared_witness: SharedWitness {
                 public_inputs,
-                witness: witness,
+                witness,
             },
             output_mapping: self.output_mapping,
         })

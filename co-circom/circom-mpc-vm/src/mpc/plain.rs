@@ -233,8 +233,8 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok(a)
     }
 
-    fn to_share(&self, a: Self::VmType) -> Self::ArithmeticShare {
-        a
+    fn to_share(&mut self, a: Self::VmType) -> Result<Self::ArithmeticShare> {
+        Ok(a)
     }
 
     fn is_shared(&mut self, _: &Self::VmType) -> Result<bool> {

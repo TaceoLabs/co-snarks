@@ -45,6 +45,13 @@ pub async fn a2b<F: PrimeField, N: Rep3Network>(
         .await
 }
 
+pub async fn b2a_consume<F: PrimeField, N: Rep3Network>(
+    x: Rep3BigUintShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3PrimeFieldShare<F>> {
+    b2a(&x, io_context).await
+}
+
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
 
 // Keep in mind: Only works if the input is actually a binary sharing of a valid field element

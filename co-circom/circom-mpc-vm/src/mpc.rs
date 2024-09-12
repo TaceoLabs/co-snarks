@@ -102,7 +102,7 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     fn open(&mut self, a: Self::VmType) -> Result<F>;
 
     /// Transforms a VM-type into a secret-shared value.
-    fn to_share(&self, a: Self::VmType) -> Self::ArithmeticShare;
+    fn to_share(&mut self, a: Self::VmType) -> Result<Self::ArithmeticShare>;
 
     /// Returns F::one() as a VM-type.
     fn public_one(&self) -> Self::VmType;
