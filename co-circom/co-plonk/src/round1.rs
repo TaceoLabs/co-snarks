@@ -110,14 +110,14 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         }
         buffer.resize(zkey.domain_size, T::ArithmeticShare::default());
         // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
-        let poly = T::ifft(&buffer, &domains.domain);
+        let mut poly = T::ifft(&buffer, &domains.domain);
 
         tracing::debug!("ffts for evals..");
         // Compute extended evaluations of a(X), b(X) and c(X) polynomials
         let eval = T::fft(&poly, &domains.extended_domain);
 
         tracing::debug!("blinding coefficients");
-        let poly = plonk_utils::blind_coefficients::<P, T>(&poly, blind_factors);
+        plonk_utils::blind_coefficients::<P, T>(&mut poly, blind_factors);
         Ok((buffer, PolyEval { poly, eval }))
     }
 

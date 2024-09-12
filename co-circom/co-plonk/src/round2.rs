@@ -244,14 +244,15 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
 
         buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
         batched_mul_span.exit();
+        let fft_span = tracing::info_span!("fft-ifft for z(x)").entered();
 
         // Compute polynomial coefficients z(X) from buffer_z
-        let poly_z = T::ifft(&buffer_z, &domains.domain);
+        let mut poly_z = T::ifft(&buffer_z, &domains.domain);
 
         // Compute extended evaluations of z(X) polynomial
         let eval_z = T::fft(&poly_z, &domains.extended_domain);
-
-        let poly_z = plonk_utils::blind_coefficients::<P, T>(&poly_z, &challenges.b[6..9]);
+        plonk_utils::blind_coefficients::<P, T>(&mut poly_z, &challenges.b[6..9]);
+        fft_span.exit();
 
         if poly_z.len() > zkey.domain_size + 3 {
             Err(PlonkProofError::PolynomialDegreeTooLarge)

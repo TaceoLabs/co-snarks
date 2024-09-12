@@ -110,6 +110,7 @@ where
 mod plonk_utils {
     use ark_ec::pairing::Pairing;
     use circom_types::plonk::ZKey;
+    use rayon::prelude::*;
 
     use crate::mpc::CircomPlonkProver;
     use crate::types::{Domains, PlonkWitness};
@@ -143,20 +144,21 @@ mod plonk_utils {
 
     // For convenience coeff is given in reverse order
     pub(crate) fn blind_coefficients<P: Pairing, T: CircomPlonkProver<P>>(
-        poly: &[T::ArithmeticShare],
+        poly: &mut Vec<T::ArithmeticShare>,
         coeff_rev: &[T::ArithmeticShare],
-    ) -> Vec<T::ArithmeticShare> {
-        let mut res = poly.to_vec();
+    ) {
         #[allow(unused_mut)]
-        for (mut p, c) in res.iter_mut().zip(coeff_rev.iter().rev()) {
-            *p = T::sub(*p, *c);
-        }
+        poly.par_iter_mut()
+            .zip(coeff_rev.par_iter().rev())
+            .with_min_len(32)
+            .for_each(|(mut p, c)| {
+                *p = T::sub(*p, *c);
+            });
         // Extend
-        res.reserve(coeff_rev.len());
+        poly.reserve(coeff_rev.len());
         for c in coeff_rev.iter().rev().cloned() {
-            res.push(c);
+            poly.push(c);
         }
-        res
     }
 
     pub(crate) fn calculate_lagrange_evaluations<P: Pairing>(

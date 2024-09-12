@@ -114,8 +114,9 @@ where
         )?;
         tracing::debug!("done!");
         tracing::debug!("getting r and s...");
-        let r = self.driver.rand();
-        let s = self.driver.rand();
+        //TODO: this is bad - we need something else
+        let r = self.runtime.block_on(self.driver.rand())?;
+        let s = self.runtime.block_on(self.driver.rand())?;
         tracing::debug!("done!");
         tracing::debug!("calling create_proof_with_assignment...");
         self.create_proof_with_assignment(zkey, r, s, &h, &public_inputs[1..], private_witness)
