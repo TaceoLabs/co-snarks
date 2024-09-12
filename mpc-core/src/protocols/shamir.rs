@@ -223,6 +223,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             .await
     }
 
+    /// Generates a random field element and returns it as a share.
     pub async fn rand(&mut self) -> IoResult<ShamirPrimeFieldShare<F>> {
         let (r, _) = self.rng_buffer.get_pair(&mut self.network).await?;
         Ok(ShamirPrimeFieldShare::new(r))

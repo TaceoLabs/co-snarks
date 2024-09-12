@@ -59,10 +59,10 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     }
 
     fn promote_to_trivial_shares(
-        id: Self::PartyID,
+        _id: Self::PartyID,
         public_values: &[<P as Pairing>::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
-        todo!()
+        arithmetic::promote_to_trivial_shares(public_values)
     }
 
     fn sub_assign_vec(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
