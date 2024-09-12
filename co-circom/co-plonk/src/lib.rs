@@ -79,7 +79,18 @@ where
         zkey: &ZKey<P>,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<PlonkProof<P>> {
-        tracing::debug!("starting PLONK prove..");
+        tracing::debug!("starting PLONK prove!");
+        tracing::debug!(
+            "we have {} constraints and {} addition constraints",
+            zkey.n_constraints,
+            zkey.n_additions
+        );
+        tracing::debug!("the domain size is {}", zkey.domain_size);
+        tracing::debug!(
+            "we have {} n_vars and {} public inputs",
+            zkey.n_vars,
+            zkey.n_public
+        );
         let state = Round1::init_round(self.driver, self.runtime, zkey, witness)?;
         tracing::debug!("init round done..");
         let state = state.round1()?;

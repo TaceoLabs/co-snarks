@@ -3,6 +3,7 @@ use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
 use co_circom_snarks::SharedWitness;
 use tokio::runtime::Runtime;
+use tracing::instrument;
 
 use crate::{
     mpc::CircomPlonkProver,
@@ -92,7 +93,36 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
 
 // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
 impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
+    fn compute_single_wire_poly(
+        party_id: T::PartyID,
+        witness: &PlonkWitness<P, T>,
+        domains: &Domains<P::ScalarField>,
+        blind_factors: &[T::ArithmeticShare],
+        zkey: &ZKey<P>,
+        map: &[usize],
+    ) -> PlonkProofResult<(Vec<T::ArithmeticShare>, PolyEval<P, T>)> {
+        let mut buffer = Vec::with_capacity(zkey.n_constraints);
+        for i in 0..zkey.n_constraints {
+            match plonk_utils::get_witness(party_id, witness, zkey, map[i]) {
+                Ok(witness) => buffer.push(witness),
+                Err(err) => return Err(err),
+            }
+        }
+        buffer.resize(zkey.domain_size, T::ArithmeticShare::default());
+        // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
+        let poly = T::ifft(&buffer, &domains.domain);
+
+        tracing::debug!("ffts for evals..");
+        // Compute extended evaluations of a(X), b(X) and c(X) polynomials
+        let eval = T::fft(&poly, &domains.extended_domain);
+
+        tracing::debug!("blinding coefficients");
+        let poly = plonk_utils::blind_coefficients::<P, T>(&poly, blind_factors);
+        Ok((buffer, PolyEval { poly, eval }))
+    }
+
     // Essentially the fft of the trace columns
+    #[instrument(level = "debug", name = "compute wire polys", skip_all)]
     fn compute_wire_polynomials(
         driver: &mut T,
         domains: &Domains<P::ScalarField>,
@@ -101,58 +131,51 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         witness: &PlonkWitness<P, T>,
     ) -> PlonkProofResult<Round1Polys<P, T>> {
         let party_id = driver.get_party_id();
-        tracing::debug!("computing wire polynomials...");
-        let num_constraints = zkey.n_constraints;
 
-        let mut buffer_a = Vec::with_capacity(zkey.domain_size);
-        let mut buffer_b = Vec::with_capacity(zkey.domain_size);
-        let mut buffer_c = Vec::with_capacity(zkey.domain_size);
+        let mut wire_a = None;
+        let mut wire_b = None;
+        let mut wire_c = None;
 
-        for i in 0..num_constraints {
-            buffer_a.push(plonk_utils::get_witness(
-                party_id,
-                witness,
-                zkey,
-                zkey.map_a[i],
-            )?);
-            buffer_b.push(plonk_utils::get_witness(
-                party_id,
-                witness,
-                zkey,
-                zkey.map_b[i],
-            )?);
-            buffer_c.push(plonk_utils::get_witness(
-                party_id,
-                witness,
-                zkey,
-                zkey.map_c[i],
-            )?);
-        }
-        buffer_a.resize(zkey.domain_size, T::ArithmeticShare::default());
-        buffer_b.resize(zkey.domain_size, T::ArithmeticShare::default());
-        buffer_c.resize(zkey.domain_size, T::ArithmeticShare::default());
+        rayon::scope(|s| {
+            s.spawn(|_| {
+                wire_a = Some(Self::compute_single_wire_poly(
+                    party_id,
+                    witness,
+                    domains,
+                    &challenges.b[..2],
+                    zkey,
+                    &zkey.map_a,
+                ))
+            });
+            s.spawn(|_| {
+                wire_b = Some(Self::compute_single_wire_poly(
+                    party_id,
+                    witness,
+                    domains,
+                    &challenges.b[2..4],
+                    zkey,
+                    &zkey.map_b,
+                ))
+            });
+            s.spawn(|_| {
+                wire_c = Some(Self::compute_single_wire_poly(
+                    party_id,
+                    witness,
+                    domains,
+                    &challenges.b[4..6],
+                    zkey,
+                    &zkey.map_c,
+                ))
+            });
+        });
+        // we have some values as rayon scope finished
+        let (buffer_a, poly_a) = wire_a.unwrap()?;
+        let (buffer_b, poly_b) = wire_b.unwrap()?;
+        let (buffer_c, poly_c) = wire_c.unwrap()?;
 
-        //TODO MULTITHREAD ME
-        tracing::debug!("iffts for buffers..");
-        // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers
-        let poly_a = T::ifft(&buffer_a, &domains.domain);
-        let poly_b = T::ifft(&buffer_b, &domains.domain);
-        let poly_c = T::ifft(&buffer_c, &domains.domain);
-
-        tracing::debug!("ffts for evals..");
-        // Compute extended evaluations of a(X), b(X) and c(X) polynomials
-        let eval_a = T::fft(&poly_a, &domains.extended_domain);
-        let eval_b = T::fft(&poly_b, &domains.extended_domain);
-        let eval_c = T::fft(&poly_c, &domains.extended_domain);
-
-        tracing::debug!("blinding coefficients");
-        let poly_a = plonk_utils::blind_coefficients::<P, T>(&poly_a, &challenges.b[..2]);
-        let poly_b = plonk_utils::blind_coefficients::<P, T>(&poly_b, &challenges.b[2..4]);
-        let poly_c = plonk_utils::blind_coefficients::<P, T>(&poly_c, &challenges.b[4..6]);
-
-        if poly_a.len() > zkey.domain_size + 2
-            || poly_b.len() > zkey.domain_size + 2
-            || poly_c.len() > zkey.domain_size + 2
+        if poly_a.poly.len() > zkey.domain_size + 2
+            || poly_b.poly.len() > zkey.domain_size + 2
+            || poly_c.poly.len() > zkey.domain_size + 2
         {
             return Err(PlonkProofError::PolynomialDegreeTooLarge);
         }
@@ -161,31 +184,25 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
             buffer_a,
             buffer_b,
             buffer_c,
-            a: PolyEval {
-                poly: poly_a.into(),
-                eval: eval_a,
-            },
-            b: PolyEval {
-                poly: poly_b.into(),
-                eval: eval_b,
-            },
-            c: PolyEval {
-                poly: poly_c.into(),
-                eval: eval_c,
-            },
+            a: poly_a,
+            b: poly_b,
+            c: poly_c,
         })
     }
 
     // Calculate the witnesses for the additions, since they are not part of the SharedWitness
+    #[instrument(level = "debug", name = "calculate additions", skip_all)]
     fn calculate_additions(
         driver: &mut T,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
         zkey: &ZKey<P>,
     ) -> PlonkProofResult<PlonkWitness<P, T>> {
-        tracing::debug!("calculating addition {} constraints...", zkey.n_additions);
         let party_id = driver.get_party_id();
         let mut witness = PlonkWitness::new(witness, zkey.n_additions);
-
+        // This is hard to multithread as we have to add the results
+        // to the vec as they are needed for the later steps.
+        // We leave it like that as it does not take to much time (<1ms for poseidon).
+        // Keep an eye on the span duration, maybe we have to come back to that later.
         for addition in zkey.additions.iter() {
             let witness1 = plonk_utils::get_witness(
                 party_id,
@@ -205,10 +222,10 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
             let result = T::add(f1, f2);
             witness.addition_witness.push(result);
         }
-        tracing::debug!("additions done!");
         Ok(witness)
     }
 
+    #[instrument(level = "debug", name = "Plonk - Round Init", skip_all)]
     pub(super) fn init_round(
         mut driver: T,
         runtime: Runtime,
@@ -216,12 +233,13 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
         let plonk_witness = Self::calculate_additions(&mut driver, private_witness, zkey)?;
-
+        let challenges = Round1Challenges::random(&mut driver)?;
+        let domains = Domains::new(zkey.domain_size)?;
         Ok(Self {
-            challenges: Round1Challenges::random(&mut driver)?,
+            challenges,
             driver,
             runtime,
-            domains: Domains::new(zkey.domain_size)?,
+            domains,
             data: PlonkDataRound1 {
                 witness: plonk_witness,
                 zkey,
@@ -229,6 +247,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         })
     }
 
+    #[instrument(level = "debug", name = "Plonk - Round 1", skip_all)]
     // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
     pub(super) fn round1(self) -> PlonkProofResult<Round2<'a, P, T>> {
         let Self {
@@ -246,14 +265,35 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         let polys =
             Self::compute_wire_polynomials(&mut driver, &domains, &challenges, zkey, witness)?;
 
-        tracing::debug!("committing to polys (MSMs)");
+        let mut commit_a = None;
+        let mut commit_b = None;
+        let mut commit_c = None;
+        let commit_span = tracing::debug_span!("committing to polys (MSMs)").entered();
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let commit_a = T::msm_public_points_g1(&p_tau[..polys.a.poly.len()], &polys.a.poly);
-        let commit_b = T::msm_public_points_g1(&p_tau[..polys.b.poly.len()], &polys.b.poly);
-        let commit_c = T::msm_public_points_g1(&p_tau[..polys.c.poly.len()], &polys.c.poly);
+        rayon::scope(|s| {
+            s.spawn(|_| {
+                let result = T::msm_public_points_g1(&p_tau[..polys.a.poly.len()], &polys.a.poly);
+                commit_a = Some(result);
+            });
+            s.spawn(|_| {
+                let result = T::msm_public_points_g1(&p_tau[..polys.b.poly.len()], &polys.b.poly);
+                commit_b = Some(result);
+            });
+            s.spawn(|_| {
+                let result = T::msm_public_points_g1(&p_tau[..polys.c.poly.len()], &polys.c.poly);
+                commit_c = Some(result);
+            });
+        });
+        // rayon scope must be done therefore some values
+        let commit_a = commit_a.unwrap();
+        let commit_b = commit_b.unwrap();
+        let commit_c = commit_c.unwrap();
 
+        // network round
+        commit_span.exit();
+        let opening_span = tracing::debug_span!("opening commits").entered();
         let opened = runtime.block_on(driver.open_point_vec_g1(&[commit_a, commit_b, commit_c]))?;
-
+        opening_span.exit();
         let proof = Round1Proof::<P> {
             commit_a: opened[0],
             commit_b: opened[1],

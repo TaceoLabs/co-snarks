@@ -15,4 +15,5 @@ Cargo.lock
 
 .vscode
 co-noir/co-acvm/src/bin/
+co-circom/co-plonk/src/bin/
 groth16_tester.rs

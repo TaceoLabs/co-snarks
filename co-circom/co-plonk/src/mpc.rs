@@ -25,6 +25,9 @@ pub trait CircomPlonkProver<P: Pairing> {
     fn rand(&mut self) -> Self::ArithmeticShare;
 
     fn get_party_id(&self) -> Self::PartyID;
+
+    fn fork(&mut self) -> Self;
+
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
@@ -51,6 +54,13 @@ pub trait CircomPlonkProver<P: Pairing> {
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
+    ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
+
+    fn mul_vecs(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+        c: &[Self::ArithmeticShare],
     ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
 
     /// Convenience method for \[a\] + \[b\] * \[c\]

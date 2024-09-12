@@ -26,7 +26,7 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
 
     type PartyID = PartyID;
 
-    fn debug_print(a: Self::ArithmeticShare) {
+    fn debug_print(_: Self::ArithmeticShare) {
         todo!()
     }
 
@@ -36,6 +36,10 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
 
     fn get_party_id(&self) -> Self::PartyID {
         self.io_context.id
+    }
+
+    fn fork(&mut self) -> Self {
+        todo!()
     }
 
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
@@ -74,6 +78,15 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         rhs: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
         rep3::arithmetic::mul_vec(lhs, rhs, &mut self.io_context).await
+    }
+
+    async fn mul_vecs(
+        &mut self,
+        _a: &[Self::ArithmeticShare],
+        _b: &[Self::ArithmeticShare],
+        _c: &[Self::ArithmeticShare],
+    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        todo!();
     }
 
     async fn add_mul_vec(

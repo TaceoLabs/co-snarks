@@ -37,6 +37,10 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         0
     }
 
+    fn fork(&mut self) -> Self {
+        PlainPlonkDriver
+    }
+
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         a + b
     }
@@ -73,6 +77,15 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         b: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
         Ok(izip!(a, b).map(|(a, b)| *a * *b).collect())
+    }
+
+    async fn mul_vecs(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+        c: &[Self::ArithmeticShare],
+    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        Ok(izip!(a, b, c).map(|(a, b, c)| *a * *b * *c).collect())
     }
 
     async fn add_mul_vec(
