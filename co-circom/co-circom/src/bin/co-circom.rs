@@ -510,7 +510,8 @@ where
                     let proof = prover.prove(&zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-
+                    tracing::info!("closing network...");
+                    prover.close_network()?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {

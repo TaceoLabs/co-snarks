@@ -261,7 +261,8 @@ impl Rep3MpcNet {
         write: &mut WriteChannel<SendStream, LengthDelimitedCodec>,
     ) -> io::Result<()> {
         let mut bytes = Vec::with_capacity(data.serialized_size(ark_serialize::Compress::No));
-        data.serialize_uncompressed(&mut bytes);
+        data.serialize_uncompressed(&mut bytes)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         write.send(Bytes::from(bytes)).await?;
         Ok(())
     }

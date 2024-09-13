@@ -17,6 +17,10 @@ impl<N: Rep3Network> Rep3Groth16Driver<N> {
     pub fn new(io_context: IoContext<N>) -> Self {
         Self { io_context }
     }
+
+    pub(crate) fn into_network(self) -> N {
+        self.io_context.network
+    }
 }
 
 impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N> {

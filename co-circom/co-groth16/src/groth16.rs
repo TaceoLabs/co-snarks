@@ -10,11 +10,13 @@ use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeField
 use co_circom_snarks::SharedWitness;
 use eyre::Result;
 use itertools::izip;
-use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet};
+use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet, Rep3Network};
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use num_traits::ToPrimitive;
 use std::marker::PhantomData;
+use std::time::Duration;
+use std::{io, thread};
 use tokio::runtime::{self, Runtime};
 use tracing::instrument;
 
@@ -106,6 +108,7 @@ where
         let num_constraints = matrices.num_constraints;
         let public_inputs = &private_witness.public_inputs;
         let private_witness = &private_witness.witness;
+        let party_id = self.driver.get_party_id();
         // TODO: actually we do not like that we have to block here
         // can we somehow manage that this doesn't have to use the network?
         let mut forked_driver = self.runtime.block_on(self.driver.fork())?;
@@ -204,12 +207,12 @@ where
         let ditribute_pow_span = tracing::debug_span!("ifft, distribute pows, fft").entered();
         rayon::scope(|s| {
             s.spawn(|_| {
-                let mul_vec_span = tracing::debug_span!("groth16 - mul vec in dist pows").entered();
-                let _guard = self.runtime.enter();
-                // TODO: this is a very large multiplication - do we want to do that on the runtime
-                // or maybe on rayon and only sending on the runtime?
                 match self.runtime.block_on(self.driver.mul_vec(&a, &b)) {
                     Ok(mut ab) => {
+                        let mul_vec_span =
+                            tracing::debug_span!("groth16 - mul vec in dist pows").entered();
+                        // TODO: this is a very large multiplication - do we want to do that on the runtime
+                        // or maybe on rayon and only sending on the runtime?
                         let ifft_span = tracing::debug_span!("ifft in dist pows").entered();
                         T::ifft_in_place(&mut ab, &domain);
                         ifft_span.exit();
@@ -224,11 +227,12 @@ where
                         T::fft_in_place(&mut ab, &domain);
                         fft_span.exit();
                         c_dist_pow = Some(Ok(ab));
-                        tracing::error!("BRANCH 1 {party_id}");
+                        mul_vec_span.exit();
                     }
-                    Err(err) => c_dist_pow = Some(Err(err)),
+                    Err(err) => {
+                        c_dist_pow = Some(Err(err));
+                    }
                 }
-                mul_vec_span.exit();
             });
             s.spawn(|_| {
                 let mut a_result = T::ifft(&a, &domain);
@@ -239,7 +243,6 @@ where
                 );
                 T::fft_in_place(&mut a_result, &domain);
                 a_dist_pow = Some(a_result);
-                tracing::error!("BRANCH 2 {party_id}");
             });
             s.spawn(|_| {
                 let mut b_result = T::ifft(&b, &domain);
@@ -250,10 +253,8 @@ where
                 );
                 T::fft_in_place(&mut b_result, &domain);
                 b_dist_pow = Some(b_result);
-                tracing::error!("BRANCH 3 {party_id}");
             });
         });
-        tracing::error!("ALL HERE");
         //drop the old values!
         std::mem::drop(a);
         std::mem::drop(b);
@@ -359,16 +360,14 @@ where
         let mut r_s_delta_g1 = None;
         let delta_g1 = zkey.delta_g1.into_group();
         let msm_create_proof = tracing::debug_span!("first MSMs").entered();
+        let party_id = forked_driver.get_party_id();
         rayon::scope(|scope| {
             scope.spawn(|_| h_acc = Some(T::msm_public_points_g1(&zkey.h_query, h)));
             scope.spawn(|_| {
                 l_aux_acc = Some(T::msm_public_points_g1(&zkey.l_query, aux_assignment))
             });
             scope.spawn(|_| match self.runtime.block_on(self.driver.mul(r, s)) {
-                Ok(rs) => {
-                    tracing::info!("I am done with mul :)");
-                    r_s_delta_g1 = Some(Ok(T::scalar_mul_public_point_g1(&delta_g1, rs)));
-                }
+                Ok(rs) => r_s_delta_g1 = Some(Ok(T::scalar_mul_public_point_g1(&delta_g1, rs))),
                 Err(err) => r_s_delta_g1 = Some(Err(err)),
             });
         });
@@ -453,7 +452,6 @@ where
         T::add_assign_points_g1(&mut g_c, &l_aux_acc);
         T::add_assign_points_g1(&mut g_c, &h_acc);
 
-        tracing::debug!("almost done...");
         let (g_c_opened, g2_b_opened) = self
             .runtime
             .block_on(self.driver.open_two_points(g_c, g2_b))?;
@@ -477,7 +475,9 @@ where
 {
     /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
-        let runtime = runtime::Builder::new_current_thread().build()?;
+        let runtime = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
         let mpc_net = runtime.block_on(Rep3MpcNet::new(config))?;
         let io_context = runtime.block_on(IoContext::init(mpc_net))?;
         let driver = Rep3Groth16Driver::new(io_context);
@@ -486,6 +486,12 @@ where
             runtime,
             phantom_data: PhantomData,
         })
+    }
+
+    pub fn close_network(self) -> io::Result<()> {
+        self.runtime
+            .block_on(self.driver.into_network().shutdown())?;
+        Ok(())
     }
 }
 
