@@ -9,7 +9,6 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
-use futures::executor::block_on;
 use num_traits::One;
 use tokio::runtime::Runtime;
 use tracing::instrument;

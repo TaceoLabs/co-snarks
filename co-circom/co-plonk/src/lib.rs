@@ -147,6 +147,8 @@ mod plonk_utils {
         poly: &mut Vec<T::ArithmeticShare>,
         coeff_rev: &[T::ArithmeticShare],
     ) {
+        tracing::info!("poly len: {}", poly.len());
+        tracing::info!("coeff_rev: {}", coeff_rev.len());
         #[allow(unused_mut)]
         poly.par_iter_mut()
             .zip(coeff_rev.par_iter().rev())
