@@ -183,6 +183,7 @@ pub async fn inv<F: PrimeField, N: Rep3Network>(
     Ok(r * y_inv)
 }
 
+/// Computes the inverse of a vector of shared field elements
 pub async fn inv_vec<F: PrimeField, N: Rep3Network>(
     a: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
@@ -220,7 +221,7 @@ pub async fn open_vec<F: PrimeField, N: Rep3Network>(
     // because we use it exactly once in PLONK where we do it for 4
     // shares..
     let (a, b) = a
-        .into_iter()
+        .iter()
         .map(|share| (share.a, share.b))
         .collect::<(Vec<F>, Vec<F>)>();
     let c = io_context.network.reshare_many(&b).await?;
@@ -276,6 +277,7 @@ pub async fn mul_open<F: PrimeField, N: Rep3Network>(
     Ok(a + b + c)
 }
 
+/// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
 pub async fn mul_open_vec<F: PrimeField, N: Rep3Network>(
     a: &[FieldShare<F>],
     b: &[FieldShare<F>],

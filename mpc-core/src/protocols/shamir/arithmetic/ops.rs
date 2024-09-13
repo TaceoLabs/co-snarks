@@ -16,6 +16,12 @@ impl<F: PrimeField> std::ops::AddAssign for ShamirPrimeFieldShare<F> {
     }
 }
 
+impl<F: PrimeField> std::ops::AddAssign<&ShamirPrimeFieldShare<F>> for ShamirPrimeFieldShare<F> {
+    fn add_assign(&mut self, rhs: &Self) {
+        self.a += rhs.a;
+    }
+}
+
 impl<F: PrimeField> std::ops::Add<&ShamirPrimeFieldShare<F>> for ShamirPrimeFieldShare<F> {
     type Output = Self;
 
@@ -150,9 +156,7 @@ impl<F: PrimeField> std::ops::Neg for &ShamirPrimeFieldShare<F> {
 
 impl<F: PrimeField> ark_ff::Zero for ShamirPrimeFieldShare<F> {
     fn zero() -> Self {
-        Self {
-            a: F::zero(),
-        }
+        Self { a: F::zero() }
     }
 
     fn is_zero(&self) -> bool {

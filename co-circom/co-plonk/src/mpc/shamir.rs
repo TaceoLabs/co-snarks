@@ -96,10 +96,9 @@ impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P:
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        todo!();
-        //let mut result = arithmetic::mul_vec(b, c, &mut self.protocol).await?;
-        //arithmetic::add_vec_assign(&mut result, a);
-        //Ok(result)
+        let mut result = arithmetic::mul_vec(b, c, &mut self.protocol).await?;
+        arithmetic::add_vec_assign(&mut result, a);
+        Ok(result)
     }
 
     async fn mul_open_vec(
@@ -107,24 +106,21 @@ impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P:
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<<P as Pairing>::ScalarField>> {
-        todo!();
-        //arithmetic::mul_open_vec(a, b, &mut self.protocol).await
+        arithmetic::mul_open_vec(a, b, &mut self.protocol).await
     }
 
     async fn open_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<<P as Pairing>::ScalarField>> {
-        todo!();
-        //arithmetic::open_vec(a, &mut self.protocol).await
+        arithmetic::open_vec(a, &mut self.protocol).await
     }
 
     async fn inv_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        todo!()
-        //arithmetic::inv_vec(a, &mut self.protocol).await
+        arithmetic::inv_vec(a, &mut self.protocol).await
     }
 
     fn promote_to_trivial_share(
