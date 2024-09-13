@@ -3,7 +3,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_core::protocols::shamir::{
-    arithmetic, network::ShamirNetwork, pointshare, ShamirPointShare, ShamirPrimeFieldShare,
+    arithmetic, core, network::ShamirNetwork, pointshare, ShamirPointShare, ShamirPrimeFieldShare,
     ShamirProtocol,
 };
 
@@ -59,10 +59,10 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     }
 
     fn promote_to_trivial_shares(
-        id: Self::PartyID,
+        _id: Self::PartyID,
         public_values: &[<P as Pairing>::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
-        todo!()
+        arithmetic::promote_to_trivial_shares(public_values)
     }
 
     fn sub_assign_vec(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
@@ -193,8 +193,19 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         a: Self::PointShareG1,
         b: Self::PointShareG2,
     ) -> std::io::Result<(<P as Pairing>::G1, <P as Pairing>::G2)> {
-        let a_res = pointshare::open_point(&a, &mut self.protocol).await?;
-        let b_res = pointshare::open_point(&b, &mut self.protocol).await?;
-        Ok((a_res, b_res))
+        let s1 = a.a;
+        let s2 = b.a;
+
+        let rcv: Vec<(P::G1, P::G2)> = self
+            .protocol
+            .network
+            .broadcast_next((s1, s2), self.protocol.threshold + 1)
+            .await?;
+        let (r1, r2): (Vec<P::G1>, Vec<P::G2>) = rcv.into_iter().unzip();
+
+        let r1 = core::reconstruct_point(&r1, &self.protocol.open_lagrange_t);
+        let r2 = core::reconstruct_point(&r2, &self.protocol.open_lagrange_t);
+
+        Ok((r1, r2))
     }
 }

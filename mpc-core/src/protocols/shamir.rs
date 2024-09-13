@@ -11,7 +11,7 @@ use rand::{CryptoRng, Rng, SeedableRng};
 use crate::RngType;
 
 pub mod arithmetic;
-mod core;
+pub mod core;
 pub mod network;
 pub mod pointshare;
 mod rngs;
@@ -167,8 +167,8 @@ pub fn combine_curve_point<C: CurveGroup>(
 
 /// This struct handles the Shamir MPC protocol, including proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], and [MSMProvider] traits.
 pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
-    threshold: usize, // degree of the polynomial
-    open_lagrange_t: Vec<F>,
+    pub threshold: usize, // degree of the polynomial
+    pub open_lagrange_t: Vec<F>,
     pub(crate) open_lagrange_2t: Vec<F>,
     mul_lagrange_2t: Vec<F>,
     rng_buffer: ShamirRng<F>,
@@ -223,6 +223,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             .await
     }
 
+    /// Generates a random field element and returns it as a share.
     pub async fn rand(&mut self) -> IoResult<ShamirPrimeFieldShare<F>> {
         let (r, _) = self.rng_buffer.get_pair(&mut self.network).await?;
         Ok(ShamirPrimeFieldShare::new(r))

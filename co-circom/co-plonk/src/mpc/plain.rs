@@ -27,9 +27,9 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         println!("{a}")
     }
 
-    fn rand(&mut self) -> Self::ArithmeticShare {
+    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         let mut rng = thread_rng();
-        Self::ArithmeticShare::rand(&mut rng)
+        Ok(Self::ArithmeticShare::rand(&mut rng))
     }
 
     fn get_party_id(&self) -> Self::PartyID {

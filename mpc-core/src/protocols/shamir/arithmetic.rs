@@ -71,7 +71,7 @@ pub fn mul_assign_public<F: PrimeField>(shared: &mut ShamirShare<F>, public: F) 
     *shared *= public;
 }
 
-/// Computes the inverse of a shared field element 
+/// Computes the inverse of a shared field element
 pub async fn inv<F: PrimeField, N: ShamirNetwork>(
     a: ShamirShare<F>,
     shamir: &mut ShamirProtocol<F, N>,
@@ -153,51 +153,32 @@ pub async fn open_many<F: PrimeField, N: ShamirNetwork>(
         .collect();
     Ok(res)
 }
+
 /*
 fn neg_vec_in_place(vec: &mut ShamirShare<F>Vec) {
     for a in vec.a.iter_mut() {
         a.neg_in_place();
     }
 }
+*/
 
-
-
-
-fn promote_to_trivial_share(&self, public_value: F) -> ShamirShare<F> {
-    ShamirShare<F>::new(public_value)
+/// Promotes a public value to a trivial share.
+pub fn promote_to_trivial_share<F: PrimeField>(public_value: F) -> ShamirShare<F> {
+    ShamirShare::<F>::new(public_value)
 }
 
-fn promote_to_trivial_shares(&self, public_values: &[F]) -> ShamirShare<F>Vec {
-    let shares = public_values.to_owned();
-    ShamirShare<F>Vec::new(shares)
+/// Promotes a vector of public values to trivial shares.
+pub fn promote_to_trivial_shares<F: PrimeField>(public_values: &[F]) -> Vec<ShamirShare<F>> {
+    public_values
+        .iter()
+        .copied()
+        .map(promote_to_trivial_share)
+        .collect()
 }
 
-fn distribute_powers_and_mul_by_const(coeffs: &mut ShamirShare<F>Vec, g: F, c: F) {
-    let mut pow = c;
-    for a in coeffs.a.iter_mut() {
-        *a *= pow;
-        pow *= g;
-    }
-}
 
-fn evaluate_constraint(
-    lhs: &[(F, usize)],
-    public_inputs: &[F],
-    private_witness: &ShamirShare<F>Vec,
-) -> ShamirShare<F> {
-    let mut acc = ShamirPrimeFieldShare::default();
-    for (coeff, index) in lhs {
-        if index < &public_inputs.len() {
-            let val = public_inputs[*index];
-            let mul_result = val * coeff;
-            acc = self.add_with_public(&mul_result, &acc);
-        } else {
-            acc.a += *coeff * private_witness.a[*index - public_inputs.len()];
-        }
-    }
-    acc
-}
 
+/*
 fn clone_from_slice(
     &self,
     dst: &mut ShamirShare<F>Vec,
@@ -228,7 +209,7 @@ async fn mul_open<F: PrimeField, N: ShamirNetwork>(
 }
 
 /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
-async fn mul_open_many<F: PrimeField, N: ShamirNetwork>(
+pub async fn mul_open_many<F: PrimeField, N: ShamirNetwork>(
     a: &[ShamirShare<F>],
     b: &[ShamirShare<F>],
     shamir: &mut ShamirProtocol<F, N>,

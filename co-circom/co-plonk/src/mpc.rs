@@ -22,7 +22,7 @@ pub trait CircomPlonkProver<P: Pairing> {
 
     fn debug_print(a: Self::ArithmeticShare);
 
-    fn rand(&mut self) -> Self::ArithmeticShare;
+    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
 
     fn get_party_id(&self) -> Self::PartyID;
 
@@ -50,26 +50,26 @@ pub trait CircomPlonkProver<P: Pairing> {
         public: P::ScalarField,
     ) -> Self::ArithmeticShare;
 
-    fn mul_vec(
+    async fn mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
-    ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
+    ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
-    fn mul_vecs(
+    async fn mul_vecs(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
-    ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
+    ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Convenience method for \[a\] + \[b\] * \[c\]
-    fn add_mul_vec(
+    async fn add_mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
-    ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
+    ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Convenience method for \[a\] + \[b\] * c
     fn add_mul_public(

@@ -100,7 +100,7 @@ pub(crate) fn reconstruct<F: PrimeField>(shares: &[F], lagrange: &[F]) -> F {
     res
 }
 
-pub(crate) fn reconstruct_point<C: CurveGroup>(shares: &[C], lagrange: &[C::ScalarField]) -> C {
+pub fn reconstruct_point<C: CurveGroup>(shares: &[C], lagrange: &[C::ScalarField]) -> C {
     debug_assert_eq!(shares.len(), lagrange.len());
     let mut res = C::zero();
     for (s, l) in shares.iter().zip(lagrange.iter()) {
