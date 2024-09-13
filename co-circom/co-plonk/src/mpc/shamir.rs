@@ -1,6 +1,8 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use ark_poly::univariate::DensePolynomial;
 use ark_poly::EvaluationDomain;
+use ark_poly::Polynomial;
 
 use mpc_core::protocols::shamir::{
     arithmetic, network::ShamirNetwork, pointshare, ShamirPointShare, ShamirPrimeFieldShare,
@@ -165,10 +167,12 @@ impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P:
     }
 
     fn evaluate_poly_public(
-        poly: &[Self::ArithmeticShare],
+        poly: Vec<Self::ArithmeticShare>,
         point: <P as Pairing>::ScalarField,
     ) -> Self::ArithmeticShare {
-        // poly::eval_poly(coeffs, point)
-        todo!() // TODO RH create poly module
+        let poly = DensePolynomial {
+            coeffs: Self::ArithmeticShare::convert_vec(poly),
+        };
+        Self::ArithmeticShare::new(poly.evaluate(&point))
     }
 }
