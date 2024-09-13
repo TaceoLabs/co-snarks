@@ -122,13 +122,13 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
         let challenges = Round4Challenges::new(challenges, xi);
         tracing::debug!("xi: {xi}");
         tracing::debug!("evaluating poly a");
-        let eval_a = T::evaluate_poly_public(&polys.a.poly, challenges.xi);
+        let eval_a = T::evaluate_poly_public(polys.a.poly, challenges.xi);
         tracing::debug!("evaluating poly b");
-        let eval_b = T::evaluate_poly_public(&polys.b.poly, challenges.xi);
+        let eval_b = T::evaluate_poly_public(polys.b.poly, challenges.xi);
         tracing::debug!("evaluating poly c");
-        let eval_c = T::evaluate_poly_public(&polys.c.poly, challenges.xi);
+        let eval_c = T::evaluate_poly_public(polys.c.poly, challenges.xi);
         tracing::debug!("evaluating poly z");
-        let eval_z = T::evaluate_poly_public(&polys.z.poly, xiw);
+        let eval_z = T::evaluate_poly_public(polys.z.poly, xiw);
 
         let opened = runtime.block_on(driver.open_vec(&[eval_a, eval_b, eval_c, eval_z]))?;
 

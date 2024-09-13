@@ -163,12 +163,10 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
     }
 
     fn evaluate_poly_public(
-        coeffs: &[Self::ArithmeticShare],
+        coeffs: Vec<Self::ArithmeticShare>,
         point: P::ScalarField,
     ) -> Self::ArithmeticShare {
-        let poly = DensePolynomial {
-            coeffs: coeffs.to_vec(),
-        };
+        let poly = DensePolynomial { coeffs };
         poly.evaluate(&point)
     }
 }

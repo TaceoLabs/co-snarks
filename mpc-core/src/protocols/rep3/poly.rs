@@ -35,7 +35,7 @@ fn horner_evaluate<F: PrimeField>(poly_coeffs: &[FieldShare<F>], point: F) -> Fi
 
 // This is copied from
 // https://docs.rs/ark-poly/latest/src/ark_poly/polynomial/univariate/dense.rs.html#56
-pub fn eval_poly<F: PrimeField>(coeffs: &[FieldShare<F>], point: F) -> FieldShare<F> {
+pub fn eval_poly<F: PrimeField>(coeffs: Vec<FieldShare<F>>, point: F) -> FieldShare<F> {
     // Horners method - parallel method
     // compute the number of threads we will be using.
     // TODO investigate how this behaves if we are in a rayon scope. Does this return all
@@ -53,8 +53,8 @@ pub fn eval_poly<F: PrimeField>(coeffs: &[FieldShare<F>], point: F) -> FieldShar
         .par_chunks(num_elem_per_thread)
         .enumerate()
         .map(|(i, chunk)| {
-            let mut thread_result = horner_evaluate(&chunk, point);
-            let power = point.pow(&[(i * num_elem_per_thread) as u64]);
+            let mut thread_result = horner_evaluate(chunk, point);
+            let power = point.pow([(i * num_elem_per_thread) as u64]);
             thread_result.a *= power;
             thread_result.b *= power;
             thread_result
