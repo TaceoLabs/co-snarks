@@ -134,5 +134,5 @@ pub trait CircomPlonkProver<P: Pairing> {
     fn evaluate_poly_public(
         poly: Vec<Self::ArithmeticShare>,
         point: P::ScalarField,
-    ) -> Self::ArithmeticShare;
+    ) -> (Self::ArithmeticShare, Vec<Self::ArithmeticShare>);
 }

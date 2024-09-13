@@ -158,7 +158,8 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
     fn evaluate_poly_public(
         coeffs: Vec<Self::ArithmeticShare>,
         point: P::ScalarField,
-    ) -> Self::ArithmeticShare {
-        poly::eval_poly(coeffs, point)
+    ) -> (Self::ArithmeticShare, Vec<Self::ArithmeticShare>) {
+        let result = poly::eval_poly(&coeffs, point);
+        (result, coeffs)
     }
 }

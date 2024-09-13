@@ -1,5 +1,5 @@
 use core::fmt;
-use std::future::Future;
+use std::{fmt::Debug, future::Future};
 
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
@@ -15,9 +15,16 @@ pub use rep3::Rep3Groth16Driver;
 type IoResult<T> = std::io::Result<T>;
 
 pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
-    type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Copy + Clone + Default + Send;
-    type PointShareG1: Send;
-    type PointShareG2: Send;
+    type ArithmeticShare: CanonicalSerialize
+        + CanonicalDeserialize
+        + Copy
+        + Clone
+        + Default
+        + Send
+        + Debug
+        + 'static;
+    type PointShareG1: Debug + Send + 'static;
+    type PointShareG2: Debug + Send + 'static;
     type PartyID: Send + Sync + Copy + fmt::Display;
 
     fn rand(&mut self) -> impl Future<Output = IoResult<Self::ArithmeticShare>>;

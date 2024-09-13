@@ -107,7 +107,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
             domains,
             challenges,
             proof,
-            polys,
+            mut polys,
             data,
         } = self;
         tracing::debug!("building challenges for round4 with Keccak256..");
@@ -122,13 +122,21 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
         let challenges = Round4Challenges::new(challenges, xi);
         tracing::debug!("xi: {xi}");
         tracing::debug!("evaluating poly a");
-        let eval_a = T::evaluate_poly_public(polys.a.poly, challenges.xi);
+        let poly_a = std::mem::take(&mut polys.a.poly);
+        let poly_b = std::mem::take(&mut polys.b.poly);
+        let poly_c = std::mem::take(&mut polys.c.poly);
+        let poly_z = std::mem::take(&mut polys.z.poly);
+        let (eval_a, poly_a) = T::evaluate_poly_public(poly_a, challenges.xi);
         tracing::debug!("evaluating poly b");
-        let eval_b = T::evaluate_poly_public(polys.b.poly, challenges.xi);
+        let (eval_b, poly_b) = T::evaluate_poly_public(poly_b, challenges.xi);
         tracing::debug!("evaluating poly c");
-        let eval_c = T::evaluate_poly_public(polys.c.poly, challenges.xi);
+        let (eval_c, poly_c) = T::evaluate_poly_public(poly_c, challenges.xi);
         tracing::debug!("evaluating poly z");
-        let eval_z = T::evaluate_poly_public(polys.z.poly, xiw);
+        let (eval_z, poly_z) = T::evaluate_poly_public(poly_z, xiw);
+        polys.a.poly = poly_a;
+        polys.b.poly = poly_b;
+        polys.c.poly = poly_c;
+        polys.z.poly = poly_z;
 
         let opened = runtime.block_on(driver.open_vec(&[eval_a, eval_b, eval_c, eval_z]))?;
 

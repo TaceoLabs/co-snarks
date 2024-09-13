@@ -14,10 +14,11 @@ use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet, Rep3Network};
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use num_traits::ToPrimitive;
+use std::io;
 use std::marker::PhantomData;
-use std::time::Duration;
-use std::{io, thread};
+use std::sync::Arc;
 use tokio::runtime::{self, Runtime};
+use tokio::sync::oneshot;
 use tracing::instrument;
 
 use crate::mpc::plain::PlainGroth16Driver;
@@ -107,8 +108,7 @@ where
         let num_inputs = matrices.num_instance_variables;
         let num_constraints = matrices.num_constraints;
         let public_inputs = &private_witness.public_inputs;
-        let private_witness = &private_witness.witness;
-        let party_id = self.driver.get_party_id();
+        let private_witness = private_witness.witness;
         // TODO: actually we do not like that we have to block here
         // can we somehow manage that this doesn't have to use the network?
         let mut forked_driver = self.runtime.block_on(self.driver.fork())?;
@@ -118,7 +118,7 @@ where
             num_constraints,
             num_inputs,
             public_inputs,
-            private_witness,
+            &private_witness,
         )?;
         tracing::debug!("getting r and s...");
         //TODO: this is bad - we need something else
@@ -130,7 +130,7 @@ where
             zkey,
             r,
             s,
-            &h,
+            h,
             &public_inputs[1..],
             private_witness,
         )
@@ -164,14 +164,13 @@ where
             GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
                 .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
         let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
+        let domain = Arc::new(domain);
         let domain_size = domain.size();
         let party_id = self.driver.get_party_id();
-        let mut a = Option::None;
-        let mut b = Option::None;
         let eval_constraint_span = tracing::debug_span!("evaluate constraints").entered();
-        rayon::scope(|s| {
-            s.spawn(|_| {
-                let mut inner_a = Self::evaluate_constraint(
+        let (a, b) = rayon::join(
+            || {
+                let mut result = Self::evaluate_constraint(
                     party_id,
                     domain_size,
                     &matrices.a,
@@ -179,99 +178,77 @@ where
                     private_witness,
                 );
                 let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
-                inner_a[num_constraints..num_constraints + num_inputs]
+                result[num_constraints..num_constraints + num_inputs]
                     .clone_from_slice(&promoted_public[..num_inputs]);
-                a = Some(inner_a);
-            });
-            s.spawn(|_| {
-                let inner_b = Self::evaluate_constraint(
+                result
+            },
+            || {
+                let result = Self::evaluate_constraint(
                     party_id,
                     domain_size,
                     &matrices.b,
                     public_inputs,
                     private_witness,
                 );
-                b = Some(inner_b);
-            })
-        });
+                result
+            },
+        );
+
         eval_constraint_span.exit();
-        // if we are here the scope finished therefore we have to have Some
-        // values
-        let a = a.unwrap();
-        let b = b.unwrap();
 
-        let mut a_dist_pow = Option::None;
-        let mut b_dist_pow = Option::None;
-        let mut c_dist_pow = Option::None;
-
-        let ditribute_pow_span = tracing::debug_span!("ifft, distribute pows, fft").entered();
-        rayon::scope(|s| {
-            s.spawn(|_| {
-                match self.runtime.block_on(self.driver.mul_vec(&a, &b)) {
-                    Ok(mut ab) => {
-                        let mul_vec_span =
-                            tracing::debug_span!("groth16 - mul vec in dist pows").entered();
-                        // TODO: this is a very large multiplication - do we want to do that on the runtime
-                        // or maybe on rayon and only sending on the runtime?
-                        let ifft_span = tracing::debug_span!("ifft in dist pows").entered();
-                        T::ifft_in_place(&mut ab, &domain);
-                        ifft_span.exit();
-                        let dist_pows_span = tracing::debug_span!("dist pows").entered();
-                        T::distribute_powers_and_mul_by_const(
-                            &mut ab,
-                            root_of_unity,
-                            P::ScalarField::one(),
-                        );
-                        dist_pows_span.exit();
-                        let fft_span = tracing::debug_span!("fft in dist pows").entered();
-                        T::fft_in_place(&mut ab, &domain);
-                        fft_span.exit();
-                        c_dist_pow = Some(Ok(ab));
-                        mul_vec_span.exit();
-                    }
-                    Err(err) => {
-                        c_dist_pow = Some(Err(err));
-                    }
-                }
-            });
-            s.spawn(|_| {
-                let mut a_result = T::ifft(&a, &domain);
-                T::distribute_powers_and_mul_by_const(
-                    &mut a_result,
-                    root_of_unity,
-                    P::ScalarField::one(),
-                );
-                T::fft_in_place(&mut a_result, &domain);
-                a_dist_pow = Some(a_result);
-            });
-            s.spawn(|_| {
-                let mut b_result = T::ifft(&b, &domain);
-                T::distribute_powers_and_mul_by_const(
-                    &mut b_result,
-                    root_of_unity,
-                    P::ScalarField::one(),
-                );
-                T::fft_in_place(&mut b_result, &domain);
-                b_dist_pow = Some(b_result);
-            });
+        let (a_tx, a_rx) = oneshot::channel();
+        let (b_tx, b_rx) = oneshot::channel();
+        let a_domain = Arc::clone(&domain);
+        let b_domain = Arc::clone(&domain);
+        let mut a_result = a.clone();
+        let mut b_result = b.clone();
+        rayon::spawn(move || {
+            T::ifft_in_place(&mut a_result, a_domain.as_ref());
+            T::distribute_powers_and_mul_by_const(
+                &mut a_result,
+                root_of_unity,
+                P::ScalarField::one(),
+            );
+            T::fft_in_place(&mut a_result, a_domain.as_ref());
+            a_tx.send(a_result).expect("channel not droped");
         });
-        //drop the old values!
-        std::mem::drop(a);
-        std::mem::drop(b);
-        //rayon finished therefore we must have some value
-        let a = a_dist_pow.unwrap();
-        let b = b_dist_pow.unwrap();
-        let c = c_dist_pow.unwrap()?;
-        ditribute_pow_span.exit();
 
-        //need to wait here...
+        rayon::spawn(move || {
+            T::ifft_in_place(&mut b_result, b_domain.as_ref());
+            T::distribute_powers_and_mul_by_const(
+                &mut b_result,
+                root_of_unity,
+                P::ScalarField::one(),
+            );
+            T::fft_in_place(&mut b_result, b_domain.as_ref());
+            b_tx.send(b_result).expect("channel not droped");
+        });
+
+        let mut ab = self.runtime.block_on(self.driver.mul_vec(&a, &b))?;
+        let mul_vec_span = tracing::debug_span!("groth16 - mul vec in dist pows").entered();
+        let ifft_span = tracing::debug_span!("ifft in dist pows").entered();
+        T::ifft_in_place(&mut ab, domain.as_ref());
+        ifft_span.exit();
+        let dist_pows_span = tracing::debug_span!("dist pows").entered();
+        T::distribute_powers_and_mul_by_const(&mut ab, root_of_unity, P::ScalarField::one());
+        dist_pows_span.exit();
+        let fft_span = tracing::debug_span!("fft in dist pows").entered();
+        T::fft_in_place(&mut ab, domain.as_ref());
+        fft_span.exit();
+        let c_dist_pow = ab;
+        mul_vec_span.exit();
+
+        tracing::error!("DONE MUL VEC SCOPE");
+        let a = a_rx.blocking_recv()?;
+        let b = b_rx.blocking_recv()?;
+
         let mul_vec_span = tracing::debug_span!("compute ab").entered();
         //TODO we can merge the mul and sub commands but it most likely is not that
         //much of a difference
         let mut ab = self.runtime.block_on(self.driver.mul_vec(&a, &b))?;
-        T::sub_assign_vec(&mut ab, &c);
+        T::sub_assign_vec(&mut ab, &c_dist_pow);
         mul_vec_span.exit();
-        Ok(ab)
+        Ok(a)
     }
 
     fn calculate_coeff_g1(
@@ -351,31 +328,34 @@ where
         zkey: &ZKey<P>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
-        h: &[T::ArithmeticShare],
+        h: Vec<T::ArithmeticShare>,
         input_assignment: &[P::ScalarField],
-        aux_assignment: &[T::ArithmeticShare],
+        aux_assignment: Vec<T::ArithmeticShare>,
     ) -> Result<Groth16Proof<P>> {
-        let mut h_acc = None;
-        let mut l_aux_acc = None;
-        let mut r_s_delta_g1 = None;
         let delta_g1 = zkey.delta_g1.into_group();
         let msm_create_proof = tracing::debug_span!("first MSMs").entered();
-        let party_id = forked_driver.get_party_id();
-        rayon::scope(|scope| {
-            scope.spawn(|_| h_acc = Some(T::msm_public_points_g1(&zkey.h_query, h)));
-            scope.spawn(|_| {
-                l_aux_acc = Some(T::msm_public_points_g1(&zkey.l_query, aux_assignment))
-            });
-            scope.spawn(|_| match self.runtime.block_on(self.driver.mul(r, s)) {
-                Ok(rs) => r_s_delta_g1 = Some(Ok(T::scalar_mul_public_point_g1(&delta_g1, rs))),
-                Err(err) => r_s_delta_g1 = Some(Err(err)),
-            });
+
+        let (h_acc_tx, h_acc_rx) = oneshot::channel();
+        let (l_acc_tx, l_acc_rx) = oneshot::channel();
+        let h_query = Arc::clone(&zkey.h_query);
+        let l_query = Arc::clone(&zkey.l_query);
+        rayon::spawn(move || {
+            let result = T::msm_public_points_g1(h_query.as_ref(), &h);
+            h_acc_tx.send(result).expect("channel not dropped");
         });
+
+        rayon::spawn(move || {
+            let result = T::msm_public_points_g1(l_query.as_ref(), &aux_assignment);
+            l_acc_tx
+                .send((result, aux_assignment))
+                .expect("channel not dropped");
+        });
+        let rs = self.runtime.block_on(self.driver.mul(r, s))?;
+        let r_s_delta_g1 = T::scalar_mul_public_point_g1(&delta_g1, rs);
         msm_create_proof.exit();
 
-        let h_acc = h_acc.unwrap();
-        let l_aux_acc = l_aux_acc.unwrap();
-        let r_s_delta_g1 = r_s_delta_g1.unwrap()?;
+        let h_acc = h_acc_rx.blocking_recv().unwrap();
+        let (l_aux_acc, aux_assignment) = l_acc_rx.blocking_recv().unwrap();
 
         let mut g_a = None;
         let mut g1_b = None;
@@ -392,7 +372,7 @@ where
                     &zkey.a_query,
                     zkey.vk.alpha_g1,
                     input_assignment,
-                    aux_assignment,
+                    &aux_assignment,
                 ));
             });
             scope.spawn(|_| {
@@ -405,7 +385,7 @@ where
                     &zkey.b_g1_query,
                     zkey.beta_g1,
                     input_assignment,
-                    aux_assignment,
+                    &aux_assignment,
                 ));
             });
             scope.spawn(|_| {
@@ -417,7 +397,7 @@ where
                     &zkey.b_g2_query,
                     zkey.vk.beta_g2,
                     input_assignment,
-                    aux_assignment,
+                    &aux_assignment,
                 ));
             });
         });
@@ -487,7 +467,9 @@ where
             phantom_data: PhantomData,
         })
     }
+}
 
+impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N> {
     pub fn close_network(self) -> io::Result<()> {
         self.runtime
             .block_on(self.driver.into_network().shutdown())?;

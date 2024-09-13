@@ -163,12 +163,14 @@ impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P:
     }
 
     fn evaluate_poly_public(
-        poly: Vec<Self::ArithmeticShare>,
-        point: <P as Pairing>::ScalarField,
-    ) -> Self::ArithmeticShare {
+        coeffs: Vec<Self::ArithmeticShare>,
+        point: P::ScalarField,
+    ) -> (Self::ArithmeticShare, Vec<Self::ArithmeticShare>) {
         let poly = DensePolynomial {
-            coeffs: Self::ArithmeticShare::convert_vec(poly),
+            coeffs: Self::ArithmeticShare::convert_vec(coeffs),
         };
-        Self::ArithmeticShare::new(poly.evaluate(&point))
+        let result = Self::ArithmeticShare::new(poly.evaluate(&point));
+        let coeffs = Self::ArithmeticShare::convert_vec_rev(poly.coeffs);
+        (result, coeffs)
     }
 }
