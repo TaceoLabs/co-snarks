@@ -13,31 +13,6 @@ use num_traits::One;
 use tokio::runtime::Runtime;
 use tracing::instrument;
 
-// To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
-// TODO parallelize these? With a different network structure this might not be needed though
-macro_rules! array_prod_mul {
-    ($driver: expr, $inp: expr) => {{
-        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
-        let len = $inp.len();
-        let r = (0..=len).map(|_| $driver.rand()).collect::<Vec<_>>();
-        let r_inv = futures::executor::block_on($driver.inv_vec(&r))?;
-        let r_inv0 = vec![r_inv[0].clone(); len];
-        let mut unblind = futures::executor::block_on($driver.mul_vec(&r_inv0, &r[1..]))?;
-
-        let mul = futures::executor::block_on($driver.mul_vec(&r[..len], &$inp))?;
-        let mut open = futures::executor::block_on($driver.mul_open_vec(&mul, &r_inv[1..]))?;
-
-        for i in 1..open.len() {
-            open[i] = open[i] * open[i - 1];
-        }
-
-        for (unblind, open) in unblind.iter_mut().zip(open.into_iter()) {
-            *unblind = T::mul_with_public(*unblind, open);
-        }
-        unblind
-    }};
-}
-
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
 pub(super) struct Round2<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) driver: T,
@@ -114,6 +89,8 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round2Polys<P, T> {
 
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
 impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
+    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
+    // TODO parallelize these? With a different network structure this might not be needed though
     async fn array_prod_mul(
         driver: &mut T,
         inv: bool,
@@ -124,7 +101,11 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         let arr = driver.mul_vecs(arr1, arr2, arr3).await?;
         // Do the multiplications of inp[i] * inp[i-1] in constant rounds
         let len = arr.len();
-        let r = (0..=len).map(|_| driver.rand()).collect::<Vec<_>>();
+
+        let mut r = Vec::with_capacity(len + 1);
+        for _ in 0..=len {
+            r.push(driver.rand().await?);
+        }
         let r_inv = driver.inv_vec(&r).await?;
         let r_inv0 = vec![r_inv[0].clone(); len];
         let mut unblind = driver.mul_vec(&r_inv0, &r[1..]).await?;

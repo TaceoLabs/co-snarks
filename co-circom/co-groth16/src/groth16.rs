@@ -16,6 +16,7 @@ use num_traits::identities::One;
 use num_traits::ToPrimitive;
 use std::marker::PhantomData;
 use tokio::runtime::{self, Runtime};
+use tracing::instrument;
 
 use crate::mpc::plain::PlainGroth16Driver;
 use crate::mpc::rep3::Rep3Groth16Driver;
@@ -48,6 +49,7 @@ calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) al
 use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
 then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
 */
+#[instrument(level = "debug", name = "root of unity", skip_all)]
 fn root_of_unity_for_groth16<F: PrimeField + FftField>(
     pow: usize,
     domain: &mut GeneralEvaluationDomain<F>,
@@ -93,6 +95,7 @@ where
 
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
+    #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
     pub fn prove(
         &mut self,
         zkey: &ZKey<P>,
@@ -103,7 +106,9 @@ where
         let num_constraints = matrices.num_constraints;
         let public_inputs = &private_witness.public_inputs;
         let private_witness = &private_witness.witness;
-        tracing::debug!("calling witness map from matrices...");
+        // TODO: actually we do not like that we have to block here
+        // can we somehow manage that this doesn't have to use the network?
+        let mut forked_driver = self.runtime.block_on(self.driver.fork())?;
         let h = self.witness_map_from_matrices(
             zkey.pow,
             matrices,
@@ -112,14 +117,20 @@ where
             public_inputs,
             private_witness,
         )?;
-        tracing::debug!("done!");
         tracing::debug!("getting r and s...");
         //TODO: this is bad - we need something else
         let r = self.runtime.block_on(self.driver.rand())?;
         let s = self.runtime.block_on(self.driver.rand())?;
         tracing::debug!("done!");
-        tracing::debug!("calling create_proof_with_assignment...");
-        self.create_proof_with_assignment(zkey, r, s, &h, &public_inputs[1..], private_witness)
+        self.create_proof_with_assignment(
+            &mut forked_driver,
+            zkey,
+            r,
+            s,
+            &h,
+            &public_inputs[1..],
+            private_witness,
+        )
     }
 
     fn evaluate_constraint(
@@ -136,6 +147,7 @@ where
         result
     }
 
+    #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
     fn witness_map_from_matrices(
         &mut self,
         power: usize,
@@ -153,8 +165,7 @@ where
         let party_id = self.driver.get_party_id();
         let mut a = Option::None;
         let mut b = Option::None;
-        tracing::debug!("evaluating constraints..");
-        let eval_constraint_span = tracing::debug_span!("groth16 - evaluate constraints").entered();
+        let eval_constraint_span = tracing::debug_span!("evaluate constraints").entered();
         rayon::scope(|s| {
             s.spawn(|_| {
                 let mut inner_a = Self::evaluate_constraint(
@@ -185,36 +196,35 @@ where
         // values
         let a = a.unwrap();
         let b = b.unwrap();
-        tracing::debug!("done!");
 
         let mut a_dist_pow = Option::None;
         let mut b_dist_pow = Option::None;
         let mut c_dist_pow = Option::None;
 
-        let ditribute_pow_span =
-            tracing::debug_span!("groth16 - ifft, distribute pows, fft").entered();
+        let ditribute_pow_span = tracing::debug_span!("ifft, distribute pows, fft").entered();
         rayon::scope(|s| {
             s.spawn(|_| {
                 let mul_vec_span = tracing::debug_span!("groth16 - mul vec in dist pows").entered();
-                // TODO this is a very large multiplication - do we want to do that on the runtime
+                let _guard = self.runtime.enter();
+                // TODO: this is a very large multiplication - do we want to do that on the runtime
                 // or maybe on rayon and only sending on the runtime?
                 match self.runtime.block_on(self.driver.mul_vec(&a, &b)) {
                     Ok(mut ab) => {
-                        let ifft_span =
-                            tracing::debug_span!("groth16 - ifft in dist pows").entered();
+                        let ifft_span = tracing::debug_span!("ifft in dist pows").entered();
                         T::ifft_in_place(&mut ab, &domain);
                         ifft_span.exit();
-                        let dist_pows_span = tracing::debug_span!("groth16 - dist pows").entered();
+                        let dist_pows_span = tracing::debug_span!("dist pows").entered();
                         T::distribute_powers_and_mul_by_const(
                             &mut ab,
                             root_of_unity,
                             P::ScalarField::one(),
                         );
                         dist_pows_span.exit();
-                        let fft_span = tracing::debug_span!("groth16 - fft in dist pows").entered();
+                        let fft_span = tracing::debug_span!("fft in dist pows").entered();
                         T::fft_in_place(&mut ab, &domain);
                         fft_span.exit();
                         c_dist_pow = Some(Ok(ab));
+                        tracing::error!("BRANCH 1 {party_id}");
                     }
                     Err(err) => c_dist_pow = Some(Err(err)),
                 }
@@ -229,6 +239,7 @@ where
                 );
                 T::fft_in_place(&mut a_result, &domain);
                 a_dist_pow = Some(a_result);
+                tracing::error!("BRANCH 2 {party_id}");
             });
             s.spawn(|_| {
                 let mut b_result = T::ifft(&b, &domain);
@@ -239,8 +250,10 @@ where
                 );
                 T::fft_in_place(&mut b_result, &domain);
                 b_dist_pow = Some(b_result);
+                tracing::error!("BRANCH 3 {party_id}");
             });
         });
+        tracing::error!("ALL HERE");
         //drop the old values!
         std::mem::drop(a);
         std::mem::drop(b);
@@ -251,7 +264,7 @@ where
         ditribute_pow_span.exit();
 
         //need to wait here...
-        let mul_vec_span = tracing::debug_span!("groth16 - compute ab").entered();
+        let mul_vec_span = tracing::debug_span!("compute ab").entered();
         //TODO we can merge the mul and sub commands but it most likely is not that
         //much of a difference
         let mut ab = self.runtime.block_on(self.driver.mul_vec(&a, &b))?;
@@ -330,8 +343,10 @@ where
         res
     }
 
+    #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
     fn create_proof_with_assignment(
         &mut self,
+        forked_driver: &mut T,
         zkey: &ZKey<P>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
@@ -339,20 +354,19 @@ where
         input_assignment: &[P::ScalarField],
         aux_assignment: &[T::ArithmeticShare],
     ) -> Result<Groth16Proof<P>> {
-        tracing::debug!("create proof with assignment...");
         let mut h_acc = None;
         let mut l_aux_acc = None;
         let mut r_s_delta_g1 = None;
-        let mut forked_driver1 = self.driver.fork();
         let delta_g1 = zkey.delta_g1.into_group();
-        let msm_create_proof = tracing::debug_span!("groth16 - create proof first MSMs").entered();
+        let msm_create_proof = tracing::debug_span!("first MSMs").entered();
         rayon::scope(|scope| {
             scope.spawn(|_| h_acc = Some(T::msm_public_points_g1(&zkey.h_query, h)));
             scope.spawn(|_| {
                 l_aux_acc = Some(T::msm_public_points_g1(&zkey.l_query, aux_assignment))
             });
-            scope.spawn(|_| match self.runtime.block_on(forked_driver1.mul(r, s)) {
+            scope.spawn(|_| match self.runtime.block_on(self.driver.mul(r, s)) {
                 Ok(rs) => {
+                    tracing::info!("I am done with mul :)");
                     r_s_delta_g1 = Some(Ok(T::scalar_mul_public_point_g1(&delta_g1, rs)));
                 }
                 Err(err) => r_s_delta_g1 = Some(Err(err)),
@@ -368,7 +382,7 @@ where
         let mut g1_b = None;
         let mut g2_b = None;
         let party_id = self.driver.get_party_id();
-        let calculate_coeff_span = tracing::debug_span!("groth16 - calculate coeff").entered();
+        let calculate_coeff_span = tracing::debug_span!("calculate coeff").entered();
         rayon::scope(|scope| {
             scope.spawn(|_| {
                 // Compute A
@@ -414,13 +428,12 @@ where
         let g2_b = g2_b.unwrap();
         calculate_coeff_span.exit();
 
-        let network_round =
-            tracing::debug_span!("groth16 - network round after calc coeff").entered();
+        let network_round = tracing::debug_span!("network round after calc coeff").entered();
         let mut g_a_opened = None;
         let mut r_g1_b = None;
         self.runtime.block_on(async {
             let (opened, mul_result) = tokio::join!(
-                forked_driver1.open_point_g1(&g_a),
+                forked_driver.open_point_g1(&g_a),
                 self.driver.scalar_mul_g1(&g1_b, r)
             );
             g_a_opened = Some(opened);
@@ -431,8 +444,7 @@ where
         let r_g1_b = r_g1_b.unwrap()?;
         network_round.exit();
 
-        let last_round =
-            tracing::debug_span!("groth16 - finish open two points and some adds").entered();
+        let last_round = tracing::debug_span!("finish open two points and some adds").entered();
         let s_g_a = T::scalar_mul_public_point_g1(&g_a_opened, s);
 
         let mut g_c = s_g_a;

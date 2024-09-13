@@ -29,8 +29,8 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         0
     }
 
-    fn fork(&mut self) -> Self {
-        PlainGroth16Driver
+    async fn fork(&mut self) -> IoResult<Self> {
+        Ok(PlainGroth16Driver)
     }
 
     fn evaluate_constraint(
@@ -106,7 +106,8 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         c: P::ScalarField,
     ) {
         let mut pow = c;
-        for c in coeffs.iter_mut() {
+        #[allow(unused_mut)]
+        for mut c in coeffs.iter_mut() {
             *c *= pow;
             pow *= g;
         }

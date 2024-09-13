@@ -42,6 +42,7 @@ macro_rules! add_test_impl {
                     File::open(format!("../test_vectors/{}/{}/{}/circuit.r1cs", stringify!($proof_system), stringify!([< $curve:lower >]), $name)).unwrap();
                 let witness_file =
                     File::open(format!("../test_vectors/{}/{}/{}/witness.wtns", stringify!($proof_system), stringify!([< $curve:lower >]), $name)).unwrap();
+                println!("hi");
                 let witness = Witness::<[< ark_ $curve:lower >]::Fr>::from_reader(witness_file).unwrap();
                 let zkey1 = [< $proof_system ZK >]::<$curve>::from_reader(zkey_file).unwrap();
                 let zkey2 = zkey1.clone();

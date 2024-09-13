@@ -34,7 +34,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         self.protocol.network.get_id()
     }
 
-    fn fork(&mut self) -> Self {
+    async fn fork(&mut self) -> IoResult<Self> {
         todo!()
     }
 

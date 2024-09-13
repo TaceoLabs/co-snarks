@@ -34,8 +34,11 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         self.io_context.id
     }
 
-    fn fork(&mut self) -> Self {
-        todo!()
+    async fn fork(&mut self) -> IoResult<Self> {
+        let forked_io_context = self.io_context.fork().await?;
+        Ok(Self {
+            io_context: forked_io_context,
+        })
     }
 
     fn evaluate_constraint(

@@ -71,11 +71,11 @@ impl<P: Pairing> std::fmt::Display for Round1Proof<P> {
 }
 
 impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
-    pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
+    pub(super) async fn random(driver: &mut T) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::ArithmeticShare::default());
         #[allow(unused_mut)]
         for mut x in b.iter_mut() {
-            *x = driver.rand();
+            *x = driver.rand().await?;
         }
         Ok(Self { b })
     }
@@ -233,7 +233,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
         let plonk_witness = Self::calculate_additions(&mut driver, private_witness, zkey)?;
-        let challenges = Round1Challenges::random(&mut driver)?;
+        // TODO: we do not want that to be async
+        let challenges = runtime.block_on(Round1Challenges::random(&mut driver))?;
         let domains = Domains::new(zkey.domain_size)?;
         Ok(Self {
             challenges,

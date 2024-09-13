@@ -1,3 +1,6 @@
+use core::fmt;
+use std::future::Future;
+
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -11,17 +14,17 @@ pub use rep3::Rep3Groth16Driver;
 
 type IoResult<T> = std::io::Result<T>;
 
-pub trait CircomGroth16Prover<P: Pairing>: Send {
+pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Copy + Clone + Default + Send;
     type PointShareG1: Send;
     type PointShareG2: Send;
-    type PartyID: Send + Sync + Copy;
+    type PartyID: Send + Sync + Copy + fmt::Display;
 
-    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
+    fn rand(&mut self) -> impl Future<Output = IoResult<Self::ArithmeticShare>>;
 
     fn get_party_id(&self) -> Self::PartyID;
 
-    fn fork(&mut self) -> Self;
+    fn fork(&mut self) -> impl Future<Output = IoResult<Self>>;
 
     /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint(
