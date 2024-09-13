@@ -13,9 +13,11 @@ use mpc_core::{
 
 use super::plain::PlainAcvmSolver;
 use super::NoirWitnessExtensionProtocol;
+use tokio::runtime::{self, Runtime};
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
 pub struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
+    runtime: Runtime,
     lut_provider: NaiveRep3LookupTable<N>,
     io_context: IoContext<N>,
     plain_solver: PlainAcvmSolver<F>,
@@ -24,7 +26,20 @@ pub struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
 
 impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
     pub(crate) fn new(network: N) -> Self {
-        todo!()
+        let runtime = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let plain_solver = PlainAcvmSolver::<F>::default();
+        let mut io_context = runtime.block_on(IoContext::init(network)).unwrap();
+        let forked = runtime.block_on(io_context.fork()).unwrap();
+        Self {
+            runtime,
+            lut_provider: NaiveRep3LookupTable { io_context: forked },
+            io_context,
+            plain_solver,
+            phantom_data: PhantomData,
+        }
     }
 }
 
@@ -156,7 +171,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
                 let future = arithmetic::mul(lhs, rhs, &mut self.io_context);
-                let shared_mul = futures::executor::block_on(future)?;
+                let shared_mul = self.runtime.block_on(future)?;
                 Rep3AcvmType::Shared(arithmetic::mul_public(shared_mul, c))
             }
         };
@@ -180,12 +195,12 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             (Rep3AcvmType::Shared(q_l), Rep3AcvmType::Public(c)) => {
                 let future = arithmetic::div_public_by_shared(-c, q_l, io_context);
-                let result = futures::executor::block_on(future)?;
+                let result = self.runtime.block_on(future)?;
                 Rep3AcvmType::Shared(result)
             }
             (Rep3AcvmType::Shared(q_l), Rep3AcvmType::Shared(c)) => {
                 let future = arithmetic::div(arithmetic::neg(c), q_l, io_context);
-                let result = futures::executor::block_on(future)?;
+                let result = self.runtime.block_on(future)?;
                 Rep3AcvmType::Shared(result)
             }
         };
@@ -221,7 +236,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             Rep3AcvmType::Shared(shared) => self.lut_provider.get_from_lut(*shared, lut),
         };
-        let value = futures::executor::block_on(value)?;
+        let value = self.runtime.block_on(value)?;
         Ok(Rep3AcvmType::Shared(value))
     }
 
@@ -250,7 +265,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 self.lut_provider.write_to_lut(index, value, lut)
             }
         };
-        futures::executor::block_on(future)?;
+        self.runtime.block_on(future)?;
         Ok(())
     }
 }

@@ -14,7 +14,7 @@ use super::{
 pub type MpcMap<F> = Vec<(F, F)>;
 
 pub struct NaiveRep3LookupTable<N: Rep3Network> {
-    io_context: IoContext<N>,
+    pub io_context: IoContext<N>,
 }
 
 impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for NaiveRep3LookupTable<N> {

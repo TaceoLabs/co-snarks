@@ -235,7 +235,7 @@ where
         let fft_span = tracing::debug_span!("fft in dist pows").entered();
         T::fft_in_place(&mut ab, domain.as_ref());
         fft_span.exit();
-        let c_dist_pow = ab;
+        let c = ab;
         mul_vec_span.exit();
 
         tracing::error!("DONE MUL VEC SCOPE");
@@ -246,9 +246,9 @@ where
         //TODO we can merge the mul and sub commands but it most likely is not that
         //much of a difference
         let mut ab = self.runtime.block_on(self.driver.mul_vec(&a, &b))?;
-        T::sub_assign_vec(&mut ab, &c_dist_pow);
+        T::sub_assign_vec(&mut ab, &c);
         mul_vec_span.exit();
-        Ok(a)
+        Ok(ab)
     }
 
     fn calculate_coeff_g1(

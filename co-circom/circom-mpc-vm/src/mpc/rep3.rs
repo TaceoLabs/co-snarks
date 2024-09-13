@@ -397,7 +397,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let b = self.val(b);
                 Ok(self
                     .runtime
-                    .block_on(arithmetic::gt_public(b, a, &mut self.io_context0))?
+                    .block_on(arithmetic::ge_public(b, a, &mut self.io_context0))?
                     .into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
@@ -460,7 +460,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let b = self.val(b);
                 Ok(self
                     .runtime
-                    .block_on(arithmetic::ge_public(b, a, &mut self.io_context0))?
+                    .block_on(arithmetic::gt_public(b, a, &mut self.io_context0))?
                     .into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
@@ -523,7 +523,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let b = self.val(b);
                 Ok(self
                     .runtime
-                    .block_on(arithmetic::lt_public(b, a, &mut self.io_context0))?
+                    .block_on(arithmetic::le_public(b, a, &mut self.io_context0))?
                     .into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
@@ -586,7 +586,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let b = self.val(b);
                 Ok(self
                     .runtime
-                    .block_on(arithmetic::le_public(b, a, &mut self.io_context0))?
+                    .block_on(arithmetic::lt_public(b, a, &mut self.io_context0))?
                     .into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
