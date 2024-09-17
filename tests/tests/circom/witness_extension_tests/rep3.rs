@@ -113,7 +113,7 @@ macro_rules! run_test {
                 compiler_config
                     .link_library
                     .push("../test_vectors/WitnessExtension/tests/libs/".into());
-                let witness_extension =
+                let mut witness_extension =
                     CoCircomCompiler::<Bn254>::parse($file.to_owned(), compiler_config)
                         .unwrap()
                         .to_rep3_vm_with_network(net, VMConfig::default())

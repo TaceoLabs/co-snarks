@@ -516,6 +516,11 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("while building runtime")?;
+
     let circuit_path = PathBuf::from(&circuit);
     file_utils::check_file_exists(&circuit_path)?;
 
@@ -524,12 +529,13 @@ where
         .context("while parsing circuit file")?;
 
     // connect to network
-    let net = futures::executor::block_on(Rep3MpcNet::new(config.network))
+    let net = rt
+        .block_on(Rep3MpcNet::new(config.network))
         .context("while connecting to network")?;
     let id = usize::from(net.get_id());
 
     // init MPC protocol
-    let rep3_vm = parsed_circom_circuit
+    let mut rep3_vm = parsed_circom_circuit
         .to_rep3_vm_with_network(net, config.vm)
         .context("while constructing MPC VM")?;
 
@@ -538,8 +544,12 @@ where
     let result_witness_share = rep3_vm
         .run(input_share)
         .context("while running witness generation")?;
+
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Witness extension took {} ms", id, duration_ms);
+
+    rep3_vm.close_network()?;
+
     Ok(result_witness_share.into_shared_witness())
 }
 

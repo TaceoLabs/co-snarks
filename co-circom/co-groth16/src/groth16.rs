@@ -238,7 +238,7 @@ where
         let c = ab;
         mul_vec_span.exit();
 
-        tracing::error!("DONE MUL VEC SCOPE");
+        // tracing::error!("DONE MUL VEC SCOPE");
         let a = a_rx.blocking_recv()?;
         let b = b_rx.blocking_recv()?;
 

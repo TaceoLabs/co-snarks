@@ -85,6 +85,12 @@ impl<F: PrimeField, N: Rep3Network> CircomRep3VmWitnessExtension<F, N> {
         let p_half_plus_one = F::from(modulus / two + one);
         arithmetic::sub_shared_by_public(z, p_half_plus_one, self.io_context0.id)
     }
+
+    pub fn close_network(self) -> eyre::Result<()> {
+        self.runtime.block_on(self.io_context0.network.shutdown())?;
+        self.runtime.block_on(self.io_context1.network.shutdown())?;
+        Ok(())
+    }
 }
 
 impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>

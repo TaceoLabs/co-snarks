@@ -719,7 +719,7 @@ mod tests {
         )
         .unwrap();
 
-        let plain_vm = parsed.to_plain_vm(VMConfig::default());
+        let mut plain_vm = parsed.to_plain_vm(VMConfig::default());
         let finalized_witness = plain_vm
             .run_with_flat(
                 to_field_vec!(vec![

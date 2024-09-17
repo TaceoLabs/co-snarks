@@ -803,18 +803,18 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
 
 impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     fn post_processing(
-        mut self,
+        &mut self,
         amount_public_inputs: usize,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         let total_public_amount = self.main_outputs + amount_public_inputs + 1;
         let mut public_inputs = Vec::with_capacity(total_public_amount);
         let mut witness = Vec::with_capacity(self.signal_to_witness.len() - total_public_amount);
-        for (count, idx) in self.signal_to_witness.into_iter().enumerate() {
+        for (count, idx) in self.signal_to_witness.iter().enumerate() {
             // the +1 here is for the constant 1 which always is at position 0.
             if count < total_public_amount {
-                public_inputs.push(self.driver.open(self.ctx.signals[idx].clone())?);
+                public_inputs.push(self.driver.open(self.ctx.signals[*idx].clone())?);
             } else {
-                witness.push(self.driver.to_share(self.ctx.signals[idx].clone())?);
+                witness.push(self.driver.to_share(self.ctx.signals[*idx].clone())?);
             }
         }
         Ok(FinalizedWitnessExtension {
@@ -822,7 +822,8 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
                 public_inputs,
                 witness,
             },
-            output_mapping: self.output_mapping,
+            // TODO take instead of clone? or consume self again and close network in here?
+            output_mapping: self.output_mapping.clone(),
         })
     }
 
@@ -893,7 +894,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     ///
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     pub fn run(
-        mut self,
+        &mut self,
         input_signals: SharedInput<F, C::ArithmeticShare>,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         let amount_public_inputs = self.set_input_signals(input_signals)?;
@@ -923,7 +924,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     ///
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     pub fn run_with_flat(
-        mut self,
+        &mut self,
         input_signals: Vec<C::VmType>,
         amount_public_inputs: usize,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
@@ -1058,5 +1059,9 @@ impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
     ) -> Result<Self> {
         let network = futures::executor::block_on(Rep3MpcNet::new(network_config))?;
         Self::from_network(parser, network, mpc_accelerator, config)
+    }
+
+    pub fn close_network(self) -> Result<()> {
+        self.driver.close_network()
     }
 }
