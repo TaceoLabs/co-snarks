@@ -144,7 +144,7 @@ impl ShamirNetwork for PartyTestNetwork {
             // to get index for the Vec
             from -= 1;
         }
-        let data = Vec::from(self.recv[from].blocking_recv().unwrap().to_data().unwrap());
+        let data = Vec::from(self.recv[from].recv().await.unwrap().to_data().unwrap());
         Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
     }
 
@@ -174,7 +174,7 @@ impl ShamirNetwork for PartyTestNetwork {
                 res.push(data.to_owned());
             }
 
-            let data = Vec::from(recv.blocking_recv().unwrap().to_data().unwrap());
+            let data = Vec::from(recv.recv().await.unwrap().to_data().unwrap());
             res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
         }
         if self.id == self.num_parties - 1 {
@@ -224,13 +224,7 @@ impl ShamirNetwork for PartyTestNetwork {
                     continue;
                 }
             }
-            let data = Vec::from(
-                self.recv[other_id]
-                    .blocking_recv()
-                    .unwrap()
-                    .to_data()
-                    .unwrap(),
-            );
+            let data = Vec::from(self.recv[other_id].recv().await.unwrap().to_data().unwrap());
             res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
         }
 

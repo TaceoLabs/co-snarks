@@ -139,7 +139,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 Ok(arithmetic::sub_shared_by_public(a, b, self.io_context0.id).into())
             }
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
-                Ok(arithmetic::sub_shared_by_public(b, a, self.io_context0.id).into())
+                Ok(arithmetic::sub_public_by_shared(a, b, self.io_context0.id).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 Ok(arithmetic::sub(a, b).into())
@@ -148,7 +148,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let b = self
                     .runtime
                     .block_on(conversion::b2a(&b, &mut self.io_context0))?;
-                Ok(arithmetic::sub_shared_by_public(b, a, self.io_context0.id).into())
+                Ok(arithmetic::sub_public_by_shared(a, b, self.io_context0.id).into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Public(b)) => {
                 let a = self

@@ -73,7 +73,9 @@ pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
     for val in vals {
         let shares = core::share(*val, num_parties, degree, rng);
         let shares = ShamirShare::convert_vec_rev(shares);
-        result.push(shares);
+        for (r, s) in izip!(&mut result, shares) {
+            r.push(s);
+        }
     }
 
     result

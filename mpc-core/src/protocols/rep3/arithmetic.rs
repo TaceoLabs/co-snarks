@@ -312,8 +312,11 @@ pub async fn sqrt<F: PrimeField, N: Rep3Network>(
     let mul = mul_vec(&lhs, &rhs, io_context).await?;
 
     // Open mul
-    io_context.network.send_next_many(&mul).await?;
-    let c = io_context.network.recv_prev::<Vec<F>>().await?;
+    io_context
+        .network
+        .send_next_many(&mul.iter().map(|s| s.b.to_owned()).collect_vec())
+        .await?;
+    let c = io_context.network.recv_prev_many::<F>().await?;
     if c.len() != 2 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
