@@ -103,7 +103,7 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
 
     fn skip(input: &ProverUnivariates<F>) -> bool {
         <Self as Relation<F>>::check_skippable();
-        input.polys.precomputed.q_aux().is_zero()
+        input.precomputed.q_aux().is_zero()
     }
 
     /**
@@ -152,23 +152,23 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
         let eta_two = &relation_parameters.eta_2;
         let eta_three = &relation_parameters.eta_3;
 
-        let w_1 = input.polys.witness.w_l();
-        let w_2 = input.polys.witness.w_r();
-        let w_3 = input.polys.witness.w_o();
-        let w_4 = input.memory.w_4();
-        let w_1_shift = input.polys.shifted_witness.w_l();
-        let w_2_shift = input.polys.shifted_witness.w_r();
-        let w_3_shift = input.polys.shifted_witness.w_o();
-        let w_4_shift = input.polys.shifted_witness.w_4();
+        let w_1 = input.witness.w_l();
+        let w_2 = input.witness.w_r();
+        let w_3 = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let w_1_shift = input.shifted_witness.w_l();
+        let w_2_shift = input.shifted_witness.w_r();
+        let w_3_shift = input.shifted_witness.w_o();
+        let w_4_shift = input.shifted_witness.w_4();
 
-        let q_1 = input.polys.precomputed.q_l();
-        let q_2 = input.polys.precomputed.q_r();
-        let q_3 = input.polys.precomputed.q_o();
-        let q_4 = input.polys.precomputed.q_4();
-        let q_m = input.polys.precomputed.q_m();
-        let q_c = input.polys.precomputed.q_c();
-        let q_arith = input.polys.precomputed.q_arith();
-        let q_aux = input.polys.precomputed.q_aux();
+        let q_1 = input.precomputed.q_l();
+        let q_2 = input.precomputed.q_r();
+        let q_3 = input.precomputed.q_o();
+        let q_4 = input.precomputed.q_4();
+        let q_m = input.precomputed.q_m();
+        let q_c = input.precomputed.q_c();
+        let q_arith = input.precomputed.q_arith();
+        let q_aux = input.precomputed.q_aux();
 
         let limb_size = F::from(BigUint::one() << 68);
         let sublimb_shift = F::from(1u64 << 14);

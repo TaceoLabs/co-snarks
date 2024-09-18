@@ -69,11 +69,11 @@ impl<F: PrimeField> AllRelationAcc<F> {
         self.r_arith.scale(&[first_scalar, elements[0]]);
         self.r_perm.scale(&elements[1..3]);
         self.r_delta.scale(&elements[3..7]);
-        self.r_elliptic.scale(&elements[7..11]);
-        self.r_aux.scale(&elements[11..17]);
-        self.r_lookup.scale(&elements[17..19]);
-        self.r_pos_ext.scale(&elements[19..23]);
-        self.r_pos_int.scale(&elements[23..]);
+        self.r_elliptic.scale(&elements[7..9]);
+        self.r_aux.scale(&elements[9..15]);
+        self.r_lookup.scale(&elements[15..17]);
+        self.r_pos_ext.scale(&elements[17..21]);
+        self.r_pos_int.scale(&elements[21..]);
     }
 
     pub fn extend_and_batch_univariates(

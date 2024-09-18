@@ -1,7 +1,5 @@
 use super::super::{
-    types::{
-        GateSeparatorPolynomial, MemoryElements, RelationParameters, MAX_PARTIAL_RELATION_LENGTH,
-    },
+    types::{GateSeparatorPolynomial, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
     univariate::Univariate,
 };
 use crate::{
@@ -21,7 +19,7 @@ use crate::{
     },
     honk_curve::HonkCurve,
     transcript::TranscriptFieldType,
-    types::Polynomials,
+    types::AllEntities,
 };
 use ark_ff::PrimeField;
 
@@ -40,17 +38,12 @@ impl SumcheckRound {
 
     fn extend_edges<F: PrimeField>(
         extended_edges: &mut ProverUnivariates<F>,
-        multivariates: &Polynomials<F>,
-        memory: &MemoryElements<Vec<F>>,
+        multivariates: &AllEntities<Vec<F>>,
         edge_index: usize,
     ) {
         tracing::trace!("Extend edges");
 
-        for (src, des) in memory
-            .iter()
-            .chain(multivariates.iter())
-            .zip(extended_edges.iter_mut())
-        {
+        for (src, des) in multivariates.iter().zip(extended_edges.iter_mut()) {
             des.extend_from(&src[edge_index..edge_index + 2]);
         }
     }
@@ -215,8 +208,7 @@ impl SumcheckRound {
         round_index: usize,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
-        memory: &MemoryElements<Vec<P::ScalarField>>,
-        polynomials: &Polynomials<P::ScalarField>,
+        polynomials: &AllEntities<Vec<P::ScalarField>>,
     ) -> SumcheckRoundOutput<P::ScalarField> {
         tracing::trace!("Sumcheck round {}", round_index);
 
@@ -229,7 +221,7 @@ impl SumcheckRound {
 
         // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
         for edge_idx in (0..self.round_size).step_by(2) {
-            Self::extend_edges(&mut extended_edge, polynomials, memory, edge_idx);
+            Self::extend_edges(&mut extended_edge, polynomials, edge_idx);
             // Compute the \f$ \ell \f$-th edge's univariate contribution,
             // scale it by the corresponding \f$ pow_{\beta} \f$ contribution and add it to the accumulators for \f$
             // \tilde{S}^i(X_i) \f$. If \f$ \ell \f$'s binary representation is given by \f$ (\ell_{i+1},\ldots,

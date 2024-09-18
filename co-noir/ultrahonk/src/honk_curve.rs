@@ -1,4 +1,4 @@
-use ark_ec::{pairing::Pairing, short_weierstrass::SWCurveConfig};
+use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
 
@@ -20,8 +20,7 @@ pub trait HonkCurve<Des: PrimeField>: Pairing {
     fn convert_destinationfield_to_scalarfield(des: &Des) -> Self::ScalarField;
 
     // For the elliptic curve relation
-    fn get_curve_b() -> Self::BaseField;
-    fn get_curve_b_as_scalarfield() -> Self::ScalarField;
+    fn get_curve_b() -> Self::ScalarField;
 }
 
 impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
@@ -59,15 +58,9 @@ impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
         des.to_owned()
     }
 
-    fn get_curve_b() -> Self::BaseField {
-        ark_bn254::g1::Config::COEFF_B
-    }
-
-    fn get_curve_b_as_scalarfield() -> ark_bn254::Fr {
-        let b = Self::get_curve_b();
-        let res = ark_bn254::Fr::from(b.0);
-        assert!(!res.is_geq_modulus());
-        res
+    fn get_curve_b() -> Self::ScalarField {
+        // We are getting grumpkin::b, which is -17
+        -ark_bn254::Fr::from(17)
     }
 }
 
@@ -92,7 +85,7 @@ fn bn254_fq_to_fr(fq: &ark_bn254::Fq) -> (ark_bn254::Fr, ark_bn254::Fr) {
     // We accomplish this by dividing the grumpkin::fr's value into two 68*2=136 bit pieces.
     const LOWER_BITS: u32 = 2 * NUM_LIMB_BITS;
     let lower_mask = (BigUint::one() << LOWER_BITS) - BigUint::one();
-    let value = BigUint::from(fq.0);
+    let value = BigUint::from(*fq);
 
     debug_assert!(value < (BigUint::one() << TOTAL_BITS));
 
@@ -110,8 +103,8 @@ fn bn254_fq_to_fr(fq: &ark_bn254::Fq) -> (ark_bn254::Fr, ark_bn254::Fr) {
 fn bn254_fq_to_fr_rev(res0: &ark_bn254::Fr, res1: &ark_bn254::Fr) -> ark_bn254::Fq {
     // Combines the two elements into one uint256_t, and then convert that to a grumpkin::fr
 
-    let res0 = BigUint::from(res0.0);
-    let res1 = BigUint::from(res1.0);
+    let res0 = BigUint::from(*res0);
+    let res1 = BigUint::from(*res1);
 
     debug_assert!(res0 < (BigUint::one() << (NUM_LIMB_BITS * 2))); // lower 136 bits
     debug_assert!(res1 < (BigUint::one() << (TOTAL_BITS - NUM_LIMB_BITS * 2))); // upper 254-136=118 bits

@@ -1,5 +1,7 @@
 //  modified from barustenberg:
 
+use crate::types::Crs;
+use crate::types::ProverCrs;
 use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
@@ -9,13 +11,14 @@ use byteorder::ReadBytesExt;
 use byteorder::WriteBytesExt;
 use byteorder::{BigEndian, LittleEndian};
 use eyre::{anyhow, Result};
-use std::cmp::min;
 use std::fs::File;
 use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::marker::PhantomData;
 use std::path::Path;
+
+pub type CrsParser<P> = NewFileStructure<P>;
 
 const BLAKE2B_CHECKSUM_LENGTH: usize = 64;
 #[derive(Debug, Default)]
@@ -33,12 +36,25 @@ struct Manifest {
 // the new one (when installing) barretenberg can be found under ~/.bb-crs (or downloaded from https://aztec-ignition.s3.amazonaws.com/MAIN%20IGNITION/flat/g1.dat or g2.dat, but the first one is 6 gb large)
 // the older ones can be downloaded with ~/aztec-packages/barretenberg/cpp/srs_db/download_srs.sh (iirc), these are separated into 20 files, for info see also ~/aztec-packages/barretenberg/cpp/srs_db/transcript_spec.md
 
-struct NewFileStructure<P: Pairing> {
+pub struct NewFileStructure<P: Pairing> {
     phantom_data: PhantomData<P>,
 }
 
-struct OldFileStructure<P: Pairing> {
-    phantom_data: PhantomData<P>,
+impl<P: Pairing> NewFileStructure<P> {
+    pub fn get_crs(path_g1: &str, path_g2: &str, crs_size: usize) -> Result<Crs<P>> {
+        let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size + 2];
+        let mut g2_x = P::G2Affine::default();
+        Self::read_transcript(&mut monomials, &mut g2_x, crs_size, path_g1, path_g2)?;
+
+        Ok(Crs { monomials, g2_x })
+    }
+
+    pub fn get_crs_g1(path_g1: &str, crs_size: usize) -> Result<ProverCrs<P>> {
+        let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size + 2];
+        Self::read_transcript_g1(&mut monomials, crs_size, path_g1)?;
+
+        Ok(ProverCrs { monomials })
+    }
 }
 
 fn get_file_size(filename: &str) -> std::io::Result<u64> {
@@ -147,7 +163,6 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
         let num_to_read = degree; //g1_file_size / 64;
         let g1_buffer_size =
             std::mem::size_of::<<P::G1 as CurveGroup>::BaseField>() * 2 * num_to_read;
-        println!("buffersize {}", g1_buffer_size / 64);
         let mut buffer = vec![0_u8; g1_buffer_size];
 
         let file = File::open(path)?;
@@ -167,7 +182,7 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
         assert!(std::mem::size_of::<P::G2Affine>() >= g2_size);
         let mut buffer = vec![0; g2_size];
 
-        let file = File::open(&path)?;
+        let file = File::open(path)?;
         let mut file = file.take(g2_size as u64);
         file.read_exact(&mut buffer[..])?;
         Self::convert_endianness_inplace(&mut buffer);
@@ -200,106 +215,13 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
     }
 }
 
-impl<P: Pairing> FileProcessor<P> for OldFileStructure<P> {
-    fn read_transcript_g1(monomials: &mut [P::G1Affine], degree: usize, dir: &str) -> Result<()> {
-        let num = 0;
-        let mut num_read = 0;
-        let mut path = get_transcript_path(dir, num);
-        println!("PATH {path}");
-        while Path::new(&path).exists() && num_read < degree {
-            let manifest = Self::read_manifest(&path)?;
-
-            let offset = std::mem::size_of::<Manifest>();
-            let num_to_read = min(manifest.num_g1_points as usize, degree - num_read);
-            let g1_buffer_size =
-                std::mem::size_of::<<P::G1 as CurveGroup>::BaseField>() * 2 * num_to_read;
-            let mut buffer = vec![0_u8; g1_buffer_size];
-
-            let mut file = File::open(&path)?;
-            file.seek(SeekFrom::Start(offset as u64))?;
-            let mut file = file.take(g1_buffer_size as u64);
-            file.read_exact(&mut buffer[..])?;
-
-            // We must pass the size actually read to the second call, not the desired
-            // g1_buffer_size as the file may have been smaller than this.
-            let monomial = &mut monomials[num_read..];
-            Self::read_elements_from_buffer(monomial, &mut buffer);
-            num_read += num_to_read;
-            path = get_transcript_path(dir, num + 1);
-        }
-
-        if num_read < degree {
-            return Err(anyhow!(
-                    "Only read {} points from {}, but require {}. Is your SRS large enough? \
-                     Either run bootstrap.sh to download the transcript.dat files to `srs_db/ignition/`, \
-                     or you might need to download extra transcript.dat files by editing \
-                     `srs_db/download_ignition.sh` (but be careful, as this suggests you've \
-                     just changed a circuit to exceed a new 'power of two' boundary).",
-                    num_read, path, degree
-                )
-            );
-        }
-
-        Ok(())
-    }
-
-    fn read_transcript_g2(g2_x: &mut P::G2Affine, dir: &str) -> Result<()> {
-        let g2_size = std::mem::size_of::<<P::G2 as CurveGroup>::BaseField>() * 2;
-        assert!(std::mem::size_of::<P::G2Affine>() >= g2_size);
-        let mut path = format!("{}/g2.dat", dir);
-
-        if Path::new(&path).exists() {
-            let mut buffer = vec![0_u8; g2_size];
-
-            let file = File::open(&path)?;
-            let mut file = file.take(g2_size as u64);
-            file.read_exact(&mut buffer[..])?;
-            Self::convert_endianness_inplace(&mut buffer);
-
-            // Again, size passed to second function should be size actually read
-            *g2_x = P::G2Affine::deserialize_uncompressed(&mut &buffer[..]).map_err(|e| {
-                anyhow!("Failed to deserialize G2Affine from transcript file: {}", e)
-            })?;
-
-            return Ok(());
-        }
-
-        // Get transcript starting at g0.dat
-        path = get_transcript_path(dir, 0);
-
-        let manifest = Self::read_manifest(&path)?;
-
-        let g2_buffer_offset = std::mem::size_of::<<P::G2 as CurveGroup>::BaseField>() / 2
-            * 2
-            * manifest.num_g1_points as usize;
-        let offset = std::mem::size_of::<Manifest>() + g2_buffer_offset;
-
-        let mut file = File::open(&path)?;
-        file.seek(SeekFrom::Start(offset as u64))?;
-        let mut buf = vec![0; g2_size];
-        file.read_exact(&mut buf[..])?;
-        Self::convert_endianness_inplace(&mut buf);
-
-        *g2_x = P::G2Affine::deserialize_uncompressed(&mut &buf[..])
-            .map_err(|e| anyhow!("Failed to deserialize G2Affine from transcript file: {}", e))?;
-
-        Ok(())
-    }
-    fn convert_endianness_inplace(buffer: &mut [u8]) {
-        for i in (0..buffer.len()).step_by(8) {
-            let be = BigEndian::read_u64(&buffer[i..i + 8]);
-            LittleEndian::write_u64(&mut buffer[i..i + 8], be);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use ark_bn254::{Bn254, Fq12, G1Affine, G2Affine};
     use ark_ec::{pairing::Pairing, AffineRepr};
     use ark_ff::Field;
 
-    use crate::parse::crs::{FileProcessor, NewFileStructure, OldFileStructure};
+    use crate::parse::crs::{FileProcessor, NewFileStructure};
     #[test]
     fn read_transcript_loads_well_formed_srs_new() {
         let degree = 1000;
@@ -324,27 +246,4 @@ mod tests {
             assert!(mon.is_on_curve());
         }
     }
-
-    //  This is the test for the old structure of the .dat file:
-
-    // #[test]
-    // fn read_transcript_loads_well_formed_srs_old() {
-    //     let degree = 1000;
-    //     let mut monomials: Vec<G1Affine> = vec![G1Affine::default(); degree + 2];
-    //     let mut g2_x = G2Affine::default();
-    //     let path = "~/aztec-packages/barretenberg/cpp/srs_db/ignition/monomial";
-    //     OldFileStructure::<Bn254>::read_transcript(&mut monomials, &mut g2_x, degree, path, path)
-    //         .unwrap();
-    //     assert_eq!(G1Affine::generator(), monomials[0]);
-
-    //     let mut p: Vec<G1Affine> = vec![monomials[1], G1Affine::generator()];
-    //     let q: Vec<G2Affine> = vec![G2Affine::generator(), g2_x];
-    //     p[0].y.neg_in_place();
-
-    //     let res = Bn254::multi_pairing(&p, &q).0;
-    //     assert_eq!(res, Fq12::ONE);
-    //     for mon in monomials.iter().take(degree) {
-    //         assert!(mon.is_on_curve());
-    // }
-    // }
 }

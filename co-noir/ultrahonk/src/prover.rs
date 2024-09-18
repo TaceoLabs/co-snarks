@@ -1,12 +1,13 @@
 use crate::{
     decider::{prover::Decider, types::ProverMemory},
-    get_msb,
     honk_curve::HonkCurve,
     oink::prover::Oink,
     poseidon2::poseidon2_bn254::POSEIDON2_BN254_T4_PARAMS,
     transcript::{TranscriptFieldType, TranscriptType},
     types::{HonkProof, ProvingKey},
+    CONST_PROOF_SIZE_LOG_N,
 };
+use ark_ec::pairing::Pairing;
 use std::{io, marker::PhantomData};
 
 pub type HonkProofResult<T> = std::result::Result<T, HonkProofError>;
@@ -23,6 +24,9 @@ pub enum HonkProofError {
     /// The proof has too little elements
     #[error("Proof too small")]
     ProofTooSmall,
+    /// Invalid proof length
+    #[error("Invalid proof length")]
+    InvalidProofLength,
     #[error(transparent)]
     IOError(#[from] io::Error),
 }
@@ -31,52 +35,36 @@ pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>> {
     phantom_data: PhantomData<P>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>> Default for UltraHonk<P> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl<P: HonkCurve<TranscriptFieldType>> UltraHonk<P> {
-    pub fn new() -> Self {
-        Self {
-            phantom_data: PhantomData,
-        }
-    }
-
-    fn generate_gate_challenges(
-        &self,
-        memory: &mut ProverMemory<P>,
-        proving_key: &ProvingKey<P>,
-        transcript: &mut TranscriptType,
-    ) {
+    fn generate_gate_challenges(memory: &mut ProverMemory<P>, transcript: &mut TranscriptType) {
         tracing::trace!("generate gate challenges");
 
-        let challenge_size = get_msb(proving_key.circuit_size) as usize;
-        let mut gate_challenges = Vec::with_capacity(challenge_size);
+        let mut gate_challenges: Vec<<P as Pairing>::ScalarField> =
+            Vec::with_capacity(CONST_PROOF_SIZE_LOG_N);
 
-        for idx in 0..challenge_size {
+        for idx in 0..CONST_PROOF_SIZE_LOG_N {
             let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{}", idx));
             gate_challenges.push(chall);
         }
         memory.relation_parameters.gate_challenges = gate_challenges;
     }
 
-    pub fn prove(
-        self,
-        proving_key: &ProvingKey<P>,
-        public_inputs: &[P::ScalarField],
-    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+    pub fn prove(proving_key: ProvingKey<P>) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("UltraHonk prove");
 
         let mut transcript = TranscriptType::new(&POSEIDON2_BN254_T4_PARAMS);
 
         let oink = Oink::<P>::default();
+        let oink_result = oink.prove(&proving_key, &mut transcript)?;
+
+        let cicruit_size = proving_key.circuit_size;
+        let crs = proving_key.crs;
+
         let mut memory =
-            ProverMemory::from(oink.prove(proving_key, public_inputs, &mut transcript)?);
-        self.generate_gate_challenges(&mut memory, proving_key, &mut transcript);
+            ProverMemory::from_memory_and_polynomials(oink_result, proving_key.polynomials);
+        Self::generate_gate_challenges(&mut memory, &mut transcript);
 
         let decider = Decider::new(memory);
-        decider.prove(proving_key, transcript)
+        decider.prove(cicruit_size, &crs, transcript)
     }
 }
