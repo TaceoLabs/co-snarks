@@ -28,13 +28,14 @@ impl Barycentric {
     ) -> Vec<F> {
         let mut res = Vec::with_capacity(domain_size);
 
-        for (i, r) in res.iter_mut().enumerate() {
-            *r = F::one();
+        for i in 0..domain_size {
+            let mut r = F::one();
             for j in 0..domain_size {
                 if j != i {
-                    *r *= big_domain[i] - big_domain[j];
+                    r *= big_domain[i] - big_domain[j];
                 }
             }
+            res.push(r);
         }
         res
     }
@@ -52,12 +53,12 @@ impl Barycentric {
         assert_eq!(big_domain_size, std::cmp::max(domain_size, num_evals));
 
         let res_size = domain_size * num_evals;
-        let mut res = Vec::with_capacity(res_size);
+        let mut res = vec![F::zero(); res_size]; // default init to 0 since below does not init all elements
 
         for k in domain_size..num_evals {
             for j in 0..domain_size {
                 let inv = lagrange_denominators[j] * (big_domain[k] - big_domain[j]);
-                res.push(inv);
+                res[k * domain_size + j] = inv;
             }
         }
 

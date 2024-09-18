@@ -1,11 +1,11 @@
-use crate::NUM_ALPHAS;
+use crate::{decider::polynomial::Polynomial, NUM_ALPHAS};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 
 pub struct ProverMemory<P: Pairing> {
-    pub w_4: Vec<P::ScalarField>,             // column 3
-    pub z_perm: Vec<P::ScalarField>,          // column 4
-    pub lookup_inverses: Vec<P::ScalarField>, // column 5
+    pub w_4: Polynomial<P::ScalarField>,             // column 3
+    pub z_perm: Polynomial<P::ScalarField>,          // column 4
+    pub lookup_inverses: Polynomial<P::ScalarField>, // column 5
     pub public_input_delta: P::ScalarField,
     pub challenges: Challenges<P::ScalarField>,
 }

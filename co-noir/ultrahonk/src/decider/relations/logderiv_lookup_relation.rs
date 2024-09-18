@@ -52,8 +52,8 @@ impl LogDerivLookupRelation {
     fn compute_inverse_exists<F: PrimeField>(
         input: &ProverUnivariates<F>,
     ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
-        let row_has_write = input.polys.witness.lookup_read_tags();
-        let row_has_read = input.polys.precomputed.q_lookup();
+        let row_has_write = input.witness.lookup_read_tags();
+        let row_has_read = input.precomputed.q_lookup();
 
         -(row_has_write.to_owned() * row_has_read) + row_has_write + row_has_read
     }
@@ -66,16 +66,16 @@ impl LogDerivLookupRelation {
         let eta_1 = &relation_parameters.eta_1;
         let eta_2 = &relation_parameters.eta_2;
         let eta_3 = &relation_parameters.eta_3;
-        let w_1 = input.polys.witness.w_l();
-        let w_2 = input.polys.witness.w_r();
-        let w_3 = input.polys.witness.w_o();
-        let w_1_shift = input.polys.shifted_witness.w_l();
-        let w_2_shift = input.polys.shifted_witness.w_r();
-        let w_3_shift = input.polys.shifted_witness.w_o();
-        let table_index = input.polys.precomputed.q_o();
-        let negative_column_1_step_size = input.polys.precomputed.q_r();
-        let negative_column_2_step_size = input.polys.precomputed.q_m();
-        let negative_column_3_step_size = input.polys.precomputed.q_c();
+        let w_1 = input.witness.w_l();
+        let w_2 = input.witness.w_r();
+        let w_3 = input.witness.w_o();
+        let w_1_shift = input.shifted_witness.w_l();
+        let w_2_shift = input.shifted_witness.w_r();
+        let w_3_shift = input.shifted_witness.w_o();
+        let table_index = input.precomputed.q_o();
+        let negative_column_1_step_size = input.precomputed.q_r();
+        let negative_column_2_step_size = input.precomputed.q_m();
+        let negative_column_3_step_size = input.precomputed.q_c();
 
         // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
         // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
@@ -103,10 +103,10 @@ impl LogDerivLookupRelation {
         let eta_2 = &relation_parameters.eta_2;
         let eta_3 = &relation_parameters.eta_3;
 
-        let table_1 = input.polys.precomputed.table_1();
-        let table_2 = input.polys.precomputed.table_2();
-        let table_3 = input.polys.precomputed.table_3();
-        let table_4 = input.polys.precomputed.table_4();
+        let table_1 = input.precomputed.table_1();
+        let table_2 = input.precomputed.table_2();
+        let table_3 = input.precomputed.table_3();
+        let table_4 = input.precomputed.table_4();
 
         table_1.to_owned()
             + gamma
@@ -122,8 +122,7 @@ impl<F: PrimeField> Relation<F> for LogDerivLookupRelation {
 
     fn skip(input: &ProverUnivariates<F>) -> bool {
         <Self as Relation<F>>::check_skippable();
-        input.polys.precomputed.q_lookup().is_zero()
-            && input.polys.witness.lookup_read_counts().is_zero()
+        input.precomputed.q_lookup().is_zero() && input.witness.lookup_read_counts().is_zero()
     }
 
     /**
@@ -171,9 +170,9 @@ impl<F: PrimeField> Relation<F> for LogDerivLookupRelation {
     ) {
         tracing::trace!("Accumulate LogDerivLookupRelation");
 
-        let inverses = input.memory.lookup_inverses(); // Degree 1
-        let read_counts = input.polys.witness.lookup_read_counts(); // Degree 1
-        let read_selector = input.polys.precomputed.q_lookup(); // Degree 1
+        let inverses = input.witness.lookup_inverses(); // Degree 1
+        let read_counts = input.witness.lookup_read_counts(); // Degree 1
+        let read_selector = input.precomputed.q_lookup(); // Degree 1
 
         let inverse_exists = Self::compute_inverse_exists(input); // Degree 2
         let read_term = Self::compute_read_term(input, relation_parameters); // Degree 2 (3)

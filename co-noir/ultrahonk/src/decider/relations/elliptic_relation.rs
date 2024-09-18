@@ -51,7 +51,7 @@ impl EllipticRelation {
         if !Self::SKIPPABLE {
             panic!("Cannot skip this relation");
         }
-        input.polys.precomputed.q_elliptic().is_zero()
+        input.precomputed.q_elliptic().is_zero()
     }
 
     /**
@@ -76,17 +76,17 @@ impl EllipticRelation {
         // replace old addition relations with these ones and
         // remove endomorphism coefficient in ecc add gate(not used))
 
-        let x_1 = input.polys.witness.w_r();
-        let y_1 = input.polys.witness.w_o();
+        let x_1 = input.witness.w_r();
+        let y_1 = input.witness.w_o();
 
-        let x_2 = input.polys.shifted_witness.w_l();
-        let y_2 = input.polys.shifted_witness.w_4();
-        let x_3 = input.polys.shifted_witness.w_o();
-        let y_3 = input.polys.shifted_witness.w_r();
+        let x_2 = input.shifted_witness.w_l();
+        let y_2 = input.shifted_witness.w_4();
+        let y_3 = input.shifted_witness.w_o();
+        let x_3 = input.shifted_witness.w_r();
 
-        let q_sign = input.polys.precomputed.q_l();
-        let q_elliptic = input.polys.precomputed.q_elliptic();
-        let q_is_double = input.polys.precomputed.q_m();
+        let q_sign = input.precomputed.q_l();
+        let q_elliptic = input.precomputed.q_elliptic();
+        let q_is_double = input.precomputed.q_m();
 
         // Contribution (1) point addition, x-coordinate check
         // q_elliptic * (x3 + x2 + x1)(x2 - x1)(x2 - x1) - y2^2 - y1^2 + 2(y2y1)*q_sign = 0
@@ -117,7 +117,7 @@ impl EllipticRelation {
         // (x3 + x1 + x1) (4y1*y1) - 9 * x1 * x1 * x1 * x1 = 0
         // N.B. we're using the equivalence x1*x1*x1 === y1*y1 - curve_b to reduce degree by 1
 
-        let curve_b = P::get_curve_b_as_scalarfield(); // here we need the extra constraint on the Curve
+        let curve_b = P::get_curve_b(); // here we need the extra constraint on the Curve
         let x1_mul_3 = x_1.to_owned() + x_1 + x_1;
         let x_pow_4_mul_3 = (y1_sqr.to_owned() - &curve_b) * &x1_mul_3;
         let mut y1_sqr_mul_4 = y1_sqr.double();

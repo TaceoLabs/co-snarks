@@ -1,61 +1,45 @@
 use crate::decider::prover::Decider;
 use crate::decider::sumcheck::sumcheck_round::{SumcheckRound, SumcheckRoundOutput};
 use crate::decider::sumcheck::SumcheckOutput;
-use crate::decider::types::{ClaimedEvaluations, MemoryElements, PartiallyEvaluatePolys};
+use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys};
 use crate::honk_curve::HonkCurve;
 use crate::transcript::{TranscriptFieldType, TranscriptType};
-use crate::types::{Polynomials, ProvingKey};
-use crate::CONST_PROOF_SIZE_LOG_N;
-use crate::{decider::types::GateSeparatorPolynomial, get_msb};
+use crate::types::AllEntities;
+use crate::{get_msb64, CONST_PROOF_SIZE_LOG_N};
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
-    fn partially_evaluate_poly(
-        poly_src: &[P::ScalarField],
-        poly_des: &mut [P::ScalarField],
-        round_size: usize,
-        round_challenge: &P::ScalarField,
-    ) {
-        for i in (0..round_size).step_by(2) {
-            poly_des[i >> 1] = poly_src[i] + (poly_src[i + 1] - poly_src[i]) * round_challenge;
-        }
-    }
-
-    fn partially_evaluate_poly_inplace(
-        poly: &mut [P::ScalarField],
-        round_size: usize,
-        round_challenge: &P::ScalarField,
-    ) {
-        for i in (0..round_size).step_by(2) {
-            poly[i >> 1] = poly[i] + (poly[i + 1] - poly[i]) * round_challenge;
-        }
-    }
-
-    // after the first round, operate in place on partially_evaluated_polynomials. To avoid giving partially_evaluated_poly as &mut and as &, we use a boolean flag to indicate whether we should operate in place.
-    pub(crate) fn partially_evaluate<const INPLACE: bool>(
+    pub(crate) fn partially_evaluate_init(
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField>,
-        polys: &Polynomials<P::ScalarField>,
-        memory: &MemoryElements<Vec<P::ScalarField>>,
+        polys: &AllEntities<Vec<P::ScalarField>>,
         round_size: usize,
         round_challenge: &P::ScalarField,
     ) {
-        tracing::trace!("Partially_evaluate");
+        tracing::trace!("Partially_evaluate init");
 
         // Barretenberg uses multithreading here
-        for (src, des) in memory
-            .iter()
-            .chain(polys.iter())
-            .zip(partially_evaluated_poly.iter_mut())
-        {
-            if INPLACE {
-                Self::partially_evaluate_poly_inplace(des, round_size, round_challenge);
-            } else {
-                Self::partially_evaluate_poly(src, des, round_size, round_challenge);
+        for (poly_src, poly_des) in polys.iter().zip(partially_evaluated_poly.iter_mut()) {
+            for i in (0..round_size).step_by(2) {
+                poly_des[i >> 1] = poly_src[i] + (poly_src[i + 1] - poly_src[i]) * round_challenge;
             }
         }
     }
 
-    // TODO order is probably wrong
+    pub(crate) fn partially_evaluate_inplace(
+        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField>,
+        round_size: usize,
+        round_challenge: &P::ScalarField,
+    ) {
+        tracing::trace!("Partially_evaluate inplace");
+
+        // Barretenberg uses multithreading here
+        for poly in partially_evaluated_poly.iter_mut() {
+            for i in (0..round_size).step_by(2) {
+                poly[i >> 1] = poly[i] + (poly[i + 1] - poly[i]) * round_challenge;
+            }
+        }
+    }
+
     fn add_evals_to_transcript(
         transcript: &mut TranscriptType,
         evaluations: &ClaimedEvaluations<P::ScalarField>,
@@ -86,12 +70,12 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
     pub(crate) fn sumcheck_prove(
         &self,
         transcript: &mut TranscriptType,
-        proving_key: &ProvingKey<P>,
+        circuit_size: u32,
     ) -> SumcheckOutput<P::ScalarField> {
         tracing::trace!("Sumcheck prove");
 
-        let multivariate_n = proving_key.circuit_size;
-        let multivariate_d = get_msb(multivariate_n);
+        let multivariate_n = circuit_size;
+        let multivariate_d = get_msb64(multivariate_n as u64);
 
         let mut sum_check_round = SumcheckRound::new(multivariate_n as usize);
 
@@ -111,8 +95,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
-            &self.memory.memory,
-            &proving_key.polynomials,
+            &self.memory.polys,
         );
 
         // Place the evaluations of the round univariate into transcript.
@@ -123,11 +106,11 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         let round_challenge = transcript.get_challenge::<P>("Sumcheck:u_0".to_string());
         multivariate_challenge.push(round_challenge);
         // Prepare sumcheck book-keeping table for the next round
-        let mut partially_evaluated_polys = PartiallyEvaluatePolys::default();
-        Self::partially_evaluate::<false>(
+        let mut partially_evaluated_polys =
+            PartiallyEvaluatePolys::new(multivariate_n as usize >> 1);
+        Self::partially_evaluate_init(
             &mut partially_evaluated_polys,
-            &proving_key.polynomials,
-            &self.memory.memory,
+            &self.memory.polys,
             multivariate_n as usize,
             &round_challenge,
         );
@@ -144,8 +127,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,
-                &partially_evaluated_polys.memory,
-                &partially_evaluated_polys.polys,
+                &partially_evaluated_polys,
             );
 
             // Place the evaluations of the round univariate into transcript.
@@ -157,10 +139,8 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
                 transcript.get_challenge::<P>(format!("Sumcheck:u_{}", round_idx));
             multivariate_challenge.push(round_challenge);
             // Prepare sumcheck book-keeping table for the next round
-            Self::partially_evaluate::<true>(
+            Self::partially_evaluate_inplace(
                 &mut partially_evaluated_polys,
-                &proving_key.polynomials,
-                &self.memory.memory,
                 sum_check_round.round_size,
                 &round_challenge,
             );

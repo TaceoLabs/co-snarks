@@ -9,12 +9,6 @@ pub struct Univariate<F: PrimeField, const SIZE: usize> {
 }
 
 impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
-    pub const SIZE: usize = SIZE;
-
-    pub fn new(evaluations: [F; SIZE]) -> Self {
-        Self { evaluations }
-    }
-
     pub fn double(self) -> Self {
         let mut result = self;
         result.double_in_place();
@@ -58,15 +52,18 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
      *
      */
     pub(crate) fn extend_from(&mut self, poly: &[F]) {
-        assert!(poly.len() <= SIZE);
-        self.evaluations[..poly.len()].copy_from_slice(poly);
+        let length = poly.len();
+        let extended_length = SIZE;
 
-        if poly.len() == 2 {
-            let delta = self.evaluations[1] - self.evaluations[0];
-            for i in 2..SIZE {
+        assert!(length <= extended_length);
+        self.evaluations[..length].copy_from_slice(poly);
+
+        if length == 2 {
+            let delta = poly[1] - poly[0];
+            for i in length..extended_length {
                 self.evaluations[i] = self.evaluations[i - 1] + delta;
             }
-        } else if poly.len() == 3 {
+        } else if length == 3 {
             // Based off https://hackmd.io/@aztec-network/SyR45cmOq?type=view
             // The technique used here is the same as the length == 3 case below.
             let inverse_two = F::from(2u64).inverse().unwrap();
@@ -74,15 +71,15 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
             let b = poly[1] - a - poly[0];
             let a2 = a.double();
             let mut a_mul = a2.to_owned();
-            for _ in 0..poly.len() - 2 {
+            for _ in 0..length - 2 {
                 a_mul += a2;
             }
             let mut extra = a_mul + a + b;
-            for i in 3..SIZE {
+            for i in length..extended_length {
                 self.evaluations[i] = self.evaluations[i - 1] + extra;
                 extra += a2;
             }
-        } else if poly.len() == 4 {
+        } else if length == 4 {
             // To compute a barycentric extension, we can compute the coefficients of the univariate.
             // We have the evaluation of the polynomial at the domain (which is assumed to be 0, 1, 2, 3).
             // Therefore, we have the 4 linear equations from plugging into f(x) = ax^3 + bx^2 + cx + d:
@@ -132,19 +129,18 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
             // This work is 3 field muls, 8 adds
             let a_plus_b = a + b;
             let a_plus_b_times_2 = a_plus_b + a_plus_b;
-            let start_idx_sqr = (poly.len() - 1) * (poly.len() - 1);
+            let start_idx_sqr = (length - 1) * (length - 1);
             let idx_sqr_three = start_idx_sqr + start_idx_sqr + start_idx_sqr;
             let mut idx_sqr_three_times_a = F::from(idx_sqr_three as u64) * a;
-            let mut x_a_term = F::from(6 * (poly.len() - 1) as u64) * a;
+            let mut x_a_term = F::from(6 * (length - 1) as u64) * a;
             let three_a = a + a + a;
             let six_a = three_a + three_a;
 
             let three_a_plus_two_b = a_plus_b_times_2 + a;
-            let mut linear_term =
-                F::from(poly.len() as u64 - 1) * three_a_plus_two_b + (a_plus_b + c);
+            let mut linear_term = F::from(length as u64 - 1) * three_a_plus_two_b + (a_plus_b + c);
 
             // For each new evaluation, we do only 6 field additions and 0 muls.
-            for i in 4..SIZE {
+            for i in length..extended_length {
                 self.evaluations[i] = self.evaluations[i - 1] + idx_sqr_three_times_a + linear_term;
 
                 idx_sqr_three_times_a += x_a_term + three_a;
@@ -153,24 +149,24 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
                 linear_term += three_a_plus_two_b;
             }
         } else {
-            for k in poly.len()..SIZE {
-                self.evaluations[k] = F::zero();
+            let big_domain = Barycentric::construct_big_domain(length, extended_length);
+            let lagrange_denominators =
+                Barycentric::construct_lagrange_denominators(length, &big_domain);
+            let dominator_inverses = Barycentric::construct_denominator_inverses(
+                extended_length,
+                &big_domain,
+                &lagrange_denominators,
+            );
+            let full_numerator_values =
+                Barycentric::construct_full_numerator_values(length, extended_length, &big_domain);
 
-                let big_domain = Barycentric::construct_big_domain(poly.len(), SIZE);
-                let lagrange_denominators =
-                    Barycentric::construct_lagrange_denominators(poly.len(), &big_domain);
-                let dominator_inverses = Barycentric::construct_denominator_inverses(
-                    SIZE,
-                    &big_domain,
-                    &lagrange_denominators,
-                );
-                let full_numerator_values =
-                    Barycentric::construct_full_numerator_values(poly.len(), SIZE, &big_domain);
+            for k in length..extended_length {
+                self.evaluations[k] = F::zero();
 
                 // compute each term v_j / (d_j*(x-x_j)) of the sum
                 for (j, term) in poly.iter().enumerate() {
                     let mut term = *term;
-                    term *= &dominator_inverses[poly.len() * k + j];
+                    term *= &dominator_inverses[length * k + j];
                     self.evaluations[k] += term;
                 }
                 // scale the sum by the value of of B(x)
