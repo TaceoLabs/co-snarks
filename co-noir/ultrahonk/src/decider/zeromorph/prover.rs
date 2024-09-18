@@ -5,11 +5,11 @@ use super::{
 };
 use crate::{
     decider::{polynomial::Polynomial, types::ClaimedEvaluations, zeromorph::OpeningPair},
-    get_msb,
+    get_msb64,
     honk_curve::HonkCurve,
     prover::HonkProofResult,
     transcript::{TranscriptFieldType, TranscriptType},
-    types::ProvingKey,
+    types::{AllEntities, ProverCrs},
     CONST_PROOF_SIZE_LOG_N, N_MAX,
 };
 use ark_ec::Group;
@@ -41,7 +41,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         polynomial: &Polynomial<P::ScalarField>,
         u_challenge: &[P::ScalarField],
     ) -> Vec<Polynomial<P::ScalarField>> {
-        let log_n = get_msb(polynomial.len() as u32);
+        let log_n = get_msb64(polynomial.len() as u64);
         // Define the vector of quotients q_k, k = 0, ..., log_N-1
         // let mut quotients = Vec::with_capacity(log_n as usize);
         let mut quotients = vec![Polynomial::default(); log_n as usize];
@@ -269,18 +269,11 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
 
     fn get_f_polyomials<'a>(
         &'a self,
-        proving_key: &'a ProvingKey<P>,
+        polys: &'a AllEntities<Vec<P::ScalarField>>,
     ) -> PolyF<'a, Vec<P::ScalarField>> {
-        let memory = [
-            self.memory.memory.w_4(),
-            self.memory.memory.z_perm(),
-            self.memory.memory.lookup_inverses(),
-        ];
-
         PolyF {
-            precomputed: &proving_key.polynomials.precomputed,
-            witness: &proving_key.polynomials.witness,
-            memory,
+            precomputed: &polys.precomputed,
+            witness: &polys.witness,
         }
     }
 
@@ -288,50 +281,42 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) -> PolyGShift<P::ScalarField> {
         PolyGShift {
-            tables: &evaluations.polys.shifted_tables,
-            wires: &evaluations.polys.shifted_witness,
-            z_perm: evaluations.memory.z_perm_shift(),
+            tables: &evaluations.shifted_tables,
+            wires: &evaluations.shifted_witness,
         }
     }
 
     fn get_g_polyomials<'a>(
         &'a self,
-        proving_key: &'a ProvingKey<P>,
+        polys: &'a AllEntities<Vec<P::ScalarField>>,
     ) -> PolyG<'a, Vec<P::ScalarField>> {
         let tables = [
-            proving_key.polynomials.precomputed.table_1(),
-            proving_key.polynomials.precomputed.table_2(),
-            proving_key.polynomials.precomputed.table_3(),
-            proving_key.polynomials.precomputed.table_4(),
+            polys.precomputed.table_1(),
+            polys.precomputed.table_2(),
+            polys.precomputed.table_3(),
+            polys.precomputed.table_4(),
         ];
 
         let wires = [
-            proving_key.polynomials.witness.w_l(),
-            proving_key.polynomials.witness.w_r(),
-            proving_key.polynomials.witness.w_o(),
-            self.memory.memory.w_4(),
+            polys.witness.w_l(),
+            polys.witness.w_r(),
+            polys.witness.w_o(),
+            polys.witness.w_4(),
         ];
 
         PolyG {
             tables,
             wires,
-            z_perm: self.memory.memory.z_perm(),
+            z_perm: polys.witness.z_perm(),
         }
     }
 
     fn get_f_evaluations(
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) -> PolyF<P::ScalarField> {
-        let memory = [
-            evaluations.memory.w_4(),
-            evaluations.memory.z_perm(),
-            evaluations.memory.lookup_inverses(),
-        ];
-
         PolyF {
-            precomputed: &evaluations.polys.precomputed,
-            witness: &evaluations.polys.witness,
-            memory,
+            precomputed: &evaluations.precomputed,
+            witness: &evaluations.witness,
         }
     }
 
@@ -349,26 +334,27 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
      * @todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
      */
     pub(crate) fn zeromorph_prove(
-        &mut self,
+        &self,
         transcript: &mut TranscriptType,
-        proving_key: &ProvingKey<P>,
+        circuit_size: u32,
+        crs: &ProverCrs<P>,
+        // proving_key: &ProvingKey<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
     ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
-        let circuit_size = proving_key.circuit_size;
-        let f_polynomials = self.get_f_polyomials(proving_key);
-        let g_polynomials = self.get_g_polyomials(proving_key);
+        let f_polynomials = self.get_f_polyomials(&self.memory.polys);
+        let g_polynomials = self.get_g_polyomials(&self.memory.polys);
         let f_evaluations = Self::get_f_evaluations(&sumcheck_output.claimed_evaluations);
         let g_shift_evaluations =
             Self::get_g_shift_evaluations(&sumcheck_output.claimed_evaluations);
         let multilinear_challenge = &sumcheck_output.challenges;
-        let commitment_key = &proving_key.crs;
+        let commitment_key = crs;
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
         let rho = transcript.get_challenge::<P>("rho".to_string());
 
         // Extract multilinear challenge u and claimed multilinear evaluations from Sumcheck output
         let u_challenge = multilinear_challenge;
-        let log_n = crate::get_msb(circuit_size);
+        let log_n = crate::get_msb32(circuit_size);
         let n = 1 << log_n;
 
         // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
@@ -400,7 +386,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         // Compute the full batched polynomial f = f_batched + g_batched.shifted() = f_batched + h_batched. This is the
         // polynomial for which we compute the quotients q_k and prove f(u) = v_batched.
         let mut f_polynomial = f_batched.to_owned();
-        f_polynomial += g_batched.shifted();
+        f_polynomial += g_batched.shifted().as_ref();
         // f_polynomial += concatenated_batched; // No groups
 
         // Compute the multilinear quotients q_k = q_k(X_0, ..., X_{k-1})

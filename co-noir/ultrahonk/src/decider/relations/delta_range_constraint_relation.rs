@@ -71,7 +71,7 @@ impl<F: PrimeField> Relation<F> for DeltaRangeConstraintRelation {
 
     fn skip(input: &ProverUnivariates<F>) -> bool {
         <Self as Relation<F>>::check_skippable();
-        input.polys.precomputed.q_delta_range().is_zero()
+        input.precomputed.q_delta_range().is_zero()
     }
 
     /**
@@ -97,12 +97,12 @@ impl<F: PrimeField> Relation<F> for DeltaRangeConstraintRelation {
     ) {
         tracing::trace!("Accumulate DeltaRangeConstraintRelation");
 
-        let w_1 = input.polys.witness.w_l();
-        let w_2 = input.polys.witness.w_r();
-        let w_3 = input.polys.witness.w_o();
-        let w_4 = input.memory.w_4();
-        let w_1_shift = input.polys.shifted_witness.w_l();
-        let q_delta_range = input.polys.precomputed.q_delta_range();
+        let w_1 = input.witness.w_l();
+        let w_2 = input.witness.w_r();
+        let w_3 = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let w_1_shift = input.shifted_witness.w_l();
+        let q_delta_range = input.precomputed.q_delta_range();
         let minus_one = -F::one();
         let minus_two = -F::from(2u64);
 

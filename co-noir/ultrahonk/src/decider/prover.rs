@@ -3,7 +3,7 @@ use crate::{
     honk_curve::HonkCurve,
     prover::HonkProofResult,
     transcript::{TranscriptFieldType, TranscriptType},
-    types::{HonkProof, ProvingKey},
+    types::{HonkProof, ProverCrs},
 };
 use std::marker::PhantomData;
 
@@ -23,14 +23,14 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
     fn compute_opening_proof(
         opening_claim: ZeroMorphOpeningClaim<P::ScalarField>,
         transcript: &mut TranscriptType,
-        proving_key: &ProvingKey<P>,
+        crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         let mut quotient = opening_claim.polynomial;
         let pair = opening_claim.opening_pair;
         quotient[0] -= pair.evaluation;
         // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
         quotient.factor_roots(&pair.challenge);
-        let quotient_commitment = crate::commit(&quotient.coefficients, &proving_key.crs)?;
+        let quotient_commitment = crate::commit(&quotient.coefficients, crs)?;
         // TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
         // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
         // pthreads) or even the work queue itself
@@ -46,10 +46,10 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
     fn execute_relation_check_rounds(
         &self,
         transcript: &mut TranscriptType,
-        proving_key: &ProvingKey<P>,
+        circuit_size: u32,
     ) -> SumcheckOutput<P::ScalarField> {
         // This is just Sumcheck.prove
-        self.sumcheck_prove(transcript, proving_key)
+        self.sumcheck_prove(transcript, circuit_size)
     }
 
     /**
@@ -61,27 +61,29 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
     fn execute_pcs_rounds(
         &mut self,
         transcript: &mut TranscriptType,
-        proving_key: &ProvingKey<P>,
+        circuit_size: u32,
+        crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
     ) -> HonkProofResult<()> {
         let prover_opening_claim =
-            self.zeromorph_prove(transcript, proving_key, sumcheck_output)?;
-        Self::compute_opening_proof(prover_opening_claim, transcript, proving_key)
+            self.zeromorph_prove(transcript, circuit_size, crs, sumcheck_output)?;
+        Self::compute_opening_proof(prover_opening_claim, transcript, crs)
     }
 
     pub fn prove(
         mut self,
-        proving_key: &ProvingKey<P>,
+        circuit_size: u32,
+        crs: &ProverCrs<P>,
         mut transcript: TranscriptType,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
-        let sumcheck_output = self.execute_relation_check_rounds(&mut transcript, proving_key);
+        let sumcheck_output = self.execute_relation_check_rounds(&mut transcript, circuit_size);
 
         // Fiat-Shamir: rho, y, x, z
         // Execute Zeromorph multilinear PCS
-        self.execute_pcs_rounds(&mut transcript, proving_key, sumcheck_output)?;
+        self.execute_pcs_rounds(&mut transcript, circuit_size, crs, sumcheck_output)?;
 
         Ok(transcript.get_proof())
     }
