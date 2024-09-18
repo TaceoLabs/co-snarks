@@ -61,6 +61,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
             proving_key.polynomials.witness.w_l().len(),
             proving_key.polynomials.witness.w_o().len()
         );
+        self.memory.w_4 = proving_key.polynomials.witness.w_4().clone();
         self.memory.w_4.resize(
             proving_key.polynomials.witness.w_l().len(),
             P::ScalarField::zero(),
@@ -98,9 +99,9 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         let w_1 = &proving_key.polynomials.witness.w_l()[i];
         let w_2 = &proving_key.polynomials.witness.w_r()[i];
         let w_3 = &proving_key.polynomials.witness.w_o()[i];
-        let w_1_shift = &proving_key.polynomials.shifted_witness.w_l()[i];
-        let w_2_shift = &proving_key.polynomials.shifted_witness.w_r()[i];
-        let w_3_shift = &proving_key.polynomials.shifted_witness.w_o()[i];
+        let w_1_shift = &proving_key.polynomials.witness.w_l().shifted()[i];
+        let w_2_shift = &proving_key.polynomials.witness.w_r().shifted()[i];
+        let w_3_shift = &proving_key.polynomials.witness.w_o().shifted()[i];
         let table_index = &proving_key.polynomials.precomputed.q_o()[i];
         let negative_column_1_step_size = &proving_key.polynomials.precomputed.q_r()[i];
         let negative_column_2_step_size = &proving_key.polynomials.precomputed.q_m()[i];
@@ -173,14 +174,10 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
             self.memory.lookup_inverses[i] = read_term * write_term;
         }
 
-        batch_invert(&mut self.memory.lookup_inverses);
+        batch_invert(self.memory.lookup_inverses.as_mut());
     }
 
-    fn compute_public_input_delta(
-        &self,
-        proving_key: &ProvingKey<P>,
-        public_inputs: &[P::ScalarField],
-    ) -> P::ScalarField {
+    fn compute_public_input_delta(&self, proving_key: &ProvingKey<P>) -> P::ScalarField {
         tracing::trace!("compute public input delta");
 
         // Let m be the number of public inputs x₀,…, xₘ₋₁.
@@ -217,7 +214,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
             - self.memory.challenges.beta
                 * P::ScalarField::from((1 + proving_key.pub_inputs_offset) as u64);
 
-        for x_i in public_inputs.iter() {
+        for x_i in proving_key.public_inputs.iter() {
             num *= num_acc + x_i;
             denom *= denom_acc + x_i;
             num_acc += self.memory.challenges.beta;
@@ -301,10 +298,9 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         batch_invert(&mut denominator);
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
-        self.memory.z_perm.resize(
-            proving_key.circuit_size as usize + 1,
-            P::ScalarField::zero(),
-        );
+        self.memory
+            .z_perm
+            .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
 
         for (des, num, den) in izip!(
             self.memory.z_perm.iter_mut().skip(1),
@@ -329,7 +325,6 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
     fn execute_preamble_round(
         transcript: &mut TranscriptType,
         proving_key: &ProvingKey<P>,
-        public_inputs: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("executing preamble round");
 
@@ -344,11 +339,13 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
             proving_key.pub_inputs_offset as u64,
         );
 
-        if proving_key.num_public_inputs as usize != public_inputs.len() {
-            return Err(HonkProofError::CorruptedWitness(public_inputs.len()));
+        if proving_key.num_public_inputs as usize != proving_key.public_inputs.len() {
+            return Err(HonkProofError::CorruptedWitness(
+                proving_key.public_inputs.len(),
+            ));
         }
 
-        for (i, public_input) in public_inputs.iter().enumerate() {
+        for (i, public_input) in proving_key.public_inputs.iter().enumerate() {
             // transcript.add_scalar(*public_input);
             transcript.send_fr_to_verifier::<P>(format!("public_input_{}", i), *public_input);
         }
@@ -366,9 +363,18 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         // Commit to the first three wire polynomials of the instance
         // We only commit to the fourth wire polynomial after adding memory records
 
-        let w_l = crate::commit(proving_key.polynomials.witness.w_l(), &proving_key.crs)?;
-        let w_r = crate::commit(proving_key.polynomials.witness.w_r(), &proving_key.crs)?;
-        let w_o = crate::commit(proving_key.polynomials.witness.w_o(), &proving_key.crs)?;
+        let w_l = crate::commit(
+            proving_key.polynomials.witness.w_l().as_ref(),
+            &proving_key.crs,
+        )?;
+        let w_r = crate::commit(
+            proving_key.polynomials.witness.w_r().as_ref(),
+            &proving_key.crs,
+        )?;
+        let w_o = crate::commit(
+            proving_key.polynomials.witness.w_o().as_ref(),
+            &proving_key.crs,
+        )?;
 
         transcript.send_point_to_verifier::<P>("W_L".to_string(), w_l.into());
         transcript.send_point_to_verifier::<P>("W_R".to_string(), w_r.into());
@@ -398,14 +404,18 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
         let lookup_read_counts = crate::commit(
-            proving_key.polynomials.witness.lookup_read_counts(),
+            proving_key
+                .polynomials
+                .witness
+                .lookup_read_counts()
+                .as_ref(),
             &proving_key.crs,
         )?;
         let lookup_read_tags = crate::commit(
-            proving_key.polynomials.witness.lookup_read_tags(),
+            proving_key.polynomials.witness.lookup_read_tags().as_ref(),
             &proving_key.crs,
         )?;
-        let w_4 = crate::commit(&self.memory.w_4, &proving_key.crs)?;
+        let w_4 = crate::commit(self.memory.w_4.as_ref(), &proving_key.crs)?;
 
         transcript.send_point_to_verifier::<P>(
             "LOOKUP_READ_COUNTS".to_string(),
@@ -432,7 +442,8 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
 
         self.compute_logderivative_inverses(proving_key);
 
-        let lookup_inverses = crate::commit(&self.memory.lookup_inverses, &proving_key.crs)?;
+        let lookup_inverses =
+            crate::commit(self.memory.lookup_inverses.as_ref(), &proving_key.crs)?;
 
         transcript
             .send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), lookup_inverses.into());
@@ -446,15 +457,13 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         &mut self,
         transcript: &mut TranscriptType,
         proving_key: &ProvingKey<P>,
-        public_inputs: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("executing grand product computation round");
 
-        self.memory.public_input_delta =
-            self.compute_public_input_delta(proving_key, public_inputs);
+        self.memory.public_input_delta = self.compute_public_input_delta(proving_key);
         self.compute_grand_product(proving_key);
 
-        let z_perm = crate::commit(&self.memory.lookup_inverses, &proving_key.crs)?;
+        let z_perm = crate::commit(self.memory.z_perm.as_ref(), &proving_key.crs)?;
 
         transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), z_perm.into());
         Ok(())
@@ -463,13 +472,12 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
     pub fn prove(
         mut self,
         proving_key: &ProvingKey<P>,
-        public_inputs: &[P::ScalarField],
         transcript: &mut TranscriptType,
     ) -> HonkProofResult<ProverMemory<P>> {
         tracing::trace!("Oink prove");
 
         // Add circuit size public input size and public inputs to transcript
-        Self::execute_preamble_round(transcript, proving_key, public_inputs)?;
+        Self::execute_preamble_round(transcript, proving_key)?;
         // Compute first three wire commitments
         self.execute_wire_commitments_round(transcript, proving_key)?;
         // Compute sorted list accumulator and commitment
@@ -477,7 +485,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         // Fiat-Shamir: beta & gamma
         self.execute_log_derivative_inverse_round(transcript, proving_key)?;
         // Compute grand product(s) and commitments.
-        self.execute_grand_product_computation_round(transcript, proving_key, public_inputs)?;
+        self.execute_grand_product_computation_round(transcript, proving_key)?;
 
         // Generate relation separators alphas for sumcheck/combiner computation
         self.generate_alphas_round(transcript);
