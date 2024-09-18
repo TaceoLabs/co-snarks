@@ -7,7 +7,7 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{PrimeField, Zero};
-use std::{collections::HashMap, ops::Index, sync::Arc};
+use std::{collections::BTreeMap, ops::Index, sync::Arc};
 
 pub(crate) type TranscriptFieldType = ark_bn254::Fr;
 pub(crate) type TranscriptType = Poseidon2Transcript<TranscriptFieldType>;
@@ -46,9 +46,15 @@ where
     }
 
     pub fn get_proof(self) -> HonkProof<F> {
-        HonkProof {
-            proof: self.proof_data,
-        }
+        HonkProof::new(self.proof_data)
+    }
+
+    pub fn print(&self) {
+        self.manifest.print();
+    }
+
+    pub fn get_manifest(&self) -> &TranscriptManifest {
+        &self.manifest
     }
 
     fn consume_prover_elements(&mut self, label: String, elements: &[F]) {
@@ -277,7 +283,7 @@ impl RoundData {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct TranscriptManifest {
-    manifest: HashMap<usize, RoundData>,
+    manifest: BTreeMap<usize, RoundData>,
 }
 
 impl TranscriptManifest {

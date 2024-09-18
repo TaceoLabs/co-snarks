@@ -1,10 +1,41 @@
-use std::ops::{AddAssign, Index, IndexMut};
-
 use ark_ff::PrimeField;
+use std::ops::{AddAssign, Index, IndexMut};
 
 #[derive(Clone, Debug, Default)]
 pub struct Polynomial<F: PrimeField> {
     pub(crate) coefficients: Vec<F>,
+}
+
+pub struct ShiftedPoly<'a, F: PrimeField> {
+    pub(crate) coefficients: &'a [F],
+    zero: F, // TODO is there are better solution
+}
+
+impl<'a, F: PrimeField> ShiftedPoly<'a, F> {
+    pub(crate) fn to_vec(&self) -> Vec<F> {
+        let mut res = Vec::with_capacity(self.coefficients.len() + 1);
+        for c in self.coefficients.iter() {
+            res.push(*c);
+        }
+        res.push(self.zero);
+        res
+    }
+
+    pub fn as_ref(&self) -> &[F] {
+        self.coefficients
+    }
+}
+
+impl<'a, F: PrimeField> Index<usize> for ShiftedPoly<'a, F> {
+    type Output = F;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        if index == self.coefficients.len() {
+            &self.zero
+        } else {
+            &self.coefficients[index]
+        }
+    }
 }
 
 impl<F: PrimeField> Polynomial<F> {
@@ -22,6 +53,10 @@ impl<F: PrimeField> Polynomial<F> {
         self.coefficients.iter()
     }
 
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut F> {
+        self.coefficients.iter_mut()
+    }
+
     pub fn len(&self) -> usize {
         self.coefficients.len()
     }
@@ -36,6 +71,22 @@ impl<F: PrimeField> Polynomial<F> {
             }
         }
         len
+    }
+
+    pub fn as_ref(&self) -> &[F] {
+        &self.coefficients
+    }
+
+    pub fn as_mut(&mut self) -> &mut [F] {
+        &mut self.coefficients
+    }
+
+    pub fn resize(&mut self, size: usize, value: F) {
+        self.coefficients.resize(size, value);
+    }
+
+    pub fn into_vec(self) -> Vec<F> {
+        self.coefficients
     }
 
     /**
@@ -102,11 +153,13 @@ impl<F: PrimeField> Polynomial<F> {
     }
 
     // Can only shift by 1
-    pub(crate) fn shifted(&self) -> &[F] {
+    pub(crate) fn shifted(&self) -> ShiftedPoly<F> {
         assert!(!self.coefficients.is_empty());
         assert!(self.coefficients[0].is_zero());
-        assert!(self.coefficients.last().unwrap().is_zero());
-        &self.coefficients[1..]
+        ShiftedPoly {
+            coefficients: &self.coefficients[1..],
+            zero: F::zero(),
+        }
     }
 }
 
@@ -128,7 +181,7 @@ impl<F: PrimeField> AddAssign<&[F]> for Polynomial<F> {
     fn add_assign(&mut self, rhs: &[F]) {
         if rhs.len() > self.coefficients.len() {
             panic!("Polynomial too large, this should not have happened");
-            self.coefficients.resize(rhs.len(), F::zero());
+            // self.coefficients.resize(rhs.len(), F::zero());
         }
         for (l, r) in self.coefficients.iter_mut().zip(rhs.iter()) {
             *l += *r;
