@@ -361,9 +361,11 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                     .block_on(arithmetic::sqrt(a, &mut self.io_context0))?;
                 // Correction to give the result closest to 0
                 // I.e., 2 * is_pos * sqrt - sqrt
+                let sqrt_val = self.val(sqrt);
+                let zero_val = self.plain.val(F::zero());
                 let is_pos = self.runtime.block_on(arithmetic::ge_public(
-                    sqrt,
-                    F::zero(),
+                    sqrt_val,
+                    zero_val,
                     &mut self.io_context0,
                 ))?;
                 let mut mul =
