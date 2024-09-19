@@ -75,7 +75,7 @@ chmod +x co-circom
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/TaceoLabs/co-circom.github
+git clone https://github.com/TaceoLabs/co-circom.git
 ```
 
 2. Build the project:
