@@ -1,5 +1,5 @@
 # split input into shares
-cargo run --release --bin co-circom -- split-input  --circuit groth16/test_vectors/sum_arrays/circuit.circom --input groth16/test_vectors/sum_arrays/input.json --protocol REP3 --curve BN254 --out-dir groth16/test_vectors/sum_arrays
+cargo run --release --bin co-circom -- split-input --circuit groth16/test_vectors/sum_arrays/circuit.circom --input groth16/test_vectors/sum_arrays/input.json --protocol REP3 --curve BN254 --out-dir groth16/test_vectors/sum_arrays
 # run witness extension in MPC
 cargo run --release --bin co-circom -- generate-witness --input groth16/test_vectors/sum_arrays/input.json.0.shared --circuit groth16/test_vectors/sum_arrays/circuit.circom --protocol REP3 --curve BN254 --config ../configs/party1.toml --out groth16/test_vectors/sum_arrays/witness.wtns.0.shared &
 cargo run --release --bin co-circom -- generate-witness --input groth16/test_vectors/sum_arrays/input.json.1.shared --circuit groth16/test_vectors/sum_arrays/circuit.circom --protocol REP3 --curve BN254 --config ../configs/party2.toml --out groth16/test_vectors/sum_arrays/witness.wtns.1.shared &
