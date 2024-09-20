@@ -1,6 +1,6 @@
 pragma circom 2.0.0;
 
-include "comparators.circom";
+include "../../../lib/comparators.circom";
 
 template Kyc(t) {
   signal input blacklist[t];
