@@ -11,10 +11,12 @@ use co_circom_snarks::SharedWitness;
 use eyre::Result;
 use itertools::izip;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet, Rep3Network};
+use mpc_core::protocols::shamir::network::{ShamirMpcNet, ShamirNetwork};
+use mpc_core::protocols::shamir::ShamirProtocol;
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use num_traits::ToPrimitive;
-use std::io;
+use std::io::{self};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio::runtime::{self, Runtime};
@@ -23,6 +25,7 @@ use tracing::instrument;
 
 use crate::mpc::plain::PlainGroth16Driver;
 use crate::mpc::rep3::Rep3Groth16Driver;
+use crate::mpc::shamir::ShamirGroth16Driver;
 use crate::mpc::CircomGroth16Prover;
 
 /// The plain [`Groth16`] type.
@@ -39,6 +42,7 @@ pub type Groth16<P> = CoGroth16<P, PlainGroth16Driver>;
 
 /// A type alias for a [CoGroth16] protocol using replicated secret sharing.
 pub type Rep3CoGroth16<P, N> = CoGroth16<P, Rep3Groth16Driver<N>>;
+pub type ShamirCoGroth16<P, N> = CoGroth16<P, ShamirGroth16Driver<<P as Pairing>::ScalarField, N>>;
 
 /* old way of computing root of unity, does not work for bls12_381:
 let root_of_unity = {
@@ -467,9 +471,35 @@ where
             phantom_data: PhantomData,
         })
     }
+
+    pub fn close_network(self) -> io::Result<()> {
+        self.runtime
+            .block_on(self.driver.into_network().shutdown())?;
+        Ok(())
+    }
 }
 
-impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N> {
+impl<P: Pairing> ShamirCoGroth16<P, ShamirMpcNet>
+where
+    P: CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    /// Create a new [ShamirCoGroth16] protocol with a given network configuration.
+    pub fn with_network_config(threshold: usize, config: NetworkConfig) -> Result<Self> {
+        let runtime = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let mpc_net = runtime.block_on(ShamirMpcNet::new(config))?;
+        let io_context = ShamirProtocol::new(threshold, mpc_net)?;
+        let driver = ShamirGroth16Driver::new(io_context);
+        Ok(CoGroth16 {
+            driver,
+            runtime,
+            phantom_data: PhantomData,
+        })
+    }
+
     pub fn close_network(self) -> io::Result<()> {
         self.runtime
             .block_on(self.driver.into_network().shutdown())?;

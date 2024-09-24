@@ -15,6 +15,10 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirGroth16Driver<F, N> {
     pub fn new(protocol: ShamirProtocol<F, N>) -> Self {
         Self { protocol }
     }
+
+    pub(crate) fn into_network(self) -> N {
+        self.protocol.network
+    }
 }
 
 impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
@@ -35,7 +39,9 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     }
 
     async fn fork(&mut self) -> IoResult<Self> {
-        todo!()
+        Ok(Self {
+            protocol: self.protocol.fork().await?,
+        })
     }
 
     fn evaluate_constraint(

@@ -8,6 +8,7 @@ mod verifier;
 pub use groth16::CoGroth16;
 pub use groth16::Groth16;
 pub use groth16::Rep3CoGroth16;
+pub use groth16::ShamirCoGroth16;
 
 #[cfg(test)]
 #[cfg(feature = "verifier")]

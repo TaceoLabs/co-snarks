@@ -1,4 +1,5 @@
-use std::marker::PhantomData;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
@@ -173,9 +174,14 @@ pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
     pub open_lagrange_t: Vec<F>,
     pub(crate) open_lagrange_2t: Vec<F>,
     mul_lagrange_2t: Vec<F>,
-    rng_buffer: ShamirRng<F>,
+    // TODO
+    // all forks will have a arc of the rng to get pairs
+    // we should have a task that buffers pairs while the forks consume them
+    // for now, when the pairs run out, the next call will block all other forks from accessing the rng and buffer more triples
+    //
+    // alternaitvely, all forks could have their own rng, would that be better? the rng serves a pair provider
+    pub(crate) rng_buffer: Arc<Mutex<ShamirRng<F>>>,
     pub network: N,
-    field: PhantomData<F>,
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
@@ -189,7 +195,12 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             eyre::bail!("Threshold too large for number of parties")
         }
 
+        let num_parties = network.get_num_parties();
+
         let seed: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
+        let rng_buffer = ShamirRng::new(seed, threshold, num_parties);
+
+        // TODO fork network and spawn task that buffer pairs here?
 
         // We send in circles, so we need to receive from the last parties
         let id = network.get_id();
@@ -212,27 +223,51 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             open_lagrange_t,
             open_lagrange_2t,
             mul_lagrange_2t,
-            rng_buffer: ShamirRng::new(seed, threshold, num_parties),
+            rng_buffer: Arc::new(Mutex::new(rng_buffer)),
             network,
-            field: PhantomData,
+        })
+    }
+
+    pub async fn fork(&mut self) -> std::io::Result<Self> {
+        let rng_buffer = self.rng_buffer.clone();
+        let network = self.network.fork().await?;
+        Ok(Self {
+            threshold: self.threshold,
+            open_lagrange_t: self.open_lagrange_t.clone(),
+            open_lagrange_2t: self.open_lagrange_2t.clone(),
+            mul_lagrange_2t: self.mul_lagrange_2t.clone(),
+            rng_buffer,
+            network,
         })
     }
 
     /// This function generates and stores `amount * (threshold + 1)` doubly shared random values, which are required to evaluate the multiplication of two secret shares. Each multiplication consumes one of these preprocessed values.
     pub async fn preprocess(&mut self, amount: usize) -> std::io::Result<()> {
         self.rng_buffer
+            .lock()
+            .await
             .buffer_triples(&mut self.network, amount)
             .await
     }
 
     /// Generates a random field element and returns it as a share.
     pub async fn rand(&mut self) -> IoResult<ShamirPrimeFieldShare<F>> {
-        let (r, _) = self.rng_buffer.get_pair(&mut self.network).await?;
+        let (r, _) = self
+            .rng_buffer
+            .lock()
+            .await
+            .get_pair(&mut self.network)
+            .await?;
         Ok(ShamirPrimeFieldShare::new(r))
     }
 
     pub(crate) async fn degree_reduce(&mut self, mut input: F) -> std::io::Result<ShamirShare<F>> {
-        let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network).await?;
+        let (r_t, r_2t) = self
+            .rng_buffer
+            .lock()
+            .await
+            .get_pair(&mut self.network)
+            .await?;
         input += r_2t;
 
         let my_id = self.network.get_id();
@@ -254,7 +289,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 acc,
                 self.network.get_num_parties(),
                 self.threshold,
-                &mut self.rng_buffer.rng,
+                &mut self.rng_buffer.lock().await.rng,
             );
             let mut my_share = F::default();
             for (other_id, share) in shares.into_iter().enumerate() {
@@ -284,7 +319,12 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         let mut r_ts = Vec::with_capacity(len);
 
         for inp in inputs.iter_mut() {
-            let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network).await?;
+            let (r_t, r_2t) = self
+                .rng_buffer
+                .lock()
+                .await
+                .get_pair(&mut self.network)
+                .await?;
             *inp += r_2t;
             r_ts.push(r_t);
         }
@@ -322,7 +362,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                     acc,
                     self.network.get_num_parties(),
                     self.threshold,
-                    &mut self.rng_buffer.rng,
+                    &mut self.rng_buffer.lock().await.rng,
                 );
                 for (des, src) in izip!(&mut shares, s) {
                     des.push(src);
@@ -365,7 +405,12 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     where
         C: CurveGroup + std::ops::Mul<F, Output = C> + for<'a> std::ops::Mul<&'a F, Output = C>,
     {
-        let (r_t, r_2t) = self.rng_buffer.get_pair(&mut self.network).await?;
+        let (r_t, r_2t) = self
+            .rng_buffer
+            .lock()
+            .await
+            .get_pair(&mut self.network)
+            .await?;
         let r_t = C::generator().mul(r_t);
         let r_2t = C::generator().mul(r_2t);
 
@@ -390,7 +435,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 acc,
                 self.network.get_num_parties(),
                 self.threshold,
-                &mut self.rng_buffer.rng,
+                &mut self.rng_buffer.lock().await.rng,
             );
             let mut my_share = C::default();
             for (other_id, share) in shares.into_iter().enumerate() {
