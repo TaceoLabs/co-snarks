@@ -26,7 +26,7 @@ pub struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
 
 impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
     pub(crate) fn new(network: N) -> Self {
-        let runtime = runtime::Builder::new_current_thread()
+        let runtime = runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();

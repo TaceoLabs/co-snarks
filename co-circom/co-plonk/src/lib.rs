@@ -204,7 +204,7 @@ mod plonk_utils {
 impl<P: Pairing> Rep3CoPlonk<P> {
     /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
     pub fn with_network_config(config: NetworkConfig) -> eyre::Result<Self> {
-        let runtime = runtime::Builder::new_current_thread().build()?;
+        let runtime = runtime::Builder::new_multi_thread().build()?;
         let mpc_net = runtime.block_on(Rep3MpcNet::new(config))?;
         let io_context = runtime.block_on(IoContext::init(mpc_net))?;
         let driver = Rep3PlonkDriver::new(io_context);

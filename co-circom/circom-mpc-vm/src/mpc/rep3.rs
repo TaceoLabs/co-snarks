@@ -59,9 +59,7 @@ pub struct CircomRep3VmWitnessExtension<F: PrimeField, N: Rep3Network> {
 
 impl<F: PrimeField, N: Rep3Network> CircomRep3VmWitnessExtension<F, N> {
     pub fn from_network(network: N) -> io::Result<Self> {
-        let runtime = runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
+        let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
         let mut io_context = runtime.block_on(IoContext::init(network))?;
         let io_context_fork = runtime.block_on(io_context.fork())?;
         Ok(Self {

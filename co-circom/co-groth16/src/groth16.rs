@@ -459,9 +459,7 @@ where
 {
     /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
-        let runtime = runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
+        let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
         let mpc_net = runtime.block_on(Rep3MpcNet::new(config))?;
         let io_context = runtime.block_on(IoContext::init(mpc_net))?;
         let driver = Rep3Groth16Driver::new(io_context);
@@ -487,9 +485,7 @@ where
 {
     /// Create a new [ShamirCoGroth16] protocol with a given network configuration.
     pub fn with_network_config(threshold: usize, config: NetworkConfig) -> Result<Self> {
-        let runtime = runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
+        let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
         let mpc_net = runtime.block_on(ShamirMpcNet::new(config))?;
         let io_context = ShamirProtocol::new(threshold, mpc_net)?;
         let driver = ShamirGroth16Driver::new(io_context);
