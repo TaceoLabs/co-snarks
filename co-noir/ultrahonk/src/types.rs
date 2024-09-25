@@ -102,7 +102,7 @@ impl<F: PrimeField> HonkProof<F> {
 
         let mut res = Vec::with_capacity(num_elements);
         for _ in 0..num_elements {
-            res.push(Self::read_field_element(&mut buf.to_vec(), &mut offset));
+            res.push(Self::read_field_element(buf, &mut offset));
         }
         debug_assert_eq!(offset, size);
         Ok(Self { proof: res })
