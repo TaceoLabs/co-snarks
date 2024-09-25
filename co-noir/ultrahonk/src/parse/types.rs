@@ -772,6 +772,12 @@ pub struct PlookupBasicTable<F: PrimeField> {
 
 impl<F: PrimeField> Default for PlookupBasicTable<F> {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<F: PrimeField> PlookupBasicTable<F> {
+    fn new() -> Self {
         Self {
             id: BasicTableId::HonkDummyBasic1,
             table_index: 0,
@@ -807,7 +813,7 @@ impl<F: PrimeField> PlookupBasicTable<F> {
         // too. This helps us ensure that the correct instantion is used for a particular BasicTableId
         assert_eq!(ID, usize::from(id.to_owned()) as u64);
         let base = 1 << 1; // Probably has to be a power of 2
-        let mut table = PlookupBasicTable::default();
+        let mut table = PlookupBasicTable::new();
         table.id = id;
         table.table_index = table_index;
         table.use_twin_keys = true;
