@@ -1,8 +1,8 @@
 use super::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable};
 use super::plookup::{BasicTableId, MultiTableId};
-use crate::batch_invert;
 use crate::decider::polynomial::Polynomial;
 use crate::types::ProvingKey;
+use crate::Utils;
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};
 use itertools::izip;
@@ -974,7 +974,7 @@ impl<F: PrimeField> PlookupMultiTable<F> {
         coefficient_inverses.extend(&self.column_2_coefficients);
         coefficient_inverses.extend(&self.column_3_coefficients);
 
-        batch_invert(&mut coefficient_inverses);
+        Utils::batch_invert(&mut coefficient_inverses);
 
         for i in 1..num_lookups {
             self.column_1_step_sizes

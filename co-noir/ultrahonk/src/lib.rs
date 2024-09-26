@@ -22,6 +22,12 @@ use prover::{HonkProofError, HonkProofResult};
 use std::io;
 use types::ProverCrs;
 
+pub(crate) const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;
+// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
+// TODO(https://github.com/AztecProtocol/barretenberg/issues/1046): Remove the need for const sized proofs
+pub(crate) const CONST_PROOF_SIZE_LOG_N: usize = 28;
+pub(crate) const N_MAX: usize = 1 << 25;
+
 pub struct Utils {}
 
 impl Utils {
@@ -106,55 +112,49 @@ impl Utils {
 
         DE_BRUIJNI_SEQUENCE[((t.wrapping_mul(0x03F79D71B4CB0A89)) >> 58) as usize]
     }
-}
 
-pub(crate) const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;
-// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
-// TODO(https://github.com/AztecProtocol/barretenberg/issues/1046): Remove the need for const sized proofs
-pub(crate) const CONST_PROOF_SIZE_LOG_N: usize = 28;
-pub(crate) const N_MAX: usize = 1 << 25;
+    fn batch_invert<F: PrimeField>(coeffs: &mut [F]) {
+        // This better?
+        // for inv in coeffs.iter_mut() {
+        //     inv.inverse_in_place();
+        // }
 
-fn batch_invert<F: PrimeField>(coeffs: &mut [F]) {
-    // This better?
-    // for inv in coeffs.iter_mut() {
-    //     inv.inverse_in_place();
-    // }
-
-    // Assumes that all elements are invertible
-    let n = coeffs.len();
-    let mut temporaries = Vec::with_capacity(n);
-    let mut skipped = Vec::with_capacity(n);
-    let mut acc = F::one();
-    for c in coeffs.iter() {
-        temporaries.push(acc);
-        if c.is_zero() {
-            skipped.push(true);
-            continue;
+        // Assumes that all elements are invertible
+        let n = coeffs.len();
+        let mut temporaries = Vec::with_capacity(n);
+        let mut skipped = Vec::with_capacity(n);
+        let mut acc = F::one();
+        for c in coeffs.iter() {
+            temporaries.push(acc);
+            if c.is_zero() {
+                skipped.push(true);
+                continue;
+            }
+            acc *= c;
+            skipped.push(false);
         }
-        acc *= c;
-        skipped.push(false);
-    }
 
-    acc.inverse_in_place().unwrap();
+        acc.inverse_in_place().unwrap();
 
-    for (c, t, skipped) in izip!(
-        coeffs.iter_mut(),
-        temporaries.into_iter(),
-        skipped.into_iter()
-    )
-    .rev()
-    {
-        if !skipped {
-            let tmp = t * acc;
-            acc *= &*c;
-            *c = tmp;
+        for (c, t, skipped) in izip!(
+            coeffs.iter_mut(),
+            temporaries.into_iter(),
+            skipped.into_iter()
+        )
+        .rev()
+        {
+            if !skipped {
+                let tmp = t * acc;
+                acc *= &*c;
+                *c = tmp;
+            }
         }
     }
-}
 
-fn commit<P: Pairing>(poly: &[P::ScalarField], crs: &ProverCrs<P>) -> HonkProofResult<P::G1> {
-    if poly.len() > crs.monomials.len() {
-        return Err(HonkProofError::CrsTooSmall);
+    fn commit<P: Pairing>(poly: &[P::ScalarField], crs: &ProverCrs<P>) -> HonkProofResult<P::G1> {
+        if poly.len() > crs.monomials.len() {
+            return Err(HonkProofError::CrsTooSmall);
+        }
+        Ok(P::G1::msm_unchecked(&crs.monomials, poly))
     }
-    Ok(P::G1::msm_unchecked(&crs.monomials, poly))
 }

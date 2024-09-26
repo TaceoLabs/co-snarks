@@ -54,7 +54,7 @@ impl<P: HonkCurve<TranscriptFieldType>> UltraHonk<P> {
 
         let mut transcript = TranscriptType::new(&POSEIDON2_BN254_T4_PARAMS);
 
-        let oink = Oink::<P>::default();
+        let oink = Oink::default();
         let oink_result = oink.prove(&proving_key, &mut transcript)?;
 
         let cicruit_size = proving_key.circuit_size;

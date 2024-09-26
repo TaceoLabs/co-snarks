@@ -1,4 +1,4 @@
-use crate::batch_invert;
+use crate::Utils;
 use ark_ff::PrimeField;
 
 pub(crate) struct Barycentric {}
@@ -62,7 +62,7 @@ impl Barycentric {
             }
         }
 
-        batch_invert(&mut res);
+        Utils::batch_invert(&mut res);
         res
     }
 

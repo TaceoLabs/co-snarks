@@ -19,11 +19,11 @@
 
 use super::types::ProverMemory;
 use crate::{
-    batch_invert,
     honk_curve::HonkCurve,
     prover::{HonkProofError, HonkProofResult},
     transcript::{TranscriptFieldType, TranscriptType},
     types::ProvingKey,
+    Utils,
 };
 use ark_ff::{One, Zero};
 use itertools::izip;
@@ -174,7 +174,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
             self.memory.lookup_inverses[i] = read_term * write_term;
         }
 
-        batch_invert(self.memory.lookup_inverses.as_mut());
+        Utils::batch_invert(self.memory.lookup_inverses.as_mut());
     }
 
     fn compute_public_input_delta(&self, proving_key: &ProvingKey<P>) -> P::ScalarField {
@@ -295,7 +295,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         }
 
         // invert denominator
-        batch_invert(&mut denominator);
+        Utils::batch_invert(&mut denominator);
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
         self.memory
@@ -363,15 +363,15 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         // Commit to the first three wire polynomials of the instance
         // We only commit to the fourth wire polynomial after adding memory records
 
-        let w_l = crate::commit(
+        let w_l = Utils::commit(
             proving_key.polynomials.witness.w_l().as_ref(),
             &proving_key.crs,
         )?;
-        let w_r = crate::commit(
+        let w_r = Utils::commit(
             proving_key.polynomials.witness.w_r().as_ref(),
             &proving_key.crs,
         )?;
-        let w_o = crate::commit(
+        let w_o = Utils::commit(
             proving_key.polynomials.witness.w_o().as_ref(),
             &proving_key.crs,
         )?;
@@ -403,7 +403,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         self.compute_w4(proving_key);
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
-        let lookup_read_counts = crate::commit(
+        let lookup_read_counts = Utils::commit(
             proving_key
                 .polynomials
                 .witness
@@ -411,11 +411,11 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
                 .as_ref(),
             &proving_key.crs,
         )?;
-        let lookup_read_tags = crate::commit(
+        let lookup_read_tags = Utils::commit(
             proving_key.polynomials.witness.lookup_read_tags().as_ref(),
             &proving_key.crs,
         )?;
-        let w_4 = crate::commit(self.memory.w_4.as_ref(), &proving_key.crs)?;
+        let w_4 = Utils::commit(self.memory.w_4.as_ref(), &proving_key.crs)?;
 
         transcript.send_point_to_verifier::<P>(
             "LOOKUP_READ_COUNTS".to_string(),
@@ -443,7 +443,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         self.compute_logderivative_inverses(proving_key);
 
         let lookup_inverses =
-            crate::commit(self.memory.lookup_inverses.as_ref(), &proving_key.crs)?;
+            Utils::commit(self.memory.lookup_inverses.as_ref(), &proving_key.crs)?;
 
         transcript
             .send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), lookup_inverses.into());
@@ -463,7 +463,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         self.memory.public_input_delta = self.compute_public_input_delta(proving_key);
         self.compute_grand_product(proving_key);
 
-        let z_perm = crate::commit(self.memory.z_perm.as_ref(), &proving_key.crs)?;
+        let z_perm = Utils::commit(self.memory.z_perm.as_ref(), &proving_key.crs)?;
 
         transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), z_perm.into());
         Ok(())
