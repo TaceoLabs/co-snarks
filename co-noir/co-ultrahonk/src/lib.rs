@@ -1,4 +1,5 @@
 pub(crate) mod parse;
+pub(crate) mod types;
 
 use ark_ec::pairing::Pairing;
 use mpc_core::protocols::{plain::PlainDriver, rep3::Rep3Protocol};

@@ -44,7 +44,7 @@ pub struct ProvingKey<P: Pairing> {
     pub(crate) memory_write_records: Vec<u32>,
 }
 
-pub(crate) struct Crs<P: Pairing> {
+pub struct Crs<P: Pairing> {
     pub(crate) monomials: Vec<P::G1Affine>,
     pub(crate) g2_x: P::G2Affine,
 }

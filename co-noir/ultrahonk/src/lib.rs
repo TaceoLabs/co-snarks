@@ -8,50 +8,64 @@ pub(crate) mod sponge_hasher;
 mod transcript;
 pub(crate) mod types;
 
+pub use parse::crs::CrsParser;
 pub use parse::{
     acir_format::AcirFormat, builder::GenericUltraCircuitBuilder, builder::UltraCircuitBuilder,
     builder::UltraCircuitVariable,
 };
 pub use prover::UltraHonk;
+pub use types::ProverCrs;
 pub use types::{HonkProof, ProvingKey};
 
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
 use ark_ff::PrimeField;
 use itertools::izip;
 use prover::{HonkProofError, HonkProofResult};
-use types::ProverCrs;
 
-// from http://supertech.csail.mit.edu/papers/debruijn.pdf
-pub(crate) fn get_msb32(inp: u32) -> u8 {
-    const MULTIPLY_DE_BRUIJNI_BIT_POSIITION: [u8; 32] = [
-        0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30, 8, 12, 20, 28, 15, 17, 24, 7,
-        19, 27, 23, 6, 26, 5, 4, 31,
-    ];
+pub struct Utils {}
 
-    let mut v = inp | (inp >> 1);
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
+impl Utils {
+    // from http://supertech.csail.mit.edu/papers/debruijn.pdf
+    pub fn get_msb32(inp: u32) -> u8 {
+        const MULTIPLY_DE_BRUIJNI_BIT_POSIITION: [u8; 32] = [
+            0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30, 8, 12, 20, 28, 15, 17, 24,
+            7, 19, 27, 23, 6, 26, 5, 4, 31,
+        ];
 
-    MULTIPLY_DE_BRUIJNI_BIT_POSIITION[((v.wrapping_mul(0x07C4ACDD)) >> 27) as usize]
-}
+        let mut v = inp | (inp >> 1);
+        v |= v >> 2;
+        v |= v >> 4;
+        v |= v >> 8;
+        v |= v >> 16;
 
-pub(crate) fn get_msb64(inp: u64) -> u8 {
-    const DE_BRUIJNI_SEQUENCE: [u8; 64] = [
-        0, 47, 1, 56, 48, 27, 2, 60, 57, 49, 41, 37, 28, 16, 3, 61, 54, 58, 35, 52, 50, 42, 21, 44,
-        38, 32, 29, 23, 17, 11, 4, 62, 46, 55, 26, 59, 40, 36, 15, 53, 34, 51, 20, 43, 31, 22, 10,
-        45, 25, 39, 14, 33, 19, 30, 9, 24, 13, 18, 8, 12, 7, 6, 5, 63,
-    ];
+        MULTIPLY_DE_BRUIJNI_BIT_POSIITION[((v.wrapping_mul(0x07C4ACDD)) >> 27) as usize]
+    }
 
-    let mut t = inp | (inp >> 1);
-    t |= t >> 2;
-    t |= t >> 4;
-    t |= t >> 8;
-    t |= t >> 16;
-    t |= t >> 32;
+    pub fn round_up_power_2(inp: usize) -> usize {
+        let lower_bound = 1usize << Self::get_msb64(inp as u64);
+        if lower_bound == inp || lower_bound == 1 {
+            inp
+        } else {
+            lower_bound * 2
+        }
+    }
 
-    DE_BRUIJNI_SEQUENCE[((t.wrapping_mul(0x03F79D71B4CB0A89)) >> 58) as usize]
+    pub fn get_msb64(inp: u64) -> u8 {
+        const DE_BRUIJNI_SEQUENCE: [u8; 64] = [
+            0, 47, 1, 56, 48, 27, 2, 60, 57, 49, 41, 37, 28, 16, 3, 61, 54, 58, 35, 52, 50, 42, 21,
+            44, 38, 32, 29, 23, 17, 11, 4, 62, 46, 55, 26, 59, 40, 36, 15, 53, 34, 51, 20, 43, 31,
+            22, 10, 45, 25, 39, 14, 33, 19, 30, 9, 24, 13, 18, 8, 12, 7, 6, 5, 63,
+        ];
+
+        let mut t = inp | (inp >> 1);
+        t |= t >> 2;
+        t |= t >> 4;
+        t |= t >> 8;
+        t |= t >> 16;
+        t |= t >> 32;
+
+        DE_BRUIJNI_SEQUENCE[((t.wrapping_mul(0x03F79D71B4CB0A89)) >> 58) as usize]
+    }
 }
 
 pub(crate) const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;

@@ -9,12 +9,12 @@ use super::{
     },
 };
 use crate::{
-    get_msb64,
-    parse::field_from_hex_string,
     parse::{
+        field_from_hex_string,
         plookup::{MultiTableId, Plookup},
         types::{FieldCT, GateCounter, RomRecord, RomTable, NUM_WIRES},
     },
+    Utils,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};
@@ -52,7 +52,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::Sca
     prev_var_index: Vec<u32>,
     pub(crate) real_variable_index: Vec<u32>,
     pub(crate) real_variable_tags: Vec<u32>,
-    pub(crate) public_inputs: Vec<u32>,
+    pub public_inputs: Vec<u32>,
     is_recursive_circuit: bool,
     pub(crate) tau: HashMap<u32, u32>,
     constant_variable_indices: HashMap<P::ScalarField, u32>,
@@ -1145,7 +1145,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         // self.num_gates += 1;
     }
 
-    pub(crate) fn add_gates_to_ensure_all_polys_are_non_zero(&mut self) {
+    pub fn add_gates_to_ensure_all_polys_are_non_zero(&mut self) {
         // q_m, q_1, q_2, q_3, q_4
         self.blocks.arithmetic.populate_wires(
             self.zero_idx,
@@ -1517,7 +1517,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
     }
 
-    pub(crate) fn get_num_gates_added_to_ensure_nonzero_polynomials() -> usize {
+    pub fn get_num_gates_added_to_ensure_nonzero_polynomials() -> usize {
         let mut builder = Self::new(0);
         let num_gates_prior = builder.get_num_gates();
         builder.add_gates_to_ensure_all_polys_are_non_zero();
@@ -1526,15 +1526,15 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         num_gates_post - num_gates_prior
     }
 
-    pub(crate) fn get_circuit_subgroup_size(num_gates: usize) -> usize {
-        let mut log2_n = get_msb64(num_gates as u64);
+    pub fn get_circuit_subgroup_size(num_gates: usize) -> usize {
+        let mut log2_n = Utils::get_msb64(num_gates as u64);
         if (1 << log2_n) != num_gates {
             log2_n += 1;
         }
         1 << log2_n
     }
 
-    pub(crate) fn get_total_circuit_size(&self) -> usize {
+    pub fn get_total_circuit_size(&self) -> usize {
         let minimum_circuit_size = self.get_tables_size() + self.get_lookups_size();
         let num_filled_gates = self.get_num_gates() + self.public_inputs.len();
         std::cmp::max(minimum_circuit_size, num_filled_gates) + Self::NUM_RESERVED_GATES
@@ -1652,7 +1652,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         read_data
     }
 
-    pub(crate) fn finalize_circuit(&mut self) {
+    pub fn finalize_circuit(&mut self) {
         // /**
         //  * First of all, add the gates related to ROM arrays and range lists.
         //  * Note that the total number of rows in an UltraPlonk program can be divided as following:
@@ -1763,7 +1763,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         );
     }
 
-    pub(crate) fn compute_dyadic_size(&self) -> usize {
+    pub fn compute_dyadic_size(&self) -> usize {
         // for the lookup argument the circuit size must be at least as large as the sum of all tables used
         let min_size_due_to_lookups = self.get_tables_size();
 

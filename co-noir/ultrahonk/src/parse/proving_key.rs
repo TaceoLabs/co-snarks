@@ -5,9 +5,9 @@ use super::{
 };
 use crate::{
     decider::polynomial::Polynomial,
-    get_msb64,
     parse::types::{CycleNode, TraceData, NUM_WIRES},
     types::{Polynomials, ProverCrs, ProvingKey},
+    Utils,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
@@ -53,15 +53,6 @@ impl<P: Pairing> ProvingKey<P> {
         proving_key
     }
 
-    fn round_up_power_2(inp: usize) -> usize {
-        let lower_bound = 1usize << get_msb64(inp as u64);
-        if lower_bound == inp || lower_bound == 1 {
-            inp
-        } else {
-            lower_bound * 2
-        }
-    }
-
     pub fn get_prover_crs(circuit: &UltraCircuitBuilder<P>, path_g1: &str) -> Result<ProverCrs<P>> {
         tracing::info!("Getting prover crs");
         const EXTRA_SRS_POINTS_FOR_ECCVM_IPA: usize = 1;
@@ -73,7 +64,7 @@ impl<P: Pairing> ProvingKey<P> {
             total_circuit_size + num_extra_gates,
         );
 
-        let srs_size = Self::round_up_power_2(srs_size) + EXTRA_SRS_POINTS_FOR_ECCVM_IPA;
+        let srs_size = Utils::round_up_power_2(srs_size) + EXTRA_SRS_POINTS_FOR_ECCVM_IPA;
         CrsParser::<P>::get_crs_g1(path_g1, srs_size)
     }
 
