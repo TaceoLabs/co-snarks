@@ -25,15 +25,23 @@ pub(crate) struct Polynomials<Shared: Default, Public: Default> {
     pub(crate) precomputed: PrecomputedEntities<Polynomial<Public>>,
 }
 
-impl<Shared: Default, Public: Default> Polynomials<Shared, Public> {
+impl<Shared: Clone + Default, Public: Clone + Default> Polynomials<Shared, Public> {
     pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
-
-        todo!("Polys");
         // Shifting is done at a later point
-        // polynomials
-        //     .iter_mut()
-        //     .for_each(|el| el.resize(circuit_size, Default::default()));
+        polynomials
+            .witness
+            .get_wires_mut()
+            .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+        polynomials
+            .witness
+            .lookup_read_counts_and_tags_mut()
+            .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+        polynomials.precomputed.iter_mut().for_each(|el| {
+            el.resize(circuit_size, Default::default());
+        });
 
         polynomials
     }
