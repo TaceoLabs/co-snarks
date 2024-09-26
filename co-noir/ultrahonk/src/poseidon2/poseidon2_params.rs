@@ -1,7 +1,7 @@
 use ark_ff::PrimeField;
 
 #[derive(Clone, Debug)]
-pub struct Poseidon2Params<F: PrimeField, const T: usize, const D: u64> {
+pub(crate) struct Poseidon2Params<F: PrimeField, const T: usize, const D: u64> {
     pub(crate) rounds_f_beginning: usize,
     pub(crate) rounds_f_end: usize,
     pub(crate) rounds_p: usize,
@@ -11,7 +11,7 @@ pub struct Poseidon2Params<F: PrimeField, const T: usize, const D: u64> {
 }
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2Params<F, T, D> {
-    pub fn new(
+    pub(crate) fn new(
         rounds_f: usize,
         rounds_p: usize,
         mat_internal_diag_m_1: [F; T],

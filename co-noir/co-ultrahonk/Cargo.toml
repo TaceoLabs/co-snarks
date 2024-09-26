@@ -10,3 +10,5 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+ark-bn254.workspace = true
+ultrahonk.workspace = true

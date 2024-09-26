@@ -8,13 +8,13 @@ use num_bigint::BigUint;
 
 // This is what we get from the proving key, we shift at a later point
 #[derive(Default)]
-pub struct Polynomials<F: PrimeField> {
-    pub witness: ProverWitnessEntities<Polynomial<F>>,
-    pub precomputed: PrecomputedEntities<Polynomial<F>>,
+pub(crate) struct Polynomials<F: PrimeField> {
+    pub(crate) witness: ProverWitnessEntities<Polynomial<F>>,
+    pub(crate) precomputed: PrecomputedEntities<Polynomial<F>>,
 }
 
 impl<F: PrimeField> Polynomials<F> {
-    pub fn new(circuit_size: usize) -> Self {
+    pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
         // Shifting is done at a later point
         polynomials
@@ -24,33 +24,33 @@ impl<F: PrimeField> Polynomials<F> {
         polynomials
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Polynomial<F>> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Polynomial<F>> {
         self.witness.iter().chain(self.precomputed.iter())
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
         self.witness.iter_mut().chain(self.precomputed.iter_mut())
     }
 }
 
 pub struct ProvingKey<P: Pairing> {
-    pub crs: ProverCrs<P>,
-    pub circuit_size: u32,
-    pub public_inputs: Vec<P::ScalarField>,
-    pub num_public_inputs: u32,
-    pub pub_inputs_offset: u32,
-    pub polynomials: Polynomials<P::ScalarField>,
-    pub memory_read_records: Vec<u32>,
-    pub memory_write_records: Vec<u32>,
+    pub(crate) crs: ProverCrs<P>,
+    pub(crate) circuit_size: u32,
+    pub(crate) public_inputs: Vec<P::ScalarField>,
+    pub(crate) num_public_inputs: u32,
+    pub(crate) pub_inputs_offset: u32,
+    pub(crate) polynomials: Polynomials<P::ScalarField>,
+    pub(crate) memory_read_records: Vec<u32>,
+    pub(crate) memory_write_records: Vec<u32>,
 }
 
-pub struct Crs<P: Pairing> {
-    pub monomials: Vec<P::G1Affine>,
-    pub g2_x: P::G2Affine,
+pub(crate) struct Crs<P: Pairing> {
+    pub(crate) monomials: Vec<P::G1Affine>,
+    pub(crate) g2_x: P::G2Affine,
 }
 
 pub struct ProverCrs<P: Pairing> {
-    pub monomials: Vec<P::G1Affine>,
+    pub(crate) monomials: Vec<P::G1Affine>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,7 +63,7 @@ impl<F: PrimeField> HonkProof<F> {
     const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
     const VEC_LEN_BYTES: u32 = 4;
 
-    pub fn new(proof: Vec<F>) -> Self {
+    pub(crate) fn new(proof: Vec<F>) -> Self {
         Self { proof }
     }
 
@@ -172,15 +172,15 @@ impl<F: PrimeField> HonkProof<F> {
 }
 
 #[derive(Default)]
-pub struct AllEntities<T: Default> {
-    pub witness: WitnessEntities<T>,
-    pub precomputed: PrecomputedEntities<T>,
-    pub shifted_witness: ShiftedWitnessEntities<T>,
-    pub shifted_tables: ShiftedTableEntities<T>,
+pub(crate) struct AllEntities<T: Default> {
+    pub(crate) witness: WitnessEntities<T>,
+    pub(crate) precomputed: PrecomputedEntities<T>,
+    pub(crate) shifted_witness: ShiftedWitnessEntities<T>,
+    pub(crate) shifted_tables: ShiftedTableEntities<T>,
 }
 
 impl<T: Default> AllEntities<T> {
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed
             .iter()
             .chain(self.witness.iter())
@@ -196,7 +196,7 @@ impl<T: Default> AllEntities<T> {
             .chain(self.shifted_witness)
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.precomputed
             .iter_mut()
             .chain(self.witness.iter_mut())
@@ -206,7 +206,7 @@ impl<T: Default> AllEntities<T> {
 }
 
 impl<T: Default + Clone> AllEntities<Vec<T>> {
-    pub fn new(circuit_size: usize) -> Self {
+    pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
         // Shifting is done at a later point
         polynomials
@@ -219,32 +219,32 @@ impl<T: Default + Clone> AllEntities<Vec<T>> {
 
 const WITNESS_ENTITIES_SIZE: usize = 8;
 #[derive(Default)]
-pub struct WitnessEntities<T: Default> {
-    pub elements: [T; WITNESS_ENTITIES_SIZE],
+pub(crate) struct WitnessEntities<T: Default> {
+    pub(crate) elements: [T; WITNESS_ENTITIES_SIZE],
 }
 
 const PROVER_WITNESS_ENTITIES_SIZE: usize = 6;
 #[derive(Default)]
-pub struct ProverWitnessEntities<T: Default> {
-    pub elements: [T; PROVER_WITNESS_ENTITIES_SIZE],
+pub(crate) struct ProverWitnessEntities<T: Default> {
+    pub(crate) elements: [T; PROVER_WITNESS_ENTITIES_SIZE],
 }
 
 const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
 #[derive(Default)]
-pub struct ShiftedWitnessEntities<T: Default> {
-    pub elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
+pub(crate) struct ShiftedWitnessEntities<T: Default> {
+    pub(crate) elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
 }
 
 const SHIFTED_TABLE_ENTITIES_SIZE: usize = 4;
 #[derive(Default)]
-pub struct ShiftedTableEntities<T: Default> {
-    pub elements: [T; SHIFTED_TABLE_ENTITIES_SIZE],
+pub(crate) struct ShiftedTableEntities<T: Default> {
+    pub(crate) elements: [T; SHIFTED_TABLE_ENTITIES_SIZE],
 }
 
 const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
 #[derive(Default)]
-pub struct PrecomputedEntities<T: Default> {
-    pub elements: [T; PRECOMPUTED_ENTITIES_SIZE],
+pub(crate) struct PrecomputedEntities<T: Default> {
+    pub(crate) elements: [T; PRECOMPUTED_ENTITIES_SIZE],
 }
 
 impl<T: Default> IntoIterator for PrecomputedEntities<T> {
@@ -303,54 +303,54 @@ impl<T: Default> ProverWitnessEntities<T> {
     // const Z_PERM: usize = 4; // column 4 (computed by prover)
     // const LOOKUP_INVERSES: usize = 5; // column 5 (computed by prover);
 
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }
 
-    pub fn into_wires(self) -> impl Iterator<Item = T> {
+    pub(crate) fn into_wires(self) -> impl Iterator<Item = T> {
         self.elements
             .into_iter()
             // .skip(Self::W_L)
             .take(Self::W_4 + 1 - Self::W_L)
     }
 
-    pub fn get_wires_mut(&mut self) -> &mut [T] {
+    pub(crate) fn get_wires_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::W_L..=Self::W_4]
     }
 
-    pub fn w_l(&self) -> &T {
+    pub(crate) fn w_l(&self) -> &T {
         &self.elements[Self::W_L]
     }
 
-    pub fn w_r(&self) -> &T {
+    pub(crate) fn w_r(&self) -> &T {
         &self.elements[Self::W_R]
     }
 
-    pub fn w_o(&self) -> &T {
+    pub(crate) fn w_o(&self) -> &T {
         &self.elements[Self::W_O]
     }
 
-    pub fn w_4(&self) -> &T {
+    pub(crate) fn w_4(&self) -> &T {
         &self.elements[Self::W_4]
     }
 
-    pub fn lookup_read_counts(&self) -> &T {
+    pub(crate) fn lookup_read_counts(&self) -> &T {
         &self.elements[Self::LOOKUP_READ_COUNTS]
     }
 
-    pub fn lookup_read_tags(&self) -> &T {
+    pub(crate) fn lookup_read_tags(&self) -> &T {
         &self.elements[Self::LOOKUP_READ_TAGS]
     }
 
-    pub fn lookup_read_counts_mut(&mut self) -> &mut T {
+    pub(crate) fn lookup_read_counts_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LOOKUP_READ_COUNTS]
     }
 
-    pub fn lookup_read_tags_mut(&mut self) -> &mut T {
+    pub(crate) fn lookup_read_tags_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LOOKUP_READ_TAGS]
     }
 }
@@ -365,59 +365,59 @@ impl<T: Default> WitnessEntities<T> {
     pub(crate) const LOOKUP_READ_COUNTS: usize = 6; // column 6
     pub(crate) const LOOKUP_READ_TAGS: usize = 7; // column 7
 
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }
 
-    pub fn to_be_shifted_mut(&mut self) -> &mut [T] {
+    pub(crate) fn to_be_shifted_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::W_L..=Self::Z_PERM]
     }
 
-    pub fn w_l(&self) -> &T {
+    pub(crate) fn w_l(&self) -> &T {
         &self.elements[Self::W_L]
     }
 
-    pub fn w_r(&self) -> &T {
+    pub(crate) fn w_r(&self) -> &T {
         &self.elements[Self::W_R]
     }
 
-    pub fn w_o(&self) -> &T {
+    pub(crate) fn w_o(&self) -> &T {
         &self.elements[Self::W_O]
     }
 
-    pub fn w_4(&self) -> &T {
+    pub(crate) fn w_4(&self) -> &T {
         &self.elements[Self::W_4]
     }
 
-    pub fn z_perm(&self) -> &T {
+    pub(crate) fn z_perm(&self) -> &T {
         &self.elements[Self::Z_PERM]
     }
 
-    pub fn lookup_inverses(&self) -> &T {
+    pub(crate) fn lookup_inverses(&self) -> &T {
         &self.elements[Self::LOOKUP_INVERSES]
     }
 
-    pub fn lookup_read_counts(&self) -> &T {
+    pub(crate) fn lookup_read_counts(&self) -> &T {
         &self.elements[Self::LOOKUP_READ_COUNTS]
     }
 
-    pub fn lookup_read_tags(&self) -> &T {
+    pub(crate) fn lookup_read_tags(&self) -> &T {
         &self.elements[Self::LOOKUP_READ_TAGS]
     }
 
-    pub fn lookup_inverses_mut(&mut self) -> &mut T {
+    pub(crate) fn lookup_inverses_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LOOKUP_INVERSES]
     }
 
-    pub fn lookup_read_counts_mut(&mut self) -> &mut T {
+    pub(crate) fn lookup_read_counts_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LOOKUP_READ_COUNTS]
     }
 
-    pub fn lookup_read_tags_mut(&mut self) -> &mut T {
+    pub(crate) fn lookup_read_tags_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LOOKUP_READ_TAGS]
     }
 }
@@ -429,31 +429,31 @@ impl<T: Default> ShiftedWitnessEntities<T> {
     const W_4: usize = 3; // column 3
     const Z_PERM: usize = 4; // column 4
 
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }
 
-    pub fn w_l(&self) -> &T {
+    pub(crate) fn w_l(&self) -> &T {
         &self.elements[Self::W_L]
     }
 
-    pub fn w_r(&self) -> &T {
+    pub(crate) fn w_r(&self) -> &T {
         &self.elements[Self::W_R]
     }
 
-    pub fn w_o(&self) -> &T {
+    pub(crate) fn w_o(&self) -> &T {
         &self.elements[Self::W_O]
     }
 
-    pub fn w_4(&self) -> &T {
+    pub(crate) fn w_4(&self) -> &T {
         &self.elements[Self::W_4]
     }
 
-    pub fn z_perm(&self) -> &T {
+    pub(crate) fn z_perm(&self) -> &T {
         &self.elements[Self::Z_PERM]
     }
 }
@@ -464,27 +464,27 @@ impl<T: Default> ShiftedTableEntities<T> {
     const TABLE_3: usize = 2; // column 2
     const TABLE_4: usize = 3; // column 3
 
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }
 
-    pub fn table_1(&self) -> &T {
+    pub(crate) fn table_1(&self) -> &T {
         &self.elements[Self::TABLE_1]
     }
 
-    pub fn table_2(&self) -> &T {
+    pub(crate) fn table_2(&self) -> &T {
         &self.elements[Self::TABLE_2]
     }
 
-    pub fn table_3(&self) -> &T {
+    pub(crate) fn table_3(&self) -> &T {
         &self.elements[Self::TABLE_3]
     }
 
-    pub fn table_4(&self) -> &T {
+    pub(crate) fn table_4(&self) -> &T {
         &self.elements[Self::TABLE_4]
     }
 }
@@ -518,147 +518,147 @@ impl<T: Default> PrecomputedEntities<T> {
     const LAGRANGE_FIRST: usize = 25; // column 25
     const LAGRANGE_LAST: usize = 26; // column 26
 
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }
 
-    pub fn get_table_polynomials(&self) -> &[T] {
+    pub(crate) fn get_table_polynomials(&self) -> &[T] {
         &self.elements[Self::TABLE_1..=Self::TABLE_4]
     }
 
-    pub fn get_selectors_mut(&mut self) -> &mut [T] {
+    pub(crate) fn get_selectors_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::Q_M..=Self::Q_POSEIDON2_INTERNAL]
     }
 
-    pub fn get_sigmas_mut(&mut self) -> &mut [T] {
+    pub(crate) fn get_sigmas_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::SIGMA_1..=Self::SIGMA_4]
     }
 
-    pub fn get_ids_mut(&mut self) -> &mut [T] {
+    pub(crate) fn get_ids_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::ID_1..=Self::ID_4]
     }
 
-    pub fn get_table_polynomials_mut(&mut self) -> &mut [T] {
+    pub(crate) fn get_table_polynomials_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::TABLE_1..=Self::TABLE_4]
     }
 
-    pub fn q_m(&self) -> &T {
+    pub(crate) fn q_m(&self) -> &T {
         &self.elements[Self::Q_M]
     }
 
-    pub fn q_c(&self) -> &T {
+    pub(crate) fn q_c(&self) -> &T {
         &self.elements[Self::Q_C]
     }
 
-    pub fn q_l(&self) -> &T {
+    pub(crate) fn q_l(&self) -> &T {
         &self.elements[Self::Q_L]
     }
 
-    pub fn q_r(&self) -> &T {
+    pub(crate) fn q_r(&self) -> &T {
         &self.elements[Self::Q_R]
     }
 
-    pub fn q_o(&self) -> &T {
+    pub(crate) fn q_o(&self) -> &T {
         &self.elements[Self::Q_O]
     }
 
-    pub fn q_4(&self) -> &T {
+    pub(crate) fn q_4(&self) -> &T {
         &self.elements[Self::Q_4]
     }
 
-    pub fn q_arith(&self) -> &T {
+    pub(crate) fn q_arith(&self) -> &T {
         &self.elements[Self::Q_ARITH]
     }
 
-    pub fn q_delta_range(&self) -> &T {
+    pub(crate) fn q_delta_range(&self) -> &T {
         &self.elements[Self::Q_DELTA_RANGE]
     }
 
-    pub fn q_elliptic(&self) -> &T {
+    pub(crate) fn q_elliptic(&self) -> &T {
         &self.elements[Self::Q_ELLIPTIC]
     }
 
-    pub fn q_aux(&self) -> &T {
+    pub(crate) fn q_aux(&self) -> &T {
         &self.elements[Self::Q_AUX]
     }
 
-    pub fn q_lookup(&self) -> &T {
+    pub(crate) fn q_lookup(&self) -> &T {
         &self.elements[Self::Q_LOOKUP]
     }
 
-    pub fn q_poseidon2_external(&self) -> &T {
+    pub(crate) fn q_poseidon2_external(&self) -> &T {
         &self.elements[Self::Q_POSEIDON2_EXTERNAL]
     }
 
-    pub fn q_poseidon2_internal(&self) -> &T {
+    pub(crate) fn q_poseidon2_internal(&self) -> &T {
         &self.elements[Self::Q_POSEIDON2_INTERNAL]
     }
 
-    pub fn sigma_1(&self) -> &T {
+    pub(crate) fn sigma_1(&self) -> &T {
         &self.elements[Self::SIGMA_1]
     }
 
-    pub fn sigma_2(&self) -> &T {
+    pub(crate) fn sigma_2(&self) -> &T {
         &self.elements[Self::SIGMA_2]
     }
 
-    pub fn sigma_3(&self) -> &T {
+    pub(crate) fn sigma_3(&self) -> &T {
         &self.elements[Self::SIGMA_3]
     }
 
-    pub fn sigma_4(&self) -> &T {
+    pub(crate) fn sigma_4(&self) -> &T {
         &self.elements[Self::SIGMA_4]
     }
 
-    pub fn id_1(&self) -> &T {
+    pub(crate) fn id_1(&self) -> &T {
         &self.elements[Self::ID_1]
     }
 
-    pub fn id_2(&self) -> &T {
+    pub(crate) fn id_2(&self) -> &T {
         &self.elements[Self::ID_2]
     }
 
-    pub fn id_3(&self) -> &T {
+    pub(crate) fn id_3(&self) -> &T {
         &self.elements[Self::ID_3]
     }
 
-    pub fn id_4(&self) -> &T {
+    pub(crate) fn id_4(&self) -> &T {
         &self.elements[Self::ID_4]
     }
 
-    pub fn table_1(&self) -> &T {
+    pub(crate) fn table_1(&self) -> &T {
         &self.elements[Self::TABLE_1]
     }
 
-    pub fn table_2(&self) -> &T {
+    pub(crate) fn table_2(&self) -> &T {
         &self.elements[Self::TABLE_2]
     }
 
-    pub fn table_3(&self) -> &T {
+    pub(crate) fn table_3(&self) -> &T {
         &self.elements[Self::TABLE_3]
     }
 
-    pub fn table_4(&self) -> &T {
+    pub(crate) fn table_4(&self) -> &T {
         &self.elements[Self::TABLE_4]
     }
 
-    pub fn lagrange_first(&self) -> &T {
+    pub(crate) fn lagrange_first(&self) -> &T {
         &self.elements[Self::LAGRANGE_FIRST]
     }
 
-    pub fn lagrange_last(&self) -> &T {
+    pub(crate) fn lagrange_last(&self) -> &T {
         &self.elements[Self::LAGRANGE_LAST]
     }
 
-    pub fn lagrange_first_mut(&mut self) -> &mut T {
+    pub(crate) fn lagrange_first_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LAGRANGE_FIRST]
     }
 
-    pub fn lagrange_last_mut(&mut self) -> &mut T {
+    pub(crate) fn lagrange_last_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LAGRANGE_LAST]
     }
 }

@@ -18,7 +18,7 @@ use std::io::SeekFrom;
 use std::marker::PhantomData;
 use std::path::Path;
 
-pub type CrsParser<P> = NewFileStructure<P>;
+pub(crate) type CrsParser<P> = NewFileStructure<P>;
 
 const BLAKE2B_CHECKSUM_LENGTH: usize = 64;
 #[derive(Debug, Default)]
@@ -36,12 +36,12 @@ struct Manifest {
 // the new one (when installing) barretenberg can be found under ~/.bb-crs (or downloaded from https://aztec-ignition.s3.amazonaws.com/MAIN%20IGNITION/flat/g1.dat or g2.dat, but the first one is 6 gb large)
 // the older ones can be downloaded with ~/aztec-packages/barretenberg/cpp/srs_db/download_srs.sh (iirc), these are separated into 20 files, for info see also ~/aztec-packages/barretenberg/cpp/srs_db/transcript_spec.md
 
-pub struct NewFileStructure<P: Pairing> {
+pub(crate) struct NewFileStructure<P: Pairing> {
     phantom_data: PhantomData<P>,
 }
 
 impl<P: Pairing> NewFileStructure<P> {
-    pub fn get_crs(path_g1: &str, path_g2: &str, crs_size: usize) -> Result<Crs<P>> {
+    pub(crate) fn get_crs(path_g1: &str, path_g2: &str, crs_size: usize) -> Result<Crs<P>> {
         let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size + 2];
         let mut g2_x = P::G2Affine::default();
         Self::read_transcript(&mut monomials, &mut g2_x, crs_size, path_g1, path_g2)?;
@@ -49,7 +49,7 @@ impl<P: Pairing> NewFileStructure<P> {
         Ok(Crs { monomials, g2_x })
     }
 
-    pub fn get_crs_g1(path_g1: &str, crs_size: usize) -> Result<ProverCrs<P>> {
+    pub(crate) fn get_crs_g1(path_g1: &str, crs_size: usize) -> Result<ProverCrs<P>> {
         let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size + 2];
         Self::read_transcript_g1(&mut monomials, crs_size, path_g1)?;
 

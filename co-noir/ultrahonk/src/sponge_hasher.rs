@@ -1,7 +1,7 @@
 use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
 
-pub trait FieldHash<F: PrimeField, const T: usize> {
+pub(crate) trait FieldHash<F: PrimeField, const T: usize> {
     fn permutation(&self, input: &[F; T]) -> [F; T] {
         let mut state = *input;
         self.permutation_in_place(&mut state);
@@ -16,7 +16,7 @@ enum SpongeMode {
     Squeeze,
 }
 
-pub struct FieldSponge<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T>> {
+pub(crate) struct FieldSponge<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T>> {
     state: [F; T],
     cache: [F; R],
     cache_size: usize,
@@ -25,7 +25,7 @@ pub struct FieldSponge<F: PrimeField, const T: usize, const R: usize, H: FieldHa
 }
 
 impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T>> FieldSponge<F, T, R, H> {
-    pub fn new(iv: F, hasher: H) -> Self {
+    pub(crate) fn new(iv: F, hasher: H) -> Self {
         assert!(R < T);
         let mut state = [F::zero(); T];
         state[R] = iv;
@@ -107,7 +107,7 @@ impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T>> FieldSpo
      * @param input
      * @return std::array<FF, out_len>
      */
-    pub fn hash_internal<const OUT_LEN: usize, const IS_VAR_LEN: bool>(
+    pub(crate) fn hash_internal<const OUT_LEN: usize, const IS_VAR_LEN: bool>(
         input: &[F],
         hasher: H,
     ) -> [F; OUT_LEN] {
@@ -133,11 +133,14 @@ impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T>> FieldSpo
         res
     }
 
-    pub fn hash_fixed_lenth<const OUT_LEN: usize>(input: &[F], hasher: H) -> [F; OUT_LEN] {
+    pub(crate) fn hash_fixed_lenth<const OUT_LEN: usize>(input: &[F], hasher: H) -> [F; OUT_LEN] {
         Self::hash_internal::<OUT_LEN, false>(input, hasher)
     }
 
-    pub fn hash_variable_length<const OUT_LEN: usize>(input: &[F], hasher: H) -> [F; OUT_LEN] {
+    pub(crate) fn hash_variable_length<const OUT_LEN: usize>(
+        input: &[F],
+        hasher: H,
+    ) -> [F; OUT_LEN] {
         Self::hash_internal::<OUT_LEN, true>(input, hasher)
     }
 }

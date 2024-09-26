@@ -1,8 +1,7 @@
 use ark_bn254::Bn254;
 use ultrahonk::{
-    parse::{builder::UltraCircuitBuilder, get_constraint_system_from_file, get_witness_from_file},
-    prover::UltraHonk,
-    types::{HonkProof, ProvingKey},
+    parse::{get_constraint_system_from_file, get_witness_from_file},
+    HonkProof, ProvingKey, UltraCircuitBuilder, UltraHonk,
 };
 
 #[test]

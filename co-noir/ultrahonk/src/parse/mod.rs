@@ -1,8 +1,8 @@
-pub mod acir_format;
-pub mod builder;
-pub mod crs;
+pub(crate) mod acir_format;
+pub(crate) mod builder;
+pub(crate) mod crs;
 pub(crate) mod plookup;
-pub mod proving_key;
+pub(crate) mod proving_key;
 pub(crate) mod types;
 
 use acir::{circuit::Circuit, native_types::WitnessStack, FieldElement};
@@ -10,13 +10,13 @@ use acir_format::AcirFormat;
 use noirc_artifacts::program::ProgramArtifact;
 use std::io;
 
-pub fn read_circuit_from_file(path: &str) -> io::Result<Circuit<FieldElement>> {
+fn read_circuit_from_file(path: &str) -> io::Result<Circuit<FieldElement>> {
     let program = std::fs::read_to_string(path)?;
     let program_artifact = serde_json::from_str::<ProgramArtifact>(&program)?;
     Ok(program_artifact.bytecode.functions[0].to_owned())
 }
 
-pub fn read_witness_stack_from_file(path: &str) -> io::Result<WitnessStack<FieldElement>> {
+fn read_witness_stack_from_file(path: &str) -> io::Result<WitnessStack<FieldElement>> {
     let witness_stack = std::fs::read(path)?;
     WitnessStack::try_from(witness_stack.as_slice())
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))

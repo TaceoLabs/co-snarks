@@ -4,12 +4,12 @@ use ark_ff::PrimeField;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
-pub struct Poseidon2<F: PrimeField, const T: usize, const D: u64> {
+pub(crate) struct Poseidon2<F: PrimeField, const T: usize, const D: u64> {
     pub(crate) params: Arc<Poseidon2Params<F, T, D>>,
 }
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
-    pub fn new(params: &Arc<Poseidon2Params<F, T, D>>) -> Self {
+    pub(crate) fn new(params: &Arc<Poseidon2Params<F, T, D>>) -> Self {
         Self {
             params: Arc::clone(params),
         }

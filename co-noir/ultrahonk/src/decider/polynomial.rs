@@ -2,11 +2,11 @@ use ark_ff::PrimeField;
 use std::ops::{AddAssign, Index, IndexMut};
 
 #[derive(Clone, Debug, Default)]
-pub struct Polynomial<F: PrimeField> {
+pub(crate) struct Polynomial<F: PrimeField> {
     pub(crate) coefficients: Vec<F>,
 }
 
-pub struct ShiftedPoly<'a, F: PrimeField> {
+pub(crate) struct ShiftedPoly<'a, F: PrimeField> {
     pub(crate) coefficients: &'a [F],
     zero: F, // TODO is there are better solution
 }
@@ -21,7 +21,7 @@ impl<'a, F: PrimeField> ShiftedPoly<'a, F> {
         res
     }
 
-    pub fn as_ref(&self) -> &[F] {
+    pub(crate) fn as_ref(&self) -> &[F] {
         self.coefficients
     }
 }
@@ -39,29 +39,29 @@ impl<'a, F: PrimeField> Index<usize> for ShiftedPoly<'a, F> {
 }
 
 impl<F: PrimeField> Polynomial<F> {
-    pub fn new(coefficients: Vec<F>) -> Self {
+    pub(crate) fn new(coefficients: Vec<F>) -> Self {
         Self { coefficients }
     }
 
-    pub fn new_zero(size: usize) -> Self {
+    pub(crate) fn new_zero(size: usize) -> Self {
         Self {
             coefficients: vec![F::zero(); size],
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &F> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &F> {
         self.coefficients.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut F> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut F> {
         self.coefficients.iter_mut()
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.coefficients.len()
     }
 
-    pub fn degree(&self) -> usize {
+    pub(crate) fn degree(&self) -> usize {
         let mut len = self.coefficients.len() - 1;
         for c in self.coefficients.iter().rev() {
             if c.is_zero() {
@@ -73,26 +73,26 @@ impl<F: PrimeField> Polynomial<F> {
         len
     }
 
-    pub fn as_ref(&self) -> &[F] {
+    pub(crate) fn as_ref(&self) -> &[F] {
         &self.coefficients
     }
 
-    pub fn as_mut(&mut self) -> &mut [F] {
+    pub(crate) fn as_mut(&mut self) -> &mut [F] {
         &mut self.coefficients
     }
 
-    pub fn resize(&mut self, size: usize, value: F) {
+    pub(crate) fn resize(&mut self, size: usize, value: F) {
         self.coefficients.resize(size, value);
     }
 
-    pub fn into_vec(self) -> Vec<F> {
+    pub(crate) fn into_vec(self) -> Vec<F> {
         self.coefficients
     }
 
     /**
      * @brief Divides p(X) by (X-r) in-place.
      */
-    pub fn factor_roots(&mut self, root: &F) {
+    pub(crate) fn factor_roots(&mut self, root: &F) {
         if root.is_zero() {
             // if one of the roots is 0 after having divided by all other roots,
             // then p(X) = a₁⋅X + ⋯ + aₙ₋₁⋅Xⁿ⁻¹

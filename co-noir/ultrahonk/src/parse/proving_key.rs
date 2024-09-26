@@ -164,7 +164,7 @@ impl<P: Pairing> ProvingKey<P> {
             if block.has_ram_rom {
                 trace_data.ram_rom_offset = offset as u32;
             }
-            // Store offset of public inputs block for use in the pub input mechanism of the permutation argument
+            // Store offset of public inputs block for use in the pub(crate)input mechanism of the permutation argument
             if block.is_pub_inputs {
                 trace_data.pub_inputs_offset = offset as u32;
             }

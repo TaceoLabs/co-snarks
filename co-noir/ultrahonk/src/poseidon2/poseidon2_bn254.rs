@@ -11,7 +11,7 @@ const ROUNDS_F: usize = 8;
 const ROUNDS_P: usize = 56;
 
 lazy_static! {
-    pub static ref MAT_DIAG_M_1: [Scalar; T] = {
+    pub(crate) static ref MAT_DIAG_M_1: [Scalar; T] = {
         [
             field_from_hex_string("0x10dc6e9c006ea38b04b1e03b4bd9490c0d03f98929ca1d7fb56821fd19d3b6e7").unwrap(),
             field_from_hex_string("0x0c28145b6a44df3e0149b3d0a30b3bb599df9756d4dd9b84a86b38cfb45a740b").unwrap(),
@@ -19,7 +19,7 @@ lazy_static! {
             field_from_hex_string("0x222c01175718386f2e2e82eb122789e352e105a3b8fa852613bc534433ee428b").unwrap(),
         ]
     };
-    pub static ref EXTERNAL_RC: Vec<[Scalar; T]> =
+    pub(crate) static ref EXTERNAL_RC: Vec<[Scalar; T]> =
         vec![
             // First external
             [
@@ -72,7 +72,7 @@ lazy_static! {
                 field_from_hex_string("0x176563472456aaa746b694c60e1823611ef39039b2edc7ff391e6f2293d2c404").unwrap(),
             ]
         ];
-    pub static ref INTERNAL_RC: Vec<Scalar> = vec![
+    pub(crate) static ref INTERNAL_RC: Vec<Scalar> = vec![
             field_from_hex_string("0x0c6f8f958be0e93053d7fd4fc54512855535ed1539f051dcb43a26fd926361cf").unwrap(),
             field_from_hex_string("0x123106a93cd17578d426e8128ac9d90aa9e8a00708e296e084dd57e69caaf811").unwrap(),
             field_from_hex_string("0x26e1ba52ad9285d97dd3ab52f8e840085e8fa83ff1e8f1877b074867cd2dee75").unwrap(),
@@ -130,5 +130,5 @@ lazy_static! {
             field_from_hex_string("0x02fcca2934e046bc623adead873579865d03781ae090ad4a8579d2e7a6800355").unwrap(),
             field_from_hex_string("0x0ef915f0ac120b876abccceb344a1d36bad3f3c5ab91a8ddcbec2e060d8befac").unwrap(),
     ];
-    pub static ref POSEIDON2_BN254_T4_PARAMS: Arc<Poseidon2Params<Scalar, T, D>> = Arc::new(Poseidon2Params::new(ROUNDS_F, ROUNDS_P, *MAT_DIAG_M_1, EXTERNAL_RC.to_vec(), INTERNAL_RC.to_vec()));
+    pub(crate) static ref POSEIDON2_BN254_T4_PARAMS: Arc<Poseidon2Params<Scalar, T, D>> = Arc::new(Poseidon2Params::new(ROUNDS_F, ROUNDS_P, *MAT_DIAG_M_1, EXTERNAL_RC.to_vec(), INTERNAL_RC.to_vec()));
 }

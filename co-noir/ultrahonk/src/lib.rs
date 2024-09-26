@@ -3,10 +3,14 @@ pub mod honk_curve;
 pub(crate) mod oink;
 pub mod parse;
 pub(crate) mod poseidon2;
-pub mod prover;
+pub(crate) mod prover;
 pub(crate) mod sponge_hasher;
 mod transcript;
-pub mod types;
+pub(crate) mod types;
+
+pub use parse::builder::UltraCircuitBuilder;
+pub use prover::UltraHonk;
+pub use types::{HonkProof, ProvingKey};
 
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
 use ark_ff::PrimeField;

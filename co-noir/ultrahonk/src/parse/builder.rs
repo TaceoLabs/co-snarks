@@ -1492,7 +1492,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
     }
 
-    pub fn get_num_gates_added_to_ensure_nonzero_polynomials() -> usize {
+    pub(crate) fn get_num_gates_added_to_ensure_nonzero_polynomials() -> usize {
         let mut builder = Self::new(0);
         let num_gates_prior = builder.get_num_gates();
         builder.add_gates_to_ensure_all_polys_are_non_zero();
@@ -1501,7 +1501,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         num_gates_post - num_gates_prior
     }
 
-    pub fn get_circuit_subgroup_size(num_gates: usize) -> usize {
+    pub(crate) fn get_circuit_subgroup_size(num_gates: usize) -> usize {
         let mut log2_n = get_msb64(num_gates as u64);
         if (1 << log2_n) != num_gates {
             log2_n += 1;
@@ -1509,7 +1509,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         1 << log2_n
     }
 
-    pub fn get_total_circuit_size(&self) -> usize {
+    pub(crate) fn get_total_circuit_size(&self) -> usize {
         let minimum_circuit_size = self.get_tables_size() + self.get_lookups_size();
         let num_filled_gates = self.get_num_gates() + self.public_inputs.len();
         std::cmp::max(minimum_circuit_size, num_filled_gates) + Self::NUM_RESERVED_GATES

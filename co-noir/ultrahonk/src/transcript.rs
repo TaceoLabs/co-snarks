@@ -31,7 +31,7 @@ impl<F> Poseidon2Transcript<F>
 where
     F: PrimeField,
 {
-    pub fn new(params: &Arc<Poseidon2Params<F, 4, 5>>) -> Self {
+    pub(crate) fn new(params: &Arc<Poseidon2Params<F, 4, 5>>) -> Self {
         Self {
             proof_data: Default::default(),
             manifest: Default::default(),
@@ -45,15 +45,15 @@ where
         }
     }
 
-    pub fn get_proof(self) -> HonkProof<F> {
+    pub(crate) fn get_proof(self) -> HonkProof<F> {
         HonkProof::new(self.proof_data)
     }
 
-    pub fn print(&self) {
+    pub(crate) fn print(&self) {
         self.manifest.print();
     }
 
-    pub fn get_manifest(&self) -> &TranscriptManifest {
+    pub(crate) fn get_manifest(&self) -> &TranscriptManifest {
         &self.manifest
     }
 
