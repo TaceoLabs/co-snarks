@@ -1,5 +1,5 @@
 use crate::{co_oink::prover::CoOink, types::ProvingKey};
-use mpc_core::traits::PrimeFieldMpcProtocol;
+use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use std::marker::PhantomData;
 use ultrahonk::prelude::{
     HonkCurve, HonkProof, HonkProofResult, TranscriptFieldType, TranscriptType,
@@ -8,7 +8,7 @@ use ultrahonk::prelude::{
 
 pub struct CoUltraHonk<T, P: HonkCurve<TranscriptFieldType>>
 where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
 {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
@@ -16,7 +16,7 @@ where
 
 impl<T, P: HonkCurve<TranscriptFieldType>> CoUltraHonk<T, P>
 where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
+    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
 {
     pub fn new(driver: T) -> Self {
         Self {

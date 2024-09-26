@@ -45,12 +45,12 @@ impl<F: PrimeField> Polynomials<F> {
 }
 
 pub struct Crs<P: Pairing> {
-    pub(crate) monomials: Vec<P::G1Affine>,
-    pub(crate) g2_x: P::G2Affine,
+    pub monomials: Vec<P::G1Affine>,
+    pub g2_x: P::G2Affine,
 }
 
 pub struct ProverCrs<P: Pairing> {
-    pub(crate) monomials: Vec<P::G1Affine>,
+    pub monomials: Vec<P::G1Affine>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -84,25 +84,17 @@ where
         self.consume_prover_elements(label, elements);
     }
 
-    pub(super) fn send_fr_to_verifier<P: HonkCurve<F>>(
-        &mut self,
-        label: String,
-        element: P::ScalarField,
-    ) {
+    pub fn send_fr_to_verifier<P: HonkCurve<F>>(&mut self, label: String, element: P::ScalarField) {
         let elements = P::convert_scalarfield_into(&element);
         self.send_to_verifier(label, &elements);
     }
 
-    pub(super) fn send_u64_to_verifier(&mut self, label: String, element: u64) {
+    pub fn send_u64_to_verifier(&mut self, label: String, element: u64) {
         let el = F::from(element);
         self.send_to_verifier(label, &[el]);
     }
 
-    pub(super) fn send_point_to_verifier<P: HonkCurve<F>>(
-        &mut self,
-        label: String,
-        element: P::G1Affine,
-    ) {
+    pub fn send_point_to_verifier<P: HonkCurve<F>>(&mut self, label: String, element: P::G1Affine) {
         let elements = Self::convert_point::<P>(element);
         self.send_to_verifier(label, &elements);
     }
