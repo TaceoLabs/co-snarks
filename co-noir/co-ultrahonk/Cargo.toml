@@ -1,5 +1,5 @@
 [package]
-name = "co-acvm"
+name = "co-ultrahonk"
 version = "0.1.0"
 publish.workspace = true
 authors.workspace = true
@@ -10,17 +10,10 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-acir.workspace = true
-acvm.workspace = true
-ark-bn254.workspace = true
+ark-ec.workspace = true
 ark-ff.workspace = true
+ark-bn254.workspace = true
 eyre.workspace = true
-intmap.workspace = true
 mpc-core.workspace = true
-noirc-abi.workspace = true
-noirc-artifacts.workspace = true
-thiserror.workspace = true
 tracing.workspace = true
-
-[dev-dependencies]
-paste.workspace = true
+ultrahonk.workspace = true

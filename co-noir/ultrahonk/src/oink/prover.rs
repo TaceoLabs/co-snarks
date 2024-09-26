@@ -29,7 +29,7 @@ use ark_ff::{One, Zero};
 use itertools::izip;
 use std::marker::PhantomData;
 
-pub struct Oink<P: HonkCurve<TranscriptFieldType>> {
+pub(crate) struct Oink<P: HonkCurve<TranscriptFieldType>> {
     memory: ProverMemory<P>,
     phantom_data: PhantomData<P>,
 }
@@ -41,7 +41,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Default for Oink<P> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             memory: ProverMemory::default(),
             phantom_data: PhantomData,
@@ -469,7 +469,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         Ok(())
     }
 
-    pub fn prove(
+    pub(crate) fn prove(
         mut self,
         proving_key: &ProvingKey<P>,
         transcript: &mut TranscriptType,

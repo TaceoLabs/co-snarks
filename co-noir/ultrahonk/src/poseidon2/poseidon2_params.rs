@@ -11,7 +11,7 @@ pub struct Poseidon2Params<F: PrimeField, const T: usize, const D: u64> {
 }
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2Params<F, T, D> {
-    pub fn new(
+    pub(crate) fn new(
         rounds_f: usize,
         rounds_p: usize,
         mat_internal_diag_m_1: [F; T],

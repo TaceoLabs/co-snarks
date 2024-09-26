@@ -15,7 +15,7 @@ pub(crate) struct Poseidon2ExternalRelationAcc<F: PrimeField> {
 }
 
 impl<F: PrimeField> Poseidon2ExternalRelationAcc<F> {
-    pub fn scale(&mut self, elements: &[F]) {
+    pub(crate) fn scale(&mut self, elements: &[F]) {
         assert!(elements.len() == Poseidon2ExternalRelation::NUM_RELATIONS);
         self.r0 *= elements[0];
         self.r1 *= elements[1];
@@ -23,7 +23,7 @@ impl<F: PrimeField> Poseidon2ExternalRelationAcc<F> {
         self.r3 *= elements[3];
     }
 
-    pub fn extend_and_batch_univariates(
+    pub(crate) fn extend_and_batch_univariates(
         &self,
         result: &mut SumcheckRoundOutput<F>,
         extended_random_poly: &SumcheckRoundOutput<F>,
