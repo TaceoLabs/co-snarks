@@ -22,7 +22,6 @@ where
         let dyadic_circuit_size = circuit.compute_dyadic_size();
         let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);
         // Construct and add to proving key the wire, selector and copy constraint polynomials
-        todo!("ProvingKey trace");
         proving_key.populate_trace(&mut circuit, false);
 
         // First and last lagrange polynomials (in the full circuit size)
@@ -39,11 +38,16 @@ where
             dyadic_circuit_size,
             0,
         );
-        // PlainProvingKey::construct_lookup_read_counts(
-        //     &mut proving_key.polynomials.witness,
-        //     &mut circuit,
-        //     dyadic_circuit_size,
-        // );
+        PlainProvingKey::construct_lookup_read_counts(
+            proving_key
+                .polynomials
+                .witness
+                .lookup_read_counts_and_tags_mut()
+                .try_into()
+                .unwrap(),
+            &mut circuit,
+            dyadic_circuit_size,
+        );
 
         todo!("ProvingKey pubinput");
         // Construct the public inputs array
@@ -86,7 +90,7 @@ where
             polynomials,
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
-            phantom_data: PhantomData,
+            phantom: PhantomData,
         }
     }
 

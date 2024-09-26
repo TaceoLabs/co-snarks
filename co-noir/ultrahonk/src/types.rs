@@ -346,12 +346,8 @@ impl<T: Default> ProverWitnessEntities<T> {
         &self.elements[Self::LOOKUP_READ_TAGS]
     }
 
-    pub(crate) fn lookup_read_counts_mut(&mut self) -> &mut T {
-        &mut self.elements[Self::LOOKUP_READ_COUNTS]
-    }
-
-    pub(crate) fn lookup_read_tags_mut(&mut self) -> &mut T {
-        &mut self.elements[Self::LOOKUP_READ_TAGS]
+    pub(crate) fn lookup_read_counts_and_tags_mut(&mut self) -> &mut [T] {
+        &mut self.elements[Self::LOOKUP_READ_COUNTS..Self::LOOKUP_READ_TAGS + 1]
     }
 }
 

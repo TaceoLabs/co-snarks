@@ -1,5 +1,4 @@
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use std::marker::PhantomData;
 use ultrahonk::prelude::{Polynomial, PrecomputedEntities, ProverCrs};
@@ -13,20 +12,20 @@ where
     pub(crate) public_inputs: Vec<P::ScalarField>,
     pub(crate) num_public_inputs: u32,
     pub(crate) pub_inputs_offset: u32,
-    pub(crate) polynomials: Polynomials<P::ScalarField>,
+    pub(crate) polynomials: Polynomials<T::FieldShare, P::ScalarField>,
     pub(crate) memory_read_records: Vec<u32>,
     pub(crate) memory_write_records: Vec<u32>,
-    pub(crate) phantom_data: PhantomData<T>, // TODO remove
+    pub(crate) phantom: PhantomData<T>,
 }
 
 // This is what we get from the proving key, we shift at a later point
 #[derive(Default)]
-pub(crate) struct Polynomials<F: PrimeField> {
-    // pub(crate) witness: ProverWitnessEntities<Polynomial<F>>,
-    pub(crate) precomputed: PrecomputedEntities<Polynomial<F>>,
+pub(crate) struct Polynomials<Shared: Default, Public: Default> {
+    pub(crate) witness: ProverWitnessEntities<Polynomial<Shared>, Polynomial<Public>>,
+    pub(crate) precomputed: PrecomputedEntities<Polynomial<Public>>,
 }
 
-impl<F: PrimeField> Polynomials<F> {
+impl<Shared: Default, Public: Default> Polynomials<Shared, Public> {
     pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
 
@@ -38,12 +37,56 @@ impl<F: PrimeField> Polynomials<F> {
 
         polynomials
     }
+}
 
-    // pub(crate) fn iter(&self) -> impl Iterator<Item = &Polynomial<F>> {
-    //     self.witness.iter().chain(self.precomputed.iter())
-    // }
+const PROVER_PRIVATE_WITNESS_ENTITIES_SIZE: usize = 4;
+const PROVER_PUBLIC_WITNESS_ENTITIES_SIZE: usize = 2;
+#[derive(Default)]
+pub(crate) struct ProverWitnessEntities<Shared, Public> {
+    pub(crate) private_elements: [Shared; PROVER_PRIVATE_WITNESS_ENTITIES_SIZE],
+    pub(crate) public_elements: [Public; PROVER_PUBLIC_WITNESS_ENTITIES_SIZE],
+}
 
-    // pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
-    //     self.witness.iter_mut().chain(self.precomputed.iter_mut())
-    // }
+impl<Shared, Public> ProverWitnessEntities<Shared, Public> {
+    const W_L: usize = 0; // column 0
+    const W_R: usize = 1; // column 1
+    const W_O: usize = 2; // column 2
+    const W_4: usize = 3; // column 3 (modified by prover)
+    const LOOKUP_READ_COUNTS: usize = 4; // column 6
+    const LOOKUP_READ_TAGS: usize = 5; // column 7
+
+    // const Z_PERM: usize = 4; // column 4 (computed by prover)
+    // const LOOKUP_INVERSES: usize = 5; // column 5 (computed by prover);
+
+    pub(crate) fn get_wires_mut(&mut self) -> &mut [Shared] {
+        &mut self.private_elements[Self::W_L..=Self::W_4]
+    }
+
+    pub(crate) fn w_l(&self) -> &Shared {
+        &self.private_elements[Self::W_L]
+    }
+
+    pub(crate) fn w_r(&self) -> &Shared {
+        &self.private_elements[Self::W_R]
+    }
+
+    pub(crate) fn w_o(&self) -> &Shared {
+        &self.private_elements[Self::W_O]
+    }
+
+    pub(crate) fn w_4(&self) -> &Shared {
+        &self.private_elements[Self::W_4]
+    }
+
+    pub(crate) fn lookup_read_counts(&self) -> &Public {
+        &self.public_elements[Self::LOOKUP_READ_COUNTS]
+    }
+
+    pub(crate) fn lookup_read_tags(&self) -> &Public {
+        &self.public_elements[Self::LOOKUP_READ_TAGS]
+    }
+
+    pub(crate) fn lookup_read_counts_and_tags_mut(&mut self) -> &mut [Public] {
+        &mut self.public_elements[Self::LOOKUP_READ_COUNTS..Self::LOOKUP_READ_TAGS + 1]
+    }
 }

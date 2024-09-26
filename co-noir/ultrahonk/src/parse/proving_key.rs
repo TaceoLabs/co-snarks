@@ -6,7 +6,7 @@ use super::{
 use crate::{
     decider::polynomial::Polynomial,
     parse::types::{TraceData, NUM_WIRES},
-    types::{Polynomials, PrecomputedEntities, ProverCrs, ProverWitnessEntities, ProvingKey},
+    types::{Polynomials, PrecomputedEntities, ProverCrs, ProvingKey},
     Utils,
 };
 use ark_ec::pairing::Pairing;
@@ -40,7 +40,12 @@ impl<P: Pairing> ProvingKey<P> {
             0,
         );
         Self::construct_lookup_read_counts(
-            &mut proving_key.polynomials.witness,
+            proving_key
+                .polynomials
+                .witness
+                .lookup_read_counts_and_tags_mut()
+                .try_into()
+                .unwrap(),
             &mut circuit,
             dyadic_circuit_size,
         );
@@ -322,8 +327,8 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    fn construct_lookup_read_counts<S: UltraCircuitVariable<P::ScalarField>>(
-        witness: &mut ProverWitnessEntities<Polynomial<P::ScalarField>>,
+    pub fn construct_lookup_read_counts<S: UltraCircuitVariable<P::ScalarField>>(
+        witness: &mut [Polynomial<P::ScalarField>; 2],
         circuit: &mut GenericUltraCircuitBuilder<P, S>,
         dyadic_circuit_size: usize,
     ) {
@@ -344,9 +349,9 @@ impl<P: Pairing> ProvingKey<P> {
 
                 // increment the read count at the corresponding index in the full polynomial
                 let index_in_poly = table_offset + index_in_table;
-                witness.lookup_read_counts_mut()[index_in_poly] += P::ScalarField::one();
-                witness.lookup_read_tags_mut()[index_in_poly] = P::ScalarField::one();
-                // tag is 1 if entry has been read 1 or more times
+                witness[0][index_in_poly] += P::ScalarField::one(); // Read count
+                witness[1][index_in_poly] = P::ScalarField::one(); // Read Tag
+                                                                   // tag is 1 if entry has been read 1 or more times
             }
             table_offset += table.len(); // set the offset of the next table within the polynomials
         }
