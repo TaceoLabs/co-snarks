@@ -130,5 +130,5 @@ lazy_static! {
            Utils::field_from_hex_string("0x02fcca2934e046bc623adead873579865d03781ae090ad4a8579d2e7a6800355").unwrap(),
            Utils::field_from_hex_string("0x0ef915f0ac120b876abccceb344a1d36bad3f3c5ab91a8ddcbec2e060d8befac").unwrap(),
     ];
-    pub(crate) static ref POSEIDON2_BN254_T4_PARAMS: Arc<Poseidon2Params<Scalar, T, D>> = Arc::new(Poseidon2Params::new(ROUNDS_F, ROUNDS_P, *MAT_DIAG_M_1, EXTERNAL_RC.to_vec(), INTERNAL_RC.to_vec()));
+    pub static ref POSEIDON2_BN254_T4_PARAMS: Arc<Poseidon2Params<Scalar, T, D>> = Arc::new(Poseidon2Params::new(ROUNDS_F, ROUNDS_P, *MAT_DIAG_M_1, EXTERNAL_RC.to_vec(), INTERNAL_RC.to_vec()));
 }

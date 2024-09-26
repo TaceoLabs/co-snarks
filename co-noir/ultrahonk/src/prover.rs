@@ -10,7 +10,7 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use std::{io, marker::PhantomData};
 
-pub(crate) type HonkProofResult<T> = std::result::Result<T, HonkProofError>;
+pub type HonkProofResult<T> = std::result::Result<T, HonkProofError>;
 
 /// The errors that may arise during the computation of a co-PLONK proof.
 #[derive(Debug, thiserror::Error)]

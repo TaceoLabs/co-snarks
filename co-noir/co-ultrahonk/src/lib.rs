@@ -1,5 +1,6 @@
 pub(crate) mod parse;
 pub mod prelude;
+pub(crate) mod prover;
 pub(crate) mod types;
 
 use ark_ec::pairing::Pairing;

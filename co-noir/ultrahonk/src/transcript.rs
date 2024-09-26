@@ -9,10 +9,10 @@ use ark_ec::AffineRepr;
 use ark_ff::{PrimeField, Zero};
 use std::{collections::BTreeMap, ops::Index, sync::Arc};
 
-pub(crate) type TranscriptFieldType = ark_bn254::Fr;
-pub(crate) type TranscriptType = Poseidon2Transcript<TranscriptFieldType>;
+pub type TranscriptFieldType = ark_bn254::Fr;
+pub type TranscriptType = Poseidon2Transcript<TranscriptFieldType>;
 
-pub(super) struct Poseidon2Transcript<F>
+pub struct Poseidon2Transcript<F>
 where
     F: PrimeField,
 {
@@ -31,7 +31,7 @@ impl<F> Poseidon2Transcript<F>
 where
     F: PrimeField,
 {
-    pub(crate) fn new(params: &Arc<Poseidon2Params<F, 4, 5>>) -> Self {
+    pub fn new(params: &Arc<Poseidon2Params<F, 4, 5>>) -> Self {
         Self {
             proof_data: Default::default(),
             manifest: Default::default(),

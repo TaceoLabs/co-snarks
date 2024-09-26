@@ -1,7 +1,7 @@
 use ark_bn254::Bn254;
-use co_ultrahonk::prelude::{PlainCoBuilder, ProvingKey, SharedBuilderVariable};
+use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey, SharedBuilderVariable};
 use mpc_core::protocols::plain::PlainDriver;
-use ultrahonk::Utils;
+use ultrahonk::{prelude::HonkProof, Utils};
 
 #[test]
 fn poseidon_plaindriver_test() {
@@ -24,13 +24,13 @@ fn poseidon_plaindriver_test() {
     let prover_crs = ProvingKey::get_prover_crs(&builder, CRS_PATH_G1).unwrap();
     let proving_key = ProvingKey::create(&driver, builder, prover_crs);
 
-    // let proof = UltraHonk::prove(proving_key).unwrap();
-    // let proof_u8 = proof.to_buffer();
+    let mut prover = CoUltraHonk::new(driver);
+    let proof = prover.prove(proving_key).unwrap();
+    let proof_u8 = proof.to_buffer();
 
     let read_proof_u8 = std::fs::read(PROOF_FILE).unwrap();
-    // assert_eq!(proof_u8, read_proof_u8);
+    assert_eq!(proof_u8, read_proof_u8);
 
-    // let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
-    // assert_eq!(proof, read_proof);
-    todo!("WIP")
+    let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
+    assert_eq!(proof, read_proof);
 }
