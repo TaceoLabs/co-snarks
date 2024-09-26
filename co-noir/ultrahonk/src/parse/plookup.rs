@@ -6,7 +6,7 @@ use num_bigint::BigUint;
 use std::array::from_fn;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BasicTableId {
+pub(crate) enum BasicTableId {
     Xor,
     And,
     Pedersen,
@@ -143,7 +143,7 @@ impl FixedBaseParams {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum MultiTableId {
+pub(crate) enum MultiTableId {
     Sha256ChInput,
     Sha256ChOutput,
     Sha256MajInput,
@@ -195,7 +195,7 @@ impl From<MultiTableId> for usize {
     }
 }
 
-pub struct Plookup<F: PrimeField> {
+pub(crate) struct Plookup<F: PrimeField> {
     pub(crate) multi_tables: [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize],
 }
 
