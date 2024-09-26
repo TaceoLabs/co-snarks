@@ -115,6 +115,52 @@ where
         }
     }
 
+    fn compute_public_input_delta(&self, proving_key: &ProvingKey<T, P>) -> P::ScalarField {
+        tracing::trace!("compute public input delta");
+
+        // Let m be the number of public inputs x₀,…, xₘ₋₁.
+        // Recall that we broke the permutation σ⁰ by changing the mapping
+        //  (i) -> (n+i)   to   (i) -> (-(i+1))   i.e. σ⁰ᵢ = −(i+1)
+        //
+        // Therefore, the term in the numerator with ID¹ᵢ = n+i does not cancel out with any term in the denominator.
+        // Similarly, the denominator contains an extra σ⁰ᵢ = −(i+1) term that does not appear in the numerator.
+        // We expect the values of W⁰ᵢ and W¹ᵢ to be equal to xᵢ.
+        // The expected accumulated product would therefore be equal to
+
+        //   ∏ᵢ (γ + W¹ᵢ + β⋅ID¹ᵢ)        ∏ᵢ (γ + xᵢ + β⋅(n+i) )
+        //  -----------------------  =  ------------------------
+        //   ∏ᵢ (γ + W⁰ᵢ + β⋅σ⁰ᵢ )        ∏ᵢ (γ + xᵢ - β⋅(i+1) )
+
+        // At the start of the loop for each xᵢ where i = 0, 1, …, m-1,
+        // we have
+        //      numerator_acc   = γ + β⋅(n+i) = γ + β⋅n + β⋅i
+        //      denominator_acc = γ - β⋅(1+i) = γ - β   - β⋅i
+        // at the end of the loop, add and subtract β to each term respectively to
+        // set the expected value for the start of iteration i+1.
+        // Note: The public inputs may be offset from the 0th index of the wires, for example due to the inclusion of an
+        // initial zero row or Goblin-stlye ECC op gates. Accordingly, the indices i in the above formulas are given by i =
+        // [0, m-1] + offset, i.e. i = offset, 1 + offset, …, m - 1 + offset.
+
+        let mut num = P::ScalarField::one();
+        let mut denom = P::ScalarField::one();
+        let mut num_acc = self.memory.challenges.gamma
+            + self.memory.challenges.beta
+                * P::ScalarField::from(
+                    (proving_key.circuit_size + proving_key.pub_inputs_offset) as u64,
+                );
+        let mut denom_acc = self.memory.challenges.gamma
+            - self.memory.challenges.beta
+                * P::ScalarField::from((1 + proving_key.pub_inputs_offset) as u64);
+
+        for x_i in proving_key.public_inputs.iter() {
+            num *= num_acc + x_i;
+            denom *= denom_acc + x_i;
+            num_acc += self.memory.challenges.beta;
+            denom_acc -= self.memory.challenges.beta;
+        }
+        num / denom
+    }
+
     // Generate relation separators alphas for sumcheck/combiner computation
     fn generate_alphas_round(&mut self, transcript: &mut TranscriptType) {
         tracing::trace!("generate alpha round");
@@ -183,11 +229,11 @@ where
             &proving_key.crs,
         );
 
-        let res = self.driver.open_point_many(&[w_l, w_r, w_o])?;
+        let open = self.driver.open_point_many(&[w_l, w_r, w_o])?;
 
-        transcript.send_point_to_verifier::<P>("W_L".to_string(), res[0].into());
-        transcript.send_point_to_verifier::<P>("W_R".to_string(), res[1].into());
-        transcript.send_point_to_verifier::<P>("W_O".to_string(), res[2].into());
+        transcript.send_point_to_verifier::<P>("W_L".to_string(), open[0].into());
+        transcript.send_point_to_verifier::<P>("W_R".to_string(), open[1].into());
+        transcript.send_point_to_verifier::<P>("W_O".to_string(), open[2].into());
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
@@ -238,6 +284,63 @@ where
         Ok(())
     }
 
+    // Fiat-Shamir: beta & gamma
+    fn execute_log_derivative_inverse_round(
+        &mut self,
+        transcript: &mut TranscriptType,
+        proving_key: &ProvingKey<T, P>,
+    ) -> HonkProofResult<()> {
+        tracing::trace!("executing log derivative inverse round");
+
+        let challs = transcript.get_challenges::<P>(&["beta".to_string(), "gamma".to_string()]);
+        self.memory.challenges.beta = challs[0];
+        self.memory.challenges.gamma = challs[1];
+
+        // self.compute_logderivative_inverses(proving_key);
+        todo!("execute_log_derivative_inverse_round");
+
+        // We moved the commiting and opening to be at the same time as z_perm
+        // transcript
+        // let lookup_inverses = CoUtils::commit(
+        //     self.driver,
+        //     self.memory.lookup_inverses.as_ref(),
+        //     &proving_key.crs,
+        // );
+
+        //     .send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), lookup_inverses.into());
+
+        // Round is done since ultra_honk is no goblin flavor
+        Ok(())
+    }
+
+    // Compute grand product(s) and commitments.
+    fn execute_grand_product_computation_round(
+        &mut self,
+        transcript: &mut TranscriptType,
+        proving_key: &ProvingKey<T, P>,
+    ) -> HonkProofResult<()> {
+        tracing::trace!("executing grand product computation round");
+
+        self.memory.public_input_delta = self.compute_public_input_delta(proving_key);
+        todo!("compute_grand_product");
+        // self.compute_grand_product(proving_key);
+
+        // This is from the previous round, but we open it here with z_perm
+        let lookup_inverses = CoUtils::commit(
+            self.driver,
+            self.memory.lookup_inverses.as_ref(),
+            &proving_key.crs,
+        );
+
+        let z_perm = CoUtils::commit(self.driver, self.memory.z_perm.as_ref(), &proving_key.crs);
+
+        let open = self.driver.open_point_many(&[lookup_inverses, z_perm])?;
+
+        transcript.send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), open[0].into());
+        transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), open[1].into());
+        Ok(())
+    }
+
     pub(crate) fn prove(
         mut self,
         proving_key: &ProvingKey<T, P>,
@@ -252,13 +355,14 @@ where
         // Compute sorted list accumulator and commitment
         self.execute_sorted_list_accumulator_round(transcript, proving_key)?;
 
-        todo!("Oink prove");
         // Fiat-Shamir: beta & gamma
-        // self.execute_log_derivative_inverse_round(transcript, proving_key)?;
+        self.execute_log_derivative_inverse_round(transcript, proving_key)?;
         // Compute grand product(s) and commitments.
-        // self.execute_grand_product_computation_round(transcript, proving_key)?;
+        self.execute_grand_product_computation_round(transcript, proving_key)?;
 
         // Generate relation separators alphas for sumcheck/combiner computation
         self.generate_alphas_round(transcript);
+
+        Ok(self.memory)
     }
 }
