@@ -1,4 +1,5 @@
 use super::CoUltraCircuitBuilder;
+use crate::parse::types::TraceData;
 use crate::types::Polynomials;
 use crate::types::ProvingKey;
 use ark_ec::pairing::Pairing;

@@ -23,12 +23,16 @@ use std::{collections::HashMap, fmt::Debug};
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
 pub trait UltraCircuitVariable<F>: Clone + PartialEq + Debug {
+    type Shared;
+
     fn from_public(value: F) -> Self;
     fn is_public(&self) -> bool;
     fn public_into_field(self) -> F;
 }
 
 impl<F: PrimeField> UltraCircuitVariable<F> for F {
+    type Shared = F;
+
     fn from_public(value: F) -> Self {
         value
     }
@@ -45,11 +49,11 @@ impl<F: PrimeField> UltraCircuitVariable<F> for F {
 pub type UltraCircuitBuilder<P> = GenericUltraCircuitBuilder<P, <P as Pairing>::ScalarField>;
 
 pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> {
-    pub(crate) variables: Vec<S>,
+    pub variables: Vec<S>,
     variable_names: HashMap<u32, String>,
     next_var_index: Vec<u32>,
     prev_var_index: Vec<u32>,
-    pub(crate) real_variable_index: Vec<u32>,
+    pub real_variable_index: Vec<u32>,
     pub(crate) real_variable_tags: Vec<u32>,
     pub public_inputs: Vec<u32>,
     is_recursive_circuit: bool,
@@ -57,7 +61,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::Sca
     constant_variable_indices: HashMap<P::ScalarField, u32>,
     pub(crate) zero_idx: u32,
     one_idx: u32,
-    pub(crate) blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
+    pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
     num_gates: usize,
     circuit_finalized: bool,
     contains_recursive_proof: bool,
@@ -927,7 +931,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         }
     }
 
-    pub(crate) fn get_variable(&self, index: usize) -> S {
+    pub fn get_variable(&self, index: usize) -> S {
         assert!(self.variables.len() > index);
         self.variables[self.real_variable_index[index] as usize].to_owned()
     }

@@ -124,7 +124,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     pub(crate) block_constraints: Vec<Vec<usize>>,
 }
 
-pub(crate) struct UltraTraceBlocks<T: Default> {
+pub struct UltraTraceBlocks<T: Default> {
     pub(crate) pub_inputs: T,
     pub(crate) arithmetic: T,
     pub(crate) delta_range: T,
@@ -136,7 +136,7 @@ pub(crate) struct UltraTraceBlocks<T: Default> {
 }
 
 impl<T: Default> UltraTraceBlocks<T> {
-    pub(crate) fn get(&self) -> [&T; 8] {
+    pub fn get(&self) -> [&T; 8] {
         [
             &self.pub_inputs,
             &self.arithmetic,
@@ -150,19 +150,16 @@ impl<T: Default> UltraTraceBlocks<T> {
     }
 }
 
-pub(crate) const NUM_WIRES: usize = 4;
-pub(crate) const NUM_SELECTORS: usize = 13;
-pub(crate) type UltraTraceBlock<F> = ExecutionTraceBlock<F, NUM_WIRES, NUM_SELECTORS>;
-pub(crate) struct ExecutionTraceBlock<
-    F: PrimeField,
-    const NUM_WIRES: usize,
-    const NUM_SELECTORS: usize,
-> {
-    pub(crate) wires: [Vec<u32>; NUM_WIRES], // vectors of indices into a witness variables array
-    pub(crate) selectors: [Vec<F>; NUM_SELECTORS],
-    pub(crate) has_ram_rom: bool, // does the block contain RAM/ROM gates
-    pub(crate) is_pub_inputs: bool, // is this the public inputs block
-    pub(crate) fixed_size: u32,   // Fixed size for use in structured trace
+pub const NUM_WIRES: usize = 4;
+pub const NUM_SELECTORS: usize = 13;
+pub type UltraTraceBlock<F> = ExecutionTraceBlock<F, NUM_WIRES, NUM_SELECTORS>;
+
+pub struct ExecutionTraceBlock<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> {
+    pub wires: [Vec<u32>; NUM_WIRES], // vectors of indices into a witness variables array
+    pub selectors: [Vec<F>; NUM_SELECTORS],
+    pub has_ram_rom: bool,      // does the block contain RAM/ROM gates
+    pub is_pub_inputs: bool,    // is this the public inputs block
+    pub(crate) fixed_size: u32, // Fixed size for use in structured trace
 }
 
 impl<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> Default
@@ -293,11 +290,11 @@ impl<F: PrimeField> UltraTraceBlock<F> {
         self.w_4().push(idx4);
     }
 
-    pub(crate) fn get_fixed_size(&self) -> u32 {
+    pub fn get_fixed_size(&self) -> u32 {
         self.fixed_size
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.wires[Self::W_L].len()
     }
 }
@@ -1095,8 +1092,8 @@ impl<F: PrimeField> Hash for CachedPartialNonNativeFieldMultiplication<F> {
 
 #[derive(Clone)]
 pub struct CycleNode {
-    pub(crate) wire_index: u32,
-    pub(crate) gate_index: u32,
+    pub wire_index: u32,
+    pub gate_index: u32,
 }
 pub type CyclicPermutation = Vec<CycleNode>;
 

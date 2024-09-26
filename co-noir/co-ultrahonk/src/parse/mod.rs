@@ -1,5 +1,6 @@
 pub(crate) mod builder_variable;
 pub(crate) mod proving_key;
+pub(crate) mod types;
 
 use ark_ec::pairing::Pairing;
 use builder_variable::SharedBuilderVariable;

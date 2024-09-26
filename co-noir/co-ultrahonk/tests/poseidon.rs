@@ -19,7 +19,7 @@ fn poseidon_plaindriver_test() {
         PlainCoBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
 
     let prover_crs = ProvingKey::get_prover_crs(&builder, CRS_PATH_G1).unwrap();
-    // let proving_key = ProvingKey::create(builder, prover_crs);
+    let proving_key = ProvingKey::create(builder, prover_crs);
 
     // let proof = UltraHonk::prove(proving_key).unwrap();
     // let proof_u8 = proof.to_buffer();

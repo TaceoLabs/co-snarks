@@ -38,48 +38,56 @@ impl<'a, F: PrimeField> Index<usize> for ShiftedPoly<'a, F> {
     }
 }
 
+impl<F: Clone> AsRef<[F]> for Polynomial<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.coefficients
+    }
+}
+
+impl<F: Clone> AsMut<[F]> for Polynomial<F> {
+    fn as_mut(&mut self) -> &mut [F] {
+        &mut self.coefficients
+    }
+}
+
 impl<F: Clone> Polynomial<F> {
-    pub(crate) fn new(coefficients: Vec<F>) -> Self {
+    pub fn new(coefficients: Vec<F>) -> Self {
         Self { coefficients }
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &F> {
+    pub fn iter(&self) -> impl Iterator<Item = &F> {
         self.coefficients.iter()
     }
 
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut F> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut F> {
         self.coefficients.iter_mut()
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn is_empty(&self) -> bool {
+        self.coefficients.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
         self.coefficients.len()
     }
 
-    pub(crate) fn as_ref(&self) -> &[F] {
-        &self.coefficients
-    }
-
-    pub(crate) fn as_mut(&mut self) -> &mut [F] {
-        &mut self.coefficients
-    }
-
-    pub(crate) fn resize(&mut self, size: usize, value: F) {
+    pub fn resize(&mut self, size: usize, value: F) {
         self.coefficients.resize(size, value);
     }
 
-    pub(crate) fn into_vec(self) -> Vec<F> {
+    pub fn into_vec(self) -> Vec<F> {
         self.coefficients
     }
 }
 
 impl<F: Zero + Clone> Polynomial<F> {
-    pub(crate) fn new_zero(size: usize) -> Self {
+    pub fn new_zero(size: usize) -> Self {
         Self {
             coefficients: vec![F::zero(); size],
         }
     }
 
-    pub(crate) fn degree(&self) -> usize {
+    pub fn degree(&self) -> usize {
         let mut len = self.coefficients.len() - 1;
         for c in self.coefficients.iter().rev() {
             if c.is_zero() {
@@ -92,7 +100,7 @@ impl<F: Zero + Clone> Polynomial<F> {
     }
 
     // Can only shift by 1
-    pub(crate) fn shifted(&self) -> ShiftedPoly<F> {
+    pub fn shifted(&self) -> ShiftedPoly<F> {
         assert!(!self.coefficients.is_empty());
         assert!(self.coefficients[0].is_zero());
         ShiftedPoly {

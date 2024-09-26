@@ -57,6 +57,8 @@ where
     P: Pairing,
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
+    type Shared = T::FieldShare;
+
     fn from_public(value: P::ScalarField) -> Self {
         Self::Public(value)
     }

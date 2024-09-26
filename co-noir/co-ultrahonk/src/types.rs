@@ -52,8 +52,9 @@ impl<Shared, Public> ProverWitnessEntities<Shared, Public> {
     const W_R: usize = 1; // column 1
     const W_O: usize = 2; // column 2
     const W_4: usize = 3; // column 3 (modified by prover)
-    const LOOKUP_READ_COUNTS: usize = 4; // column 6
-    const LOOKUP_READ_TAGS: usize = 5; // column 7
+
+    const LOOKUP_READ_COUNTS: usize = 0; // column 6
+    const LOOKUP_READ_TAGS: usize = 1; // column 7
 
     // const Z_PERM: usize = 4; // column 4 (computed by prover)
     // const LOOKUP_INVERSES: usize = 5; // column 5 (computed by prover);
