@@ -5,7 +5,7 @@ use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, Partial
 use crate::honk_curve::HonkCurve;
 use crate::transcript::{TranscriptFieldType, TranscriptType};
 use crate::types::AllEntities;
-use crate::{get_msb64, CONST_PROOF_SIZE_LOG_N};
+use crate::{Utils, CONST_PROOF_SIZE_LOG_N};
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
@@ -75,7 +75,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         tracing::trace!("Sumcheck prove");
 
         let multivariate_n = circuit_size;
-        let multivariate_d = get_msb64(multivariate_n as u64);
+        let multivariate_d = Utils::get_msb64(multivariate_n as u64);
 
         let mut sum_check_round = SumcheckRound::new(multivariate_n as usize);
 

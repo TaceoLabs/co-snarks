@@ -71,7 +71,7 @@ pub struct AcirFormat<F: PrimeField> {
 }
 
 impl<F: PrimeField> AcirFormat<F> {
-    pub fn witness_map_to_witness_vector(
+    pub(crate) fn witness_map_to_witness_vector(
         witness_map: WitnessMap<GenericFieldElement<F>>,
     ) -> Vec<F> {
         let mut wv = Vec::new();
@@ -91,7 +91,7 @@ impl<F: PrimeField> AcirFormat<F> {
     }
 
     #[allow(clippy::field_reassign_with_default)]
-    pub fn circuit_serde_to_acir_format(
+    pub(crate) fn circuit_serde_to_acir_format(
         circuit: Circuit<GenericFieldElement<F>>,
         honk_recursion: bool,
     ) -> Self {

@@ -31,7 +31,7 @@ pub(crate) struct AuxiliaryRelationAcc<F: PrimeField> {
 }
 
 impl<F: PrimeField> AuxiliaryRelationAcc<F> {
-    pub fn scale(&mut self, elements: &[F]) {
+    pub(crate) fn scale(&mut self, elements: &[F]) {
         assert!(elements.len() == AuxiliaryRelation::NUM_RELATIONS);
         self.r0 *= elements[0];
         self.r1 *= elements[1];
@@ -41,7 +41,7 @@ impl<F: PrimeField> AuxiliaryRelationAcc<F> {
         self.r5 *= elements[5];
     }
 
-    pub fn extend_and_batch_univariates(
+    pub(crate) fn extend_and_batch_univariates(
         &self,
         result: &mut SumcheckRoundOutput<F>,
         extended_random_poly: &SumcheckRoundOutput<F>,

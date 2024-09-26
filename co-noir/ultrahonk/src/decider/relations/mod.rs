@@ -64,7 +64,7 @@ pub(crate) struct AllRelationAcc<F: PrimeField> {
 }
 
 impl<F: PrimeField> AllRelationAcc<F> {
-    pub fn scale(&mut self, first_scalar: F, elements: &[F]) {
+    pub(crate) fn scale(&mut self, first_scalar: F, elements: &[F]) {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
         self.r_arith.scale(&[first_scalar, elements[0]]);
         self.r_perm.scale(&elements[1..3]);
@@ -76,7 +76,7 @@ impl<F: PrimeField> AllRelationAcc<F> {
         self.r_pos_int.scale(&elements[21..]);
     }
 
-    pub fn extend_and_batch_univariates(
+    pub(crate) fn extend_and_batch_univariates(
         &self,
         result: &mut SumcheckRoundOutput<F>,
         extended_random_poly: &SumcheckRoundOutput<F>,

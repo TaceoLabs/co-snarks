@@ -9,34 +9,59 @@ use super::{
     },
 };
 use crate::{
-    get_msb64,
     parse::{
         plookup::{MultiTableId, Plookup},
         types::{FieldCT, GateCounter, RomRecord, RomTable, NUM_WIRES},
     },
-    poseidon2::field_from_hex_string,
+    Utils,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{One, Zero};
+use ark_ff::{One, PrimeField, Zero};
 use num_bigint::BigUint;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
-pub struct UltraCircuitBuilder<P: Pairing> {
-    pub(crate) variables: Vec<P::ScalarField>,
+pub trait UltraCircuitVariable<F>: Clone + PartialEq + Debug {
+    type Shared;
+
+    fn from_public(value: F) -> Self;
+    fn is_public(&self) -> bool;
+    fn public_into_field(self) -> F;
+}
+
+impl<F: PrimeField> UltraCircuitVariable<F> for F {
+    type Shared = F;
+
+    fn from_public(value: F) -> Self {
+        value
+    }
+
+    fn is_public(&self) -> bool {
+        true
+    }
+
+    fn public_into_field(self) -> F {
+        self
+    }
+}
+
+pub type UltraCircuitBuilder<P> = GenericUltraCircuitBuilder<P, <P as Pairing>::ScalarField>;
+
+pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> {
+    pub variables: Vec<S>,
     variable_names: HashMap<u32, String>,
     next_var_index: Vec<u32>,
     prev_var_index: Vec<u32>,
-    pub(crate) real_variable_index: Vec<u32>,
+    pub real_variable_index: Vec<u32>,
     pub(crate) real_variable_tags: Vec<u32>,
-    pub(crate) public_inputs: Vec<u32>,
+    pub public_inputs: Vec<u32>,
     is_recursive_circuit: bool,
     pub(crate) tau: HashMap<u32, u32>,
     constant_variable_indices: HashMap<P::ScalarField, u32>,
     pub(crate) zero_idx: u32,
     one_idx: u32,
-    pub(crate) blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
+    pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
     num_gates: usize,
     circuit_finalized: bool,
     contains_recursive_proof: bool,
@@ -54,21 +79,21 @@ pub struct UltraCircuitBuilder<P: Pairing> {
     pub(crate) memory_write_records: Vec<u32>,
 }
 
-impl<P: Pairing> UltraCircuitBuilder<P> {
-    const DUMMY_TAG: u32 = 0;
-    const REAL_VARIABLE: u32 = u32::MAX - 1;
-    const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
-    const UNINITIALIZED_MEMORY_RECORD: u32 = u32::MAX;
-    const NUMBER_OF_GATES_PER_RAM_ACCESS: usize = 2;
-    const NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY: usize = 1;
-    const NUM_RESERVED_GATES: usize = 4;
+impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBuilder<P, S> {
+    pub(crate) const DUMMY_TAG: u32 = 0;
+    pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
+    pub(crate) const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
+    pub(crate) const UNINITIALIZED_MEMORY_RECORD: u32 = u32::MAX;
+    pub(crate) const NUMBER_OF_GATES_PER_RAM_ACCESS: usize = 2;
+    pub(crate) const NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY: usize = 1;
+    pub(crate) const NUM_RESERVED_GATES: usize = 4;
     // number of gates created per non-native field operation in process_non_native_field_multiplications
-    const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
+    pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
 
     pub fn create_circuit(
         constraint_system: AcirFormat<P::ScalarField>,
         size_hint: usize,
-        witness: Vec<P::ScalarField>,
+        witness: Vec<S>,
         honk_recursion: bool,           // true for ultrahonk
         collect_gates_per_opcode: bool, // false for ultrahonk
     ) -> Self {
@@ -148,7 +173,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
      */
     fn init(
         size_hint: usize,
-        witness_values: Vec<P::ScalarField>,
+        witness_values: Vec<S>,
         public_inputs: Vec<u32>,
         varnum: usize,
         recursive: bool,
@@ -158,15 +183,14 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
         // TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
 
-        for idx in 0..varnum {
-            // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
-            // be "set" later on via the assert_equal mechanism.
-            let value = if idx < witness_values.len() {
-                witness_values[idx]
-            } else {
-                P::ScalarField::zero()
-            };
-            builder.add_variable(value);
+        let len = witness_values.len();
+        for witness in witness_values.into_iter().take(varnum) {
+            builder.add_variable(witness);
+        }
+        // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
+        // be "set" later on via the assert_equal mechanism.
+        for _ in len..varnum {
+            builder.add_variable(S::from_public(P::ScalarField::zero()));
         }
 
         // Add the public_inputs from acir
@@ -181,7 +205,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         builder
     }
 
-    pub(crate) fn add_variable(&mut self, value: P::ScalarField) -> u32 {
+    pub(crate) fn add_variable(&mut self, value: S) -> u32 {
         let idx = self.variables.len() as u32;
         self.variables.push(value);
         self.real_variable_index.push(idx);
@@ -195,7 +219,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         if let Some(val) = self.constant_variable_indices.get(&variable) {
             *val
         } else {
-            let variable_index = self.add_variable(variable);
+            let variable_index = self.add_variable(S::from_public(variable));
             self.fix_witness(variable_index, variable);
             self.constant_variable_indices
                 .insert(variable, variable_index);
@@ -817,19 +841,19 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         // TODO(https://github.com/AztecProtocol/barretenberg/issues/911): These are pairing points extracted from a valid
         // proof. This is a workaround because we can't represent the point at infinity in biggroup yet.
         let mut agg_obj_indices = AggregationObjectIndices::default();
-        let x0 = field_from_hex_string::<P::BaseField>(
+        let x0 = Utils::field_from_hex_string::<P::BaseField>(
             "0x031e97a575e9d05a107acb64952ecab75c020998797da7842ab5d6d1986846cf",
         )
         .expect("x0 works");
-        let y0 = field_from_hex_string::<P::BaseField>(
+        let y0 = Utils::field_from_hex_string::<P::BaseField>(
             "0x178cbf4206471d722669117f9758a4c410db10a01750aebb5666547acf8bd5a4",
         )
         .expect("y0 works");
-        let x1 = field_from_hex_string::<P::BaseField>(
+        let x1 = Utils::field_from_hex_string::<P::BaseField>(
             "0x0f94656a2ca489889939f81e9c74027fd51009034b3357f0e91b8a11e7842c38",
         )
         .expect("x1 works");
-        let y1 = field_from_hex_string::<P::BaseField>(
+        let y1 = Utils::field_from_hex_string::<P::BaseField>(
             "0x1b52c2020d7464a0c80c0da527a08193fe27776f50224bd6fb128b46c1ddb67f",
         )
         .expect("y1 works");
@@ -855,7 +879,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
             ];
 
             for val in val_limbs {
-                let idx = self.add_variable(val);
+                let idx = self.add_variable(S::from_public(val));
                 agg_obj_indices[agg_obj_indices_idx] = idx;
                 agg_obj_indices_idx += 1;
             }
@@ -885,6 +909,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
     ) {
         let mut table = RomTable::new(init);
 
+        // TODO this is just implemented for the Plain backend
         for op in constraint.trace.iter() {
             assert_eq!(op.access_type, 0);
             let value = self.poly_to_field_ct(&op.value);
@@ -906,13 +931,13 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         }
     }
 
-    pub(crate) fn get_variable(&self, index: usize) -> P::ScalarField {
+    pub fn get_variable(&self, index: usize) -> S {
         assert!(self.variables.len() > index);
-        self.variables[self.real_variable_index[index] as usize]
+        self.variables[self.real_variable_index[index] as usize].to_owned()
     }
 
     pub(crate) fn assert_equal_constant(&mut self, a_idx: usize, b: P::ScalarField) {
-        assert_eq!(self.variables[a_idx], b);
+        assert_eq!(self.variables[a_idx], S::from_public(b));
         let b_idx = self.put_constant_variable(b);
         self.assert_equal(a_idx, b_idx as usize);
     }
@@ -1021,7 +1046,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
     fn create_rom_gate(&mut self, record: &mut RomRecord) {
         // Record wire value can't yet be computed
-        record.record_witness = self.add_variable(P::ScalarField::zero());
+        record.record_witness = self.add_variable(S::from_public(P::ScalarField::zero()));
         self.apply_aux_selectors(AuxSelectors::RomRead);
         self.blocks.aux.populate_wires(
             record.index_witness,
@@ -1037,7 +1062,10 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
     pub(crate) fn read_rom_array(&mut self, rom_id: usize, index_witness: u32) -> u32 {
         assert!(self.rom_arrays.len() > rom_id);
-        let val: BigUint = self.get_variable(index_witness as usize).into();
+        let val: BigUint = self
+            .get_variable(index_witness as usize)
+            .public_into_field()
+            .into();
         let index: usize = val.try_into().unwrap();
 
         assert!(self.rom_arrays[rom_id].state.len() > index);
@@ -1120,7 +1148,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         // self.num_gates += 1;
     }
 
-    pub(crate) fn add_gates_to_ensure_all_polys_are_non_zero(&mut self) {
+    pub fn add_gates_to_ensure_all_polys_are_non_zero(&mut self) {
         // q_m, q_1, q_2, q_3, q_4
         self.blocks.arithmetic.populate_wires(
             self.zero_idx,
@@ -1328,8 +1356,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         let left_witness_value = P::ScalarField::from(left_value as u64);
         let right_witness_value = P::ScalarField::from(right_value as u64);
 
-        let left_witness_index = self.add_variable(left_witness_value);
-        let right_witness_index = self.add_variable(right_witness_value);
+        let left_witness_index = self.add_variable(S::from_public(left_witness_value));
+        let right_witness_index = self.add_variable(S::from_public(right_witness_value));
         let dummy_accumulators = self.plookup.get_lookup_accumulators(
             MultiTableId::HonkDummyMulti,
             left_witness_value,
@@ -1502,7 +1530,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
     }
 
     pub fn get_circuit_subgroup_size(num_gates: usize) -> usize {
-        let mut log2_n = get_msb64(num_gates as u64);
+        let mut log2_n = Utils::get_msb64(num_gates as u64);
         if (1 << log2_n) != num_gates {
             log2_n += 1;
         }
@@ -1561,16 +1589,16 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
             let first_idx = if i == 0 {
                 key_a_index
             } else {
-                self.add_variable(read_values[ColumnIdx::C1][i])
+                self.add_variable(S::from_public(read_values[ColumnIdx::C1][i]))
             };
 
             #[allow(clippy::unnecessary_unwrap)]
             let second_idx = if i == 0 && (key_b_index.is_some()) {
                 key_b_index.unwrap()
             } else {
-                self.add_variable(read_values[ColumnIdx::C2][i])
+                self.add_variable(S::from_public(read_values[ColumnIdx::C2][i]))
             };
-            let third_idx = self.add_variable(read_values[ColumnIdx::C3][i]);
+            let third_idx = self.add_variable(S::from_public(read_values[ColumnIdx::C3][i]));
 
             read_data[ColumnIdx::C1].push(first_idx);
             read_data[ColumnIdx::C2].push(second_idx);
@@ -1627,7 +1655,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         read_data
     }
 
-    pub(crate) fn finalize_circuit(&mut self) {
+    pub fn finalize_circuit(&mut self) {
         // /**
         //  * First of all, add the gates related to ROM arrays and range lists.
         //  * Note that the total number of rows in an UltraPlonk program can be divided as following:
@@ -1738,7 +1766,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         );
     }
 
-    pub(crate) fn compute_dyadic_size(&self) -> usize {
+    pub fn compute_dyadic_size(&self) -> usize {
         // for the lookup argument the circuit size must be at least as large as the sum of all tables used
         let min_size_due_to_lookups = self.get_tables_size();
 
@@ -1753,5 +1781,25 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
         // Next power of 2 (dyadic circuit size)
         Self::get_circuit_subgroup_size(total_num_gates)
+    }
+
+    pub fn populate_public_inputs_block(&mut self) {
+        tracing::info!("Populating public inputs block");
+
+        // Update the public inputs block
+        for idx in self.public_inputs.iter() {
+            for (wire_idx, wire) in self.blocks.pub_inputs.wires.iter_mut().enumerate() {
+                if wire_idx < 2 {
+                    // first two wires get a copy of the public inputs
+                    wire.push(*idx);
+                } else {
+                    // the remaining wires get zeros
+                    wire.push(self.zero_idx);
+                }
+            }
+            for selector in self.blocks.pub_inputs.selectors.iter_mut() {
+                selector.push(P::ScalarField::zero());
+            }
+        }
     }
 }

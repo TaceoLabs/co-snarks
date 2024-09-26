@@ -2,21 +2,21 @@ use crate::{decider::polynomial::Polynomial, NUM_ALPHAS};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 
-pub struct ProverMemory<P: Pairing> {
-    pub w_4: Polynomial<P::ScalarField>,             // column 3
-    pub z_perm: Polynomial<P::ScalarField>,          // column 4
-    pub lookup_inverses: Polynomial<P::ScalarField>, // column 5
-    pub public_input_delta: P::ScalarField,
-    pub challenges: Challenges<P::ScalarField>,
+pub(crate) struct ProverMemory<P: Pairing> {
+    pub(crate) w_4: Polynomial<P::ScalarField>,    // column 3
+    pub(crate) z_perm: Polynomial<P::ScalarField>, // column 4
+    pub(crate) lookup_inverses: Polynomial<P::ScalarField>, // column 5
+    pub(crate) public_input_delta: P::ScalarField,
+    pub(crate) challenges: Challenges<P::ScalarField>,
 }
 
-pub struct Challenges<F: PrimeField> {
-    pub eta_1: F,
-    pub eta_2: F,
-    pub eta_3: F,
-    pub beta: F,
-    pub gamma: F,
-    pub alphas: [F; NUM_ALPHAS],
+pub(crate) struct Challenges<F: PrimeField> {
+    pub(crate) eta_1: F,
+    pub(crate) eta_2: F,
+    pub(crate) eta_3: F,
+    pub(crate) beta: F,
+    pub(crate) gamma: F,
+    pub(crate) alphas: [F; NUM_ALPHAS],
 }
 
 impl<F: PrimeField> Default for Challenges<F> {
