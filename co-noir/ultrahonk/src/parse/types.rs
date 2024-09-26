@@ -148,6 +148,10 @@ impl<T: Default> UltraTraceBlocks<T> {
             &self.poseidon_internal,
         ]
     }
+
+    pub fn get_pub_inputs(&self) -> &T {
+        &self.pub_inputs
+    }
 }
 
 pub const NUM_WIRES: usize = 4;

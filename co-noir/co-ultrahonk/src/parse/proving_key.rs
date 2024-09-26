@@ -1,6 +1,7 @@
 use super::CoUltraCircuitBuilder;
 use crate::parse::types::TraceData;
 use crate::types::Polynomials;
+use crate::types::ProverWitnessEntities;
 use crate::types::ProvingKey;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
@@ -9,11 +10,15 @@ use mpc_core::traits::PrimeFieldMpcProtocol;
 use std::marker::PhantomData;
 use ultrahonk::prelude::ProverCrs;
 use ultrahonk::prelude::ProvingKey as PlainProvingKey;
+use ultrahonk::prelude::UltraCircuitVariable;
 
 impl<T, P: Pairing> ProvingKey<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
+    const PUBLIC_INPUT_WIRE_INDEX: usize =
+        ProverWitnessEntities::<T::FieldShare, P::ScalarField>::W_R;
+
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
     pub fn create(driver: &T, mut circuit: CoUltraCircuitBuilder<T, P>, crs: ProverCrs<P>) -> Self {
         tracing::info!("ProvingKey create");
@@ -50,17 +55,17 @@ where
             dyadic_circuit_size,
         );
 
-        todo!("ProvingKey pubinput");
         // Construct the public inputs array
-        // let public_wires_src = proving_key.polynomials.witness.w_r();
-
-        // for input in public_wires_src
-        //     .iter()
-        //     .skip(proving_key.pub_inputs_offset as usize)
-        //     .take(proving_key.num_public_inputs as usize)
-        // {
-        //     proving_key.public_inputs.push(*input);
-        // }
+        let block = circuit.blocks.get_pub_inputs();
+        assert!(block.is_pub_inputs);
+        for var_idx in block.wires[Self::PUBLIC_INPUT_WIRE_INDEX]
+            .iter()
+            .take(proving_key.num_public_inputs as usize)
+            .cloned()
+        {
+            let var = circuit.get_variable(var_idx as usize);
+            proving_key.public_inputs.push(var.public_into_field());
+        }
 
         // TODO the following elements are not part of the proving key so far
         // Set the recursive proof indices

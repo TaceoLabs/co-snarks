@@ -57,7 +57,7 @@ pub(crate) struct ProverWitnessEntities<Shared, Public> {
 
 impl<Shared, Public> ProverWitnessEntities<Shared, Public> {
     const W_L: usize = 0; // column 0
-    const W_R: usize = 1; // column 1
+    pub(crate) const W_R: usize = 1; // column 1
     const W_O: usize = 2; // column 2
     const W_4: usize = 3; // column 3 (modified by prover)
 
