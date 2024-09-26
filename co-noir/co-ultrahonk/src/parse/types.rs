@@ -64,6 +64,7 @@ where
 
     pub(crate) fn construct_trace_data(
         &mut self,
+        driver: &T,
         builder: &mut CoUltraCircuitBuilder<T, P>,
         is_structured: bool,
     ) {
@@ -86,7 +87,8 @@ where
                     let real_var_idx = builder.real_variable_index[var_idx] as usize;
                     let trace_row_idx = block_row_idx + offset;
                     // Insert the real witness values from this block into the wire polys at the correct offset
-                    self.wires[wire_idx][trace_row_idx] = builder.get_variable(var_idx);
+                    self.wires[wire_idx][trace_row_idx] =
+                        builder.get_variable(var_idx).get_as_shared(driver);
                     // Add the address of the witness value to its corresponding copy cycle
                     self.copy_cycles[real_var_idx].push(CycleNode {
                         wire_index: wire_idx as u32,

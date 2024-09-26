@@ -15,7 +15,7 @@ where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
-    pub fn create(mut circuit: CoUltraCircuitBuilder<T, P>, crs: ProverCrs<P>) -> Self {
+    pub fn create(driver: &T, mut circuit: CoUltraCircuitBuilder<T, P>, crs: ProverCrs<P>) -> Self {
         tracing::info!("ProvingKey create");
         circuit.add_gates_to_ensure_all_polys_are_non_zero();
         circuit.finalize_circuit();
@@ -23,7 +23,7 @@ where
         let dyadic_circuit_size = circuit.compute_dyadic_size();
         let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);
         // Construct and add to proving key the wire, selector and copy constraint polynomials
-        proving_key.populate_trace(&mut circuit, false);
+        proving_key.populate_trace(driver, &mut circuit, false);
 
         // First and last lagrange polynomials (in the full circuit size)
         proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
@@ -95,11 +95,16 @@ where
         }
     }
 
-    fn populate_trace(&mut self, builder: &mut CoUltraCircuitBuilder<T, P>, is_strucutred: bool) {
+    fn populate_trace(
+        &mut self,
+        driver: &T,
+        builder: &mut CoUltraCircuitBuilder<T, P>,
+        is_strucutred: bool,
+    ) {
         tracing::info!("Populating trace");
 
         let mut trace_data = TraceData::new(builder, self);
-        trace_data.construct_trace_data(builder, is_strucutred);
+        trace_data.construct_trace_data(driver, builder, is_strucutred);
 
         let ram_rom_offset = trace_data.ram_rom_offset;
         let copy_cycles = trace_data.copy_cycles;

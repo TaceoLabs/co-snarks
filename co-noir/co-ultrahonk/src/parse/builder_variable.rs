@@ -12,6 +12,19 @@ where
     Shared(T::FieldShare),
 }
 
+impl<T, P> SharedBuilderVariable<T, P>
+where
+    P: Pairing,
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub fn get_as_shared(&self, driver: &T) -> T::FieldShare {
+        match self {
+            SharedBuilderVariable::Public(value) => driver.promote_to_trivial_share(*value),
+            SharedBuilderVariable::Shared(value) => value.to_owned(),
+        }
+    }
+}
+
 impl<T, P> Clone for SharedBuilderVariable<T, P>
 where
     P: Pairing,
