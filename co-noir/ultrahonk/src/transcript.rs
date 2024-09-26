@@ -265,7 +265,7 @@ where
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
-struct RoundData {
+pub(crate) struct RoundData {
     challenge_label: Vec<String>,
     entries: Vec<(String, usize)>,
 }
@@ -282,7 +282,7 @@ impl RoundData {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct TranscriptManifest {
+pub(crate) struct TranscriptManifest {
     manifest: BTreeMap<usize, RoundData>,
 }
 

@@ -1,5 +1,5 @@
 pub(crate) mod decider;
-pub mod honk_curve;
+pub(crate) mod honk_curve;
 pub(crate) mod oink;
 pub mod parse;
 pub(crate) mod poseidon2;

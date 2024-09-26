@@ -3,7 +3,7 @@ pub(crate) mod builder;
 pub(crate) mod crs;
 pub(crate) mod plookup;
 pub(crate) mod proving_key;
-pub mod types;
+pub(crate) mod types;
 
 use acir::{circuit::Circuit, native_types::WitnessStack, FieldElement};
 use acir_format::AcirFormat;
@@ -14,7 +14,7 @@ use num_bigint::BigUint;
 use num_traits::Num;
 use std::io;
 
-pub fn field_from_hex_string<F: PrimeField>(str: &str) -> Result<F, Error> {
+pub(crate) fn field_from_hex_string<F: PrimeField>(str: &str) -> Result<F, Error> {
     let tmp = match str.strip_prefix("0x") {
         Some(t) => BigUint::from_str_radix(t, 16),
         None => BigUint::from_str_radix(str, 16),

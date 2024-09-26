@@ -17,14 +17,31 @@ use crate::{
     },
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{One, Zero};
+use ark_ff::{One, PrimeField, Zero};
 use num_bigint::BigUint;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
-pub struct UltraCircuitBuilder<P: Pairing> {
-    pub(crate) variables: Vec<P::ScalarField>,
+pub trait UltraCircuitVariable<F>: Copy + From<F> + PartialEq + Eq + Debug {
+    fn is_public(&self) -> bool;
+    fn public_into_field(self) -> F;
+}
+
+impl<F: PrimeField> UltraCircuitVariable<F> for F {
+    fn is_public(&self) -> bool {
+        true
+    }
+
+    fn public_into_field(self) -> F {
+        self
+    }
+}
+
+pub type UltraCircuitBuilder<P> = GenericUltraCircuitBuilder<P, <P as Pairing>::ScalarField>;
+
+pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> {
+    pub(crate) variables: Vec<S>,
     variable_names: HashMap<u32, String>,
     next_var_index: Vec<u32>,
     prev_var_index: Vec<u32>,
@@ -54,21 +71,21 @@ pub struct UltraCircuitBuilder<P: Pairing> {
     pub(crate) memory_write_records: Vec<u32>,
 }
 
-impl<P: Pairing> UltraCircuitBuilder<P> {
-    pub const DUMMY_TAG: u32 = 0;
-    pub const REAL_VARIABLE: u32 = u32::MAX - 1;
-    pub const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
-    pub const UNINITIALIZED_MEMORY_RECORD: u32 = u32::MAX;
-    pub const NUMBER_OF_GATES_PER_RAM_ACCESS: usize = 2;
-    pub const NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY: usize = 1;
-    pub const NUM_RESERVED_GATES: usize = 4;
+impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBuilder<P, S> {
+    pub(crate) const DUMMY_TAG: u32 = 0;
+    pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
+    pub(crate) const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
+    pub(crate) const UNINITIALIZED_MEMORY_RECORD: u32 = u32::MAX;
+    pub(crate) const NUMBER_OF_GATES_PER_RAM_ACCESS: usize = 2;
+    pub(crate) const NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY: usize = 1;
+    pub(crate) const NUM_RESERVED_GATES: usize = 4;
     // number of gates created per non-native field operation in process_non_native_field_multiplications
-    pub const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
+    pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
 
     pub fn create_circuit(
         constraint_system: AcirFormat<P::ScalarField>,
         size_hint: usize,
-        witness: Vec<P::ScalarField>,
+        witness: Vec<S>,
         honk_recursion: bool,           // true for ultrahonk
         collect_gates_per_opcode: bool, // false for ultrahonk
     ) -> Self {
@@ -148,7 +165,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
      */
     fn init(
         size_hint: usize,
-        witness_values: Vec<P::ScalarField>,
+        witness_values: Vec<S>,
         public_inputs: Vec<u32>,
         varnum: usize,
         recursive: bool,
@@ -165,7 +182,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
         // be "set" later on via the assert_equal mechanism.
         for _ in len..varnum {
-            builder.add_variable(P::ScalarField::zero());
+            builder.add_variable(S::from(P::ScalarField::zero()));
         }
 
         // Add the public_inputs from acir
@@ -180,7 +197,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         builder
     }
 
-    pub(crate) fn add_variable(&mut self, value: P::ScalarField) -> u32 {
+    pub(crate) fn add_variable(&mut self, value: S) -> u32 {
         let idx = self.variables.len() as u32;
         self.variables.push(value);
         self.real_variable_index.push(idx);
@@ -194,7 +211,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         if let Some(val) = self.constant_variable_indices.get(&variable) {
             *val
         } else {
-            let variable_index = self.add_variable(variable);
+            let variable_index = self.add_variable(S::from(variable));
             self.fix_witness(variable_index, variable);
             self.constant_variable_indices
                 .insert(variable, variable_index);
@@ -854,7 +871,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
             ];
 
             for val in val_limbs {
-                let idx = self.add_variable(val);
+                let idx = self.add_variable(S::from(val));
                 agg_obj_indices[agg_obj_indices_idx] = idx;
                 agg_obj_indices_idx += 1;
             }
@@ -884,6 +901,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
     ) {
         let mut table = RomTable::new(init);
 
+        // TODO this is just implemented for the Plain backend
         for op in constraint.trace.iter() {
             assert_eq!(op.access_type, 0);
             let value = self.poly_to_field_ct(&op.value);
@@ -905,13 +923,13 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         }
     }
 
-    pub(crate) fn get_variable(&self, index: usize) -> P::ScalarField {
+    pub(crate) fn get_variable(&self, index: usize) -> S {
         assert!(self.variables.len() > index);
         self.variables[self.real_variable_index[index] as usize]
     }
 
     pub(crate) fn assert_equal_constant(&mut self, a_idx: usize, b: P::ScalarField) {
-        assert_eq!(self.variables[a_idx], b);
+        assert_eq!(self.variables[a_idx], S::from(b));
         let b_idx = self.put_constant_variable(b);
         self.assert_equal(a_idx, b_idx as usize);
     }
@@ -1020,7 +1038,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
     fn create_rom_gate(&mut self, record: &mut RomRecord) {
         // Record wire value can't yet be computed
-        record.record_witness = self.add_variable(P::ScalarField::zero());
+        record.record_witness = self.add_variable(S::from(P::ScalarField::zero()));
         self.apply_aux_selectors(AuxSelectors::RomRead);
         self.blocks.aux.populate_wires(
             record.index_witness,
@@ -1036,7 +1054,10 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
     pub(crate) fn read_rom_array(&mut self, rom_id: usize, index_witness: u32) -> u32 {
         assert!(self.rom_arrays.len() > rom_id);
-        let val: BigUint = self.get_variable(index_witness as usize).into();
+        let val: BigUint = self
+            .get_variable(index_witness as usize)
+            .public_into_field()
+            .into();
         let index: usize = val.try_into().unwrap();
 
         assert!(self.rom_arrays[rom_id].state.len() > index);
@@ -1327,8 +1348,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         let left_witness_value = P::ScalarField::from(left_value as u64);
         let right_witness_value = P::ScalarField::from(right_value as u64);
 
-        let left_witness_index = self.add_variable(left_witness_value);
-        let right_witness_index = self.add_variable(right_witness_value);
+        let left_witness_index = self.add_variable(S::from(left_witness_value));
+        let right_witness_index = self.add_variable(S::from(right_witness_value));
         let dummy_accumulators = self.plookup.get_lookup_accumulators(
             MultiTableId::HonkDummyMulti,
             left_witness_value,
@@ -1560,16 +1581,16 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
             let first_idx = if i == 0 {
                 key_a_index
             } else {
-                self.add_variable(read_values[ColumnIdx::C1][i])
+                self.add_variable(S::from(read_values[ColumnIdx::C1][i]))
             };
 
             #[allow(clippy::unnecessary_unwrap)]
             let second_idx = if i == 0 && (key_b_index.is_some()) {
                 key_b_index.unwrap()
             } else {
-                self.add_variable(read_values[ColumnIdx::C2][i])
+                self.add_variable(S::from(read_values[ColumnIdx::C2][i]))
             };
-            let third_idx = self.add_variable(read_values[ColumnIdx::C3][i]);
+            let third_idx = self.add_variable(S::from(read_values[ColumnIdx::C3][i]));
 
             read_data[ColumnIdx::C1].push(first_idx);
             read_data[ColumnIdx::C2].push(second_idx);

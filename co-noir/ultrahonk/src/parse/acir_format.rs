@@ -17,16 +17,16 @@ use std::collections::{HashMap, HashSet};
 #[derive(Default)]
 pub struct AcirFormat<F: PrimeField> {
     // The number of witnesses in the circuit
-    pub varnum: u32,
+    pub(crate) varnum: u32,
     // Specifies whether a prover that produces SNARK recursion friendly proofs should be used.
     // The proof produced when this flag is true should be friendly for recursive verification inside
     // of another SNARK. For example, a recursive friendly proof may use Blake3Pedersen for
     // hashing in its transcript, while we still want a prove that uses Keccak for its transcript in order
     // to be able to verify SNARKs on Ethereum.
-    pub recursive: bool,
-    pub num_acir_opcodes: u32,
+    pub(crate) recursive: bool,
+    pub(crate) num_acir_opcodes: u32,
     //  using PolyTripleConstraint = bb::poly_triple_<bb::curve::BN254::ScalarField>;
-    pub public_inputs: Vec<u32>,
+    pub(crate) public_inputs: Vec<u32>,
     //  std::vector<LogicConstraint> logic_constraints;
     //  std::vector<RangeConstraint> range_constraints;
     //  std::vector<AES128Constraint> aes128_constraints;
@@ -44,30 +44,30 @@ pub struct AcirFormat<F: PrimeField> {
     //  std::vector<Poseidon2Constraint> poseidon2_constraints;
     //  std::vector<MultiScalarMul> multi_scalar_mul_constraints;
     //  std::vector<EcAdd> ec_add_constraints;
-    pub recursion_constraints: Vec<RecursionConstraint>,
-    pub honk_recursion_constraints: Vec<RecursionConstraint>,
+    pub(crate) recursion_constraints: Vec<RecursionConstraint>,
+    pub(crate) honk_recursion_constraints: Vec<RecursionConstraint>,
     //  std::vector<RecursionConstraint> ivc_recursion_constraints;
     //  std::vector<BigIntFromLeBytes> bigint_from_le_bytes_constraints;
     //  std::vector<BigIntToLeBytes> bigint_to_le_bytes_constraints;
     //  std::vector<BigIntOperation> bigint_operations;
-    pub assert_equalities: Vec<PolyTriple<F>>,
+    pub(crate) assert_equalities: Vec<PolyTriple<F>>,
 
     // A standard plonk arithmetic constraint, as defined in the poly_triple struct, consists of selector values
     // for q_M,q_L,q_R,q_O,q_C and indices of three variables taking the role of left, right and output wire
     // This could be a large vector, we don't expect the blackbox implementations to be so large.
-    pub poly_triple_constraints: Vec<PolyTriple<F>>,
-    pub quad_constraints: Vec<MulQuad<F>>,
-    pub block_constraints: Vec<BlockConstraint<F>>,
+    pub(crate) poly_triple_constraints: Vec<PolyTriple<F>>,
+    pub(crate) quad_constraints: Vec<MulQuad<F>>,
+    pub(crate) block_constraints: Vec<BlockConstraint<F>>,
 
     // Number of gates added to the circuit per original opcode.
     // Has length equal to num_acir_opcodes.
-    pub gates_per_opcode: Vec<usize>,
+    pub(crate) gates_per_opcode: Vec<usize>,
 
     // Set of constrained witnesses
     pub(crate) constrained_witness: HashSet<u32>,
 
     // Indices of the original opcode that originated each constraint in AcirFormat.
-    pub original_opcode_indices: AcirFormatOriginalOpcodeIndices,
+    pub(crate) original_opcode_indices: AcirFormatOriginalOpcodeIndices,
 }
 
 impl<F: PrimeField> AcirFormat<F> {

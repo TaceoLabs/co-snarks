@@ -1,4 +1,4 @@
-use super::builder::UltraCircuitBuilder;
+use super::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable};
 use super::plookup::{BasicTableId, MultiTableId};
 use crate::batch_invert;
 use crate::decider::polynomial::Polynomial;
@@ -14,7 +14,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Index, IndexMut};
 
 #[derive(Default, PartialEq, Eq)]
-pub struct PolyTriple<F: PrimeField> {
+pub(crate) struct PolyTriple<F: PrimeField> {
     pub(crate) a: u32,
     pub(crate) b: u32,
     pub(crate) c: u32,
@@ -50,7 +50,7 @@ pub(crate) struct AddQuad<F: PrimeField> {
 }
 
 #[derive(Default, PartialEq, Eq)]
-pub struct MulQuad<F: PrimeField> {
+pub(crate) struct MulQuad<F: PrimeField> {
     pub(crate) a: u32,
     pub(crate) b: u32,
     pub(crate) c: u32,
@@ -85,7 +85,7 @@ impl Default for BlockType {
 }
 
 #[derive(Default)]
-pub struct BlockConstraint<F: PrimeField> {
+pub(crate) struct BlockConstraint<F: PrimeField> {
     pub(crate) init: Vec<PolyTriple<F>>,
     pub(crate) trace: Vec<MemOp<F>>,
     pub(crate) type_: BlockType,
@@ -93,7 +93,7 @@ pub struct BlockConstraint<F: PrimeField> {
 }
 
 #[derive(Default)]
-pub struct AcirFormatOriginalOpcodeIndices {
+pub(crate) struct AcirFormatOriginalOpcodeIndices {
     // pub(crate)logic_constraints: Vec<usize>,
     // pub(crate)range_constraints: Vec<usize>,
     // pub(crate)aes128_constraints: Vec<usize>,
@@ -118,10 +118,10 @@ pub struct AcirFormatOriginalOpcodeIndices {
     // pub(crate)bigint_to_le_bytes_constraints: Vec<usize>,
     // pub(crate)bigint_operations: Vec<usize>,
     pub(crate) assert_equalities: Vec<usize>,
-    pub poly_triple_constraints: Vec<usize>,
-    pub quad_constraints: Vec<usize>,
+    pub(crate) poly_triple_constraints: Vec<usize>,
+    pub(crate) quad_constraints: Vec<usize>,
     // Multiple opcode indices per block:
-    pub block_constraints: Vec<Vec<usize>>,
+    pub(crate) block_constraints: Vec<Vec<usize>>,
 }
 
 pub(crate) struct UltraTraceBlocks<T: Default> {
@@ -315,7 +315,10 @@ impl GateCounter {
         }
     }
 
-    pub(crate) fn compute_diff<P: Pairing>(&mut self, builder: &UltraCircuitBuilder<P>) -> usize {
+    pub(crate) fn compute_diff<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+        &mut self,
+        builder: &GenericUltraCircuitBuilder<P, S>,
+    ) -> usize {
         if !self.collect_gates_per_opcode {
             return 0;
         }
@@ -325,9 +328,9 @@ impl GateCounter {
         diff
     }
 
-    pub(crate) fn track_diff<P: Pairing>(
+    pub(crate) fn track_diff<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
         &mut self,
-        builder: &UltraCircuitBuilder<P>,
+        builder: &GenericUltraCircuitBuilder<P, S>,
         gates_per_opcode: &mut [usize],
         opcode_index: usize,
     ) {
@@ -337,7 +340,7 @@ impl GateCounter {
     }
 }
 
-pub struct RecursionConstraint {
+pub(crate) struct RecursionConstraint {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
     key: Vec<u32>,
@@ -382,10 +385,10 @@ impl<F: PrimeField> RomTable<F> {
         }
     }
 
-    pub(crate) fn index_field_ct<P: Pairing>(
+    pub(crate) fn index_field_ct<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
         &mut self,
         index: &FieldCT<F>,
-        builder: &mut UltraCircuitBuilder<P>,
+        builder: &mut GenericUltraCircuitBuilder<P, S>,
     ) -> FieldCT<F>
     where
         F: From<P::ScalarField>,
@@ -406,8 +409,10 @@ impl<F: PrimeField> RomTable<F> {
         FieldCT::from_witness_index(output_idx)
     }
 
-    fn initialize_table<P: Pairing>(&mut self, builder: &mut UltraCircuitBuilder<P>)
-    where
+    fn initialize_table<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, S>,
+    ) where
         F: From<P::ScalarField>,
         P::ScalarField: From<F>,
     {
@@ -503,9 +508,10 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub(crate) fn from_witness<P: Pairing>(
+    // TODO this is just implemented for the plain backend
+    pub(crate) fn from_witness<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
         input: P::ScalarField,
-        builder: &mut UltraCircuitBuilder<P>,
+        builder: &mut GenericUltraCircuitBuilder<P, S>,
     ) -> Self
     where
         F: From<P::ScalarField>,
@@ -522,14 +528,18 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub(crate) fn get_value<P: Pairing>(&self, builder: &UltraCircuitBuilder<P>) -> F
+    pub(crate) fn get_value<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+        &self,
+        builder: &GenericUltraCircuitBuilder<P, S>,
+    ) -> F
     where
         F: From<P::ScalarField>,
     {
         if self.witness_index != Self::IS_CONSTANT {
-            self.multiplicative_constant
-                * F::from(builder.get_variable(self.witness_index as usize))
-                + self.additive_constant
+            let variable = builder
+                .get_variable(self.witness_index as usize)
+                .public_into_field(); // TODO this is just implemented for the Plain backend
+            self.multiplicative_constant * F::from(variable) + self.additive_constant
         } else {
             self.additive_constant.to_owned()
         }
@@ -546,10 +556,10 @@ impl<F: PrimeField> FieldCT<F> {
      * succeeds or fails. This can lead to confusion when debugging. If you want to log the inputs, do so before
      * calling this method.
      */
-    pub(crate) fn assert_equal<P: Pairing>(
+    pub(crate) fn assert_equal<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
         &self,
         other: &Self,
-        builder: &mut UltraCircuitBuilder<P>,
+        builder: &mut GenericUltraCircuitBuilder<P, S>,
     ) where
         F: From<P::ScalarField>,
         P::ScalarField: From<F>,
@@ -576,7 +586,10 @@ impl<F: PrimeField> FieldCT<F> {
         self.witness_index == Self::IS_CONSTANT
     }
 
-    fn normalize<P: Pairing>(&self, builder: &mut UltraCircuitBuilder<P>) -> Self
+    fn normalize<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, S>,
+    ) -> Self
     where
         F: From<P::ScalarField>,
         P::ScalarField: From<F>,
@@ -592,10 +605,14 @@ impl<F: PrimeField> FieldCT<F> {
         // We need a new gate to enforce that the `result` was correctly calculated from `this`.
 
         let mut result = FieldCT::default();
-        let value = F::from(builder.get_variable(self.witness_index as usize));
+        let value = F::from(
+            builder
+                .get_variable(self.witness_index as usize)
+                .public_into_field(),
+        ); // TODO this is just implemented for the Plain backend
         let out = self.multiplicative_constant * value + self.additive_constant;
 
-        result.witness_index = builder.add_variable(P::ScalarField::from(out));
+        result.witness_index = builder.add_variable(S::from(P::ScalarField::from(out)));
         result.additive_constant = F::zero();
         result.multiplicative_constant = F::one();
 
@@ -633,6 +650,7 @@ impl<F: PrimeField> Default for FieldCT<F> {
     }
 }
 
+// TODO this is just implemented for the Plain backend
 pub(crate) struct WitnessCT<F: PrimeField> {
     pub(crate) witness: F,
     pub(crate) witness_index: u32,
@@ -641,14 +659,14 @@ pub(crate) struct WitnessCT<F: PrimeField> {
 impl<F: PrimeField> WitnessCT<F> {
     const IS_CONSTANT: u32 = FieldCT::<F>::IS_CONSTANT;
 
-    pub(crate) fn from_field<P: Pairing>(
+    pub(crate) fn from_field<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
         value: P::ScalarField,
-        builder: &mut UltraCircuitBuilder<P>,
+        builder: &mut GenericUltraCircuitBuilder<P, S>,
     ) -> Self
     where
         F: From<P::ScalarField>,
     {
-        builder.add_variable(value);
+        builder.add_variable(S::from(value));
         Self {
             witness: F::from(value),
             witness_index: Self::IS_CONSTANT,
@@ -667,7 +685,7 @@ pub(crate) struct RomRecord {
 }
 
 #[derive(Default)]
-pub struct RomTranscript {
+pub(crate) struct RomTranscript {
     // Contains the value of each index of the array
     pub(crate) state: Vec<[u32; 2]>,
 
@@ -708,7 +726,7 @@ impl Default for RamRecord {
 }
 
 #[derive(Default)]
-pub struct RamTranscript {
+pub(crate) struct RamTranscript {
     // Contains the value of each index of the array
     pub(crate) state: Vec<u32>,
 
@@ -995,7 +1013,7 @@ pub(crate) enum ColumnIdx {
     C3,
 }
 
-pub struct RangeList {
+pub(crate) struct RangeList {
     pub(crate) target_range: u64,
     pub(crate) range_tag: u32,
     pub(crate) tau_tag: u32,
