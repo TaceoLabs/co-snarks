@@ -1,11 +1,11 @@
-use std::marker::PhantomData;
-
 use super::CoUltraCircuitBuilder;
 use crate::types::ProvingKey;
 use ark_ec::pairing::Pairing;
 use eyre::Result;
 use mpc_core::traits::PrimeFieldMpcProtocol;
-use ultrahonk::{CrsParser, ProverCrs, Utils};
+use std::marker::PhantomData;
+use ultrahonk::ProverCrs;
+use ultrahonk::ProvingKey as PlainProvingKey;
 
 impl<T, P: Pairing> ProvingKey<T, P>
 where
@@ -55,18 +55,7 @@ where
         circuit: &CoUltraCircuitBuilder<T, P>,
         path_g1: &str,
     ) -> Result<ProverCrs<P>> {
-        tracing::info!("Getting prover crs");
-        const EXTRA_SRS_POINTS_FOR_ECCVM_IPA: usize = 1;
-
-        let num_extra_gates =
-            CoUltraCircuitBuilder::<T, P>::get_num_gates_added_to_ensure_nonzero_polynomials();
-        let total_circuit_size = circuit.get_total_circuit_size();
-        let srs_size = CoUltraCircuitBuilder::<T, P>::get_circuit_subgroup_size(
-            total_circuit_size + num_extra_gates,
-        );
-
-        let srs_size = Utils::round_up_power_2(srs_size) + EXTRA_SRS_POINTS_FOR_ECCVM_IPA;
-        CrsParser::<P>::get_crs_g1(path_g1, srs_size)
+        PlainProvingKey::get_prover_crs(circuit, path_g1)
     }
 
     fn new(circuit_size: usize, num_public_inputs: usize, crs: ProverCrs<P>) -> Self {

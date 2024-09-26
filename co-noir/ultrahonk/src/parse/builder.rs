@@ -1779,4 +1779,24 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         // Next power of 2 (dyadic circuit size)
         Self::get_circuit_subgroup_size(total_num_gates)
     }
+
+    pub fn populate_public_inputs_block(&mut self) {
+        tracing::info!("Populating public inputs block");
+
+        // Update the public inputs block
+        for idx in self.public_inputs.iter() {
+            for (wire_idx, wire) in self.blocks.pub_inputs.wires.iter_mut().enumerate() {
+                if wire_idx < 2 {
+                    // first two wires get a copy of the public inputs
+                    wire.push(*idx);
+                } else {
+                    // the remaining wires get zeros
+                    wire.push(self.zero_idx);
+                }
+            }
+            for selector in self.blocks.pub_inputs.selectors.iter_mut() {
+                selector.push(P::ScalarField::zero());
+            }
+        }
+    }
 }

@@ -5,12 +5,12 @@ use super::{
 };
 use crate::{
     decider::polynomial::Polynomial,
-    parse::types::{CycleNode, TraceData, NUM_WIRES},
-    types::{Polynomials, ProverCrs, ProvingKey},
-    Utils,
+    parse::types::{TraceData, NUM_WIRES},
+    types::{Polynomials, PrecomputedEntities, ProverCrs, ProverWitnessEntities, ProvingKey},
+    GenericUltraCircuitBuilder, UltraCircuitVariable, Utils,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{One, Zero};
+use ark_ff::One;
 use eyre::Result;
 
 impl<P: Pairing> ProvingKey<P> {
@@ -30,8 +30,20 @@ impl<P: Pairing> ProvingKey<P> {
         proving_key.polynomials.precomputed.lagrange_last_mut()[dyadic_circuit_size - 1] =
             P::ScalarField::one();
 
-        proving_key.construct_lookup_table_polynomials(&circuit, dyadic_circuit_size, 0);
-        proving_key.construct_lookup_read_counts(&mut circuit, dyadic_circuit_size);
+        Self::construct_lookup_table_polynomials(
+            proving_key
+                .polynomials
+                .precomputed
+                .get_table_polynomials_mut(),
+            &circuit,
+            dyadic_circuit_size,
+            0,
+        );
+        Self::construct_lookup_read_counts(
+            &mut proving_key.polynomials.witness,
+            &mut circuit,
+            dyadic_circuit_size,
+        );
 
         // Construct the public inputs array
         let public_wires_src = proving_key.polynomials.witness.w_r();
@@ -53,7 +65,10 @@ impl<P: Pairing> ProvingKey<P> {
         proving_key
     }
 
-    pub fn get_prover_crs(circuit: &UltraCircuitBuilder<P>, path_g1: &str) -> Result<ProverCrs<P>> {
+    pub fn get_prover_crs<S: UltraCircuitVariable<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, S>,
+        path_g1: &str,
+    ) -> Result<ProverCrs<P>> {
         tracing::info!("Getting prover crs");
         const EXTRA_SRS_POINTS_FOR_ECCVM_IPA: usize = 1;
 
@@ -87,7 +102,8 @@ impl<P: Pairing> ProvingKey<P> {
     fn populate_trace(&mut self, builder: &mut UltraCircuitBuilder<P>, is_strucutred: bool) {
         tracing::info!("Populating trace");
 
-        let trace_data = self.construct_trace_data(builder, is_strucutred);
+        let mut trace_data = TraceData::new(builder, self);
+        trace_data.construct_trace_data(builder, is_strucutred);
 
         let ram_rom_offset = trace_data.ram_rom_offset;
         let copy_cycles = trace_data.copy_cycles;
@@ -101,95 +117,13 @@ impl<P: Pairing> ProvingKey<P> {
         );
 
         // Compute the permutation argument polynomials (sigma/id) and add them to proving key
-        self.compute_permutation_argument_polynomials(builder, copy_cycles);
-    }
-
-    fn construct_trace_data(
-        &mut self,
-        builder: &mut UltraCircuitBuilder<P>,
-        is_structured: bool,
-    ) -> TraceData<P> {
-        tracing::info!("Construct trace data");
-        let mut trace_data = TraceData::new(builder, self);
-
-        // Complete the public inputs execution trace block from builder.public_inputs
-        Self::populate_public_inputs_block(builder);
-
-        let mut offset = 1; // Offset at which to place each block in the trace polynomials
-                            // For each block in the trace, populate wire polys, copy cycles and selector polys
-
-        for block in builder.blocks.get() {
-            let block_size = block.len();
-
-            // Update wire polynomials and copy cycles
-            // NB: The order of row/column loops is arbitrary but needs to be row/column to match old copy_cycle code
-
-            for block_row_idx in 0..block_size {
-                for wire_idx in 0..NUM_WIRES {
-                    let var_idx = block.wires[wire_idx][block_row_idx] as usize; // an index into the variables array
-                    let real_var_idx = builder.real_variable_index[var_idx] as usize;
-                    let trace_row_idx = block_row_idx + offset;
-                    // Insert the real witness values from this block into the wire polys at the correct offset
-                    trace_data.wires[wire_idx][trace_row_idx] = builder.get_variable(var_idx);
-                    // Add the address of the witness value to its corresponding copy cycle
-                    trace_data.copy_cycles[real_var_idx].push(CycleNode {
-                        wire_index: wire_idx as u32,
-                        gate_index: trace_row_idx as u32,
-                    });
-                }
-            }
-
-            // Insert the selector values for this block into the selector polynomials at the correct offset
-            // TODO(https://github.com/AztecProtocol/barretenberg/issues/398): implicit arithmetization/flavor consistency
-            for (selector_poly, selector) in
-                trace_data.selectors.iter_mut().zip(block.selectors.iter())
-            {
-                debug_assert_eq!(selector.len(), block_size);
-
-                for (src, des) in selector.iter().zip(selector_poly.iter_mut().skip(offset)) {
-                    *des = *src;
-                }
-            }
-
-            // Store the offset of the block containing RAM/ROM read/write gates for use in updating memory records
-            if block.has_ram_rom {
-                trace_data.ram_rom_offset = offset as u32;
-            }
-            // Store offset of public inputs block for use in the pub(crate)input mechanism of the permutation argument
-            if block.is_pub_inputs {
-                trace_data.pub_inputs_offset = offset as u32;
-            }
-
-            // If the trace is structured, we populate the data from the next block at a fixed block size offset
-            if is_structured {
-                offset += block.get_fixed_size() as usize;
-            } else {
-                // otherwise, the next block starts immediately following the previous one
-                offset += block_size;
-            }
-        }
-
-        trace_data
-    }
-
-    fn populate_public_inputs_block(builder: &mut UltraCircuitBuilder<P>) {
-        tracing::info!("Populating public inputs block");
-
-        // Update the public inputs block
-        for idx in builder.public_inputs.iter() {
-            for (wire_idx, wire) in builder.blocks.pub_inputs.wires.iter_mut().enumerate() {
-                if wire_idx < 2 {
-                    // first two wires get a copy of the public inputs
-                    wire.push(*idx);
-                } else {
-                    // the remaining wires get zeros
-                    wire.push(builder.zero_idx);
-                }
-            }
-            for selector in builder.blocks.pub_inputs.selectors.iter_mut() {
-                selector.push(P::ScalarField::zero());
-            }
-        }
+        Self::compute_permutation_argument_polynomials(
+            &mut self.polynomials.precomputed,
+            builder,
+            copy_cycles,
+            self.circuit_size as usize,
+            self.pub_inputs_offset as usize,
+        );
     }
 
     fn add_memory_records_to_proving_key(
@@ -213,35 +147,41 @@ impl<P: Pairing> ProvingKey<P> {
     }
 
     fn compute_permutation_argument_polynomials(
-        &mut self,
+        polys: &mut PrecomputedEntities<Polynomial<P::ScalarField>>,
         circuit: &UltraCircuitBuilder<P>,
         copy_cycles: Vec<CyclicPermutation>,
+        circuit_size: usize,
+        pub_inputs_offset: usize,
     ) {
         tracing::info!("Computing permutation argument polynomials");
-        let mapping = self.compute_permutation_mapping(circuit, copy_cycles);
+        let mapping = Self::compute_permutation_mapping(
+            circuit_size,
+            pub_inputs_offset,
+            circuit,
+            copy_cycles,
+        );
 
         // Compute Honk-style sigma and ID polynomials from the corresponding mappings
-        let circuit_size = self.circuit_size as usize;
-
         Self::compute_honk_style_permutation_lagrange_polynomials_from_mapping(
-            self.polynomials.precomputed.get_sigmas_mut(),
+            polys.get_sigmas_mut(),
             mapping.sigmas,
             circuit_size,
         );
         Self::compute_honk_style_permutation_lagrange_polynomials_from_mapping(
-            self.polynomials.precomputed.get_ids_mut(),
+            polys.get_ids_mut(),
             mapping.ids,
             circuit_size,
         );
     }
 
     fn compute_permutation_mapping(
-        &self,
+        circuit_size: usize,
+        pub_inputs_offset: usize,
         circuit_constructor: &UltraCircuitBuilder<P>,
         wire_copy_cycles: Vec<CyclicPermutation>,
     ) -> PermutationMapping {
         // Initialize the table of permutations so that every element points to itself
-        let mut mapping = PermutationMapping::new(self.circuit_size as usize);
+        let mut mapping = PermutationMapping::new(circuit_size);
 
         // Represents the index of a variable in circuit_constructor.variables (needed only for generalized)
         let real_variable_tags = &circuit_constructor.real_variable_tags;
@@ -289,10 +229,9 @@ impl<P: Pairing> ProvingKey<P> {
         // Add information about public inputs so that the cycles can be altered later; See the construction of the
         // permutation polynomials for details.
         let num_public_inputs = circuit_constructor.public_inputs.len();
-        let public_inputs_offset = self.pub_inputs_offset as usize;
 
         for i in 0..num_public_inputs {
-            let idx = i + public_inputs_offset;
+            let idx = i + pub_inputs_offset;
             mapping.sigmas[0][idx].row_index = idx as u32;
             mapping.sigmas[0][idx].column_index = 0;
             mapping.sigmas[0][idx].is_public_input = true;
@@ -354,13 +293,11 @@ impl<P: Pairing> ProvingKey<P> {
     }
 
     fn construct_lookup_table_polynomials(
-        &mut self,
+        table_polynomials: &mut [Polynomial<P::ScalarField>],
         circuit: &UltraCircuitBuilder<P>,
         dyadic_circuit_size: usize,
         additional_offset: usize,
     ) {
-        let table_polynomials = self.polynomials.precomputed.get_table_polynomials_mut();
-
         // Create lookup selector polynomials which interpolate each table column.
         // Our selector polys always need to interpolate the full subgroup size, so here we offset so as to
         // put the table column's values at the end. (The first gates are for non-lookup constraints).
@@ -386,7 +323,7 @@ impl<P: Pairing> ProvingKey<P> {
     }
 
     fn construct_lookup_read_counts(
-        &mut self,
+        witness: &mut ProverWitnessEntities<Polynomial<P::ScalarField>>,
         circuit: &mut UltraCircuitBuilder<P>,
         dyadic_circuit_size: usize,
     ) {
@@ -407,10 +344,8 @@ impl<P: Pairing> ProvingKey<P> {
 
                 // increment the read count at the corresponding index in the full polynomial
                 let index_in_poly = table_offset + index_in_table;
-                self.polynomials.witness.lookup_read_counts_mut()[index_in_poly] +=
-                    P::ScalarField::one();
-                self.polynomials.witness.lookup_read_tags_mut()[index_in_poly] =
-                    P::ScalarField::one();
+                witness.lookup_read_counts_mut()[index_in_poly] += P::ScalarField::one();
+                witness.lookup_read_tags_mut()[index_in_poly] = P::ScalarField::one();
                 // tag is 1 if entry has been read 1 or more times
             }
             table_offset += table.len(); // set the offset of the next table within the polynomials
