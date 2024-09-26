@@ -1,6 +1,5 @@
 use ark_bn254::Bn254;
-// use co_ultrahonk::PlainCoBuilder;
-use mpc_core::protocols::plain::PlainDriver;
+use co_ultrahonk::{PlainCoBuilder, SharedBuilderVariable};
 use ultrahonk::parse::{get_constraint_system_from_file, get_witness_from_file};
 
 #[test]
@@ -14,11 +13,10 @@ fn poseidon_plaindriver_test() {
     let constraint_system = get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
     let witness = get_witness_from_file(WITNESS_FILE).unwrap();
 
-    // let witness = PlainCoBuilder::promote_public_witness_vector(witness);
+    let witness = SharedBuilderVariable::promote_public_witness_vector(witness);
 
-    // let driver = PlainDriver::default();
-    // let builder =
-    //     PlainCoBuilder::<Bn254>::create_circuit(driver, constraint_system, 0, witness, true, false);
+    let builder =
+        PlainCoBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
 
     // let prover_crs = ProvingKey::get_prover_crs(&builder, CRS_PATH_G1).unwrap();
     // let proving_key = ProvingKey::create(builder, prover_crs);
@@ -31,5 +29,5 @@ fn poseidon_plaindriver_test() {
 
     // let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
     // assert_eq!(proof, read_proof);
-    // todo!("WIP")
+    todo!("WIP")
 }
