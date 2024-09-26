@@ -5,12 +5,11 @@ use super::{
 };
 use crate::{
     decider::{polynomial::Polynomial, types::ClaimedEvaluations, zeromorph::OpeningPair},
-    get_msb64,
     honk_curve::HonkCurve,
     prover::HonkProofResult,
     transcript::{TranscriptFieldType, TranscriptType},
     types::{AllEntities, ProverCrs},
-    CONST_PROOF_SIZE_LOG_N, N_MAX,
+    Utils, CONST_PROOF_SIZE_LOG_N, N_MAX,
 };
 use ark_ec::Group;
 use ark_ff::{Field, One, Zero};
@@ -41,7 +40,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         polynomial: &Polynomial<P::ScalarField>,
         u_challenge: &[P::ScalarField],
     ) -> Vec<Polynomial<P::ScalarField>> {
-        let log_n = get_msb64(polynomial.len() as u64);
+        let log_n = Utils::get_msb64(polynomial.len() as u64);
         // Define the vector of quotients q_k, k = 0, ..., log_N-1
         // let mut quotients = Vec::with_capacity(log_n as usize);
         let mut quotients = vec![Polynomial::default(); log_n as usize];
@@ -354,7 +353,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
 
         // Extract multilinear challenge u and claimed multilinear evaluations from Sumcheck output
         let u_challenge = multilinear_challenge;
-        let log_n = crate::get_msb32(circuit_size);
+        let log_n = Utils::get_msb32(circuit_size);
         let n = 1 << log_n;
 
         // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
@@ -410,7 +409,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
 
         // Compute the batched, lifted-degree quotient \hat{q}
         let batched_quotient =
-            Self::compute_batched_lifted_degree_quotient(&quotients, &y_challenge, n as usize);
+            Self::compute_batched_lifted_degree_quotient(&quotients, &y_challenge, n);
 
         // Compute and send the commitment C_q = [\hat{q}]
         let q_commitment = crate::commit(&batched_quotient.coefficients, commitment_key)?;

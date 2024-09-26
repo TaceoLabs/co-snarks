@@ -20,7 +20,7 @@ pub(crate) struct PolyGShift<'a, T: Default> {
 
 #[allow(unused)]
 impl<'a, T: Default> PolyF<'a, T> {
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed.iter().chain(self.witness.iter())
     }
 }
@@ -39,53 +39,53 @@ impl<'a, T: Default> PolyG<'a, T> {
     const W_O: usize = 2;
     const W_4: usize = 3;
 
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.tables
             .into_iter()
             .chain(self.wires)
             .chain(std::iter::once(self.z_perm))
     }
 
-    pub fn table_1(&self) -> &T {
+    pub(crate) fn table_1(&self) -> &T {
         self.tables[Self::TABLE_1]
     }
 
-    pub fn table_2(&self) -> &T {
+    pub(crate) fn table_2(&self) -> &T {
         self.tables[Self::TABLE_2]
     }
 
-    pub fn table_3(&self) -> &T {
+    pub(crate) fn table_3(&self) -> &T {
         self.tables[Self::TABLE_3]
     }
 
-    pub fn table_4(&self) -> &T {
+    pub(crate) fn table_4(&self) -> &T {
         self.tables[Self::TABLE_4]
     }
 
-    pub fn w_l(&self) -> &T {
+    pub(crate) fn w_l(&self) -> &T {
         self.wires[Self::W_L]
     }
 
-    pub fn w_r(&self) -> &T {
+    pub(crate) fn w_r(&self) -> &T {
         self.wires[Self::W_R]
     }
 
-    pub fn w_o(&self) -> &T {
+    pub(crate) fn w_o(&self) -> &T {
         self.wires[Self::W_O]
     }
 
-    pub fn w_4(&self) -> &T {
+    pub(crate) fn w_4(&self) -> &T {
         self.wires[Self::W_4]
     }
 
-    pub fn z_perm(&self) -> &T {
+    pub(crate) fn z_perm(&self) -> &T {
         self.z_perm
     }
 }
 
 #[allow(unused)]
 impl<'a, T: Default> PolyGShift<'a, T> {
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.tables.iter().chain(self.wires.iter())
     }
 }

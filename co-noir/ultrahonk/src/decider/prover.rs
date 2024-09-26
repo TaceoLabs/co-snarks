@@ -7,13 +7,13 @@ use crate::{
 };
 use std::marker::PhantomData;
 
-pub struct Decider<P: HonkCurve<TranscriptFieldType>> {
+pub(crate) struct Decider<P: HonkCurve<TranscriptFieldType>> {
     pub(super) memory: ProverMemory<P>,
     phantom_data: PhantomData<P>,
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
-    pub fn new(memory: ProverMemory<P>) -> Self {
+    pub(crate) fn new(memory: ProverMemory<P>) -> Self {
         Self {
             memory,
             phantom_data: PhantomData,
@@ -70,7 +70,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         Self::compute_opening_proof(prover_opening_claim, transcript, crs)
     }
 
-    pub fn prove(
+    pub(crate) fn prove(
         mut self,
         circuit_size: u32,
         crs: &ProverCrs<P>,

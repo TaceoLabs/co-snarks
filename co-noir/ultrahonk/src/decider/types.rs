@@ -8,28 +8,28 @@ use ark_ff::PrimeField;
 use itertools::izip;
 use std::{iter, vec};
 
-pub struct ProverMemory<P: Pairing> {
-    pub polys: AllEntities<Vec<P::ScalarField>>,
-    pub relation_parameters: RelationParameters<P::ScalarField>,
+pub(crate) struct ProverMemory<P: Pairing> {
+    pub(crate) polys: AllEntities<Vec<P::ScalarField>>,
+    pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
 }
 
-pub const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
-pub type ProverUnivariates<F> = AllEntities<Univariate<F, MAX_PARTIAL_RELATION_LENGTH>>;
-pub type PartiallyEvaluatePolys<F> = AllEntities<Vec<F>>;
-pub type ClaimedEvaluations<F> = AllEntities<F>;
+pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
+pub(crate) type ProverUnivariates<F> = AllEntities<Univariate<F, MAX_PARTIAL_RELATION_LENGTH>>;
+pub(crate) type PartiallyEvaluatePolys<F> = AllEntities<Vec<F>>;
+pub(crate) type ClaimedEvaluations<F> = AllEntities<F>;
 
-pub struct RelationParameters<F: PrimeField> {
-    pub eta_1: F,
-    pub eta_2: F,
-    pub eta_3: F,
-    pub beta: F,
-    pub gamma: F,
-    pub public_input_delta: F,
-    pub alphas: [F; NUM_ALPHAS],
-    pub gate_challenges: Vec<F>,
+pub(crate) struct RelationParameters<F: PrimeField> {
+    pub(crate) eta_1: F,
+    pub(crate) eta_2: F,
+    pub(crate) eta_3: F,
+    pub(crate) beta: F,
+    pub(crate) gamma: F,
+    pub(crate) public_input_delta: F,
+    pub(crate) alphas: [F; NUM_ALPHAS],
+    pub(crate) gate_challenges: Vec<F>,
 }
 
-pub struct GateSeparatorPolynomial<F: PrimeField> {
+pub(crate) struct GateSeparatorPolynomial<F: PrimeField> {
     betas: Vec<F>,
     pub(crate) beta_products: Vec<F>,
     pub(crate) partial_evaluation_result: F,
@@ -38,7 +38,7 @@ pub struct GateSeparatorPolynomial<F: PrimeField> {
 }
 
 impl<F: PrimeField> GateSeparatorPolynomial<F> {
-    pub fn new(betas: Vec<F>) -> Self {
+    pub(crate) fn new(betas: Vec<F>) -> Self {
         let pow_size = 1 << betas.len();
         let current_element_idx = 0;
         let periodicity = 2;
@@ -63,11 +63,11 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
         }
     }
 
-    pub fn current_element(&self) -> F {
+    pub(crate) fn current_element(&self) -> F {
         self.betas[self.current_element_idx]
     }
 
-    pub fn partially_evaluate(&mut self, round_challenge: F) {
+    pub(crate) fn partially_evaluate(&mut self, round_challenge: F) {
         let current_univariate_eval =
             F::ONE + (round_challenge * (self.betas[self.current_element_idx] - F::ONE));
         self.partial_evaluation_result *= current_univariate_eval;

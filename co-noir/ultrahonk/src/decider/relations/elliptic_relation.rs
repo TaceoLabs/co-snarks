@@ -12,13 +12,13 @@ pub(crate) struct EllipticRelationAcc<F: PrimeField> {
 }
 
 impl<F: PrimeField> EllipticRelationAcc<F> {
-    pub fn scale(&mut self, elements: &[F]) {
+    pub(crate) fn scale(&mut self, elements: &[F]) {
         assert!(elements.len() == EllipticRelation::NUM_RELATIONS);
         self.r0 *= elements[0];
         self.r1 *= elements[1];
     }
 
-    pub fn extend_and_batch_univariates(
+    pub(crate) fn extend_and_batch_univariates(
         &self,
         result: &mut SumcheckRoundOutput<F>,
         extended_random_poly: &SumcheckRoundOutput<F>,

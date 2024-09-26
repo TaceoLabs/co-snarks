@@ -48,7 +48,8 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
         + CanonicalSerialize
         + CanonicalDeserialize
         + Sync
-        + Default;
+        + Default
+        + PartialEq;
 
     /// The type of a vector of shared field elements.
     type FieldShareVec: FieldShareVecTrait<FieldShare = Self::FieldShare>;
