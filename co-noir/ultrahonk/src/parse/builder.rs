@@ -10,11 +10,11 @@ use super::{
 };
 use crate::{
     get_msb64,
+    parse::field_from_hex_string,
     parse::{
         plookup::{MultiTableId, Plookup},
         types::{FieldCT, GateCounter, RomRecord, RomTable, NUM_WIRES},
     },
-    poseidon2::field_from_hex_string,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};

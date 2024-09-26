@@ -16,3 +16,4 @@ ark-bn254.workspace = true
 mpc-core.workspace = true
 tracing.workspace = true
 ultrahonk.workspace = true
+num-bigint.workspace = true

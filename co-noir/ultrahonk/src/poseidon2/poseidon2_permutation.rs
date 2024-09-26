@@ -171,7 +171,9 @@ impl<F: PrimeField, const T: usize, const D: u64> FieldHash<F, T> for Poseidon2<
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::poseidon2::{field_from_hex_string, poseidon2_bn254::POSEIDON2_BN254_T4_PARAMS};
+    use crate::{
+        parse::field_from_hex_string, poseidon2::poseidon2_bn254::POSEIDON2_BN254_T4_PARAMS,
+    };
     use rand::thread_rng;
 
     const TESTRUNS: usize = 10;

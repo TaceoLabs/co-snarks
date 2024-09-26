@@ -14,7 +14,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Index, IndexMut};
 
 #[derive(Default, PartialEq, Eq)]
-pub(crate) struct PolyTriple<F: PrimeField> {
+pub struct PolyTriple<F: PrimeField> {
     pub(crate) a: u32,
     pub(crate) b: u32,
     pub(crate) c: u32,
@@ -50,7 +50,7 @@ pub(crate) struct AddQuad<F: PrimeField> {
 }
 
 #[derive(Default, PartialEq, Eq)]
-pub(crate) struct MulQuad<F: PrimeField> {
+pub struct MulQuad<F: PrimeField> {
     pub(crate) a: u32,
     pub(crate) b: u32,
     pub(crate) c: u32,
@@ -85,7 +85,7 @@ impl Default for BlockType {
 }
 
 #[derive(Default)]
-pub(crate) struct BlockConstraint<F: PrimeField> {
+pub struct BlockConstraint<F: PrimeField> {
     pub(crate) init: Vec<PolyTriple<F>>,
     pub(crate) trace: Vec<MemOp<F>>,
     pub(crate) type_: BlockType,
@@ -93,7 +93,7 @@ pub(crate) struct BlockConstraint<F: PrimeField> {
 }
 
 #[derive(Default)]
-pub(crate) struct AcirFormatOriginalOpcodeIndices {
+pub struct AcirFormatOriginalOpcodeIndices {
     // pub(crate)logic_constraints: Vec<usize>,
     // pub(crate)range_constraints: Vec<usize>,
     // pub(crate)aes128_constraints: Vec<usize>,
@@ -118,10 +118,10 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     // pub(crate)bigint_to_le_bytes_constraints: Vec<usize>,
     // pub(crate)bigint_operations: Vec<usize>,
     pub(crate) assert_equalities: Vec<usize>,
-    pub(crate) poly_triple_constraints: Vec<usize>,
-    pub(crate) quad_constraints: Vec<usize>,
+    pub poly_triple_constraints: Vec<usize>,
+    pub quad_constraints: Vec<usize>,
     // Multiple opcode indices per block:
-    pub(crate) block_constraints: Vec<Vec<usize>>,
+    pub block_constraints: Vec<Vec<usize>>,
 }
 
 pub(crate) struct UltraTraceBlocks<T: Default> {
@@ -337,7 +337,7 @@ impl GateCounter {
     }
 }
 
-pub(crate) struct RecursionConstraint {
+pub struct RecursionConstraint {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
     key: Vec<u32>,

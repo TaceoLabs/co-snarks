@@ -7,8 +7,21 @@ pub mod types;
 
 use acir::{circuit::Circuit, native_types::WitnessStack, FieldElement};
 use acir_format::AcirFormat;
+use ark_ff::PrimeField;
+use eyre::Error;
 use noirc_artifacts::program::ProgramArtifact;
+use num_bigint::BigUint;
+use num_traits::Num;
 use std::io;
+
+pub fn field_from_hex_string<F: PrimeField>(str: &str) -> Result<F, Error> {
+    let tmp = match str.strip_prefix("0x") {
+        Some(t) => BigUint::from_str_radix(t, 16),
+        None => BigUint::from_str_radix(str, 16),
+    };
+
+    Ok(tmp?.into())
+}
 
 fn read_circuit_from_file(path: &str) -> io::Result<Circuit<FieldElement>> {
     let program = std::fs::read_to_string(path)?;

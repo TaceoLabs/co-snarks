@@ -1,5 +1,5 @@
 use super::poseidon2_params::Poseidon2Params;
-use crate::poseidon2::field_from_hex_string;
+use crate::parse::field_from_hex_string;
 use lazy_static::lazy_static;
 use std::sync::Arc;
 
