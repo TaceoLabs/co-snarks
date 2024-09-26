@@ -8,7 +8,7 @@ pub(crate) mod sponge_hasher;
 mod transcript;
 pub(crate) mod types;
 
-pub use parse::builder::UltraCircuitBuilder;
+pub use parse::{acir_format::AcirFormat, builder::UltraCircuitBuilder};
 pub use prover::UltraHonk;
 pub use types::{HonkProof, ProvingKey};
 

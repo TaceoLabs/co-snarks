@@ -10,5 +10,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+ark-ec.workspace = true
+ark-ff.workspace = true
 ark-bn254.workspace = true
+mpc-core.workspace = true
+tracing.workspace = true
 ultrahonk.workspace = true

@@ -55,15 +55,15 @@ pub struct UltraCircuitBuilder<P: Pairing> {
 }
 
 impl<P: Pairing> UltraCircuitBuilder<P> {
-    const DUMMY_TAG: u32 = 0;
-    const REAL_VARIABLE: u32 = u32::MAX - 1;
-    const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
-    const UNINITIALIZED_MEMORY_RECORD: u32 = u32::MAX;
-    const NUMBER_OF_GATES_PER_RAM_ACCESS: usize = 2;
-    const NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY: usize = 1;
-    const NUM_RESERVED_GATES: usize = 4;
+    pub const DUMMY_TAG: u32 = 0;
+    pub const REAL_VARIABLE: u32 = u32::MAX - 1;
+    pub const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
+    pub const UNINITIALIZED_MEMORY_RECORD: u32 = u32::MAX;
+    pub const NUMBER_OF_GATES_PER_RAM_ACCESS: usize = 2;
+    pub const NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY: usize = 1;
+    pub const NUM_RESERVED_GATES: usize = 4;
     // number of gates created per non-native field operation in process_non_native_field_multiplications
-    const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
+    pub const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
 
     pub fn create_circuit(
         constraint_system: AcirFormat<P::ScalarField>,

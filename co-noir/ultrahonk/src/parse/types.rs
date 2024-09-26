@@ -667,7 +667,7 @@ pub(crate) struct RomRecord {
 }
 
 #[derive(Default)]
-pub(crate) struct RomTranscript {
+pub struct RomTranscript {
     // Contains the value of each index of the array
     pub(crate) state: Vec<[u32; 2]>,
 
@@ -708,7 +708,7 @@ impl Default for RamRecord {
 }
 
 #[derive(Default)]
-pub(crate) struct RamTranscript {
+pub struct RamTranscript {
     // Contains the value of each index of the array
     pub(crate) state: Vec<u32>,
 
@@ -995,7 +995,7 @@ pub(crate) enum ColumnIdx {
     C3,
 }
 
-pub(crate) struct RangeList {
+pub struct RangeList {
     pub(crate) target_range: u64,
     pub(crate) range_tag: u32,
     pub(crate) tau_tag: u32,

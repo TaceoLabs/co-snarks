@@ -3,7 +3,7 @@ pub(crate) mod builder;
 pub(crate) mod crs;
 pub(crate) mod plookup;
 pub(crate) mod proving_key;
-pub(crate) mod types;
+pub mod types;
 
 use acir::{circuit::Circuit, native_types::WitnessStack, FieldElement};
 use acir_format::AcirFormat;
