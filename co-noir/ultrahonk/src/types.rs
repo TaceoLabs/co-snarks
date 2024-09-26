@@ -77,29 +77,31 @@ impl<F: PrimeField> HonkProof<F> {
 
     fn from_buffer_internal(buf: &[u8], size_included: bool) -> HonkProofResult<Self> {
         let size = buf.len();
+        let mut offset = 0;
+
+        // Check sizes
         let num_elements = if size_included {
-            (size - Self::VEC_LEN_BYTES as usize) / Self::FIELDSIZE_BYTES as usize
+            let num_elements =
+                (size - Self::VEC_LEN_BYTES as usize) / Self::FIELDSIZE_BYTES as usize;
+            if num_elements * Self::FIELDSIZE_BYTES as usize + Self::VEC_LEN_BYTES as usize != size
+            {
+                return Err(HonkProofError::InvalidProofLength);
+            }
+
+            let read_num_elements = Self::read_u32(buf, &mut offset);
+            if read_num_elements != num_elements as u32 {
+                return Err(HonkProofError::InvalidProofLength);
+            }
+            num_elements
         } else {
-            size / Self::FIELDSIZE_BYTES as usize
+            let num_elements = size / Self::FIELDSIZE_BYTES as usize;
+            if num_elements * Self::FIELDSIZE_BYTES as usize != size {
+                return Err(HonkProofError::InvalidProofLength);
+            }
+            num_elements
         };
 
-        if num_elements * Self::FIELDSIZE_BYTES as usize
-            + if size_included {
-                Self::VEC_LEN_BYTES as usize
-            } else {
-                0
-            }
-            != size
-        {
-            return Err(HonkProofError::InvalidProofLength);
-        }
-
-        let mut offset = 0;
-        let is_size = Self::read_u32(buf, &mut offset);
-        if is_size != num_elements as u32 {
-            return Err(HonkProofError::InvalidProofLength);
-        }
-
+        // Read data
         let mut res = Vec::with_capacity(num_elements);
         for _ in 0..num_elements {
             res.push(Self::read_field_element(buf, &mut offset));
