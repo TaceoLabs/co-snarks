@@ -1,5 +1,5 @@
-pub(crate) mod decider;
-pub(crate) mod oink;
+pub(crate) mod co_decider;
+pub(crate) mod co_oink;
 pub(crate) mod parse;
 pub mod prelude;
 pub(crate) mod prover;
@@ -20,7 +20,7 @@ impl<P: Pairing> SharedBuilderVariable<PlainDriver<P::ScalarField>, P> {
     }
 }
 
-pub(crate) const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;
+pub(crate) const NUM_ALPHAS: usize = co_decider::relations::NUM_SUBRELATIONS - 1;
 // The log of the max circuit size assumed in order to achieve constant sized Honk proofs
 // TODO(https://github.com/AztecProtocol/barretenberg/issues/1046): Remove the need for const sized proofs
 pub(crate) const CONST_PROOF_SIZE_LOG_N: usize = 28;

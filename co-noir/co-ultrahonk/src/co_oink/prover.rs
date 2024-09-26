@@ -23,7 +23,7 @@ use mpc_core::traits::PrimeFieldMpcProtocol;
 use std::marker::PhantomData;
 use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, TranscriptType};
 
-pub(crate) struct Oink<'a, T, P: HonkCurve<TranscriptFieldType>>
+pub(crate) struct CoOink<'a, T, P: HonkCurve<TranscriptFieldType>>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
@@ -32,7 +32,7 @@ where
     phantom_data: PhantomData<P>,
 }
 
-impl<'a, T, P: HonkCurve<TranscriptFieldType>> Oink<'a, T, P>
+impl<'a, T, P: HonkCurve<TranscriptFieldType>> CoOink<'a, T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {

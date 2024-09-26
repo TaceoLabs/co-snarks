@@ -1,4 +1,4 @@
-use crate::{oink::prover::Oink, types::ProvingKey};
+use crate::{co_oink::prover::CoOink, types::ProvingKey};
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use std::marker::PhantomData;
 use ultrahonk::prelude::{
@@ -33,7 +33,7 @@ where
 
         let mut transcript = TranscriptType::new(&POSEIDON2_BN254_T4_PARAMS);
 
-        let oink = Oink::new(&mut self.driver);
+        let oink = CoOink::new(&mut self.driver);
         let oink_result = oink.prove(&proving_key, &mut transcript)?;
 
         let cicruit_size = proving_key.circuit_size;
