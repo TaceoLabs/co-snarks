@@ -9,10 +9,10 @@ use ark_ec::AffineRepr;
 use ark_ff::{PrimeField, Zero};
 use std::{collections::BTreeMap, ops::Index, sync::Arc};
 
-pub(crate) type TranscriptFieldType = ark_bn254::Fr;
-pub(crate) type TranscriptType = Poseidon2Transcript<TranscriptFieldType>;
+pub type TranscriptFieldType = ark_bn254::Fr;
+pub type TranscriptType = Poseidon2Transcript<TranscriptFieldType>;
 
-pub(super) struct Poseidon2Transcript<F>
+pub struct Poseidon2Transcript<F>
 where
     F: PrimeField,
 {
@@ -45,15 +45,15 @@ where
         }
     }
 
-    pub fn get_proof(self) -> HonkProof<F> {
+    pub(crate) fn get_proof(self) -> HonkProof<F> {
         HonkProof::new(self.proof_data)
     }
 
-    pub fn print(&self) {
+    pub(crate) fn print(&self) {
         self.manifest.print();
     }
 
-    pub fn get_manifest(&self) -> &TranscriptManifest {
+    pub(crate) fn get_manifest(&self) -> &TranscriptManifest {
         &self.manifest
     }
 
@@ -265,7 +265,7 @@ where
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
-struct RoundData {
+pub(crate) struct RoundData {
     challenge_label: Vec<String>,
     entries: Vec<(String, usize)>,
 }
@@ -282,7 +282,7 @@ impl RoundData {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct TranscriptManifest {
+pub(crate) struct TranscriptManifest {
     manifest: BTreeMap<usize, RoundData>,
 }
 

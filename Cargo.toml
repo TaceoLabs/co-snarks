@@ -9,6 +9,7 @@ members = [
     "co-circom/co-plonk",
     "co-noir/co-acvm",
     "co-noir/ultrahonk",
+    "co-noir/co-ultrahonk",
     "mpc-core",
     "mpc-net",
     "tests",
@@ -85,6 +86,7 @@ tokio = { version = "1.34.0", features = [
 toml = "0.8.13"
 tracing = { version = "0.1.40" }
 tracing-subscriber = "0.3"
+ultrahonk = { version = "0.1.0", path = "co-noir/ultrahonk" }
 
 # This profile can be used for CI in pull requests.
 [profile.ci-dev]

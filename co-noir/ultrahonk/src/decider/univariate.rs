@@ -4,30 +4,30 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use crate::decider::barycentric::Barycentric;
 
 #[derive(Clone, Debug)]
-pub struct Univariate<F: PrimeField, const SIZE: usize> {
+pub(crate) struct Univariate<F: PrimeField, const SIZE: usize> {
     pub(crate) evaluations: [F; SIZE],
 }
 
 impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
-    pub fn double(self) -> Self {
+    pub(crate) fn double(self) -> Self {
         let mut result = self;
         result.double_in_place();
         result
     }
 
-    pub fn double_in_place(&mut self) {
+    pub(crate) fn double_in_place(&mut self) {
         for i in 0..SIZE {
             self.evaluations[i].double_in_place();
         }
     }
 
-    pub fn sqr(self) -> Self {
+    pub(crate) fn sqr(self) -> Self {
         let mut result = self;
         result.square_in_place();
         result
     }
 
-    pub fn square_in_place(&mut self) {
+    pub(crate) fn square_in_place(&mut self) {
         for i in 0..SIZE {
             self.evaluations[i].square_in_place();
         }
