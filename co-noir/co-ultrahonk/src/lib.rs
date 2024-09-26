@@ -1,13 +1,10 @@
 pub(crate) mod parse;
+pub mod prelude;
 pub(crate) mod types;
 
 use ark_ec::pairing::Pairing;
-use mpc_core::protocols::{plain::PlainDriver, rep3::Rep3Protocol};
-
-pub use parse::{builder_variable::SharedBuilderVariable, CoUltraCircuitBuilder};
-pub type PlainCoBuilder<P> = CoUltraCircuitBuilder<PlainDriver<<P as Pairing>::ScalarField>, P>;
-pub type Rep3CoBuilder<P, N> =
-    CoUltraCircuitBuilder<Rep3Protocol<<P as Pairing>::ScalarField, N>, P>;
+use mpc_core::protocols::plain::PlainDriver;
+use parse::builder_variable::SharedBuilderVariable;
 
 impl<P: Pairing> SharedBuilderVariable<PlainDriver<P::ScalarField>, P> {
     pub fn promote_public_witness_vector(

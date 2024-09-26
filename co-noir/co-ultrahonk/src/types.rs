@@ -13,10 +13,10 @@ where
     pub(crate) public_inputs: Vec<P::ScalarField>,
     pub(crate) num_public_inputs: u32,
     pub(crate) pub_inputs_offset: u32,
-    // pub(crate) polynomials: Polynomials<P::ScalarField>,
+    pub(crate) polynomials: Polynomials<P::ScalarField>,
     pub(crate) memory_read_records: Vec<u32>,
     pub(crate) memory_write_records: Vec<u32>,
-    pub(crate) phantom_data: PhantomData<T>,
+    pub(crate) phantom_data: PhantomData<T>, // TODO remove
 }
 
 // This is what we get from the proving key, we shift at a later point
@@ -29,10 +29,12 @@ pub(crate) struct Polynomials<F: PrimeField> {
 impl<F: PrimeField> Polynomials<F> {
     pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
+
+        todo!("Polys");
         // Shifting is done at a later point
-        polynomials
-            .iter_mut()
-            .for_each(|el| el.resize(circuit_size, Default::default()));
+        // polynomials
+        //     .iter_mut()
+        //     .for_each(|el| el.resize(circuit_size, Default::default()));
 
         polynomials
     }

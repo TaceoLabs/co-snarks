@@ -1,11 +1,12 @@
 use super::CoUltraCircuitBuilder;
+use crate::types::Polynomials;
 use crate::types::ProvingKey;
 use ark_ec::pairing::Pairing;
 use eyre::Result;
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use std::marker::PhantomData;
-use ultrahonk::ProverCrs;
-use ultrahonk::ProvingKey as PlainProvingKey;
+use ultrahonk::prelude::ProverCrs;
+use ultrahonk::prelude::ProvingKey as PlainProvingKey;
 
 impl<T, P: Pairing> ProvingKey<T, P>
 where
@@ -20,38 +21,39 @@ where
         let dyadic_circuit_size = circuit.compute_dyadic_size();
         let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);
         // Construct and add to proving key the wire, selector and copy constraint polynomials
-        proving_key.populate_trace(&mut circuit, false);
+        todo!("ProvingKey create");
+        // proving_key.populate_trace(&mut circuit, false);
 
-        // First and last lagrange polynomials (in the full circuit size)
-        proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
-        proving_key.polynomials.precomputed.lagrange_last_mut()[dyadic_circuit_size - 1] =
-            P::ScalarField::one();
+        // // First and last lagrange polynomials (in the full circuit size)
+        // proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
+        // proving_key.polynomials.precomputed.lagrange_last_mut()[dyadic_circuit_size - 1] =
+        //     P::ScalarField::one();
 
-        PlainProvingKey::construct_lookup_table_polynomials(
-            proving_key
-                .polynomials
-                .precomputed
-                .get_table_polynomials_mut(),
-            &circuit,
-            dyadic_circuit_size,
-            0,
-        );
-        PlainProvingKey::construct_lookup_read_counts(
-            &mut proving_key.polynomials.witness,
-            &mut circuit,
-            dyadic_circuit_size,
-        );
+        // PlainProvingKey::construct_lookup_table_polynomials(
+        //     proving_key
+        //         .polynomials
+        //         .precomputed
+        //         .get_table_polynomials_mut(),
+        //     &circuit,
+        //     dyadic_circuit_size,
+        //     0,
+        // );
+        // PlainProvingKey::construct_lookup_read_counts(
+        //     &mut proving_key.polynomials.witness,
+        //     &mut circuit,
+        //     dyadic_circuit_size,
+        // );
 
-        // Construct the public inputs array
-        let public_wires_src = proving_key.polynomials.witness.w_r();
+        // // Construct the public inputs array
+        // let public_wires_src = proving_key.polynomials.witness.w_r();
 
-        for input in public_wires_src
-            .iter()
-            .skip(proving_key.pub_inputs_offset as usize)
-            .take(proving_key.num_public_inputs as usize)
-        {
-            proving_key.public_inputs.push(*input);
-        }
+        // for input in public_wires_src
+        //     .iter()
+        //     .skip(proving_key.pub_inputs_offset as usize)
+        //     .take(proving_key.num_public_inputs as usize)
+        // {
+        //     proving_key.public_inputs.push(*input);
+        // }
 
         // TODO the following elements are not part of the proving key so far
         // Set the recursive proof indices
@@ -71,8 +73,7 @@ where
 
     fn new(circuit_size: usize, num_public_inputs: usize, crs: ProverCrs<P>) -> Self {
         tracing::info!("ProvingKey new");
-        // let polynomials = Polynomials::new(circuit_size);
-        todo!("Polys");
+        let polynomials = Polynomials::new(circuit_size);
 
         Self {
             crs,
@@ -80,7 +81,7 @@ where
             public_inputs: Vec::with_capacity(num_public_inputs),
             num_public_inputs: num_public_inputs as u32,
             pub_inputs_offset: 0,
-            // polynomials,
+            polynomials,
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
             phantom_data: PhantomData,

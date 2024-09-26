@@ -1,8 +1,7 @@
-use std::fmt::Debug;
-
 use ark_ec::pairing::Pairing;
 use mpc_core::traits::PrimeFieldMpcProtocol;
-use ultrahonk::UltraCircuitVariable;
+use std::fmt::Debug;
+use ultrahonk::prelude::UltraCircuitVariable;
 
 pub enum SharedBuilderVariable<T, P>
 where

@@ -409,7 +409,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
 
         // Compute the batched, lifted-degree quotient \hat{q}
         let batched_quotient =
-            Self::compute_batched_lifted_degree_quotient(&quotients, &y_challenge, n as usize);
+            Self::compute_batched_lifted_degree_quotient(&quotients, &y_challenge, n);
 
         // Compute and send the commitment C_q = [\hat{q}]
         let q_commitment = crate::commit(&batched_quotient.coefficients, commitment_key)?;
