@@ -126,9 +126,9 @@ impl<P: Pairing> ProvingKey<P> {
         );
     }
 
-    fn add_memory_records_to_proving_key(
+    pub fn add_memory_records_to_proving_key<S: UltraCircuitVariable<P::ScalarField>>(
         ram_rom_offset: u32,
-        builder: &UltraCircuitBuilder<P>,
+        builder: &GenericUltraCircuitBuilder<P, S>,
         memory_read_records: &mut Vec<u32>,
         memory_write_records: &mut Vec<u32>,
     ) {
@@ -146,9 +146,9 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    fn compute_permutation_argument_polynomials(
+    pub fn compute_permutation_argument_polynomials<S: UltraCircuitVariable<P::ScalarField>>(
         polys: &mut PrecomputedEntities<Polynomial<P::ScalarField>>,
-        circuit: &UltraCircuitBuilder<P>,
+        circuit: &GenericUltraCircuitBuilder<P, S>,
         copy_cycles: Vec<CyclicPermutation>,
         circuit_size: usize,
         pub_inputs_offset: usize,
@@ -174,10 +174,10 @@ impl<P: Pairing> ProvingKey<P> {
         );
     }
 
-    fn compute_permutation_mapping(
+    fn compute_permutation_mapping<S: UltraCircuitVariable<P::ScalarField>>(
         circuit_size: usize,
         pub_inputs_offset: usize,
-        circuit_constructor: &UltraCircuitBuilder<P>,
+        circuit_constructor: &GenericUltraCircuitBuilder<P, S>,
         wire_copy_cycles: Vec<CyclicPermutation>,
     ) -> PermutationMapping {
         // Initialize the table of permutations so that every element points to itself
@@ -292,9 +292,9 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    fn construct_lookup_table_polynomials(
+    pub fn construct_lookup_table_polynomials<S: UltraCircuitVariable<P::ScalarField>>(
         table_polynomials: &mut [Polynomial<P::ScalarField>],
-        circuit: &UltraCircuitBuilder<P>,
+        circuit: &GenericUltraCircuitBuilder<P, S>,
         dyadic_circuit_size: usize,
         additional_offset: usize,
     ) {
@@ -322,9 +322,9 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    fn construct_lookup_read_counts(
+    fn construct_lookup_read_counts<S: UltraCircuitVariable<P::ScalarField>>(
         witness: &mut ProverWitnessEntities<Polynomial<P::ScalarField>>,
-        circuit: &mut UltraCircuitBuilder<P>,
+        circuit: &mut GenericUltraCircuitBuilder<P, S>,
         dyadic_circuit_size: usize,
     ) {
         // TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace

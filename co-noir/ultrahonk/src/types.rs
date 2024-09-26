@@ -518,147 +518,147 @@ impl<T: Default> PrecomputedEntities<T> {
     const LAGRANGE_FIRST: usize = 25; // column 25
     const LAGRANGE_LAST: usize = 26; // column 26
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
     }
 
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }
 
-    pub(crate) fn get_table_polynomials(&self) -> &[T] {
+    pub fn get_table_polynomials(&self) -> &[T] {
         &self.elements[Self::TABLE_1..=Self::TABLE_4]
     }
 
-    pub(crate) fn get_selectors_mut(&mut self) -> &mut [T] {
+    pub fn get_selectors_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::Q_M..=Self::Q_POSEIDON2_INTERNAL]
     }
 
-    pub(crate) fn get_sigmas_mut(&mut self) -> &mut [T] {
+    pub fn get_sigmas_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::SIGMA_1..=Self::SIGMA_4]
     }
 
-    pub(crate) fn get_ids_mut(&mut self) -> &mut [T] {
+    pub fn get_ids_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::ID_1..=Self::ID_4]
     }
 
-    pub(crate) fn get_table_polynomials_mut(&mut self) -> &mut [T] {
+    pub fn get_table_polynomials_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::TABLE_1..=Self::TABLE_4]
     }
 
-    pub(crate) fn q_m(&self) -> &T {
+    pub fn q_m(&self) -> &T {
         &self.elements[Self::Q_M]
     }
 
-    pub(crate) fn q_c(&self) -> &T {
+    pub fn q_c(&self) -> &T {
         &self.elements[Self::Q_C]
     }
 
-    pub(crate) fn q_l(&self) -> &T {
+    pub fn q_l(&self) -> &T {
         &self.elements[Self::Q_L]
     }
 
-    pub(crate) fn q_r(&self) -> &T {
+    pub fn q_r(&self) -> &T {
         &self.elements[Self::Q_R]
     }
 
-    pub(crate) fn q_o(&self) -> &T {
+    pub fn q_o(&self) -> &T {
         &self.elements[Self::Q_O]
     }
 
-    pub(crate) fn q_4(&self) -> &T {
+    pub fn q_4(&self) -> &T {
         &self.elements[Self::Q_4]
     }
 
-    pub(crate) fn q_arith(&self) -> &T {
+    pub fn q_arith(&self) -> &T {
         &self.elements[Self::Q_ARITH]
     }
 
-    pub(crate) fn q_delta_range(&self) -> &T {
+    pub fn q_delta_range(&self) -> &T {
         &self.elements[Self::Q_DELTA_RANGE]
     }
 
-    pub(crate) fn q_elliptic(&self) -> &T {
+    pub fn q_elliptic(&self) -> &T {
         &self.elements[Self::Q_ELLIPTIC]
     }
 
-    pub(crate) fn q_aux(&self) -> &T {
+    pub fn q_aux(&self) -> &T {
         &self.elements[Self::Q_AUX]
     }
 
-    pub(crate) fn q_lookup(&self) -> &T {
+    pub fn q_lookup(&self) -> &T {
         &self.elements[Self::Q_LOOKUP]
     }
 
-    pub(crate) fn q_poseidon2_external(&self) -> &T {
+    pub fn q_poseidon2_external(&self) -> &T {
         &self.elements[Self::Q_POSEIDON2_EXTERNAL]
     }
 
-    pub(crate) fn q_poseidon2_internal(&self) -> &T {
+    pub fn q_poseidon2_internal(&self) -> &T {
         &self.elements[Self::Q_POSEIDON2_INTERNAL]
     }
 
-    pub(crate) fn sigma_1(&self) -> &T {
+    pub fn sigma_1(&self) -> &T {
         &self.elements[Self::SIGMA_1]
     }
 
-    pub(crate) fn sigma_2(&self) -> &T {
+    pub fn sigma_2(&self) -> &T {
         &self.elements[Self::SIGMA_2]
     }
 
-    pub(crate) fn sigma_3(&self) -> &T {
+    pub fn sigma_3(&self) -> &T {
         &self.elements[Self::SIGMA_3]
     }
 
-    pub(crate) fn sigma_4(&self) -> &T {
+    pub fn sigma_4(&self) -> &T {
         &self.elements[Self::SIGMA_4]
     }
 
-    pub(crate) fn id_1(&self) -> &T {
+    pub fn id_1(&self) -> &T {
         &self.elements[Self::ID_1]
     }
 
-    pub(crate) fn id_2(&self) -> &T {
+    pub fn id_2(&self) -> &T {
         &self.elements[Self::ID_2]
     }
 
-    pub(crate) fn id_3(&self) -> &T {
+    pub fn id_3(&self) -> &T {
         &self.elements[Self::ID_3]
     }
 
-    pub(crate) fn id_4(&self) -> &T {
+    pub fn id_4(&self) -> &T {
         &self.elements[Self::ID_4]
     }
 
-    pub(crate) fn table_1(&self) -> &T {
+    pub fn table_1(&self) -> &T {
         &self.elements[Self::TABLE_1]
     }
 
-    pub(crate) fn table_2(&self) -> &T {
+    pub fn table_2(&self) -> &T {
         &self.elements[Self::TABLE_2]
     }
 
-    pub(crate) fn table_3(&self) -> &T {
+    pub fn table_3(&self) -> &T {
         &self.elements[Self::TABLE_3]
     }
 
-    pub(crate) fn table_4(&self) -> &T {
+    pub fn table_4(&self) -> &T {
         &self.elements[Self::TABLE_4]
     }
 
-    pub(crate) fn lagrange_first(&self) -> &T {
+    pub fn lagrange_first(&self) -> &T {
         &self.elements[Self::LAGRANGE_FIRST]
     }
 
-    pub(crate) fn lagrange_last(&self) -> &T {
+    pub fn lagrange_last(&self) -> &T {
         &self.elements[Self::LAGRANGE_LAST]
     }
 
-    pub(crate) fn lagrange_first_mut(&mut self) -> &mut T {
+    pub fn lagrange_first_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LAGRANGE_FIRST]
     }
 
-    pub(crate) fn lagrange_last_mut(&mut self) -> &mut T {
+    pub fn lagrange_last_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LAGRANGE_LAST]
     }
 }

@@ -1094,11 +1094,11 @@ impl<F: PrimeField> Hash for CachedPartialNonNativeFieldMultiplication<F> {
 }
 
 #[derive(Clone)]
-pub(crate) struct CycleNode {
+pub struct CycleNode {
     pub(crate) wire_index: u32,
     pub(crate) gate_index: u32,
 }
-pub(crate) type CyclicPermutation = Vec<CycleNode>;
+pub type CyclicPermutation = Vec<CycleNode>;
 
 pub(crate) struct TraceData<'a, P: Pairing> {
     pub(crate) wires: [&'a mut Polynomial<P::ScalarField>; NUM_WIRES],
