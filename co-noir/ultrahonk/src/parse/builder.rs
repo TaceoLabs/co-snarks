@@ -10,7 +10,6 @@ use super::{
 };
 use crate::{
     parse::{
-        field_from_hex_string,
         plookup::{MultiTableId, Plookup},
         types::{FieldCT, GateCounter, RomRecord, RomTable, NUM_WIRES},
     },
@@ -838,19 +837,19 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         // TODO(https://github.com/AztecProtocol/barretenberg/issues/911): These are pairing points extracted from a valid
         // proof. This is a workaround because we can't represent the point at infinity in biggroup yet.
         let mut agg_obj_indices = AggregationObjectIndices::default();
-        let x0 = field_from_hex_string::<P::BaseField>(
+        let x0 = Utils::field_from_hex_string::<P::BaseField>(
             "0x031e97a575e9d05a107acb64952ecab75c020998797da7842ab5d6d1986846cf",
         )
         .expect("x0 works");
-        let y0 = field_from_hex_string::<P::BaseField>(
+        let y0 = Utils::field_from_hex_string::<P::BaseField>(
             "0x178cbf4206471d722669117f9758a4c410db10a01750aebb5666547acf8bd5a4",
         )
         .expect("y0 works");
-        let x1 = field_from_hex_string::<P::BaseField>(
+        let x1 = Utils::field_from_hex_string::<P::BaseField>(
             "0x0f94656a2ca489889939f81e9c74027fd51009034b3357f0e91b8a11e7842c38",
         )
         .expect("x1 works");
-        let y1 = field_from_hex_string::<P::BaseField>(
+        let y1 = Utils::field_from_hex_string::<P::BaseField>(
             "0x1b52c2020d7464a0c80c0da527a08193fe27776f50224bd6fb128b46c1ddb67f",
         )
         .expect("y1 works");

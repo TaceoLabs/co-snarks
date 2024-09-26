@@ -1,7 +1,7 @@
 use ark_bn254::Bn254;
 use ultrahonk::{
-    parse::{get_constraint_system_from_file, get_witness_from_file},
-    HonkProof, ProvingKey, UltraCircuitBuilder, UltraHonk,
+    prelude::{HonkProof, ProvingKey, UltraCircuitBuilder, UltraHonk},
+    Utils,
 };
 
 #[test]
@@ -12,8 +12,8 @@ fn poseidon_test() {
     const WITNESS_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.gz";
     const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.proof";
 
-    let constraint_system = get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
-    let witness = get_witness_from_file(WITNESS_FILE).unwrap();
+    let constraint_system = Utils::get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
+    let witness = Utils::get_witness_from_file(WITNESS_FILE).unwrap();
 
     let builder =
         UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);

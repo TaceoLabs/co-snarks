@@ -1,5 +1,5 @@
 use super::{
-    builder::UltraCircuitBuilder,
+    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable},
     crs::CrsParser,
     types::{CyclicPermutation, Mapping, PermutationMapping},
 };
@@ -7,7 +7,7 @@ use crate::{
     decider::polynomial::Polynomial,
     parse::types::{TraceData, NUM_WIRES},
     types::{Polynomials, PrecomputedEntities, ProverCrs, ProverWitnessEntities, ProvingKey},
-    GenericUltraCircuitBuilder, UltraCircuitVariable, Utils,
+    Utils,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;

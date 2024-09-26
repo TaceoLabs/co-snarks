@@ -6,6 +6,17 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use num_bigint::BigUint;
 
+pub struct ProvingKey<P: Pairing> {
+    pub(crate) crs: ProverCrs<P>,
+    pub(crate) circuit_size: u32,
+    pub(crate) public_inputs: Vec<P::ScalarField>,
+    pub(crate) num_public_inputs: u32,
+    pub(crate) pub_inputs_offset: u32,
+    pub(crate) polynomials: Polynomials<P::ScalarField>,
+    pub(crate) memory_read_records: Vec<u32>,
+    pub(crate) memory_write_records: Vec<u32>,
+}
+
 // This is what we get from the proving key, we shift at a later point
 #[derive(Default)]
 pub(crate) struct Polynomials<F: PrimeField> {
@@ -31,17 +42,6 @@ impl<F: PrimeField> Polynomials<F> {
     pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
         self.witness.iter_mut().chain(self.precomputed.iter_mut())
     }
-}
-
-pub struct ProvingKey<P: Pairing> {
-    pub(crate) crs: ProverCrs<P>,
-    pub(crate) circuit_size: u32,
-    pub(crate) public_inputs: Vec<P::ScalarField>,
-    pub(crate) num_public_inputs: u32,
-    pub(crate) pub_inputs_offset: u32,
-    pub(crate) polynomials: Polynomials<P::ScalarField>,
-    pub(crate) memory_read_records: Vec<u32>,
-    pub(crate) memory_write_records: Vec<u32>,
 }
 
 pub struct Crs<P: Pairing> {
@@ -243,7 +243,7 @@ pub(crate) struct ShiftedTableEntities<T: Default> {
 
 const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
 #[derive(Default)]
-pub(crate) struct PrecomputedEntities<T: Default> {
+pub struct PrecomputedEntities<T: Default> {
     pub(crate) elements: [T; PRECOMPUTED_ENTITIES_SIZE],
 }
 

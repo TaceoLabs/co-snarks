@@ -171,9 +171,7 @@ impl<F: PrimeField, const T: usize, const D: u64> FieldHash<F, T> for Poseidon2<
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{
-        parse::field_from_hex_string, poseidon2::poseidon2_bn254::POSEIDON2_BN254_T4_PARAMS,
-    };
+    use crate::{poseidon2::poseidon2_bn254::POSEIDON2_BN254_T4_PARAMS, Utils};
     use rand::thread_rng;
 
     const TESTRUNS: usize = 10;
@@ -221,19 +219,19 @@ mod test {
             ark_bn254::Fr::from(3u64),
         ];
         let expected = [
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "0x01bd538c2ee014ed5141b29e9ae240bf8db3fe5b9a38629a9647cf8d76c01737",
             )
             .unwrap(),
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "0x239b62e7db98aa3a2a8f6a0d2fa1709e7a35959aa6c7034814d9daa90cbac662",
             )
             .unwrap(),
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "0x04cbb44c61d928ed06808456bf758cbf0c18d1e15a7b6dbc8245fa7515d5e3cb",
             )
             .unwrap(),
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "0x2e11c5cff2a22c64d01304b778d78f6998eff1ab73163a35603f54794c30847a",
             )
             .unwrap(),
@@ -245,37 +243,37 @@ mod test {
     #[test]
     fn posedon2_bn254_t4_kat2() {
         let input = [
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "9a807b615c4d3e2fa0b1c2d3e4f56789fedcba9876543210abcdef0123456789",
             )
             .unwrap(),
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "9a807b615c4d3e2fa0b1c2d3e4f56789fedcba9876543210abcdef0123456789",
             )
             .unwrap(),
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "0x9a807b615c4d3e2fa0b1c2d3e4f56789fedcba9876543210abcdef0123456789",
             )
             .unwrap(),
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "0x9a807b615c4d3e2fa0b1c2d3e4f56789fedcba9876543210abcdef0123456789",
             )
             .unwrap(),
         ];
         let expected = [
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "0x2bf1eaf87f7d27e8dc4056e9af975985bccc89077a21891d6c7b6ccce0631f95",
             )
             .unwrap(),
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "0x0c01fa1b8d0748becafbe452c0cb0231c38224ea824554c9362518eebdd5701f",
             )
             .unwrap(),
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "0x018555a8eb50cf07f64b019ebaf3af3c925c93e631f3ecd455db07bbb52bbdd3",
             )
             .unwrap(),
-            field_from_hex_string(
+            Utils::field_from_hex_string(
                 "0x0cbea457c91c22c6c31fd89afd2541efc2edf31736b9f721e823b2165c90fd41",
             )
             .unwrap(),

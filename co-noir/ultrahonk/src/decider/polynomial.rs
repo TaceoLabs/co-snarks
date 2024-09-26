@@ -1,12 +1,12 @@
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, Zero};
 use std::ops::{AddAssign, Index, IndexMut};
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct Polynomial<F: PrimeField> {
+pub struct Polynomial<F> {
     pub(crate) coefficients: Vec<F>,
 }
 
-pub(crate) struct ShiftedPoly<'a, F: PrimeField> {
+pub struct ShiftedPoly<'a, F> {
     pub(crate) coefficients: &'a [F],
     zero: F, // TODO is there are better solution
 }
@@ -38,15 +38,9 @@ impl<'a, F: PrimeField> Index<usize> for ShiftedPoly<'a, F> {
     }
 }
 
-impl<F: PrimeField> Polynomial<F> {
+impl<F: Clone> Polynomial<F> {
     pub(crate) fn new(coefficients: Vec<F>) -> Self {
         Self { coefficients }
-    }
-
-    pub(crate) fn new_zero(size: usize) -> Self {
-        Self {
-            coefficients: vec![F::zero(); size],
-        }
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &F> {
@@ -59,18 +53,6 @@ impl<F: PrimeField> Polynomial<F> {
 
     pub(crate) fn len(&self) -> usize {
         self.coefficients.len()
-    }
-
-    pub(crate) fn degree(&self) -> usize {
-        let mut len = self.coefficients.len() - 1;
-        for c in self.coefficients.iter().rev() {
-            if c.is_zero() {
-                len -= 1;
-            } else {
-                break;
-            }
-        }
-        len
     }
 
     pub(crate) fn as_ref(&self) -> &[F] {
@@ -88,7 +70,39 @@ impl<F: PrimeField> Polynomial<F> {
     pub(crate) fn into_vec(self) -> Vec<F> {
         self.coefficients
     }
+}
 
+impl<F: Zero + Clone> Polynomial<F> {
+    pub(crate) fn new_zero(size: usize) -> Self {
+        Self {
+            coefficients: vec![F::zero(); size],
+        }
+    }
+
+    pub(crate) fn degree(&self) -> usize {
+        let mut len = self.coefficients.len() - 1;
+        for c in self.coefficients.iter().rev() {
+            if c.is_zero() {
+                len -= 1;
+            } else {
+                break;
+            }
+        }
+        len
+    }
+
+    // Can only shift by 1
+    pub(crate) fn shifted(&self) -> ShiftedPoly<F> {
+        assert!(!self.coefficients.is_empty());
+        assert!(self.coefficients[0].is_zero());
+        ShiftedPoly {
+            coefficients: &self.coefficients[1..],
+            zero: F::zero(),
+        }
+    }
+}
+
+impl<F: PrimeField> Polynomial<F> {
     /**
      * @brief Divides p(X) by (X-r) in-place.
      */
@@ -151,19 +165,9 @@ impl<F: PrimeField> Polynomial<F> {
     pub(crate) fn add_scaled(&mut self, src: &Polynomial<F>, scalar: &F) {
         self.add_scaled_slice(&src.coefficients, scalar);
     }
-
-    // Can only shift by 1
-    pub(crate) fn shifted(&self) -> ShiftedPoly<F> {
-        assert!(!self.coefficients.is_empty());
-        assert!(self.coefficients[0].is_zero());
-        ShiftedPoly {
-            coefficients: &self.coefficients[1..],
-            zero: F::zero(),
-        }
-    }
 }
 
-impl<F: PrimeField> Index<usize> for Polynomial<F> {
+impl<F> Index<usize> for Polynomial<F> {
     type Output = F;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -171,7 +175,7 @@ impl<F: PrimeField> Index<usize> for Polynomial<F> {
     }
 }
 
-impl<F: PrimeField> IndexMut<usize> for Polynomial<F> {
+impl<F> IndexMut<usize> for Polynomial<F> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.coefficients[index]
     }
