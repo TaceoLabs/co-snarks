@@ -32,8 +32,9 @@ pub(crate) const N_MAX: usize = 1 << 25;
 
 // TODO do not forget to remove this
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
-type FieldShare<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
-type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
+pub(crate) type FieldShare<T, P> =
+    <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare;
+pub(crate) type PointShare<T, C> = <T as EcMpcProtocol<C>>::PointShare;
 
 pub(crate) struct CoUtils {}
 

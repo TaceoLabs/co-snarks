@@ -151,7 +151,10 @@ impl Utils {
         }
     }
 
-    fn commit<P: Pairing>(poly: &[P::ScalarField], crs: &ProverCrs<P>) -> HonkProofResult<P::G1> {
+    pub fn commit<P: Pairing>(
+        poly: &[P::ScalarField],
+        crs: &ProverCrs<P>,
+    ) -> HonkProofResult<P::G1> {
         if poly.len() > crs.monomials.len() {
             return Err(HonkProofError::CrsTooSmall);
         }

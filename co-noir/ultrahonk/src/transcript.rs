@@ -228,7 +228,7 @@ where
         new_challenge
     }
 
-    pub(super) fn get_challenge<P: HonkCurve<F>>(&mut self, label: String) -> P::ScalarField {
+    pub fn get_challenge<P: HonkCurve<F>>(&mut self, label: String) -> P::ScalarField {
         self.manifest.add_challenge(self.round_number, &[label]);
         let challenge = self.get_next_challenge_buffer();
         let res = P::convert_destinationfield_to_scalarfield(&challenge);
@@ -236,10 +236,7 @@ where
         res
     }
 
-    pub(super) fn get_challenges<P: HonkCurve<F>>(
-        &mut self,
-        labels: &[String],
-    ) -> Vec<P::ScalarField> {
+    pub fn get_challenges<P: HonkCurve<F>>(&mut self, labels: &[String]) -> Vec<P::ScalarField> {
         self.manifest.add_challenge(self.round_number, labels);
         let mut res = Vec::with_capacity(labels.len());
         for _ in 0..labels.len() {
