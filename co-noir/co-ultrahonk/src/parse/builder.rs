@@ -7,6 +7,7 @@ use ultrahonk::{
     AcirFormat, UltraCircuitBuilder,
 };
 
+#[derive(Clone, Debug)]
 pub enum BuilderFieldType<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -20,7 +21,7 @@ where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(crate) driver: T,
-    // pub(crate) variables: Vec<P::ScalarField>,
+    pub(crate) variables: Vec<BuilderFieldType<T, P>>,
     variable_names: HashMap<u32, String>,
     next_var_index: Vec<u32>,
     prev_var_index: Vec<u32>,
@@ -48,7 +49,6 @@ where
     pub(crate) memory_read_records: Vec<u32>,
     // Stores gate index of RAM writes (required by proving key)
     pub(crate) memory_write_records: Vec<u32>,
-    phantom_pairing: std::marker::PhantomData<P>,
 }
 
 impl<T, P: Pairing> CoUltraCircuitBuilder<T, P>
@@ -99,6 +99,7 @@ where
             constraint_system.recursive,
         );
 
+        todo!("Build constraints");
         // builder.build_constraints(
         //     constraint_system,
         //     has_valid_witness_assignments,
@@ -111,7 +112,7 @@ where
 
     fn new(driver: T, size_hint: usize) -> Self {
         tracing::info!("Builder new");
-        // let variables = Vec::with_capacity(size_hint * 3);
+        let variables = Vec::with_capacity(size_hint * 3);
         let variable_names = HashMap::with_capacity(size_hint * 3);
         let next_var_index = Vec::with_capacity(size_hint * 3);
         let prev_var_index = Vec::with_capacity(size_hint * 3);
@@ -120,7 +121,7 @@ where
 
         Self {
             driver,
-            // variables,
+            variables,
             variable_names,
             next_var_index,
             prev_var_index,
@@ -145,7 +146,6 @@ where
             // cached_partial_non_native_field_multiplications: Vec::new(),
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
-            phantom_pairing: std::marker::PhantomData,
         }
     }
 
@@ -176,16 +176,15 @@ where
 
         // TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
 
-        // for idx in 0..varnum {
-        //     // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
-        //     // be "set" later on via the assert_equal mechanism.
-        //     let value = if idx < witness_values.len() {
-        //         witness_values[idx]
-        //     } else {
-        //         P::ScalarField::zero()
-        //     };
-        //     builder.add_variable(value);
-        // }
+        let len = witness_values.len();
+        for witness in witness_values.into_iter().take(varnum) {
+            builder.add_variable(witness);
+        }
+        // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
+        // be "set" later on via the assert_equal mechanism.
+        for _ in len..varnum {
+            builder.add_variable(BuilderFieldType::Public(P::ScalarField::zero()));
+        }
 
         // Add the public_inputs from acir
         builder.public_inputs = public_inputs;
@@ -197,5 +196,15 @@ where
 
         builder.is_recursive_circuit = recursive;
         builder
+    }
+
+    pub(crate) fn add_variable(&mut self, value: BuilderFieldType<T, P>) -> u32 {
+        let idx = self.variables.len() as u32;
+        self.variables.push(value);
+        self.real_variable_index.push(idx);
+        self.next_var_index.push(Self::REAL_VARIABLE);
+        self.prev_var_index.push(Self::FIRST_VARIABLE_IN_CLASS);
+        self.real_variable_tags.push(Self::DUMMY_TAG);
+        idx
     }
 }

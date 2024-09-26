@@ -158,15 +158,14 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
         // TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
 
-        for idx in 0..varnum {
-            // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
-            // be "set" later on via the assert_equal mechanism.
-            let value = if idx < witness_values.len() {
-                witness_values[idx]
-            } else {
-                P::ScalarField::zero()
-            };
-            builder.add_variable(value);
+        let len = witness_values.len();
+        for witness in witness_values.into_iter().take(varnum) {
+            builder.add_variable(witness);
+        }
+        // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
+        // be "set" later on via the assert_equal mechanism.
+        for _ in len..varnum {
+            builder.add_variable(P::ScalarField::zero());
         }
 
         // Add the public_inputs from acir
