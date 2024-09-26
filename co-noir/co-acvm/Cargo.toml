@@ -19,8 +19,6 @@ intmap.workspace = true
 mpc-core.workspace = true
 noirc-abi.workspace = true
 noirc-artifacts.workspace = true
-num-bigint.workspace = true
-num-traits.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
