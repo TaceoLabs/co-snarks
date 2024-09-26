@@ -612,7 +612,7 @@ impl<F: PrimeField> FieldCT<F> {
         ); // TODO this is just implemented for the Plain backend
         let out = self.multiplicative_constant * value + self.additive_constant;
 
-        result.witness_index = builder.add_variable(S::from(P::ScalarField::from(out)));
+        result.witness_index = builder.add_variable(S::from_public(P::ScalarField::from(out)));
         result.additive_constant = F::zero();
         result.multiplicative_constant = F::one();
 
@@ -666,7 +666,7 @@ impl<F: PrimeField> WitnessCT<F> {
     where
         F: From<P::ScalarField>,
     {
-        builder.add_variable(S::from(value));
+        builder.add_variable(S::from_public(value));
         Self {
             witness: F::from(value),
             witness_index: Self::IS_CONSTANT,
