@@ -43,7 +43,7 @@ where
     }
 
     pub fn prove(
-        &mut self,
+        mut self,
         proving_key: ProvingKey<T, P>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("CoUltraHonk prove");
