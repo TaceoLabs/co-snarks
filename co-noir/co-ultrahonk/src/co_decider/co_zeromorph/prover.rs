@@ -72,44 +72,23 @@ where
         }
     }
 
-    /**
-     * @brief  * @brief Returns a univariate opening claim equivalent to a set of multilinear evaluation claims for
-     * unshifted polynomials f_i and to-be-shifted polynomials g_i to be subsequently proved with a univariate PCS
-     *
-     * @param f_polynomials Unshifted polynomials
-     * @param g_polynomials To-be-shifted polynomials (of which the shifts h_i were evaluated by sumcheck)
-     * @param evaluations Set of evaluations v_i = f_i(u), w_i = h_i(u) = g_i_shifted(u)
-     * @param multilinear_challenge Multilinear challenge point u
-     * @param commitment_key
-     * @param transcript
-     *
-     * @todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
-     */
-    pub(crate) fn zeromorph_prove(
+    fn compute_batched_polys(
         &mut self,
         transcript: &mut TranscriptType,
-        circuit_size: u32,
-        crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<P::ScalarField>,
-        // ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
-    ) -> HonkProofResult<()> {
-        tracing::trace!("Zeromorph prove");
-
+        claimed_evaluations: AllEntities<P::ScalarField, P::ScalarField>,
+        n: usize,
+    ) -> (
+        SharedPolynomial<T, P>,
+        SharedPolynomial<T, P>,
+        P::ScalarField,
+    ) {
         let f_polynomials = Self::get_f_polyomials(&self.memory.polys);
         let g_polynomials = Self::get_g_polyomials(&self.memory.polys);
-        let f_evaluations = Self::get_f_evaluations(&sumcheck_output.claimed_evaluations);
-        let g_shift_evaluations =
-            Self::get_g_shift_evaluations(&sumcheck_output.claimed_evaluations);
-        let multilinear_challenge = &sumcheck_output.challenges;
-        let commitment_key = crs;
+        let f_evaluations = Self::get_f_evaluations(&claimed_evaluations);
+        let g_shift_evaluations = Self::get_g_shift_evaluations(&claimed_evaluations);
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
         let rho = transcript.get_challenge::<P>("rho".to_string());
-
-        // Extract multilinear challenge u and claimed multilinear evaluations from Sumcheck output
-        let u_challenge = multilinear_challenge;
-        let log_n = Utils::get_msb32(circuit_size);
-        let n = 1 << log_n;
 
         // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
         // f_batched = sum_{i=0}^{m-1}\rho^i*f_i and g_batched = sum_{i=0}^{l-1}\rho^{m+i}*g_i,
@@ -178,6 +157,51 @@ where
             batched_evaluation += batching_scalar * g_shift_eval;
             batching_scalar *= rho;
         }
+
+        (f_batched, g_batched, batched_evaluation)
+    }
+
+    /**
+     * @brief  * @brief Returns a univariate opening claim equivalent to a set of multilinear evaluation claims for
+     * unshifted polynomials f_i and to-be-shifted polynomials g_i to be subsequently proved with a univariate PCS
+     *
+     * @param f_polynomials Unshifted polynomials
+     * @param g_polynomials To-be-shifted polynomials (of which the shifts h_i were evaluated by sumcheck)
+     * @param evaluations Set of evaluations v_i = f_i(u), w_i = h_i(u) = g_i_shifted(u)
+     * @param multilinear_challenge Multilinear challenge point u
+     * @param commitment_key
+     * @param transcript
+     *
+     * @todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
+     */
+    pub(crate) fn zeromorph_prove(
+        &mut self,
+        transcript: &mut TranscriptType,
+        circuit_size: u32,
+        crs: &ProverCrs<P>,
+        sumcheck_output: SumcheckOutput<P::ScalarField>,
+        // ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
+    ) -> HonkProofResult<()> {
+        tracing::trace!("Zeromorph prove");
+
+        let multilinear_challenge = &sumcheck_output.challenges;
+        let commitment_key = crs;
+
+        // Extract multilinear challenge u and claimed multilinear evaluations from Sumcheck output
+        let u_challenge = multilinear_challenge;
+        let log_n = Utils::get_msb32(circuit_size);
+        let n = 1 << log_n;
+
+        let (f_batched, g_batched, batched_evaluation) =
+            self.compute_batched_polys(transcript, sumcheck_output.claimed_evaluations, n);
+
+        // We don't have groups, so we skip a lot now
+
+        // Compute the full batched polynomial f = f_batched + g_batched.shifted() = f_batched + h_batched. This is the
+        // polynomial for which we compute the quotients q_k and prove f(u) = v_batched.
+        let mut f_polynomial = f_batched.to_owned();
+        f_polynomial += g_batched.shifted().as_ref();
+        // f_polynomial += concatenated_batched; // No groups
 
         todo!("ZeroMorph prove")
     }
