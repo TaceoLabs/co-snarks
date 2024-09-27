@@ -339,6 +339,8 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
     ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
+        tracing::trace!("Zeromorph prove");
+
         let f_polynomials = self.get_f_polyomials(&self.memory.polys);
         let g_polynomials = self.get_g_polyomials(&self.memory.polys);
         let f_evaluations = Self::get_f_evaluations(&sumcheck_output.claimed_evaluations);
