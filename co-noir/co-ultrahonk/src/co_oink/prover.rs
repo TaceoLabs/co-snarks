@@ -23,7 +23,6 @@ use ark_ff::One;
 use itertools::izip;
 use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use std::marker::PhantomData;
-use tracing::field::Field;
 use ultrahonk::{
     prelude::{
         HonkCurve, HonkProofError, HonkProofResult, Polynomial, TranscriptFieldType, TranscriptType,
@@ -295,6 +294,35 @@ where
         Ok(driver.mul_many(&mul1, &mul2)?)
     }
 
+    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
+    fn array_prod_mul(
+        &mut self,
+        inp: &[FieldShare<T, P>],
+    ) -> HonkProofResult<Vec<FieldShare<T, P>>> {
+        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
+        let len = inp.len();
+
+        let r = (0..=len)
+            .map(|_| self.driver.rand())
+            .collect::<Result<Vec<_>, _>>()?;
+        let r_inv = self.driver.inv_many(&r)?;
+        let r_inv0 = vec![r_inv[0].clone(); len];
+
+        let mut unblind = self.driver.mul_many(&r_inv0, &r[1..])?;
+
+        let mul = self.driver.mul_many(&r[..len], inp)?;
+        let mut open = self.driver.mul_open_many(&mul, &r_inv[1..])?;
+
+        for i in 1..open.len() {
+            open[i] = open[i] * open[i - 1];
+        }
+
+        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
+            *unblind = self.driver.mul_with_public(open, unblind);
+        }
+        Ok(unblind)
+    }
+
     fn compute_grand_product(&mut self, proving_key: &ProvingKey<T, P>) -> HonkProofResult<()> {
         tracing::trace!("compute grand product");
         // Barratenberg uses multithreading here
@@ -345,32 +373,21 @@ where
         let numerator = self.driver.mul_many(&num1, &num2)?;
         let denominator = self.driver.mul_many(&denom1, &denom2)?;
 
-        todo!("compute grand product")
-
         // Step (2)
         // Compute the accumulating product of the numerator and denominator terms.
-        // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation signlethreaded for simplicity
 
-        // for i in 1..proving_key.circuit_size as usize {
-        //     numerator[i] = numerator[i] * numerator[i - 1];
-        //     denominator[i] = denominator[i] * denominator[i - 1];
-        // }
+        // TODO could batch here as well
+        // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
+        let numerator = self.array_prod_mul(&numerator)?;
+        let mut denominator = self.array_prod_mul(&denominator)?;
 
-        // // invert denominator
-        // CoUtils::batch_invert(&mut denominator);
+        // invert denominator
+        CoUtils::batch_invert::<T, P>(self.driver, &mut denominator)?;
 
-        // // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
-        // self.memory
-        //     .z_perm
-        //     .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
-
-        // for (des, num, den) in izip!(
-        //     self.memory.z_perm.iter_mut().skip(1),
-        //     numerator.into_iter(),
-        //     denominator.into_iter()
-        // ) {
-        //     *des = num * den;
-        // }
+        // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
+        let z_perm = self.driver.mul_many(&numerator, &denominator)?;
+        self.memory.z_perm = Polynomial::new(z_perm);
+        Ok(())
     }
 
     // Generate relation separators alphas for sumcheck/combiner computation
