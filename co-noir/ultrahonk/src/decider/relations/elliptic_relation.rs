@@ -1,4 +1,3 @@
-use crate::decider::sumcheck::sumcheck_round::SumcheckRoundOutput;
 use crate::decider::types::RelationParameters;
 use crate::decider::{types::ProverUnivariates, univariate::Univariate};
 use crate::honk_curve::HonkCurve;
@@ -18,10 +17,10 @@ impl<F: PrimeField> EllipticRelationAcc<F> {
         self.r1 *= elements[1];
     }
 
-    pub(crate) fn extend_and_batch_univariates(
+    pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        result: &mut SumcheckRoundOutput<F>,
-        extended_random_poly: &SumcheckRoundOutput<F>,
+        result: &mut Univariate<F, SIZE>,
+        extended_random_poly: &Univariate<F, SIZE>,
         partial_evaluation_result: &F,
     ) {
         self.r0.extend_and_batch_univariates(

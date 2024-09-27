@@ -68,7 +68,7 @@ impl SumcheckRound {
     ) {
         // Pow-Factor  \f$ (1-X) + X\beta_i \f$
         let random_polynomial = [F::one(), gate_sparators.current_element()];
-        let mut extended_random_polynomial = SumcheckRoundOutput::default();
+        let mut extended_random_polynomial = Univariate::default();
         extended_random_polynomial.extend_from(&random_polynomial);
 
         univariate_accumulators.extend_and_batch_univariates(

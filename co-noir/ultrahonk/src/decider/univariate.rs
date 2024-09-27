@@ -1,11 +1,10 @@
+use crate::decider::barycentric::Barycentric;
 use ark_ff::{PrimeField, Zero};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use crate::decider::barycentric::Barycentric;
-
 #[derive(Clone, Debug)]
-pub(crate) struct Univariate<F: PrimeField, const SIZE: usize> {
-    pub(crate) evaluations: [F; SIZE],
+pub struct Univariate<F, const SIZE: usize> {
+    pub evaluations: [F; SIZE],
 }
 
 impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
@@ -51,7 +50,7 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
      * = f(2) + Δ...
      *
      */
-    pub(crate) fn extend_from(&mut self, poly: &[F]) {
+    pub fn extend_from(&mut self, poly: &[F]) {
         let length = poly.len();
         let extended_length = SIZE;
 
@@ -164,8 +163,7 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
                 self.evaluations[k] = F::zero();
 
                 // compute each term v_j / (d_j*(x-x_j)) of the sum
-                for (j, term) in poly.iter().enumerate() {
-                    let mut term = *term;
+                for (j, mut term) in poly.iter().cloned().enumerate() {
                     term *= &dominator_inverses[length * k + j];
                     self.evaluations[k] += term;
                 }
