@@ -1,7 +1,12 @@
 use ark_ec::pairing::Pairing;
 use mpc_core::traits::PrimeFieldMpcProtocol;
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    ops::{Index, IndexMut},
+};
 use ultrahonk::prelude::Polynomial;
+
+use crate::FieldShare;
 
 pub(crate) struct SharedPolynomial<T, P: Pairing>
 where
@@ -47,6 +52,15 @@ where
             let tmp = driver.mul_with_public(scalar, src);
             *des = driver.add(des, &tmp);
         }
+    }
+
+    pub(crate) fn add_scaled(
+        &mut self,
+        driver: &mut T,
+        src: &SharedPolynomial<T, P>,
+        scalar: &P::ScalarField,
+    ) {
+        self.add_scaled_slice(driver, &src.coefficients, scalar);
     }
 
     pub(crate) fn add_scaled_slice_public(
@@ -111,5 +125,23 @@ where
 {
     fn as_ref(&self) -> &[T::FieldShare] {
         &self.coefficients
+    }
+}
+impl<T, P: Pairing> Index<usize> for SharedPolynomial<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    type Output = T::FieldShare;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.coefficients[index]
+    }
+}
+impl<T, P: Pairing> IndexMut<usize> for SharedPolynomial<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.coefficients[index]
     }
 }

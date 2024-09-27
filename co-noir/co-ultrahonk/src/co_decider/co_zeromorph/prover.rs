@@ -132,6 +132,112 @@ where
         SharedPolynomial::new(result)
     }
 
+    // /**
+    //  * @brief Compute partially evaluated degree check polynomial \zeta_x = q - \sum_k y^k * x^{N - d_k - 1} * q_k
+    //  * @details Compute \zeta_x, where
+    //  *
+    //  *                          \zeta_x = q - \sum_k y^k * x^{N - d_k - 1} * q_k
+    //  *
+    //  * @param batched_quotient
+    //  * @param quotients
+    //  * @param y_challenge
+    //  * @param x_challenge
+    //  * @return Polynomial Degree check polynomial \zeta_x such that \zeta_x(x) = 0
+    //  */
+    fn compute_partially_evaluated_degree_check_polynomial(
+        driver: &mut T,
+        batched_quotient: &SharedPolynomial<T, P>,
+        quotients: &[SharedPolynomial<T, P>],
+        y_challenge: &P::ScalarField,
+        x_challenge: &P::ScalarField,
+    ) -> SharedPolynomial<T, P> {
+        let n = batched_quotient.len();
+
+        // Initialize partially evaluated degree check polynomial \zeta_x to \hat{q}
+        let mut result = batched_quotient.clone();
+
+        let mut y_power = P::ScalarField::ONE; // y^k
+        for (k, q) in quotients.iter().enumerate() {
+            // Accumulate y^k * x^{N - d_k - 1} * q_k into \hat{q}
+            let deg_k = (1 << k) - 1;
+            let exponent = (n - deg_k - 1) as u64;
+            let x_power = x_challenge.pow([exponent]); // x^{N - d_k - 1}
+
+            result.add_scaled(driver, q, &(-y_power * x_power));
+
+            y_power *= y_challenge; // update batching scalar y^k
+        }
+
+        result
+    }
+
+    /**
+     * @brief Compute partially evaluated zeromorph identity polynomial Z_x
+     * @details Compute Z_x, where
+     *
+     *  Z_x = x * f_batched + g_batched - v * x * \Phi_n(x)
+     *           - x * \sum_k (x^{2^k}\Phi_{n-k-1}(x^{2^{k-1}}) - u_k\Phi_{n-k}(x^{2^k})) * q_k
+     *           + concatentation_term
+     *
+     * where f_batched = \sum_{i=0}^{m-1}\rho^i*f_i, g_batched = \sum_{i=0}^{l-1}\rho^{m+i}*g_i
+     *
+     * and concatenation_term = \sum_{i=0}^{num_chunks_per_group}(x^{i * min_N + 1}concatenation_groups_batched_{i})
+     *
+     * @note The concatenation term arises from an implementation detail in the Translator and is not part of the
+     * conventional ZM protocol
+     * @param input_polynomial
+     * @param quotients
+     * @param v_evaluation
+     * @param x_challenge
+     * @return Polynomial
+     */
+    fn compute_partially_evaluated_zeromorph_identity_polynomial(
+        driver: &mut T,
+        f_batched: SharedPolynomial<T, P>,
+        g_batched: SharedPolynomial<T, P>,
+        quotients: Vec<SharedPolynomial<T, P>>,
+        v_evaluation: P::ScalarField,
+        u_challenge: &[P::ScalarField],
+        x_challenge: P::ScalarField,
+    ) -> SharedPolynomial<T, P> {
+        let n = f_batched.len();
+
+        // Initialize Z_x with x * \sum_{i=0}^{m-1} f_i + \sum_{i=0}^{l-1} g_i
+        let mut result = g_batched;
+        result.add_scaled(driver, &f_batched, &x_challenge);
+
+        // Compute Z_x -= v * x * \Phi_n(x)
+        let phi_numerator = x_challenge.pow([n as u64]) - P::ScalarField::ONE; // x^N - 1
+        let phi_n_x = phi_numerator / (x_challenge - P::ScalarField::ONE);
+        let rhs = v_evaluation * x_challenge * phi_n_x;
+        result[0] = driver.add_with_public(&-rhs, &result[0]);
+
+        // Add contribution from q_k polynomials
+        for (k, (q, u)) in izip!(quotients.iter(), u_challenge.iter()).enumerate() {
+            let exp_1 = 1 << k;
+            let x_power = x_challenge.pow([exp_1]); // x^{2^k}
+
+            // \Phi_{n-k-1}(x^{2^{k + 1}})
+            let exp_2 = 1 << (k + 1);
+            let phi_term_1 = phi_numerator / (x_challenge.pow([exp_2]) - P::ScalarField::ONE);
+
+            // \Phi_{n-k}(x^{2^k})
+            let phi_term_2 = phi_numerator / (x_challenge.pow([exp_1]) - P::ScalarField::ONE);
+
+            // x^{2^k} * \Phi_{n-k-1}(x^{2^{k+1}}) - u_k *  \Phi_{n-k}(x^{2^k})
+            let mut scalar = x_power * phi_term_1 - phi_term_2 * u;
+
+            scalar *= x_challenge;
+            scalar *= -P::ScalarField::ONE;
+
+            result.add_scaled(driver, q, &scalar);
+        }
+
+        // We don't have groups, so we are done already
+
+        result
+    }
+
     fn get_f_polyomials(
         polys: &AllEntities<Vec<FieldShare<T, P>>, Vec<P::ScalarField>>,
     ) -> PolyF<Vec<FieldShare<T, P>>, Vec<P::ScalarField>> {
@@ -364,6 +470,7 @@ where
 
         // Compute degree check polynomial \zeta partially evaluated at x
         let zeta_x = Self::compute_partially_evaluated_degree_check_polynomial(
+            &mut self.driver,
             &batched_quotient,
             &quotients,
             &y_challenge,
@@ -371,16 +478,17 @@ where
         );
 
         // Compute ZeroMorph identity polynomial Z partially evaluated at x
-        // let z_x = Self::compute_partially_evaluated_zeromorph_identity_polynomial(
-        //     f_batched,
-        //     g_batched,
-        //     quotients,
-        //     batched_evaluation,
-        //     u_challenge,
-        //     x_challenge,
-        // );
+        let z_x = Self::compute_partially_evaluated_zeromorph_identity_polynomial(
+            &mut self.driver,
+            f_batched,
+            g_batched,
+            quotients,
+            batched_evaluation,
+            u_challenge,
+            x_challenge,
+        );
 
-        // // Compute batched degree-check and ZM-identity quotient polynomial pi
+        // Compute batched degree-check and ZM-identity quotient polynomial pi
         // let pi_polynomial =
         //     Self::compute_batched_evaluation_and_degree_check_polynomial(zeta_x, z_x, z_challenge);
 
