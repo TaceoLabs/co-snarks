@@ -18,16 +18,6 @@ pub(crate) struct PolyGShift<'a, T: Default> {
     pub(crate) wires: &'a ShiftedWitnessEntities<T>,
 }
 
-impl<'a, Shared: Default, Public: Default> PolyF<'a, Shared, Public> {
-    pub(crate) fn public_iter(&self) -> impl Iterator<Item = &Public> {
-        self.precomputed.iter().chain(self.witness.public_iter())
-    }
-
-    pub(crate) fn shared_iter(&self) -> impl Iterator<Item = &Shared> {
-        self.witness.shared_iter()
-    }
-}
-
 impl<'a, Shared: Default, Public: Default> PolyG<'a, Shared, Public> {
     pub(crate) fn public_iter(&self) -> impl Iterator<Item = &Public> {
         self.tables.into_iter()
@@ -45,10 +35,6 @@ impl<'a, T: Default> PolyGShift<'a, T> {
 
     pub(crate) fn wires_iter(&self) -> impl Iterator<Item = &T> {
         self.wires.iter()
-    }
-
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
-        self.tables_iter().chain(self.wires_iter())
     }
 
     pub(crate) fn public_iter(&self) -> impl Iterator<Item = &T> {

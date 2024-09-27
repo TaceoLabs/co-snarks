@@ -1,14 +1,17 @@
 use super::types::{PolyF, PolyG, PolyGShift};
 use crate::{
     co_decider::{
-        co_sumcheck::SumcheckOutput, polynomial::SharedPolynomial, prover::CoDecider,
+        co_sumcheck::SumcheckOutput,
+        co_zeromorph::{OpeningPair, ZeroMorphOpeningClaim},
+        polynomial::SharedPolynomial,
+        prover::CoDecider,
         types::ClaimedEvaluations,
     },
     types::AllEntities,
-    CoUtils, FieldShare, CONST_PROOF_SIZE_LOG_N,
+    CoUtils, FieldShare, CONST_PROOF_SIZE_LOG_N, N_MAX,
 };
 use ark_ec::Group;
-use ark_ff::{Field, One};
+use ark_ff::{Field, One, Zero};
 use itertools::izip;
 use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use ultrahonk::{
@@ -238,6 +241,48 @@ where
         result
     }
 
+    /**
+     * @brief Compute combined evaluation and degree-check polynomial pi
+     * @details Compute univariate polynomial pi, where
+     *
+     *  pi = (\zeta_c + z*Z_x) X^{N_{max}-(N-1)}
+     *
+     * The proof that pi(x) = 0 for some verifier challenge x will then be computed as part of the univariate PCS
+     * opening. If this is instantiated with KZG, the PCS is going to compute the quotient
+     * q_pi = (q_\zeta + z*q_Z)X^{N_{max}-(N-1)}, with q_\zeta = \zeta_x/(X-x), q_Z = Z_x/(X-x),
+     *
+     * @param Z_x
+     * @param zeta_x
+     * @param x_challenge
+     * @param z_challenge
+     * @param N_max
+     * @return Polynomial
+     */
+    fn compute_batched_evaluation_and_degree_check_polynomial(
+        driver: &mut T,
+        zeta_x: SharedPolynomial<T, P>,
+        z_x: SharedPolynomial<T, P>,
+        z_challenge: P::ScalarField,
+    ) -> SharedPolynomial<T, P> {
+        // We cannot commit to polynomials with size > N_max
+        let n = zeta_x.len();
+        assert!(n <= N_MAX);
+        let mut batched_polynomial = zeta_x;
+        batched_polynomial.add_scaled(driver, &z_x, &z_challenge);
+
+        // TODO(#742): To complete the degree check, we need to do an opening proof for x_challenge with a univariate
+        // PCS for the degree-lifted polynomial (\zeta_c + z*Z_x)*X^{N_max - N - 1}. If this PCS is KZG, verification
+        // then requires a pairing check similar to the standard KZG check but with [1]_2 replaced by [X^{N_max - N
+        // -1}]_2. Two issues: A) we do not have an SRS with these G2 elements (so need to generate a fake setup until
+        // we can do the real thing), and B) its not clear to me how to update our pairing algorithms to do this type of
+        // pairing. For now, simply construct pi without the shift and do a standard KZG pairing check if the PCS is
+        // KZG. When we're ready, all we have to do to make this fully legit is commit to the shift here and update the
+        // pairing check accordingly. Note: When this is implemented properly, it doesnt make sense to store the
+        // (massive) shifted polynomial of size N_max. Ideally would only store the unshifted version and just compute
+        // the shifted commitment directly via a new method.
+        batched_polynomial
+    }
+
     fn get_f_polyomials(
         polys: &AllEntities<Vec<FieldShare<T, P>>, Vec<P::ScalarField>>,
     ) -> PolyF<Vec<FieldShare<T, P>>, Vec<P::ScalarField>> {
@@ -397,8 +442,7 @@ where
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
-        // ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
-    ) -> HonkProofResult<()> {
+    ) -> HonkProofResult<ZeroMorphOpeningClaim<T, P>> {
         tracing::trace!("Zeromorph prove");
 
         let multilinear_challenge = &sumcheck_output.challenges;
@@ -489,18 +533,20 @@ where
         );
 
         // Compute batched degree-check and ZM-identity quotient polynomial pi
-        // let pi_polynomial =
-        //     Self::compute_batched_evaluation_and_degree_check_polynomial(zeta_x, z_x, z_challenge);
+        let pi_polynomial = Self::compute_batched_evaluation_and_degree_check_polynomial(
+            &mut self.driver,
+            zeta_x,
+            z_x,
+            z_challenge,
+        );
 
-        // let res = ZeroMorphOpeningClaim {
-        //     polynomial: pi_polynomial,
-        //     opening_pair: OpeningPair {
-        //         challenge: x_challenge,
-        //         evaluation: P::ScalarField::zero(),
-        //     },
-        // };
-        // Ok(res)
-
-        todo!("ZeroMorph prove")
+        let res = ZeroMorphOpeningClaim {
+            polynomial: pi_polynomial,
+            opening_pair: OpeningPair {
+                challenge: x_challenge,
+                evaluation: P::ScalarField::zero(),
+            },
+        };
+        Ok(res)
     }
 }

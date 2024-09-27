@@ -6,8 +6,6 @@ use std::{
 };
 use ultrahonk::prelude::Polynomial;
 
-use crate::FieldShare;
-
 pub(crate) struct SharedPolynomial<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,

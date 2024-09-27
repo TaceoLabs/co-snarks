@@ -53,9 +53,9 @@ where
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
     ) -> HonkProofResult<()> {
+        let prover_opening_claim =
+            self.zeromorph_prove(transcript, circuit_size, crs, sumcheck_output)?;
         todo!("decider execute_pcs_rounds");
-        // let prover_opening_claim =
-        //     self.zeromorph_prove(transcript, circuit_size, crs, sumcheck_output)?;
         // Self::compute_opening_proof(prover_opening_claim, transcript, crs)
     }
 
