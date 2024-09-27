@@ -20,8 +20,10 @@
 use super::types::ProverMemory;
 use crate::{types::ProvingKey, CoUtils, FieldShare};
 use ark_ff::One;
+use itertools::izip;
 use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use std::marker::PhantomData;
+use tracing::field::Field;
 use ultrahonk::{
     prelude::{HonkCurve, HonkProofError, HonkProofResult, TranscriptFieldType, TranscriptType},
     Utils,
@@ -113,6 +115,113 @@ where
             *target = self.driver.add(target, &mul3);
             *target = self.driver.add_with_public(&P::ScalarField::one(), target);
         }
+    }
+
+    fn compute_read_term(&mut self, proving_key: &ProvingKey<T, P>, i: usize) -> FieldShare<T, P> {
+        tracing::trace!("compute read term");
+
+        let gamma = &self.memory.challenges.gamma;
+        let eta_1 = &self.memory.challenges.eta_1;
+        let eta_2 = &self.memory.challenges.eta_2;
+        let eta_3 = &self.memory.challenges.eta_3;
+        let w_1 = &proving_key.polynomials.witness.w_l()[i];
+        let w_2 = &proving_key.polynomials.witness.w_r()[i];
+        let w_3 = &proving_key.polynomials.witness.w_o()[i];
+        let w_1_shift = &proving_key.polynomials.witness.w_l().shifted()[i];
+        let w_2_shift = &proving_key.polynomials.witness.w_r().shifted()[i];
+        let w_3_shift = &proving_key.polynomials.witness.w_o().shifted()[i];
+        let table_index = &proving_key.polynomials.precomputed.q_o()[i];
+        let negative_column_1_step_size = &proving_key.polynomials.precomputed.q_r()[i];
+        let negative_column_2_step_size = &proving_key.polynomials.precomputed.q_m()[i];
+        let negative_column_3_step_size = &proving_key.polynomials.precomputed.q_c()[i];
+
+        // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
+        // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
+        // method get_lookup_accumulators() in  for a detailed explanation.
+
+        let mul = &self
+            .driver
+            .mul_with_public(negative_column_1_step_size, w_1_shift);
+        let add = &self.driver.add_with_public(gamma, mul);
+        let derived_table_entry_1 = self.driver.add(w_1, add);
+
+        let mul = self
+            .driver
+            .mul_with_public(negative_column_2_step_size, w_2_shift);
+        let derived_table_entry_2 = self.driver.add(w_2, &mul);
+
+        let mul = self
+            .driver
+            .mul_with_public(negative_column_3_step_size, w_3_shift);
+        let derived_table_entry_3 = self.driver.add(w_3, &mul);
+
+        // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
+        // deg 2 or 3
+        // TODO add_assign?
+        let mul = self.driver.mul_with_public(eta_1, &derived_table_entry_2);
+        let res = self.driver.add(&derived_table_entry_1, &mul);
+        let mul = &self.driver.mul_with_public(eta_2, &derived_table_entry_3);
+        let res = self.driver.add(&res, mul);
+        self.driver.add_with_public(&(*table_index * eta_3), &res)
+    }
+
+    // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
+    fn compute_write_term(&self, proving_key: &ProvingKey<T, P>, i: usize) -> P::ScalarField {
+        tracing::trace!("compute write term");
+
+        let gamma = &self.memory.challenges.gamma;
+        let eta_1 = &self.memory.challenges.eta_1;
+        let eta_2 = &self.memory.challenges.eta_2;
+        let eta_3 = &self.memory.challenges.eta_3;
+        let table_1 = &proving_key.polynomials.precomputed.table_1()[i];
+        let table_2 = &proving_key.polynomials.precomputed.table_2()[i];
+        let table_3 = &proving_key.polynomials.precomputed.table_3()[i];
+        let table_4 = &proving_key.polynomials.precomputed.table_4()[i];
+
+        *table_1 + gamma + *table_2 * eta_1 + *table_3 * eta_2 + *table_4 * eta_3
+    }
+
+    fn compute_logderivative_inverses(
+        &mut self,
+        proving_key: &ProvingKey<T, P>,
+    ) -> HonkProofResult<()> {
+        tracing::trace!("compute logderivative inverse");
+
+        debug_assert_eq!(
+            proving_key.polynomials.precomputed.q_lookup().len(),
+            proving_key.circuit_size as usize
+        );
+        debug_assert_eq!(
+            proving_key.polynomials.witness.lookup_read_tags().len(),
+            proving_key.circuit_size as usize
+        );
+        self.memory
+            .lookup_inverses
+            .resize(proving_key.circuit_size as usize, Default::default());
+
+        // const READ_TERMS: usize = 1;
+        // const WRITE_TERMS: usize = 1;
+        // // 1 + polynomial degree of this relation
+        // const LENGTH: usize = 5; // both subrelations are degree 4
+
+        for (i, (q_lookup, lookup_read_tag)) in izip!(
+            proving_key.polynomials.precomputed.q_lookup().iter(),
+            proving_key.polynomials.witness.lookup_read_tags().iter(),
+        )
+        .enumerate()
+        {
+            if !(q_lookup.is_one() || lookup_read_tag.is_one()) {
+                continue;
+            }
+
+            // READ_TERMS and WRITE_TERMS are 1, so we skip the loop
+            let read_term = self.compute_read_term(proving_key, i);
+            let write_term = self.compute_write_term(proving_key, i);
+            self.memory.lookup_inverses[i] = self.driver.mul_with_public(&write_term, &read_term);
+        }
+
+        CoUtils::batch_invert::<T, P>(self.driver, self.memory.lookup_inverses.as_mut())?;
+        Ok(())
     }
 
     fn compute_public_input_delta(&self, proving_key: &ProvingKey<T, P>) -> P::ScalarField {
@@ -296,18 +405,9 @@ where
         self.memory.challenges.beta = challs[0];
         self.memory.challenges.gamma = challs[1];
 
-        // self.compute_logderivative_inverses(proving_key);
-        todo!("execute_log_derivative_inverse_round");
+        self.compute_logderivative_inverses(proving_key);
 
-        // We moved the commiting and opening to be at the same time as z_perm
-        // transcript
-        // let lookup_inverses = CoUtils::commit(
-        //     self.driver,
-        //     self.memory.lookup_inverses.as_ref(),
-        //     &proving_key.crs,
-        // );
-
-        //     .send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), lookup_inverses.into());
+        // We moved the commiting and opening of the lookup inverses to be at the same time as z_perm
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())

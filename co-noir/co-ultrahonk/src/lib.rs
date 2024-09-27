@@ -47,10 +47,19 @@ impl CoUtils {
     where
         T: MSMProvider<P::G1>,
     {
-        MSMProvider::msm_public_points(
-            driver,
-            &crs.monomials,
-            &FieldShareVec::<T, P>::from(poly.to_vec()),
-        )
+        let poly_vec = FieldShareVec::<T, P>::from(poly.to_vec());
+        MSMProvider::msm_public_points(driver, &crs.monomials, &poly_vec)
+    }
+
+    pub(crate) fn batch_invert<T, P: Pairing>(
+        driver: &mut T,
+        poly: &mut [FieldShare<T, P>],
+    ) -> std::io::Result<()>
+    where
+        T: PrimeFieldMpcProtocol<P::ScalarField>,
+    {
+        let res = driver.inv_many(poly)?;
+        poly.clone_from_slice(&res);
+        Ok(())
     }
 }

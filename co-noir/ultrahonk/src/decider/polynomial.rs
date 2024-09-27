@@ -1,4 +1,5 @@
-use ark_ff::{PrimeField, Zero};
+use ark_ff::PrimeField;
+use num_traits::Zero;
 use std::ops::{AddAssign, Index, IndexMut};
 
 #[derive(Clone, Debug, Default)]
@@ -11,13 +12,13 @@ pub struct ShiftedPoly<'a, F> {
     zero: F, // TODO is there are better solution
 }
 
-impl<'a, F: PrimeField> ShiftedPoly<'a, F> {
+impl<'a, F: Clone> ShiftedPoly<'a, F> {
     pub(crate) fn to_vec(&self) -> Vec<F> {
         let mut res = Vec::with_capacity(self.coefficients.len() + 1);
-        for c in self.coefficients.iter() {
-            res.push(*c);
+        for c in self.coefficients.iter().cloned() {
+            res.push(c);
         }
-        res.push(self.zero);
+        res.push(self.zero.clone());
         res
     }
 
@@ -26,7 +27,7 @@ impl<'a, F: PrimeField> ShiftedPoly<'a, F> {
     }
 }
 
-impl<'a, F: PrimeField> Index<usize> for ShiftedPoly<'a, F> {
+impl<'a, F: Clone> Index<usize> for ShiftedPoly<'a, F> {
     type Output = F;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -98,14 +99,21 @@ impl<F: Zero + Clone> Polynomial<F> {
         }
         len
     }
+}
+
+impl<F: Default + Clone> Polynomial<F> {
+    pub fn new_default(size: usize) -> Self {
+        Self {
+            coefficients: vec![F::default(); size],
+        }
+    }
 
     // Can only shift by 1
     pub fn shifted(&self) -> ShiftedPoly<F> {
         assert!(!self.coefficients.is_empty());
-        assert!(self.coefficients[0].is_zero());
         ShiftedPoly {
             coefficients: &self.coefficients[1..],
-            zero: F::zero(),
+            zero: F::default(),
         }
     }
 }
