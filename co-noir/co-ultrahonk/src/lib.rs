@@ -1,5 +1,6 @@
 pub(crate) mod co_decider;
 pub(crate) mod co_oink;
+pub(crate) mod co_zeromorph;
 pub(crate) mod parse;
 pub mod prelude;
 pub(crate) mod prover;

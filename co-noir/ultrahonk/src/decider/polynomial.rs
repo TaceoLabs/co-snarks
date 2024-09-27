@@ -13,7 +13,7 @@ pub struct ShiftedPoly<'a, F> {
 }
 
 impl<'a, F: Clone> ShiftedPoly<'a, F> {
-    pub(crate) fn to_vec(&self) -> Vec<F> {
+    pub fn to_vec(&self) -> Vec<F> {
         let mut res = Vec::with_capacity(self.coefficients.len() + 1);
         for c in self.coefficients.iter().cloned() {
             res.push(c);

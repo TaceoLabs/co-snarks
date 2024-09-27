@@ -11,6 +11,6 @@ pub use crate::prover::HonkProofResult;
 pub use crate::prover::{HonkProofError, UltraHonk};
 pub use crate::transcript::TranscriptFieldType;
 pub use crate::transcript::TranscriptType;
-pub use crate::types::PrecomputedEntities;
 pub use crate::types::ProverCrs;
 pub use crate::types::{HonkProof, ProvingKey};
+pub use crate::types::{PrecomputedEntities, ShiftedTableEntities, ShiftedWitnessEntities};

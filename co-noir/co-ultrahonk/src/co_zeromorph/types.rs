@@ -1,4 +1,3 @@
-use super::univariate::Univariate;
 use crate::{
     types::{AllEntities, Polynomials},
     NUM_ALPHAS,
@@ -6,17 +5,16 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use itertools::izip;
-use std::{iter, vec};
+use mpc_core::traits::PrimeFieldMpcProtocol;
+use std::iter;
 
-pub(crate) struct ProverMemory<P: Pairing> {
-    pub(crate) polys: AllEntities<Vec<P::ScalarField>>,
+pub(crate) struct ProverMemory<T, P: Pairing>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub(crate) polys: AllEntities<Vec<T::FieldShare>, Vec<P::ScalarField>>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
 }
-
-pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
-pub(crate) type ProverUnivariates<F> = AllEntities<Univariate<F, MAX_PARTIAL_RELATION_LENGTH>>;
-pub(crate) type PartiallyEvaluatePolys<F> = AllEntities<Vec<F>>;
-pub(crate) type ClaimedEvaluations<F> = AllEntities<F>;
 
 pub(crate) struct RelationParameters<F: PrimeField> {
     pub(crate) eta_1: F,
@@ -29,57 +27,13 @@ pub(crate) struct RelationParameters<F: PrimeField> {
     pub(crate) gate_challenges: Vec<F>,
 }
 
-pub(crate) struct GateSeparatorPolynomial<F: PrimeField> {
-    betas: Vec<F>,
-    pub(crate) beta_products: Vec<F>,
-    pub(crate) partial_evaluation_result: F,
-    current_element_idx: usize,
-    pub(crate) periodicity: usize,
-}
-
-impl<F: PrimeField> GateSeparatorPolynomial<F> {
-    pub(crate) fn new(betas: Vec<F>) -> Self {
-        let pow_size = 1 << betas.len();
-        let current_element_idx = 0;
-        let periodicity = 2;
-        let partial_evaluation_result = F::ONE;
-
-        // Barretenberg uses multithreading here and a simpler algorithm with worse complexity
-        let mut beta_products = vec![F::ONE; pow_size];
-        for (i, beta) in betas.iter().enumerate() {
-            let index = 1 << i;
-            beta_products[index] = *beta;
-            for j in 1..index {
-                beta_products[index + j] = beta_products[j] * beta;
-            }
-        }
-
-        Self {
-            betas,
-            beta_products,
-            partial_evaluation_result,
-            current_element_idx,
-            periodicity,
-        }
-    }
-
-    pub(crate) fn current_element(&self) -> F {
-        self.betas[self.current_element_idx]
-    }
-
-    pub(crate) fn partially_evaluate(&mut self, round_challenge: F) {
-        let current_univariate_eval =
-            F::ONE + (round_challenge * (self.betas[self.current_element_idx] - F::ONE));
-        self.partial_evaluation_result *= current_univariate_eval;
-        self.current_element_idx += 1;
-        self.periodicity *= 2;
-    }
-}
-
-impl<P: Pairing> ProverMemory<P> {
+impl<T, P: Pairing> ProverMemory<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
     pub(crate) fn from_memory_and_polynomials(
-        prover_memory: crate::oink::types::ProverMemory<P>,
-        polynomials: Polynomials<P::ScalarField>,
+        prover_memory: crate::co_oink::types::ProverMemory<T, P>,
+        polynomials: Polynomials<T::FieldShare, P::ScalarField>,
     ) -> Self {
         let relation_parameters = RelationParameters {
             eta_1: prover_memory.challenges.eta_1,

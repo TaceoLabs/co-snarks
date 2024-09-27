@@ -1,4 +1,7 @@
-use crate::{co_oink::prover::CoOink, types::ProvingKey, CONST_PROOF_SIZE_LOG_N};
+use crate::{
+    co_oink::prover::CoOink, co_zeromorph::types::ProverMemory, types::ProvingKey,
+    CONST_PROOF_SIZE_LOG_N,
+};
 use ark_ec::pairing::Pairing;
 use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use std::marker::PhantomData;
@@ -53,11 +56,11 @@ where
         let cicruit_size = proving_key.circuit_size;
         let crs = proving_key.crs;
 
-        // let mut memory =
-        //     ProverMemory::from_memory_and_polynomials(oink_result, proving_key.polynomials);
-        // memory.relation_parameters.gate_challenges =
-        //     Self::generate_gate_challenges(&mut transcript);
+        let mut memory =
+            ProverMemory::from_memory_and_polynomials(oink_result, proving_key.polynomials);
+        memory.relation_parameters.gate_challenges =
+            Self::generate_gate_challenges(&mut transcript);
 
-        todo!("prove");
+        todo!("decider prove");
     }
 }
