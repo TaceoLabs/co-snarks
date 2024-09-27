@@ -45,7 +45,7 @@ where
         }
     }
 
-    pub(crate) fn get_proof(self) -> HonkProof<F> {
+    pub fn get_proof(self) -> HonkProof<F> {
         HonkProof::new(self.proof_data)
     }
 
@@ -99,7 +99,7 @@ where
         self.send_to_verifier(label, &elements);
     }
 
-    pub(super) fn send_fr_iter_to_verifier<
+    pub fn send_fr_iter_to_verifier<
         'a,
         P: HonkCurve<F>,
         I: IntoIterator<Item = &'a P::ScalarField>,

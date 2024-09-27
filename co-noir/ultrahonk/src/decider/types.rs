@@ -29,16 +29,16 @@ pub(crate) struct RelationParameters<F: PrimeField> {
     pub(crate) gate_challenges: Vec<F>,
 }
 
-pub(crate) struct GateSeparatorPolynomial<F: PrimeField> {
+pub struct GateSeparatorPolynomial<F: PrimeField> {
     betas: Vec<F>,
-    pub(crate) beta_products: Vec<F>,
-    pub(crate) partial_evaluation_result: F,
+    pub beta_products: Vec<F>,
+    pub partial_evaluation_result: F,
     current_element_idx: usize,
-    pub(crate) periodicity: usize,
+    pub periodicity: usize,
 }
 
 impl<F: PrimeField> GateSeparatorPolynomial<F> {
-    pub(crate) fn new(betas: Vec<F>) -> Self {
+    pub fn new(betas: Vec<F>) -> Self {
         let pow_size = 1 << betas.len();
         let current_element_idx = 0;
         let periodicity = 2;
@@ -63,11 +63,11 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
         }
     }
 
-    pub(crate) fn current_element(&self) -> F {
+    pub fn current_element(&self) -> F {
         self.betas[self.current_element_idx]
     }
 
-    pub(crate) fn partially_evaluate(&mut self, round_challenge: F) {
+    pub fn partially_evaluate(&mut self, round_challenge: F) {
         let current_univariate_eval =
             F::ONE + (round_challenge * (self.betas[self.current_element_idx] - F::ONE));
         self.partial_evaluation_result *= current_univariate_eval;

@@ -1,6 +1,5 @@
 use super::Relation;
 use crate::decider::{
-    sumcheck::sumcheck_round::SumcheckRoundOutput,
     types::{ProverUnivariates, RelationParameters},
     univariate::Univariate,
 };
@@ -19,10 +18,10 @@ impl<F: PrimeField> UltraArithmeticRelationAcc<F> {
         self.r1 *= elements[1];
     }
 
-    pub(crate) fn extend_and_batch_univariates(
+    pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        result: &mut SumcheckRoundOutput<F>,
-        extended_random_poly: &SumcheckRoundOutput<F>,
+        result: &mut Univariate<F, SIZE>,
+        extended_random_poly: &Univariate<F, SIZE>,
         partial_evaluation_result: &F,
     ) {
         self.r0.extend_and_batch_univariates(

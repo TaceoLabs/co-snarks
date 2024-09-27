@@ -1,3 +1,4 @@
+use super::univariates::SharedUnivariate;
 use crate::{
     types::{AllEntities, Polynomials},
     NUM_ALPHAS,
@@ -7,6 +8,7 @@ use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use std::iter;
+use ultrahonk::prelude::Univariate;
 
 pub(crate) struct ProverMemory<T, P: Pairing>
 where
@@ -15,6 +17,17 @@ where
     pub(crate) polys: AllEntities<Vec<T::FieldShare>, Vec<P::ScalarField>>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
 }
+
+pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
+pub(crate) type ProverUnivariates<T, P> = AllEntities<
+    SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>,
+    Univariate<<P as Pairing>::ScalarField, MAX_PARTIAL_RELATION_LENGTH>,
+>;
+pub(crate) type PartiallyEvaluatePolys<T, P> = AllEntities<
+    Vec<<T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShare>,
+    Vec<<P as Pairing>::ScalarField>,
+>;
+pub(crate) type ClaimedEvaluations<F> = AllEntities<F, F>;
 
 pub(crate) struct RelationParameters<F: PrimeField> {
     pub(crate) eta_1: F,

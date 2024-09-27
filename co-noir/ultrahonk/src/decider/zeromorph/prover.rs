@@ -337,7 +337,6 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         transcript: &mut TranscriptType,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        // proving_key: &ProvingKey<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
     ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
         let f_polynomials = self.get_f_polyomials(&self.memory.polys);
