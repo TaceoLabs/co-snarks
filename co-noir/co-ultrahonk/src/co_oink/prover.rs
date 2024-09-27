@@ -280,11 +280,16 @@ where
         beta: &P::ScalarField,
         gamma: &P::ScalarField,
     ) -> HonkProofResult<Vec<FieldShare<T, P>>> {
-        debug_assert_eq!(shared1.len(), shared2.len());
-        let mut mul1 = Vec::with_capacity(shared1.len());
-        let mut mul2 = Vec::with_capacity(shared1.len());
+        let len = shared1.len();
+        debug_assert_eq!(len, shared2.len());
 
-        for (s1, s2, p1, p2) in izip!(shared1.iter(), shared2.iter(), pub1.iter(), pub2.iter()) {
+        // We drop the last element since it is not needed for the grand product
+        let mut mul1 = Vec::with_capacity(len - 1);
+        let mut mul2 = Vec::with_capacity(len - 1);
+
+        for (s1, s2, p1, p2) in
+            izip!(shared1.iter(), shared2.iter(), pub1.iter(), pub2.iter()).take(len - 1)
+        {
             let m1 = driver.add_with_public(&(*p1 * beta + gamma), s1);
             let m2 = driver.add_with_public(&(*p2 * beta + gamma), s2);
             mul1.push(m1);
@@ -385,7 +390,8 @@ where
         CoUtils::batch_invert::<T, P>(self.driver, &mut denominator)?;
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
-        let z_perm = self.driver.mul_many(&numerator, &denominator)?;
+        let mut z_perm = self.driver.mul_many(&numerator, &denominator)?;
+        z_perm.insert(0, FieldShare::<T, P>::default()); // insert a default element at the beginning
         self.memory.z_perm = Polynomial::new(z_perm);
         Ok(())
     }
