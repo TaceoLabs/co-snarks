@@ -200,7 +200,8 @@ where
         // Compute the full batched polynomial f = f_batched + g_batched.shifted() = f_batched + h_batched. This is the
         // polynomial for which we compute the quotients q_k and prove f(u) = v_batched.
         let mut f_polynomial = f_batched.to_owned();
-        f_polynomial += g_batched.shifted().as_ref();
+
+        f_polynomial.add_assign_slice(&mut self.driver, g_batched.shifted());
         // f_polynomial += concatenated_batched; // No groups
 
         todo!("ZeroMorph prove")
