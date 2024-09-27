@@ -1,4 +1,7 @@
-use super::{co_sumcheck::SumcheckOutput, types::ProverMemory};
+use super::{
+    co_sumcheck::SumcheckOutput, co_zeromorph::ZeroMorphOpeningClaim, types::ProverMemory,
+};
+use crate::CoUtils;
 use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use std::marker::PhantomData;
 use ultrahonk::prelude::{
@@ -24,6 +27,27 @@ where
             memory,
             phantom_data: PhantomData,
         }
+    }
+
+    fn compute_opening_proof(
+        driver: &mut T,
+        opening_claim: ZeroMorphOpeningClaim<T, P>,
+        transcript: &mut TranscriptType,
+        crs: &ProverCrs<P>,
+    ) -> HonkProofResult<()> {
+        let mut quotient = opening_claim.polynomial;
+        let pair = opening_claim.opening_pair;
+
+        quotient[0] = driver.add_with_public(&-pair.evaluation, &quotient[0]);
+        // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
+        quotient.factor_roots(driver, &pair.challenge);
+        let quotient_commitment = CoUtils::commit(driver, &quotient.coefficients, crs);
+        // TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
+        // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
+        // pthreads) or even the work queue itself
+        let quotient_commitment = driver.open_point(&quotient_commitment)?;
+        transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
+        Ok(())
     }
 
     /**
@@ -53,10 +77,9 @@ where
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
     ) -> HonkProofResult<()> {
-        todo!("decider execute_pcs_rounds");
-        // let prover_opening_claim =
-        //     self.zeromorph_prove(transcript, circuit_size, crs, sumcheck_output)?;
-        // Self::compute_opening_proof(prover_opening_claim, transcript, crs)
+        let prover_opening_claim =
+            self.zeromorph_prove(transcript, circuit_size, crs, sumcheck_output)?;
+        Self::compute_opening_proof(&mut self.driver, prover_opening_claim, transcript, crs)
     }
 
     pub(crate) fn prove(
