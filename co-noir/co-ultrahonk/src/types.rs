@@ -57,6 +57,71 @@ pub(crate) struct AllEntities<Shared: Default, Public: Default> {
     pub(crate) shifted_tables: ShiftedTableEntities<Public>,
 }
 
+impl<Shared: Default, Public: Default> AllEntities<Shared, Public> {
+    pub(crate) fn public_iter(&self) -> impl Iterator<Item = &Public> {
+        self.precomputed
+            .iter()
+            .chain(self.witness.public_iter())
+            .chain(self.shifted_tables.iter())
+    }
+
+    pub(crate) fn shared_iter(&self) -> impl Iterator<Item = &Shared> {
+        self.witness
+            .shared_iter()
+            .chain(self.shifted_witness.iter())
+    }
+
+    pub(crate) fn into_public_iter(self) -> impl Iterator<Item = Public> {
+        self.precomputed
+            .into_iter()
+            .chain(self.witness.into_public_iter())
+            .chain(self.shifted_tables)
+    }
+
+    pub(crate) fn into_shared_iter(self) -> impl Iterator<Item = Shared> {
+        self.witness.into_shared_iter().chain(self.shifted_witness)
+    }
+
+    pub(crate) fn public_iter_mut(&mut self) -> impl Iterator<Item = &mut Public> {
+        self.precomputed
+            .iter_mut()
+            .chain(self.witness.public_iter_mut())
+            .chain(self.shifted_tables.iter_mut())
+    }
+
+    pub(crate) fn shared_iter_mut(&mut self) -> impl Iterator<Item = &mut Shared> {
+        self.witness
+            .shared_iter_mut()
+            .chain(self.shifted_witness.iter_mut())
+    }
+}
+
+impl<Shared: Default + Clone, Public: Default + Clone> AllEntities<Vec<Shared>, Vec<Public>> {
+    pub(crate) fn new(circuit_size: usize) -> Self {
+        let mut polynomials = Self::default();
+        // Shifting is done at a later point
+        polynomials
+            .shared_iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+        polynomials
+            .public_iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+
+        polynomials
+    }
+}
+
+impl<T: Default> AllEntities<T, T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+        self.precomputed
+            .iter()
+            .chain(self.witness.shared_iter())
+            .chain(self.witness.public_iter())
+            .chain(self.shifted_tables.iter())
+            .chain(self.shifted_witness.iter())
+    }
+}
+
 const PROVER_PRIVATE_WITNESS_ENTITIES_SIZE: usize = 4;
 const PROVER_PUBLIC_WITNESS_ENTITIES_SIZE: usize = 2;
 #[derive(Default)]
@@ -135,6 +200,30 @@ impl<Shared, Public> WitnessEntities<Shared, Public> {
 
     pub(crate) const LOOKUP_READ_COUNTS: usize = 0; // column 6
     pub(crate) const LOOKUP_READ_TAGS: usize = 1; // column 7
+
+    pub(crate) fn shared_iter(&self) -> impl Iterator<Item = &Shared> {
+        self.private_elements.iter()
+    }
+
+    pub(crate) fn public_iter(&self) -> impl Iterator<Item = &Public> {
+        self.public_elements.iter()
+    }
+
+    pub(crate) fn into_shared_iter(self) -> impl Iterator<Item = Shared> {
+        self.private_elements.into_iter()
+    }
+
+    pub(crate) fn into_public_iter(self) -> impl Iterator<Item = Public> {
+        self.public_elements.into_iter()
+    }
+
+    pub(crate) fn shared_iter_mut(&mut self) -> impl Iterator<Item = &mut Shared> {
+        self.private_elements.iter_mut()
+    }
+
+    pub(crate) fn public_iter_mut(&mut self) -> impl Iterator<Item = &mut Public> {
+        self.public_elements.iter_mut()
+    }
 
     pub(crate) fn to_be_shifted_mut(&mut self) -> &mut [Shared] {
         &mut self.private_elements[Self::W_L..=Self::Z_PERM]
