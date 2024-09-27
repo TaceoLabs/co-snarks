@@ -157,39 +157,40 @@ where
         let s3 = w_l.add_public(driver, q_o);
         let s4 = w_l.add_public(driver, q_4);
 
-        todo!("Poseidon2ExternalRelation::accumulate");
+        // todo!("Poseidon2ExternalRelation::accumulate");
 
         // apply s-box round
-        // let mut u1 = s1.to_owned().sqr();
-        // u1 = u1.sqr();
-        // u1 *= s1;
-        // let mut u2 = s2.to_owned().sqr();
-        // u2 = u2.sqr();
-        // u2 *= s2;
-        // let mut u3 = s3.to_owned().sqr();
-        // u3 = u3.sqr();
-        // u3 *= s3;
-        // let mut u4 = s4.to_owned().sqr();
-        // u4 = u4.sqr();
-        // u4 *= s4;
+        let s = SharedUnivariate::univariates_to_vec(&[s1, s2, s3, s4]);
+        let u = driver.mul_many(&s, &s)?;
+        let u = driver.mul_many(&u, &u)?;
+        let u = driver.mul_many(&u, &s)?;
+        let u = SharedUnivariate::vec_to_univariates(&u);
 
-        // // matrix mul v = M_E * u with 14 additions
-        // let t0 = u1 + &u2; // u_1 + u_2
-        // let t1 = u3 + &u4; // u_3 + u_4
-        // let mut t2 = u2.double(); // 2u_2
-        // t2 += &t1; // 2u_2 + u_3 + u_4
-        // let mut t3 = u4.double(); // 2u_4
-        // t3 += &t0; // u_1 + u_2 + 2u_4
-        // let mut v4 = t1.double();
-        // v4.double_in_place();
-        // v4 += &t3; // u_1 + u_2 + 4u_3 + 6u_4
-        // let mut v2 = t0.double();
-        // v2.double_in_place();
-        // v2 += &t2; // 4u_1 + 6u_2 + u_3 + u_4
-        // let v1 = t3 + &v2; // 5u_1 + 7u_2 + u_3 + 3u_4
-        // let v3 = t2 + &v4; // u_1 + 3u_2 + 5u_3 + 7u_4
+        // matrix mul v = M_E * u with 14 additions
 
-        // let q_pos_by_scaling = q_poseidon2_external.to_owned() * scaling_factor;
+        let t0 = u[0].add(driver, &u[1]); // u_1 + u_2
+        let t1 = u[2].add(driver, &u[3]); // u_3 + u_4
+        let t2 = u[1].add(driver, &u[1]); // 2u_2
+        let t2 = t2.add(driver, &t1); // 2u_2 + u_3 + u_4
+        let t3 = u[3].add(driver, &u[3]); // 2u_4
+        let t3 = t3.add(driver, &t0); // u_1 + u_2 + 2u_4
+        let v4 = t1.add(driver, &t1);
+        let v4 = v4.add(driver, &v4);
+        let v4 = v4.add(driver, &t3); // u_1 + u_2 + 4u_3 + 6u_4
+        let v2 = t0.add(driver, &t0);
+        let v2 = v2.add(driver, &v2);
+        let v2 = v2.add(driver, &t2); // 4u_1 + 6u_2 + u_3 + u_4
+        let v1 = t3.add(driver, &v2); // 5u_1 + 7u_2 + u_3 + 3u_4
+        let v3 = t2.add(driver, &v4); // u_1 + 3u_2 + 5u_3 + 7u_4
+
+        let q_pos_by_scaling = q_poseidon2_external.to_owned() * scaling_factor;
+        let tmp1 = v1.sub(driver, w_l_shift);
+        let tmp2 = v2.sub(driver, w_r_shift);
+        let tmp3 = v3.sub(driver, w_o_shift);
+        let tmp4 = v4.sub(driver, w_4_shift);
+
+        todo!("Continue with poseidon");
+
         // let tmp = (v1 - w_l_shift) * &q_pos_by_scaling;
         // for i in 0..univariate_accumulator.r0.evaluations.len() {
         //     univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
@@ -215,5 +216,6 @@ where
         // for i in 0..univariate_accumulator.r3.evaluations.len() {
         //     univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
         // }
+        Ok(())
     }
 }

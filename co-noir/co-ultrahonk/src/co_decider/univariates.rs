@@ -27,6 +27,12 @@ where
         result
     }
 
+    pub(crate) fn sub(&self, driver: &mut T, rhs: &Self) -> Self {
+        let mut result = self.to_owned();
+        result.sub_assign(driver, rhs);
+        result
+    }
+
     pub(crate) fn add_public(
         &self,
         driver: &mut T,
@@ -53,6 +59,12 @@ where
         }
     }
 
+    pub(crate) fn sub_assign(&mut self, driver: &mut T, rhs: &Self) {
+        for i in 0..SIZE {
+            self.evaluations[i] = driver.sub(&self.evaluations[i], &rhs.evaluations[i]);
+        }
+    }
+
     pub(crate) fn mul_public(self, driver: &mut T, rhs: &Univariate<P::ScalarField, SIZE>) -> Self {
         let mut result = self;
         result.mul_assign_public(driver, rhs);
@@ -67,6 +79,24 @@ where
         for i in 0..SIZE {
             self.evaluations[i] = driver.mul_with_public(&rhs.evaluations[i], &self.evaluations[i]);
         }
+    }
+
+    pub(crate) fn vec_to_univariates(vec: &[T::FieldShare]) -> Vec<Self> {
+        assert_eq!(vec.len() % SIZE, 0);
+        vec.chunks(SIZE)
+            .map(|chunk| {
+                let mut evaluations = array::from_fn(|_| T::FieldShare::default());
+                evaluations.clone_from_slice(chunk);
+                Self { evaluations }
+            })
+            .collect()
+    }
+
+    pub(crate) fn univariates_to_vec(univariates: &[Self]) -> Vec<T::FieldShare> {
+        univariates
+            .iter()
+            .flat_map(|univariate| univariate.evaluations.to_owned())
+            .collect()
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE2: usize>(
