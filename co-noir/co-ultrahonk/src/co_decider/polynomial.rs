@@ -29,8 +29,21 @@ where
     ) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(src.iter()) {
-            let tmp = driver.mul_with_public(scalar, &src);
+            let tmp = driver.mul_with_public(scalar, src);
             *des = driver.add(des, &tmp);
+        }
+    }
+
+    pub fn add_scaled_slice_public(
+        &mut self,
+        driver: &mut T,
+        src: &[P::ScalarField],
+        scalar: &P::ScalarField,
+    ) {
+        // Barrettenberg uses multithreading here
+        for (des, src) in self.coefficients.iter_mut().zip(src.iter()) {
+            let tmp = *scalar * src;
+            *des = driver.add_with_public(&tmp, des);
         }
     }
 }

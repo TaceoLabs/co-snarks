@@ -134,13 +134,26 @@ where
 
         // Shared part of f_batched
         let mut f_batched = SharedPolynomial::<T, P>::promote_poly(&self.driver, f_batched);
-        for (f_poly, f_eval) in f_polynomials.shared_iter().zip(f_evaluations.shared_iter()) {
+        for (f_poly, f_eval) in f_polynomials
+            .witness
+            .shared_iter()
+            .zip(f_evaluations.witness.shared_iter())
+        {
             f_batched.add_scaled_slice(&mut self.driver, f_poly, &batching_scalar);
             batched_evaluation += batching_scalar * f_eval;
             batching_scalar *= rho;
         }
 
-        todo!("Final public of f");
+        // Final public part of f_batched
+        for (f_poly, f_eval) in f_polynomials
+            .witness
+            .public_iter()
+            .zip(f_evaluations.witness.public_iter())
+        {
+            f_batched.add_scaled_slice_public(&mut self.driver, f_poly, &batching_scalar);
+            batched_evaluation += batching_scalar * f_eval;
+            batching_scalar *= rho;
+        }
 
         // For g_batched the order of public first and shared later is ok
         let mut g_batched = Polynomial::new_zero(n); // batched to-be-shifted polynomials

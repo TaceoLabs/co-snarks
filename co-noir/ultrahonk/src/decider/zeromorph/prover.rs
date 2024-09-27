@@ -266,6 +266,52 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         batched_polynomial
     }
 
+    fn compute_batched_polys(
+        &self,
+        transcript: &mut TranscriptType,
+        claimed_evaluations: AllEntities<P::ScalarField>,
+        n: usize,
+    ) -> (
+        Polynomial<P::ScalarField>,
+        Polynomial<P::ScalarField>,
+        P::ScalarField,
+    ) {
+        let f_polynomials = Self::get_f_polyomials(&self.memory.polys);
+        let g_polynomials = Self::get_g_polyomials(&self.memory.polys);
+        let f_evaluations = Self::get_f_evaluations(&claimed_evaluations);
+        let g_shift_evaluations = Self::get_g_shift_evaluations(&claimed_evaluations);
+
+        // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
+        let rho = transcript.get_challenge::<P>("rho".to_string());
+
+        // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
+        // f_batched = sum_{i=0}^{m-1}\rho^i*f_i and g_batched = sum_{i=0}^{l-1}\rho^{m+i}*g_i,
+        // and also batched evaluation
+        // v = sum_{i=0}^{m-1}\rho^i*f_i(u) + sum_{i=0}^{l-1}\rho^{m+i}*h_i(u).
+        // Note: g_batched is formed from the to-be-shifted polynomials, but the batched evaluation incorporates the
+        // evaluations produced by sumcheck of h_i = g_i_shifted.
+
+        let mut batched_evaluation = P::ScalarField::ZERO;
+        let mut batching_scalar = P::ScalarField::ONE;
+        let mut f_batched = Polynomial::new_zero(n); // batched unshifted polynomials
+
+        for (f_poly, f_eval) in f_polynomials.iter().zip(f_evaluations.iter()) {
+            f_batched.add_scaled_slice(f_poly, &batching_scalar);
+            batched_evaluation += batching_scalar * f_eval;
+            batching_scalar *= rho;
+        }
+
+        let mut g_batched = Polynomial::new_zero(n); // batched to-be-shifted polynomials
+
+        for (g_poly, g_shift_eval) in g_polynomials.iter().zip(g_shift_evaluations.iter()) {
+            g_batched.add_scaled_slice(g_poly, &batching_scalar);
+            batched_evaluation += batching_scalar * g_shift_eval;
+            batching_scalar *= rho;
+        }
+
+        (f_batched, g_batched, batched_evaluation)
+    }
+
     fn get_f_polyomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {
         PolyF {
             precomputed: &polys.precomputed,
@@ -335,45 +381,16 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
     ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
         tracing::trace!("Zeromorph prove");
 
-        let f_polynomials = Self::get_f_polyomials(&self.memory.polys);
-        let g_polynomials = Self::get_g_polyomials(&self.memory.polys);
-        let f_evaluations = Self::get_f_evaluations(&sumcheck_output.claimed_evaluations);
-        let g_shift_evaluations =
-            Self::get_g_shift_evaluations(&sumcheck_output.claimed_evaluations);
         let multilinear_challenge = &sumcheck_output.challenges;
         let commitment_key = crs;
-
-        // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
-        let rho = transcript.get_challenge::<P>("rho".to_string());
 
         // Extract multilinear challenge u and claimed multilinear evaluations from Sumcheck output
         let u_challenge = multilinear_challenge;
         let log_n = Utils::get_msb32(circuit_size);
         let n = 1 << log_n;
 
-        // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
-        // f_batched = sum_{i=0}^{m-1}\rho^i*f_i and g_batched = sum_{i=0}^{l-1}\rho^{m+i}*g_i,
-        // and also batched evaluation
-        // v = sum_{i=0}^{m-1}\rho^i*f_i(u) + sum_{i=0}^{l-1}\rho^{m+i}*h_i(u).
-        // Note: g_batched is formed from the to-be-shifted polynomials, but the batched evaluation incorporates the
-        // evaluations produced by sumcheck of h_i = g_i_shifted.
-        let mut batched_evaluation = P::ScalarField::ZERO;
-        let mut batching_scalar = P::ScalarField::ONE;
-        let mut f_batched = Polynomial::new_zero(n); // batched unshifted polynomials
-
-        for (f_poly, f_eval) in f_polynomials.iter().zip(f_evaluations.iter()) {
-            f_batched.add_scaled_slice(f_poly, &batching_scalar);
-            batched_evaluation += batching_scalar * f_eval;
-            batching_scalar *= rho;
-        }
-
-        let mut g_batched = Polynomial::new_zero(n); // batched to-be-shifted polynomials
-
-        for (g_poly, g_shift_eval) in g_polynomials.iter().zip(g_shift_evaluations.iter()) {
-            g_batched.add_scaled_slice(g_poly, &batching_scalar);
-            batched_evaluation += batching_scalar * g_shift_eval;
-            batching_scalar *= rho;
-        }
+        let (f_batched, g_batched, batched_evaluation) =
+            self.compute_batched_polys(transcript, sumcheck_output.claimed_evaluations, n);
 
         // We don't have groups, so we skip a lot now
 
