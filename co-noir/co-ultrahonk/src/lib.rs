@@ -58,8 +58,6 @@ impl CoUtils {
     where
         T: PrimeFieldMpcProtocol<P::ScalarField>,
     {
-        let res = driver.inv_many(poly)?;
-        poly.clone_from_slice(&res);
-        Ok(())
+        driver.inv_many_in_place(poly)
     }
 }
