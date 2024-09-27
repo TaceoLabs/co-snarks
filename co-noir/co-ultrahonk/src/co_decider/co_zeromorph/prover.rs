@@ -1,5 +1,8 @@
 use crate::{
-    co_decider::{co_sumcheck::SumcheckOutput, prover::CoDecider, types::ClaimedEvaluations},
+    co_decider::{
+        co_sumcheck::SumcheckOutput, polynomial::SharedPolynomial, prover::CoDecider,
+        types::ClaimedEvaluations,
+    },
     types::AllEntities,
     FieldShare,
 };
@@ -18,10 +21,9 @@ impl<T, P: HonkCurve<TranscriptFieldType>> CoDecider<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
 {
-    fn get_f_polyomials<'a>(
-        &'a self,
-        polys: &'a AllEntities<Vec<FieldShare<T, P>>, Vec<P::ScalarField>>,
-    ) -> PolyF<'a, Vec<FieldShare<T, P>>, Vec<P::ScalarField>> {
+    fn get_f_polyomials(
+        polys: &AllEntities<Vec<FieldShare<T, P>>, Vec<P::ScalarField>>,
+    ) -> PolyF<Vec<FieldShare<T, P>>, Vec<P::ScalarField>> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
@@ -37,10 +39,9 @@ where
         }
     }
 
-    fn get_g_polyomials<'a>(
-        &'a self,
-        polys: &'a AllEntities<Vec<FieldShare<T, P>>, Vec<P::ScalarField>>,
-    ) -> PolyG<'a, Vec<FieldShare<T, P>>, Vec<P::ScalarField>> {
+    fn get_g_polyomials(
+        polys: &AllEntities<Vec<FieldShare<T, P>>, Vec<P::ScalarField>>,
+    ) -> PolyG<Vec<FieldShare<T, P>>, Vec<P::ScalarField>> {
         let tables = [
             polys.precomputed.table_1(),
             polys.precomputed.table_2(),
@@ -85,7 +86,7 @@ where
      * @todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
      */
     pub(crate) fn zeromorph_prove(
-        &self,
+        &mut self,
         transcript: &mut TranscriptType,
         circuit_size: u32,
         crs: &ProverCrs<P>,
@@ -94,8 +95,8 @@ where
     ) -> HonkProofResult<()> {
         tracing::trace!("Zeromorph prove");
 
-        let f_polynomials = self.get_f_polyomials(&self.memory.polys);
-        let g_polynomials = self.get_g_polyomials(&self.memory.polys);
+        let f_polynomials = Self::get_f_polyomials(&self.memory.polys);
+        let g_polynomials = Self::get_g_polyomials(&self.memory.polys);
         let f_evaluations = Self::get_f_evaluations(&sumcheck_output.claimed_evaluations);
         let g_shift_evaluations =
             Self::get_g_shift_evaluations(&sumcheck_output.claimed_evaluations);
@@ -120,15 +121,31 @@ where
         let mut batching_scalar = P::ScalarField::ONE;
         let mut f_batched = Polynomial::new_zero(n); // batched unshifted polynomials
 
-        for (f_poly, f_eval) in f_polynomials.public_iter().zip(f_evaluations.public_iter()) {
+        // Precomputed part of f_batched
+        for (f_poly, f_eval) in f_polynomials
+            .precomputed
+            .iter()
+            .zip(f_evaluations.precomputed.iter())
+        {
             f_batched.add_scaled_slice(f_poly, &batching_scalar);
             batched_evaluation += batching_scalar * f_eval;
             batching_scalar *= rho;
         }
-        todo!("Private part as well");
 
+        // Shared part of f_batched
+        let mut f_batched = SharedPolynomial::<T, P>::promote_poly(&self.driver, f_batched);
+        for (f_poly, f_eval) in f_polynomials.shared_iter().zip(f_evaluations.shared_iter()) {
+            f_batched.add_scaled_slice(&mut self.driver, f_poly, &batching_scalar);
+            batched_evaluation += batching_scalar * f_eval;
+            batching_scalar *= rho;
+        }
+
+        todo!("Final public of f");
+
+        // For g_batched the order of public first and shared later is ok
         let mut g_batched = Polynomial::new_zero(n); // batched to-be-shifted polynomials
 
+        // Public part of g_batched
         for (g_poly, g_shift_eval) in g_polynomials
             .public_iter()
             .zip(g_shift_evaluations.public_iter())
@@ -137,7 +154,17 @@ where
             batched_evaluation += batching_scalar * g_shift_eval;
             batching_scalar *= rho;
         }
-        todo!("Private part as well");
+
+        // Shared part of g_batched
+        let mut g_batched = SharedPolynomial::<T, P>::promote_poly(&self.driver, g_batched);
+        for (g_poly, g_shift_eval) in g_polynomials
+            .shared_iter()
+            .zip(g_shift_evaluations.shared_iter())
+        {
+            g_batched.add_scaled_slice(&mut self.driver, g_poly, &batching_scalar);
+            batched_evaluation += batching_scalar * g_shift_eval;
+            batching_scalar *= rho;
+        }
 
         todo!("ZeroMorph prove")
     }

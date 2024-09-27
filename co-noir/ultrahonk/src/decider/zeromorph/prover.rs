@@ -266,10 +266,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         batched_polynomial
     }
 
-    fn get_f_polyomials<'a>(
-        &'a self,
-        polys: &'a AllEntities<Vec<P::ScalarField>>,
-    ) -> PolyF<'a, Vec<P::ScalarField>> {
+    fn get_f_polyomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
@@ -285,10 +282,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         }
     }
 
-    fn get_g_polyomials<'a>(
-        &'a self,
-        polys: &'a AllEntities<Vec<P::ScalarField>>,
-    ) -> PolyG<'a, Vec<P::ScalarField>> {
+    fn get_g_polyomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyG<Vec<P::ScalarField>> {
         let tables = [
             polys.precomputed.table_1(),
             polys.precomputed.table_2(),
@@ -341,8 +335,8 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
     ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
         tracing::trace!("Zeromorph prove");
 
-        let f_polynomials = self.get_f_polyomials(&self.memory.polys);
-        let g_polynomials = self.get_g_polyomials(&self.memory.polys);
+        let f_polynomials = Self::get_f_polyomials(&self.memory.polys);
+        let g_polynomials = Self::get_g_polyomials(&self.memory.polys);
         let f_evaluations = Self::get_f_evaluations(&sumcheck_output.claimed_evaluations);
         let g_shift_evaluations =
             Self::get_g_shift_evaluations(&sumcheck_output.claimed_evaluations);

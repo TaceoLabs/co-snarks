@@ -173,7 +173,7 @@ impl<F: PrimeField> Polynomial<F> {
 
     pub fn add_scaled_slice(&mut self, src: &[F], scalar: &F) {
         // Barrettenberg uses multithreading here
-        for (des, &src) in self.coefficients.iter_mut().zip(src.iter()) {
+        for (des, src) in self.coefficients.iter_mut().zip(src.iter()) {
             *des += *scalar * src;
         }
     }
