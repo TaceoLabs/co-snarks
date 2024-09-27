@@ -135,6 +135,10 @@ pub trait PrimeFieldMpcProtocol<F: PrimeField> {
     /// Computes the inverse of many shared values: \[b\] = \[a\] ^ -1. Requires network communication.
     fn inv_many(&mut self, a: &[Self::FieldShare]) -> std::io::Result<Vec<Self::FieldShare>>;
 
+    /// Computes the inverse of many shared values: \[a\] = \[a\] ^ -1. Requires network communication.
+    /// This function ignores the case of one share to be zero and maps it to zero.
+    fn inv_many_in_place(&mut self, a: &mut [Self::FieldShare]) -> std::io::Result<()>;
+
     /// Negates a shared value: \[b\] = -\[a\].
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare;
 

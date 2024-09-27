@@ -174,6 +174,15 @@ impl<F: PrimeField> PrimeFieldMpcProtocol<F> for PlainDriver<F> {
         Ok(res)
     }
 
+    fn inv_many_in_place(&mut self, a: &mut [Self::FieldShare]) -> std::io::Result<()> {
+        for a in a.iter_mut() {
+            if !a.is_zero() {
+                a.inverse_in_place().unwrap();
+            }
+        }
+        Ok(())
+    }
+
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
         -*a
     }

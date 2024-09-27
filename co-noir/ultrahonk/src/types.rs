@@ -45,12 +45,12 @@ impl<F: PrimeField> Polynomials<F> {
 }
 
 pub struct Crs<P: Pairing> {
-    pub(crate) monomials: Vec<P::G1Affine>,
-    pub(crate) g2_x: P::G2Affine,
+    pub monomials: Vec<P::G1Affine>,
+    pub g2_x: P::G2Affine,
 }
 
 pub struct ProverCrs<P: Pairing> {
-    pub(crate) monomials: Vec<P::G1Affine>,
+    pub monomials: Vec<P::G1Affine>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -231,13 +231,13 @@ pub(crate) struct ProverWitnessEntities<T: Default> {
 
 const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
 #[derive(Default)]
-pub(crate) struct ShiftedWitnessEntities<T: Default> {
+pub struct ShiftedWitnessEntities<T: Default> {
     pub(crate) elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
 }
 
 const SHIFTED_TABLE_ENTITIES_SIZE: usize = 4;
 #[derive(Default)]
-pub(crate) struct ShiftedTableEntities<T: Default> {
+pub struct ShiftedTableEntities<T: Default> {
     pub(crate) elements: [T; SHIFTED_TABLE_ENTITIES_SIZE],
 }
 
@@ -429,7 +429,7 @@ impl<T: Default> ShiftedWitnessEntities<T> {
         self.elements.iter()
     }
 
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }
 
@@ -464,7 +464,7 @@ impl<T: Default> ShiftedTableEntities<T> {
         self.elements.iter()
     }
 
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }
 
