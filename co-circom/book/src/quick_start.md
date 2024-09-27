@@ -35,7 +35,7 @@ In the first step, we compile an `.r1cs` file using circom and create a verifica
 circom multiplier2.circom --r1cs
 ```
 
-You will find a file called `multiplier2.r1cs` in your working folder. To create the keys you can either follow the circom documentation, or download the two keys from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/b90e9e61cbb674f274dbd154842b77c1d09275ea/co-circom/examples/groth16/test_vectors/multiplier2), where we created the keys already (you will need `multiplier2.zkey` and `verification_key.json`).
+You will find a file called `multiplier2.r1cs` in your working folder. To create the keys you can either follow the circom documentation, or download the two keys from our [GitHub](https://github.com/TaceoLabs/collaborative-circom/tree/main/co-circom/co-circom/examples/groth16/test_vectors/multiplier2), where we created the keys already (you will need `multiplier2.zkey` and `verification_key.json`).
 
 ## Split the Input
 
