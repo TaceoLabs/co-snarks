@@ -18,37 +18,40 @@
 // clang-format on
 
 use super::types::ProverMemory;
-use crate::{
-    honk_curve::HonkCurve,
-    prover::{HonkProofError, HonkProofResult},
-    transcript::{TranscriptFieldType, TranscriptType},
-    types::ProvingKey,
+use crate::{types::ProvingKey, CoUtils, FieldShare};
+use ark_ff::One;
+use itertools::izip;
+use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
+use std::marker::PhantomData;
+use ultrahonk::{
+    prelude::{
+        HonkCurve, HonkProofError, HonkProofResult, Polynomial, TranscriptFieldType, TranscriptType,
+    },
     Utils,
 };
-use ark_ff::{One, Zero};
-use itertools::izip;
-use std::marker::PhantomData;
 
-pub(crate) struct Oink<P: HonkCurve<TranscriptFieldType>> {
-    memory: ProverMemory<P>,
+pub(crate) struct CoOink<'a, T, P: HonkCurve<TranscriptFieldType>>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
+{
+    driver: &'a mut T,
+    memory: ProverMemory<T, P>,
     phantom_data: PhantomData<P>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>> Default for Oink<P> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
-    pub(crate) fn new() -> Self {
+impl<'a, T, P: HonkCurve<TranscriptFieldType>> CoOink<'a, T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
+{
+    pub(crate) fn new(driver: &'a mut T) -> Self {
         Self {
+            driver,
             memory: ProverMemory::default(),
             phantom_data: PhantomData,
         }
     }
 
-    fn compute_w4(&mut self, proving_key: &ProvingKey<P>) {
+    fn compute_w4(&mut self, proving_key: &ProvingKey<T, P>) {
         tracing::trace!("compute w4");
         // The memory record values are computed at the indicated indices as
         // w4 = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag;
@@ -64,32 +67,58 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         self.memory.w_4 = proving_key.polynomials.witness.w_4().clone();
         self.memory.w_4.resize(
             proving_key.polynomials.witness.w_l().len(),
-            P::ScalarField::zero(),
+            FieldShare::<T, P>::default(),
         );
 
         // Compute read record values
         for gate_idx in proving_key.memory_read_records.iter() {
             let gate_idx = *gate_idx as usize;
             let target = &mut self.memory.w_4[gate_idx];
-            *target += proving_key.polynomials.witness.w_l()[gate_idx]
-                * self.memory.challenges.eta_1
-                + proving_key.polynomials.witness.w_r()[gate_idx] * self.memory.challenges.eta_2
-                + proving_key.polynomials.witness.w_o()[gate_idx] * self.memory.challenges.eta_3;
+
+            let mul1 = self.driver.mul_with_public(
+                &self.memory.challenges.eta_1,
+                &proving_key.polynomials.witness.w_l()[gate_idx],
+            );
+            let mul2 = self.driver.mul_with_public(
+                &self.memory.challenges.eta_2,
+                &proving_key.polynomials.witness.w_r()[gate_idx],
+            );
+            let mul3 = self.driver.mul_with_public(
+                &self.memory.challenges.eta_3,
+                &proving_key.polynomials.witness.w_o()[gate_idx],
+            );
+            // TODO add_assign?
+            *target = self.driver.add(target, &mul1);
+            *target = self.driver.add(target, &mul2);
+            *target = self.driver.add(target, &mul3);
         }
 
         // Compute write record values
         for gate_idx in proving_key.memory_write_records.iter() {
             let gate_idx = *gate_idx as usize;
             let target = &mut self.memory.w_4[gate_idx];
-            *target += proving_key.polynomials.witness.w_l()[gate_idx]
-                * self.memory.challenges.eta_1
-                + proving_key.polynomials.witness.w_r()[gate_idx] * self.memory.challenges.eta_2
-                + proving_key.polynomials.witness.w_o()[gate_idx] * self.memory.challenges.eta_3
-                + P::ScalarField::one();
+
+            let mul1 = self.driver.mul_with_public(
+                &self.memory.challenges.eta_1,
+                &proving_key.polynomials.witness.w_l()[gate_idx],
+            );
+            let mul2 = self.driver.mul_with_public(
+                &self.memory.challenges.eta_2,
+                &proving_key.polynomials.witness.w_r()[gate_idx],
+            );
+            let mul3 = self.driver.mul_with_public(
+                &self.memory.challenges.eta_3,
+                &proving_key.polynomials.witness.w_o()[gate_idx],
+            );
+            // TODO add_assign?
+            *target = self.driver.add(target, &mul1);
+            *target = self.driver.add(target, &mul2);
+            *target = self.driver.add(target, &mul3);
+            *target = self.driver.add_with_public(&P::ScalarField::one(), target);
         }
     }
 
-    fn compute_read_term(&self, proving_key: &ProvingKey<P>, i: usize) -> P::ScalarField {
+    fn compute_read_term(&mut self, proving_key: &ProvingKey<T, P>, i: usize) -> FieldShare<T, P> {
         tracing::trace!("compute read term");
 
         let gamma = &self.memory.challenges.gamma;
@@ -110,20 +139,35 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
         // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
         // method get_lookup_accumulators() in  for a detailed explanation.
-        let derived_table_entry_1 = *w_1 + gamma + *negative_column_1_step_size * w_1_shift;
-        let derived_table_entry_2 = *w_2 + *negative_column_2_step_size * w_2_shift;
-        let derived_table_entry_3 = *w_3 + *negative_column_3_step_size * w_3_shift;
+
+        let mul = &self
+            .driver
+            .mul_with_public(negative_column_1_step_size, w_1_shift);
+        let add = &self.driver.add_with_public(gamma, mul);
+        let derived_table_entry_1 = self.driver.add(w_1, add);
+
+        let mul = self
+            .driver
+            .mul_with_public(negative_column_2_step_size, w_2_shift);
+        let derived_table_entry_2 = self.driver.add(w_2, &mul);
+
+        let mul = self
+            .driver
+            .mul_with_public(negative_column_3_step_size, w_3_shift);
+        let derived_table_entry_3 = self.driver.add(w_3, &mul);
 
         // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
         // deg 2 or 3
-        derived_table_entry_1
-            + derived_table_entry_2 * eta_1
-            + derived_table_entry_3 * eta_2
-            + *table_index * eta_3
+        // TODO add_assign?
+        let mul = self.driver.mul_with_public(eta_1, &derived_table_entry_2);
+        let res = self.driver.add(&derived_table_entry_1, &mul);
+        let mul = &self.driver.mul_with_public(eta_2, &derived_table_entry_3);
+        let res = self.driver.add(&res, mul);
+        self.driver.add_with_public(&(*table_index * eta_3), &res)
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term(&self, proving_key: &ProvingKey<P>, i: usize) -> P::ScalarField {
+    fn compute_write_term(&self, proving_key: &ProvingKey<T, P>, i: usize) -> P::ScalarField {
         tracing::trace!("compute write term");
 
         let gamma = &self.memory.challenges.gamma;
@@ -138,7 +182,10 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         *table_1 + gamma + *table_2 * eta_1 + *table_3 * eta_2 + *table_4 * eta_3
     }
 
-    fn compute_logderivative_inverses(&mut self, proving_key: &ProvingKey<P>) {
+    fn compute_logderivative_inverses(
+        &mut self,
+        proving_key: &ProvingKey<T, P>,
+    ) -> HonkProofResult<()> {
         tracing::trace!("compute logderivative inverse");
 
         debug_assert_eq!(
@@ -151,7 +198,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         );
         self.memory
             .lookup_inverses
-            .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
+            .resize(proving_key.circuit_size as usize, Default::default());
 
         // const READ_TERMS: usize = 1;
         // const WRITE_TERMS: usize = 1;
@@ -171,13 +218,14 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
             // READ_TERMS and WRITE_TERMS are 1, so we skip the loop
             let read_term = self.compute_read_term(proving_key, i);
             let write_term = self.compute_write_term(proving_key, i);
-            self.memory.lookup_inverses[i] = read_term * write_term;
+            self.memory.lookup_inverses[i] = self.driver.mul_with_public(&write_term, &read_term);
         }
 
-        Utils::batch_invert(self.memory.lookup_inverses.as_mut());
+        CoUtils::batch_invert::<T, P>(self.driver, self.memory.lookup_inverses.as_mut())?;
+        Ok(())
     }
 
-    fn compute_public_input_delta(&self, proving_key: &ProvingKey<P>) -> P::ScalarField {
+    fn compute_public_input_delta(&self, proving_key: &ProvingKey<T, P>) -> P::ScalarField {
         tracing::trace!("compute public input delta");
 
         // Let m be the number of public inputs x₀,…, xₘ₋₁.
@@ -223,92 +271,129 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         num / denom
     }
 
-    fn compute_grand_product_numerator(
-        &self,
-        proving_key: &ProvingKey<P>,
-        i: usize,
-    ) -> P::ScalarField {
-        tracing::trace!("compute grand product numerator");
+    fn batched_grand_product_num_denom(
+        driver: &mut T,
+        shared1: &Polynomial<FieldShare<T, P>>,
+        shared2: &Polynomial<FieldShare<T, P>>,
+        pub1: &Polynomial<P::ScalarField>,
+        pub2: &Polynomial<P::ScalarField>,
+        beta: &P::ScalarField,
+        gamma: &P::ScalarField,
+    ) -> HonkProofResult<Vec<FieldShare<T, P>>> {
+        let len = shared1.len();
+        debug_assert_eq!(len, shared2.len());
 
-        let w_1 = &proving_key.polynomials.witness.w_l()[i];
-        let w_2 = &proving_key.polynomials.witness.w_r()[i];
-        let w_3 = &proving_key.polynomials.witness.w_o()[i];
-        let w_4 = &self.memory.w_4[i];
-        let id_1 = &proving_key.polynomials.precomputed.id_1()[i];
-        let id_2 = &proving_key.polynomials.precomputed.id_2()[i];
-        let id_3 = &proving_key.polynomials.precomputed.id_3()[i];
-        let id_4 = &proving_key.polynomials.precomputed.id_4()[i];
-        let beta = &self.memory.challenges.beta;
-        let gamma = &self.memory.challenges.gamma;
+        // We drop the last element since it is not needed for the grand product
+        let mut mul1 = Vec::with_capacity(len - 1);
+        let mut mul2 = Vec::with_capacity(len - 1);
 
-        // witness degree 4; full degree 8
-        (*w_1 + *id_1 * beta + gamma)
-            * (*w_2 + *id_2 * beta + gamma)
-            * (*w_3 + *id_3 * beta + gamma)
-            * (*w_4 + *id_4 * beta + gamma)
+        for (s1, s2, p1, p2) in
+            izip!(shared1.iter(), shared2.iter(), pub1.iter(), pub2.iter()).take(len - 1)
+        {
+            let m1 = driver.add_with_public(&(*p1 * beta + gamma), s1);
+            let m2 = driver.add_with_public(&(*p2 * beta + gamma), s2);
+            mul1.push(m1);
+            mul2.push(m2);
+        }
+
+        Ok(driver.mul_many(&mul1, &mul2)?)
     }
 
-    fn grand_product_denominator(&self, proving_key: &ProvingKey<P>, i: usize) -> P::ScalarField {
-        tracing::trace!("compute grand product denominator");
+    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
+    fn array_prod_mul(
+        &mut self,
+        inp: &[FieldShare<T, P>],
+    ) -> HonkProofResult<Vec<FieldShare<T, P>>> {
+        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
+        let len = inp.len();
 
-        let w_1 = &proving_key.polynomials.witness.w_l()[i];
-        let w_2 = &proving_key.polynomials.witness.w_r()[i];
-        let w_3 = &proving_key.polynomials.witness.w_o()[i];
-        let w_4 = &self.memory.w_4[i];
-        let sigma_1 = &proving_key.polynomials.precomputed.sigma_1()[i];
-        let sigma_2 = &proving_key.polynomials.precomputed.sigma_2()[i];
-        let sigma_3 = &proving_key.polynomials.precomputed.sigma_3()[i];
-        let sigma_4 = &proving_key.polynomials.precomputed.sigma_4()[i];
-        let beta = &self.memory.challenges.beta;
-        let gamma = &self.memory.challenges.gamma;
+        let r = (0..=len)
+            .map(|_| self.driver.rand())
+            .collect::<Result<Vec<_>, _>>()?;
+        let r_inv = self.driver.inv_many(&r)?;
+        let r_inv0 = vec![r_inv[0].clone(); len];
 
-        // witness degree 4; full degree 8
-        (*w_1 + *sigma_1 * beta + gamma)
-            * (*w_2 + *sigma_2 * beta + gamma)
-            * (*w_3 + *sigma_3 * beta + gamma)
-            * (*w_4 + *sigma_4 * beta + gamma)
+        let mut unblind = self.driver.mul_many(&r_inv0, &r[1..])?;
+
+        let mul = self.driver.mul_many(&r[..len], inp)?;
+        let mut open = self.driver.mul_open_many(&mul, &r_inv[1..])?;
+
+        for i in 1..open.len() {
+            open[i] = open[i] * open[i - 1];
+        }
+
+        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
+            *unblind = self.driver.mul_with_public(open, unblind);
+        }
+        Ok(unblind)
     }
 
-    fn compute_grand_product(&mut self, proving_key: &ProvingKey<P>) {
+    fn compute_grand_product(&mut self, proving_key: &ProvingKey<T, P>) -> HonkProofResult<()> {
         tracing::trace!("compute grand product");
         // Barratenberg uses multithreading here
 
         // In Barretenberg circuit size is taken from the q_c polynomial
-        let mut numerator = Vec::with_capacity(proving_key.circuit_size as usize);
-        let mut denominator = Vec::with_capacity(proving_key.circuit_size as usize);
-
         // Step (1)
         // Populate `numerator` and `denominator` with the algebra described by Relation
 
-        for i in 0..proving_key.circuit_size as usize {
-            numerator.push(self.compute_grand_product_numerator(proving_key, i));
-            denominator.push(self.grand_product_denominator(proving_key, i));
-        }
+        // TODO could batch those 4 as well
+        let denom1 = Self::batched_grand_product_num_denom(
+            self.driver,
+            proving_key.polynomials.witness.w_l(),
+            proving_key.polynomials.witness.w_r(),
+            proving_key.polynomials.precomputed.sigma_1(),
+            proving_key.polynomials.precomputed.sigma_2(),
+            &self.memory.challenges.beta,
+            &self.memory.challenges.gamma,
+        )?;
+        let denom2 = Self::batched_grand_product_num_denom(
+            self.driver,
+            proving_key.polynomials.witness.w_o(),
+            &self.memory.w_4,
+            proving_key.polynomials.precomputed.sigma_3(),
+            proving_key.polynomials.precomputed.sigma_4(),
+            &self.memory.challenges.beta,
+            &self.memory.challenges.gamma,
+        )?;
+        let num1 = Self::batched_grand_product_num_denom(
+            self.driver,
+            proving_key.polynomials.witness.w_l(),
+            proving_key.polynomials.witness.w_r(),
+            proving_key.polynomials.precomputed.id_1(),
+            proving_key.polynomials.precomputed.id_2(),
+            &self.memory.challenges.beta,
+            &self.memory.challenges.gamma,
+        )?;
+        let num2 = Self::batched_grand_product_num_denom(
+            self.driver,
+            proving_key.polynomials.witness.w_o(),
+            &self.memory.w_4,
+            proving_key.polynomials.precomputed.id_3(),
+            proving_key.polynomials.precomputed.id_4(),
+            &self.memory.challenges.beta,
+            &self.memory.challenges.gamma,
+        )?;
+
+        // TODO could batch here as well
+        let numerator = self.driver.mul_many(&num1, &num2)?;
+        let denominator = self.driver.mul_many(&denom1, &denom2)?;
 
         // Step (2)
         // Compute the accumulating product of the numerator and denominator terms.
-        // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation signlethreaded for simplicity
 
-        for i in 1..proving_key.circuit_size as usize {
-            numerator[i] = numerator[i] * numerator[i - 1];
-            denominator[i] = denominator[i] * denominator[i - 1];
-        }
+        // TODO could batch here as well
+        // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
+        let numerator = self.array_prod_mul(&numerator)?;
+        let mut denominator = self.array_prod_mul(&denominator)?;
 
         // invert denominator
-        Utils::batch_invert(&mut denominator);
+        CoUtils::batch_invert::<T, P>(self.driver, &mut denominator)?;
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
-        self.memory
-            .z_perm
-            .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
-
-        for (des, num, den) in izip!(
-            self.memory.z_perm.iter_mut().skip(1),
-            numerator.into_iter(),
-            denominator.into_iter()
-        ) {
-            *des = num * den;
-        }
+        let mut z_perm = self.driver.mul_many(&numerator, &denominator)?;
+        z_perm.insert(0, FieldShare::<T, P>::default()); // insert a default element at the beginning
+        self.memory.z_perm = Polynomial::new(z_perm);
+        Ok(())
     }
 
     // Generate relation separators alphas for sumcheck/combiner computation
@@ -324,7 +409,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
     // Add circuit size public input size and public inputs to transcript
     fn execute_preamble_round(
         transcript: &mut TranscriptType,
-        proving_key: &ProvingKey<P>,
+        proving_key: &ProvingKey<T, P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing preamble round");
 
@@ -356,29 +441,34 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
     fn execute_wire_commitments_round(
         &mut self,
         transcript: &mut TranscriptType,
-        proving_key: &ProvingKey<P>,
+        proving_key: &ProvingKey<T, P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing wire commitments round");
 
         // Commit to the first three wire polynomials of the instance
         // We only commit to the fourth wire polynomial after adding memory records
 
-        let w_l = Utils::commit(
+        let w_l = CoUtils::commit(
+            self.driver,
             proving_key.polynomials.witness.w_l().as_ref(),
             &proving_key.crs,
-        )?;
-        let w_r = Utils::commit(
+        );
+        let w_r = CoUtils::commit(
+            self.driver,
             proving_key.polynomials.witness.w_r().as_ref(),
             &proving_key.crs,
-        )?;
-        let w_o = Utils::commit(
+        );
+        let w_o = CoUtils::commit(
+            self.driver,
             proving_key.polynomials.witness.w_o().as_ref(),
             &proving_key.crs,
-        )?;
+        );
 
-        transcript.send_point_to_verifier::<P>("W_L".to_string(), w_l.into());
-        transcript.send_point_to_verifier::<P>("W_R".to_string(), w_r.into());
-        transcript.send_point_to_verifier::<P>("W_O".to_string(), w_o.into());
+        let open = self.driver.open_point_many(&[w_l, w_r, w_o])?;
+
+        transcript.send_point_to_verifier::<P>("W_L".to_string(), open[0].into());
+        transcript.send_point_to_verifier::<P>("W_R".to_string(), open[1].into());
+        transcript.send_point_to_verifier::<P>("W_O".to_string(), open[2].into());
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
@@ -388,7 +478,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
     fn execute_sorted_list_accumulator_round(
         &mut self,
         transcript: &mut TranscriptType,
-        proving_key: &ProvingKey<P>,
+        proving_key: &ProvingKey<T, P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
@@ -415,7 +505,8 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
             proving_key.polynomials.witness.lookup_read_tags().as_ref(),
             &proving_key.crs,
         )?;
-        let w_4 = Utils::commit(self.memory.w_4.as_ref(), &proving_key.crs)?;
+        let w_4 = CoUtils::commit(self.driver, self.memory.w_4.as_ref(), &proving_key.crs);
+        let w_4 = self.driver.open_point(&w_4)?;
 
         transcript.send_point_to_verifier::<P>(
             "LOOKUP_READ_COUNTS".to_string(),
@@ -432,7 +523,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
     fn execute_log_derivative_inverse_round(
         &mut self,
         transcript: &mut TranscriptType,
-        proving_key: &ProvingKey<P>,
+        proving_key: &ProvingKey<T, P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing log derivative inverse round");
 
@@ -440,13 +531,9 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         self.memory.challenges.beta = challs[0];
         self.memory.challenges.gamma = challs[1];
 
-        self.compute_logderivative_inverses(proving_key);
+        self.compute_logderivative_inverses(proving_key)?;
 
-        let lookup_inverses =
-            Utils::commit(self.memory.lookup_inverses.as_ref(), &proving_key.crs)?;
-
-        transcript
-            .send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), lookup_inverses.into());
+        // We moved the commiting and opening of the lookup inverses to be at the same time as z_perm
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
@@ -456,24 +543,34 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
     fn execute_grand_product_computation_round(
         &mut self,
         transcript: &mut TranscriptType,
-        proving_key: &ProvingKey<P>,
+        proving_key: &ProvingKey<T, P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing grand product computation round");
 
         self.memory.public_input_delta = self.compute_public_input_delta(proving_key);
-        self.compute_grand_product(proving_key);
+        self.compute_grand_product(proving_key)?;
 
-        let z_perm = Utils::commit(self.memory.z_perm.as_ref(), &proving_key.crs)?;
+        // This is from the previous round, but we open it here with z_perm
+        let lookup_inverses = CoUtils::commit(
+            self.driver,
+            self.memory.lookup_inverses.as_ref(),
+            &proving_key.crs,
+        );
 
-        transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), z_perm.into());
+        let z_perm = CoUtils::commit(self.driver, self.memory.z_perm.as_ref(), &proving_key.crs);
+
+        let open = self.driver.open_point_many(&[lookup_inverses, z_perm])?;
+
+        transcript.send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), open[0].into());
+        transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), open[1].into());
         Ok(())
     }
 
     pub(crate) fn prove(
         mut self,
-        proving_key: &ProvingKey<P>,
+        proving_key: &ProvingKey<T, P>,
         transcript: &mut TranscriptType,
-    ) -> HonkProofResult<ProverMemory<P>> {
+    ) -> HonkProofResult<ProverMemory<T, P>> {
         tracing::trace!("Oink prove");
 
         // Add circuit size public input size and public inputs to transcript
@@ -482,6 +579,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         self.execute_wire_commitments_round(transcript, proving_key)?;
         // Compute sorted list accumulator and commitment
         self.execute_sorted_list_accumulator_round(transcript, proving_key)?;
+
         // Fiat-Shamir: beta & gamma
         self.execute_log_derivative_inverse_round(transcript, proving_key)?;
         // Compute grand product(s) and commitments.

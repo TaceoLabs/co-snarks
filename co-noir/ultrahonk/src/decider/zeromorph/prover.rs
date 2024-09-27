@@ -393,7 +393,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         debug_assert_eq!(quotients.len(), log_n as usize);
         // Compute and send commitments C_{q_k} = [q_k], k = 0,...,d-1
         for (idx, val) in quotients.iter().enumerate() {
-            let res = crate::commit(&val.coefficients, commitment_key)?;
+            let res = Utils::commit(&val.coefficients, commitment_key)?;
             let label = format!("ZM:C_q_{}", idx);
             transcript.send_point_to_verifier::<P>(label, res.into());
         }
@@ -412,7 +412,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
             Self::compute_batched_lifted_degree_quotient(&quotients, &y_challenge, n);
 
         // Compute and send the commitment C_q = [\hat{q}]
-        let q_commitment = crate::commit(&batched_quotient.coefficients, commitment_key)?;
+        let q_commitment = Utils::commit(&batched_quotient.coefficients, commitment_key)?;
         transcript.send_point_to_verifier::<P>("ZM:C_q".to_string(), q_commitment.into());
 
         // Get challenges x and z
