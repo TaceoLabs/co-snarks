@@ -81,12 +81,6 @@ where
 
     fn send_to_verifier(&mut self, label: String, elements: &[F]) {
         self.proof_data.extend(elements);
-
-        println!("Sending to verifier: {}", label);
-        for el in elements.iter() {
-            println!("\t{}", el);
-        }
-
         self.consume_prover_elements(label, elements);
     }
 
