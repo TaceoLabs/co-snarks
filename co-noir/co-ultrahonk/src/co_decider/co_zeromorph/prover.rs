@@ -8,7 +8,7 @@ use crate::{
     CoUtils, FieldShare, CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::Group;
-use ark_ff::Field;
+use ark_ff::{Field, One};
 use itertools::izip;
 use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use ultrahonk::{
@@ -85,6 +85,51 @@ where
         }
 
         quotients
+    }
+
+    /**
+     * @brief Construct batched, lifted-degree univariate quotient \hat{q} = \sum_k y^k * X^{N - d_k - 1} * q_k
+     * @details The purpose of the batched lifted-degree quotient is to reduce the individual degree checks
+     * deg(q_k) <= 2^k - 1 to a single degree check on \hat{q}. This is done by first shifting each of the q_k to the
+     * right (i.e. multiplying by an appropriate power of X) so that each is degree N-1, then batching them all together
+     * using powers of the provided challenge. Note: In practice, we do not actually compute the shifted q_k, we simply
+     * accumulate them into \hat{q} at the appropriate offset.
+     *
+     * @param quotients Polynomials q_k, interpreted as univariates; deg(q_k) = 2^k - 1
+     * @param N circuit size
+     * @return Polynomial
+     */
+    fn compute_batched_lifted_degree_quotient(
+        driver: &mut T,
+        quotients: &[SharedPolynomial<T, P>],
+        y_challenge: &P::ScalarField,
+        n: usize,
+    ) -> SharedPolynomial<T, P> {
+        // Batched lifted degree quotient polynomial
+        let mut result = vec![FieldShare::<T, P>::default(); n];
+
+        // Compute \hat{q} = \sum_k y^k * X^{N - d_k - 1} * q_k
+        let mut scalar = P::ScalarField::one();
+        for (k, quotient) in quotients.iter().enumerate() {
+            // Rather than explicitly computing the shifts of q_k by N - d_k - 1 (i.e. multiplying q_k by X^{N - d_k -
+            // 1}) then accumulating them, we simply accumulate y^k*q_k into \hat{q} at the index offset N - d_k - 1
+            let deg_k = (1 << k) - 1;
+            let offset = n - deg_k - 1;
+
+            for (r, q) in result
+                .iter_mut()
+                .skip(offset)
+                .take(deg_k + 1)
+                .zip(quotient.iter())
+            {
+                let tmp = driver.mul_with_public(&scalar, q);
+                *r = driver.add(r, &tmp);
+            }
+
+            scalar *= y_challenge; // update batching scalar y^k
+        }
+
+        SharedPolynomial::new(result)
     }
 
     fn get_f_polyomials(
@@ -294,6 +339,59 @@ where
 
         // Get challenge y
         let y_challenge = transcript.get_challenge::<P>("ZM:y".to_string());
+
+        // Compute the batched, lifted-degree quotient \hat{q}
+        let batched_quotient = Self::compute_batched_lifted_degree_quotient(
+            &mut self.driver,
+            &quotients,
+            &y_challenge,
+            n,
+        );
+
+        // Compute and send the commitment C_q = [\hat{q}]
+        let q_commitment = CoUtils::commit(
+            &mut self.driver,
+            &batched_quotient.coefficients,
+            commitment_key,
+        );
+        let q_commitment = self.driver.open_point(&q_commitment)?;
+        transcript.send_point_to_verifier::<P>("ZM:C_q".to_string(), q_commitment.into());
+
+        // Get challenges x and z
+        let challs = transcript.get_challenges::<P>(&["ZM:x".to_string(), "ZM:z".to_string()]);
+        let x_challenge = challs[0];
+        let z_challenge = challs[1];
+
+        // Compute degree check polynomial \zeta partially evaluated at x
+        let zeta_x = Self::compute_partially_evaluated_degree_check_polynomial(
+            &batched_quotient,
+            &quotients,
+            &y_challenge,
+            &x_challenge,
+        );
+
+        // Compute ZeroMorph identity polynomial Z partially evaluated at x
+        // let z_x = Self::compute_partially_evaluated_zeromorph_identity_polynomial(
+        //     f_batched,
+        //     g_batched,
+        //     quotients,
+        //     batched_evaluation,
+        //     u_challenge,
+        //     x_challenge,
+        // );
+
+        // // Compute batched degree-check and ZM-identity quotient polynomial pi
+        // let pi_polynomial =
+        //     Self::compute_batched_evaluation_and_degree_check_polynomial(zeta_x, z_x, z_challenge);
+
+        // let res = ZeroMorphOpeningClaim {
+        //     polynomial: pi_polynomial,
+        //     opening_pair: OpeningPair {
+        //         challenge: x_challenge,
+        //         evaluation: P::ScalarField::zero(),
+        //     },
+        // };
+        // Ok(res)
 
         todo!("ZeroMorph prove")
     }

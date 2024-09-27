@@ -14,6 +14,10 @@ impl<T, P: Pairing> SharedPolynomial<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
+    pub fn new(coefficients: Vec<T::FieldShare>) -> Self {
+        Self { coefficients }
+    }
+
     pub(crate) fn promote_poly(driver: &T, poly: Polynomial<P::ScalarField>) -> Self {
         // TODO remove the FieldShareVec
         let coefficients: T::FieldShareVec = driver.promote_to_trivial_shares(poly.as_ref());
