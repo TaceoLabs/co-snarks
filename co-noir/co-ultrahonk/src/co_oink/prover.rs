@@ -25,7 +25,9 @@ use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use std::marker::PhantomData;
 use tracing::field::Field;
 use ultrahonk::{
-    prelude::{HonkCurve, HonkProofError, HonkProofResult, TranscriptFieldType, TranscriptType},
+    prelude::{
+        HonkCurve, HonkProofError, HonkProofResult, Polynomial, TranscriptFieldType, TranscriptType,
+    },
     Utils,
 };
 
@@ -270,6 +272,107 @@ where
         num / denom
     }
 
+    fn batched_grand_product_num_denom(
+        driver: &mut T,
+        shared1: &Polynomial<FieldShare<T, P>>,
+        shared2: &Polynomial<FieldShare<T, P>>,
+        pub1: &Polynomial<P::ScalarField>,
+        pub2: &Polynomial<P::ScalarField>,
+        beta: &P::ScalarField,
+        gamma: &P::ScalarField,
+    ) -> HonkProofResult<Vec<FieldShare<T, P>>> {
+        debug_assert_eq!(shared1.len(), shared2.len());
+        let mut mul1 = Vec::with_capacity(shared1.len());
+        let mut mul2 = Vec::with_capacity(shared1.len());
+
+        for (s1, s2, p1, p2) in izip!(shared1.iter(), shared2.iter(), pub1.iter(), pub2.iter()) {
+            let m1 = driver.add_with_public(&(*p1 * beta + gamma), s1);
+            let m2 = driver.add_with_public(&(*p2 * beta + gamma), s2);
+            mul1.push(m1);
+            mul2.push(m2);
+        }
+
+        Ok(driver.mul_many(&mul1, &mul2)?)
+    }
+
+    fn compute_grand_product(&mut self, proving_key: &ProvingKey<T, P>) -> HonkProofResult<()> {
+        tracing::trace!("compute grand product");
+        // Barratenberg uses multithreading here
+
+        // In Barretenberg circuit size is taken from the q_c polynomial
+        // Step (1)
+        // Populate `numerator` and `denominator` with the algebra described by Relation
+
+        // TODO could batch those 4 as well
+        let denom1 = Self::batched_grand_product_num_denom(
+            self.driver,
+            proving_key.polynomials.witness.w_l(),
+            proving_key.polynomials.witness.w_r(),
+            proving_key.polynomials.precomputed.sigma_1(),
+            proving_key.polynomials.precomputed.sigma_2(),
+            &self.memory.challenges.beta,
+            &self.memory.challenges.gamma,
+        )?;
+        let denom2 = Self::batched_grand_product_num_denom(
+            self.driver,
+            proving_key.polynomials.witness.w_o(),
+            &self.memory.w_4,
+            proving_key.polynomials.precomputed.sigma_3(),
+            proving_key.polynomials.precomputed.sigma_4(),
+            &self.memory.challenges.beta,
+            &self.memory.challenges.gamma,
+        )?;
+        let num1 = Self::batched_grand_product_num_denom(
+            self.driver,
+            proving_key.polynomials.witness.w_l(),
+            proving_key.polynomials.witness.w_r(),
+            proving_key.polynomials.precomputed.id_1(),
+            proving_key.polynomials.precomputed.id_2(),
+            &self.memory.challenges.beta,
+            &self.memory.challenges.gamma,
+        )?;
+        let num2 = Self::batched_grand_product_num_denom(
+            self.driver,
+            proving_key.polynomials.witness.w_o(),
+            &self.memory.w_4,
+            proving_key.polynomials.precomputed.id_3(),
+            proving_key.polynomials.precomputed.id_4(),
+            &self.memory.challenges.beta,
+            &self.memory.challenges.gamma,
+        )?;
+
+        // TODO could batch here as well
+        let numerator = self.driver.mul_many(&num1, &num2)?;
+        let denominator = self.driver.mul_many(&denom1, &denom2)?;
+
+        todo!("compute grand product")
+
+        // Step (2)
+        // Compute the accumulating product of the numerator and denominator terms.
+        // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation signlethreaded for simplicity
+
+        // for i in 1..proving_key.circuit_size as usize {
+        //     numerator[i] = numerator[i] * numerator[i - 1];
+        //     denominator[i] = denominator[i] * denominator[i - 1];
+        // }
+
+        // // invert denominator
+        // CoUtils::batch_invert(&mut denominator);
+
+        // // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
+        // self.memory
+        //     .z_perm
+        //     .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
+
+        // for (des, num, den) in izip!(
+        //     self.memory.z_perm.iter_mut().skip(1),
+        //     numerator.into_iter(),
+        //     denominator.into_iter()
+        // ) {
+        //     *des = num * den;
+        // }
+    }
+
     // Generate relation separators alphas for sumcheck/combiner computation
     fn generate_alphas_round(&mut self, transcript: &mut TranscriptType) {
         tracing::trace!("generate alpha round");
@@ -405,7 +508,7 @@ where
         self.memory.challenges.beta = challs[0];
         self.memory.challenges.gamma = challs[1];
 
-        self.compute_logderivative_inverses(proving_key);
+        self.compute_logderivative_inverses(proving_key)?;
 
         // We moved the commiting and opening of the lookup inverses to be at the same time as z_perm
 
@@ -422,8 +525,7 @@ where
         tracing::trace!("executing grand product computation round");
 
         self.memory.public_input_delta = self.compute_public_input_delta(proving_key);
-        todo!("compute_grand_product");
-        // self.compute_grand_product(proving_key);
+        self.compute_grand_product(proving_key)?;
 
         // This is from the previous round, but we open it here with z_perm
         let lookup_inverses = CoUtils::commit(
