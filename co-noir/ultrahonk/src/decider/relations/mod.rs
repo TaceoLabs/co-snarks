@@ -7,10 +7,8 @@ pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
-use super::{
-    sumcheck::sumcheck_round::SumcheckRoundOutput,
-    types::{ProverUnivariates, RelationParameters},
-};
+use super::types::{ProverUnivariates, RelationParameters};
+use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc};
 use delta_range_constraint_relation::{
@@ -76,10 +74,10 @@ impl<F: PrimeField> AllRelationAcc<F> {
         self.r_pos_int.scale(&elements[21..]);
     }
 
-    pub(crate) fn extend_and_batch_univariates(
+    pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        result: &mut SumcheckRoundOutput<F>,
-        extended_random_poly: &SumcheckRoundOutput<F>,
+        result: &mut Univariate<F, SIZE>,
+        extended_random_poly: &Univariate<F, SIZE>,
         partial_evaluation_result: &F,
     ) {
         self.r_arith.extend_and_batch_univariates(

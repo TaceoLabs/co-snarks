@@ -1,41 +1,80 @@
-use crate::decider::prover::Decider;
-use crate::decider::sumcheck::round::{SumcheckRound, SumcheckRoundOutput};
-use crate::decider::sumcheck::SumcheckOutput;
-use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys};
-use crate::honk_curve::HonkCurve;
-use crate::transcript::{TranscriptFieldType, TranscriptType};
-use crate::types::AllEntities;
-use crate::{Utils, CONST_PROOF_SIZE_LOG_N};
+use super::SumcheckOutput;
+use crate::{
+    co_decider::{
+        co_sumcheck::round::SumcheckRound,
+        prover::CoDecider,
+        types::{ClaimedEvaluations, PartiallyEvaluatePolys, MAX_PARTIAL_RELATION_LENGTH},
+    },
+    types::AllEntities,
+    FieldShare, CONST_PROOF_SIZE_LOG_N,
+};
+use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
+use ultrahonk::{
+    prelude::{
+        GateSeparatorPolynomial, HonkCurve, HonkProofResult, TranscriptFieldType, TranscriptType,
+        Univariate,
+    },
+    Utils,
+};
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
-impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
+impl<T, P: HonkCurve<TranscriptFieldType>> CoDecider<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
+{
     pub(crate) fn partially_evaluate_init(
-        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField>,
-        polys: &AllEntities<Vec<P::ScalarField>>,
+        driver: &mut T,
+        partially_evaluated_poly: &mut PartiallyEvaluatePolys<T, P>,
+        polys: &AllEntities<Vec<FieldShare<T, P>>, Vec<P::ScalarField>>,
         round_size: usize,
         round_challenge: &P::ScalarField,
     ) {
         tracing::trace!("Partially_evaluate init");
 
         // Barretenberg uses multithreading here
-        for (poly_src, poly_des) in polys.iter().zip(partially_evaluated_poly.iter_mut()) {
+
+        for (poly_src, poly_des) in polys
+            .public_iter()
+            .zip(partially_evaluated_poly.public_iter_mut())
+        {
             for i in (0..round_size).step_by(2) {
                 poly_des[i >> 1] = poly_src[i] + (poly_src[i + 1] - poly_src[i]) * round_challenge;
+            }
+        }
+
+        for (poly_src, poly_des) in polys
+            .shared_iter()
+            .zip(partially_evaluated_poly.shared_iter_mut())
+        {
+            for i in (0..round_size).step_by(2) {
+                let tmp = driver.sub(&poly_src[i + 1], &poly_src[i]);
+                let tmp = driver.mul_with_public(round_challenge, &tmp);
+                poly_des[i >> 1] = driver.add(&poly_src[i], &tmp);
             }
         }
     }
 
     pub(crate) fn partially_evaluate_inplace(
-        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField>,
+        driver: &mut T,
+        partially_evaluated_poly: &mut PartiallyEvaluatePolys<T, P>,
         round_size: usize,
         round_challenge: &P::ScalarField,
     ) {
         tracing::trace!("Partially_evaluate inplace");
 
         // Barretenberg uses multithreading here
-        for poly in partially_evaluated_poly.iter_mut() {
+
+        for poly in partially_evaluated_poly.public_iter_mut() {
             for i in (0..round_size).step_by(2) {
                 poly[i >> 1] = poly[i] + (poly[i + 1] - poly[i]) * round_challenge;
+            }
+        }
+
+        for poly in partially_evaluated_poly.shared_iter_mut() {
+            for i in (0..round_size).step_by(2) {
+                let tmp = driver.sub(&poly[i + 1], &poly[i]);
+                let tmp = driver.mul_with_public(round_challenge, &tmp);
+                poly[i >> 1] = driver.add(&poly[i], &tmp);
             }
         }
     }
@@ -53,25 +92,40 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
     }
 
     fn extract_claimed_evaluations(
-        partially_evaluated_polynomials: PartiallyEvaluatePolys<P::ScalarField>,
-    ) -> ClaimedEvaluations<P::ScalarField> {
+        driver: &mut T,
+        partially_evaluated_polynomials: PartiallyEvaluatePolys<T, P>,
+    ) -> HonkProofResult<ClaimedEvaluations<P::ScalarField>> {
         let mut multivariate_evaluations = ClaimedEvaluations::default();
 
         for (src, des) in partially_evaluated_polynomials
-            .into_iter()
-            .zip(multivariate_evaluations.iter_mut())
+            .public_iter()
+            .zip(multivariate_evaluations.public_iter_mut())
         {
             *des = src[0];
         }
 
-        multivariate_evaluations
+        let shared = partially_evaluated_polynomials
+            .into_shared_iter()
+            .map(|x| x[0].to_owned())
+            .collect::<Vec<_>>();
+
+        let opened = driver.open_many(&shared).unwrap();
+
+        for (src, des) in opened
+            .into_iter()
+            .zip(multivariate_evaluations.shared_iter_mut())
+        {
+            *des = src;
+        }
+
+        Ok(multivariate_evaluations)
     }
 
     pub(crate) fn sumcheck_prove(
-        &self,
+        &mut self,
         transcript: &mut TranscriptType,
         circuit_size: u32,
-    ) -> SumcheckOutput<P::ScalarField> {
+    ) -> HonkProofResult<SumcheckOutput<P::ScalarField>> {
         tracing::trace!("Sumcheck prove");
 
         let multivariate_n = circuit_size;
@@ -91,25 +145,28 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
         // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
         // compute_univariate also takes into account the zk_sumcheck_data.
-        let round_univariate = sum_check_round.compute_univariate::<P>(
+        let round_univariate = sum_check_round.compute_univariate::<T, P>(
+            &mut self.driver,
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
             &self.memory.polys,
         );
+        let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
 
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
             "Sumcheck:univariate_0".to_string(),
-            &round_univariate.evaluations,
+            &round_univariate,
         );
         let round_challenge = transcript.get_challenge::<P>("Sumcheck:u_0".to_string());
         multivariate_challenge.push(round_challenge);
 
         // Prepare sumcheck book-keeping table for the next round
         let mut partially_evaluated_polys =
-            PartiallyEvaluatePolys::new(multivariate_n as usize >> 1);
+            PartiallyEvaluatePolys::<T, P>::new(multivariate_n as usize >> 1);
         Self::partially_evaluate_init(
+            &mut self.driver,
             &mut partially_evaluated_polys,
             &self.memory.polys,
             multivariate_n as usize,
@@ -124,23 +181,26 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
             tracing::trace!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript
 
-            let round_univariate = sum_check_round.compute_univariate::<P>(
+            let round_univariate = sum_check_round.compute_univariate::<T, P>(
+                &mut self.driver,
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,
                 &partially_evaluated_polys,
             );
+            let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
 
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{}", round_idx),
-                &round_univariate.evaluations,
+                &round_univariate,
             );
             let round_challenge =
                 transcript.get_challenge::<P>(format!("Sumcheck:u_{}", round_idx));
             multivariate_challenge.push(round_challenge);
             // Prepare sumcheck book-keeping table for the next round
             Self::partially_evaluate_inplace(
+                &mut self.driver,
                 &mut partially_evaluated_polys,
                 sum_check_round.round_size,
                 &round_challenge,
@@ -150,7 +210,8 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         }
 
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
-        let zero_univariate = SumcheckRoundOutput::<P::ScalarField>::default();
+        let zero_univariate =
+            Univariate::<P::ScalarField, { MAX_PARTIAL_RELATION_LENGTH + 1 }>::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{}", idx),
@@ -162,12 +223,14 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
 
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
         // evaluations of all witnesses are masked.
-        let multivariate_evaluations = Self::extract_claimed_evaluations(partially_evaluated_polys);
+        let multivariate_evaluations =
+            Self::extract_claimed_evaluations(&mut self.driver, partially_evaluated_polys)?;
         Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
 
-        SumcheckOutput {
+        let res = SumcheckOutput {
             claimed_evaluations: multivariate_evaluations,
             challenges: multivariate_challenge,
-        }
+        };
+        Ok(res)
     }
 }
