@@ -188,14 +188,6 @@ impl<T: Default> AllEntities<T> {
             .chain(self.shifted_witness.iter())
     }
 
-    fn into_iter(self) -> impl Iterator<Item = T> {
-        self.precomputed
-            .into_iter()
-            .chain(self.witness)
-            .chain(self.shifted_tables)
-            .chain(self.shifted_witness)
-    }
-
     pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.precomputed
             .iter_mut()
@@ -289,6 +281,28 @@ impl<T: Default> IntoIterator for ShiftedWitnessEntities<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.elements.into_iter()
+    }
+}
+
+impl<T: Default> IntoIterator for AllEntities<T> {
+    type Item = T;
+    type IntoIter = std::iter::Chain<
+        std::iter::Chain<
+            std::iter::Chain<
+                std::array::IntoIter<T, PRECOMPUTED_ENTITIES_SIZE>,
+                std::array::IntoIter<T, WITNESS_ENTITIES_SIZE>,
+            >,
+            std::array::IntoIter<T, SHIFTED_TABLE_ENTITIES_SIZE>,
+        >,
+        std::array::IntoIter<T, SHIFTED_WITNESS_ENTITIES_SIZE>,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.precomputed
+            .into_iter()
+            .chain(self.witness)
+            .chain(self.shifted_tables)
+            .chain(self.shifted_witness)
     }
 }
 
@@ -425,7 +439,7 @@ impl<T: Default> ShiftedWitnessEntities<T> {
     const W_4: usize = 3; // column 3
     const Z_PERM: usize = 4; // column 4
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
     }
 
@@ -460,7 +474,7 @@ impl<T: Default> ShiftedTableEntities<T> {
     const TABLE_3: usize = 2; // column 2
     const TABLE_4: usize = 3; // column 3
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
     }
 

@@ -1,5 +1,7 @@
 use crate::{
-    co_oink::prover::CoOink, co_zeromorph::types::ProverMemory, types::ProvingKey,
+    co_decider::{prover::CoDecider, types::ProverMemory},
+    co_oink::prover::CoOink,
+    types::ProvingKey,
     CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::pairing::Pairing;
@@ -61,6 +63,7 @@ where
         memory.relation_parameters.gate_challenges =
             Self::generate_gate_challenges(&mut transcript);
 
-        todo!("decider prove");
+        let decider = CoDecider::new(self.driver, memory);
+        decider.prove(cicruit_size, &crs, transcript)
     }
 }

@@ -1,4 +1,7 @@
+pub use crate::decider::barycentric::Barycentric;
 pub use crate::decider::polynomial::Polynomial;
+pub use crate::decider::types::GateSeparatorPolynomial;
+pub use crate::decider::univariate::Univariate;
 pub use crate::honk_curve::HonkCurve;
 pub use crate::parse::crs::CrsParser;
 pub use crate::parse::{
