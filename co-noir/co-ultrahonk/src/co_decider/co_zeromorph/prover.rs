@@ -6,6 +6,7 @@ use crate::{
     types::AllEntities,
     FieldShare,
 };
+use itertools::izip;
 use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use ultrahonk::{
     prelude::{
@@ -21,6 +22,71 @@ impl<T, P: HonkCurve<TranscriptFieldType>> CoDecider<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
 {
+    // /**
+    //  * @brief Compute multivariate quotients q_k(X_0, ..., X_{k-1}) for f(X_0, ..., X_{n-1})
+    //  * @details Starting from the coefficients of f, compute q_k inductively from k = n - 1, to k = 0.
+    //  *          f needs to be updated at each step.
+    //  *
+    //  *          First, compute q_{n-1} of size N/2 by
+    //  *          q_{n-1}[l] = f[N/2 + l ] - f[l].
+    //  *
+    //  *          Update f by f[l] <- f[l] + u_{n-1} * q_{n-1}[l]; f now has size N/2.
+    //  *          Compute q_{n-2} of size N/(2^2) by
+    //  *          q_{n-2}[l] = f[N/2^2 + l] - f[l].
+    //  *
+    //  *          Update f by f[l] <- f[l] + u_{n-2} * q_{n-2}[l]; f now has size N/(2^2).
+    //  *          Compute q_{n-3} of size N/(2^3) by
+    //  *          q_{n-3}[l] = f[N/2^3 + l] - f[l]. Repeat similarly until you reach q_0.
+    //  *
+    //  * @param polynomial Multilinear polynomial f(X_0, ..., X_{d-1})
+    //  * @param u_challenge Multivariate challenge u = (u_0, ..., u_{d-1})
+    //  * @return std::vector<Polynomial> The quotients q_k
+    //  */
+    fn compute_multilinear_quotients(
+        driver: &mut T,
+        polynomial: &SharedPolynomial<T, P>,
+        u_challenge: &[P::ScalarField],
+    ) -> Vec<SharedPolynomial<T, P>> {
+        let log_n = Utils::get_msb64(polynomial.len() as u64);
+        // Define the vector of quotients q_k, k = 0, ..., log_N-1
+        // let mut quotients = Vec::with_capacity(log_n as usize);
+        let mut quotients = vec![SharedPolynomial::default(); log_n as usize];
+
+        // Compute the coefficients of q_{n-1}
+        let mut size_q = 1 << (log_n - 1);
+        let mut q = Vec::with_capacity(size_q);
+        let (half_a, half_b) = polynomial.coefficients.split_at(size_q);
+        for (a, b) in half_a.iter().zip(half_b.iter()) {
+            q.push(driver.sub(b, a));
+        }
+
+        quotients[log_n as usize - 1].coefficients = q;
+
+        let mut g = half_a.to_owned();
+
+        // Compute q_k in reverse order from k= n-2, i.e. q_{n-2}, ..., q_0
+        for k in 1..log_n {
+            // Compute f_k
+            let mut f_k = Vec::with_capacity(size_q);
+            let index = log_n as usize - k as usize;
+            for (g, q) in izip!(g, quotients[index].iter()) {
+                let tmp = driver.mul_with_public(&u_challenge[index], q);
+                f_k.push(driver.add(&g, &tmp));
+            }
+            size_q >>= 1;
+            let mut q = Vec::with_capacity(size_q);
+            let (half_a, half_b) = f_k.split_at(size_q);
+            for (a, b) in half_a.iter().zip(half_b.iter()) {
+                q.push(driver.sub(b, a));
+            }
+
+            quotients[index - 1].coefficients = q;
+            g = f_k;
+        }
+
+        quotients
+    }
+
     fn get_f_polyomials(
         polys: &AllEntities<Vec<FieldShare<T, P>>, Vec<P::ScalarField>>,
     ) -> PolyF<Vec<FieldShare<T, P>>, Vec<P::ScalarField>> {
@@ -203,6 +269,11 @@ where
 
         f_polynomial.add_assign_slice(&mut self.driver, g_batched.shifted());
         // f_polynomial += concatenated_batched; // No groups
+
+        // Compute the multilinear quotients q_k = q_k(X_0, ..., X_{k-1})
+        let quotients =
+            Self::compute_multilinear_quotients(&mut self.driver, &f_polynomial, u_challenge);
+        debug_assert_eq!(quotients.len(), log_n as usize);
 
         todo!("ZeroMorph prove")
     }

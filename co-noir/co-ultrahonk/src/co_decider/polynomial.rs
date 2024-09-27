@@ -21,14 +21,18 @@ where
         Self { coefficients }
     }
 
-    pub fn add_assign_slice(&mut self, driver: &mut T, other: &[T::FieldShare]) {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T::FieldShare> {
+        self.coefficients.iter()
+    }
+
+    pub(crate) fn add_assign_slice(&mut self, driver: &mut T, other: &[T::FieldShare]) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(other.iter()) {
             *des = driver.add(des, src);
         }
     }
 
-    pub fn add_scaled_slice(
+    pub(crate) fn add_scaled_slice(
         &mut self,
         driver: &mut T,
         src: &[T::FieldShare],
@@ -41,7 +45,7 @@ where
         }
     }
 
-    pub fn add_scaled_slice_public(
+    pub(crate) fn add_scaled_slice_public(
         &mut self,
         driver: &mut T,
         src: &[P::ScalarField],
@@ -54,8 +58,12 @@ where
         }
     }
 
+    pub(crate) fn len(&self) -> usize {
+        self.coefficients.len()
+    }
+
     // Can only shift by 1
-    pub fn shifted(&self) -> &[T::FieldShare] {
+    pub(crate) fn shifted(&self) -> &[T::FieldShare] {
         assert!(!self.coefficients.is_empty());
         &self.coefficients[1..]
     }

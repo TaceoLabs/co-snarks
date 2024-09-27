@@ -4,7 +4,7 @@ use std::ops::{AddAssign, Index, IndexMut};
 
 #[derive(Clone, Debug, Default)]
 pub struct Polynomial<F> {
-    pub(crate) coefficients: Vec<F>,
+    pub coefficients: Vec<F>,
 }
 
 pub struct ShiftedPoly<'a, F> {
