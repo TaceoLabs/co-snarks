@@ -5,11 +5,14 @@ use crate::{
 };
 use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use ultrahonk::{
-    prelude::{HonkCurve, HonkProofResult, ProverCrs, TranscriptFieldType, TranscriptType},
+    prelude::{
+        HonkCurve, HonkProofResult, Polynomial, ProverCrs, TranscriptFieldType, TranscriptType,
+    },
     Utils,
 };
 
 use super::types::{PolyF, PolyG, PolyGShift};
+use ark_ff::Field;
 
 impl<T, P: HonkCurve<TranscriptFieldType>> CoDecider<T, P>
 where
@@ -106,6 +109,35 @@ where
         let u_challenge = multilinear_challenge;
         let log_n = Utils::get_msb32(circuit_size);
         let n = 1 << log_n;
+
+        // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
+        // f_batched = sum_{i=0}^{m-1}\rho^i*f_i and g_batched = sum_{i=0}^{l-1}\rho^{m+i}*g_i,
+        // and also batched evaluation
+        // v = sum_{i=0}^{m-1}\rho^i*f_i(u) + sum_{i=0}^{l-1}\rho^{m+i}*h_i(u).
+        // Note: g_batched is formed from the to-be-shifted polynomials, but the batched evaluation incorporates the
+        // evaluations produced by sumcheck of h_i = g_i_shifted.
+        let mut batched_evaluation = P::ScalarField::ZERO;
+        let mut batching_scalar = P::ScalarField::ONE;
+        let mut f_batched = Polynomial::new_zero(n); // batched unshifted polynomials
+
+        for (f_poly, f_eval) in f_polynomials.public_iter().zip(f_evaluations.public_iter()) {
+            f_batched.add_scaled_slice(f_poly, &batching_scalar);
+            batched_evaluation += batching_scalar * f_eval;
+            batching_scalar *= rho;
+        }
+        todo!("Private part as well");
+
+        let mut g_batched = Polynomial::new_zero(n); // batched to-be-shifted polynomials
+
+        for (g_poly, g_shift_eval) in g_polynomials
+            .public_iter()
+            .zip(g_shift_evaluations.public_iter())
+        {
+            g_batched.add_scaled_slice(g_poly, &batching_scalar);
+            batched_evaluation += batching_scalar * g_shift_eval;
+            batching_scalar *= rho;
+        }
+        todo!("Private part as well");
 
         todo!("ZeroMorph prove")
     }
