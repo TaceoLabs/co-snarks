@@ -447,19 +447,19 @@ impl<T: Default> ShiftedWitnessEntities<T> {
         self.elements.iter_mut()
     }
 
-    pub(crate) fn w_l(&self) -> &T {
+    pub fn w_l(&self) -> &T {
         &self.elements[Self::W_L]
     }
 
-    pub(crate) fn w_r(&self) -> &T {
+    pub fn w_r(&self) -> &T {
         &self.elements[Self::W_R]
     }
 
-    pub(crate) fn w_o(&self) -> &T {
+    pub fn w_o(&self) -> &T {
         &self.elements[Self::W_O]
     }
 
-    pub(crate) fn w_4(&self) -> &T {
+    pub fn w_4(&self) -> &T {
         &self.elements[Self::W_4]
     }
 

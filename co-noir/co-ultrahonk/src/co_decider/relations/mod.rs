@@ -1,10 +1,37 @@
 pub(crate) mod poseidon2_external_relation;
 
-use super::{co_sumcheck::round::SumcheckRoundOutput, univariates::SharedUnivariate};
+use super::{
+    co_sumcheck::round::SumcheckRoundOutput,
+    types::{ProverUnivariates, RelationParameters},
+    univariates::SharedUnivariate,
+};
 use ark_ec::pairing::Pairing;
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use poseidon2_external_relation::{Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc};
-use ultrahonk::prelude::Univariate;
+use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
+
+pub(crate) trait Relation<T, P: HonkCurve<TranscriptFieldType>>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    type Acc: Default;
+    const SKIPPABLE: bool;
+
+    fn check_skippable() {
+        if !Self::SKIPPABLE {
+            panic!("Cannot skip this relation");
+        }
+    }
+
+    fn skip(input: &ProverUnivariates<T, P>) -> bool;
+    fn accumulate(
+        driver: &mut T,
+        univariate_accumulator: &mut Self::Acc,
+        input: &ProverUnivariates<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factor: &P::ScalarField,
+    ) -> HonkProofResult<()>;
+}
 
 // TODO calculate once relations are here
 pub(crate) const NUM_SUBRELATIONS: usize = 26;

@@ -4,7 +4,6 @@ use mpc_core::traits::PrimeFieldMpcProtocol;
 use std::array;
 use ultrahonk::prelude::{Barycentric, Univariate};
 
-#[derive(Clone, Debug)]
 pub(crate) struct SharedUnivariate<T, P: Pairing, const SIZE: usize>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -22,9 +21,35 @@ where
         }
     }
 
+    pub(crate) fn add(&self, driver: &mut T, rhs: &Self) -> Self {
+        let mut result = self.to_owned();
+        result.add_assign(driver, rhs);
+        result
+    }
+
+    pub(crate) fn add_public(
+        &self,
+        driver: &mut T,
+        rhs: &Univariate<P::ScalarField, SIZE>,
+    ) -> Self {
+        let mut result = self.to_owned();
+        result.add_assign_public(driver, rhs);
+        result
+    }
+
     pub(crate) fn add_assign(&mut self, driver: &mut T, rhs: &Self) {
         for i in 0..SIZE {
             self.evaluations[i] = driver.add(&self.evaluations[i], &rhs.evaluations[i]);
+        }
+    }
+
+    pub(crate) fn add_assign_public(
+        &mut self,
+        driver: &mut T,
+        rhs: &Univariate<P::ScalarField, SIZE>,
+    ) {
+        for i in 0..SIZE {
+            self.evaluations[i] = driver.add_with_public(&rhs.evaluations[i], &self.evaluations[i]);
         }
     }
 
@@ -249,5 +274,25 @@ where
         Self {
             evaluations: array::from_fn(|_| T::FieldShare::default()),
         }
+    }
+}
+
+impl<T, P: Pairing, const SIZE: usize> Clone for SharedUnivariate<T, P, SIZE>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            evaluations: self.evaluations.clone(),
+        }
+    }
+}
+
+impl<T, P: Pairing, const SIZE: usize> std::fmt::Debug for SharedUnivariate<T, P, SIZE>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.evaluations.iter()).finish()
     }
 }
