@@ -101,3 +101,11 @@ where
             .finish()
     }
 }
+impl<T, P: Pairing> AsRef<[T::FieldShare]> for SharedPolynomial<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn as_ref(&self) -> &[T::FieldShare] {
+        &self.coefficients
+    }
+}

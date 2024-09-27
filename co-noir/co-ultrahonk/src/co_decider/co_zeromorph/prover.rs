@@ -1,11 +1,14 @@
+use super::types::{PolyF, PolyG, PolyGShift};
 use crate::{
     co_decider::{
         co_sumcheck::SumcheckOutput, polynomial::SharedPolynomial, prover::CoDecider,
         types::ClaimedEvaluations,
     },
     types::AllEntities,
-    FieldShare,
+    CoUtils, FieldShare, CONST_PROOF_SIZE_LOG_N,
 };
+use ark_ec::Group;
+use ark_ff::Field;
 use itertools::izip;
 use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use ultrahonk::{
@@ -14,9 +17,6 @@ use ultrahonk::{
     },
     Utils,
 };
-
-use super::types::{PolyF, PolyG, PolyGShift};
-use ark_ff::Field;
 
 impl<T, P: HonkCurve<TranscriptFieldType>> CoDecider<T, P>
 where
@@ -274,6 +274,26 @@ where
         let quotients =
             Self::compute_multilinear_quotients(&mut self.driver, &f_polynomial, u_challenge);
         debug_assert_eq!(quotients.len(), log_n as usize);
+        // Compute and send commitments C_{q_k} = [q_k], k = 0,...,d-1
+        let mut commitments = Vec::with_capacity(log_n as usize);
+        for q in quotients.iter() {
+            let commitment = CoUtils::commit(&mut self.driver, q.as_ref(), commitment_key);
+            commitments.push(commitment);
+        }
+        let commitments = self.driver.open_point_many(&commitments)?;
+        for (idx, val) in commitments.into_iter().enumerate() {
+            let label = format!("ZM:C_q_{}", idx);
+            transcript.send_point_to_verifier::<P>(label, val.into());
+        }
+        // Add buffer elements to remove log_N dependence in proof
+        for idx in log_n as usize..CONST_PROOF_SIZE_LOG_N {
+            let res = P::G1::generator(); // TODO Is this one?
+            let label = format!("ZM:C_q_{}", idx);
+            transcript.send_point_to_verifier::<P>(label, res.into());
+        }
+
+        // Get challenge y
+        let y_challenge = transcript.get_challenge::<P>("ZM:y".to_string());
 
         todo!("ZeroMorph prove")
     }
