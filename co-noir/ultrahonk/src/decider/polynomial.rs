@@ -4,7 +4,7 @@ use std::ops::{AddAssign, Index, IndexMut};
 
 #[derive(Clone, Debug, Default)]
 pub struct Polynomial<F> {
-    pub(crate) coefficients: Vec<F>,
+    pub coefficients: Vec<F>,
 }
 
 pub struct ShiftedPoly<'a, F> {
@@ -171,9 +171,9 @@ impl<F: PrimeField> Polynomial<F> {
         self.coefficients.pop();
     }
 
-    pub(crate) fn add_scaled_slice(&mut self, src: &[F], scalar: &F) {
+    pub fn add_scaled_slice(&mut self, src: &[F], scalar: &F) {
         // Barrettenberg uses multithreading here
-        for (des, &src) in self.coefficients.iter_mut().zip(src.iter()) {
+        for (des, src) in self.coefficients.iter_mut().zip(src.iter()) {
             *des += *scalar * src;
         }
     }
