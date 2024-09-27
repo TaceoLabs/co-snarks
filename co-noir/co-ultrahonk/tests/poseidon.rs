@@ -24,7 +24,7 @@ fn poseidon_plaindriver_test() {
     let prover_crs = ProvingKey::get_prover_crs(&builder, CRS_PATH_G1).unwrap();
     let proving_key = ProvingKey::create(&driver, builder, prover_crs);
 
-    let mut prover = CoUltraHonk::new(driver);
+    let prover = CoUltraHonk::new(driver);
     let proof = prover.prove(proving_key).unwrap();
     let proof_u8 = proof.to_buffer();
 

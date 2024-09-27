@@ -36,7 +36,7 @@ pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> UltraHonk<P> {
-    fn generate_gate_challenges(memory: &mut ProverMemory<P>, transcript: &mut TranscriptType) {
+    fn generate_gate_challenges(transcript: &mut TranscriptType) -> Vec<P::ScalarField> {
         tracing::trace!("generate gate challenges");
 
         let mut gate_challenges: Vec<<P as Pairing>::ScalarField> =
@@ -46,7 +46,7 @@ impl<P: HonkCurve<TranscriptFieldType>> UltraHonk<P> {
             let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{}", idx));
             gate_challenges.push(chall);
         }
-        memory.relation_parameters.gate_challenges = gate_challenges;
+        gate_challenges
     }
 
     pub fn prove(proving_key: ProvingKey<P>) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
@@ -54,7 +54,7 @@ impl<P: HonkCurve<TranscriptFieldType>> UltraHonk<P> {
 
         let mut transcript = TranscriptType::new(&POSEIDON2_BN254_T4_PARAMS);
 
-        let oink = Oink::<P>::default();
+        let oink = Oink::default();
         let oink_result = oink.prove(&proving_key, &mut transcript)?;
 
         let cicruit_size = proving_key.circuit_size;
@@ -62,7 +62,8 @@ impl<P: HonkCurve<TranscriptFieldType>> UltraHonk<P> {
 
         let mut memory =
             ProverMemory::from_memory_and_polynomials(oink_result, proving_key.polynomials);
-        Self::generate_gate_challenges(&mut memory, &mut transcript);
+        memory.relation_parameters.gate_challenges =
+            Self::generate_gate_challenges(&mut transcript);
 
         let decider = Decider::new(memory);
         decider.prove(cicruit_size, &crs, transcript)

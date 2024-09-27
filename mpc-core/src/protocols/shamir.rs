@@ -534,6 +534,23 @@ impl<F: PrimeField, N: ShamirNetwork> PrimeFieldMpcProtocol<F> for ShamirProtoco
         Ok(res)
     }
 
+    fn inv_many_in_place(&mut self, a: &mut [Self::FieldShare]) -> std::io::Result<()> {
+        let r = (0..a.len())
+            .map(|_| self.rand())
+            .collect::<Result<Vec<_>, _>>()?;
+        let y = self.mul_open_many(a, &r)?;
+
+        for (a, r, y) in izip!(a.iter_mut(), r, y) {
+            if y.is_zero() {
+                *a = Self::FieldShare::default();
+            } else {
+                *a = r * y.inverse().unwrap();
+            }
+        }
+
+        Ok(())
+    }
+
     fn neg(&mut self, a: &Self::FieldShare) -> Self::FieldShare {
         -a
     }
