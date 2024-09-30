@@ -1,4 +1,5 @@
 pub(crate) mod poseidon2_external_relation;
+pub(crate) mod poseidon2_internal_relation;
 
 use super::{
     co_sumcheck::round::SumcheckRoundOutput,
@@ -8,6 +9,7 @@ use super::{
 use ark_ec::pairing::Pairing;
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use poseidon2_external_relation::{Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc};
+use poseidon2_internal_relation::Poseidon2InternalRelationAcc;
 use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
 
 pub(crate) trait Relation<T, P: HonkCurve<TranscriptFieldType>>
@@ -49,7 +51,14 @@ pub(crate) struct AllRelationAcc<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
+    // pub(crate) r_arith: UltraArithmeticRelationAcc<T, P>,
+    // pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
+    // pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
+    // pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
+    // pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
+    // pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
+    pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
 
 impl<T, P: Pairing> Default for AllRelationAcc<T, P>
@@ -58,7 +67,14 @@ where
 {
     fn default() -> Self {
         Self {
+            // r_arith: Default::default(),
+            // r_perm: Default::default(),
+            // r_delta:  Default::default(),
+            // r_elliptic:  Default::default(),
+            // r_aux:  Default::default(),
+            // r_lookup: Default::default(),
             r_pos_ext: Default::default(),
+            r_pos_int: Default::default(),
         }
     }
 }
@@ -81,7 +97,7 @@ where
         // self.r_aux.scale(driver, &elements[9..15]);
         // self.r_lookup.scale(driver, &elements[15..17]);
         self.r_pos_ext.scale(driver, &elements[17..21]);
-        // self.r_pos_int.scale(driver, &elements[21..]);
+        self.r_pos_int.scale(driver, &elements[21..]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -133,11 +149,11 @@ where
             extended_random_poly,
             partial_evaluation_result,
         );
-        // self.r_pos_int.extend_and_batch_univariates(
-        //     driver,
-        //     result,
-        //     extended_random_poly,
-        //     partial_evaluation_result,
-        // );
+        self.r_pos_int.extend_and_batch_univariates(
+            driver,
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
     }
 }

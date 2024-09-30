@@ -5,7 +5,7 @@ pub struct Poseidon2Params<F: PrimeField, const T: usize, const D: u64> {
     pub(crate) rounds_f_beginning: usize,
     pub(crate) rounds_f_end: usize,
     pub(crate) rounds_p: usize,
-    pub(crate) mat_internal_diag_m_1: [F; T], // The diagonal of the internal matrix, each element taken minus 1 for more efficient implementations
+    pub mat_internal_diag_m_1: [F; T], // The diagonal of the internal matrix, each element taken minus 1 for more efficient implementations
     pub(crate) round_constants_external: Vec<[F; T]>,
     pub(crate) round_constants_internal: Vec<F>,
 }

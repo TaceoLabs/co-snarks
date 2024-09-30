@@ -15,6 +15,13 @@ impl<T, P: Pairing, const SIZE: usize> SharedUnivariate<T, P, SIZE>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
+    pub(crate) fn from_vec(vec: &[T::FieldShare]) -> Self {
+        assert_eq!(vec.len(), SIZE);
+        let mut res = Self::default();
+        res.evaluations.clone_from_slice(vec);
+        res
+    }
+
     pub(crate) fn scale(&mut self, driver: &mut T, rhs: &P::ScalarField) {
         for i in 0..SIZE {
             self.evaluations[i] = driver.mul_with_public(rhs, &self.evaluations[i]);
@@ -324,5 +331,14 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list().entries(self.evaluations.iter()).finish()
+    }
+}
+
+impl<T, P: Pairing, const SIZE: usize> AsRef<[T::FieldShare]> for SharedUnivariate<T, P, SIZE>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn as_ref(&self) -> &[T::FieldShare] {
+        self.evaluations.as_ref()
     }
 }

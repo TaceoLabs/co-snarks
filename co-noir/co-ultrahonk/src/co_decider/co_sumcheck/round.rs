@@ -1,7 +1,8 @@
 use crate::{
     co_decider::{
         relations::{
-            poseidon2_external_relation::Poseidon2ExternalRelation, AllRelationAcc, Relation,
+            poseidon2_external_relation::Poseidon2ExternalRelation,
+            poseidon2_internal_relation::Poseidon2InternalRelation, AllRelationAcc, Relation,
         },
         types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
@@ -213,13 +214,13 @@ impl SumcheckRound {
             relation_parameters,
             scaling_factor,
         )?;
-        // Self::accumulate_one_relation_univariates::<_, _, Poseidon2InternalRelation>(
-        //     driver,
-        //     &mut univariate_accumulators.r_pos_int,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // )?;
+        Self::accumulate_one_relation_univariates::<_, _, Poseidon2InternalRelation>(
+            driver,
+            &mut univariate_accumulators.r_pos_int,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
         Ok(())
     }
 
