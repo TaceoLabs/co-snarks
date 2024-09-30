@@ -159,9 +159,7 @@ where
         let mut u1 = SharedUnivariate::from_vec(&u1);
 
         // matrix mul with v = M_I * u 4 muls and 7 additions
-        let sum = u1.add(driver, &u2);
-        let sum = sum.add(driver, &u3);
-        let sum = sum.add(driver, &u4);
+        let sum = u1.add(driver, &u2).add(driver, &u3).add(driver, &u4);
 
         let q_pos_by_scaling = q_poseidon2_internal.to_owned() * scaling_factor;
 
@@ -181,8 +179,9 @@ where
 
         u1.scale_inplace(driver, &internal_matrix_diag_0);
         let v1 = u1.add(driver, &sum);
-        let tmp = v1.sub(driver, w_l_shift);
-        let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
+        let tmp = v1
+            .sub(driver, w_l_shift)
+            .mul_public(driver, &q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] = driver.add(
@@ -195,8 +194,9 @@ where
 
         u2.scale_inplace(driver, &internal_matrix_diag_1);
         let v2 = u2.add(driver, &sum);
-        let tmp = v2.sub(driver, w_r_shift);
-        let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
+        let tmp = v2
+            .sub(driver, w_r_shift)
+            .mul_public(driver, &q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] = driver.add(
@@ -209,8 +209,9 @@ where
 
         u3.scale_inplace(driver, &internal_matrix_diag_2);
         let v3 = u3.add(driver, &sum);
-        let tmp = v3.sub(driver, w_o_shift);
-        let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
+        let tmp = v3
+            .sub(driver, w_o_shift)
+            .mul_public(driver, &q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r2.evaluations.len() {
             univariate_accumulator.r2.evaluations[i] = driver.add(
@@ -222,8 +223,9 @@ where
         ///////////////////////////////////////////////////////////////////////
         u4.scale_inplace(driver, &internal_matrix_diag_3);
         let v4 = u4.add(driver, &sum);
-        let tmp = v4.sub(driver, w_4_shift);
-        let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
+        let tmp = v4
+            .sub(driver, w_4_shift)
+            .mul_public(driver, &q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r3.evaluations.len() {
             univariate_accumulator.r3.evaluations[i] = driver.add(

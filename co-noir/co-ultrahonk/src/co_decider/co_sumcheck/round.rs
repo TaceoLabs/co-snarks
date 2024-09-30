@@ -4,7 +4,8 @@ use crate::{
             auxiliary_relation::AuxiliaryRelation,
             delta_range_constraint_relation::DeltaRangeConstraintRelation,
             poseidon2_external_relation::Poseidon2ExternalRelation,
-            poseidon2_internal_relation::Poseidon2InternalRelation, AllRelationAcc, Relation,
+            poseidon2_internal_relation::Poseidon2InternalRelation,
+            ultra_arithmetic_relation::UltraArithmeticRelation, AllRelationAcc, Relation,
         },
         types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
@@ -167,13 +168,13 @@ impl SumcheckRound {
         T: PrimeFieldMpcProtocol<P::ScalarField>,
     {
         tracing::trace!("Accumulate relations");
-        // Self::accumulate_one_relation_univariates::<_, _, UltraArithmeticRelation>(
-        //     driver,
-        //     &mut univariate_accumulators.r_arith,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // )?;
+        Self::accumulate_one_relation_univariates::<_, _, UltraArithmeticRelation>(
+            driver,
+            &mut univariate_accumulators.r_arith,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
         // Self::accumulate_one_relation_univariates::<_, _, UltraPermutationRelation>(
         //     driver,
         //     &mut univariate_accumulators.r_perm,

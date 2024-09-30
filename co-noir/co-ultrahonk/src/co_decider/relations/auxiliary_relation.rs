@@ -239,56 +239,63 @@ where
         let tmp = mul[2].add(driver, &mul[3]);
         let mut non_native_field_gate_2 = tmp.sub(driver, w_3_shift);
         non_native_field_gate_2.scale_inplace(driver, &limb_size);
-        let non_native_field_gate_2 = non_native_field_gate_2.sub(driver, w_4_shift);
-        let non_native_field_gate_2 = non_native_field_gate_2.add(driver, &limb_subproduct);
-        let non_native_field_gate_2 = non_native_field_gate_2.mul_public(driver, q_4);
+        let non_native_field_gate_2 = non_native_field_gate_2
+            .sub(driver, w_4_shift)
+            .add(driver, &limb_subproduct)
+            .mul_public(driver, q_4);
 
         limb_subproduct.scale_inplace(driver, &limb_size);
         let limb_subproduct = limb_subproduct.add(driver, &mul[4]);
-        let non_native_field_gate_1 = limb_subproduct.sub(driver, w_3);
-        let non_native_field_gate_1 = non_native_field_gate_1.sub(driver, w_4);
-        let non_native_field_gate_1 = non_native_field_gate_1.mul_public(driver, q_3);
+        let non_native_field_gate_1 = limb_subproduct
+            .sub(driver, w_3)
+            .sub(driver, w_4)
+            .mul_public(driver, q_3);
 
-        let non_native_field_gate_3 = limb_subproduct.add(driver, w_4);
-        let non_native_field_gate_3 = non_native_field_gate_3.sub(driver, w_3_shift);
-        let non_native_field_gate_3 = non_native_field_gate_3.sub(driver, w_4_shift);
-        let non_native_field_gate_3 = non_native_field_gate_3.mul_public(driver, q_m);
+        let non_native_field_gate_3 = limb_subproduct
+            .add(driver, w_4)
+            .sub(driver, w_3_shift)
+            .sub(driver, w_4_shift)
+            .mul_public(driver, q_m);
 
-        let non_native_field_identity =
-            non_native_field_gate_1.add(driver, &non_native_field_gate_2);
-        let non_native_field_identity =
-            non_native_field_identity.add(driver, &non_native_field_gate_3);
-        let non_native_field_identity = non_native_field_identity.mul_public(driver, q_2);
+        let non_native_field_identity = non_native_field_gate_1
+            .add(driver, &non_native_field_gate_2)
+            .add(driver, &non_native_field_gate_3)
+            .mul_public(driver, q_2);
 
         // ((((w2' * 2^14 + w1') * 2^14 + w3) * 2^14 + w2) * 2^14 + w1 - w4) * qm
         // deg 2
 
-        let limb_accumulator_1 = w_2_shift.scale(driver, &sublimb_shift);
-        let mut limb_accumulator_1 = limb_accumulator_1.add(driver, w_1_shift);
+        let mut limb_accumulator_1 = w_2_shift
+            .scale(driver, &sublimb_shift)
+            .add(driver, w_1_shift);
         limb_accumulator_1.scale_inplace(driver, &sublimb_shift);
         let mut limb_accumulator_1 = limb_accumulator_1.add(driver, w_3);
         limb_accumulator_1.scale_inplace(driver, &sublimb_shift);
         let mut limb_accumulator_1 = limb_accumulator_1.add(driver, w_2);
         limb_accumulator_1.scale_inplace(driver, &sublimb_shift);
-        let limb_accumulator_1 = limb_accumulator_1.add(driver, w_1);
-        let limb_accumulator_1 = limb_accumulator_1.sub(driver, w_4);
-        let limb_accumulator_1 = limb_accumulator_1.mul_public(driver, q_4);
+        let limb_accumulator_1 = limb_accumulator_1
+            .add(driver, w_1)
+            .sub(driver, w_4)
+            .mul_public(driver, q_4);
 
         // ((((w3' * 2^14 + w2') * 2^14 + w1') * 2^14 + w4) * 2^14 + w3 - w4') * qm
         // deg 2
-        let limb_accumulator_2 = w_3_shift.scale(driver, &sublimb_shift);
-        let mut limb_accumulator_2 = limb_accumulator_2.add(driver, w_2_shift);
+        let mut limb_accumulator_2 = w_3_shift
+            .scale(driver, &sublimb_shift)
+            .add(driver, w_2_shift);
         limb_accumulator_2.scale_inplace(driver, &sublimb_shift);
         let mut limb_accumulator_2 = limb_accumulator_2.add(driver, w_1_shift);
         limb_accumulator_2.scale_inplace(driver, &sublimb_shift);
         let mut limb_accumulator_2 = limb_accumulator_2.add(driver, w_4);
         limb_accumulator_2.scale_inplace(driver, &sublimb_shift);
-        let limb_accumulator_2 = limb_accumulator_2.add(driver, w_3);
-        let limb_accumulator_2 = limb_accumulator_2.sub(driver, w_4_shift);
-        let limb_accumulator_2 = limb_accumulator_2.mul_public(driver, q_m);
+        let limb_accumulator_2 = limb_accumulator_2
+            .add(driver, w_3)
+            .sub(driver, w_4_shift)
+            .mul_public(driver, q_m);
 
-        let limb_accumulator_identity = limb_accumulator_1.add(driver, &limb_accumulator_2);
-        let limb_accumulator_identity = limb_accumulator_identity.mul_public(driver, q_3); // deg 3
+        let limb_accumulator_identity = limb_accumulator_1
+            .add(driver, &limb_accumulator_2)
+            .mul_public(driver, q_3); // deg 3
 
         /*
          * MEMORY
@@ -330,12 +337,13 @@ where
          *
          * For ROM gates, qc = 0
          */
-        let memory_record_check = w_3.scale(driver, eta_three);
-        let tmp = w_2.scale(driver, eta_two);
-        let memory_record_check = memory_record_check.add(driver, &tmp);
-        let tmp = w_1.scale(driver, eta);
-        let memory_record_check = memory_record_check.add(driver, &tmp);
-        let memory_record_check = memory_record_check.add_public(driver, q_c);
+        let tmp1 = w_2.scale(driver, eta_two);
+        let tmp2 = w_1.scale(driver, eta);
+        let memory_record_check = w_3
+            .scale(driver, eta_three)
+            .add(driver, &tmp1)
+            .add(driver, &tmp2)
+            .add_public(driver, q_c);
         let partial_record_check = memory_record_check.to_owned(); // used in RAM consistency check; deg 1 or 2
         let memory_record_check = memory_record_check.sub(driver, w_4);
 
@@ -357,8 +365,9 @@ where
         let index_delta = w_1_shift.sub(driver, w_1);
         let record_delta = w_4_shift.sub(driver, w_4);
 
-        let index_delta_one = index_delta.neg(driver);
-        let index_delta_one = index_delta_one.add_scalar(driver, &P::ScalarField::one());
+        let index_delta_one = index_delta
+            .neg(driver)
+            .add_scalar(driver, &P::ScalarField::one());
 
         /*
          * RAM Consistency Check
@@ -431,15 +440,17 @@ where
         // TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
         // reverse order we could re-use `partial_record_check`  1 -  (w3' * eta_three + w2' * eta_two + w1' *
         // eta) deg 1 or 2
-        let next_gate_access_type = w_3_shift.scale(driver, eta_three);
-        let tmp = w_2_shift.scale(driver, eta_two);
-        let next_gate_access_type = next_gate_access_type.add(driver, &tmp);
-        let tmp = w_1_shift.scale(driver, eta);
-        let next_gate_access_type = next_gate_access_type.add(driver, &tmp);
+        let tmp1 = w_2_shift.scale(driver, eta_two);
+        let tmp2 = w_1_shift.scale(driver, eta);
+        let next_gate_access_type = w_3_shift
+            .scale(driver, eta_three)
+            .add(driver, &tmp1)
+            .add(driver, &tmp2);
         let next_gate_access_type = w_4_shift.sub(driver, &next_gate_access_type);
 
-        let tmp = next_gate_access_type.neg(driver);
-        let tmp = tmp.add_scalar(driver, &P::ScalarField::one()); // deg 3 or 4
+        let tmp = next_gate_access_type
+            .neg(driver)
+            .add_scalar(driver, &P::ScalarField::one()); // deg 3 or 4
 
         let timestamp_delta = w_2_shift.sub(driver, w_2);
 
@@ -514,17 +525,18 @@ where
          * The complete RAM/ROM memory identity
          * Partial degree:
          */
-        let memory_identity = rom_consistency_check_identity; // deg 3 or 4
-        let tmp = ram_timestamp_check_identity.mul_public(driver, &(q_4.to_owned() * q_1));
-        let memory_identity = memory_identity.add(driver, &tmp); // deg_4
-        let tmp = memory_record_check.mul_public(driver, &(q_m.to_owned() * q_1));
-        let memory_identity = memory_identity.add(driver, &tmp); // deg 3 or 4
-        let memory_identity = memory_identity.add(driver, &ram_consistency_check_identity); // deg 3 or 5
+        let tmp1 = ram_timestamp_check_identity.mul_public(driver, &(q_4.to_owned() * q_1));
+        let tmp2 = memory_record_check.mul_public(driver, &(q_m.to_owned() * q_1));
+        let memory_identity = rom_consistency_check_identity // deg 3 or 4
+            .add(driver, &tmp1) // deg_4
+            .add(driver, &tmp2) // deg 3 or 4
+            .add(driver, &ram_consistency_check_identity); // deg 3 or 5
 
         // (deg 3 or 5) + (deg 4) + (deg 3)
         let tmp = memory_identity.add(driver, &non_native_field_identity);
-        let auxiliary_identity = tmp.add(driver, &limb_accumulator_identity);
-        let auxiliary_identity = auxiliary_identity.mul_public(driver, &q_aux_by_scaling); // deg 5 or 6
+        let auxiliary_identity = tmp
+            .add(driver, &limb_accumulator_identity)
+            .mul_public(driver, &q_aux_by_scaling); // deg 5 or 6
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] = driver.add(

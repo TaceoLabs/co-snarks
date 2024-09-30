@@ -2,6 +2,7 @@ pub(crate) mod auxiliary_relation;
 pub(crate) mod delta_range_constraint_relation;
 pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
+pub(crate) mod ultra_arithmetic_relation;
 
 use super::{
     co_sumcheck::round::SumcheckRoundOutput,
@@ -14,6 +15,7 @@ use delta_range_constraint_relation::DeltaRangeConstraintRelationAcc;
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use poseidon2_external_relation::{Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc};
 use poseidon2_internal_relation::Poseidon2InternalRelationAcc;
+use ultra_arithmetic_relation::UltraArithmeticRelationAcc;
 use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
 
 pub(crate) trait Relation<T, P: HonkCurve<TranscriptFieldType>>
@@ -55,7 +57,7 @@ pub(crate) struct AllRelationAcc<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    // pub(crate) r_arith: UltraArithmeticRelationAcc<T, P>,
+    pub(crate) r_arith: UltraArithmeticRelationAcc<T, P>,
     // pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
     // pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
@@ -71,7 +73,7 @@ where
 {
     fn default() -> Self {
         Self {
-            // r_arith: Default::default(),
+            r_arith: Default::default(),
             // r_perm: Default::default(),
             r_delta: Default::default(),
             // r_elliptic:  Default::default(),
@@ -94,7 +96,7 @@ where
         elements: &[P::ScalarField],
     ) {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
-        // self.r_arith.scale(driver, &[first_scalar, elements[0]]);
+        self.r_arith.scale(driver, &[first_scalar, elements[0]]);
         // self.r_perm.scale(driver, &elements[1..3]);
         self.r_delta.scale(driver, &elements[3..7]);
         // self.r_elliptic.scale(driver, &elements[7..9]);
@@ -111,12 +113,12 @@ where
         extended_random_poly: &Univariate<P::ScalarField, SIZE>,
         partial_evaluation_result: &P::ScalarField,
     ) {
-        // self.r_arith.extend_and_batch_univariates(
-        //     driver,
-        //     result,
-        //     extended_random_poly,
-        //     partial_evaluation_result,
-        // );
+        self.r_arith.extend_and_batch_univariates(
+            driver,
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
         // self.r_perm.extend_and_batch_univariates(
         //     driver,
         //     result,
