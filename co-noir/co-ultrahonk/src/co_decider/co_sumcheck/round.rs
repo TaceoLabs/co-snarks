@@ -4,6 +4,7 @@ use crate::{
             auxiliary_relation::AuxiliaryRelation,
             delta_range_constraint_relation::DeltaRangeConstraintRelation,
             logderiv_lookup_relation::LogDerivLookupRelation,
+            permutation_relation::UltraPermutationRelation,
             poseidon2_external_relation::Poseidon2ExternalRelation,
             poseidon2_internal_relation::Poseidon2InternalRelation,
             ultra_arithmetic_relation::UltraArithmeticRelation, AllRelationAcc, Relation,
@@ -176,13 +177,13 @@ impl SumcheckRound {
             relation_parameters,
             scaling_factor,
         )?;
-        // Self::accumulate_one_relation_univariates::<_, _, UltraPermutationRelation>(
-        //     driver,
-        //     &mut univariate_accumulators.r_perm,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // )?;
+        Self::accumulate_one_relation_univariates::<_, _, UltraPermutationRelation>(
+            driver,
+            &mut univariate_accumulators.r_perm,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
         Self::accumulate_one_relation_univariates::<_, _, DeltaRangeConstraintRelation>(
             driver,
             &mut univariate_accumulators.r_delta,

@@ -463,7 +463,7 @@ impl<T: Default> ShiftedWitnessEntities<T> {
         &self.elements[Self::W_4]
     }
 
-    pub(crate) fn z_perm(&self) -> &T {
+    pub fn z_perm(&self) -> &T {
         &self.elements[Self::Z_PERM]
     }
 }

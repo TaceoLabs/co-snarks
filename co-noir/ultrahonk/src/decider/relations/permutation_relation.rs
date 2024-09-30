@@ -1,6 +1,6 @@
 use super::Relation;
 use crate::decider::{
-    types::{ProverUnivariates, RelationParameters},
+    types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
     univariate::Univariate,
 };
 use ark_ff::{PrimeField, Zero};
@@ -50,7 +50,7 @@ impl UltraPermutationRelation {
     fn compute_grand_product_numerator<F: PrimeField>(
         input: &ProverUnivariates<F>,
         relation_parameters: &RelationParameters<F>,
-    ) -> Univariate<F, 7> {
+    ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
         let w_3 = input.witness.w_o();
@@ -73,7 +73,7 @@ impl UltraPermutationRelation {
     fn compute_grand_product_denominator<F: PrimeField>(
         input: &ProverUnivariates<F>,
         relation_parameters: &RelationParameters<F>,
-    ) -> Univariate<F, 7> {
+    ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
         let w_3 = input.witness.w_o();
