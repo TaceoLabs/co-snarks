@@ -95,34 +95,18 @@ impl UltraPermutationRelation {
         let gamma = &relation_parameters.gamma;
 
         // witness degree 4; full degree 8
-        let wid1 = w_1
-            .add_public(driver, &(id_1.to_owned() * beta))
-            .add_scalar(driver, gamma);
-        let wid2 = w_2
-            .add_public(driver, &(id_2.to_owned() * beta))
-            .add_scalar(driver, gamma);
-        let wid3 = w_3
-            .add_public(driver, &(id_3.to_owned() * beta))
-            .add_scalar(driver, gamma);
-        let wid4 = w_4
-            .add_public(driver, &(id_4.to_owned() * beta))
-            .add_scalar(driver, gamma);
+        let wid1 = w_1.add_public(driver, &(id_1.to_owned() * beta + gamma));
+        let wid2 = w_2.add_public(driver, &(id_2.to_owned() * beta + gamma));
+        let wid3 = w_3.add_public(driver, &(id_3.to_owned() * beta + gamma));
+        let wid4 = w_4.add_public(driver, &(id_4.to_owned() * beta + gamma));
 
-        let wsigma1 = w_1
-            .add_public(driver, &(sigma_1.to_owned() * beta))
-            .add_scalar(driver, gamma);
-        let wsigma2 = w_2
-            .add_public(driver, &(sigma_2.to_owned() * beta))
-            .add_scalar(driver, gamma);
-        let wsigma3 = w_3
-            .add_public(driver, &(sigma_3.to_owned() * beta))
-            .add_scalar(driver, gamma);
-        let wsigma4 = w_4
-            .add_public(driver, &(sigma_4.to_owned() * beta))
-            .add_scalar(driver, gamma);
+        let wsigma1 = w_1.add_public(driver, &(sigma_1.to_owned() * beta + gamma));
+        let wsigma2 = w_2.add_public(driver, &(sigma_2.to_owned() * beta + gamma));
+        let wsigma3 = w_3.add_public(driver, &(sigma_3.to_owned() * beta + gamma));
+        let wsigma4 = w_4.add_public(driver, &(sigma_4.to_owned() * beta + gamma));
 
-        let lhs = SharedUnivariate::univariates_to_vec(&[wid1, wsigma1, wid2, wsigma2]);
-        let rhs = SharedUnivariate::univariates_to_vec(&[wid3, wsigma3, wid4, wsigma4]);
+        let lhs = SharedUnivariate::univariates_to_vec(&[wid1, wsigma1, wid3, wsigma3]);
+        let rhs = SharedUnivariate::univariates_to_vec(&[wid2, wsigma2, wid4, wsigma4]);
         let mul1 = driver.mul_many(&lhs, &rhs)?;
         let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
         let mul2 = driver.mul_many(lhs, rhs)?;
