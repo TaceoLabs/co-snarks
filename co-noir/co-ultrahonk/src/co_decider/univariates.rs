@@ -28,10 +28,26 @@ where
         }
     }
 
+    pub(crate) fn neg(&self, driver: &mut T) -> Self {
+        let mut result = self.to_owned();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.neg(&self.evaluations[i]);
+        }
+        result
+    }
+
     pub(crate) fn scale(&self, driver: &mut T, rhs: &P::ScalarField) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
             result.evaluations[i] = driver.mul_with_public(rhs, &self.evaluations[i]);
+        }
+        result
+    }
+
+    pub(crate) fn add_scalar(&self, driver: &mut T, rhs: &P::ScalarField) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.add_with_public(rhs, &self.evaluations[i]);
         }
         result
     }

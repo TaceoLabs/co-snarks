@@ -357,22 +357,29 @@ where
         let index_delta = w_1_shift.sub(driver, &w_1);
         let record_delta = w_4_shift.sub(driver, &w_4);
 
-        let index_is_monotonically_increasing = index_delta.to_owned().sqr() - &index_delta; // deg 2
+        let index_delta_one = index_delta.neg(driver);
+        let index_delta_one = index_delta_one.add_scalar(driver, &P::ScalarField::one());
 
-        let index_delta_one = -index_delta + &P::ScalarField::one();
+        let lhs = SharedUnivariate::univariates_to_vec(&[index_delta, record_delta]);
+        let rhs = SharedUnivariate::univariates_to_vec(&[index_delta, index_delta_one]);
+        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = SharedUnivariate::vec_to_univariates(&mul);
 
-        let adjacent_values_match_if_adjacent_indices_match = record_delta * &index_delta_one; // deg 2
+        let index_is_monotonically_increasing = mul[0].sub(driver, &index_delta); // deg 2
+        let adjacent_values_match_if_adjacent_indices_match = &mul[1]; // deg 2
 
         let q_aux_by_scaling = q_aux.to_owned() * scaling_factor;
         let q_one_by_two = q_1.to_owned() * q_2;
         let q_one_by_two_by_aux_by_scaling = q_one_by_two.to_owned() * &q_aux_by_scaling;
 
-        let tmp = adjacent_values_match_if_adjacent_indices_match * &q_one_by_two_by_aux_by_scaling; // deg 5
+        let tmp = adjacent_values_match_if_adjacent_indices_match
+            .mul_public(driver, &q_one_by_two_by_aux_by_scaling); // deg 5
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
         }
 
-        let tmp = q_one_by_two_by_aux_by_scaling * &index_is_monotonically_increasing; // deg 5
+        let tmp =
+            index_is_monotonically_increasing.mul_public(driver, &q_one_by_two_by_aux_by_scaling); // deg 5
         for i in 0..univariate_accumulator.r2.evaluations.len() {
             univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
         }
