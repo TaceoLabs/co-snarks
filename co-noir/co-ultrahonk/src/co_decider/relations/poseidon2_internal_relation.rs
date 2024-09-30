@@ -4,7 +4,7 @@ use crate::co_decider::{
     univariates::SharedUnivariate,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{PrimeField, Zero};
+use ark_ff::Zero;
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use num_bigint::BigUint;
 use ultrahonk::prelude::{
