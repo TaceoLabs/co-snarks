@@ -184,38 +184,51 @@ where
         let v3 = t2.add(driver, &v4); // u_1 + 3u_2 + 5u_3 + 7u_4
 
         let q_pos_by_scaling = q_poseidon2_external.to_owned() * scaling_factor;
-        let tmp1 = v1.sub(driver, w_l_shift);
-        let tmp2 = v2.sub(driver, w_r_shift);
-        let tmp3 = v3.sub(driver, w_o_shift);
-        let tmp4 = v4.sub(driver, w_4_shift);
+        let tmp = v1.sub(driver, w_l_shift);
+        let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
+        for i in 0..univariate_accumulator.r0.evaluations.len() {
+            univariate_accumulator.r0.evaluations[i] = driver.add(
+                &univariate_accumulator.r0.evaluations[i],
+                &tmp.evaluations[i],
+            );
+        }
 
-        todo!("Continue with poseidon");
+        ///////////////////////////////////////////////////////////////////////
 
-        // let tmp = (v1 - w_l_shift) * &q_pos_by_scaling;
-        // for i in 0..univariate_accumulator.r0.evaluations.len() {
-        //     univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-        // }
+        let tmp = v2.sub(driver, w_r_shift);
+        let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
 
-        // ///////////////////////////////////////////////////////////////////////
+        for i in 0..univariate_accumulator.r1.evaluations.len() {
+            univariate_accumulator.r1.evaluations[i] = driver.add(
+                &univariate_accumulator.r1.evaluations[i],
+                &tmp.evaluations[i],
+            );
+        }
 
-        // let tmp = (v2 - w_r_shift) * &q_pos_by_scaling;
-        // for i in 0..univariate_accumulator.r1.evaluations.len() {
-        //     univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        // }
+        ///////////////////////////////////////////////////////////////////////
 
-        // ///////////////////////////////////////////////////////////////////////
+        let tmp = v3.sub(driver, w_o_shift);
+        let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
 
-        // let tmp = (v3 - w_o_shift) * &q_pos_by_scaling;
-        // for i in 0..univariate_accumulator.r2.evaluations.len() {
-        //     univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
-        // }
+        for i in 0..univariate_accumulator.r2.evaluations.len() {
+            univariate_accumulator.r2.evaluations[i] = driver.add(
+                &univariate_accumulator.r2.evaluations[i],
+                &tmp.evaluations[i],
+            );
+        }
 
-        // ///////////////////////////////////////////////////////////////////////
+        ///////////////////////////////////////////////////////////////////////
 
-        // let tmp = (v4 - w_4_shift) * q_pos_by_scaling;
-        // for i in 0..univariate_accumulator.r3.evaluations.len() {
-        //     univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
-        // }
+        let tmp = v4.sub(driver, w_4_shift);
+        let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
+
+        for i in 0..univariate_accumulator.r3.evaluations.len() {
+            univariate_accumulator.r3.evaluations[i] = driver.add(
+                &univariate_accumulator.r3.evaluations[i],
+                &tmp.evaluations[i],
+            );
+        }
+
         Ok(())
     }
 }
