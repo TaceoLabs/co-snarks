@@ -2,6 +2,7 @@ use crate::{
     co_decider::{
         relations::{
             auxiliary_relation::AuxiliaryRelation,
+            delta_range_constraint_relation::DeltaRangeConstraintRelation,
             poseidon2_external_relation::Poseidon2ExternalRelation,
             poseidon2_internal_relation::Poseidon2InternalRelation, AllRelationAcc, Relation,
         },
@@ -180,13 +181,13 @@ impl SumcheckRound {
         //     relation_parameters,
         //     scaling_factor,
         // )?;
-        // Self::accumulate_one_relation_univariates::<_, _, DeltaRangeConstraintRelation>(
-        //     driver,
-        //     &mut univariate_accumulators.r_delta,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // )?;
+        Self::accumulate_one_relation_univariates::<_, _, DeltaRangeConstraintRelation>(
+            driver,
+            &mut univariate_accumulators.r_delta,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
         // Self::accumulate_one_relation_univariates::<_, _, EllipticRelationAcc>(
         //     driver,
         //     &mut univariate_accumulators.r_elliptic,
