@@ -360,32 +360,6 @@ where
         let index_delta_one = index_delta.neg(driver);
         let index_delta_one = index_delta_one.add_scalar(driver, &P::ScalarField::one());
 
-        let lhs = SharedUnivariate::univariates_to_vec(&[index_delta, record_delta]);
-        let rhs = SharedUnivariate::univariates_to_vec(&[index_delta, index_delta_one]);
-        let mul = driver.mul_many(&lhs, &rhs)?;
-        let mul = SharedUnivariate::vec_to_univariates(&mul);
-
-        let index_is_monotonically_increasing = mul[0].sub(driver, &index_delta); // deg 2
-        let adjacent_values_match_if_adjacent_indices_match = &mul[1]; // deg 2
-
-        let q_aux_by_scaling = q_aux.to_owned() * scaling_factor;
-        let q_one_by_two = q_1.to_owned() * q_2;
-        let q_one_by_two_by_aux_by_scaling = q_one_by_two.to_owned() * &q_aux_by_scaling;
-
-        let tmp = adjacent_values_match_if_adjacent_indices_match
-            .mul_public(driver, &q_one_by_two_by_aux_by_scaling); // deg 5
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
-
-        let tmp =
-            index_is_monotonically_increasing.mul_public(driver, &q_one_by_two_by_aux_by_scaling); // deg 5
-        for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
-        }
-
-        let rom_consistency_check_identity = q_one_by_two * &memory_record_check; // deg 3 or 4
-
         /*
          * RAM Consistency Check
          *
@@ -404,50 +378,113 @@ where
          * N.B. it is the responsibility of the circuit writer to ensure that every RAM cell is initialized
          * with a WRITE operation.
          */
-        let access_type = w_4.to_owned() - partial_record_check; // will be 0 or 1 for honest Prover; deg 1 or 2
-        let access_check = access_type.to_owned() * &access_type - &access_type; // check value is 0 or 1; deg 2 or 4
+        let access_type = w_4.sub(driver, &partial_record_check); // deg 1 or 2
+
+        let value_delta = w_3_shift.sub(driver, &w_3);
+
+        let lhs = SharedUnivariate::univariates_to_vec(&[
+            index_delta,
+            record_delta,
+            access_type,
+            value_delta,
+        ]);
+        let rhs = SharedUnivariate::univariates_to_vec(&[
+            index_delta,
+            index_delta_one,
+            access_type,
+            index_delta_one,
+        ]);
+        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = SharedUnivariate::vec_to_univariates(&mul);
+
+        let index_is_monotonically_increasing = mul[0].sub(driver, &index_delta); // deg 2
+        let adjacent_values_match_if_adjacent_indices_match = &mul[1]; // deg 2
+
+        let q_aux_by_scaling = q_aux.to_owned() * scaling_factor;
+        let q_one_by_two = q_1.to_owned() * q_2;
+        let q_one_by_two_by_aux_by_scaling = q_one_by_two.to_owned() * &q_aux_by_scaling;
+
+        let tmp = adjacent_values_match_if_adjacent_indices_match
+            .mul_public(driver, &q_one_by_two_by_aux_by_scaling); // deg 5
+        for i in 0..univariate_accumulator.r1.evaluations.len() {
+            univariate_accumulator.r1.evaluations[i] = driver.add(
+                &univariate_accumulator.r1.evaluations[i],
+                &tmp.evaluations[i],
+            );
+        }
+
+        let tmp =
+            index_is_monotonically_increasing.mul_public(driver, &q_one_by_two_by_aux_by_scaling); // deg 5
+        for i in 0..univariate_accumulator.r2.evaluations.len() {
+            univariate_accumulator.r2.evaluations[i] = driver.add(
+                &univariate_accumulator.r2.evaluations[i],
+                &tmp.evaluations[i],
+            );
+        }
+
+        let rom_consistency_check_identity = memory_record_check.mul_public(driver, &q_one_by_two); // deg 3 or 4
+
+        // Continue with RAM access check
+
+        let access_check = &mul[2].sub(driver, &access_type); // check value is 0 or 1; deg 2 or 4
 
         // TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
         // reverse order we could re-use `partial_record_check`  1 -  (w3' * eta_three + w2' * eta_two + w1' *
         // eta) deg 1 or 2
-        let mut next_gate_access_type = w_3_shift.to_owned() * eta_three;
-        next_gate_access_type += w_2_shift.to_owned() * eta_two;
-        next_gate_access_type += w_1_shift.to_owned() * eta;
-        next_gate_access_type = -next_gate_access_type.to_owned() + w_4_shift;
+        let next_gate_access_type = w_3_shift.scale(driver, eta_three);
+        let tmp = w_2_shift.scale(driver, eta_two);
+        let next_gate_access_type = next_gate_access_type.add(driver, &tmp);
+        let tmp = w_1_shift.scale(driver, eta);
+        let next_gate_access_type = next_gate_access_type.add(driver, &tmp);
+        let next_gate_access_type = w_4_shift.sub(driver, &next_gate_access_type);
 
-        let value_delta = w_3_shift.to_owned() - w_3;
-        let adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation =
-            value_delta * &index_delta_one * (-next_gate_access_type.to_owned() + &F::one()); // deg 3 or 4
+        let tmp = next_gate_access_type.neg(driver);
+        let tmp = tmp.add_scalar(driver, &P::ScalarField::one()); // deg 3 or 4
+
+        // let adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation =
+        //     &mul[3] * (-next_gate_access_type.to_owned() + &F::one());
+        todo!("Finish this");
 
         // We can't apply the RAM consistency check identity on the final entry in the sorted list (the wires in the
         // next gate would make the identity fail).  We need to validate that its 'access type' bool is correct. Can't
         // do  with an arithmetic gate because of the  `eta` factors. We need to check that the *next* gate's access
         // type is  correct, to cover this edge case
         // deg 2 or 4
-        let next_gate_access_type_is_boolean =
-            next_gate_access_type.to_owned().sqr() - next_gate_access_type;
+        // let next_gate_access_type_is_boolean =
+        //     next_gate_access_type.to_owned().sqr() - next_gate_access_type;
+        todo!("Finish this");
 
         let q_arith_by_aux_and_scaling = q_arith.to_owned() * &q_aux_by_scaling;
         // Putting it all together...
 
-        let tmp =
-            adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
-                * &q_arith_by_aux_and_scaling; // deg 5 or 6
-        for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
-        }
+        // let tmp =
+        //     adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
+        //         * &q_arith_by_aux_and_scaling; // deg 5 or 6
+        // for i in 0..univariate_accumulator.r3.evaluations.len() {
+        //     univariate_accumulator.r3.evaluations[i] = driver.add(
+        //         &univariate_accumulator.r3.evaluations[i],
+        //         &tmp.evaluations[i],
+        //     );
+        // }
+        todo!("Finish this");
 
-        let tmp = index_is_monotonically_increasing * &q_arith_by_aux_and_scaling; // deg 4
+        let tmp = index_is_monotonically_increasing.mul_public(driver, &q_arith_by_aux_and_scaling); // deg 4
         for i in 0..univariate_accumulator.r4.evaluations.len() {
-            univariate_accumulator.r4.evaluations[i] += tmp.evaluations[i];
+            univariate_accumulator.r4.evaluations[i] = driver.add(
+                &univariate_accumulator.r4.evaluations[i],
+                &tmp.evaluations[i],
+            );
         }
 
-        let tmp = next_gate_access_type_is_boolean * q_arith_by_aux_and_scaling; // deg 4 or 6
+        let tmp = next_gate_access_type_is_boolean.mul_public(driver, &q_arith_by_aux_and_scaling); // deg 4 or 6
         for i in 0..univariate_accumulator.r5.evaluations.len() {
-            univariate_accumulator.r5.evaluations[i] += tmp.evaluations[i];
+            univariate_accumulator.r5.evaluations[i] = driver.add(
+                &univariate_accumulator.r5.evaluations[i],
+                &tmp.evaluations[i],
+            );
         }
 
-        let ram_consistency_check_identity = access_check * (q_arith); // deg 3 or 5
+        let ram_consistency_check_identity = access_check.mul_public(driver, &q_arith); // deg 3 or 5
 
         /*
          * RAM Timestamp Consistency Check
@@ -460,25 +497,31 @@ where
          * Iff delta_index == 0, timestamp_check = timestamp_{i + 1} - timestamp_i
          * Else timestamp_check = 0
          */
-        let timestamp_delta = w_2_shift.to_owned() - w_2;
-        let ram_timestamp_check_identity = index_delta_one * timestamp_delta - w_3; // deg 3
+        let timestamp_delta = w_2_shift.sub(driver, w_2);
+        // let ram_timestamp_check_identity = index_delta_one * timestamp_delta - w_3; // deg 3
+        todo!("Finish this");
 
         /*
          * The complete RAM/ROM memory identity
          * Partial degree:
          */
-        let mut memory_identity = rom_consistency_check_identity; // deg 3 or 4
-        memory_identity += ram_timestamp_check_identity * (q_4.to_owned() * q_1); // deg 4
-        memory_identity += memory_record_check * (q_m.to_owned() * q_1); // deg 3 or 4
-        memory_identity += ram_consistency_check_identity; // deg 3 or 5
+        let memory_identity = rom_consistency_check_identity; // deg 3 or 4
+        let tmp = ram_timestamp_check_identity.mul_public(driver, &(q_4.to_owned() * q_1));
+        let memory_identity = memory_identity.add(driver, &tmp); // deg_4
+        let tmp = memory_record_check.mul_public(driver, &(q_m.to_owned() * q_1));
+        let memory_identity = memory_identity.add(driver, &tmp); // deg 3 or 4
+        let memory_identity = memory_identity.add(driver, &ram_consistency_check_identity); // deg 3 or 5
 
         // (deg 3 or 5) + (deg 4) + (deg 3)
-        let mut auxiliary_identity =
-            memory_identity + non_native_field_identity + limb_accumulator_identity;
-        auxiliary_identity *= q_aux_by_scaling; // deg 5 or 6
+        let tmp = memory_identity.add(driver, &non_native_field_identity);
+        let auxiliary_identity = tmp.add(driver, &limb_accumulator_identity);
+        let auxiliary_identity = auxiliary_identity.mul_public(driver, &q_aux_by_scaling); // deg 5 or 6
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += auxiliary_identity.evaluations[i];
+            univariate_accumulator.r0.evaluations[i] = driver.add(
+                &univariate_accumulator.r0.evaluations[i],
+                &auxiliary_identity.evaluations[i],
+            );
         }
 
         Ok(())
