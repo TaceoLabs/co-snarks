@@ -1,5 +1,3 @@
-use core::panic;
-
 use crate::{
     mpc::CircomPlonkProver,
     plonk_utils,

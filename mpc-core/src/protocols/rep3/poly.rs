@@ -3,7 +3,7 @@ use std::cmp::max;
 
 use ark_ff::PrimeField;
 
-use super::Rep3PrimeFieldShare;
+use super::{arithmetic, Rep3PrimeFieldShare};
 
 type FieldShare<F> = Rep3PrimeFieldShare<F>;
 
@@ -24,18 +24,18 @@ const MIN_ELEMENTS_PER_THREAD: usize = 16;
 fn horner_evaluate<F: PrimeField>(poly_coeffs: &[FieldShare<F>], point: F) -> FieldShare<F> {
     poly_coeffs
         .iter()
-        .rfold(FieldShare::zero_share(), move |mut result, coeff| {
-            let tmp_a = coeff.a + point;
-            let tmp_b = coeff.b + point;
-            result.a *= tmp_a;
-            result.b *= tmp_b;
-            result
+        .rfold(FieldShare::zero_share(), move |result, coeff| {
+            arithmetic::add(arithmetic::mul_public(result, point), *coeff)
         })
 }
 
 // This is copied from
 // https://docs.rs/ark-poly/latest/src/ark_poly/polynomial/univariate/dense.rs.html#56
 pub fn eval_poly<F: PrimeField>(coeffs: &[FieldShare<F>], point: F) -> FieldShare<F> {
+    if point.is_zero() {
+        return coeffs[0];
+    }
+
     // Horners method - parallel method
     // compute the number of threads we will be using.
     // TODO investigate how this behaves if we are in a rayon scope. Does this return all
@@ -59,10 +59,6 @@ pub fn eval_poly<F: PrimeField>(coeffs: &[FieldShare<F>], point: F) -> FieldShar
             thread_result.b *= power;
             thread_result
         })
-        .reduce(FieldShare::zero_share, |mut acc, e| {
-            acc.a += e.a;
-            acc.b += e.b;
-            acc
-        });
+        .reduce(FieldShare::zero_share, |acc, e| arithmetic::add(acc, e));
     result
 }

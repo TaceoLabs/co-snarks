@@ -19,6 +19,10 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirPlonkDriver<F, N> {
     pub fn new(protocol: ShamirProtocol<F, N>) -> Self {
         Self { protocol }
     }
+
+    pub(crate) fn into_network(self) -> N {
+        self.protocol.network
+    }
 }
 
 impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P::ScalarField, N> {
@@ -40,8 +44,10 @@ impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P:
         self.protocol.network.get_id()
     }
 
-    fn fork(&mut self) -> Self {
-        todo!()
+    async fn fork(&mut self) -> IoResult<Self> {
+        Ok(Self {
+            protocol: self.protocol.fork().await?,
+        })
     }
 
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
@@ -61,9 +67,9 @@ impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P:
     }
 
     fn neg_vec_in_place(&mut self, a: &mut [Self::ArithmeticShare]) {
-        //for a in a.iter_mut() {
-        //    *a = arithmetic::neg(*a);
-        //}
+        for a in a.iter_mut() {
+            *a = arithmetic::neg(*a);
+        }
     }
 
     fn mul_with_public(
@@ -83,11 +89,12 @@ impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P:
 
     async fn mul_vecs(
         &mut self,
-        _a: &[Self::ArithmeticShare],
-        _b: &[Self::ArithmeticShare],
-        _c: &[Self::ArithmeticShare],
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+        c: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        todo!()
+        let tmp = arithmetic::mul_vec(a, b, &mut self.protocol).await?;
+        arithmetic::mul_vec(&tmp, c, &mut self.protocol).await
     }
 
     async fn add_mul_vec(
