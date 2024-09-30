@@ -1,10 +1,13 @@
 use super::Relation;
-use crate::decider::{
+use crate::co_decider::{
     types::{ProverUnivariates, RelationParameters},
-    univariate::Univariate,
+    univariates::SharedUnivariate,
 };
+use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};
+use mpc_core::traits::PrimeFieldMpcProtocol;
 use num_bigint::BigUint;
+use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
 
 /**
  * TODO(https://github.com/AztecProtocol/barretenberg/issues/757): Investigate optimizations.
@@ -18,34 +21,58 @@ use num_bigint::BigUint;
  *     5 // RAM consistency sub-relation 3
  * };
  */
-#[derive(Clone, Debug, Default)]
-pub(crate) struct AuxiliaryRelationAcc<F: PrimeField> {
-    pub(crate) r0: Univariate<F, 6>,
-    pub(crate) r1: Univariate<F, 6>,
-    pub(crate) r2: Univariate<F, 6>,
-    pub(crate) r3: Univariate<F, 6>,
-    pub(crate) r4: Univariate<F, 6>,
-    pub(crate) r5: Univariate<F, 6>,
+#[derive(Clone, Debug)]
+pub(crate) struct AuxiliaryRelationAcc<T, P: Pairing>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub(crate) r0: SharedUnivariate<T, P, 6>,
+    pub(crate) r1: SharedUnivariate<T, P, 6>,
+    pub(crate) r2: SharedUnivariate<T, P, 6>,
+    pub(crate) r3: SharedUnivariate<T, P, 6>,
+    pub(crate) r4: SharedUnivariate<T, P, 6>,
+    pub(crate) r5: SharedUnivariate<T, P, 6>,
 }
 
-impl<F: PrimeField> AuxiliaryRelationAcc<F> {
-    pub(crate) fn scale(&mut self, elements: &[F]) {
+impl<T, P: Pairing> Default for AuxiliaryRelationAcc<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn default() -> Self {
+        Self {
+            r0: Default::default(),
+            r1: Default::default(),
+            r2: Default::default(),
+            r3: Default::default(),
+            r4: Default::default(),
+            r5: Default::default(),
+        }
+    }
+}
+
+impl<T, P: Pairing> AuxiliaryRelationAcc<T, P>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
         assert!(elements.len() == AuxiliaryRelation::NUM_RELATIONS);
-        self.r0 *= elements[0];
-        self.r1 *= elements[1];
-        self.r2 *= elements[2];
-        self.r3 *= elements[3];
-        self.r4 *= elements[4];
-        self.r5 *= elements[5];
+        self.r0.scale_inplace(driver, &elements[0]);
+        self.r1.scale_inplace(driver, &elements[1]);
+        self.r2.scale_inplace(driver, &elements[2]);
+        self.r3.scale_inplace(driver, &elements[3]);
+        self.r4.scale_inplace(driver, &elements[4]);
+        self.r5.scale_inplace(driver, &elements[5]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        result: &mut Univariate<F, SIZE>,
-        extended_random_poly: &Univariate<F, SIZE>,
-        partial_evaluation_result: &F,
+        driver: &mut T,
+        result: &mut SharedUnivariate<T, P, SIZE>,
+        extended_random_poly: &Univariate<P::ScalarField, SIZE>,
+        partial_evaluation_result: &P::ScalarField,
     ) {
         self.r0.extend_and_batch_univariates(
+            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -53,6 +80,7 @@ impl<F: PrimeField> AuxiliaryRelationAcc<F> {
         );
 
         self.r1.extend_and_batch_univariates(
+            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -60,6 +88,7 @@ impl<F: PrimeField> AuxiliaryRelationAcc<F> {
         );
 
         self.r2.extend_and_batch_univariates(
+            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -67,6 +96,7 @@ impl<F: PrimeField> AuxiliaryRelationAcc<F> {
         );
 
         self.r3.extend_and_batch_univariates(
+            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -74,6 +104,7 @@ impl<F: PrimeField> AuxiliaryRelationAcc<F> {
         );
 
         self.r4.extend_and_batch_univariates(
+            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -81,6 +112,7 @@ impl<F: PrimeField> AuxiliaryRelationAcc<F> {
         );
 
         self.r5.extend_and_batch_univariates(
+            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -95,12 +127,15 @@ impl AuxiliaryRelation {
     pub(crate) const NUM_RELATIONS: usize = 6;
 }
 
-impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
-    type Acc = AuxiliaryRelationAcc<F>;
+impl<T, P: HonkCurve<TranscriptFieldType>> Relation<T, P> for AuxiliaryRelation
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    type Acc = AuxiliaryRelationAcc<T, P>;
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F>) -> bool {
-        <Self as Relation<F>>::check_skippable();
+    fn skip(input: &ProverUnivariates<T, P>) -> bool {
+        <Self as Relation<T, P>>::check_skippable();
         input.precomputed.q_aux().is_zero()
     }
 
@@ -139,11 +174,12 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
     fn accumulate(
+        driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F>,
-        relation_parameters: &RelationParameters<F>,
-        scaling_factor: &F,
-    ) {
+        input: &ProverUnivariates<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factor: &P::ScalarField,
+    ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate AuxiliaryRelation");
 
         let eta = &relation_parameters.eta_1;
@@ -168,8 +204,8 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
         let q_arith = input.precomputed.q_arith();
         let q_aux = input.precomputed.q_aux();
 
-        let limb_size = F::from(BigUint::one() << 68);
-        let sublimb_shift = F::from(1u64 << 14);
+        let limb_size = P::ScalarField::from(BigUint::one() << 68);
+        let sublimb_shift = P::ScalarField::from(1u64 << 14);
 
         /*
          * Non native field arithmetic gate 2
@@ -181,56 +217,78 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
          *            \_                                                                               _/
          *
          **/
-        let mut limb_subproduct = w_1.to_owned() * w_2_shift + w_1_shift.to_owned() * w_2;
-        let mut non_native_field_gate_2 = w_1.to_owned() * w_4 + w_2.to_owned() * w_3 - w_3_shift;
-        non_native_field_gate_2 *= limb_size;
-        non_native_field_gate_2 -= w_4_shift;
-        non_native_field_gate_2 += &limb_subproduct;
-        non_native_field_gate_2 *= q_4;
 
-        limb_subproduct *= limb_size;
-        limb_subproduct += w_1_shift.to_owned() * w_2_shift;
-        let mut non_native_field_gate_1 = limb_subproduct.to_owned();
-        non_native_field_gate_1 -= w_3.to_owned() + w_4;
-        non_native_field_gate_1 *= q_3;
+        let lhs = SharedUnivariate::univariates_to_vec(&[
+            w_1.to_owned(),
+            w_2.to_owned(),
+            w_1.to_owned(),
+            w_2.to_owned(),
+            w_1_shift.to_owned(),
+        ]);
+        let rhs = SharedUnivariate::univariates_to_vec(&[
+            w_2_shift.to_owned(),
+            w_1_shift.to_owned(),
+            w_4.to_owned(),
+            w_3.to_owned(),
+            w_2_shift.to_owned(),
+        ]);
+        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = SharedUnivariate::vec_to_univariates(&mul);
 
-        let mut non_native_field_gate_3 = limb_subproduct;
-        non_native_field_gate_3 += w_4;
-        non_native_field_gate_3 -= w_3_shift.to_owned() + w_4_shift;
-        non_native_field_gate_3 *= q_m;
+        let mut limb_subproduct = mul[0].add(driver, &mul[1]);
+        let tmp = mul[2].add(driver, &mul[3]);
+        let mut non_native_field_gate_2 = tmp.sub(driver, &w_3_shift);
+        non_native_field_gate_2.scale_inplace(driver, &limb_size);
+        let non_native_field_gate_2 = non_native_field_gate_2.sub(driver, &w_4_shift);
+        let non_native_field_gate_2 = non_native_field_gate_2.add(driver, &limb_subproduct);
+        let non_native_field_gate_2 = non_native_field_gate_2.mul_public(driver, &q_4);
 
-        let mut non_native_field_identity =
-            non_native_field_gate_1 + non_native_field_gate_2 + non_native_field_gate_3;
-        non_native_field_identity *= q_2;
+        limb_subproduct.scale_inplace(driver, &limb_size);
+        let limb_subproduct = limb_subproduct.add(driver, &mul[4]);
+        let non_native_field_gate_1 = limb_subproduct.sub(driver, &w_3);
+        let non_native_field_gate_1 = non_native_field_gate_1.sub(driver, &w_4);
+        let non_native_field_gate_1 = non_native_field_gate_1.mul_public(driver, &q_3);
+
+        let mut non_native_field_gate_3 = limb_subproduct.add(driver, &w_4);
+        let non_native_field_gate_3 = non_native_field_gate_3.sub(driver, &w_3_shift);
+        let non_native_field_gate_3 = non_native_field_gate_3.sub(driver, &w_4_shift);
+        non_native_field_gate_3.mul_public(driver, &q_m);
+
+        let non_native_field_identity =
+            non_native_field_gate_1.add(driver, &non_native_field_gate_2);
+        let non_native_field_identity =
+            non_native_field_identity.add(driver, &non_native_field_gate_3);
+        let non_native_field_identity = non_native_field_identity.mul_public(driver, &q_2);
 
         // ((((w2' * 2^14 + w1') * 2^14 + w3) * 2^14 + w2) * 2^14 + w1 - w4) * qm
         // deg 2
-        let mut limb_accumulator_1 = w_2_shift.to_owned() * sublimb_shift;
-        limb_accumulator_1 += w_1_shift;
-        limb_accumulator_1 *= sublimb_shift;
-        limb_accumulator_1 += w_3;
-        limb_accumulator_1 *= sublimb_shift;
-        limb_accumulator_1 += w_2;
-        limb_accumulator_1 *= sublimb_shift;
-        limb_accumulator_1 += w_1;
-        limb_accumulator_1 -= w_4;
-        limb_accumulator_1 *= q_4;
+
+        let mut limb_accumulator_1 = w_2_shift.scale(driver, &sublimb_shift);
+        let mut limb_accumulator_1 = limb_accumulator_1.add(driver, &w_1_shift);
+        limb_accumulator_1.scale_inplace(driver, &sublimb_shift);
+        let mut limb_accumulator_1 = limb_accumulator_1.add(driver, &w_3);
+        limb_accumulator_1.scale_inplace(driver, &sublimb_shift);
+        let mut limb_accumulator_1 = limb_accumulator_1.add(driver, &w_2);
+        limb_accumulator_1.scale_inplace(driver, &sublimb_shift);
+        let limb_accumulator_1 = limb_accumulator_1.add(driver, &w_1);
+        let limb_accumulator_1 = limb_accumulator_1.sub(driver, &w_4);
+        let limb_accumulator_1 = limb_accumulator_1.mul_public(driver, &q_4);
 
         // ((((w3' * 2^14 + w2') * 2^14 + w1') * 2^14 + w4) * 2^14 + w3 - w4') * qm
         // deg 2
-        let mut limb_accumulator_2 = w_3_shift.to_owned() * sublimb_shift;
-        limb_accumulator_2 += w_2_shift;
-        limb_accumulator_2 *= sublimb_shift;
-        limb_accumulator_2 += w_1_shift;
-        limb_accumulator_2 *= sublimb_shift;
-        limb_accumulator_2 += w_4;
-        limb_accumulator_2 *= sublimb_shift;
-        limb_accumulator_2 += w_3;
-        limb_accumulator_2 -= w_4_shift;
-        limb_accumulator_2 *= q_m;
+        let mut limb_accumulator_2 = w_3_shift.scale(driver, &sublimb_shift);
+        let mut limb_accumulator_2 = limb_accumulator_2.add(driver, &w_2_shift);
+        limb_accumulator_2.scale_inplace(driver, &sublimb_shift);
+        let mut limb_accumulator_2 = limb_accumulator_2.add(driver, &w_1_shift);
+        limb_accumulator_2.scale_inplace(driver, &sublimb_shift);
+        let mut limb_accumulator_2 = limb_accumulator_2.add(driver, &w_4);
+        limb_accumulator_2.scale_inplace(driver, &sublimb_shift);
+        let limb_accumulator_2 = limb_accumulator_2.add(driver, &w_3);
+        let limb_accumulator_2 = limb_accumulator_2.sub(driver, &w_4_shift);
+        let limb_accumulator_2 = limb_accumulator_2.mul_public(driver, &q_m);
 
-        let mut limb_accumulator_identity = limb_accumulator_1 + limb_accumulator_2;
-        limb_accumulator_identity *= q_3; //  deg 3
+        let limb_accumulator_identity = limb_accumulator_1.add(driver, &limb_accumulator_2);
+        let limb_accumulator_identity = limb_accumulator_identity.mul_public(driver, &q_3); // deg 3
 
         /*
          * MEMORY
@@ -272,12 +330,14 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
          *
          * For ROM gates, qc = 0
          */
-        let mut memory_record_check = w_3.to_owned() * eta_three;
-        memory_record_check += w_2.to_owned() * eta_two;
-        memory_record_check += w_1.to_owned() * eta;
-        memory_record_check += q_c;
+        let memory_record_check = w_3.scale(driver, &eta_three);
+        let tmp = w_2.scale(driver, &eta_two);
+        let memory_record_check = memory_record_check.add(driver, &tmp);
+        let tmp = w_1.scale(driver, &eta);
+        let memory_record_check = memory_record_check.add(driver, &tmp);
+        let memory_record_check = memory_record_check.add_public(driver, &q_c);
         let partial_record_check = memory_record_check.to_owned(); // used in RAM consistency check; deg 1 or 2
-        memory_record_check -= w_4;
+        let memory_record_check = memory_record_check.sub(driver, &w_4);
 
         /*
          * ROM Consistency Check
@@ -294,12 +354,12 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
          * 3. if, at gate i, index_i == index_{i + 1}, then value1_i == value1_{i + 1} and value2_i == value2_{i + 1}
          *
          */
-        let index_delta = w_1_shift.to_owned() - w_1;
-        let record_delta = w_4_shift.to_owned() - w_4;
+        let index_delta = w_1_shift.sub(driver, &w_1);
+        let record_delta = w_4_shift.sub(driver, &w_4);
 
         let index_is_monotonically_increasing = index_delta.to_owned().sqr() - &index_delta; // deg 2
 
-        let index_delta_one = -index_delta + &F::one();
+        let index_delta_one = -index_delta + &P::ScalarField::one();
 
         let adjacent_values_match_if_adjacent_indices_match = record_delta * &index_delta_one; // deg 2
 
@@ -413,5 +473,7 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] += auxiliary_identity.evaluations[i];
         }
+
+        Ok(())
     }
 }

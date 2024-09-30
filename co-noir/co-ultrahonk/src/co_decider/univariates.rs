@@ -22,10 +22,18 @@ where
         res
     }
 
-    pub(crate) fn scale(&mut self, driver: &mut T, rhs: &P::ScalarField) {
+    pub(crate) fn scale_inplace(&mut self, driver: &mut T, rhs: &P::ScalarField) {
         for i in 0..SIZE {
             self.evaluations[i] = driver.mul_with_public(rhs, &self.evaluations[i]);
         }
+    }
+
+    pub(crate) fn scale(&self, driver: &mut T, rhs: &P::ScalarField) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.mul_with_public(rhs, &self.evaluations[i]);
+        }
+        result
     }
 
     pub(crate) fn add(&self, driver: &mut T, rhs: &Self) -> Self {

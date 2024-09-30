@@ -39,10 +39,10 @@ where
 {
     pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
         assert!(elements.len() == Poseidon2ExternalRelation::NUM_RELATIONS);
-        self.r0.scale(driver, &elements[0]);
-        self.r1.scale(driver, &elements[1]);
-        self.r2.scale(driver, &elements[2]);
-        self.r3.scale(driver, &elements[3]);
+        self.r0.scale_inplace(driver, &elements[0]);
+        self.r1.scale_inplace(driver, &elements[1]);
+        self.r2.scale_inplace(driver, &elements[2]);
+        self.r3.scale_inplace(driver, &elements[3]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(

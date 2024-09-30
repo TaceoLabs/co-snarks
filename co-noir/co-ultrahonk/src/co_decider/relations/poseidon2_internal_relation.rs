@@ -35,16 +35,17 @@ where
         }
     }
 }
+
 impl<T, P: Pairing> Poseidon2InternalRelationAcc<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
         assert!(elements.len() == Poseidon2InternalRelation::NUM_RELATIONS);
-        self.r0.scale(driver, &elements[0]);
-        self.r1.scale(driver, &elements[1]);
-        self.r2.scale(driver, &elements[2]);
-        self.r3.scale(driver, &elements[3]);
+        self.r0.scale_inplace(driver, &elements[0]);
+        self.r1.scale_inplace(driver, &elements[1]);
+        self.r2.scale_inplace(driver, &elements[2]);
+        self.r3.scale_inplace(driver, &elements[3]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -178,7 +179,7 @@ where
             POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
         ));
 
-        u1.scale(driver, &internal_matrix_diag_0);
+        u1.scale_inplace(driver, &internal_matrix_diag_0);
         let v1 = u1.add(driver, &sum);
         let tmp = v1.sub(driver, w_l_shift);
         let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
@@ -192,7 +193,7 @@ where
 
         ///////////////////////////////////////////////////////////////////////
 
-        u2.scale(driver, &internal_matrix_diag_1);
+        u2.scale_inplace(driver, &internal_matrix_diag_1);
         let v2 = u2.add(driver, &sum);
         let tmp = v2.sub(driver, w_r_shift);
         let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
@@ -206,7 +207,7 @@ where
 
         ///////////////////////////////////////////////////////////////////////
 
-        u3.scale(driver, &internal_matrix_diag_2);
+        u3.scale_inplace(driver, &internal_matrix_diag_2);
         let v3 = u3.add(driver, &sum);
         let tmp = v3.sub(driver, w_o_shift);
         let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
@@ -219,7 +220,7 @@ where
         }
 
         ///////////////////////////////////////////////////////////////////////
-        u4.scale(driver, &internal_matrix_diag_3);
+        u4.scale_inplace(driver, &internal_matrix_diag_3);
         let v4 = u4.add(driver, &sum);
         let tmp = v4.sub(driver, w_4_shift);
         let tmp = tmp.mul_public(driver, &q_pos_by_scaling);
