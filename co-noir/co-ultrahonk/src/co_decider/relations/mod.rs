@@ -1,5 +1,6 @@
 pub(crate) mod auxiliary_relation;
 pub(crate) mod delta_range_constraint_relation;
+pub(crate) mod logderiv_lookup_relation;
 pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
@@ -12,6 +13,7 @@ use super::{
 use ark_ec::pairing::Pairing;
 use auxiliary_relation::AuxiliaryRelationAcc;
 use delta_range_constraint_relation::DeltaRangeConstraintRelationAcc;
+use logderiv_lookup_relation::LogDerivLookupRelationAcc;
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use poseidon2_external_relation::{Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc};
 use poseidon2_internal_relation::Poseidon2InternalRelationAcc;
@@ -62,7 +64,7 @@ where
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
     // pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
     pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
-    // pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
+    pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
@@ -78,7 +80,7 @@ where
             r_delta: Default::default(),
             // r_elliptic:  Default::default(),
             r_aux: Default::default(),
-            // r_lookup: Default::default(),
+            r_lookup: Default::default(),
             r_pos_ext: Default::default(),
             r_pos_int: Default::default(),
         }
@@ -101,7 +103,7 @@ where
         self.r_delta.scale(driver, &elements[3..7]);
         // self.r_elliptic.scale(driver, &elements[7..9]);
         self.r_aux.scale(driver, &elements[9..15]);
-        // self.r_lookup.scale(driver, &elements[15..17]);
+        self.r_lookup.scale(driver, &elements[15..17]);
         self.r_pos_ext.scale(driver, &elements[17..21]);
         self.r_pos_int.scale(driver, &elements[21..]);
     }
@@ -143,12 +145,12 @@ where
             extended_random_poly,
             partial_evaluation_result,
         );
-        // self.r_lookup.extend_and_batch_univariates(
-        //     driver,
-        //     result,
-        //     extended_random_poly,
-        //     partial_evaluation_result,
-        // );
+        self.r_lookup.extend_and_batch_univariates(
+            driver,
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
         self.r_pos_ext.extend_and_batch_univariates(
             driver,
             result,

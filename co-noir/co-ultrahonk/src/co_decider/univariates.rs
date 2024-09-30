@@ -52,6 +52,15 @@ where
         result
     }
 
+    pub(crate) fn sub_scalar(&self, driver: &mut T, rhs: &P::ScalarField) -> Self {
+        let neg = -*rhs;
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.add_with_public(&neg, &self.evaluations[i]);
+        }
+        result
+    }
+
     pub(crate) fn add(&self, driver: &mut T, rhs: &Self) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
@@ -77,6 +86,19 @@ where
         for i in 0..SIZE {
             result.evaluations[i] =
                 driver.add_with_public(&rhs.evaluations[i], &self.evaluations[i]);
+        }
+        result
+    }
+
+    pub(crate) fn sub_public(
+        &self,
+        driver: &mut T,
+        rhs: &Univariate<P::ScalarField, SIZE>,
+    ) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] =
+                driver.add_with_public(&-rhs.evaluations[i], &self.evaluations[i]);
         }
         result
     }
