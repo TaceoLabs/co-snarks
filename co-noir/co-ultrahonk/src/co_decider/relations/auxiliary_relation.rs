@@ -4,7 +4,7 @@ use crate::co_decider::{
     univariates::SharedUnivariate,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{One, Zero};
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use num_bigint::BigUint;
 use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
@@ -249,10 +249,10 @@ where
         let non_native_field_gate_1 = non_native_field_gate_1.sub(driver, &w_4);
         let non_native_field_gate_1 = non_native_field_gate_1.mul_public(driver, &q_3);
 
-        let mut non_native_field_gate_3 = limb_subproduct.add(driver, &w_4);
+        let non_native_field_gate_3 = limb_subproduct.add(driver, &w_4);
         let non_native_field_gate_3 = non_native_field_gate_3.sub(driver, &w_3_shift);
         let non_native_field_gate_3 = non_native_field_gate_3.sub(driver, &w_4_shift);
-        non_native_field_gate_3.mul_public(driver, &q_m);
+        let non_native_field_gate_3 = non_native_field_gate_3.mul_public(driver, &q_m);
 
         let non_native_field_identity =
             non_native_field_gate_1.add(driver, &non_native_field_gate_2);
@@ -263,7 +263,7 @@ where
         // ((((w2' * 2^14 + w1') * 2^14 + w3) * 2^14 + w2) * 2^14 + w1 - w4) * qm
         // deg 2
 
-        let mut limb_accumulator_1 = w_2_shift.scale(driver, &sublimb_shift);
+        let limb_accumulator_1 = w_2_shift.scale(driver, &sublimb_shift);
         let mut limb_accumulator_1 = limb_accumulator_1.add(driver, &w_1_shift);
         limb_accumulator_1.scale_inplace(driver, &sublimb_shift);
         let mut limb_accumulator_1 = limb_accumulator_1.add(driver, &w_3);
@@ -276,7 +276,7 @@ where
 
         // ((((w3' * 2^14 + w2') * 2^14 + w1') * 2^14 + w4) * 2^14 + w3 - w4') * qm
         // deg 2
-        let mut limb_accumulator_2 = w_3_shift.scale(driver, &sublimb_shift);
+        let limb_accumulator_2 = w_3_shift.scale(driver, &sublimb_shift);
         let mut limb_accumulator_2 = limb_accumulator_2.add(driver, &w_2_shift);
         limb_accumulator_2.scale_inplace(driver, &sublimb_shift);
         let mut limb_accumulator_2 = limb_accumulator_2.add(driver, &w_1_shift);
@@ -383,16 +383,16 @@ where
         let value_delta = w_3_shift.sub(driver, &w_3);
 
         let lhs = SharedUnivariate::univariates_to_vec(&[
-            index_delta,
+            index_delta.to_owned(),
             record_delta,
-            access_type,
+            access_type.to_owned(),
             value_delta,
         ]);
         let rhs = SharedUnivariate::univariates_to_vec(&[
-            index_delta,
-            index_delta_one,
-            access_type,
-            index_delta_one,
+            index_delta.to_owned(),
+            index_delta_one.to_owned(),
+            access_type.to_owned(),
+            index_delta_one.to_owned(),
         ]);
         let mul = driver.mul_many(&lhs, &rhs)?;
         let mul = SharedUnivariate::vec_to_univariates(&mul);
@@ -441,32 +441,43 @@ where
         let tmp = next_gate_access_type.neg(driver);
         let tmp = tmp.add_scalar(driver, &P::ScalarField::one()); // deg 3 or 4
 
-        // let adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation =
-        //     &mul[3] * (-next_gate_access_type.to_owned() + &F::one());
-        todo!("Finish this");
+        let timestamp_delta = w_2_shift.sub(driver, w_2);
+
+        let lhs = SharedUnivariate::univariates_to_vec(&[
+            mul[3].to_owned(),
+            next_gate_access_type.to_owned(),
+            index_delta_one,
+        ]);
+        let rhs = SharedUnivariate::univariates_to_vec(&[
+            tmp,
+            next_gate_access_type.to_owned(),
+            timestamp_delta,
+        ]);
+        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = SharedUnivariate::vec_to_univariates(&mul);
+
+        let adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation =
+            &mul[0];
 
         // We can't apply the RAM consistency check identity on the final entry in the sorted list (the wires in the
         // next gate would make the identity fail).  We need to validate that its 'access type' bool is correct. Can't
         // do  with an arithmetic gate because of the  `eta` factors. We need to check that the *next* gate's access
         // type is  correct, to cover this edge case
         // deg 2 or 4
-        // let next_gate_access_type_is_boolean =
-        //     next_gate_access_type.to_owned().sqr() - next_gate_access_type;
-        todo!("Finish this");
+        let next_gate_access_type_is_boolean = mul[1].sub(driver, &next_gate_access_type);
 
         let q_arith_by_aux_and_scaling = q_arith.to_owned() * &q_aux_by_scaling;
         // Putting it all together...
 
-        // let tmp =
-        //     adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
-        //         * &q_arith_by_aux_and_scaling; // deg 5 or 6
-        // for i in 0..univariate_accumulator.r3.evaluations.len() {
-        //     univariate_accumulator.r3.evaluations[i] = driver.add(
-        //         &univariate_accumulator.r3.evaluations[i],
-        //         &tmp.evaluations[i],
-        //     );
-        // }
-        todo!("Finish this");
+        let tmp =
+            adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
+                .mul_public(driver, &q_arith_by_aux_and_scaling); // deg 5 or 6
+        for i in 0..univariate_accumulator.r3.evaluations.len() {
+            univariate_accumulator.r3.evaluations[i] = driver.add(
+                &univariate_accumulator.r3.evaluations[i],
+                &tmp.evaluations[i],
+            );
+        }
 
         let tmp = index_is_monotonically_increasing.mul_public(driver, &q_arith_by_aux_and_scaling); // deg 4
         for i in 0..univariate_accumulator.r4.evaluations.len() {
@@ -497,9 +508,7 @@ where
          * Iff delta_index == 0, timestamp_check = timestamp_{i + 1} - timestamp_i
          * Else timestamp_check = 0
          */
-        let timestamp_delta = w_2_shift.sub(driver, w_2);
-        // let ram_timestamp_check_identity = index_delta_one * timestamp_delta - w_3; // deg 3
-        todo!("Finish this");
+        let ram_timestamp_check_identity = &mul[2].sub(driver, &w_3); // deg 3
 
         /*
          * The complete RAM/ROM memory identity

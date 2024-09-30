@@ -29,7 +29,7 @@ where
     }
 
     pub(crate) fn neg(&self, driver: &mut T) -> Self {
-        let mut result = self.to_owned();
+        let mut result = Self::default();
         for i in 0..SIZE {
             result.evaluations[i] = driver.neg(&self.evaluations[i]);
         }
@@ -53,14 +53,18 @@ where
     }
 
     pub(crate) fn add(&self, driver: &mut T, rhs: &Self) -> Self {
-        let mut result = self.to_owned();
-        result.add_assign(driver, rhs);
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.add(&self.evaluations[i], &rhs.evaluations[i]);
+        }
         result
     }
 
     pub(crate) fn sub(&self, driver: &mut T, rhs: &Self) -> Self {
-        let mut result = self.to_owned();
-        result.sub_assign(driver, rhs);
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.sub(&self.evaluations[i], &rhs.evaluations[i]);
+        }
         result
     }
 
@@ -69,8 +73,11 @@ where
         driver: &mut T,
         rhs: &Univariate<P::ScalarField, SIZE>,
     ) -> Self {
-        let mut result = self.to_owned();
-        result.add_assign_public(driver, rhs);
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] =
+                driver.add_with_public(&rhs.evaluations[i], &self.evaluations[i]);
+        }
         result
     }
 
@@ -96,9 +103,16 @@ where
         }
     }
 
-    pub(crate) fn mul_public(self, driver: &mut T, rhs: &Univariate<P::ScalarField, SIZE>) -> Self {
-        let mut result = self;
-        result.mul_assign_public(driver, rhs);
+    pub(crate) fn mul_public(
+        &self,
+        driver: &mut T,
+        rhs: &Univariate<P::ScalarField, SIZE>,
+    ) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] =
+                driver.mul_with_public(&rhs.evaluations[i], &self.evaluations[i]);
+        }
         result
     }
 
