@@ -153,9 +153,9 @@ where
 
         // add round constants which are loaded in selectors
         let s1 = w_l.add_public(driver, q_l);
-        let s2 = w_l.add_public(driver, q_r);
-        let s3 = w_l.add_public(driver, q_o);
-        let s4 = w_l.add_public(driver, q_4);
+        let s2 = w_r.add_public(driver, q_r);
+        let s3 = w_o.add_public(driver, q_o);
+        let s4 = w_4.add_public(driver, q_4);
 
         // todo!("Poseidon2ExternalRelation::accumulate");
 
