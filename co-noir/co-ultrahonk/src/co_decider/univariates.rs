@@ -226,7 +226,7 @@ where
             let tmp = driver.mul_with_public(&inverse_two, &tmp);
             let a = driver.sub(&tmp, &poly[1]);
 
-            let tmp = driver.sub(&poly[0], &poly[1]);
+            let tmp = driver.sub(&poly[1], &poly[0]);
             let b = driver.sub(&tmp, &a);
 
             let a2 = driver.add(&a, &a);
