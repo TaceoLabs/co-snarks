@@ -35,8 +35,8 @@ use co_circom::{file_utils, MPCCurve, MPCProtocol, ProofSystem};
 use co_circom_snarks::{SharedInput, SharedWitness};
 use co_groth16::Groth16;
 use co_groth16::{Rep3CoGroth16, ShamirCoGroth16};
-use co_plonk::Plonk;
 use co_plonk::Rep3CoPlonk;
+use co_plonk::{Plonk, ShamirCoPlonk};
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
     rep3::{self, network::Rep3MpcNet},
@@ -578,26 +578,22 @@ where
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    todo!("shamir")
-                    //                   let witness_share = co_circom::parse_witness_share(witness_file)?;
-                    //                   let public_input = witness_share.public_inputs.clone();
-                    //
-                    //                   // connect to network
-                    //                   let net = ShamirMpcNet::new(config.network)?;
-                    //                   let id = net.get_id();
-                    //
-                    //                   // init MPC protocol
-                    //                   let protocol = ShamirProtocol::new(t, net)?;
-                    //
-                    //                   let prover = CoPlonk::new(protocol);
-                    //
-                    //                   // execute prover in MPC
-                    //                   tracing::info!("Party {}: starting proof generation..", id);
-                    //                   let start = Instant::now();
-                    //                   let proof = prover.prove(&pk, witness_share)?;
-                    //                   let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    //                   tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-                    //                   (proof, public_input)
+                    let witness_share = co_circom::parse_witness_share(witness_file)?;
+                    let public_input = witness_share.public_inputs.clone();
+                    // connect to network
+                    let id = config.network.my_id;
+
+                    //init prover
+                    let prover = ShamirCoPlonk::with_network_config(t, config.network)
+                        .context("while building prover")?;
+
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let proof = prover.prove(&pk, witness_share)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
                 }
             };
 

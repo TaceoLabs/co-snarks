@@ -8,9 +8,12 @@ use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use co_circom_snarks::SharedWitness;
 use mpc::rep3::Rep3PlonkDriver;
+use mpc::shamir::ShamirPlonkDriver;
 use mpc::CircomPlonkProver;
 use mpc_core::protocols::rep3::network::IoContext;
 use mpc_core::protocols::rep3::network::Rep3MpcNet;
+use mpc_core::protocols::shamir::network::ShamirNetwork;
+use mpc_core::protocols::shamir::{network::ShamirMpcNet, ShamirProtocol};
 use mpc_net::config::NetworkConfig;
 use round1::Round1;
 use std::io;
@@ -32,6 +35,8 @@ pub use plonk::Plonk;
 type PlonkProofResult<T> = std::result::Result<T, PlonkProofError>;
 
 pub type Rep3CoPlonk<P> = CoPlonk<P, Rep3PlonkDriver<Rep3MpcNet>>;
+pub type ShamirCoPlonk<P> =
+    CoPlonk<P, ShamirPlonkDriver<<P as Pairing>::ScalarField, ShamirMpcNet>>;
 
 /// The errors that may arise during the computation of a co-PLONK proof.
 #[derive(Debug, thiserror::Error)]
@@ -202,9 +207,9 @@ mod plonk_utils {
 }
 
 impl<P: Pairing> Rep3CoPlonk<P> {
-    /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
+    /// Create a new [Rep3CoPlonk] protocol with a given network configuration.
     pub fn with_network_config(config: NetworkConfig) -> eyre::Result<Self> {
-        let runtime = runtime::Builder::new_multi_thread().build()?;
+        let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
         let mpc_net = runtime.block_on(Rep3MpcNet::new(config))?;
         let io_context = runtime.block_on(IoContext::init(mpc_net))?;
         let driver = Rep3PlonkDriver::new(io_context);
@@ -213,6 +218,27 @@ impl<P: Pairing> Rep3CoPlonk<P> {
             runtime,
             phantom_data: PhantomData,
         })
+    }
+}
+
+impl<P: Pairing> ShamirCoPlonk<P> {
+    /// Create a new [ShamirCoPlonk] protocol with a given network configuration.
+    pub fn with_network_config(threshold: usize, config: NetworkConfig) -> eyre::Result<Self> {
+        let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
+        let mpc_net = runtime.block_on(ShamirMpcNet::new(config))?;
+        let io_context = ShamirProtocol::new(threshold, mpc_net)?;
+        let driver = ShamirPlonkDriver::new(io_context);
+        Ok(CoPlonk {
+            driver,
+            runtime,
+            phantom_data: PhantomData,
+        })
+    }
+
+    pub fn close_network(self) -> io::Result<()> {
+        self.runtime
+            .block_on(self.driver.into_network().shutdown())?;
+        Ok(())
     }
 }
 

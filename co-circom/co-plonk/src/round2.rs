@@ -206,8 +206,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
 
         num_den_span.exit();
         let batched_mul_span = tracing::info_span!("buffer z network round").entered();
-        let mut forked0 = driver.fork();
-        let mut forked1 = driver.fork();
+        let mut forked0 = runtime.block_on(driver.fork())?;
+        let mut forked1 = runtime.block_on(driver.fork())?;
         // TODO: This is super bad atm. There is potentially some heavy
         // work involved from the muliplications, but also a lot of networking.
         // Maybe we need a better mul implementation for that!

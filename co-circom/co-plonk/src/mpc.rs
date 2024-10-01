@@ -26,7 +26,9 @@ pub trait CircomPlonkProver<P: Pairing> {
 
     fn get_party_id(&self) -> Self::PartyID;
 
-    fn fork(&mut self) -> Self;
+    async fn fork(&mut self) -> IoResult<Self>
+    where
+        Self: Sized;
 
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;

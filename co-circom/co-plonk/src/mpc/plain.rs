@@ -37,8 +37,8 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         0
     }
 
-    fn fork(&mut self) -> Self {
-        PlainPlonkDriver
+    async fn fork(&mut self) -> IoResult<Self> {
+        Ok(PlainPlonkDriver)
     }
 
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {

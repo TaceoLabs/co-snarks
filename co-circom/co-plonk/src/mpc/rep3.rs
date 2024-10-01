@@ -17,6 +17,10 @@ impl<N: Rep3Network> Rep3PlonkDriver<N> {
     pub fn new(io_context: IoContext<N>) -> Self {
         Self { io_context }
     }
+
+    pub(crate) fn into_network(self) -> N {
+        self.io_context.network
+    }
 }
 
 impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
@@ -38,8 +42,11 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         self.io_context.id
     }
 
-    fn fork(&mut self) -> Self {
-        todo!()
+    async fn fork(&mut self) -> IoResult<Self> {
+        let forked_io_context = self.io_context.fork().await?;
+        Ok(Self {
+            io_context: forked_io_context,
+        })
     }
 
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
@@ -82,11 +89,12 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
 
     async fn mul_vecs(
         &mut self,
-        _a: &[Self::ArithmeticShare],
-        _b: &[Self::ArithmeticShare],
-        _c: &[Self::ArithmeticShare],
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+        c: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        todo!();
+        let tmp = arithmetic::mul_vec(a, b, &mut self.io_context).await?;
+        arithmetic::mul_vec(&tmp, c, &mut self.io_context).await
     }
 
     async fn add_mul_vec(
