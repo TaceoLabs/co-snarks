@@ -38,15 +38,15 @@ pub struct GateSeparatorPolynomial<F: PrimeField> {
 }
 
 impl<F: PrimeField> GateSeparatorPolynomial<F> {
-    pub fn new(betas: Vec<F>) -> Self {
-        let pow_size = 1 << betas.len();
+    pub fn new(betas: Vec<F>, log_num_mononmials: usize) -> Self {
+        let pow_size = 1 << log_num_mononmials;
         let current_element_idx = 0;
         let periodicity = 2;
         let partial_evaluation_result = F::ONE;
 
         // Barretenberg uses multithreading here and a simpler algorithm with worse complexity
         let mut beta_products = vec![F::ONE; pow_size];
-        for (i, beta) in betas.iter().enumerate() {
+        for (i, beta) in betas.iter().take(log_num_mononmials).enumerate() {
             let index = 1 << i;
             beta_products[index] = *beta;
             for j in 1..index {

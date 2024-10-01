@@ -135,6 +135,7 @@ where
 
         let mut gate_separators = GateSeparatorPolynomial::new(
             self.memory.relation_parameters.gate_challenges.to_owned(),
+            multivariate_d as usize,
         );
 
         let mut multivariate_challenge = Vec::with_capacity(multivariate_d as usize);
