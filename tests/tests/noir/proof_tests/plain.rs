@@ -8,12 +8,38 @@ use co_ultrahonk::prelude::{
     UltraCircuitVariable, Utils,
 };
 use mpc_core::protocols::plain::PlainDriver;
+use serial_test::serial;
 
-// add_plain_test!("poseidon");
+fn witness_map_to_witness_vector<F: PrimeField, V: UltraCircuitVariable<F>>(
+    witness_map: WitnessMap<F>,
+) -> Vec<V> {
+    let mut wv = Vec::new();
+    let mut index = 0;
+    for (w, f) in witness_map.into_iter() {
+        // ACIR uses a sparse format for WitnessMap where unused witness indices may be left unassigned.
+        // To ensure that witnesses sit at the correct indices in the `WitnessVector`, we fill any indices
+        // which do not exist within the `WitnessMap` with the dummy value of zero.
+        while index < w.0 {
+            wv.push(V::from_public(F::zero()));
+            index += 1;
+        }
+        wv.push(V::from_public(f));
+        index += 1;
+    }
+    wv
+}
 
-#[test]
-fn poseidon_proof_test() {
-    let name = "poseidon";
+fn convert_witness_plain<P: Pairing>(
+    mut witness_stack: WitnessStack<P::ScalarField>,
+) -> Vec<SharedBuilderVariable<PlainDriver<P::ScalarField>, P>> {
+    let witness_map = witness_stack
+        .pop()
+        .expect("Witness should be present")
+        .witness;
+    witness_map_to_witness_vector(witness_map)
+}
+
+fn proof_test(name: &str) {
     const CRS_PATH_G1: &str = "../co-noir/ultrahonk/crs/bn254_g1.dat";
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
@@ -45,38 +71,7 @@ fn poseidon_proof_test() {
     assert_eq!(proof, read_proof);
 }
 
-fn witness_map_to_witness_vector<F: PrimeField, V: UltraCircuitVariable<F>>(
-    witness_map: WitnessMap<F>,
-) -> Vec<V> {
-    let mut wv = Vec::new();
-    let mut index = 0;
-    for (w, f) in witness_map.into_iter() {
-        // ACIR uses a sparse format for WitnessMap where unused witness indices may be left unassigned.
-        // To ensure that witnesses sit at the correct indices in the `WitnessVector`, we fill any indices
-        // which do not exist within the `WitnessMap` with the dummy value of zero.
-        while index < w.0 {
-            wv.push(V::from_public(F::zero()));
-            index += 1;
-        }
-        wv.push(V::from_public(f));
-        index += 1;
-    }
-    wv
-}
-
-fn convert_witness_plain<P: Pairing>(
-    mut witness_stack: WitnessStack<P::ScalarField>,
-) -> Vec<SharedBuilderVariable<PlainDriver<P::ScalarField>, P>> {
-    let witness_map = witness_stack
-        .pop()
-        .expect("Witness should be present")
-        .witness;
-    witness_map_to_witness_vector(witness_map)
-}
-
-#[test]
-fn poseidon_witness_and_proof_test() {
-    let name = "poseidon";
+fn witness_and_proof_test(name: &str) {
     const CRS_PATH_G1: &str = "../co-noir/ultrahonk/crs/bn254_g1.dat";
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", name);
@@ -89,10 +84,6 @@ fn poseidon_witness_and_proof_test() {
     let solver = PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
     let witness = solver.solve().unwrap();
     let witness = convert_witness_plain(witness);
-
-    // let witness = Utils::get_witness_from_file(&witness_file).unwrap();
-
-    // let witness = SharedBuilderVariable::promote_public_witness_vector(witness);
 
     let builder =
         PlainCoBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
@@ -112,4 +103,16 @@ fn poseidon_witness_and_proof_test() {
 
     let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
     assert_eq!(proof, read_proof);
+}
+
+#[test]
+#[serial]
+fn poseidon_witness_and_proof_test() {
+    witness_and_proof_test("poseidon");
+}
+
+#[test]
+#[serial]
+fn poseidon_proof_test() {
+    proof_test("poseidon");
 }
