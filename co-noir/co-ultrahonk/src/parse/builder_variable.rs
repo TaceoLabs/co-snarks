@@ -76,6 +76,10 @@ where
         Self::Public(value)
     }
 
+    fn from_shared(value: T::FieldShare) -> Self {
+        Self::Shared(value)
+    }
+
     fn is_public(&self) -> bool {
         match self {
             SharedBuilderVariable::Public(_) => true,
