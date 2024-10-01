@@ -4,7 +4,6 @@ use co_ultrahonk::prelude::{
     UltraCircuitVariable, Utils,
 };
 use mpc_core::protocols::shamir::ShamirProtocol;
-use serial_test::serial;
 use std::thread;
 use tests::shamir_network::ShamirTestNetwork;
 
@@ -70,7 +69,6 @@ fn proof_test(name: &str, num_parties: usize, threshold: usize) {
 }
 
 #[test]
-#[serial]
 fn poseidon_proof_test() {
     proof_test("poseidon", 3, 1);
 }

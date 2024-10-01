@@ -10,7 +10,6 @@ use co_ultrahonk::prelude::{
 use mpc_core::protocols::rep3::{
     network::Rep3Network, witness_extension_impl::Rep3VmType, Rep3Protocol,
 };
-use serial_test::serial;
 use std::thread;
 use tests::rep3_network::Rep3TestNetwork;
 
@@ -175,13 +174,11 @@ fn witness_and_proof_test(name: &str) {
 }
 
 #[test]
-#[serial]
 fn poseidon_witness_and_proof_test() {
     witness_and_proof_test("poseidon");
 }
 
 #[test]
-#[serial]
 fn poseidon_proof_test() {
     proof_test("poseidon");
 }
