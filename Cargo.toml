@@ -49,6 +49,7 @@ co-acvm = { version = "0.1.0", path = "co-noir/co-acvm" }
 co-circom-snarks = { version = "0.1.0", path = "co-circom/co-circom-snarks" }
 co-groth16 = { version = "0.5.0", path = "co-circom/co-groth16" }
 co-plonk = { version = "0.3.0", path = "co-circom/co-plonk" }
+co-ultrahonk = { version = "0.1.0", path = "co-noir/co-ultrahonk" }
 color-eyre = "0.6.3"
 criterion = { version = "0.5", features = ["async_tokio"] }
 eyre = "0.6"

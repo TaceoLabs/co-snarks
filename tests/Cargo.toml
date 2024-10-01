@@ -20,6 +20,7 @@ co-acvm = { workspace = true }
 co-circom-snarks = { workspace = true }
 co-groth16 = { workspace = true, features = ["verifier"] }
 co-plonk = { workspace = true }
+co-ultrahonk = { workspace = true }
 criterion = { workspace = true }
 itertools = { workspace = true }
 mpc-core = { workspace = true }
