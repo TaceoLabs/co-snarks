@@ -109,22 +109,6 @@ where
         }
     }
 
-    pub(crate) fn add_assign_public(
-        &mut self,
-        driver: &mut T,
-        rhs: &Univariate<P::ScalarField, SIZE>,
-    ) {
-        for i in 0..SIZE {
-            self.evaluations[i] = driver.add_with_public(&rhs.evaluations[i], &self.evaluations[i]);
-        }
-    }
-
-    pub(crate) fn sub_assign(&mut self, driver: &mut T, rhs: &Self) {
-        for i in 0..SIZE {
-            self.evaluations[i] = driver.sub(&self.evaluations[i], &rhs.evaluations[i]);
-        }
-    }
-
     pub(crate) fn mul_public(
         &self,
         driver: &mut T,
@@ -136,16 +120,6 @@ where
                 driver.mul_with_public(&rhs.evaluations[i], &self.evaluations[i]);
         }
         result
-    }
-
-    pub(crate) fn mul_assign_public(
-        &mut self,
-        driver: &mut T,
-        rhs: &Univariate<P::ScalarField, SIZE>,
-    ) {
-        for i in 0..SIZE {
-            self.evaluations[i] = driver.mul_with_public(&rhs.evaluations[i], &self.evaluations[i]);
-        }
     }
 
     pub(crate) fn vec_to_univariates(vec: &[T::FieldShare]) -> Vec<Self> {

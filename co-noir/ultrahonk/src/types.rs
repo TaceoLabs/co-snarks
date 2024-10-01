@@ -35,10 +35,6 @@ impl<F: PrimeField> Polynomials<F> {
         polynomials
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &Polynomial<F>> {
-        self.witness.iter().chain(self.precomputed.iter())
-    }
-
     pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
         self.witness.iter_mut().chain(self.precomputed.iter_mut())
     }
@@ -317,10 +313,6 @@ impl<T: Default> ProverWitnessEntities<T> {
     // const Z_PERM: usize = 4; // column 4 (computed by prover)
     // const LOOKUP_INVERSES: usize = 5; // column 5 (computed by prover);
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
-        self.elements.iter()
-    }
-
     pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }
@@ -468,6 +460,7 @@ impl<T: Default> ShiftedWitnessEntities<T> {
     }
 }
 
+#[allow(unused)]
 impl<T: Default> ShiftedTableEntities<T> {
     const TABLE_1: usize = 0; // column 0
     const TABLE_2: usize = 1; // column 1
