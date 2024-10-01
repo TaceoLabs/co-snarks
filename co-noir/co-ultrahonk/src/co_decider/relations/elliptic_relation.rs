@@ -117,62 +117,113 @@ where
         let q_elliptic = input.precomputed.q_elliptic();
         let q_is_double = input.precomputed.q_m();
 
+        // First round of multiplications
+        let x_diff = x_2.sub(driver, x_1);
+        let y1_plus_y3 = y_1.add(driver, y_3);
+        let y_diff = y_2.mul_public(driver, q_sign).sub(driver, y_1);
+        let x1_mul_3 = x_1.add(driver, x_1).add(driver, x_1);
+
+        let lhs = SharedUnivariate::univariates_to_vec(&[
+            y_1.to_owned(),
+            y_2.to_owned(),
+            y_1.to_owned(),
+            x_diff.to_owned(),
+            y1_plus_y3.to_owned(),
+            y_diff,
+            x1_mul_3.to_owned(),
+        ]);
+        let rhs = SharedUnivariate::univariates_to_vec(&[
+            y_1.to_owned(),
+            y_2.to_owned(),
+            y_2.to_owned(),
+            x_diff.to_owned(),
+            x_diff,
+            x_3.sub(driver, x_1),
+            x_1.to_owned(),
+        ]);
+        let mul1 = driver.mul_many(&lhs, &rhs)?;
+        let mul1 = SharedUnivariate::vec_to_univariates(&mul1);
+
+        // Second round of multiplications
+        let curve_b = P::get_curve_b(); // here we need the extra constraint on the Curve
+        let y1_sqr = &mul1[0];
+        let y1_sqr_mul_4 = y1_sqr.add(driver, y1_sqr);
+        let y1_sqr_mul_4 = y1_sqr_mul_4.add(driver, &y1_sqr_mul_4);
+        let x1_sqr_mul_3 = &mul1[6];
+
+        let lhs = SharedUnivariate::univariates_to_vec(&[
+            x_3.add(driver, x_2).add(driver, x_1),
+            y1_sqr.sub_scalar(driver, &curve_b),
+            x_3.add(driver, x_1).add(driver, x_1),
+            x1_sqr_mul_3.to_owned(),
+            y_1.add(driver, y_1),
+        ]);
+        let rhs = SharedUnivariate::univariates_to_vec(&[
+            mul1[3].to_owned(),
+            x1_mul_3,
+            y1_sqr_mul_4,
+            x_1.sub(driver, x_3),
+            y1_plus_y3,
+        ]);
+        let mul2 = driver.mul_many(&lhs, &rhs)?;
+        let mul2 = SharedUnivariate::vec_to_univariates(&mul2);
+
         // Contribution (1) point addition, x-coordinate check
         // q_elliptic * (x3 + x2 + x1)(x2 - x1)(x2 - x1) - y2^2 - y1^2 + 2(y2y1)*q_sign = 0
-        let x_diff = x_2.sub(driver, &x_1);
-        let y2_sqr = y_2.to_owned().sqr();
-        let y1_sqr = y_1.to_owned().sqr();
-        let y1y2 = y_1.to_owned() * y_2 * q_sign;
-        let x_add_identity =
-            (x_3.to_owned() + x_2 + x_1) * x_diff.to_owned().sqr() - y2_sqr - &y1_sqr
-                + &y1y2
-                + y1y2;
+        let y2_sqr = &mul1[1];
+        let y1y2 = mul1[2].mul_public(driver, q_sign);
+        let x_add_identity = mul2[0]
+            .sub(driver, y2_sqr)
+            .sub(driver, y1_sqr)
+            .add(driver, &y1y2)
+            .add(driver, &y1y2);
 
         let q_elliptic_by_scaling = q_elliptic.to_owned() * scaling_factor;
         let q_elliptic_q_double_scaling = q_elliptic_by_scaling.to_owned() * q_is_double;
         let q_elliptic_not_double_scaling = q_elliptic_by_scaling - &q_elliptic_q_double_scaling;
-        let mut tmp_1 = x_add_identity * &q_elliptic_not_double_scaling;
+        let tmp_1 = x_add_identity.mul_public(driver, &q_elliptic_not_double_scaling);
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (2) point addition, x-coordinate check
         // q_elliptic * (q_sign * y1 + y3)(x2 - x1) + (x3 - x1)(y2 - q_sign * y1) = 0
-        let y1_plus_y3 = y_1.add(driver, &y_3);
-        let y_diff = y_2.mul_public(driver, &q_sign).sub(driver, &y_1);
-        let y_add_identity = y1_plus_y3.to_owned() * x_diff + (x_3.sub(driver, &x_1)) * y_diff;
-        let mut tmp_2 = y_add_identity * &q_elliptic_not_double_scaling;
+        let y_add_identity = &mul1[4].add(driver, &mul1[5]);
+        let tmp_2 = y_add_identity.mul_public(driver, &q_elliptic_not_double_scaling);
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (3) point doubling, x-coordinate check
         // (x3 + x1 + x1) (4y1*y1) - 9 * x1 * x1 * x1 * x1 = 0
         // N.B. we're using the equivalence x1*x1*x1 === y1*y1 - curve_b to reduce degree by 1
 
-        let curve_b = P::get_curve_b(); // here we need the extra constraint on the Curve
-        let x1_mul_3 = x_1.add(driver, &x_1).add(driver, &x_1);
-        let x_pow_4_mul_3 = (y1_sqr.to_owned() - &curve_b) * &x1_mul_3;
-        let mut y1_sqr_mul_4 = y1_sqr.double();
-        y1_sqr_mul_4.double_in_place();
-        let x1_pow_4_mul_9 = x_pow_4_mul_3.to_owned().double() + &x_pow_4_mul_3;
-        let x_double_identity =
-            (x_3.add(driver, &x_1).add(driver, &x_1)) * y1_sqr_mul_4 - x1_pow_4_mul_9;
+        let x_pow_4_mul_3 = &mul2[1];
+        let x1_pow_4_mul_9 = x_pow_4_mul_3
+            .add(driver, x_pow_4_mul_3)
+            .add(driver, x_pow_4_mul_3);
+        let x_double_identity = mul2[2].sub(driver, &x1_pow_4_mul_9);
 
-        tmp_1 += x_double_identity * &q_elliptic_q_double_scaling;
+        let tmp = x_double_identity.mul_public(driver, &q_elliptic_q_double_scaling);
+        let tmp_1 = tmp_1.add(driver, &tmp);
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4) point doubling, y-coordinate check
         // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
-        let x1_sqr_mul_3 = x1_mul_3 * x_1;
-        let y_double_identity =
-            x1_sqr_mul_3 * (x_1.sub(driver, &x_3)) - (y_1.add(driver, &y_1)) * y1_plus_y3;
-        tmp_2 += y_double_identity * q_elliptic_q_double_scaling;
+        let y_double_identity = mul2[3].sub(driver, &mul2[4]);
+        let tmp = y_double_identity.mul_public(driver, &q_elliptic_q_double_scaling);
+        let tmp_2 = tmp_2.add(driver, &tmp);
 
         ///////////////////////////////////////////////////////////////////////
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp_1.evaluations[i];
+            univariate_accumulator.r0.evaluations[i] = driver.add(
+                &univariate_accumulator.r0.evaluations[i],
+                &tmp_1.evaluations[i],
+            );
         }
 
         for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp_2.evaluations[i];
+            univariate_accumulator.r1.evaluations[i] = driver.add(
+                &univariate_accumulator.r1.evaluations[i],
+                &tmp_2.evaluations[i],
+            );
         }
 
         Ok(())
