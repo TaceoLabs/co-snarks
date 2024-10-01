@@ -2,6 +2,7 @@ use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
 
 pub(crate) trait FieldHash<F: PrimeField, const T: usize> {
+    #[allow(unused)]
     fn permutation(&self, input: &[F; T]) -> [F; T] {
         let mut state = *input;
         self.permutation_in_place(&mut state);
@@ -137,6 +138,7 @@ impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T>> FieldSpo
         Self::hash_internal::<OUT_LEN, false>(input, hasher)
     }
 
+    #[allow(unused)]
     pub(crate) fn hash_variable_length<const OUT_LEN: usize>(
         input: &[F],
         hasher: H,

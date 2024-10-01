@@ -112,46 +112,46 @@ impl<F: PrimeField> Relation<F> for DeltaRangeConstraintRelation {
         let delta_4 = w_1_shift.to_owned() - w_4;
 
         // Contribution (1)
-        let mut tmp_1 = (delta_1.to_owned() + &minus_one).sqr() + &minus_one;
-        tmp_1 *= (delta_1.to_owned() + &minus_two).sqr() + &minus_one;
-        tmp_1 *= q_delta_range;
-        tmp_1 *= scaling_factor;
+        let mut tmp = (delta_1.to_owned() + &minus_one).sqr() + &minus_one;
+        tmp *= (delta_1.to_owned() + &minus_two).sqr() + &minus_one;
+        tmp *= q_delta_range;
+        tmp *= scaling_factor;
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp_1.evaluations[i];
+            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
         }
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (2)
-        let mut tmp_2 = (delta_2.to_owned() + &minus_one).sqr() + &minus_one;
-        tmp_2 *= (delta_2.to_owned() + &minus_two).sqr() + &minus_one;
-        tmp_2 *= q_delta_range;
-        tmp_2 *= scaling_factor;
+        let mut tmp = (delta_2.to_owned() + &minus_one).sqr() + &minus_one;
+        tmp *= (delta_2.to_owned() + &minus_two).sqr() + &minus_one;
+        tmp *= q_delta_range;
+        tmp *= scaling_factor;
 
         for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp_2.evaluations[i];
+            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
         }
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (3)
-        let mut tmp_3 = (delta_3.to_owned() + &minus_one).sqr() + &minus_one;
-        tmp_3 *= (delta_3.to_owned() + &minus_two).sqr() + &minus_one;
-        tmp_3 *= q_delta_range;
-        tmp_3 *= scaling_factor;
+        let mut tmp = (delta_3.to_owned() + &minus_one).sqr() + &minus_one;
+        tmp *= (delta_3.to_owned() + &minus_two).sqr() + &minus_one;
+        tmp *= q_delta_range;
+        tmp *= scaling_factor;
 
         for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] += tmp_3.evaluations[i];
+            univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
         }
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4)
-        let mut tmp_4 = (delta_4.to_owned() + &minus_one).sqr() + &minus_one;
-        tmp_4 *= (delta_4.to_owned() + &minus_two).sqr() + &minus_one;
-        tmp_4 *= q_delta_range;
-        tmp_4 *= scaling_factor;
+        let mut tmp = (delta_4.to_owned() + &minus_one).sqr() + &minus_one;
+        tmp *= (delta_4.to_owned() + &minus_two).sqr() + &minus_one;
+        tmp *= q_delta_range;
+        tmp *= scaling_factor;
 
         for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] += tmp_4.evaluations[i];
+            univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
         }
     }
 }

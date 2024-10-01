@@ -153,19 +153,19 @@ impl SumcheckRound {
     ) {
         tracing::trace!("Accumulate relations");
 
-        Self::accumulate_one_relation_univariates::<P::ScalarField, UltraArithmeticRelation>(
+        Self::accumulate_one_relation_univariates::<_, UltraArithmeticRelation>(
             &mut univariate_accumulators.r_arith,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        Self::accumulate_one_relation_univariates::<P::ScalarField, UltraPermutationRelation>(
+        Self::accumulate_one_relation_univariates::<_, UltraPermutationRelation>(
             &mut univariate_accumulators.r_perm,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        Self::accumulate_one_relation_univariates::<P::ScalarField, DeltaRangeConstraintRelation>(
+        Self::accumulate_one_relation_univariates::<_, DeltaRangeConstraintRelation>(
             &mut univariate_accumulators.r_delta,
             extended_edges,
             relation_parameters,
@@ -177,25 +177,25 @@ impl SumcheckRound {
             relation_parameters,
             scaling_factor,
         );
-        Self::accumulate_one_relation_univariates::<P::ScalarField, AuxiliaryRelation>(
+        Self::accumulate_one_relation_univariates::<_, AuxiliaryRelation>(
             &mut univariate_accumulators.r_aux,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        Self::accumulate_one_relation_univariates::<P::ScalarField, LogDerivLookupRelation>(
+        Self::accumulate_one_relation_univariates::<_, LogDerivLookupRelation>(
             &mut univariate_accumulators.r_lookup,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        Self::accumulate_one_relation_univariates::<P::ScalarField, Poseidon2ExternalRelation>(
+        Self::accumulate_one_relation_univariates::<_, Poseidon2ExternalRelation>(
             &mut univariate_accumulators.r_pos_ext,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        Self::accumulate_one_relation_univariates::<P::ScalarField, Poseidon2InternalRelation>(
+        Self::accumulate_one_relation_univariates::<_, Poseidon2InternalRelation>(
             &mut univariate_accumulators.r_pos_int,
             extended_edges,
             relation_parameters,
