@@ -47,8 +47,9 @@ impl CoUtils {
     where
         T: MSMProvider<P::G1>,
     {
+        let len = poly.len();
         let poly_vec = FieldShareVec::<T, P>::from(poly.to_vec());
-        MSMProvider::msm_public_points(driver, &crs.monomials, &poly_vec)
+        MSMProvider::msm_public_points(driver, &crs.monomials[..len], &poly_vec)
     }
 
     pub(crate) fn batch_invert<T, P: Pairing>(
