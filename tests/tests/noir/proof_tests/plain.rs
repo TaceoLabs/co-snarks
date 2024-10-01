@@ -8,7 +8,6 @@ use co_ultrahonk::prelude::{
     UltraCircuitVariable, Utils,
 };
 use mpc_core::protocols::plain::PlainDriver;
-use serial_test::serial;
 
 fn witness_map_to_witness_vector<P: Pairing>(
     witness_map: WitnessMap<P::ScalarField>,
@@ -106,13 +105,11 @@ fn witness_and_proof_test(name: &str) {
 }
 
 #[test]
-#[serial]
 fn poseidon_witness_and_proof_test() {
     witness_and_proof_test("poseidon");
 }
 
 #[test]
-#[serial]
 fn poseidon_proof_test() {
     proof_test("poseidon");
 }
