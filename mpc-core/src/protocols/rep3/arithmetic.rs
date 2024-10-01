@@ -8,8 +8,11 @@ use num_traits::Zero;
 use types::Rep3PrimeFieldShare;
 
 use crate::protocols::rep3::{detail, id::PartyID, network::Rep3Network};
+use rayon::prelude::*;
 
-use super::{binary, conversion, network::IoContext, IoResult, Rep3BigUintShare};
+use super::{
+    binary, conversion, network::IoContext, rngs::Rep3CorrelatedRng, IoResult, Rep3BigUintShare,
+};
 
 pub type FieldShare<F> = Rep3PrimeFieldShare<F>;
 pub type BinaryShare<F> = Rep3BigUintShare<F>;
@@ -102,21 +105,31 @@ pub fn mul_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F) {
     *shared *= public;
 }
 
-/// Performs element-wise multiplication of two vectors of shared values.
-pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
+/// TODO DOCU - RIGHT THAT ONLY PEOPLE THAT KNOW WHAT THEY
+/// ARE DOING SHOULD USE THIS
+pub fn local_mul_vec<F: PrimeField, N: Rep3Network>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
+) -> Vec<F> {
+    //squeeze all random elements at once in beginning for determinismus
+    let masking_fes = io_context
+        .rngs
+        .rand
+        .masking_field_elements_vec::<F>(lhs.len());
+
+    lhs.par_iter()
+        .zip_eq(rhs.par_iter())
+        .zip_eq(masking_fes.par_iter())
+        .with_min_len(1024)
+        .map(|((lhs, rhs), masking)| lhs.a * rhs.a + lhs.a * rhs.b + lhs.b * rhs.a + masking)
+        .collect()
+}
+
+pub async fn io_mul_vec<F: PrimeField, N: Rep3Network>(
+    local_a: Vec<F>,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<FieldShare<F>>> {
-    debug_assert_eq!(lhs.len(), rhs.len());
-    let local_a = izip!(lhs.iter(), rhs.iter())
-        .map(|(lhs, rhs)| {
-            lhs.a * rhs.a
-                + lhs.a * rhs.b
-                + lhs.b * rhs.a
-                + io_context.rngs.rand.masking_field_element::<F>()
-        })
-        .collect_vec();
     let local_b = io_context.network.reshare_many(&local_a).await?;
     if local_b.len() != local_a.len() {
         return Err(std::io::Error::new(
@@ -127,6 +140,28 @@ pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
     Ok(izip!(local_a, local_b)
         .map(|(a, b)| FieldShare::new(a, b))
         .collect())
+}
+
+/// Performs element-wise multiplication of two vectors of shared values.
+pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
+    lhs: &[FieldShare<F>],
+    rhs: &[FieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<FieldShare<F>>> {
+    // do not use local_mul_vec here!!! We are async, this means we
+    // run on a tokio runtime. local_mul_vec uses rayon and starves the
+    // runtime. This method is for small multiplications of vecs.
+    // If you want a larger one use local_mul_vec and then io_mul_vec.
+    debug_assert_eq!(lhs.len(), rhs.len());
+    let local_a = izip!(lhs.iter(), rhs.iter())
+        .map(|(lhs, rhs)| {
+            lhs.a * rhs.a
+                + lhs.a * rhs.b
+                + lhs.b * rhs.a
+                + io_context.rngs.rand.masking_field_element::<F>()
+        })
+        .collect_vec();
+    io_mul_vec(local_a, io_context).await
 }
 
 /// Performs division of two shared values, returning a / b.

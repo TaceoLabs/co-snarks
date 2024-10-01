@@ -6,6 +6,8 @@ use mpc_core::protocols::rep3::{
     network::{IoContext, Rep3Network},
     pointshare, Rep3PointShare, Rep3PrimeFieldShare,
 };
+use rayon::prelude::*;
+use tokio::runtime::Runtime;
 
 use super::{CircomGroth16Prover, IoResult};
 
@@ -70,15 +72,10 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         public_values
-            .iter()
+            .par_iter()
+            .with_min_len(1024)
             .map(|value| Self::ArithmeticShare::promote_from_trivial(value, id))
             .collect()
-    }
-
-    fn sub_assign_vec(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
-        for (a, b) in izip!(a, b) {
-            arithmetic::sub_assign(a, *b);
-        }
     }
 
     async fn mul(
@@ -97,25 +94,19 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         arithmetic::mul_vec(lhs, rhs, &mut self.io_context).await
     }
 
-    fn fft_in_place<D: ark_poly::EvaluationDomain<P::ScalarField>>(
-        data: &mut Vec<Self::ArithmeticShare>,
-        domain: &D,
-    ) {
-        domain.fft_in_place(data)
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField> {
+        arithmetic::local_mul_vec::<P::ScalarField, N>(a, b, &mut self.io_context)
     }
 
-    fn ifft_in_place<D: ark_poly::EvaluationDomain<P::ScalarField>>(
-        data: &mut Vec<Self::ArithmeticShare>,
-        domain: &D,
-    ) {
-        domain.ifft_in_place(data)
-    }
-
-    fn ifft<D: ark_poly::EvaluationDomain<P::ScalarField>>(
-        data: &[Self::ArithmeticShare],
-        domain: &D,
-    ) -> Vec<Self::ArithmeticShare> {
-        domain.ifft(&data)
+    async fn io_round_mul_vec(
+        &mut self,
+        a: Vec<P::ScalarField>,
+    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        arithmetic::io_mul_vec(a, &mut self.io_context).await
     }
 
     fn distribute_powers_and_mul_by_const(

@@ -56,12 +56,16 @@ use std::{
     process::ExitCode,
 };
 use tracing::instrument;
+use tracing_subscriber::fmt::format::FmtSpan;
 
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{fmt, EnvFilter};
 
-    let fmt_layer = fmt::layer().with_target(true).with_line_number(true);
+    let fmt_layer = fmt::layer()
+        .with_target(false)
+        .with_line_number(false)
+        .with_span_events(FmtSpan::CLOSE | FmtSpan::ENTER);
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("info"))
         .unwrap();

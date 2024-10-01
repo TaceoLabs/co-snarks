@@ -2,7 +2,7 @@ use core::fmt;
 use std::{fmt::Debug, future::Future};
 
 use ark_ec::pairing::Pairing;
-use ark_poly::EvaluationDomain;
+use ark_poly::{domain::DomainCoeff, EvaluationDomain};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 pub(crate) mod plain;
@@ -11,6 +11,7 @@ pub(crate) mod shamir;
 
 pub use plain::PlainGroth16Driver;
 pub use rep3::Rep3Groth16Driver;
+pub use shamir::ShamirGroth16Driver;
 
 type IoResult<T> = std::io::Result<T>;
 
@@ -22,6 +23,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         + Default
         + Send
         + Debug
+        + DomainCoeff<P::ScalarField>
         + 'static;
     type PointShareG1: Debug + Send + 'static;
     type PointShareG2: Debug + Send + 'static;
@@ -47,9 +49,6 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
 
-    /// Elementwise subtraction of two vectors of shares in place: \[a_i\] -= \[b_i\]
-    fn sub_assign_vec(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]);
-
     async fn mul(
         &mut self,
         a: Self::ArithmeticShare,
@@ -63,22 +62,15 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         b: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
-    fn fft_in_place<D: EvaluationDomain<P::ScalarField>>(
-        data: &mut Vec<Self::ArithmeticShare>,
-        domain: &D,
-    );
-
-    /// Computes the inverse FFT of a vector of shared field elements in place.
-    fn ifft_in_place<D: EvaluationDomain<P::ScalarField>>(
-        data: &mut Vec<Self::ArithmeticShare>,
-        domain: &D,
-    );
-
-    /// Computes the inverse FFT of a vector of shared field elements in place.
-    fn ifft<D: EvaluationDomain<P::ScalarField>>(
-        data: &[Self::ArithmeticShare],
-        domain: &D,
-    ) -> Vec<Self::ArithmeticShare>;
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField>;
+    async fn io_round_mul_vec(
+        &mut self,
+        a: Vec<P::ScalarField>,
+    ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Computes the \[coeffs_i\] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     fn distribute_powers_and_mul_by_const(

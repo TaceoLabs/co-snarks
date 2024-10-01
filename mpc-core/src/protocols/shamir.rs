@@ -311,7 +311,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         Ok(ShamirShare::new(my_share - r_t))
     }
 
-    pub(crate) async fn degree_reduce_vec(
+    pub async fn degree_reduce_vec(
         &mut self,
         mut inputs: Vec<F>,
     ) -> std::io::Result<Vec<ShamirShare<F>>> {

@@ -2,6 +2,7 @@ use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
 
 use super::{core, network::ShamirNetwork, IoResult, ShamirProtocol};
+use rayon::prelude::*;
 
 mod ops;
 pub(super) mod types;
@@ -55,12 +56,24 @@ pub async fn mul<F: PrimeField, N: ShamirNetwork>(
     shamir.degree_reduce(mul).await
 }
 
+//does not reduce the degree
+pub fn local_mul_vec<F: PrimeField>(a: &[ShamirShare<F>], b: &[ShamirShare<F>]) -> Vec<F> {
+    a.par_iter()
+        .zip_eq(b.par_iter())
+        .with_min_len(1024)
+        .map(|(a, b)| a.a * b.a)
+        .collect::<Vec<_>>()
+}
+
 /// Performs element-wise multiplication of two slices of shares.
 pub async fn mul_vec<F: PrimeField, N: ShamirNetwork>(
     a: &[ShamirShare<F>],
     b: &[ShamirShare<F>],
     shamir: &mut ShamirProtocol<F, N>,
 ) -> std::io::Result<Vec<ShamirShare<F>>> {
+    //do not use local_mul_vec as it uses rayon and this method runs on
+    //the tokio runtime. This method is for smaller vecs, local_mul_vec and then
+    //degree_reduce for larger vecs.
     let mul = a
         .iter()
         .zip(b.iter())
@@ -180,11 +193,7 @@ pub fn promote_to_trivial_share<F: PrimeField>(public_value: F) -> ShamirShare<F
 
 /// Promotes a vector of public values to trivial shares.
 pub fn promote_to_trivial_shares<F: PrimeField>(public_values: &[F]) -> Vec<ShamirShare<F>> {
-    public_values
-        .iter()
-        .copied()
-        .map(promote_to_trivial_share)
-        .collect()
+    ShamirShare::convert_vec_rev(public_values.to_owned())
 }
 
 /*

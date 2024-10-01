@@ -1,0 +1,51 @@
+[2m2024-10-01T09:04:05.412564Z[0m [32m INFO[0m [1mrun_split_witness[0m[2m:[0m enter
+[2m2024-10-01T09:04:05.413238Z[0m [32m INFO[0m [1mrun_split_witness[0m[2m:[0m Sharing took 0.033 ms
+[2m2024-10-01T09:04:05.413361Z[0m [32m INFO[0m [1mrun_split_witness[0m[2m:[0m Wrote witness share 0 to file test_vectors/poseidon/witness.wtns.0.shared
+[2m2024-10-01T09:04:05.413490Z[0m [32m INFO[0m [1mrun_split_witness[0m[2m:[0m Wrote witness share 1 to file test_vectors/poseidon/witness.wtns.1.shared
+[2m2024-10-01T09:04:05.413592Z[0m [32m INFO[0m [1mrun_split_witness[0m[2m:[0m Wrote witness share 2 to file test_vectors/poseidon/witness.wtns.2.shared
+[2m2024-10-01T09:04:05.413598Z[0m [32m INFO[0m [1mrun_split_witness[0m[2m:[0m Split witness into shares successfully
+[2m2024-10-01T09:04:05.413621Z[0m [32m INFO[0m [1mrun_split_witness[0m[2m:[0m close [3mtime.busy[0m[2m=[0m1.06ms [3mtime.idle[0m[2m=[0m2.15µs
+[2m2024-10-01T09:04:06.813881Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.814188Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.814270Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mroot of unity[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.814440Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mroot of unity[0m[2m:[0m close [3mtime.busy[0m[2m=[0m168µs [3mtime.idle[0m[2m=[0m1.31µs
+[2m2024-10-01T09:04:06.814475Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mevaluate constraints[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.814896Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mevaluate constraints[0m[2m:[0m close [3mtime.busy[0m[2m=[0m420µs [3mtime.idle[0m[2m=[0m1.09µs
+[2m2024-10-01T09:04:06.815029Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mdistribute powers mul c (fft/ifft)[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.815073Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mdistribute powers mul c (fft/ifft)[0m[2m:[0m[1mlocal_mul_vec[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.815162Z[0m [34mDEBUG[0m [1mdistribute powers mul a (fft/ifft)[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.815603Z[0m [34mDEBUG[0m [1mdistribute powers mul b (fft/ifft)[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.816249Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mdistribute powers mul c (fft/ifft)[0m[2m:[0m[1mlocal_mul_vec[0m[2m:[0m close [3mtime.busy[0m[2m=[0m1.17ms [3mtime.idle[0m[2m=[0m1.22µs
+[2m2024-10-01T09:04:06.816301Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mdistribute powers mul c (fft/ifft)[0m[2m:[0m[1mifft in dist pows[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.828543Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mdistribute powers mul c (fft/ifft)[0m[2m:[0m[1mifft in dist pows[0m[2m:[0m close [3mtime.busy[0m[2m=[0m12.2ms [3mtime.idle[0m[2m=[0m1.48µs
+[2m2024-10-01T09:04:06.828616Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mdistribute powers mul c (fft/ifft)[0m[2m:[0m[1mdist pows[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.828646Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mdistribute powers mul c (fft/ifft)[0m[2m:[0m[1mdist pows[0m[2m:[0m close [3mtime.busy[0m[2m=[0m30.1µs [3mtime.idle[0m[2m=[0m1.94µs
+[2m2024-10-01T09:04:06.828657Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mdistribute powers mul c (fft/ifft)[0m[2m:[0m[1mfft in dist pows[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.837705Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mdistribute powers mul c (fft/ifft)[0m[2m:[0m[1mfft in dist pows[0m[2m:[0m close [3mtime.busy[0m[2m=[0m9.04ms [3mtime.idle[0m[2m=[0m2.17µs
+[2m2024-10-01T09:04:06.837762Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mdistribute powers mul c (fft/ifft)[0m[2m:[0m close [3mtime.busy[0m[2m=[0m22.7ms [3mtime.idle[0m[2m=[0m930ns
+[2m2024-10-01T09:04:06.839861Z[0m [34mDEBUG[0m [1mdistribute powers mul b (fft/ifft)[0m[2m:[0m close [3mtime.busy[0m[2m=[0m24.3ms [3mtime.idle[0m[2m=[0m1.89µs
+[2m2024-10-01T09:04:06.841246Z[0m [34mDEBUG[0m [1mdistribute powers mul a (fft/ifft)[0m[2m:[0m close [3mtime.busy[0m[2m=[0m26.1ms [3mtime.idle[0m[2m=[0m2.17µs
+[2m2024-10-01T09:04:06.841287Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mcompute ab[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.841306Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mcompute ab[0m[2m:[0m[1mlocal part (mul and sub)[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.845684Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mcompute ab[0m[2m:[0m[1mlocal part (mul and sub)[0m[2m:[0m close [3mtime.busy[0m[2m=[0m4.37ms [3mtime.idle[0m[2m=[0m1.64µs
+[2m2024-10-01T09:04:06.845725Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mcompute ab[0m[2m:[0m[1mio part[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.907116Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mcompute ab[0m[2m:[0m[1mio part[0m[2m:[0m close [3mtime.busy[0m[2m=[0m61.4ms [3mtime.idle[0m[2m=[0m1.80µs
+[2m2024-10-01T09:04:06.907159Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m[1mcompute ab[0m[2m:[0m close [3mtime.busy[0m[2m=[0m65.9ms [3mtime.idle[0m[2m=[0m1.27µs
+[2m2024-10-01T09:04:06.907168Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mwitness map from matrices[0m[2m:[0m close [3mtime.busy[0m[2m=[0m93.0ms [3mtime.idle[0m[2m=[0m1.02µs
+[2m2024-10-01T09:04:06.907173Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m getting r and s...
+[2m2024-10-01T09:04:06.907178Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m done!
+[2m2024-10-01T09:04:06.907182Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mcreate proof with assignment[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.907185Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mcreate proof with assignment[0m[2m:[0m[1mfirst MSMs[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.907404Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mcreate proof with assignment[0m[2m:[0m[1mfirst MSMs[0m[2m:[0m close [3mtime.busy[0m[2m=[0m218µs [3mtime.idle[0m[2m=[0m432ns
+[2m2024-10-01T09:04:06.911927Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mcreate proof with assignment[0m[2m:[0m[1mcalculate coeff[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.918849Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mcreate proof with assignment[0m[2m:[0m[1mcalculate coeff[0m[2m:[0m close [3mtime.busy[0m[2m=[0m6.92ms [3mtime.idle[0m[2m=[0m1.95µs
+[2m2024-10-01T09:04:06.918894Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mcreate proof with assignment[0m[2m:[0m[1mnetwork round after calc coeff[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.919463Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mcreate proof with assignment[0m[2m:[0m[1mnetwork round after calc coeff[0m[2m:[0m close [3mtime.busy[0m[2m=[0m569µs [3mtime.idle[0m[2m=[0m1.34µs
+[2m2024-10-01T09:04:06.919488Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mcreate proof with assignment[0m[2m:[0m[1mfinish open two points and some adds[0m[2m:[0m enter
+[2m2024-10-01T09:04:06.929442Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mcreate proof with assignment[0m[2m:[0m[1mfinish open two points and some adds[0m[2m:[0m close [3mtime.busy[0m[2m=[0m9.95ms [3mtime.idle[0m[2m=[0m871ns
+[2m2024-10-01T09:04:06.929519Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m[1mcreate proof with assignment[0m[2m:[0m close [3mtime.busy[0m[2m=[0m22.3ms [3mtime.idle[0m[2m=[0m944ns
+[2m2024-10-01T09:04:06.929531Z[0m [34mDEBUG[0m [1mGroth16 - Proof[0m[2m:[0m close [3mtime.busy[0m[2m=[0m116ms [3mtime.idle[0m[2m=[0m1.85µs
+[2m2024-10-01T09:04:16.215673Z[0m [32m INFO[0m [1mrun_verify[0m[2m:[0m enter
+[2m2024-10-01T09:04:16.222594Z[0m [32m INFO[0m [1mrun_verify[0m[2m:[0m Proof verification took 3.858 ms
+[2m2024-10-01T09:04:16.222632Z[0m [32m INFO[0m [1mrun_verify[0m[2m:[0m Proof verified successfully
+[2m2024-10-01T09:04:16.222640Z[0m [32m INFO[0m [1mrun_verify[0m[2m:[0m close [3mtime.busy[0m[2m=[0m6.97ms [3mtime.idle[0m[2m=[0m2.30µs

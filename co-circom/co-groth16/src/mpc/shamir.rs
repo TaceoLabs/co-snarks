@@ -1,7 +1,6 @@
 use super::{CircomGroth16Prover, IoResult};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use itertools::izip;
 use mpc_core::protocols::shamir::{
     arithmetic, core, network::ShamirNetwork, pointshare, ShamirPointShare, ShamirPrimeFieldShare,
     ShamirProtocol,
@@ -46,8 +45,8 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
 
     fn evaluate_constraint(
         _party_id: Self::PartyID,
-        lhs: &[(<P as Pairing>::ScalarField, usize)],
-        public_inputs: &[<P as Pairing>::ScalarField],
+        lhs: &[(P::ScalarField, usize)],
+        public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
     ) -> Self::ArithmeticShare {
         let mut acc = Self::ArithmeticShare::default();
@@ -66,15 +65,9 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
 
     fn promote_to_trivial_shares(
         _id: Self::PartyID,
-        public_values: &[<P as Pairing>::ScalarField],
+        public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         arithmetic::promote_to_trivial_shares(public_values)
-    }
-
-    fn sub_assign_vec(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
-        for (a, b) in izip!(a, b) {
-            arithmetic::sub_assign(a, *b);
-        }
     }
 
     async fn mul(
@@ -93,31 +86,25 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         arithmetic::mul_vec(a, b, &mut self.protocol).await
     }
 
-    fn fft_in_place<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
-        data: &mut Vec<Self::ArithmeticShare>,
-        domain: &D,
-    ) {
-        domain.fft_in_place(data)
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField> {
+        arithmetic::local_mul_vec(a, b)
     }
 
-    fn ifft_in_place<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
-        data: &mut Vec<Self::ArithmeticShare>,
-        domain: &D,
-    ) {
-        domain.ifft_in_place(data)
-    }
-
-    fn ifft<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
-        data: &[Self::ArithmeticShare],
-        domain: &D,
-    ) -> Vec<Self::ArithmeticShare> {
-        domain.ifft(&data)
+    async fn io_round_mul_vec(
+        &mut self,
+        a: Vec<P::ScalarField>,
+    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        self.protocol.degree_reduce_vec(a).await
     }
 
     fn distribute_powers_and_mul_by_const(
         coeffs: &mut [Self::ArithmeticShare],
-        g: <P as Pairing>::ScalarField,
-        c: <P as Pairing>::ScalarField,
+        g: P::ScalarField,
+        c: P::ScalarField,
     ) {
         let mut pow = c;
         for share in coeffs.iter_mut() {
@@ -127,23 +114,20 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     }
 
     fn msm_public_points_g1(
-        points: &[<P as Pairing>::G1Affine],
+        points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1 {
         pointshare::msm_public_points(points, scalars)
     }
 
     fn msm_public_points_g2(
-        points: &[<P as Pairing>::G2Affine],
+        points: &[P::G2Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG2 {
         pointshare::msm_public_points(points, scalars)
     }
 
-    fn scalar_mul_public_point_g1(
-        a: &<P as Pairing>::G1,
-        b: Self::ArithmeticShare,
-    ) -> Self::PointShareG1 {
+    fn scalar_mul_public_point_g1(a: &P::G1, b: Self::ArithmeticShare) -> Self::PointShareG1 {
         pointshare::scalar_mul_public_point(b, a)
     }
 
@@ -151,15 +135,11 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         pointshare::add_assign(a, b)
     }
 
-    fn add_assign_points_public_g1(
-        _id: Self::PartyID,
-        a: &mut Self::PointShareG1,
-        b: &<P as Pairing>::G1,
-    ) {
+    fn add_assign_points_public_g1(_id: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1) {
         pointshare::add_assign_public(a, b)
     }
 
-    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<<P as Pairing>::G1> {
+    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1> {
         pointshare::open_point(a, &mut self.protocol).await
     }
 
@@ -175,10 +155,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         pointshare::sub_assign(a, b);
     }
 
-    fn scalar_mul_public_point_g2(
-        a: &<P as Pairing>::G2,
-        b: Self::ArithmeticShare,
-    ) -> Self::PointShareG2 {
+    fn scalar_mul_public_point_g2(a: &P::G2, b: Self::ArithmeticShare) -> Self::PointShareG2 {
         pointshare::scalar_mul_public_point(b, a)
     }
 
@@ -186,11 +163,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         pointshare::add_assign(a, b)
     }
 
-    fn add_assign_points_public_g2(
-        _id: Self::PartyID,
-        a: &mut Self::PointShareG2,
-        b: &<P as Pairing>::G2,
-    ) {
+    fn add_assign_points_public_g2(_id: Self::PartyID, a: &mut Self::PointShareG2, b: &P::G2) {
         pointshare::add_assign_public(a, b)
     }
 
@@ -198,7 +171,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         &mut self,
         a: Self::PointShareG1,
         b: Self::PointShareG2,
-    ) -> std::io::Result<(<P as Pairing>::G1, <P as Pairing>::G2)> {
+    ) -> std::io::Result<(P::G1, P::G2)> {
         let s1 = a.a;
         let s2 = b.a;
 

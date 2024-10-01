@@ -2,7 +2,8 @@ use crate::RngType;
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
-use rand::{Rng, SeedableRng};
+use rand::{Rng, RngCore, SeedableRng};
+use rayon::prelude::*;
 
 #[derive(Debug)]
 pub(crate) struct Rep3CorrelatedRng {
@@ -59,6 +60,26 @@ impl Rep3Rand {
         let a = F::rand(&mut self.rng1);
         let b = F::rand(&mut self.rng2);
         (a, b)
+    }
+
+    pub fn masking_field_elements_vec<F: PrimeField>(&mut self, len: usize) -> Vec<F> {
+        let field_size = usize::try_from(F::MODULUS_BIT_SIZE)
+            .expect("u32 fits into usize")
+            .div_ceil(8);
+        let mut a = vec![0_u8; field_size * len];
+        let mut b = vec![0_u8; field_size * len];
+        rayon::join(
+            || {
+                self.rng1.fill_bytes(&mut a);
+            },
+            || {
+                self.rng2.fill_bytes(&mut b);
+            },
+        );
+        a.par_chunks(field_size)
+            .zip_eq(b.par_chunks(field_size))
+            .map(|(a, b)| F::from_be_bytes_mod_order(a) - F::from_be_bytes_mod_order(b))
+            .collect()
     }
 
     pub fn masking_ec_element<C: CurveGroup>(&mut self) -> C {

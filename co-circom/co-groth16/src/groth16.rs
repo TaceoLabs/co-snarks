@@ -9,19 +9,19 @@ use circom_types::groth16::{Groth16Proof, ZKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use co_circom_snarks::SharedWitness;
 use eyre::Result;
-use itertools::izip;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet, Rep3Network};
 use mpc_core::protocols::shamir::network::{ShamirMpcNet, ShamirNetwork};
 use mpc_core::protocols::shamir::ShamirProtocol;
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use num_traits::ToPrimitive;
+use rayon::prelude::*;
 use std::io::{self};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio::runtime::{self, Runtime};
 use tokio::sync::oneshot;
-use tracing::instrument;
+use tracing::{debug_span, instrument};
 
 use crate::mpc::plain::PlainGroth16Driver;
 use crate::mpc::rep3::Rep3Groth16Driver;
@@ -113,8 +113,7 @@ where
         let num_constraints = matrices.num_constraints;
         let public_inputs = &private_witness.public_inputs;
         let private_witness = private_witness.witness;
-        // TODO: actually we do not like that we have to block here
-        // can we somehow manage that this doesn't have to use the network?
+        // we need two network drivers for Groth16 so we fork the network here
         let mut forked_driver = self.runtime.block_on(self.driver.fork())?;
         let h = self.witness_map_from_matrices(
             zkey.pow,
@@ -147,10 +146,12 @@ where
         public_inputs: &[P::ScalarField],
         private_witness: &[T::ArithmeticShare],
     ) -> Vec<T::ArithmeticShare> {
-        let mut result = vec![T::ArithmeticShare::default(); domain_size];
-        for (res, x) in izip!(&mut result, matrix) {
-            *res = T::evaluate_constraint(party_id, x, public_inputs, private_witness);
-        }
+        let mut result = matrix
+            .par_iter()
+            .with_min_len(512)
+            .map(|x| T::evaluate_constraint(party_id, x, public_inputs, private_witness))
+            .collect::<Vec<_>>();
+        result.resize(domain_size, T::ArithmeticShare::default());
         result
     }
 
@@ -187,14 +188,13 @@ where
                 result
             },
             || {
-                let result = Self::evaluate_constraint(
+                Self::evaluate_constraint(
                     party_id,
                     domain_size,
                     &matrices.b,
                     public_inputs,
                     private_witness,
-                );
-                result
+                )
             },
         );
 
@@ -207,51 +207,65 @@ where
         let mut a_result = a.clone();
         let mut b_result = b.clone();
         rayon::spawn(move || {
-            T::ifft_in_place(&mut a_result, a_domain.as_ref());
+            let a_span = tracing::debug_span!("distribute powers mul a (fft/ifft)").entered();
+            a_domain.ifft_in_place(&mut a_result);
             T::distribute_powers_and_mul_by_const(
                 &mut a_result,
                 root_of_unity,
                 P::ScalarField::one(),
             );
-            T::fft_in_place(&mut a_result, a_domain.as_ref());
+            a_domain.fft_in_place(&mut a_result);
             a_tx.send(a_result).expect("channel not droped");
+            a_span.exit();
         });
 
         rayon::spawn(move || {
-            T::ifft_in_place(&mut b_result, b_domain.as_ref());
+            let b_span = tracing::debug_span!("distribute powers mul b (fft/ifft)").entered();
+            b_domain.ifft_in_place(&mut b_result);
             T::distribute_powers_and_mul_by_const(
                 &mut b_result,
                 root_of_unity,
                 P::ScalarField::one(),
             );
-            T::fft_in_place(&mut b_result, b_domain.as_ref());
+            b_domain.fft_in_place(&mut b_result);
             b_tx.send(b_result).expect("channel not droped");
+            b_span.exit();
         });
 
-        let mut ab = self.runtime.block_on(self.driver.mul_vec(&a, &b))?;
-        let mul_vec_span = tracing::debug_span!("groth16 - mul vec in dist pows").entered();
+        let c_span = tracing::debug_span!("distribute powers mul c (fft/ifft)").entered();
+        let local_mul_vec_span = tracing::debug_span!("local_mul_vec").entered();
+        let mut ab = self.driver.local_mul_vec(&a, &b);
+        local_mul_vec_span.exit();
         let ifft_span = tracing::debug_span!("ifft in dist pows").entered();
-        T::ifft_in_place(&mut ab, domain.as_ref());
+        domain.ifft_in_place(&mut ab);
         ifft_span.exit();
         let dist_pows_span = tracing::debug_span!("dist pows").entered();
-        T::distribute_powers_and_mul_by_const(&mut ab, root_of_unity, P::ScalarField::one());
+        let mut pow = P::ScalarField::one();
+        for share in ab.iter_mut() {
+            *share *= pow;
+            pow *= root_of_unity;
+        }
         dist_pows_span.exit();
         let fft_span = tracing::debug_span!("fft in dist pows").entered();
-        T::fft_in_place(&mut ab, domain.as_ref());
+        domain.fft_in_place(&mut ab);
         fft_span.exit();
         let c = ab;
-        mul_vec_span.exit();
+        c_span.exit();
 
-        // tracing::error!("DONE MUL VEC SCOPE");
         let a = a_rx.blocking_recv()?;
         let b = b_rx.blocking_recv()?;
 
-        let mul_vec_span = tracing::debug_span!("compute ab").entered();
-        //TODO we can merge the mul and sub commands but it most likely is not that
-        //much of a difference
-        let mut ab = self.runtime.block_on(self.driver.mul_vec(&a, &b))?;
-        T::sub_assign_vec(&mut ab, &c);
-        mul_vec_span.exit();
+        let compute_ab_span = tracing::debug_span!("compute ab").entered();
+        let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
+        let mut ab = self.driver.local_mul_vec(&a, &b);
+        ab.par_iter_mut().zip_eq(c.par_iter()).for_each(|(a, b)| {
+            *a -= b;
+        });
+        local_ab_span.exit();
+        let local_ab_span = tracing::debug_span!("io part").entered();
+        let ab = self.runtime.block_on(self.driver.io_round_mul_vec(ab))?;
+        local_ab_span.exit();
+        compute_ab_span.exit();
         Ok(ab)
     }
 
@@ -459,7 +473,9 @@ where
 {
     /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
     pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
-        let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
+        let runtime = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
         let mpc_net = runtime.block_on(Rep3MpcNet::new(config))?;
         let io_context = runtime.block_on(IoContext::init(mpc_net))?;
         let driver = Rep3Groth16Driver::new(io_context);

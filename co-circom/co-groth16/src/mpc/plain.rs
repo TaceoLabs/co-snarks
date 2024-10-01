@@ -3,6 +3,7 @@ use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::UniformRand;
 use itertools::izip;
 use rand::thread_rng;
+use tokio::runtime::Runtime;
 
 use super::CircomGroth16Prover;
 
@@ -57,12 +58,6 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         public_values.to_vec()
     }
 
-    fn sub_assign_vec(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
-        for (a, b) in izip!(a.iter_mut(), b.iter()) {
-            *a -= b;
-        }
-    }
-
     async fn mul(
         &mut self,
         a: Self::ArithmeticShare,
@@ -79,25 +74,19 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
-    fn fft_in_place<D: ark_poly::EvaluationDomain<P::ScalarField>>(
-        data: &mut Vec<Self::ArithmeticShare>,
-        domain: &D,
-    ) {
-        domain.fft_in_place(data);
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField> {
+        a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect()
     }
 
-    fn ifft_in_place<D: ark_poly::EvaluationDomain<P::ScalarField>>(
-        data: &mut Vec<Self::ArithmeticShare>,
-        domain: &D,
-    ) {
-        domain.ifft_in_place(data);
-    }
-
-    fn ifft<D: ark_poly::EvaluationDomain<P::ScalarField>>(
-        data: &[Self::ArithmeticShare],
-        domain: &D,
-    ) -> Vec<Self::ArithmeticShare> {
-        domain.ifft(data)
+    async fn io_round_mul_vec(
+        &mut self,
+        a: Vec<P::ScalarField>,
+    ) -> super::IoResult<Vec<Self::ArithmeticShare>> {
+        Ok(a)
     }
 
     fn distribute_powers_and_mul_by_const(
