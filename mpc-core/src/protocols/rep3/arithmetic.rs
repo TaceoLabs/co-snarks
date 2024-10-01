@@ -326,8 +326,8 @@ pub async fn mul_open_vec<F: PrimeField, N: Rep3Network>(
     Ok(a)
 }
 
-async fn rand<F: PrimeField, N: Rep3Network>(io_context: &mut IoContext<N>) -> FieldShare<F> {
-    let (a, b) = io_context.random_fes().await;
+pub fn rand<F: PrimeField, N: Rep3Network>(io_context: &mut IoContext<N>) -> FieldShare<F> {
+    let (a, b) = io_context.random_fes();
     FieldShare::new(a, b)
 }
 
@@ -336,8 +336,8 @@ pub async fn sqrt<F: PrimeField, N: Rep3Network>(
     share: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let r_squ = rand(io_context).await;
-    let r_inv = rand(io_context).await;
+    let r_squ = rand(io_context);
+    let r_inv = rand(io_context);
 
     let rr = mul(r_squ, r_squ, io_context).await?;
 

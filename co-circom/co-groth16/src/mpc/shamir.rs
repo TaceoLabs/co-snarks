@@ -7,16 +7,22 @@ use mpc_core::protocols::shamir::{
 };
 
 pub struct ShamirGroth16Driver<F: PrimeField, N: ShamirNetwork> {
-    protocol: ShamirProtocol<F, N>,
+    protocol0: ShamirProtocol<F, N>,
+    protocol1: ShamirProtocol<F, N>,
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirGroth16Driver<F, N> {
-    pub fn new(protocol: ShamirProtocol<F, N>) -> Self {
-        Self { protocol }
+    pub fn new(protocol0: ShamirProtocol<F, N>, protocol1: ShamirProtocol<F, N>) -> Self {
+        Self {
+            protocol0,
+            protocol1,
+        }
     }
 
-    pub(crate) fn into_network(self) -> N {
-        self.protocol.network
+    pub(crate) async fn close_network(self) -> IoResult<()> {
+        self.protocol0.network.shutdown().await?;
+        self.protocol1.network.shutdown().await?;
+        Ok(())
     }
 }
 
@@ -29,18 +35,12 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
 
     type PartyID = usize;
 
-    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
-        self.protocol.rand().await
+    fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
+        self.protocol0.rand()
     }
 
     fn get_party_id(&self) -> Self::PartyID {
-        self.protocol.network.get_id()
-    }
-
-    async fn fork(&mut self) -> IoResult<Self> {
-        Ok(Self {
-            protocol: self.protocol.fork().await?,
-        })
+        self.protocol0.network.get_id()
     }
 
     fn evaluate_constraint(
@@ -75,7 +75,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         a: Self::ArithmeticShare,
         b: Self::ArithmeticShare,
     ) -> IoResult<Self::ArithmeticShare> {
-        arithmetic::mul(a, b, &mut self.protocol).await
+        arithmetic::mul(a, b, &mut self.protocol0).await
     }
 
     async fn mul_vec(
@@ -83,7 +83,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        arithmetic::mul_vec(a, b, &mut self.protocol).await
+        arithmetic::mul_vec(a, b, &mut self.protocol0).await
     }
 
     fn local_mul_vec(
@@ -98,7 +98,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         &mut self,
         a: Vec<P::ScalarField>,
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        self.protocol.degree_reduce_vec(a).await
+        self.protocol0.degree_reduce_vec(a).await
     }
 
     fn distribute_powers_and_mul_by_const(
@@ -140,7 +140,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     }
 
     async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1> {
-        pointshare::open_point(a, &mut self.protocol).await
+        pointshare::open_point(a, &mut self.protocol0).await
     }
 
     async fn scalar_mul_g1(
@@ -148,7 +148,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         a: &Self::PointShareG1,
         b: Self::ArithmeticShare,
     ) -> IoResult<Self::PointShareG1> {
-        pointshare::scalar_mul(a, b, &mut self.protocol).await
+        pointshare::scalar_mul(a, b, &mut self.protocol0).await
     }
 
     fn sub_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1) {
@@ -176,15 +176,28 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         let s2 = b.a;
 
         let rcv: Vec<(P::G1, P::G2)> = self
-            .protocol
+            .protocol0
             .network
-            .broadcast_next((s1, s2), self.protocol.threshold + 1)
+            .broadcast_next((s1, s2), self.protocol0.threshold + 1)
             .await?;
         let (r1, r2): (Vec<P::G1>, Vec<P::G2>) = rcv.into_iter().unzip();
 
-        let r1 = core::reconstruct_point(&r1, &self.protocol.open_lagrange_t);
-        let r2 = core::reconstruct_point(&r2, &self.protocol.open_lagrange_t);
+        let r1 = core::reconstruct_point(&r1, &self.protocol0.open_lagrange_t);
+        let r2 = core::reconstruct_point(&r2, &self.protocol0.open_lagrange_t);
 
         Ok((r1, r2))
+    }
+
+    async fn open_point_and_scalar_mul(
+        &mut self,
+        g_a: &Self::PointShareG1,
+        g1_b: &Self::PointShareG1,
+        r: Self::ArithmeticShare,
+    ) -> super::IoResult<(P::G1, Self::PointShareG1)> {
+        let (opened, mul_result) = tokio::join!(
+            pointshare::open_point(g_a, &mut self.protocol0),
+            pointshare::scalar_mul(g1_b, r, &mut self.protocol1),
+        );
+        Ok((opened?, mul_result?))
     }
 }

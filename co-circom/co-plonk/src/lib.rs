@@ -12,7 +12,7 @@ use mpc::shamir::ShamirPlonkDriver;
 use mpc::CircomPlonkProver;
 use mpc_core::protocols::rep3::network::IoContext;
 use mpc_core::protocols::rep3::network::Rep3MpcNet;
-use mpc_core::protocols::shamir::network::ShamirNetwork;
+use mpc_core::protocols::shamir::ShamirPreprocessing;
 use mpc_core::protocols::shamir::{network::ShamirMpcNet, ShamirProtocol};
 use mpc_net::config::NetworkConfig;
 use round1::Round1;
@@ -211,8 +211,9 @@ impl<P: Pairing> Rep3CoPlonk<P> {
     pub fn with_network_config(config: NetworkConfig) -> eyre::Result<Self> {
         let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
         let mpc_net = runtime.block_on(Rep3MpcNet::new(config))?;
-        let io_context = runtime.block_on(IoContext::init(mpc_net))?;
-        let driver = Rep3PlonkDriver::new(io_context);
+        let mut io_context0 = runtime.block_on(IoContext::init(mpc_net))?;
+        let io_context1 = runtime.block_on(io_context0.fork())?;
+        let driver = Rep3PlonkDriver::new(io_context0, io_context1);
         Ok(CoPlonk {
             driver,
             runtime,
@@ -223,11 +224,22 @@ impl<P: Pairing> Rep3CoPlonk<P> {
 
 impl<P: Pairing> ShamirCoPlonk<P> {
     /// Create a new [ShamirCoPlonk] protocol with a given network configuration.
-    pub fn with_network_config(threshold: usize, config: NetworkConfig) -> eyre::Result<Self> {
+    pub fn with_network_config(
+        threshold: usize,
+        config: NetworkConfig,
+        zkey: &ZKey<P>,
+    ) -> eyre::Result<Self> {
+        let domain_size = zkey.domain_size;
+        // TODO check and explain numbers
+        let num_pairs = domain_size * 218 + 3;
         let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
         let mpc_net = runtime.block_on(ShamirMpcNet::new(config))?;
-        let io_context = ShamirProtocol::new(threshold, mpc_net)?;
-        let driver = ShamirPlonkDriver::new(io_context);
+        let preprocessing =
+            runtime.block_on(ShamirPreprocessing::new(threshold, mpc_net, num_pairs))?;
+        let mut protocol0 = ShamirProtocol::from(preprocessing);
+        // TODO check and explain numbers
+        let protocol1 = runtime.block_on(protocol0.fork_with_pairs(domain_size * 7 + 2))?;
+        let driver = ShamirPlonkDriver::new(protocol0, protocol1);
         Ok(CoPlonk {
             driver,
             runtime,
@@ -236,8 +248,7 @@ impl<P: Pairing> ShamirCoPlonk<P> {
     }
 
     pub fn close_network(self) -> io::Result<()> {
-        self.runtime
-            .block_on(self.driver.into_network().shutdown())?;
+        self.runtime.block_on(self.driver.close_network())?;
         Ok(())
     }
 }

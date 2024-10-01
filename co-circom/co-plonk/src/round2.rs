@@ -89,45 +89,6 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round2Polys<P, T> {
 
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
 impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
-    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
-    // TODO parallelize these? With a different network structure this might not be needed though
-    async fn array_prod_mul(
-        driver: &mut T,
-        inv: bool,
-        arr1: &[T::ArithmeticShare],
-        arr2: &[T::ArithmeticShare],
-        arr3: &[T::ArithmeticShare],
-    ) -> PlonkProofResult<Vec<T::ArithmeticShare>> {
-        let arr = driver.mul_vecs(arr1, arr2, arr3).await?;
-        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
-        let len = arr.len();
-
-        let mut r = Vec::with_capacity(len + 1);
-        for _ in 0..=len {
-            r.push(driver.rand().await?);
-        }
-        let r_inv = driver.inv_vec(&r).await?;
-        let r_inv0 = vec![r_inv[0].clone(); len];
-        let mut unblind = driver.mul_vec(&r_inv0, &r[1..]).await?;
-
-        let mul = driver.mul_vec(&r[..len], &arr).await?;
-        let mut open = driver.mul_open_vec(&mul, &r_inv[1..]).await?;
-
-        for i in 1..open.len() {
-            open[i] = open[i] * open[i - 1];
-        }
-
-        #[allow(unused_mut)]
-        for (mut unblind, open) in unblind.iter_mut().zip(open.into_iter()) {
-            *unblind = T::mul_with_public(*unblind, open);
-        }
-        if inv {
-            Ok(driver.inv_vec(&unblind).await?)
-        } else {
-            Ok(unblind)
-        }
-    }
-
     // Computes the permutation polynomial z(X) (see https://eprint.iacr.org/2019/953.pdf)
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     #[instrument(level = "info", name = "compute z", skip_all)]
@@ -205,25 +166,13 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         }
 
         num_den_span.exit();
+
         let batched_mul_span = tracing::info_span!("buffer z network round").entered();
-        let mut forked0 = runtime.block_on(driver.fork())?;
-        let mut forked1 = runtime.block_on(driver.fork())?;
-        // TODO: This is super bad atm. There is potentially some heavy
-        // work involved from the muliplications, but also a lot of networking.
-        // Maybe we need a better mul implementation for that!
-        let (num, den) = runtime.block_on(async {
-            tokio::join!(
-                Self::array_prod_mul(&mut forked0, false, &n1, &n2, &n3),
-                Self::array_prod_mul(&mut forked1, true, &d1, &d2, &d3),
-            )
-        });
-        let num = num?;
-        let den = den?;
-
+        let (num, den) = runtime.block_on(driver.array_prod_mul2(&n1, &n2, &n3, &d1, &d2, &d3))?;
         let mut buffer_z = runtime.block_on(driver.mul_vec(&num, &den))?;
-
         buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
         batched_mul_span.exit();
+
         let fft_span = tracing::info_span!("fft-ifft for z(x)").entered();
 
         // Compute polynomial coefficients z(X) from buffer_z

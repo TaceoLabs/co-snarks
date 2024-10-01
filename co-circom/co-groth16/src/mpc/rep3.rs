@@ -1,5 +1,4 @@
 use ark_ec::pairing::Pairing;
-use itertools::izip;
 use mpc_core::protocols::rep3::{
     arithmetic,
     id::PartyID,
@@ -7,21 +6,26 @@ use mpc_core::protocols::rep3::{
     pointshare, Rep3PointShare, Rep3PrimeFieldShare,
 };
 use rayon::prelude::*;
-use tokio::runtime::Runtime;
 
 use super::{CircomGroth16Prover, IoResult};
 
 pub struct Rep3Groth16Driver<N: Rep3Network> {
-    io_context: IoContext<N>,
+    io_context0: IoContext<N>,
+    io_context1: IoContext<N>,
 }
 
 impl<N: Rep3Network> Rep3Groth16Driver<N> {
-    pub fn new(io_context: IoContext<N>) -> Self {
-        Self { io_context }
+    pub fn new(io_context0: IoContext<N>, io_context1: IoContext<N>) -> Self {
+        Self {
+            io_context0,
+            io_context1,
+        }
     }
 
-    pub(crate) fn into_network(self) -> N {
-        self.io_context.network
+    pub(crate) async fn close_network(self) -> IoResult<()> {
+        self.io_context0.network.shutdown().await?;
+        self.io_context1.network.shutdown().await?;
+        Ok(())
     }
 }
 
@@ -32,19 +36,12 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
 
     type PartyID = PartyID;
 
-    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
-        Ok(Self::ArithmeticShare::rand(&mut self.io_context))
+    fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
+        Ok(Self::ArithmeticShare::rand(&mut self.io_context0))
     }
 
     fn get_party_id(&self) -> Self::PartyID {
-        self.io_context.id
-    }
-
-    async fn fork(&mut self) -> IoResult<Self> {
-        let forked_io_context = self.io_context.fork().await?;
-        Ok(Self {
-            io_context: forked_io_context,
-        })
+        self.io_context0.id
     }
 
     fn evaluate_constraint(
@@ -83,7 +80,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         a: Self::ArithmeticShare,
         b: Self::ArithmeticShare,
     ) -> IoResult<Self::ArithmeticShare> {
-        arithmetic::mul(a, b, &mut self.io_context).await
+        arithmetic::mul(a, b, &mut self.io_context0).await
     }
 
     async fn mul_vec(
@@ -91,7 +88,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         lhs: &[Self::ArithmeticShare],
         rhs: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        arithmetic::mul_vec(lhs, rhs, &mut self.io_context).await
+        arithmetic::mul_vec(lhs, rhs, &mut self.io_context0).await
     }
 
     fn local_mul_vec(
@@ -99,14 +96,14 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> Vec<P::ScalarField> {
-        arithmetic::local_mul_vec::<P::ScalarField, N>(a, b, &mut self.io_context)
+        arithmetic::local_mul_vec::<P::ScalarField, N>(a, b, &mut self.io_context0)
     }
 
     async fn io_round_mul_vec(
         &mut self,
         a: Vec<P::ScalarField>,
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        arithmetic::io_mul_vec(a, &mut self.io_context).await
+        arithmetic::io_mul_vec(a, &mut self.io_context0).await
     }
 
     fn distribute_powers_and_mul_by_const(
@@ -149,7 +146,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
     }
 
     async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1> {
-        pointshare::open_point(a, &mut self.io_context).await
+        pointshare::open_point(a, &mut self.io_context0).await
     }
 
     async fn scalar_mul_g1(
@@ -157,7 +154,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         a: &Self::PointShareG1,
         b: Self::ArithmeticShare,
     ) -> IoResult<Self::PointShareG1> {
-        pointshare::scalar_mul(a, b, &mut self.io_context).await
+        pointshare::scalar_mul(a, b, &mut self.io_context0).await
     }
 
     fn sub_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1) {
@@ -183,9 +180,22 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
     ) -> std::io::Result<(P::G1, P::G2)> {
         let s1 = a.b;
         let s2 = b.b;
-        let (mut r1, mut r2) = self.io_context.network.reshare((s1, s2)).await?;
+        let (mut r1, mut r2) = self.io_context0.network.reshare((s1, s2)).await?;
         r1 += a.a + a.b;
         r2 += b.a + b.b;
         Ok((r1, r2))
+    }
+
+    async fn open_point_and_scalar_mul(
+        &mut self,
+        g_a: &Self::PointShareG1,
+        g1_b: &Self::PointShareG1,
+        r: Self::ArithmeticShare,
+    ) -> std::io::Result<(<P as Pairing>::G1, Self::PointShareG1)> {
+        let (opened, mul_result) = tokio::join!(
+            pointshare::open_point(g_a, &mut self.io_context0),
+            pointshare::scalar_mul(g1_b, r, &mut self.io_context1),
+        );
+        Ok((opened?, mul_result?))
     }
 }

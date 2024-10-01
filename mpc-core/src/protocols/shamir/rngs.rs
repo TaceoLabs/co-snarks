@@ -12,22 +12,16 @@ pub(super) struct ShamirRng<F> {
     pub(super) num_parties: usize,
     pub(super) r_t: Vec<F>,
     pub(super) r_2t: Vec<F>,
-    pub(super) remaining: usize,
 }
 
 impl<F: PrimeField> ShamirRng<F> {
-    const BATCH_SIZE: usize = 1024;
-
     pub fn new(seed: [u8; crate::SEED_SIZE], threshold: usize, num_parties: usize) -> Self {
-        let r_t = Vec::with_capacity(Self::BATCH_SIZE * (threshold + 1));
-        let r_2t = Vec::with_capacity(Self::BATCH_SIZE * (threshold + 1));
         Self {
             rng: RngType::from_seed(seed),
             threshold,
             num_parties,
-            r_t,
-            r_2t,
-            remaining: 0,
+            r_t: Vec::new(),
+            r_2t: Vec::new(),
         }
     }
 
@@ -56,14 +50,12 @@ impl<F: PrimeField> ShamirRng<F> {
     }
 
     // Generates amount * (self.threshold + 1) random double shares
+    // TODO we are generating more than amount triples? depends on threshold? should it stay like this?
     pub(super) async fn buffer_triples<N: ShamirNetwork>(
         &mut self,
         network: &mut N,
         amount: usize,
     ) -> std::io::Result<()> {
-        debug_assert_eq!(self.remaining, self.r_t.len());
-        debug_assert_eq!(self.remaining, self.r_2t.len());
-
         let rand = (0..amount)
             .map(|_| F::rand(&mut self.rng))
             .collect::<Vec<_>>();
@@ -125,14 +117,15 @@ impl<F: PrimeField> ShamirRng<F> {
         }
 
         // reserve buffer
-        self.r_t
-            .resize(self.remaining + amount * (self.threshold + 1), F::default());
-        self.r_2t
-            .resize(self.remaining + amount * (self.threshold + 1), F::default());
+        let mut r_t = Vec::with_capacity(amount * (self.threshold + 1));
+        let mut r_2t = Vec::with_capacity(amount * (self.threshold + 1));
+
+        r_t.resize(amount * (self.threshold + 1), F::default());
+        r_2t.resize(amount * (self.threshold + 1), F::default());
 
         // Now make vandermonde multiplication
-        let r_t_chunks = self.r_t[self.remaining..].chunks_exact_mut(self.threshold + 1);
-        let r_2t_chunks = self.r_2t[self.remaining..].chunks_exact_mut(self.threshold + 1);
+        let r_t_chunks = r_t.chunks_exact_mut(self.threshold + 1);
+        let r_2t_chunks = r_2t.chunks_exact_mut(self.threshold + 1);
 
         for (r_t_des, r_2t_des, r_t_src, r_2t_src) in
             izip!(r_t_chunks, r_2t_chunks, rcv_rt, rcv_r2t)
@@ -140,25 +133,10 @@ impl<F: PrimeField> ShamirRng<F> {
             Self::vandermonde_mul(&r_t_src, r_t_des, self.num_parties, self.threshold);
             Self::vandermonde_mul(&r_2t_src, r_2t_des, self.num_parties, self.threshold);
         }
-        self.remaining += amount * (self.threshold + 1);
+
+        self.r_t.extend(r_t);
+        self.r_2t.extend(r_2t);
 
         Ok(())
-    }
-
-    pub(super) async fn get_pair<N: ShamirNetwork>(
-        &mut self,
-        network: &mut N,
-    ) -> std::io::Result<(F, F)> {
-        if self.remaining == 0 {
-            self.buffer_triples(network, Self::BATCH_SIZE).await?;
-            debug_assert_eq!(self.remaining, Self::BATCH_SIZE * (self.threshold + 1));
-            debug_assert_eq!(self.r_t.len(), Self::BATCH_SIZE * (self.threshold + 1));
-            debug_assert_eq!(self.r_2t.len(), Self::BATCH_SIZE * (self.threshold + 1));
-        }
-
-        let r1 = self.r_t.pop().unwrap();
-        let r2 = self.r_2t.pop().unwrap();
-        self.remaining -= 1;
-        Ok((r1, r2))
     }
 }

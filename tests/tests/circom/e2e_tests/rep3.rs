@@ -61,9 +61,9 @@ macro_rules! add_test_impl {
                 ) {
                     threads.push(thread::spawn(move || {
                         let runtime = runtime::Builder::new_current_thread().build().unwrap();
-                        let io_context = runtime.block_on(IoContext::init(net)).unwrap();
-
-                        let rep3 = [< Rep3 $proof_system Driver>]::new(io_context);
+                        let mut io_context0 = runtime.block_on(IoContext::init(net)).unwrap();
+                        let io_context1 = runtime.block_on(io_context0.fork()).unwrap();
+                        let rep3 = [< Rep3 $proof_system Driver>]::new(io_context0, io_context1);
                         #[allow(unused_mut)]
                         let mut prover = [< Co $proof_system>]::<
                             $curve, [< Rep3 $proof_system Driver>]<PartyTestNetwork>

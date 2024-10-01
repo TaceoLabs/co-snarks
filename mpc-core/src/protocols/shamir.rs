@@ -1,6 +1,3 @@
-use std::sync::Arc;
-use tokio::sync::Mutex;
-
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use itertools::izip;
@@ -19,6 +16,8 @@ mod rngs;
 
 pub use arithmetic::types::ShamirPrimeFieldShare;
 pub use pointshare::types::ShamirPointShare;
+
+const BATCH_SIZE: usize = 1024;
 
 type IoResult<T> = std::io::Result<T>;
 type ShamirShare<F> = ShamirPrimeFieldShare<F>;
@@ -168,27 +167,14 @@ pub fn combine_curve_point<C: CurveGroup>(
     Ok(rec)
 }
 
-/// This struct handles the Shamir MPC protocol, including proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], and [MSMProvider] traits.
-pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
-    pub threshold: usize, // degree of the polynomial
-    pub open_lagrange_t: Vec<F>,
-    pub(crate) open_lagrange_2t: Vec<F>,
-    mul_lagrange_2t: Vec<F>,
-    // TODO
-    // all forks will have a arc of the rng to get pairs
-    // we should have a task that buffers pairs while the forks consume them
-    // for now, when the pairs run out, the next call will block all other forks from accessing the rng and buffer more triples
-    //
-    // alternaitvely, all forks could have their own rng, would that be better? the rng serves a pair provider
-    pub(crate) rng_buffer: Arc<Mutex<ShamirRng<F>>>,
+pub struct ShamirPreprocessing<F: PrimeField, N: ShamirNetwork> {
+    threshold: usize,
+    pub(crate) rng_buffer: ShamirRng<F>,
     pub network: N,
 }
 
-impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
-    const KING_ID: usize = 0;
-
-    /// Constructs the Shamir protocol from an established network. It also requires to specify the threshold t, which defines the maximum tolerated number of corrupted parties. The threshold t is thus equivalent to the degree of the sharing polynomials.
-    pub fn new(threshold: usize, network: N) -> eyre::Result<Self> {
+impl<F: PrimeField, N: ShamirNetwork> ShamirPreprocessing<F, N> {
+    pub async fn new(threshold: usize, mut network: N, amount: usize) -> eyre::Result<Self> {
         let num_parties = network.get_num_parties();
 
         if 2 * threshold + 1 > num_parties {
@@ -198,76 +184,98 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         let num_parties = network.get_num_parties();
 
         let seed: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
-        let rng_buffer = ShamirRng::new(seed, threshold, num_parties);
+        let mut rng_buffer = ShamirRng::new(seed, threshold, num_parties);
 
-        // TODO fork network and spawn task that buffer pairs here?
+        for _ in 0..amount.div_ceil(BATCH_SIZE) {
+            rng_buffer.buffer_triples(&mut network, BATCH_SIZE).await?;
+        }
 
+        Ok(Self {
+            threshold,
+            rng_buffer,
+            network,
+        })
+    }
+}
+
+impl<F: PrimeField, N: ShamirNetwork> From<ShamirPreprocessing<F, N>> for ShamirProtocol<F, N> {
+    fn from(value: ShamirPreprocessing<F, N>) -> Self {
+        let num_parties = value.network.get_num_parties();
         // We send in circles, so we need to receive from the last parties
-        let id = network.get_id();
+        let id = value.network.get_id();
         let open_lagrange_t = core::lagrange_from_coeff(
-            &(0..threshold + 1)
+            &(0..value.threshold + 1)
                 .map(|i| (id + num_parties - i) % num_parties + 1)
                 .collect::<Vec<_>>(),
         );
         let open_lagrange_2t = core::lagrange_from_coeff(
-            &(0..2 * threshold + 1)
+            &(0..2 * value.threshold + 1)
                 .map(|i| (id + num_parties - i) % num_parties + 1)
                 .collect::<Vec<_>>(),
         );
 
         let mul_lagrange_2t =
-            core::lagrange_from_coeff(&(1..=2 * threshold + 1).collect::<Vec<_>>());
+            core::lagrange_from_coeff(&(1..=2 * value.threshold + 1).collect::<Vec<_>>());
 
-        Ok(Self {
-            threshold,
+        ShamirProtocol {
+            threshold: value.threshold,
             open_lagrange_t,
             open_lagrange_2t,
             mul_lagrange_2t,
-            rng_buffer: Arc::new(Mutex::new(rng_buffer)),
-            network,
-        })
+            rng: value.rng_buffer.rng,
+            r_t: value.rng_buffer.r_t,
+            r_2t: value.rng_buffer.r_2t,
+            network: value.network,
+        }
     }
+}
 
-    pub async fn fork(&mut self) -> std::io::Result<Self> {
-        let rng_buffer = self.rng_buffer.clone();
-        let network = self.network.fork().await?;
+/// This struct handles the Shamir MPC protocol, including proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], and [MSMProvider] traits.
+pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
+    pub threshold: usize, // degree of the polynomial
+    pub open_lagrange_t: Vec<F>,
+    pub(crate) open_lagrange_2t: Vec<F>,
+    mul_lagrange_2t: Vec<F>,
+    rng: RngType,
+    pub(crate) r_t: Vec<F>,
+    pub(crate) r_2t: Vec<F>,
+    pub network: N,
+}
+
+impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
+    const KING_ID: usize = 0;
+
+    pub async fn fork_with_pairs(&mut self, amount: usize) -> std::io::Result<Self> {
         Ok(Self {
             threshold: self.threshold,
             open_lagrange_t: self.open_lagrange_t.clone(),
             open_lagrange_2t: self.open_lagrange_2t.clone(),
             mul_lagrange_2t: self.mul_lagrange_2t.clone(),
-            rng_buffer,
-            network,
+            rng: RngType::from_seed(self.rng.gen()),
+            r_t: self.r_t.drain(0..amount).collect(),
+            r_2t: self.r_2t.drain(0..amount).collect(),
+            network: self.network.fork().await?,
         })
     }
 
-    /// This function generates and stores `amount * (threshold + 1)` doubly shared random values, which are required to evaluate the multiplication of two secret shares. Each multiplication consumes one of these preprocessed values.
-    pub async fn preprocess(&mut self, amount: usize) -> std::io::Result<()> {
-        self.rng_buffer
-            .lock()
-            .await
-            .buffer_triples(&mut self.network, amount)
-            .await
+    pub fn get_pair(&mut self) -> std::io::Result<(F, F)> {
+        if let (Some(r_t), Some(r_2t)) = (self.r_t.pop(), self.r_2t.pop()) {
+            Ok((r_t, r_2t))
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "not enough correlated random pairs",
+            ))
+        }
     }
 
     /// Generates a random field element and returns it as a share.
-    pub async fn rand(&mut self) -> IoResult<ShamirPrimeFieldShare<F>> {
-        let (r, _) = self
-            .rng_buffer
-            .lock()
-            .await
-            .get_pair(&mut self.network)
-            .await?;
-        Ok(ShamirPrimeFieldShare::new(r))
+    pub fn rand(&mut self) -> std::io::Result<ShamirPrimeFieldShare<F>> {
+        self.get_pair().map(|(r, _)| ShamirPrimeFieldShare::new(r))
     }
 
     pub(crate) async fn degree_reduce(&mut self, mut input: F) -> std::io::Result<ShamirShare<F>> {
-        let (r_t, r_2t) = self
-            .rng_buffer
-            .lock()
-            .await
-            .get_pair(&mut self.network)
-            .await?;
+        let (r_t, r_2t) = self.get_pair()?;
         input += r_2t;
 
         let my_id = self.network.get_id();
@@ -289,7 +297,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 acc,
                 self.network.get_num_parties(),
                 self.threshold,
-                &mut self.rng_buffer.lock().await.rng,
+                &mut self.rng,
             );
             let mut my_share = F::default();
             for (other_id, share) in shares.into_iter().enumerate() {
@@ -319,12 +327,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         let mut r_ts = Vec::with_capacity(len);
 
         for inp in inputs.iter_mut() {
-            let (r_t, r_2t) = self
-                .rng_buffer
-                .lock()
-                .await
-                .get_pair(&mut self.network)
-                .await?;
+            let (r_t, r_2t) = self.get_pair()?;
             *inp += r_2t;
             r_ts.push(r_t);
         }
@@ -362,7 +365,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                     acc,
                     self.network.get_num_parties(),
                     self.threshold,
-                    &mut self.rng_buffer.lock().await.rng,
+                    &mut self.rng,
                 );
                 for (des, src) in izip!(&mut shares, s) {
                     des.push(src);
@@ -405,12 +408,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     where
         C: CurveGroup + std::ops::Mul<F, Output = C> + for<'a> std::ops::Mul<&'a F, Output = C>,
     {
-        let (r_t, r_2t) = self
-            .rng_buffer
-            .lock()
-            .await
-            .get_pair(&mut self.network)
-            .await?;
+        let (r_t, r_2t) = self.get_pair()?;
         let r_t = C::generator().mul(r_t);
         let r_2t = C::generator().mul(r_2t);
 
@@ -435,7 +433,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 acc,
                 self.network.get_num_parties(),
                 self.threshold,
-                &mut self.rng_buffer.lock().await.rng,
+                &mut self.rng,
             );
             let mut my_share = C::default();
             for (other_id, share) in shares.into_iter().enumerate() {

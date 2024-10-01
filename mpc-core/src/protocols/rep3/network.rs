@@ -92,7 +92,7 @@ impl<N: Rep3Network> IoContext<N> {
         })
     }
 
-    pub async fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
+    pub fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
         self.rngs.rand.random_fes()
     }
 
@@ -403,18 +403,5 @@ impl Rep3Network for Rep3MpcNet {
         } else {
             Ok(())
         }
-    }
-}
-
-impl<F> TryFrom<Rep3MpcNet> for ShamirProtocol<F, ShamirMpcNet>
-where
-    F: PrimeField,
-{
-    type Error = eyre::Report;
-
-    fn try_from(value: Rep3MpcNet) -> Result<Self, Self::Error> {
-        let threshold = 1;
-        let network = value.to_shamir_net();
-        Ok(ShamirProtocol::new(threshold, network)?)
     }
 }

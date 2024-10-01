@@ -97,7 +97,7 @@ pub async fn inv<F: PrimeField, N: ShamirNetwork>(
     a: ShamirShare<F>,
     shamir: &mut ShamirProtocol<F, N>,
 ) -> std::io::Result<ShamirShare<F>> {
-    let r = shamir.rand().await?;
+    let r = shamir.rand()?;
     let y = mul_open(a, r, shamir).await?;
     if y.is_zero() {
         return Err(std::io::Error::new(
@@ -115,12 +115,8 @@ pub async fn inv_vec<F: PrimeField, N: ShamirNetwork>(
     shamir: &mut ShamirProtocol<F, N>,
 ) -> std::io::Result<Vec<ShamirShare<F>>> {
     let r = (0..a.len())
-        //.map(|_| shamir.rand().await?) // TODO: cannot use async here but rand will soon be sync again
-        .map(|_| {
-            futures::executor::block_on(shamir.rand())
-                .expect("the soon to be implemented random variant will not return an IoResult")
-        })
-        .collect_vec();
+        .map(|_| shamir.rand())
+        .collect::<std::io::Result<Vec<_>>>()?;
     let y = mul_open_vec(a, &r, shamir).await?;
     if y.iter().any(|y| y.is_zero()) {
         return Err(std::io::Error::new(

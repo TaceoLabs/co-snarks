@@ -23,11 +23,14 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
     //doesn't matter
     type PartyID = usize;
 
+    //doesn't matter
+    type IoContext = ();
+
     fn debug_print(a: Self::ArithmeticShare) {
         println!("{a}")
     }
 
-    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
+    fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))
     }
@@ -35,10 +38,6 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
     fn get_party_id(&self) -> Self::PartyID {
         //doesn't matter
         0
-    }
-
-    async fn fork(&mut self) -> IoResult<Self> {
-        Ok(PlainPlonkDriver)
     }
 
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
@@ -169,5 +168,83 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         let poly = DensePolynomial { coeffs };
         let result = poly.evaluate(&point);
         (result, poly.coeffs)
+    }
+
+    async fn array_prod_mul(
+        _: &mut Self::IoContext,
+        inv: bool,
+        arr1: &[Self::ArithmeticShare],
+        arr2: &[Self::ArithmeticShare],
+        arr3: &[Self::ArithmeticShare],
+    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        let inv_vec = |a: &[Self::ArithmeticShare]| {
+            let mut res = Vec::with_capacity(a.len());
+            for a in a {
+                if a.is_zero() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "Cannot invert zero",
+                    ));
+                }
+                res.push(a.inverse().unwrap());
+            }
+            Ok(res)
+        };
+
+        let arr = izip!(arr1, arr2, arr3)
+            .map(|(a, b, c)| *a * *b * *c)
+            .collect::<Vec<_>>();
+        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
+        let len = arr.len();
+
+        let mut rng = thread_rng();
+        let mut r = Vec::with_capacity(len + 1);
+        for _ in 0..=len {
+            r.push(Self::ArithmeticShare::rand(&mut rng));
+        }
+
+        let r_inv = inv_vec(&r).unwrap();
+        let r_inv0 = vec![r_inv[0]; len];
+
+        let mut unblind = izip!(&r_inv0, &r[1..])
+            .map(|(a, b)| *a * *b)
+            .collect::<Vec<Self::ArithmeticShare>>();
+        let mul = izip!(&r[..len], &arr)
+            .map(|(a, b)| *a * *b)
+            .collect::<Vec<Self::ArithmeticShare>>();
+        let mut open = izip!(&mul, &r_inv[1..])
+            .map(|(a, b)| *a * *b)
+            .collect::<Vec<P::ScalarField>>();
+
+        for i in 1..open.len() {
+            open[i] = open[i] * open[i - 1];
+        }
+
+        for (unblind, open) in unblind.iter_mut().zip(open.into_iter()) {
+            *unblind *= open;
+        }
+        if inv {
+            inv_vec(&unblind)
+        } else {
+            Ok(unblind)
+        }
+    }
+
+    async fn array_prod_mul2(
+        &mut self,
+        n1: &[Self::ArithmeticShare],
+        n2: &[Self::ArithmeticShare],
+        n3: &[Self::ArithmeticShare],
+        d1: &[Self::ArithmeticShare],
+        d2: &[Self::ArithmeticShare],
+        d3: &[Self::ArithmeticShare],
+    ) -> IoResult<(Vec<Self::ArithmeticShare>, Vec<Self::ArithmeticShare>)> {
+        let mut io_context0 = ();
+        let mut io_context1 = ();
+        let (num, den) = tokio::join!(
+            <Self as CircomPlonkProver<P>>::array_prod_mul(&mut io_context0, false, n1, n2, n3),
+            <Self as CircomPlonkProver<P>>::array_prod_mul(&mut io_context1, true, d1, d2, d3),
+        );
+        Ok((num?, den?))
     }
 }

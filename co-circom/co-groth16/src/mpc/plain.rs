@@ -1,9 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::UniformRand;
-use itertools::izip;
 use rand::thread_rng;
-use tokio::runtime::Runtime;
 
 use super::CircomGroth16Prover;
 
@@ -20,7 +18,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
 
     type PartyID = usize;
 
-    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
+    fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))
     }
@@ -28,10 +26,6 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     fn get_party_id(&self) -> Self::PartyID {
         //does't matter
         0
-    }
-
-    async fn fork(&mut self) -> IoResult<Self> {
-        Ok(PlainGroth16Driver)
     }
 
     fn evaluate_constraint(
@@ -162,5 +156,14 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         b: Self::PointShareG2,
     ) -> std::io::Result<(P::G1, P::G2)> {
         Ok((a, b))
+    }
+
+    async fn open_point_and_scalar_mul(
+        &mut self,
+        g_a: &Self::PointShareG1,
+        g1_b: &Self::PointShareG1,
+        r: Self::ArithmeticShare,
+    ) -> super::IoResult<(P::G1, Self::PointShareG1)> {
+        Ok((*g_a, *g1_b * r))
     }
 }

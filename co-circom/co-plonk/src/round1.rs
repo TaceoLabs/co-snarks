@@ -75,7 +75,7 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
         let mut b = core::array::from_fn(|_| T::ArithmeticShare::default());
         #[allow(unused_mut)]
         for mut x in b.iter_mut() {
-            *x = driver.rand().await?;
+            *x = driver.rand()?;
         }
         Ok(Self { b })
     }

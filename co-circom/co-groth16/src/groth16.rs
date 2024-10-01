@@ -9,9 +9,9 @@ use circom_types::groth16::{Groth16Proof, ZKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use co_circom_snarks::SharedWitness;
 use eyre::Result;
-use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet, Rep3Network};
-use mpc_core::protocols::shamir::network::{ShamirMpcNet, ShamirNetwork};
-use mpc_core::protocols::shamir::ShamirProtocol;
+use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet};
+use mpc_core::protocols::shamir::network::ShamirMpcNet;
+use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
 use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use num_traits::ToPrimitive;
@@ -21,7 +21,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio::runtime::{self, Runtime};
 use tokio::sync::oneshot;
-use tracing::{debug_span, instrument};
+use tracing::instrument;
 
 use crate::mpc::plain::PlainGroth16Driver;
 use crate::mpc::rep3::Rep3Groth16Driver;
@@ -113,8 +113,6 @@ where
         let num_constraints = matrices.num_constraints;
         let public_inputs = &private_witness.public_inputs;
         let private_witness = private_witness.witness;
-        // we need two network drivers for Groth16 so we fork the network here
-        let mut forked_driver = self.runtime.block_on(self.driver.fork())?;
         let h = self.witness_map_from_matrices(
             zkey.pow,
             matrices,
@@ -124,19 +122,9 @@ where
             &private_witness,
         )?;
         tracing::debug!("getting r and s...");
-        //TODO: this is bad - we need something else
-        let r = self.runtime.block_on(self.driver.rand())?;
-        let s = self.runtime.block_on(self.driver.rand())?;
+        let (r, s) = (self.driver.rand()?, self.driver.rand()?);
         tracing::debug!("done!");
-        self.create_proof_with_assignment(
-            &mut forked_driver,
-            zkey,
-            r,
-            s,
-            h,
-            &public_inputs[1..],
-            private_witness,
-        )
+        self.create_proof_with_assignment(zkey, r, s, h, &public_inputs[1..], private_witness)
     }
 
     fn evaluate_constraint(
@@ -342,7 +330,6 @@ where
     #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
     fn create_proof_with_assignment(
         &mut self,
-        forked_driver: &mut T,
         zkey: &ZKey<P>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
@@ -426,19 +413,9 @@ where
         calculate_coeff_span.exit();
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
-        let mut g_a_opened = None;
-        let mut r_g1_b = None;
-        self.runtime.block_on(async {
-            let (opened, mul_result) = tokio::join!(
-                forked_driver.open_point_g1(&g_a),
-                self.driver.scalar_mul_g1(&g1_b, r)
-            );
-            g_a_opened = Some(opened);
-            r_g1_b = Some(mul_result);
-        });
-
-        let g_a_opened = g_a_opened.unwrap()?;
-        let r_g1_b = r_g1_b.unwrap()?;
+        let (g_a_opened, r_g1_b) = self
+            .runtime
+            .block_on(self.driver.open_point_and_scalar_mul(&g_a, &g1_b, r))?;
         network_round.exit();
 
         let last_round = tracing::debug_span!("finish open two points and some adds").entered();
@@ -477,8 +454,9 @@ where
             .enable_all()
             .build()?;
         let mpc_net = runtime.block_on(Rep3MpcNet::new(config))?;
-        let io_context = runtime.block_on(IoContext::init(mpc_net))?;
-        let driver = Rep3Groth16Driver::new(io_context);
+        let mut io_context0 = runtime.block_on(IoContext::init(mpc_net))?;
+        let io_context1 = runtime.block_on(io_context0.fork())?;
+        let driver = Rep3Groth16Driver::new(io_context0, io_context1);
         Ok(CoGroth16 {
             driver,
             runtime,
@@ -487,8 +465,7 @@ where
     }
 
     pub fn close_network(self) -> io::Result<()> {
-        self.runtime
-            .block_on(self.driver.into_network().shutdown())?;
+        self.runtime.block_on(self.driver.close_network())?;
         Ok(())
     }
 }
@@ -500,11 +477,22 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a new [ShamirCoGroth16] protocol with a given network configuration.
-    pub fn with_network_config(threshold: usize, config: NetworkConfig) -> Result<Self> {
+    pub fn with_network_config(
+        threshold: usize,
+        config: NetworkConfig,
+        zkey: &ZKey<P>,
+    ) -> Result<Self> {
+        let domain_size = 2usize.pow(u32::try_from(zkey.pow).expect("pow fits into u32"));
+        // we need domain_size + 2 + 1 number of corr rand pairs in witness_map_from_matrices (degree_reduce_vec + r and s + 1 for fork)
+        let num_pairs = domain_size + 2 + 1;
         let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
         let mpc_net = runtime.block_on(ShamirMpcNet::new(config))?;
-        let io_context = ShamirProtocol::new(threshold, mpc_net)?;
-        let driver = ShamirGroth16Driver::new(io_context);
+        let preprocessing =
+            runtime.block_on(ShamirPreprocessing::new(threshold, mpc_net, num_pairs))?;
+        let mut protocol0 = ShamirProtocol::from(preprocessing);
+        // the protocol1 is only used for scalar_mul which uses degree_reduce_point and needs 1 pair
+        let protocol1 = runtime.block_on(protocol0.fork_with_pairs(1))?;
+        let driver = ShamirGroth16Driver::new(protocol0, protocol1);
         Ok(CoGroth16 {
             driver,
             runtime,
@@ -513,8 +501,7 @@ where
     }
 
     pub fn close_network(self) -> io::Result<()> {
-        self.runtime
-            .block_on(self.driver.into_network().shutdown())?;
+        self.runtime.block_on(self.driver.close_network())?;
         Ok(())
     }
 }

@@ -2,7 +2,9 @@ mod field_share {
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
     use itertools::{izip, Itertools};
-    use mpc_core::protocols::shamir::{self, arithmetic, ShamirProtocol};
+    use mpc_core::protocols::shamir::{
+        self, arithmetic, ShamirPointShare, ShamirPreprocessing, ShamirProtocol,
+    };
     use rand::thread_rng;
     use std::{str::FromStr, thread};
     use tests::shamir_network::ShamirTestNetwork;
@@ -103,7 +105,10 @@ mod field_share {
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             tokio::spawn(async move {
-                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                let mut shamir = ShamirPreprocessing::new(threshold, net, 2)
+                    .await
+                    .unwrap()
+                    .into();
                 let mul = arithmetic::mul(x, y, &mut shamir).await.unwrap();
                 let mul = arithmetic::mul(mul, y, &mut shamir).await.unwrap();
                 tx.send(arithmetic::add(mul, x))
@@ -199,7 +204,10 @@ mod field_share {
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             tokio::spawn(async move {
-                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                let mut shamir = ShamirPreprocessing::new(threshold, net, x.len())
+                    .await
+                    .unwrap()
+                    .into();
                 let mul = arithmetic::mul_vec(&x, &y, &mut shamir).await.unwrap();
                 tx.send(mul)
             });
@@ -251,7 +259,10 @@ mod field_share {
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
             tokio::spawn(async move {
-                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                let mut shamir = ShamirPreprocessing::new(threshold, net, x.len() * 2)
+                    .await
+                    .unwrap()
+                    .into();
                 let mul = arithmetic::mul_vec(&x, &y, &mut shamir).await.unwrap();
                 let mul = arithmetic::mul_vec(&mul, &y, &mut shamir).await.unwrap();
                 tx.send(mul)
@@ -332,7 +343,10 @@ mod field_share {
 
         for (net, tx, x) in izip!(test_network.get_party_networks(), tx, x_shares) {
             tokio::spawn(async move {
-                let mut shamir = ShamirProtocol::new(threshold, net).unwrap();
+                let mut shamir = ShamirPreprocessing::new(threshold, net, 1)
+                    .await
+                    .unwrap()
+                    .into();
                 tx.send(arithmetic::inv(x, &mut shamir).await.unwrap())
             });
         }

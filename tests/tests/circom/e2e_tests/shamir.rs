@@ -6,7 +6,7 @@ use circom_types::{
     plonk::{JsonVerificationKey as PlonkVK, ZKey as PlonkZK},
     R1CS,
 };
-use mpc_core::protocols::shamir::ShamirProtocol;
+use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
 
 use co_circom_snarks::SharedWitness;
 use co_groth16::mpc::ShamirGroth16Driver;
@@ -56,9 +56,14 @@ macro_rules! add_test_impl {
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
                     threads.push(thread::spawn(move || {
+                        let domain_size = 2usize.pow(u32::try_from(zkey.pow).expect("pow fits into u32"));
+                        // we need domain_size + 2 + 1 number of corr rand pairs in witness_map_from_matrices (degree_reduce_vec + r and s + 1 for fork)
+                        let num_pairs = domain_size + 2 + 1;
                         let runtime = runtime::Builder::new_current_thread().build().unwrap();
-                        let io_context = ShamirProtocol::new(1, net).unwrap();
-                        let shamir = [< Shamir $proof_system Driver>]::new(io_context);
+                        let preprocessing = runtime.block_on(ShamirPreprocessing::new(1, net, num_pairs)).unwrap();
+                        let mut io_context0 = ShamirProtocol::from(preprocessing);
+                        let io_context1 = runtime.block_on(io_context0.fork_with_pairs(1)).unwrap();
+                        let shamir = [< Shamir $proof_system Driver>]::new(io_context0, io_context1);
                         #[allow(unused_mut)]
                         let mut prover = [< Co $proof_system>]::<
                             $curve, [< Shamir $proof_system Driver>]<[< ark_ $curve:lower >]::Fr, PartyTestNetwork>

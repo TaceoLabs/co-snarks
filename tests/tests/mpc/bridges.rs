@@ -2,8 +2,9 @@ mod translate_share {
     use ark_std::UniformRand;
     use itertools::Itertools;
     use mpc_core::protocols::{
+        bridges::network::RepToShamirNetwork,
         rep3::{self, network::IoContext},
-        shamir::{self, ShamirProtocol},
+        shamir::{self, ShamirPreprocessing, ShamirProtocol},
     };
     use rand::thread_rng;
     use std::thread;
@@ -28,7 +29,13 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut shamir = ShamirProtocol::try_from(net).unwrap();
+                let preprocessing = futures::executor::block_on(ShamirPreprocessing::new(
+                    1,
+                    net.to_shamir_net(),
+                    1,
+                ))
+                .unwrap();
+                let mut shamir = ShamirProtocol::from(preprocessing);
                 let share = futures::executor::block_on(shamir.translate_primefield_repshare(x));
                 tx.send(share.unwrap())
             });
@@ -62,7 +69,13 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut shamir = ShamirProtocol::try_from(net).unwrap();
+                let preprecessing = futures::executor::block_on(ShamirPreprocessing::new(
+                    1,
+                    net.to_shamir_net(),
+                    x.len(),
+                ))
+                .unwrap();
+                let mut shamir = ShamirProtocol::from(preprecessing);
                 let share =
                     futures::executor::block_on(shamir.translate_primefield_repshare_vec(x));
                 tx.send(share.unwrap())
@@ -95,7 +108,13 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let mut shamir = ShamirProtocol::try_from(net).unwrap();
+                let preprecessing = futures::executor::block_on(ShamirPreprocessing::new(
+                    1,
+                    net.to_shamir_net(),
+                    1,
+                ))
+                .unwrap();
+                let mut shamir = ShamirProtocol::from(preprecessing);
                 let share = futures::executor::block_on(shamir.translate_point_repshare(x));
                 tx.send(share.unwrap())
             });

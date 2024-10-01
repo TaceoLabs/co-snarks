@@ -31,11 +31,9 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     type PointShareG2: Debug + Send + 'static;
     type PartyID: Send + Sync + Copy + fmt::Display;
 
-    fn rand(&mut self) -> impl Future<Output = IoResult<Self::ArithmeticShare>>;
+    fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
 
     fn get_party_id(&self) -> Self::PartyID;
-
-    fn fork(&mut self) -> impl Future<Output = IoResult<Self>>;
 
     /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint(
@@ -120,4 +118,11 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         a: Self::PointShareG1,
         b: Self::PointShareG2,
     ) -> std::io::Result<(P::G1, P::G2)>;
+
+    async fn open_point_and_scalar_mul(
+        &mut self,
+        g_a: &Self::PointShareG1,
+        g1_b: &Self::PointShareG1,
+        r: Self::ArithmeticShare,
+    ) -> std::io::Result<(P::G1, Self::PointShareG1)>;
 }

@@ -10,16 +10,22 @@ use mpc_core::protocols::rep3::{
 use super::{CircomPlonkProver, IoResult};
 
 pub struct Rep3PlonkDriver<N: Rep3Network> {
-    io_context: IoContext<N>,
+    io_context0: IoContext<N>,
+    io_context1: IoContext<N>,
 }
 
 impl<N: Rep3Network> Rep3PlonkDriver<N> {
-    pub fn new(io_context: IoContext<N>) -> Self {
-        Self { io_context }
+    pub fn new(io_context0: IoContext<N>, io_context1: IoContext<N>) -> Self {
+        Self {
+            io_context0,
+            io_context1,
+        }
     }
 
-    pub(crate) fn into_network(self) -> N {
-        self.io_context.network
+    pub(crate) async fn close_network(self) -> IoResult<()> {
+        self.io_context0.network.shutdown().await?;
+        self.io_context1.network.shutdown().await?;
+        Ok(())
     }
 }
 
@@ -30,23 +36,18 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
 
     type PartyID = PartyID;
 
+    type IoContext = IoContext<N>;
+
     fn debug_print(_: Self::ArithmeticShare) {
         todo!()
     }
 
-    async fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
-        Ok(Self::ArithmeticShare::rand(&mut self.io_context))
+    fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
+        Ok(Self::ArithmeticShare::rand(&mut self.io_context0))
     }
 
     fn get_party_id(&self) -> Self::PartyID {
-        self.io_context.id
-    }
-
-    async fn fork(&mut self) -> IoResult<Self> {
-        let forked_io_context = self.io_context.fork().await?;
-        Ok(Self {
-            io_context: forked_io_context,
-        })
+        self.io_context0.id
     }
 
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
@@ -84,7 +85,7 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         lhs: &[Self::ArithmeticShare],
         rhs: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        arithmetic::mul_vec(lhs, rhs, &mut self.io_context).await
+        arithmetic::mul_vec(lhs, rhs, &mut self.io_context0).await
     }
 
     async fn mul_vecs(
@@ -93,8 +94,8 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        let tmp = arithmetic::mul_vec(a, b, &mut self.io_context).await?;
-        arithmetic::mul_vec(&tmp, c, &mut self.io_context).await
+        let tmp = arithmetic::mul_vec(a, b, &mut self.io_context0).await?;
+        arithmetic::mul_vec(&tmp, c, &mut self.io_context1).await
     }
 
     async fn add_mul_vec(
@@ -103,7 +104,7 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        let mut result = arithmetic::mul_vec(b, c, &mut self.io_context).await?;
+        let mut result = arithmetic::mul_vec(b, c, &mut self.io_context0).await?;
         arithmetic::add_vec_assign(&mut result, a);
         Ok(result)
     }
@@ -113,18 +114,18 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<P::ScalarField>> {
-        arithmetic::mul_open_vec(a, b, &mut self.io_context).await
+        arithmetic::mul_open_vec(a, b, &mut self.io_context0).await
     }
 
     async fn open_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>> {
-        arithmetic::open_vec(a, &mut self.io_context).await
+        arithmetic::open_vec(a, &mut self.io_context0).await
     }
 
     async fn inv_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        arithmetic::inv_vec(a, &mut self.io_context).await
+        arithmetic::inv_vec(a, &mut self.io_context0).await
     }
 
     fn promote_to_trivial_share(
@@ -149,11 +150,11 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
     }
 
     async fn open_point_g1(&mut self, a: Self::PointShareG1) -> IoResult<P::G1> {
-        pointshare::open_point(&a, &mut self.io_context).await
+        pointshare::open_point(&a, &mut self.io_context0).await
     }
 
     async fn open_point_vec_g1(&mut self, a: &[Self::PointShareG1]) -> IoResult<Vec<P::G1>> {
-        pointshare::open_point_many(a, &mut self.io_context).await
+        pointshare::open_point_many(a, &mut self.io_context0).await
     }
 
     fn msm_public_points_g1(
@@ -169,5 +170,66 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
     ) -> (Self::ArithmeticShare, Vec<Self::ArithmeticShare>) {
         let result = poly::eval_poly(&coeffs, point);
         (result, coeffs)
+    }
+
+    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
+    // TODO parallelize these? With a different network structure this might not be needed though
+    async fn array_prod_mul(
+        io_context: &mut Self::IoContext,
+        inv: bool,
+        arr1: &[Self::ArithmeticShare],
+        arr2: &[Self::ArithmeticShare],
+        arr3: &[Self::ArithmeticShare],
+    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        let arr = arithmetic::mul_vec(arr1, arr2, io_context).await?;
+        let arr = arithmetic::mul_vec(&arr, arr3, io_context).await?;
+        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
+        let len = arr.len();
+
+        let mut r = Vec::with_capacity(len + 1);
+        for _ in 0..=len {
+            r.push(arithmetic::rand(io_context));
+        }
+        let r_inv = arithmetic::inv_vec(&r, io_context).await?;
+        let r_inv0 = vec![r_inv[0]; len];
+        let mut unblind = arithmetic::mul_vec(&r_inv0, &r[1..], io_context).await?;
+
+        let mul = arithmetic::mul_vec(&r[..len], &arr, io_context).await?;
+        let mut open = arithmetic::mul_open_vec(&mul, &r_inv[1..], io_context).await?;
+
+        for i in 1..open.len() {
+            open[i] = open[i] * open[i - 1];
+        }
+
+        for (unblind, open) in unblind.iter_mut().zip(open.into_iter()) {
+            *unblind = arithmetic::mul_public(*unblind, open);
+        }
+        if inv {
+            Ok(arithmetic::inv_vec(&unblind, io_context).await?)
+        } else {
+            Ok(unblind)
+        }
+    }
+
+    async fn array_prod_mul2(
+        &mut self,
+        n1: &[Self::ArithmeticShare],
+        n2: &[Self::ArithmeticShare],
+        n3: &[Self::ArithmeticShare],
+        d1: &[Self::ArithmeticShare],
+        d2: &[Self::ArithmeticShare],
+        d3: &[Self::ArithmeticShare],
+    ) -> IoResult<(Vec<Self::ArithmeticShare>, Vec<Self::ArithmeticShare>)> {
+        let (num, den) = tokio::join!(
+            <Self as CircomPlonkProver<P>>::array_prod_mul(
+                &mut self.io_context0,
+                false,
+                n1,
+                n2,
+                n3
+            ),
+            <Self as CircomPlonkProver<P>>::array_prod_mul(&mut self.io_context1, true, d1, d2, d3),
+        );
+        Ok((num?, den?))
     }
 }

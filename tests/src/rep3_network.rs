@@ -249,16 +249,3 @@ impl RepToShamirNetwork<ShamirPartyTestNetwork> for PartyTestNetwork {
         }
     }
 }
-
-impl<F> TryFrom<PartyTestNetwork> for ShamirProtocol<F, ShamirPartyTestNetwork>
-where
-    F: PrimeField,
-{
-    type Error = eyre::Report;
-
-    fn try_from(value: PartyTestNetwork) -> Result<Self, Self::Error> {
-        let threshold = 1;
-        let network = value.to_shamir_net();
-        Ok(ShamirProtocol::new(threshold, network)?)
-    }
-}

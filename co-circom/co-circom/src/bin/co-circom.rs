@@ -39,8 +39,9 @@ use co_plonk::Rep3CoPlonk;
 use co_plonk::{Plonk, ShamirCoPlonk};
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
+    bridges::network::RepToShamirNetwork,
     rep3::{self, network::Rep3MpcNet},
-    shamir::{network::ShamirMpcNet, ShamirProtocol},
+    shamir::{ShamirPreprocessing, ShamirProtocol},
 };
 use mpc_core::protocols::{
     rep3::{network::Rep3Network, Rep3PrimeFieldShare},
@@ -158,7 +159,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     }
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_split_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: SplitWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -257,7 +258,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_split_input<P: Pairing + CircomArkworksPairingBridge>(
     config: SplitInputConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -339,7 +340,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_merge_input_shares<P: Pairing + CircomArkworksPairingBridge>(
     config: MergeInputSharesConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -372,7 +373,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -409,7 +410,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: TranslateWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -444,8 +445,16 @@ where
     let id = usize::from(net.get_id());
 
     // init MPC protocol
-    let mut protocol = ShamirProtocol::<P::ScalarField, ShamirMpcNet>::try_from(net)
-        .context("while building shamir protocol")?;
+    let threshold = 1;
+    let num_pairs = witness_share.witness.len();
+    let preprocessing = runtime
+        .block_on(ShamirPreprocessing::new(
+            threshold,
+            net.to_shamir_net(),
+            num_pairs,
+        ))
+        .context("while shamir preprocessing")?;
+    let mut protocol = ShamirProtocol::from(preprocessing);
     // Translate witness to shamir shares
     let start = Instant::now();
     let translated_witness = runtime
@@ -466,7 +475,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateProofConfig,
 ) -> color_eyre::Result<ExitCode>
@@ -525,7 +534,7 @@ where
 
                     // connect to network
                     let id = config.network.my_id;
-                    let mut prover = ShamirCoGroth16::with_network_config(t, config.network)
+                    let mut prover = ShamirCoGroth16::with_network_config(t, config.network, &zkey)
                         .context("while building prover")?;
 
                     // execute prover in MPC
@@ -575,6 +584,8 @@ where
                     let proof = prover.prove(&pk, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    // TODO close
+                    // prover.close_network()?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -584,7 +595,7 @@ where
                     let id = config.network.my_id;
 
                     //init prover
-                    let prover = ShamirCoPlonk::with_network_config(t, config.network)
+                    let prover = ShamirCoPlonk::with_network_config(t, config.network, &pk)
                         .context("while building prover")?;
 
                     // execute prover in MPC
@@ -593,6 +604,8 @@ where
                     let proof = prover.prove(&pk, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    // TODO close
+                    // prover.close_network()?;
                     (proof, public_input)
                 }
             };
@@ -639,7 +652,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_verify<P: Pairing + CircomArkworksPairingBridge>(
     config: VerifyConfig,
 ) -> color_eyre::Result<ExitCode>

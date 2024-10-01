@@ -20,15 +20,13 @@ pub trait CircomPlonkProver<P: Pairing> {
 
     type PartyID: Send + Sync + Copy;
 
+    type IoContext;
+
     fn debug_print(a: Self::ArithmeticShare);
 
-    fn rand(&mut self) -> impl Future<Output = IoResult<Self::ArithmeticShare>>;
+    fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
 
     fn get_party_id(&self) -> Self::PartyID;
-
-    async fn fork(&mut self) -> IoResult<Self>
-    where
-        Self: Sized;
 
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
@@ -137,4 +135,22 @@ pub trait CircomPlonkProver<P: Pairing> {
         poly: Vec<Self::ArithmeticShare>,
         point: P::ScalarField,
     ) -> (Self::ArithmeticShare, Vec<Self::ArithmeticShare>);
+
+    async fn array_prod_mul(
+        io_context: &mut Self::IoContext,
+        inv: bool,
+        arr1: &[Self::ArithmeticShare],
+        arr2: &[Self::ArithmeticShare],
+        arr3: &[Self::ArithmeticShare],
+    ) -> IoResult<Vec<Self::ArithmeticShare>>;
+
+    async fn array_prod_mul2(
+        &mut self,
+        n1: &[Self::ArithmeticShare],
+        n2: &[Self::ArithmeticShare],
+        n3: &[Self::ArithmeticShare],
+        d1: &[Self::ArithmeticShare],
+        d2: &[Self::ArithmeticShare],
+        d3: &[Self::ArithmeticShare],
+    ) -> IoResult<(Vec<Self::ArithmeticShare>, Vec<Self::ArithmeticShare>)>;
 }
