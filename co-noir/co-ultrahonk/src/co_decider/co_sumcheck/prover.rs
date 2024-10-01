@@ -151,7 +151,7 @@ where
             &self.memory.relation_parameters,
             &gate_separators,
             &self.memory.polys,
-        );
+        )?;
         let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
 
         // Place the evaluations of the round univariate into transcript.
@@ -187,7 +187,7 @@ where
                 &self.memory.relation_parameters,
                 &gate_separators,
                 &partially_evaluated_polys,
-            );
+            )?;
             let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
 
             // Place the evaluations of the round univariate into transcript.

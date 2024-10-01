@@ -6,10 +6,13 @@ use crate::co_decider::{
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use mpc_core::traits::PrimeFieldMpcProtocol;
-use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
+use num_bigint::BigUint;
+use ultrahonk::prelude::{
+    HonkCurve, HonkProofResult, TranscriptFieldType, Univariate, POSEIDON2_BN254_T4_PARAMS,
+};
 
 #[derive(Clone, Debug)]
-pub(crate) struct Poseidon2ExternalRelationAcc<T, P: Pairing>
+pub(crate) struct Poseidon2InternalRelationAcc<T, P: Pairing>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
@@ -19,7 +22,7 @@ where
     pub(crate) r3: SharedUnivariate<T, P, 7>,
 }
 
-impl<T, P: Pairing> Default for Poseidon2ExternalRelationAcc<T, P>
+impl<T, P: Pairing> Default for Poseidon2InternalRelationAcc<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
@@ -33,12 +36,12 @@ where
     }
 }
 
-impl<T, P: Pairing> Poseidon2ExternalRelationAcc<T, P>
+impl<T, P: Pairing> Poseidon2InternalRelationAcc<T, P>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
     pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
-        assert!(elements.len() == Poseidon2ExternalRelation::NUM_RELATIONS);
+        assert!(elements.len() == Poseidon2InternalRelation::NUM_RELATIONS);
         self.r0.scale_inplace(driver, &elements[0]);
         self.r1.scale_inplace(driver, &elements[1]);
         self.r2.scale_inplace(driver, &elements[2]);
@@ -86,42 +89,37 @@ where
     }
 }
 
-pub(crate) struct Poseidon2ExternalRelation {}
+pub(crate) struct Poseidon2InternalRelation {}
 
-impl Poseidon2ExternalRelation {
+impl Poseidon2InternalRelation {
     pub(crate) const NUM_RELATIONS: usize = 4;
 }
 
-impl<T, P: HonkCurve<TranscriptFieldType>> Relation<T, P> for Poseidon2ExternalRelation
+impl<T, P: HonkCurve<TranscriptFieldType>> Relation<T, P> for Poseidon2InternalRelation
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    type Acc = Poseidon2ExternalRelationAcc<T, P>;
+    type Acc = Poseidon2InternalRelationAcc<T, P>;
     const SKIPPABLE: bool = true;
 
     fn skip(input: &ProverUnivariates<T, P>) -> bool {
         <Self as Relation<T, P>>::check_skippable();
-        input.precomputed.q_poseidon2_external().is_zero()
+        input.precomputed.q_poseidon2_internal().is_zero()
     }
 
     /**
-     * @brief Expression for the poseidon2 external round relation, based on E_i in Section 6 of
+     * @brief Expression for the poseidon2 internal round relation, based on I_i in Section 6 of
      * https://eprint.iacr.org/2023/323.pdf.
      * @details This relation is defined as C(in(X)...) :=
-     * q_poseidon2_external * ( (v1 - w_1_shift) + \alpha * (v2 - w_2_shift) +
+     * q_poseidon2_internal * ( (v1 - w_1_shift) + \alpha * (v2 - w_2_shift) +
      * \alpha^2 * (v3 - w_3_shift) + \alpha^3 * (v4 - w_4_shift) ) = 0 where:
      *      u1 := (w_1 + q_1)^5
-     *      u2 := (w_2 + q_2)^5
-     *      u3 := (w_3 + q_3)^5
-     *      u4 := (w_4 + q_4)^5
-     *      t0 := u1 + u2                                           (1, 1, 0, 0)
-     *      t1 := u3 + u4                                           (0, 0, 1, 1)
-     *      t2 := 2 * u2 + t1 = 2 * u2 + u3 + u4                    (0, 2, 1, 1)
-     *      t3 := 2 * u4 + t0 = u1 + u2 + 2 * u4                    (1, 1, 0, 2)
-     *      v4 := 4 * t1 + t3 = u1 + u2 + 4 * u3 + 6 * u4           (1, 1, 4, 6)
-     *      v2 := 4 * t0 + t2 = 4 * u1 + 6 * u2 + u3 + u4           (4, 6, 1, 1)
-     *      v1 := t3 + v2 = 5 * u1 + 7 * u2 + 1 * u3 + 3 * u4       (5, 7, 1, 3)
-     *      v3 := t2 + v4                                           (1, 3, 5, 7)
+     *      sum := u1 + w_2 + w_3 + w_4
+     *      v1 := u1 * D1 + sum
+     *      v2 := w_2 * D2 + sum
+     *      v3 := w_3 * D3 + sum
+     *      v4 := w_4 * D4 + sum
+     *      Di is the ith internal diagonal value - 1 of the internal matrix M_I
      *
      * @param evals transformed to `evals + C(in(X)...)*scaling_factor`
      * @param in an std::array containing the fully extended Univariate edges.
@@ -135,7 +133,7 @@ where
         _relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
-        tracing::trace!("Accumulate Poseidon2ExternalRelation");
+        tracing::trace!("Accumulate Poseidon2InternalRelation");
 
         let w_l = input.witness.w_l();
         let w_r = input.witness.w_r();
@@ -146,42 +144,45 @@ where
         let w_o_shift = input.shifted_witness.w_o();
         let w_4_shift = input.shifted_witness.w_4();
         let q_l = input.precomputed.q_l();
-        let q_r = input.precomputed.q_r();
-        let q_o = input.precomputed.q_o();
-        let q_4 = input.precomputed.q_4();
-        let q_poseidon2_external = input.precomputed.q_poseidon2_external();
+        let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
 
-        // add round constants which are loaded in selectors
+        // add round constants
         let s1 = w_l.add_public(driver, q_l);
-        let s2 = w_r.add_public(driver, q_r);
-        let s3 = w_o.add_public(driver, q_o);
-        let s4 = w_4.add_public(driver, q_4);
 
         // apply s-box round
-        let s = SharedUnivariate::univariates_to_vec(&[s1, s2, s3, s4]);
-        let u = driver.mul_many(&s, &s)?;
-        let u = driver.mul_many(&u, &u)?;
-        let u = driver.mul_many(&u, &s)?;
-        let u = SharedUnivariate::vec_to_univariates(&u);
+        let u1 = driver.mul_many(s1.as_ref(), s1.as_ref())?;
+        let u1 = driver.mul_many(u1.as_ref(), u1.as_ref())?;
+        let u1 = driver.mul_many(u1.as_ref(), s1.as_ref())?;
+        let mut u2 = w_r.to_owned();
+        let mut u3 = w_o.to_owned();
+        let mut u4 = w_4.to_owned();
+        let mut u1 = SharedUnivariate::from_vec(&u1);
 
-        // matrix mul v = M_E * u with 14 additions
-        let t0 = u[0].add(driver, &u[1]); // u_1 + u_2
-        let t1 = u[2].add(driver, &u[3]); // u_3 + u_4
-        let t2 = u[1].add(driver, &u[1]); // 2u_2
-        let t2 = t2.add(driver, &t1); // 2u_2 + u_3 + u_4
-        let t3 = u[3].add(driver, &u[3]); // 2u_4
-        let t3 = t3.add(driver, &t0); // u_1 + u_2 + 2u_4
-        let v4 = t1.add(driver, &t1);
-        let v4 = v4.add(driver, &v4).add(driver, &t3); // u_1 + u_2 + 4u_3 + 6u_4
-        let v2 = t0.add(driver, &t0);
-        let v2 = v2.add(driver, &v2).add(driver, &t2); // 4u_1 + 6u_2 + u_3 + u_4
-        let v1 = t3.add(driver, &v2); // 5u_1 + 7u_2 + u_3 + 3u_4
-        let v3 = t2.add(driver, &v4); // u_1 + 3u_2 + 5u_3 + 7u_4
+        // matrix mul with v = M_I * u 4 muls and 7 additions
+        let sum = u1.add(driver, &u2).add(driver, &u3).add(driver, &u4);
 
-        let q_pos_by_scaling = q_poseidon2_external.to_owned() * scaling_factor;
+        let q_pos_by_scaling = q_poseidon2_internal.to_owned() * scaling_factor;
+
+        // TODO this poseidon instance is very hardcoded to the bn254 curve
+        let internal_matrix_diag_0 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
+        ));
+        let internal_matrix_diag_1 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
+        ));
+        let internal_matrix_diag_2 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
+        ));
+        let internal_matrix_diag_3 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
+        ));
+
+        u1.scale_inplace(driver, &internal_matrix_diag_0);
+        let v1 = u1.add(driver, &sum);
         let tmp = v1
             .sub(driver, w_l_shift)
             .mul_public(driver, &q_pos_by_scaling);
+
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] = driver.add(
                 &univariate_accumulator.r0.evaluations[i],
@@ -191,6 +192,8 @@ where
 
         ///////////////////////////////////////////////////////////////////////
 
+        u2.scale_inplace(driver, &internal_matrix_diag_1);
+        let v2 = u2.add(driver, &sum);
         let tmp = v2
             .sub(driver, w_r_shift)
             .mul_public(driver, &q_pos_by_scaling);
@@ -204,6 +207,8 @@ where
 
         ///////////////////////////////////////////////////////////////////////
 
+        u3.scale_inplace(driver, &internal_matrix_diag_2);
+        let v3 = u3.add(driver, &sum);
         let tmp = v3
             .sub(driver, w_o_shift)
             .mul_public(driver, &q_pos_by_scaling);
@@ -216,7 +221,8 @@ where
         }
 
         ///////////////////////////////////////////////////////////////////////
-
+        u4.scale_inplace(driver, &internal_matrix_diag_3);
+        let v4 = u4.add(driver, &sum);
         let tmp = v4
             .sub(driver, w_4_shift)
             .mul_public(driver, &q_pos_by_scaling);
