@@ -4,7 +4,7 @@ use crate::{
         types::{ProverUnivariates, RelationParameters},
         univariate::Univariate,
     },
-    poseidon2::poseidon2_bn254,
+    prelude::POSEIDON2_BN254_T4_PARAMS,
 };
 use ark_ff::{PrimeField, Zero};
 use num_bigint::BigUint;
@@ -132,10 +132,18 @@ impl<F: PrimeField> Relation<F> for Poseidon2InternalRelation {
         let q_pos_by_scaling = q_poseidon2_internal.to_owned() * scaling_factor;
 
         // TODO this poseidon instance is very hardcoded to the bn254 curve
-        let internal_matrix_diag_0 = F::from(BigUint::from(poseidon2_bn254::MAT_DIAG_M_1[0]));
-        let internal_matrix_diag_1 = F::from(BigUint::from(poseidon2_bn254::MAT_DIAG_M_1[1]));
-        let internal_matrix_diag_2 = F::from(BigUint::from(poseidon2_bn254::MAT_DIAG_M_1[2]));
-        let internal_matrix_diag_3 = F::from(BigUint::from(poseidon2_bn254::MAT_DIAG_M_1[3]));
+        let internal_matrix_diag_0 = F::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
+        ));
+        let internal_matrix_diag_1 = F::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
+        ));
+        let internal_matrix_diag_2 = F::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
+        ));
+        let internal_matrix_diag_3 = F::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
+        ));
 
         let mut v1 = u1 * internal_matrix_diag_0;
         v1 += &sum;

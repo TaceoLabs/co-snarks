@@ -4,7 +4,6 @@ use mpc_core::traits::PrimeFieldMpcProtocol;
 use std::array;
 use ultrahonk::prelude::{Barycentric, Univariate};
 
-#[derive(Clone, Debug)]
 pub(crate) struct SharedUnivariate<T, P: Pairing, const SIZE: usize>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
@@ -16,10 +15,92 @@ impl<T, P: Pairing, const SIZE: usize> SharedUnivariate<T, P, SIZE>
 where
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    pub(crate) fn scale(&mut self, driver: &mut T, rhs: &P::ScalarField) {
+    pub(crate) fn from_vec(vec: &[T::FieldShare]) -> Self {
+        assert_eq!(vec.len(), SIZE);
+        let mut res = Self::default();
+        res.evaluations.clone_from_slice(vec);
+        res
+    }
+
+    pub(crate) fn scale_inplace(&mut self, driver: &mut T, rhs: &P::ScalarField) {
         for i in 0..SIZE {
             self.evaluations[i] = driver.mul_with_public(rhs, &self.evaluations[i]);
         }
+    }
+
+    pub(crate) fn neg(&self, driver: &mut T) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.neg(&self.evaluations[i]);
+        }
+        result
+    }
+
+    pub(crate) fn scale(&self, driver: &mut T, rhs: &P::ScalarField) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.mul_with_public(rhs, &self.evaluations[i]);
+        }
+        result
+    }
+
+    pub(crate) fn add_scalar(&self, driver: &mut T, rhs: &P::ScalarField) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.add_with_public(rhs, &self.evaluations[i]);
+        }
+        result
+    }
+
+    pub(crate) fn sub_scalar(&self, driver: &mut T, rhs: &P::ScalarField) -> Self {
+        let neg = -*rhs;
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.add_with_public(&neg, &self.evaluations[i]);
+        }
+        result
+    }
+
+    pub(crate) fn add(&self, driver: &mut T, rhs: &Self) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.add(&self.evaluations[i], &rhs.evaluations[i]);
+        }
+        result
+    }
+
+    pub(crate) fn sub(&self, driver: &mut T, rhs: &Self) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = driver.sub(&self.evaluations[i], &rhs.evaluations[i]);
+        }
+        result
+    }
+
+    pub(crate) fn add_public(
+        &self,
+        driver: &mut T,
+        rhs: &Univariate<P::ScalarField, SIZE>,
+    ) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] =
+                driver.add_with_public(&rhs.evaluations[i], &self.evaluations[i]);
+        }
+        result
+    }
+
+    pub(crate) fn sub_public(
+        &self,
+        driver: &mut T,
+        rhs: &Univariate<P::ScalarField, SIZE>,
+    ) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] =
+                driver.add_with_public(&-rhs.evaluations[i], &self.evaluations[i]);
+        }
+        result
     }
 
     pub(crate) fn add_assign(&mut self, driver: &mut T, rhs: &Self) {
@@ -28,20 +109,35 @@ where
         }
     }
 
-    pub(crate) fn mul_public(self, driver: &mut T, rhs: &Univariate<P::ScalarField, SIZE>) -> Self {
-        let mut result = self;
-        result.mul_assign_public(driver, rhs);
+    pub(crate) fn mul_public(
+        &self,
+        driver: &mut T,
+        rhs: &Univariate<P::ScalarField, SIZE>,
+    ) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] =
+                driver.mul_with_public(&rhs.evaluations[i], &self.evaluations[i]);
+        }
         result
     }
 
-    pub(crate) fn mul_assign_public(
-        &mut self,
-        driver: &mut T,
-        rhs: &Univariate<P::ScalarField, SIZE>,
-    ) {
-        for i in 0..SIZE {
-            self.evaluations[i] = driver.mul_with_public(&rhs.evaluations[i], &self.evaluations[i]);
-        }
+    pub(crate) fn vec_to_univariates(vec: &[T::FieldShare]) -> Vec<Self> {
+        assert_eq!(vec.len() % SIZE, 0);
+        vec.chunks(SIZE)
+            .map(|chunk| {
+                let mut evaluations = array::from_fn(|_| T::FieldShare::default());
+                evaluations.clone_from_slice(chunk);
+                Self { evaluations }
+            })
+            .collect()
+    }
+
+    pub(crate) fn univariates_to_vec(univariates: &[Self]) -> Vec<T::FieldShare> {
+        univariates
+            .iter()
+            .flat_map(|univariate| univariate.evaluations.to_owned())
+            .collect()
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE2: usize>(
@@ -104,7 +200,7 @@ where
             let tmp = driver.mul_with_public(&inverse_two, &tmp);
             let a = driver.sub(&tmp, &poly[1]);
 
-            let tmp = driver.sub(&poly[0], &poly[1]);
+            let tmp = driver.sub(&poly[1], &poly[0]);
             let b = driver.sub(&tmp, &a);
 
             let a2 = driver.add(&a, &a);
@@ -249,5 +345,34 @@ where
         Self {
             evaluations: array::from_fn(|_| T::FieldShare::default()),
         }
+    }
+}
+
+impl<T, P: Pairing, const SIZE: usize> Clone for SharedUnivariate<T, P, SIZE>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            evaluations: self.evaluations.clone(),
+        }
+    }
+}
+
+impl<T, P: Pairing, const SIZE: usize> std::fmt::Debug for SharedUnivariate<T, P, SIZE>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.evaluations.iter()).finish()
+    }
+}
+
+impl<T, P: Pairing, const SIZE: usize> AsRef<[T::FieldShare]> for SharedUnivariate<T, P, SIZE>
+where
+    T: PrimeFieldMpcProtocol<P::ScalarField>,
+{
+    fn as_ref(&self) -> &[T::FieldShare] {
+        self.evaluations.as_ref()
     }
 }

@@ -697,7 +697,7 @@ pub(crate) struct RomTranscript {
     pub(crate) records: Vec<RomRecord>,
 }
 
-enum AccessType {
+pub(crate) enum AccessType {
     Read,
     Write,
 }
