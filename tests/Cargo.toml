@@ -20,6 +20,7 @@ co-acvm = { workspace = true }
 co-circom-snarks = { workspace = true }
 co-groth16 = { workspace = true, features = ["verifier"] }
 co-plonk = { workspace = true }
+co-ultrahonk = { workspace = true }
 criterion = { workspace = true }
 itertools = { workspace = true }
 mpc-core = { workspace = true }
@@ -28,6 +29,7 @@ rand = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+serial_test = "3.1"
 
 [dev-dependencies]
 paste.workspace = true

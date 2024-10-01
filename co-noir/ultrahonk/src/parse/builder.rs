@@ -26,6 +26,7 @@ pub trait UltraCircuitVariable<F>: Clone + PartialEq + Debug {
     type Shared;
 
     fn from_public(value: F) -> Self;
+    fn from_shared(value: Self::Shared) -> Self;
     fn is_public(&self) -> bool;
     fn public_into_field(self) -> F;
 }
@@ -34,6 +35,10 @@ impl<F: PrimeField> UltraCircuitVariable<F> for F {
     type Shared = F;
 
     fn from_public(value: F) -> Self {
+        value
+    }
+
+    fn from_shared(value: Self::Shared) -> Self {
         value
     }
 
