@@ -11,7 +11,7 @@ pub(crate) mod sponge_hasher;
 mod transcript;
 pub(crate) mod types;
 
-use acir::{circuit::Circuit, native_types::WitnessStack, FieldElement};
+use acir::{native_types::WitnessStack, FieldElement};
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
 use ark_ff::PrimeField;
 use eyre::Error;
@@ -42,10 +42,9 @@ impl Utils {
         Ok(tmp?.into())
     }
 
-    fn read_circuit_from_file(path: &str) -> io::Result<Circuit<FieldElement>> {
+    pub fn get_program_artifact_from_file(path: &str) -> io::Result<ProgramArtifact> {
         let program = std::fs::read_to_string(path)?;
-        let program_artifact = serde_json::from_str::<ProgramArtifact>(&program)?;
-        Ok(program_artifact.bytecode.functions[0].to_owned())
+        Ok(serde_json::from_str::<ProgramArtifact>(&program)?)
     }
 
     fn read_witness_stack_from_file(path: &str) -> io::Result<WitnessStack<FieldElement>> {
@@ -54,13 +53,23 @@ impl Utils {
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
     }
 
+    pub fn get_constraint_system_from_artifact(
+        program_artifact: &ProgramArtifact,
+        honk_recusion: bool,
+    ) -> AcirFormat<ark_bn254::Fr> {
+        let circuit = program_artifact.bytecode.functions[0].to_owned();
+        AcirFormat::circuit_serde_to_acir_format(circuit, honk_recusion)
+    }
+
     pub fn get_constraint_system_from_file(
         path: &str,
         honk_recusion: bool,
     ) -> io::Result<AcirFormat<ark_bn254::Fr>> {
-        let circuit = Self::read_circuit_from_file(path)?;
-        let constraint_system = AcirFormat::circuit_serde_to_acir_format(circuit, honk_recusion);
-        Ok(constraint_system)
+        let program_artifact = Self::get_program_artifact_from_file(path)?;
+        Ok(Self::get_constraint_system_from_artifact(
+            &program_artifact,
+            honk_recusion,
+        ))
     }
 
     pub fn get_witness_from_file(path: &str) -> io::Result<Vec<ark_bn254::Fr>> {
