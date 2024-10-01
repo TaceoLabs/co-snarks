@@ -1,11 +1,13 @@
 pub(crate) mod decider;
 pub(crate) mod honk_curve;
 pub(crate) mod oink;
+#[allow(unused)] // TODO remove this at a later point
 pub(crate) mod parse;
 pub(crate) mod poseidon2;
 pub mod prelude;
 pub(crate) mod prover;
 pub(crate) mod sponge_hasher;
+#[allow(unused)] // TODO remove this at a later point
 mod transcript;
 pub(crate) mod types;
 

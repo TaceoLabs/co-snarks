@@ -16,5 +16,6 @@ ark-bn254.workspace = true
 eyre.workspace = true
 itertools.workspace = true
 mpc-core.workspace = true
+num-bigint.workspace = true
 tracing.workspace = true
 ultrahonk.workspace = true

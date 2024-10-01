@@ -1,6 +1,14 @@
 use crate::{
     co_decider::{
-        relations::AllRelationAcc,
+        relations::{
+            auxiliary_relation::AuxiliaryRelation,
+            delta_range_constraint_relation::DeltaRangeConstraintRelation,
+            elliptic_relation::EllipticRelation, logderiv_lookup_relation::LogDerivLookupRelation,
+            permutation_relation::UltraPermutationRelation,
+            poseidon2_external_relation::Poseidon2ExternalRelation,
+            poseidon2_internal_relation::Poseidon2InternalRelation,
+            ultra_arithmetic_relation::UltraArithmeticRelation, AllRelationAcc, Relation,
+        },
         types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
@@ -9,7 +17,9 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use mpc_core::traits::PrimeFieldMpcProtocol;
-use ultrahonk::prelude::{GateSeparatorPolynomial, HonkCurve, TranscriptFieldType, Univariate};
+use ultrahonk::prelude::{
+    GateSeparatorPolynomial, HonkCurve, HonkProofResult, TranscriptFieldType, Univariate,
+};
 
 pub(crate) type SumcheckRoundOutput<T, P> =
     SharedUnivariate<T, P, { MAX_PARTIAL_RELATION_LENGTH + 1 }>;
@@ -122,17 +132,101 @@ impl SumcheckRound {
         res
     }
 
+    fn accumulate_one_relation_univariates<
+        T,
+        P: HonkCurve<TranscriptFieldType>,
+        R: Relation<T, P>,
+    >(
+        driver: &mut T,
+        univariate_accumulator: &mut R::Acc,
+        extended_edges: &ProverUnivariates<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factor: &P::ScalarField,
+    ) -> HonkProofResult<()>
+    where
+        T: PrimeFieldMpcProtocol<P::ScalarField>,
+    {
+        if R::SKIPPABLE && R::skip(extended_edges) {
+            return Ok(());
+        }
+
+        R::accumulate(
+            driver,
+            univariate_accumulator,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )
+    }
+
     fn accumulate_relation_univariates<T, P: HonkCurve<TranscriptFieldType>>(
         driver: &mut T,
         univariate_accumulators: &mut AllRelationAcc<T, P>,
         extended_edges: &ProverUnivariates<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
-    ) where
+    ) -> HonkProofResult<()>
+    where
         T: PrimeFieldMpcProtocol<P::ScalarField>,
     {
         tracing::trace!("Accumulate relations");
-        todo!("Accumulate relations")
+        Self::accumulate_one_relation_univariates::<_, _, UltraArithmeticRelation>(
+            driver,
+            &mut univariate_accumulators.r_arith,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        Self::accumulate_one_relation_univariates::<_, _, UltraPermutationRelation>(
+            driver,
+            &mut univariate_accumulators.r_perm,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        Self::accumulate_one_relation_univariates::<_, _, DeltaRangeConstraintRelation>(
+            driver,
+            &mut univariate_accumulators.r_delta,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        Self::accumulate_one_relation_univariates::<_, _, EllipticRelation>(
+            driver,
+            &mut univariate_accumulators.r_elliptic,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        Self::accumulate_one_relation_univariates::<_, _, AuxiliaryRelation>(
+            driver,
+            &mut univariate_accumulators.r_aux,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        Self::accumulate_one_relation_univariates::<_, _, LogDerivLookupRelation>(
+            driver,
+            &mut univariate_accumulators.r_lookup,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        Self::accumulate_one_relation_univariates::<_, _, Poseidon2ExternalRelation>(
+            driver,
+            &mut univariate_accumulators.r_pos_ext,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        Self::accumulate_one_relation_univariates::<_, _, Poseidon2InternalRelation>(
+            driver,
+            &mut univariate_accumulators.r_pos_int,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        Ok(())
     }
 
     pub(crate) fn compute_univariate<T, P: HonkCurve<TranscriptFieldType>>(
@@ -142,7 +236,7 @@ impl SumcheckRound {
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<T::FieldShare>, Vec<P::ScalarField>>,
-    ) -> SumcheckRoundOutput<T, P>
+    ) -> HonkProofResult<SumcheckRoundOutput<T, P>>
     where
         T: PrimeFieldMpcProtocol<P::ScalarField>,
     {
@@ -169,13 +263,14 @@ impl SumcheckRound {
                 &extended_edge,
                 relation_parameters,
                 &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
-            );
+            )?;
         }
-        Self::batch_over_relations_univariates(
+        let res = Self::batch_over_relations_univariates(
             driver,
             univariate_accumulators,
             &relation_parameters.alphas,
             gate_sparators,
-        )
+        );
+        Ok(res)
     }
 }

@@ -71,13 +71,6 @@ impl<Shared: Default, Public: Default> AllEntities<Shared, Public> {
             .chain(self.shifted_witness.iter())
     }
 
-    pub(crate) fn into_public_iter(self) -> impl Iterator<Item = Public> {
-        self.precomputed
-            .into_iter()
-            .chain(self.witness.into_public_iter())
-            .chain(self.shifted_tables)
-    }
-
     pub(crate) fn into_shared_iter(self) -> impl Iterator<Item = Shared> {
         self.witness.into_shared_iter().chain(self.shifted_witness)
     }
@@ -211,10 +204,6 @@ impl<Shared, Public> WitnessEntities<Shared, Public> {
 
     pub(crate) fn into_shared_iter(self) -> impl Iterator<Item = Shared> {
         self.private_elements.into_iter()
-    }
-
-    pub(crate) fn into_public_iter(self) -> impl Iterator<Item = Public> {
-        self.public_elements.into_iter()
     }
 
     pub(crate) fn shared_iter_mut(&mut self) -> impl Iterator<Item = &mut Shared> {
