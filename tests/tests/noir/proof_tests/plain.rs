@@ -1,7 +1,7 @@
 use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
+use ark_ff::Zero;
 use co_acvm::solver::PlainCoSolver;
 use co_ultrahonk::prelude::{
     CoUltraHonk, HonkProof, PlainCoBuilder, ProvingKey, SharedBuilderVariable,
@@ -10,9 +10,9 @@ use co_ultrahonk::prelude::{
 use mpc_core::protocols::plain::PlainDriver;
 use serial_test::serial;
 
-fn witness_map_to_witness_vector<F: PrimeField, V: UltraCircuitVariable<F>>(
-    witness_map: WitnessMap<F>,
-) -> Vec<V> {
+fn witness_map_to_witness_vector<P: Pairing>(
+    witness_map: WitnessMap<P::ScalarField>,
+) -> Vec<SharedBuilderVariable<PlainDriver<P::ScalarField>, P>> {
     let mut wv = Vec::new();
     let mut index = 0;
     for (w, f) in witness_map.into_iter() {
@@ -20,10 +20,10 @@ fn witness_map_to_witness_vector<F: PrimeField, V: UltraCircuitVariable<F>>(
         // To ensure that witnesses sit at the correct indices in the `WitnessVector`, we fill any indices
         // which do not exist within the `WitnessMap` with the dummy value of zero.
         while index < w.0 {
-            wv.push(V::from_public(F::zero()));
+            wv.push(SharedBuilderVariable::from_public(P::ScalarField::zero()));
             index += 1;
         }
-        wv.push(V::from_public(f));
+        wv.push(SharedBuilderVariable::from_public(f));
         index += 1;
     }
     wv
