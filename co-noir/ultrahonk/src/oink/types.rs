@@ -3,9 +3,12 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 
 pub(crate) struct ProverMemory<P: Pairing> {
-    pub(crate) w_4: Polynomial<P::ScalarField>,    // column 3
-    pub(crate) z_perm: Polynomial<P::ScalarField>, // column 4
-    pub(crate) lookup_inverses: Polynomial<P::ScalarField>, // column 5
+    /// column 3
+    pub(crate) w_4: Polynomial<P::ScalarField>,
+    /// column 4
+    pub(crate) z_perm: Polynomial<P::ScalarField>,
+    /// column 5
+    pub(crate) lookup_inverses: Polynomial<P::ScalarField>,
     pub(crate) public_input_delta: P::ScalarField,
     pub(crate) challenges: Challenges<P::ScalarField>,
 }
