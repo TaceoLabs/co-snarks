@@ -18,9 +18,11 @@ pub trait CircomPlonkProver<P: Pairing> {
     type PointShareG1: Send;
     type PointShareG2: Send;
 
-    type PartyID: Send + Sync + Copy;
+    type PartyID: Send + Sync + Copy + std::fmt::Display;
 
     type IoContext;
+
+    async fn close_network(self) -> IoResult<()>;
 
     fn debug_print(a: Self::ArithmeticShare);
 

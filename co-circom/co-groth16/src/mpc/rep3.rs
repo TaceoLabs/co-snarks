@@ -21,12 +21,6 @@ impl<N: Rep3Network> Rep3Groth16Driver<N> {
             io_context1,
         }
     }
-
-    pub(crate) async fn close_network(self) -> IoResult<()> {
-        self.io_context0.network.shutdown().await?;
-        self.io_context1.network.shutdown().await?;
-        Ok(())
-    }
 }
 
 impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N> {
@@ -35,6 +29,12 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
     type PointShareG2 = Rep3PointShare<P::G2>;
 
     type PartyID = PartyID;
+
+    async fn close_network(self) -> IoResult<()> {
+        self.io_context0.network.shutdown().await?;
+        self.io_context1.network.shutdown().await?;
+        Ok(())
+    }
 
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         Ok(Self::ArithmeticShare::rand(&mut self.io_context0))

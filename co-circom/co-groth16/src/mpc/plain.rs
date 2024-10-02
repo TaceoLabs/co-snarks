@@ -18,6 +18,10 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
 
     type PartyID = usize;
 
+    async fn close_network(self) -> super::IoResult<()> {
+        Ok(())
+    }
+
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))

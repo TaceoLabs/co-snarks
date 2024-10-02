@@ -18,12 +18,6 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirGroth16Driver<F, N> {
             protocol1,
         }
     }
-
-    pub(crate) async fn close_network(self) -> IoResult<()> {
-        self.protocol0.network.shutdown().await?;
-        self.protocol1.network.shutdown().await?;
-        Ok(())
-    }
 }
 
 impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
@@ -34,6 +28,12 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     type PointShareG2 = ShamirPointShare<P::G2>;
 
     type PartyID = usize;
+
+    async fn close_network(self) -> IoResult<()> {
+        self.protocol0.network.shutdown().await?;
+        self.protocol1.network.shutdown().await?;
+        Ok(())
+    }
 
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         self.protocol0.rand()

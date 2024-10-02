@@ -19,6 +19,7 @@ use rayon::prelude::*;
 use std::io::{self};
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::runtime::{self, Runtime};
 use tokio::sync::oneshot;
 use tracing::instrument;
@@ -104,10 +105,13 @@ where
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
     pub fn prove(
-        &mut self,
+        mut self,
         zkey: &ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> Result<Groth16Proof<P>> {
+        let id = self.driver.get_party_id();
+        tracing::info!("Party {}: starting proof generation..", id);
+        let start = Instant::now();
         let matrices = &zkey.matrices;
         let num_inputs = matrices.num_instance_variables;
         let num_constraints = matrices.num_constraints;
@@ -124,7 +128,12 @@ where
         tracing::debug!("getting r and s...");
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
         tracing::debug!("done!");
-        self.create_proof_with_assignment(zkey, r, s, h, &public_inputs[1..], private_witness)
+        let proof =
+            self.create_proof_with_assignment(zkey, r, s, h, &public_inputs[1..], private_witness)?;
+
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+        Ok(proof)
     }
 
     fn evaluate_constraint(
@@ -329,7 +338,7 @@ where
 
     #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
     fn create_proof_with_assignment(
-        &mut self,
+        mut self,
         zkey: &ZKey<P>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
@@ -432,6 +441,8 @@ where
             .block_on(self.driver.open_two_points(g_c, g2_b))?;
         last_round.exit();
 
+        self.runtime.block_on(self.driver.close_network())?;
+
         Ok(Groth16Proof {
             pi_a: g_a_opened.into_affine(),
             pi_b: g2_b_opened.into_affine(),
@@ -463,11 +474,6 @@ where
             phantom_data: PhantomData,
         })
     }
-
-    pub fn close_network(self) -> io::Result<()> {
-        self.runtime.block_on(self.driver.close_network())?;
-        Ok(())
-    }
 }
 
 impl<P: Pairing> ShamirCoGroth16<P, ShamirMpcNet>
@@ -498,11 +504,6 @@ where
             runtime,
             phantom_data: PhantomData,
         })
-    }
-
-    pub fn close_network(self) -> io::Result<()> {
-        self.runtime.block_on(self.driver.close_network())?;
-        Ok(())
     }
 }
 

@@ -468,6 +468,8 @@ where
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Translating witness took {} ms", id, duration_ms);
 
+    runtime.block_on(protocol.close_network())?;
+
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
     bincode::serialize_into(out_file, &shamir_witness_share)?;
@@ -514,18 +516,11 @@ where
                     let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
                     // connect to network
-                    let id = config.network.my_id;
-                    let mut prover = Rep3CoGroth16::with_network_config(config.network)
+                    let prover = Rep3CoGroth16::with_network_config(config.network)
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    tracing::info!("Party {}: starting proof generation..", id);
-                    let start = Instant::now();
                     let proof = prover.prove(&zkey, witness_share)?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-                    tracing::info!("closing network...");
-                    prover.close_network()?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -533,17 +528,11 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     // connect to network
-                    let id = config.network.my_id;
-                    let mut prover = ShamirCoGroth16::with_network_config(t, config.network, &zkey)
+                    let prover = ShamirCoGroth16::with_network_config(t, config.network, &zkey)
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    tracing::info!("Party {}: starting proof generation..", id);
-                    let start = Instant::now();
                     let proof = prover.prove(&zkey, witness_share)?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-                    prover.close_network()?;
                     (proof, public_input)
                 }
             };
@@ -571,41 +560,25 @@ where
 
                     let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
-                    // connect to network
-                    let id = config.network.my_id;
 
                     //init prover
                     let prover = Rep3CoPlonk::with_network_config(config.network)
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    tracing::info!("Party {}: starting proof generation..", id);
-                    let start = Instant::now();
                     let proof = prover.prove(&pk, witness_share)?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-                    // TODO close
-                    // prover.close_network()?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
                     let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
-                    // connect to network
-                    let id = config.network.my_id;
 
                     //init prover
                     let prover = ShamirCoPlonk::with_network_config(t, config.network, &pk)
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    tracing::info!("Party {}: starting proof generation..", id);
-                    let start = Instant::now();
                     let proof = prover.prove(&pk, witness_share)?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-                    // TODO close
-                    // prover.close_network()?;
                     (proof, public_input)
                 }
             };

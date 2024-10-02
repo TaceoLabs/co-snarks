@@ -26,6 +26,10 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
     //doesn't matter
     type IoContext = ();
 
+    async fn close_network(self) -> IoResult<()> {
+        Ok(())
+    }
+
     fn debug_print(a: Self::ArithmeticShare) {
         println!("{a}")
     }
