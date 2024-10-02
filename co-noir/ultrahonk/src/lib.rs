@@ -24,11 +24,11 @@ use prover::{HonkProofError, HonkProofResult};
 use std::{io, path::Path};
 use types::ProverCrs;
 
-pub(crate) const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;
+pub const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;
 /// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
 /// TODO(https://github.com/AztecProtocol/barretenberg/issues/1046): Remove the need for const sized proofs
-pub(crate) const CONST_PROOF_SIZE_LOG_N: usize = 28;
-pub(crate) const N_MAX: usize = 1 << 25;
+pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
+pub const N_MAX: usize = 1 << 25;
 
 pub struct Utils {}
 
