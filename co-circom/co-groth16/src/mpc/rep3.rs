@@ -6,6 +6,7 @@ use mpc_core::protocols::rep3::{
     pointshare, Rep3PointShare, Rep3PrimeFieldShare,
 };
 use rayon::prelude::*;
+use tokio::sync::oneshot;
 
 use super::{CircomGroth16Prover, IoResult};
 
@@ -23,7 +24,10 @@ impl<N: Rep3Network> Rep3Groth16Driver<N> {
     }
 }
 
-impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N> {
+impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
+where
+    N: 'static,
+{
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShareG1 = Rep3PointShare<P::G1>;
     type PointShareG2 = Rep3PointShare<P::G2>;
@@ -91,12 +95,18 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         arithmetic::mul_vec(lhs, rhs, &mut self.io_context0).await
     }
 
-    fn local_mul_vec(
+    async fn local_mul_vec(
         &mut self,
-        a: &[Self::ArithmeticShare],
-        b: &[Self::ArithmeticShare],
-    ) -> Vec<P::ScalarField> {
-        arithmetic::local_mul_vec::<P::ScalarField, N>(a, b, &mut self.io_context0)
+        a: Vec<Self::ArithmeticShare>,
+        b: Vec<Self::ArithmeticShare>,
+    ) -> IoResult<Vec<P::ScalarField>> {
+        let mut forked = self.io_context0.fork().await?;
+        let (tx, rx) = oneshot::channel();
+        rayon::spawn(move || {
+            let result = arithmetic::local_mul_vec(&a, &b, &mut forked);
+            tx.send(result).expect("channel not dropped");
+        });
+        Ok(rx.await.expect("channel not dropped"))
     }
 
     async fn io_round_mul_vec(

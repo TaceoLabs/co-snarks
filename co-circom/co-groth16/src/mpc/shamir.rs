@@ -5,6 +5,7 @@ use mpc_core::protocols::shamir::{
     arithmetic, core, network::ShamirNetwork, pointshare, ShamirPointShare, ShamirPrimeFieldShare,
     ShamirProtocol,
 };
+use tokio::sync::oneshot;
 
 pub struct ShamirGroth16Driver<F: PrimeField, N: ShamirNetwork> {
     protocol0: ShamirProtocol<F, N>,
@@ -86,12 +87,17 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         arithmetic::mul_vec(a, b, &mut self.protocol0).await
     }
 
-    fn local_mul_vec(
+    async fn local_mul_vec(
         &mut self,
-        a: &[Self::ArithmeticShare],
-        b: &[Self::ArithmeticShare],
-    ) -> Vec<P::ScalarField> {
-        arithmetic::local_mul_vec(a, b)
+        a: Vec<Self::ArithmeticShare>,
+        b: Vec<Self::ArithmeticShare>,
+    ) -> IoResult<Vec<P::ScalarField>> {
+        let (tx, rx) = oneshot::channel();
+        rayon::spawn(move || {
+            let result = arithmetic::local_mul_vec(&a, &b);
+            tx.send(result).expect("channel not dropped");
+        });
+        Ok(rx.await.expect("channel not dropped"))
     }
 
     async fn io_round_mul_vec(

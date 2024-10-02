@@ -24,8 +24,8 @@ mod tests {
 
     use crate::groth16::Groth16;
 
-    #[test]
-    fn create_proof_and_verify_bn254() {
+    #[tokio::test]
+    async fn create_proof_and_verify_bn254() {
         let zkey_file =
             File::open("../../test_vectors/Groth16/bn254/multiplier2/circuit.zkey").unwrap();
         let witness_file =
@@ -42,7 +42,9 @@ mod tests {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
-        let proof = Groth16::<Bn254>::plain_prove(&zkey, witness).expect("proof generation works");
+        let proof = Groth16::<Bn254>::plain_prove(&zkey, witness)
+            .await
+            .expect("proof generation works");
         let ser_proof = serde_json::to_string(&proof).unwrap();
         let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
         let verified = Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
@@ -69,8 +71,8 @@ mod tests {
         assert!(verified)
     }
 
-    #[test]
-    fn create_proof_and_verify_poseidon_hash_bn254() {
+    #[tokio::test]
+    async fn create_proof_and_verify_poseidon_hash_bn254() {
         let zkey_file =
             File::open("../../test_vectors/Groth16/bn254/poseidon/circuit.zkey").unwrap();
         let witness_file =
@@ -86,7 +88,9 @@ mod tests {
             public_inputs: public_input.clone(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
-        let proof = Groth16::<Bn254>::plain_prove(&zkey, witness).expect("proof generation works");
+        let proof = Groth16::<Bn254>::plain_prove(&zkey, witness)
+            .await
+            .expect("proof generation works");
         let ser_proof = serde_json::to_string(&proof).unwrap();
         let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
         let verified = Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
@@ -132,8 +136,8 @@ mod tests {
         assert!(verified)
     }
 
-    #[test]
-    fn proof_circom_proof_bls12_381() {
+    #[tokio::test]
+    async fn proof_circom_proof_bls12_381() {
         let zkey_file =
             File::open("../../test_vectors/Groth16/bls12_381/multiplier2/circuit.zkey").unwrap();
         let witness_file =
@@ -150,8 +154,9 @@ mod tests {
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
-        let proof =
-            Groth16::<Bls12_381>::plain_prove(&zkey, witness).expect("proof generation works");
+        let proof = Groth16::<Bls12_381>::plain_prove(&zkey, witness)
+            .await
+            .expect("proof generation works");
         let verified =
             Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
         assert!(verified);
@@ -162,8 +167,8 @@ mod tests {
         assert!(verified)
     }
 
-    #[test]
-    fn proof_circom_proof_bn254() {
+    #[tokio::test]
+    async fn proof_circom_proof_bn254() {
         let zkey_file =
             File::open("../../test_vectors/Groth16/bn254/multiplier2/circuit.zkey").unwrap();
         let witness_file =
@@ -180,7 +185,9 @@ mod tests {
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
-        let proof = Groth16::<Bn254>::plain_prove(&zkey, witness).expect("proof generation works");
+        let proof = Groth16::<Bn254>::plain_prove(&zkey, witness)
+            .await
+            .expect("proof generation works");
         let verified =
             Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
         assert!(verified);

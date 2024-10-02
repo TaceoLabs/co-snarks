@@ -502,6 +502,9 @@ where
 
     // parse Circom zkey file
     let zkey_file = File::open(zkey)?;
+    let rt = runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
 
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
@@ -516,11 +519,12 @@ where
                     let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
                     // connect to network
-                    let prover = Rep3CoGroth16::with_network_config(config.network)
+                    let prover = rt
+                        .block_on(Rep3CoGroth16::with_network_config(config.network))
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&zkey, witness_share)?;
+                    let proof = rt.block_on(prover.prove(&zkey, witness_share))?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -528,11 +532,16 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     // connect to network
-                    let prover = ShamirCoGroth16::with_network_config(t, config.network, &zkey)
+                    let prover = rt
+                        .block_on(ShamirCoGroth16::with_network_config(
+                            t,
+                            config.network,
+                            &zkey,
+                        ))
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&zkey, witness_share)?;
+                    let proof = rt.block_on(prover.prove(&zkey, witness_share))?;
                     (proof, public_input)
                 }
             };

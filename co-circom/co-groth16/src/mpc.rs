@@ -29,7 +29,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         + 'static;
     type PointShareG1: Debug + Send + 'static;
     type PointShareG2: Debug + Send + 'static;
-    type PartyID: Send + Sync + Copy + fmt::Display;
+    type PartyID: Send + Sync + Copy + fmt::Display + 'static;
 
     async fn close_network(self) -> IoResult<()>;
 
@@ -64,11 +64,12 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         b: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
-    fn local_mul_vec(
+    async fn local_mul_vec(
         &mut self,
-        a: &[Self::ArithmeticShare],
-        b: &[Self::ArithmeticShare],
-    ) -> Vec<P::ScalarField>;
+        a: Vec<Self::ArithmeticShare>,
+        b: Vec<Self::ArithmeticShare>,
+    ) -> IoResult<Vec<P::ScalarField>>;
+
     async fn io_round_mul_vec(
         &mut self,
         a: Vec<P::ScalarField>,

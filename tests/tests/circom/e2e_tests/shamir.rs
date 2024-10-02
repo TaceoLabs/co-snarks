@@ -67,8 +67,8 @@ macro_rules! add_test_impl {
                         #[allow(unused_mut)]
                         let mut prover = [< Co $proof_system>]::<
                             $curve, [< Shamir $proof_system Driver>]<[< ark_ $curve:lower >]::Fr, PartyTestNetwork>
-                        >::new(shamir, runtime);
-                        prover.prove(&zkey, x).unwrap()
+                        >::new(shamir);
+                        runtime.block_on(prover.prove(&zkey, x)).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();

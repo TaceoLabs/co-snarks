@@ -26,6 +26,7 @@ use mpc_core::protocols::rep3::{
 };
 use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
+use tokio::runtime;
 
 /// A module for file utility functions.
 pub mod file_utils;
@@ -568,10 +569,14 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     tracing::info!("establishing network and building protocol....");
-    let mut prover = Rep3CoGroth16::with_network_config(config)?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("while building runtime")?;
+    let mut prover = rt.block_on(Rep3CoGroth16::with_network_config(config))?;
     // connect to network
     tracing::info!("done!");
     tracing::info!("starting prover...");
     // execute prover in MPC
-    prover.prove(&zkey, witness_share)
+    rt.block_on(prover.prove(&zkey, witness_share))
 }
