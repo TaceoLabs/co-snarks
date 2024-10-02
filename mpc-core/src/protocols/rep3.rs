@@ -318,6 +318,17 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Prot
         }
         Ok(())
     }
+
+    fn is_shared(a: &Self::AcvmType) -> bool {
+        matches!(a, Rep3VmType::Shared(_))
+    }
+
+    fn get_shared(a: &Self::AcvmType) -> Option<Self::FieldShare> {
+        match a {
+            Rep3VmType::Shared(shared) => Some(shared.clone()),
+            _ => None,
+        }
+    }
 }
 
 /// This struct handles the full Rep3 MPC protocol, including witness extension and proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], [MSMProvider], and [CircomWitnessExtensionProtocol] traits.

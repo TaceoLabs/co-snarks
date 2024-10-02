@@ -76,6 +76,10 @@ where
         proving_key
     }
 
+    pub fn get_public_inputs(&self) -> Vec<P::ScalarField> {
+        self.public_inputs.clone()
+    }
+
     pub fn get_prover_crs(
         circuit: &CoUltraCircuitBuilder<T, P>,
         path_g1: &str,

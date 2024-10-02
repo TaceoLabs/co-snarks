@@ -354,6 +354,12 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField>:
         value: Self::AcvmType,
         lut: &mut Self::SecretSharedMap,
     ) -> eyre::Result<()>;
+
+    /// Returns true if the value is shared
+    fn is_shared(a: &Self::AcvmType) -> bool;
+
+    /// Returns the share if the value is shared
+    fn get_shared(a: &Self::AcvmType) -> Option<Self::FieldShare>;
 }
 
 /// A trait representing the MPC operations required for extending the secret-shared Circom witness in MPC. The operations are generic over public and private (i.e., secret-shared) inputs.

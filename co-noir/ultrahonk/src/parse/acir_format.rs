@@ -26,7 +26,7 @@ pub struct AcirFormat<F: PrimeField> {
     pub(crate) recursive: bool,
     pub(crate) num_acir_opcodes: u32,
     //  using PolyTripleConstraint = bb::poly_triple_<bb::curve::BN254::ScalarField>;
-    pub(crate) public_inputs: Vec<u32>,
+    pub public_inputs: Vec<u32>,
     //  std::vector<LogicConstraint> logic_constraints;
     //  std::vector<RangeConstraint> range_constraints;
     //  std::vector<AES128Constraint> aes128_constraints;

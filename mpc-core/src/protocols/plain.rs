@@ -671,6 +671,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainDriver<F> {
     ) -> eyre::Result<()> {
         self.write_to_lut(index, value, map)
     }
+
+    fn is_shared(_: &Self::AcvmType) -> bool {
+        false
+    }
+
+    fn get_shared(_: &Self::AcvmType) -> Option<Self::FieldShare> {
+        None
+    }
 }
 
 impl<F: PrimeField> LookupTableProvider<F> for PlainDriver<F> {

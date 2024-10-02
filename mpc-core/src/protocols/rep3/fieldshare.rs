@@ -4,14 +4,52 @@
 
 use super::id::PartyID;
 use ark_ff::PrimeField;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 
 /// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    CanonicalSerialize,
+    CanonicalDeserialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct Rep3PrimeFieldShare<F: PrimeField> {
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub(crate) a: F,
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub(crate) b: F,
+}
+
+// TODO unify with the other implementations
+
+/// Serialize an object with ark serialization, to be used with serde.
+/// `#[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]`
+pub(crate) fn ark_se<S, A: CanonicalSerialize>(a: &A, s: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let mut bytes = vec![];
+    a.serialize_with_mode(&mut bytes, Compress::Yes)
+        .map_err(serde::ser::Error::custom)?;
+    s.serialize_bytes(&bytes)
+}
+
+/// Deserialize an object with ark deserialization, to be used with serde.
+/// `#[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]`
+pub(crate) fn ark_de<'de, D, A: CanonicalDeserialize>(data: D) -> Result<A, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    let s: Vec<u8> = serde::de::Deserialize::deserialize(data)?;
+    let a = A::deserialize_with_mode(s.as_slice(), Compress::Yes, Validate::Yes);
+    a.map_err(serde::de::Error::custom)
 }
 
 impl<F: PrimeField> Rep3PrimeFieldShare<F> {
