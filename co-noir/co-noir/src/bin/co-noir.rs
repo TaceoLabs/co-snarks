@@ -4,10 +4,18 @@ use co_noir::{
     file_utils, share_rep3, GenerateProofCli, GenerateProofConfig, MPCProtocol, PubShared,
     SplitWitnessCli, SplitWitnessConfig,
 };
-use co_ultrahonk::prelude::Utils;
+use co_ultrahonk::prelude::{CoUltraHonk, ProvingKey, Rep3CoBuilder, Utils};
 use color_eyre::eyre::{eyre, Context, ContextCompat};
-use mpc_core::protocols::rep3::network::Rep3MpcNet;
-use std::{fs::File, io::BufWriter, process::ExitCode, time::Instant};
+use mpc_core::protocols::rep3::{
+    network::{Rep3MpcNet, Rep3Network},
+    Rep3Protocol,
+};
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter, Write},
+    process::ExitCode,
+    time::Instant,
+};
 use tracing::instrument;
 
 fn install_tracing() {
@@ -137,9 +145,97 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
 #[instrument(skip(config))]
 fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCode> {
     let witness = config.witness;
+    let circuit_path = config.circuit;
+    let crs_path = config.crs;
     let protocol = config.protocol;
     let out = config.out;
     let t = config.threshold;
 
-    todo!()
+    file_utils::check_file_exists(&witness)?;
+    file_utils::check_file_exists(&circuit_path)?;
+    file_utils::check_file_exists(&crs_path)?;
+
+    // parse witness shares
+    let witness_file =
+        BufReader::new(File::open(witness).context("trying to open witness share file")?);
+
+    // parse constraint system
+    let constraint_system = Utils::get_constraint_system_from_file(
+        circuit_path
+            .to_str()
+            .context("while opening artifact file")?,
+        true,
+    )
+    .context("while parsing program artifact")?;
+
+    let proof = match protocol {
+        MPCProtocol::REP3 => {
+            if t != 1 {
+                return Err(eyre!("REP3 only allows the threshold to be 1"));
+            }
+            let witness_share = bincode::deserialize_from(witness_file)
+                .context("while deserializing witness share")?;
+            // connect to network
+            let net = Rep3MpcNet::new(config.network)?;
+            let id = usize::from(net.get_id());
+
+            // init MPC protocol
+            let protocol = Rep3Protocol::new(net)?;
+
+            // Create the circuit
+            tracing::info!("Party {}: starting to generate proving key..", id);
+            let start = Instant::now();
+            let builder = Rep3CoBuilder::<Bn254, _>::create_circuit(
+                constraint_system,
+                0,
+                witness_share,
+                true,
+                false,
+            );
+
+            // parse the crs
+            let prover_crs = ProvingKey::get_prover_crs(
+                &builder,
+                crs_path.to_str().context("while opening crs file")?,
+            )
+            .expect("failed to get prover crs");
+
+            // Get the proving key and prover
+            let proving_key = ProvingKey::create(&protocol, builder, prover_crs);
+            let prover = CoUltraHonk::new(protocol);
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!(
+                "Party {}: Proving key generation took {} ms",
+                id,
+                duration_ms
+            );
+
+            // execute prover in MPC
+            tracing::info!("Party {}: starting proof generation..", id);
+            let start = Instant::now();
+            let proof = prover.prove(proving_key)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+
+            proof
+        }
+        _ => todo!("Implement other MPC protocols"),
+    };
+
+    // write result to output file
+    if let Some(out) = out {
+        let mut out_file =
+            BufWriter::new(std::fs::File::create(&out).context("while creating output file")?);
+
+        let proof_u8 = proof.to_buffer();
+        out_file
+            .write(proof_u8.as_slice())
+            .context("while writing proof to file")?;
+        tracing::info!("Wrote proof to file {}", out.display());
+    }
+
+    // public input
+
+    tracing::info!("Proof generation finished successfully");
+    Ok(ExitCode::SUCCESS)
 }
