@@ -16,7 +16,6 @@ default = []
 dangerous = []
 
 [dependencies]
-acir = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-poly = { workspace = true }
