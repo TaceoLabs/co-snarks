@@ -62,31 +62,6 @@ fn get_file_size(filename: &str) -> std::io::Result<u64> {
     Ok(metadata.len())
 }
 
-fn read_file_into_buffer(
-    buffer: &mut [u8],
-    size: usize,
-    filename: &str,
-    offset: u64,
-    _amount: usize,
-) -> std::io::Result<()> {
-    let mut file = File::open(filename)?;
-    file.seek(SeekFrom::Start(offset))?;
-    let actual_size = file.read(buffer)?;
-    if actual_size != size {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "Only read {} bytes from file but expected {}.",
-                actual_size, size
-            ),
-        ));
-    }
-    Ok(())
-}
-
-fn get_transcript_path(dir: &str, num: usize) -> String {
-    format!("{}/transcript{:02}.dat", dir, num)
-}
 trait FileProcessor<P: Pairing> {
     fn read_transcript_g1(monomials: &mut [P::G1Affine], degree: usize, dir: &str) -> Result<()>;
     fn read_transcript_g2(g2_x: &mut P::G2Affine, dir: &str) -> Result<()>;
