@@ -24,11 +24,11 @@ impl<P: Pairing> SharedBuilderVariable<PlainDriver<P::ScalarField>, P> {
     }
 }
 
-pub(crate) const NUM_ALPHAS: usize = co_decider::relations::NUM_SUBRELATIONS - 1;
+pub(crate) const NUM_ALPHAS: usize = ultrahonk::NUM_ALPHAS;
 // The log of the max circuit size assumed in order to achieve constant sized Honk proofs
 // TODO(https://github.com/AztecProtocol/barretenberg/issues/1046): Remove the need for const sized proofs
-pub(crate) const CONST_PROOF_SIZE_LOG_N: usize = 28;
-pub(crate) const N_MAX: usize = 1 << 25;
+pub(crate) const CONST_PROOF_SIZE_LOG_N: usize = ultrahonk::CONST_PROOF_SIZE_LOG_N;
+pub(crate) const N_MAX: usize = ultrahonk::N_MAX;
 
 // TODO do not forget to remove this
 type FieldShareVec<T, P> = <T as PrimeFieldMpcProtocol<<P as Pairing>::ScalarField>>::FieldShareVec;
