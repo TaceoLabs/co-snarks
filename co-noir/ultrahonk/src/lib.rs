@@ -21,7 +21,7 @@ use num_bigint::BigUint;
 use num_traits::Num;
 use prelude::AcirFormat;
 use prover::{HonkProofError, HonkProofResult};
-use std::io;
+use std::{io, path::Path};
 use types::ProverCrs;
 
 pub(crate) const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;
@@ -42,12 +42,14 @@ impl Utils {
         Ok(tmp?.into())
     }
 
-    pub fn get_program_artifact_from_file(path: &str) -> io::Result<ProgramArtifact> {
+    pub fn get_program_artifact_from_file(path: impl AsRef<Path>) -> io::Result<ProgramArtifact> {
         let program = std::fs::read_to_string(path)?;
         Ok(serde_json::from_str::<ProgramArtifact>(&program)?)
     }
 
-    fn read_witness_stack_from_file(path: &str) -> io::Result<WitnessStack<FieldElement>> {
+    fn read_witness_stack_from_file(
+        path: impl AsRef<Path>,
+    ) -> io::Result<WitnessStack<FieldElement>> {
         let witness_stack = std::fs::read(path)?;
         WitnessStack::try_from(witness_stack.as_slice())
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
@@ -62,7 +64,7 @@ impl Utils {
     }
 
     pub fn get_constraint_system_from_file(
-        path: &str,
+        path: impl AsRef<Path>,
         honk_recusion: bool,
     ) -> io::Result<AcirFormat<ark_bn254::Fr>> {
         let program_artifact = Self::get_program_artifact_from_file(path)?;
@@ -72,7 +74,7 @@ impl Utils {
         ))
     }
 
-    pub fn get_witness_from_file(path: &str) -> io::Result<Vec<ark_bn254::Fr>> {
+    pub fn get_witness_from_file(path: impl AsRef<Path>) -> io::Result<Vec<ark_bn254::Fr>> {
         let mut witness_stack = Self::read_witness_stack_from_file(path)?;
         let witness_map = witness_stack
             .pop()

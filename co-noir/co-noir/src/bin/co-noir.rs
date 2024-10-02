@@ -112,22 +112,12 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
     file_utils::check_dir_exists(&out_dir)?;
 
     // parse constraint system
-    let constraint_system = Utils::get_constraint_system_from_file(
-        circuit_path
-            .to_str()
-            .context("while opening artifact file")?,
-        true,
-    )
-    .context("while parsing program artifact")?;
+    let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
+        .context("while parsing program artifact")?;
     let pub_inputs = constraint_system.public_inputs;
 
     // parse witness
-    let witness = Utils::get_witness_from_file(
-        witness_path
-            .to_str()
-            .context("while opening witness file")?,
-    )
-    .context("while parsing witness")?;
+    let witness = Utils::get_witness_from_file(&witness_path).context("while parsing witness")?;
 
     // create witness map storing pub/private information
     let mut witness = witness
@@ -218,12 +208,8 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
     file_utils::check_dir_exists(&out_dir)?;
 
     // parse constraint system
-    let compiled_program = Utils::get_program_artifact_from_file(
-        circuit_path
-            .to_str()
-            .context("while opening artifact file")?,
-    )
-    .context("while parsing program artifact")?;
+    let compiled_program = Utils::get_program_artifact_from_file(&circuit_path)
+        .context("while parsing program artifact")?;
 
     // read the input file
     let inputs =
@@ -270,12 +256,8 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     file_utils::check_file_exists(&circuit_path)?;
 
     // parse constraint system
-    let compiled_program = Utils::get_program_artifact_from_file(
-        circuit_path
-            .to_str()
-            .context("while opening artifact file")?,
-    )
-    .context("while parsing program artifact")?;
+    let compiled_program = Utils::get_program_artifact_from_file(&circuit_path)
+        .context("while parsing program artifact")?;
 
     // parse input shares
     let input_share_file =
@@ -393,13 +375,8 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
         BufReader::new(File::open(witness).context("trying to open witness share file")?);
 
     // parse constraint system
-    let constraint_system = Utils::get_constraint_system_from_file(
-        circuit_path
-            .to_str()
-            .context("while opening artifact file")?,
-        true,
-    )
-    .context("while parsing program artifact")?;
+    let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
+        .context("while parsing program artifact")?;
 
     let (proof, public_input) = match protocol {
         MPCProtocol::REP3 => {
