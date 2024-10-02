@@ -1,6 +1,6 @@
 use super::univariate::Univariate;
 use crate::{
-    types::{AllEntities, Polynomials},
+    types::{AllEntities, Polynomials, VerifyingKey},
     NUM_ALPHAS,
 };
 use ark_ec::pairing::Pairing;
@@ -13,10 +13,17 @@ pub(crate) struct ProverMemory<P: Pairing> {
     pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
 }
 
+pub(crate) struct VerifierMemory<P: Pairing> {
+    pub(crate) verifier_commitments: VerifierCommitments<P::G1Affine>,
+    pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
+    pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField>,
+}
+
 pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
 pub(crate) type ProverUnivariates<F> = AllEntities<Univariate<F, MAX_PARTIAL_RELATION_LENGTH>>;
 pub(crate) type PartiallyEvaluatePolys<F> = AllEntities<Vec<F>>;
 pub(crate) type ClaimedEvaluations<F> = AllEntities<F>;
+pub(crate) type VerifierCommitments<P> = AllEntities<P>;
 
 pub(crate) struct RelationParameters<F: PrimeField> {
     pub(crate) eta_1: F,
@@ -57,6 +64,20 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
         Self {
             betas,
             beta_products,
+            partial_evaluation_result,
+            current_element_idx,
+            periodicity,
+        }
+    }
+
+    pub fn new_betas(betas: Vec<F>) -> Self {
+        let current_element_idx = 0;
+        let periodicity = 2;
+        let partial_evaluation_result = F::ONE;
+
+        Self {
+            betas,
+            beta_products: Vec::new(),
             partial_evaluation_result,
             current_element_idx,
             periodicity,
@@ -139,6 +160,49 @@ impl<P: Pairing> ProverMemory<P> {
         Self {
             polys: memory,
             relation_parameters,
+        }
+    }
+}
+
+impl<P: Pairing> VerifierMemory<P> {
+    #[allow(clippy::field_reassign_with_default)]
+    pub(crate) fn from_memory_and_key(
+        verifier_memory: crate::oink::types::VerifierMemory<P>,
+        vk: VerifyingKey<P>,
+    ) -> Self {
+        let relation_parameters = RelationParameters {
+            eta_1: verifier_memory.challenges.eta_1,
+            eta_2: verifier_memory.challenges.eta_2,
+            eta_3: verifier_memory.challenges.eta_3,
+            beta: verifier_memory.challenges.beta,
+            gamma: verifier_memory.challenges.gamma,
+            public_input_delta: verifier_memory.public_input_delta,
+            alphas: verifier_memory.challenges.alphas,
+            gate_challenges: Default::default(),
+        };
+
+        let mut memory = AllEntities::default();
+        memory.witness = verifier_memory.witness_commitments;
+        memory.precomputed = vk.commitments;
+
+        // These copies are not required
+        // for (des, src) in izip!(
+        //     memory.shifted_witness.iter_mut(),
+        //     memory.witness.to_be_shifted().iter().cloned(),
+        // ) {
+        //     *des = src;
+        // }
+        // for (des, src) in izip!(
+        //     memory.shifted_tables.iter_mut(),
+        //     memory.precomputed.get_table_polynomials().iter().cloned()
+        // ) {
+        //     *des = src;
+        // }
+
+        Self {
+            relation_parameters,
+            verifier_commitments: memory,
+            claimed_evaluations: Default::default(),
         }
     }
 }

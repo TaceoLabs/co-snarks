@@ -1,4 +1,4 @@
-use crate::{decider::polynomial::Polynomial, NUM_ALPHAS};
+use crate::{decider::polynomial::Polynomial, types::WitnessEntities, NUM_ALPHAS};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 
@@ -10,6 +10,12 @@ pub(crate) struct ProverMemory<P: Pairing> {
     /// column 5
     pub(crate) lookup_inverses: Polynomial<P::ScalarField>,
     pub(crate) public_input_delta: P::ScalarField,
+    pub(crate) challenges: Challenges<P::ScalarField>,
+}
+
+pub(crate) struct VerifierMemory<P: Pairing> {
+    pub(crate) public_input_delta: P::ScalarField,
+    pub(crate) witness_commitments: WitnessEntities<P::G1Affine>,
     pub(crate) challenges: Challenges<P::ScalarField>,
 }
 
@@ -42,6 +48,16 @@ impl<P: Pairing> Default for ProverMemory<P> {
             z_perm: Default::default(),
             lookup_inverses: Default::default(),
             public_input_delta: Default::default(),
+            challenges: Default::default(),
+        }
+    }
+}
+
+impl<P: Pairing> Default for VerifierMemory<P> {
+    fn default() -> Self {
+        Self {
+            public_input_delta: Default::default(),
+            witness_commitments: Default::default(),
             challenges: Default::default(),
         }
     }

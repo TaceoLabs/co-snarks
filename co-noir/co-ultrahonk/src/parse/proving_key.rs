@@ -8,9 +8,14 @@ use ark_ff::One;
 use eyre::Result;
 use mpc_core::traits::PrimeFieldMpcProtocol;
 use std::marker::PhantomData;
+use ultrahonk::prelude::Crs;
+use ultrahonk::prelude::HonkProofResult;
+use ultrahonk::prelude::PrecomputedEntities;
 use ultrahonk::prelude::ProverCrs;
 use ultrahonk::prelude::ProvingKey as PlainProvingKey;
 use ultrahonk::prelude::UltraCircuitVariable;
+use ultrahonk::prelude::VerifyingKey;
+use ultrahonk::Utils;
 
 impl<T, P: Pairing> ProvingKey<T, P>
 where
@@ -76,6 +81,46 @@ where
         proving_key
     }
 
+    pub fn create_keys(
+        driver: &T,
+        circuit: CoUltraCircuitBuilder<T, P>,
+        crs: Crs<P>,
+    ) -> HonkProofResult<(Self, VerifyingKey<P>)> {
+        let contains_recursive_proof = circuit.contains_recursive_proof;
+        let recursive_proof_public_input_indices = circuit.recursive_proof_public_input_indices;
+
+        let pk = ProvingKey::create(
+            driver,
+            circuit,
+            ProverCrs {
+                monomials: crs.monomials,
+            },
+        );
+        let circuit_size = pk.circuit_size;
+
+        let mut commitments = PrecomputedEntities::default();
+        for (des, src) in commitments
+            .iter_mut()
+            .zip(pk.polynomials.precomputed.iter())
+        {
+            let comm = Utils::commit(src.as_ref(), &pk.crs)?;
+            *des = P::G1Affine::from(comm);
+        }
+
+        // Create and return the VerifyingKey instance
+        let vk = VerifyingKey {
+            crs: crs.g2_x,
+            circuit_size,
+            num_public_inputs: pk.num_public_inputs,
+            pub_inputs_offset: pk.pub_inputs_offset,
+            commitments,
+            _contains_recursive_proof: contains_recursive_proof,
+            _recursive_proof_public_input_indices: recursive_proof_public_input_indices,
+        };
+
+        Ok((pk, vk))
+    }
+
     pub fn get_public_inputs(&self) -> Vec<P::ScalarField> {
         self.public_inputs.clone()
     }
@@ -85,6 +130,14 @@ where
         path_g1: &str,
     ) -> Result<ProverCrs<P>> {
         PlainProvingKey::get_prover_crs(circuit, path_g1)
+    }
+
+    pub fn get_crs(
+        circuit: &CoUltraCircuitBuilder<T, P>,
+        path_g1: &str,
+        path_g2: &str,
+    ) -> Result<Crs<P>> {
+        PlainProvingKey::get_crs(circuit, path_g1, path_g2)
     }
 
     fn new(circuit_size: usize, num_public_inputs: usize, crs: ProverCrs<P>) -> Self {

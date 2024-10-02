@@ -1,3 +1,4 @@
+use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
@@ -5,7 +6,7 @@ use ark_ff::Zero;
 use co_acvm::solver::PlainCoSolver;
 use co_ultrahonk::prelude::{
     CoUltraHonk, HonkProof, PlainCoBuilder, ProvingKey, SharedBuilderVariable,
-    UltraCircuitVariable, Utils,
+    UltraCircuitVariable, UltraHonk, Utils,
 };
 use mpc_core::protocols::plain::PlainDriver;
 
@@ -39,7 +40,6 @@ fn convert_witness_plain<P: Pairing>(
 }
 
 fn proof_test(name: &str) {
-    const CRS_PATH_G1: &str = "../co-noir/ultrahonk/crs/bn254_g1.dat";
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
     let proof_file = format!("../test_vectors/noir/{}/kat/{}.proof", name, name);
@@ -55,9 +55,8 @@ fn proof_test(name: &str) {
 
     let driver = PlainDriver::default();
 
-    let prover_crs =
-        ProvingKey::get_prover_crs(&builder, CRS_PATH_G1).expect("failed to get prover crs");
-    let proving_key = ProvingKey::create(&driver, builder, prover_crs);
+    let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).expect("failed to get crs");
+    let (proving_key, verifying_key) = ProvingKey::create_keys(&driver, builder, crs).unwrap();
 
     let prover = CoUltraHonk::new(driver);
     let proof = prover.prove(proving_key).unwrap();
@@ -68,10 +67,12 @@ fn proof_test(name: &str) {
 
     let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
     assert_eq!(proof, read_proof);
+
+    let is_valid = UltraHonk::verify(proof, verifying_key).unwrap();
+    assert!(is_valid);
 }
 
 fn witness_and_proof_test(name: &str) {
-    const CRS_PATH_G1: &str = "../co-noir/ultrahonk/crs/bn254_g1.dat";
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", name);
     let proof_file = format!("../test_vectors/noir/{}/kat/{}.proof", name, name);
@@ -89,9 +90,8 @@ fn witness_and_proof_test(name: &str) {
 
     let driver = PlainDriver::default();
 
-    let prover_crs =
-        ProvingKey::get_prover_crs(&builder, CRS_PATH_G1).expect("failed to get prover crs");
-    let proving_key = ProvingKey::create(&driver, builder, prover_crs);
+    let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).expect("failed to get crs");
+    let (proving_key, verifying_key) = ProvingKey::create_keys(&driver, builder, crs).unwrap();
 
     let prover = CoUltraHonk::new(driver);
     let proof = prover.prove(proving_key).unwrap();
@@ -102,6 +102,9 @@ fn witness_and_proof_test(name: &str) {
 
     let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
     assert_eq!(proof, read_proof);
+
+    let is_valid = UltraHonk::verify(proof, verifying_key).unwrap();
+    assert!(is_valid);
 }
 
 #[test]

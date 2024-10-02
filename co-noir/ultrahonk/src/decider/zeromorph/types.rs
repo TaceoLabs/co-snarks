@@ -8,9 +8,8 @@ pub(crate) struct PolyF<'a, T: Default> {
 }
 
 pub(crate) struct PolyG<'a, T: Default> {
-    pub(crate) tables: [&'a T; 4],
-    pub(crate) wires: [&'a T; 4],
-    pub(crate) z_perm: &'a T,
+    pub(crate) tables: &'a [T; 4],
+    pub(crate) wires: &'a [T; 5],
 }
 
 pub(crate) struct PolyGShift<'a, T: Default> {
@@ -22,14 +21,19 @@ impl<'a, T: Default> PolyF<'a, T> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed.iter().chain(self.witness.iter())
     }
+
+    pub(crate) fn len(&self) -> usize {
+        self.precomputed.elements.len() + self.witness.elements.len()
+    }
 }
 
 impl<'a, T: Default> PolyG<'a, T> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
-        self.tables
-            .into_iter()
-            .chain(self.wires)
-            .chain(std::iter::once(self.z_perm))
+        self.tables.iter().chain(self.wires)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.tables.len() + self.wires.len()
     }
 }
 

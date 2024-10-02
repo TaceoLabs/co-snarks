@@ -25,13 +25,13 @@ use ark_ff::PrimeField;
 
 pub(crate) type SumcheckRoundOutput<F> = Univariate<F, { MAX_PARTIAL_RELATION_LENGTH + 1 }>;
 
-pub(crate) struct SumcheckRound {
+pub(crate) struct SumcheckProverRound {
     pub(crate) round_size: usize,
 }
 
-impl SumcheckRound {
+impl SumcheckProverRound {
     pub(crate) fn new(initial_round_size: usize) -> Self {
-        SumcheckRound {
+        Self {
             round_size: initial_round_size,
         }
     }

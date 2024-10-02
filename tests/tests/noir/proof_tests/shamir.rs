@@ -1,14 +1,14 @@
+use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
 use co_ultrahonk::prelude::{
     CoUltraHonk, HonkProof, ProvingKey, ShamirCoBuilder, SharedBuilderVariable,
-    UltraCircuitVariable, Utils,
+    UltraCircuitBuilder, UltraCircuitVariable, UltraHonk, Utils, VerifyingKey,
 };
 use mpc_core::protocols::shamir::ShamirProtocol;
 use std::thread;
 use tests::shamir_network::ShamirTestNetwork;
 
 fn proof_test(name: &str, num_parties: usize, threshold: usize) {
-    const CRS_PATH_G1: &str = "../co-noir/ultrahonk/crs/bn254_g1.dat";
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
     let proof_file = format!("../test_vectors/noir/{}/kat/{}.proof", name, name);
@@ -66,6 +66,16 @@ fn proof_test(name: &str, num_parties: usize, threshold: usize) {
 
     let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
     assert_eq!(proof, read_proof);
+
+    // Get vk
+    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let builder =
+        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, vec![], true, false);
+    let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
+    let verifying_key = VerifyingKey::create(builder, crs).unwrap();
+
+    let is_valid = UltraHonk::verify(proof, verifying_key).unwrap();
+    assert!(is_valid);
 }
 
 #[test]

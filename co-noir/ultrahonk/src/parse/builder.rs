@@ -13,6 +13,8 @@ use crate::{
         plookup::{MultiTableId, Plookup},
         types::{FieldCT, GateCounter, RomRecord, RomTable, NUM_WIRES},
     },
+    prover::HonkProofResult,
+    types::{Crs, PrecomputedEntities, ProverCrs, ProvingKey, VerifyingKey},
     Utils,
 };
 use ark_ec::pairing::Pairing;
@@ -53,6 +55,43 @@ impl<F: PrimeField> UltraCircuitVariable<F> for F {
 
 pub type UltraCircuitBuilder<P> = GenericUltraCircuitBuilder<P, <P as Pairing>::ScalarField>;
 
+impl<P: Pairing> UltraCircuitBuilder<P> {
+    pub fn create_keys(self, crs: Crs<P>) -> HonkProofResult<(ProvingKey<P>, VerifyingKey<P>)> {
+        let contains_recursive_proof = self.contains_recursive_proof;
+        let recursive_proof_public_input_indices = self.recursive_proof_public_input_indices;
+
+        let pk = ProvingKey::create(
+            self,
+            ProverCrs {
+                monomials: crs.monomials,
+            },
+        );
+        let circuit_size = pk.circuit_size;
+
+        let mut commitments = PrecomputedEntities::default();
+        for (des, src) in commitments
+            .iter_mut()
+            .zip(pk.polynomials.precomputed.iter())
+        {
+            let comm = Utils::commit(src.as_ref(), &pk.crs)?;
+            *des = P::G1Affine::from(comm);
+        }
+
+        // Create and return the VerifyingKey instance
+        let vk = VerifyingKey {
+            crs: crs.g2_x,
+            circuit_size,
+            num_public_inputs: pk.num_public_inputs,
+            pub_inputs_offset: pk.pub_inputs_offset,
+            commitments,
+            _contains_recursive_proof: contains_recursive_proof,
+            _recursive_proof_public_input_indices: recursive_proof_public_input_indices,
+        };
+
+        Ok((pk, vk))
+    }
+}
+
 pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> {
     pub variables: Vec<S>,
     variable_names: HashMap<u32, String>,
@@ -69,8 +108,8 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::Sca
     pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
     num_gates: usize,
     circuit_finalized: bool,
-    contains_recursive_proof: bool,
-    recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
+    pub contains_recursive_proof: bool,
+    pub recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
     rom_arrays: Vec<RomTranscript>,
     ram_arrays: Vec<RamTranscript>,
     pub(crate) lookup_tables: Vec<PlookupBasicTable<P::ScalarField>>,

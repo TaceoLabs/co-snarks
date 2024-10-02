@@ -6,7 +6,7 @@ use super::{
 use crate::{
     decider::polynomial::Polynomial,
     parse::types::{TraceData, NUM_WIRES},
-    types::{Polynomials, PrecomputedEntities, ProverCrs, ProvingKey},
+    types::{Crs, Polynomials, PrecomputedEntities, ProverCrs, ProvingKey},
     Utils,
 };
 use ark_ec::pairing::Pairing;
@@ -70,11 +70,9 @@ impl<P: Pairing> ProvingKey<P> {
         proving_key
     }
 
-    pub fn get_prover_crs<S: UltraCircuitVariable<P::ScalarField>>(
+    fn get_crs_size<S: UltraCircuitVariable<P::ScalarField>>(
         circuit: &GenericUltraCircuitBuilder<P, S>,
-        path_g1: &str,
-    ) -> Result<ProverCrs<P>> {
-        tracing::info!("Getting prover crs");
+    ) -> usize {
         const EXTRA_SRS_POINTS_FOR_ECCVM_IPA: usize = 1;
 
         let num_extra_gates =
@@ -84,8 +82,28 @@ impl<P: Pairing> ProvingKey<P> {
             total_circuit_size + num_extra_gates,
         );
 
-        let srs_size = Utils::round_up_power_2(srs_size) + EXTRA_SRS_POINTS_FOR_ECCVM_IPA;
+        Utils::round_up_power_2(srs_size) + EXTRA_SRS_POINTS_FOR_ECCVM_IPA
+    }
+
+    pub fn get_prover_crs<S: UltraCircuitVariable<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, S>,
+        path_g1: &str,
+    ) -> Result<ProverCrs<P>> {
+        tracing::info!("Getting prover crs");
+
+        let srs_size = Self::get_crs_size(circuit);
         CrsParser::<P>::get_crs_g1(path_g1, srs_size)
+    }
+
+    pub fn get_crs<S: UltraCircuitVariable<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, S>,
+        path_g1: &str,
+        path_g2: &str,
+    ) -> Result<Crs<P>> {
+        tracing::info!("Getting crs");
+
+        let srs_size = Self::get_crs_size(circuit);
+        CrsParser::<P>::get_crs(path_g1, path_g2, srs_size)
     }
 
     fn new(circuit_size: usize, num_public_inputs: usize, crs: ProverCrs<P>) -> Self {
