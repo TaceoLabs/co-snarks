@@ -1,4 +1,5 @@
 use ark_bn254::Bn254;
+use ark_ff::Zero;
 use clap::{Parser, Subcommand};
 use co_noir::{
     file_utils, share_rep3, GenerateProofCli, GenerateProofConfig, MPCProtocol, PubShared,
@@ -149,6 +150,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let crs_path = config.crs;
     let protocol = config.protocol;
     let out = config.out;
+    let public_input_filename = config.public_input;
     let t = config.threshold;
 
     file_utils::check_file_exists(&witness)?;
@@ -168,7 +170,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     )
     .context("while parsing program artifact")?;
 
-    let proof = match protocol {
+    let (proof, public_input) = match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
                 return Err(eyre!("REP3 only allows the threshold to be 1"));
@@ -202,6 +204,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
 
             // Get the proving key and prover
             let proving_key = ProvingKey::create(&protocol, builder, prover_crs);
+            let public_input = proving_key.get_public_inputs();
             let prover = CoUltraHonk::new(protocol);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!(
@@ -217,7 +220,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
 
-            proof
+            (proof, public_input)
         }
         _ => todo!("Implement other MPC protocols"),
     };
@@ -234,7 +237,29 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
         tracing::info!("Wrote proof to file {}", out.display());
     }
 
-    // public input
+    // write public input to output file
+    if let Some(public_input_filename) = public_input_filename {
+        let public_input_as_strings = public_input
+            .iter()
+            .map(|f| {
+                if f.is_zero() {
+                    "0".to_string()
+                } else {
+                    f.to_string()
+                }
+            })
+            .collect::<Vec<String>>();
+        let public_input_file = BufWriter::new(
+            std::fs::File::create(&public_input_filename)
+                .context("while creating public input file")?,
+        );
+        serde_json::to_writer(public_input_file, &public_input_as_strings)
+            .context("while writing out public inputs to JSON file")?;
+        tracing::info!(
+            "Wrote public inputs to file {}",
+            public_input_filename.display()
+        );
+    }
 
     tracing::info!("Proof generation finished successfully");
     Ok(ExitCode::SUCCESS)

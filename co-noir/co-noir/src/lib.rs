@@ -126,6 +126,10 @@ pub struct GenerateProofCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out: Option<PathBuf>,
+    /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub public_input: Option<PathBuf>,
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
@@ -144,6 +148,8 @@ pub struct GenerateProofConfig {
     pub protocol: MPCProtocol,
     /// The output file where the final proof is written to. If not passed, this party will not write the proof to a file.
     pub out: Option<PathBuf>,
+    /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
+    pub public_input: Option<PathBuf>,
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
