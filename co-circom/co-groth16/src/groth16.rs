@@ -271,11 +271,16 @@ where
         let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
         let mut ab = self.driver.local_mul_vec(a, b).await?;
         let c = c_rx.await?;
-        ab.par_iter_mut().zip_eq(c.par_iter()).for_each(|(a, b)| {
-            *a -= b;
-        });
+        ab.par_iter_mut()
+            .zip_eq(c.par_iter())
+            .with_min_len(512)
+            .for_each(|(a, b)| {
+                *a -= b;
+            });
         local_ab_span.exit();
         let local_ab_span = tracing::debug_span!("io part").entered();
+        // TODO we can return the result as join handle and wait on it later
+        // so we do not need a full network round here
         let ab = self.driver.io_round_mul_vec(ab).await?;
         local_ab_span.exit();
         compute_ab_span.exit();
