@@ -188,7 +188,7 @@ pub struct GenerateWitnessConfig {
     pub network: NetworkConfig,
 }
 
-/// Cli arguments for `transalte_witness`
+/// Cli arguments for `translate_witness`
 #[derive(Debug, Serialize, Args)]
 pub struct TranslateWitnessCli {
     /// The path to the config file
@@ -213,7 +213,7 @@ pub struct TranslateWitnessCli {
     pub out: Option<PathBuf>,
 }
 
-/// Config for `transalte_witness`
+/// Config for `translate_witness`
 #[derive(Debug, Deserialize)]
 pub struct TranslateWitnessConfig {
     /// The path to the witness share file
