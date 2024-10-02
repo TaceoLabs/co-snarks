@@ -248,6 +248,27 @@ where
     T: NoirWitnessExtensionProtocol<F>,
     F: PrimeField,
 {
+    fn open_results(&mut self, function: &Circuit<GenericFieldElement<F>>) -> CoAcvmResult<()> {
+        let witness_map = &mut self.witness_map[self.function_index];
+
+        let mut vec = Vec::with_capacity(function.return_values.0.len());
+        for index in function.return_values.0.iter() {
+            let val = witness_map.get(index).expect("witness should be present");
+            if let Some(val) = T::get_shared(val) {
+                vec.push(val.clone());
+            };
+        }
+        let mut opened = self.driver.open_many(&vec)?;
+        for index in function.return_values.0.iter().rev() {
+            let val = witness_map.get(index).expect("witness should be present");
+            if T::is_shared(val) {
+                let opened_val = opened.pop().expect("opened value should be present");
+                witness_map.insert(*index, T::AcvmType::from(opened_val));
+            }
+        }
+        Ok(())
+    }
+
     pub fn solve(mut self) -> CoAcvmResult<WitnessStack<T::AcvmType>> {
         let functions = std::mem::take(&mut self.functions);
 
@@ -273,7 +294,9 @@ where
                 //} => todo!(),
             }
         }
-        tracing::trace!("we are done! Wrap things up.");
+        tracing::trace!("we are done! Opening results...");
+        self.open_results(&functions[self.function_index])?;
+        tracing::trace!("Done! Wrap things up.");
         let mut witness_stack = WitnessStack::default();
         for (idx, witness) in self.witness_map.into_iter().rev().enumerate() {
             witness_stack.push(u32::try_from(idx).expect("usize fits into u32"), witness);
