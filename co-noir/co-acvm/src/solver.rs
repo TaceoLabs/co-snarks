@@ -2,6 +2,7 @@ use acir::{
     acir_field::GenericFieldElement,
     circuit::{Circuit, ExpressionWidth, Opcode},
     native_types::{WitnessMap, WitnessStack},
+    FieldElement,
 };
 use ark_ff::PrimeField;
 use intmap::IntMap;
@@ -73,7 +74,10 @@ impl<T> CoSolver<T, ark_bn254::Fr>
 where
     T: NoirWitnessExtensionProtocol<ark_bn254::Fr>,
 {
-    pub fn read_abi_bn254<P>(path: P, abi: &Abi) -> eyre::Result<WitnessMap<T::AcvmType>>
+    pub fn read_abi_bn254_fieldelement<P>(
+        path: P,
+        abi: &Abi,
+    ) -> eyre::Result<WitnessMap<FieldElement>>
     where
         PathBuf: From<P>,
     {
@@ -86,14 +90,20 @@ where
             // TODO the return value can be none for the witness extension
             // do we want to keep it like that? Seems not necessary but maybe
             // we need it for proving/verifying
-            let initial_witness = abi.encode(&input_map, return_value.clone())?;
-            let mut witnesses = WitnessMap::<T::AcvmType>::default();
-            for (witness, v) in initial_witness.into_iter() {
-                witnesses.insert(witness, T::AcvmType::from(v.into_repr())); //TODO this can be
-                                                                             //private for some
-            }
-            Ok(witnesses)
+            Ok(abi.encode(&input_map, return_value.clone())?)
         }
+    }
+
+    pub fn read_abi_bn254<P>(path: P, abi: &Abi) -> eyre::Result<WitnessMap<T::AcvmType>>
+    where
+        PathBuf: From<P>,
+    {
+        let initial_witness = Self::read_abi_bn254_fieldelement(path, abi)?;
+        let mut witnesses = WitnessMap::<T::AcvmType>::default();
+        for (witness, v) in initial_witness.into_iter() {
+            witnesses.insert(witness, T::AcvmType::from(v.into_repr())); //TODO this can be private for some
+        }
+        Ok(witnesses)
     }
 
     pub fn new_bn254<P>(

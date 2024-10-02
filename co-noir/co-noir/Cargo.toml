@@ -13,21 +13,18 @@ rust-version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+acir.workspace = true
 ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
 bincode.workspace = true
-# circom-mpc-compiler = { workspace = true }
-# circom-mpc-vm = { workspace = true }
-# circom-types = { workspace = true }
 clap.workspace = true
+co-acvm = { workspace = true }
 co-ultrahonk = { workspace = true }
 color-eyre.workspace = true
 figment.workspace = true
 mpc-core = { workspace = true }
 mpc-net.workspace = true
-# num-bigint.workspace = true
-# num-traits.workspace = true
 rand.workspace = true
 serde_json.workspace = true
 serde.workspace = true

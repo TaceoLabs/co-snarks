@@ -1,4 +1,5 @@
 pub mod file_utils;
+use acir::{acir_field::GenericFieldElement, native_types::WitnessMap};
 use ark_ec::pairing::Pairing;
 use clap::{Args, ValueEnum};
 use co_ultrahonk::prelude::{SharedBuilderVariable, UltraCircuitVariable};
@@ -7,7 +8,7 @@ use figment::{
     Figment,
 };
 use mpc_core::protocols::{
-    rep3::{self, network::Rep3Network, Rep3Protocol},
+    rep3::{self, network::Rep3Network, Rep3PrimeFieldShare, Rep3Protocol},
     shamir::{self, network::ShamirNetwork, ShamirProtocol},
 };
 use mpc_net::config::NetworkConfig;
@@ -102,6 +103,44 @@ pub struct SplitWitnessConfig {
     pub num_parties: usize,
 }
 
+/// Cli arguments for `split_input`
+#[derive(Debug, Default, Clone, Serialize, Args)]
+pub struct SplitInputCli {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the input JSON file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub input: Option<PathBuf>,
+    /// The path to the circuit file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub circuit: Option<String>,
+    /// The MPC protocol to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub protocol: Option<MPCProtocol>,
+    /// The path to the (existing) output directory
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub out_dir: Option<PathBuf>,
+}
+
+/// Config for `split_input`
+#[derive(Debug, Clone, Deserialize)]
+pub struct SplitInputConfig {
+    /// The path to the input JSON file
+    pub input: PathBuf,
+    /// The path to the circuit file
+    pub circuit: String,
+    /// The MPC protocol to be used
+    pub protocol: MPCProtocol,
+    /// The path to the (existing) output directory
+    pub out_dir: PathBuf,
+}
+
 /// Cli arguments for `generate_proof`
 #[derive(Debug, Serialize, Args)]
 pub struct GenerateProofCli {
@@ -189,6 +228,7 @@ macro_rules! impl_config {
     };
 }
 
+impl_config!(SplitInputCli, SplitInputConfig);
 impl_config!(SplitWitnessCli, SplitWitnessConfig);
 impl_config!(GenerateProofCli, GenerateProofConfig);
 
@@ -246,4 +286,20 @@ pub fn share_shamir<P: Pairing, N: ShamirNetwork, R: Rng + CryptoRng>(
         }
     }
     res
+}
+
+pub fn share_input_rep3<P: Pairing, N: Rep3Network, R: Rng + CryptoRng>(
+    initial_witness: WitnessMap<GenericFieldElement<P::ScalarField>>,
+    rng: &mut R,
+) -> [WitnessMap<Rep3PrimeFieldShare<P::ScalarField>>; 3] {
+    let mut witnesses = array::from_fn(|_| WitnessMap::default());
+    for (witness, v) in initial_witness.into_iter() {
+        let v = v.into_repr();
+        let shares = rep3::utils::share_field_element(v, rng);
+        for (w, share) in witnesses.iter_mut().zip(shares) {
+            w.insert(witness, share);
+        }
+    }
+
+    witnesses
 }
