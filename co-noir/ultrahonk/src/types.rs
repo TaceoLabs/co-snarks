@@ -303,12 +303,18 @@ impl<T: Default> IntoIterator for AllEntities<T> {
 }
 
 impl<T: Default> ProverWitnessEntities<T> {
-    const W_L: usize = 0; // column 0
-    const W_R: usize = 1; // column 1
-    const W_O: usize = 2; // column 2
-    const W_4: usize = 3; // column 3 (modified by prover)
-    const LOOKUP_READ_COUNTS: usize = 4; // column 6
-    const LOOKUP_READ_TAGS: usize = 5; // column 7
+    /// column 0
+    const W_L: usize = 0;
+    /// column 1
+    const W_R: usize = 1;
+    /// column 2
+    const W_O: usize = 2;
+    /// column 3 (modified by prover)
+    const W_4: usize = 3;
+    /// column 6
+    const LOOKUP_READ_COUNTS: usize = 4;
+    /// column 7
+    const LOOKUP_READ_TAGS: usize = 5;
 
     // const Z_PERM: usize = 4; // column 4 (computed by prover)
     // const LOOKUP_INVERSES: usize = 5; // column 5 (computed by prover);
@@ -358,14 +364,22 @@ impl<T: Default> ProverWitnessEntities<T> {
 }
 
 impl<T: Default> WitnessEntities<T> {
-    const W_L: usize = 0; // column 0
-    const W_R: usize = 1; // column 1
-    const W_O: usize = 2; // column 2
-    const W_4: usize = 3; // column 3 (computed by prover)
-    const Z_PERM: usize = 4; // column 4 (computed by prover)
-    pub(crate) const LOOKUP_INVERSES: usize = 5; // column 5 (computed by prover);
-    pub(crate) const LOOKUP_READ_COUNTS: usize = 6; // column 6
-    pub(crate) const LOOKUP_READ_TAGS: usize = 7; // column 7
+    /// column 0
+    const W_L: usize = 0;
+    /// column 1
+    const W_R: usize = 1;
+    /// column 2
+    const W_O: usize = 2;
+    /// column 3 (computed by prover)
+    const W_4: usize = 3;
+    /// column 4 (computed by prover)
+    const Z_PERM: usize = 4;
+    /// column 5 (computed by prover);
+    pub(crate) const LOOKUP_INVERSES: usize = 5;
+    /// column 6
+    pub(crate) const LOOKUP_READ_COUNTS: usize = 6;
+    /// column 7
+    pub(crate) const LOOKUP_READ_TAGS: usize = 7;
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
@@ -425,11 +439,16 @@ impl<T: Default> WitnessEntities<T> {
 }
 
 impl<T: Default> ShiftedWitnessEntities<T> {
-    const W_L: usize = 0; // column 0
-    const W_R: usize = 1; // column 1
-    const W_O: usize = 2; // column 2
-    const W_4: usize = 3; // column 3
-    const Z_PERM: usize = 4; // column 4
+    /// column 0
+    const W_L: usize = 0;
+    /// column 1
+    const W_R: usize = 1;
+    /// column 2
+    const W_O: usize = 2;
+    /// column 3
+    const W_4: usize = 3;
+    /// column 4
+    const Z_PERM: usize = 4;
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
@@ -462,10 +481,14 @@ impl<T: Default> ShiftedWitnessEntities<T> {
 
 #[allow(unused)]
 impl<T: Default> ShiftedTableEntities<T> {
-    const TABLE_1: usize = 0; // column 0
-    const TABLE_2: usize = 1; // column 1
-    const TABLE_3: usize = 2; // column 2
-    const TABLE_4: usize = 3; // column 3
+    /// column 0
+    const TABLE_1: usize = 0;
+    /// column 1
+    const TABLE_2: usize = 1;
+    /// column 2
+    const TABLE_3: usize = 2;
+    /// column 3
+    const TABLE_4: usize = 3;
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
@@ -493,33 +516,60 @@ impl<T: Default> ShiftedTableEntities<T> {
 }
 
 impl<T: Default> PrecomputedEntities<T> {
-    const Q_M: usize = 0; // column 0
-    const Q_C: usize = 1; // column 1
-    const Q_L: usize = 2; // column 2
-    const Q_R: usize = 3; // column 3
-    const Q_O: usize = 4; // column 4
-    const Q_4: usize = 5; // column 5
-    const Q_ARITH: usize = 6; // column 6
-    const Q_DELTA_RANGE: usize = 7; // column 7
-    const Q_ELLIPTIC: usize = 8; // column 8
-    const Q_AUX: usize = 9; // column 9
-    const Q_LOOKUP: usize = 10; // column 10
-    const Q_POSEIDON2_EXTERNAL: usize = 11; // column 11
-    const Q_POSEIDON2_INTERNAL: usize = 12; // column 12
-    const SIGMA_1: usize = 13; // column 13
-    const SIGMA_2: usize = 14; // column 14
-    const SIGMA_3: usize = 15; // column 15
-    const SIGMA_4: usize = 16; // column 16
-    const ID_1: usize = 17; // column 17
-    const ID_2: usize = 18; // column 18
-    const ID_3: usize = 19; // column 19
-    const ID_4: usize = 20; // column 20
-    const TABLE_1: usize = 21; // column 21
-    const TABLE_2: usize = 22; // column 22
-    const TABLE_3: usize = 23; // column 23
-    const TABLE_4: usize = 24; // column 24
-    const LAGRANGE_FIRST: usize = 25; // column 25
-    const LAGRANGE_LAST: usize = 26; // column 26
+    /// column 0
+    const Q_M: usize = 0;
+    /// column 1
+    const Q_C: usize = 1;
+    /// column 2
+    const Q_L: usize = 2;
+    /// column 3
+    const Q_R: usize = 3;
+    /// column 4
+    const Q_O: usize = 4;
+    /// column 5
+    const Q_4: usize = 5;
+    /// column 6
+    const Q_ARITH: usize = 6;
+    /// column 7
+    const Q_DELTA_RANGE: usize = 7;
+    /// column 8
+    const Q_ELLIPTIC: usize = 8;
+    /// column 9
+    const Q_AUX: usize = 9;
+    /// column 10
+    const Q_LOOKUP: usize = 10;
+    /// column 11
+    const Q_POSEIDON2_EXTERNAL: usize = 11;
+    /// column 12
+    const Q_POSEIDON2_INTERNAL: usize = 12;
+    /// column 13
+    const SIGMA_1: usize = 13;
+    /// column 14
+    const SIGMA_2: usize = 14;
+    /// column 15
+    const SIGMA_3: usize = 15;
+    /// column 16
+    const SIGMA_4: usize = 16;
+    /// column 17
+    const ID_1: usize = 17;
+    /// column 18
+    const ID_2: usize = 18;
+    /// column 19
+    const ID_3: usize = 19;
+    /// column 20
+    const ID_4: usize = 20;
+    /// column 21
+    const TABLE_1: usize = 21;
+    /// column 22
+    const TABLE_2: usize = 22;
+    /// column 23
+    const TABLE_3: usize = 23;
+    /// column 24
+    const TABLE_4: usize = 24;
+    /// column 25
+    const LAGRANGE_FIRST: usize = 25;
+    /// column 26
+    const LAGRANGE_LAST: usize = 26;
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
