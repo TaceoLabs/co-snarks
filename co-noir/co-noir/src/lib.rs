@@ -188,6 +188,46 @@ pub struct GenerateWitnessConfig {
     pub network: NetworkConfig,
 }
 
+/// Cli arguments for `transalte_witness`
+#[derive(Debug, Serialize, Args)]
+pub struct TranslateWitnessCli {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the witness share file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub witness: Option<PathBuf>,
+    /// The MPC protocol that was used for the witness generation
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub src_protocol: Option<MPCProtocol>,
+    /// The MPC protocol to be used for the proof generation
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub target_protocol: Option<MPCProtocol>,
+    /// The output file where the final witness share is written to
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub out: Option<PathBuf>,
+}
+
+/// Config for `transalte_witness`
+#[derive(Debug, Deserialize)]
+pub struct TranslateWitnessConfig {
+    /// The path to the witness share file
+    pub witness: PathBuf,
+    /// The MPC protocol that was used for the witness generation
+    pub src_protocol: MPCProtocol,
+    /// The MPC protocol to be used for the proof generation
+    pub target_protocol: MPCProtocol,
+    /// The output file where the final witness share is written to
+    pub out: PathBuf,
+    /// Network config
+    pub network: NetworkConfig,
+}
+
 /// Cli arguments for `generate_proof`
 #[derive(Debug, Serialize, Args)]
 pub struct GenerateProofCli {
@@ -278,6 +318,7 @@ macro_rules! impl_config {
 impl_config!(SplitInputCli, SplitInputConfig);
 impl_config!(SplitWitnessCli, SplitWitnessConfig);
 impl_config!(GenerateWitnessCli, GenerateWitnessConfig);
+impl_config!(TranslateWitnessCli, TranslateWitnessConfig);
 impl_config!(GenerateProofCli, GenerateProofConfig);
 
 #[allow(clippy::type_complexity)]

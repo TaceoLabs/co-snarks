@@ -7,16 +7,20 @@ use co_noir::{
     convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
     translate_witness_share_rep3, GenerateProofCli, GenerateProofConfig, GenerateWitnessCli,
     GenerateWitnessConfig, MPCProtocol, PubShared, SplitInputCli, SplitInputConfig,
-    SplitWitnessCli, SplitWitnessConfig,
+    SplitWitnessCli, SplitWitnessConfig, TranslateWitnessCli, TranslateWitnessConfig,
 };
-use co_ultrahonk::prelude::{CoUltraHonk, ProvingKey, Rep3CoBuilder, ShamirCoBuilder, Utils};
+use co_ultrahonk::prelude::{
+    CoUltraHonk, ProvingKey, Rep3CoBuilder, ShamirCoBuilder, SharedBuilderVariable, Utils,
+};
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
     rep3::{
+        fieldshare::Rep3PrimeFieldShareVec,
         network::{Rep3MpcNet, Rep3Network},
         Rep3PrimeFieldShare, Rep3Protocol,
     },
     shamir::{
+        fieldshare::ShamirPrimeFieldShareVec,
         network::{ShamirMpcNet, ShamirNetwork},
         ShamirProtocol,
     },
@@ -60,6 +64,8 @@ enum Commands {
     SplitInput(SplitInputCli),
     /// Evaluates the extended witness generation for the specified circuit and input share in MPC
     GenerateWitness(GenerateWitnessCli),
+    /// Translates the witness generated with one MPC protocol to a witness for a different one
+    TranslateWitness(TranslateWitnessCli),
     /// Evaluates the prover algorithm for the specified circuit and witness share in MPC
     GenerateProof(GenerateProofCli),
 }
@@ -80,6 +86,10 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::GenerateWitness(cli) => {
             let config = GenerateWitnessConfig::parse(cli).context("while parsing config")?;
             run_generate_witness(config)
+        }
+        Commands::TranslateWitness(cli) => {
+            let config = TranslateWitnessConfig::parse(cli).context("while parsing config")?;
+            run_translate_witness(config)
         }
         Commands::GenerateProof(cli) => {
             let config = GenerateProofConfig::parse(cli).context("while parsing config")?;
@@ -297,6 +307,69 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
     bincode::serialize_into(out_file, &result_witness_share)
         .context("while serializing witness share")?;
+    tracing::info!("Witness successfully written to {}", out.display());
+    Ok(ExitCode::SUCCESS)
+}
+
+#[instrument(skip(config))]
+fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<ExitCode> {
+    let witness = config.witness;
+    let src_protocol = config.src_protocol;
+    let target_protocol = config.target_protocol;
+    let out = config.out;
+
+    if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
+        return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
+    }
+    file_utils::check_file_exists(&witness)?;
+
+    // parse witness shares
+    let witness_file =
+        BufReader::new(File::open(witness).context("trying to open witness share file")?);
+    let witness_share: Vec<SharedBuilderVariable<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>> =
+        bincode::deserialize_from(witness_file).context("while deserializing witness share")?;
+
+    // extract shares only
+    let mut shares = vec![];
+    for share in witness_share.iter() {
+        if let SharedBuilderVariable::Shared(value) = share {
+            shares.push(value.to_owned());
+        }
+    }
+
+    // connect to network
+    let net = Rep3MpcNet::new(config.network)?;
+    let id = usize::from(net.get_id());
+
+    // init MPC protocol
+    let protocol = Rep3Protocol::<ark_bn254::Fr, Rep3MpcNet>::new(net)?;
+    let mut protocol = protocol.get_shamir_protocol()?;
+
+    // Translate witness to shamir shares
+    let start = Instant::now();
+    let result_shares: ShamirPrimeFieldShareVec<ark_bn254::Fr> =
+        protocol.translate_primefield_repshare_vec(Rep3PrimeFieldShareVec::from(shares))?;
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Party {}: Translating witness took {} ms", id, duration_ms);
+
+    let mut result: Vec<SharedBuilderVariable<ShamirProtocol<ark_bn254::Fr, ShamirMpcNet>, Bn254>> =
+        Vec::with_capacity(witness_share.len());
+    let mut iter = result_shares.into_iter();
+    for val in witness_share.into_iter() {
+        match val {
+            SharedBuilderVariable::Public(value) => {
+                result.push(SharedBuilderVariable::Public(value))
+            }
+            SharedBuilderVariable::Shared(_) => {
+                let share = iter.next().expect("enough shares");
+                result.push(SharedBuilderVariable::Shared(share))
+            }
+        }
+    }
+
+    // write result to output file
+    let out_file = BufWriter::new(std::fs::File::create(&out)?);
+    bincode::serialize_into(out_file, &result)?;
     tracing::info!("Witness successfully written to {}", out.display());
     Ok(ExitCode::SUCCESS)
 }
