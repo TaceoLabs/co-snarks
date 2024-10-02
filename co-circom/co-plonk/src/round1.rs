@@ -7,7 +7,7 @@ use tracing::instrument;
 
 use crate::{
     mpc::CircomPlonkProver,
-    plonk_utils,
+    plonk_utils::{self, rayon_join},
     round2::Round2,
     types::{Domains, PlonkData, PlonkWitness, PolyEval},
     PlonkProofError, PlonkProofResult,
@@ -131,47 +131,35 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         witness: &PlonkWitness<P, T>,
     ) -> PlonkProofResult<Round1Polys<P, T>> {
         let party_id = driver.get_party_id();
-
-        let mut wire_a = None;
-        let mut wire_b = None;
-        let mut wire_c = None;
-
-        rayon::scope(|s| {
-            s.spawn(|_| {
-                wire_a = Some(Self::compute_single_wire_poly(
-                    party_id,
-                    witness,
-                    domains,
-                    &challenges.b[..2],
-                    zkey,
-                    &zkey.map_a,
-                ))
-            });
-            s.spawn(|_| {
-                wire_b = Some(Self::compute_single_wire_poly(
-                    party_id,
-                    witness,
-                    domains,
-                    &challenges.b[2..4],
-                    zkey,
-                    &zkey.map_b,
-                ))
-            });
-            s.spawn(|_| {
-                wire_c = Some(Self::compute_single_wire_poly(
-                    party_id,
-                    witness,
-                    domains,
-                    &challenges.b[4..6],
-                    zkey,
-                    &zkey.map_c,
-                ))
-            });
-        });
-        // we have some values as rayon scope finished
-        let (buffer_a, poly_a) = wire_a.unwrap()?;
-        let (buffer_b, poly_b) = wire_b.unwrap()?;
-        let (buffer_c, poly_c) = wire_c.unwrap()?;
+        let (wire_a, wire_b, wire_c) = rayon_join!(
+            Self::compute_single_wire_poly(
+                party_id,
+                witness,
+                domains,
+                &challenges.b[..2],
+                zkey,
+                &zkey.map_a,
+            ),
+            Self::compute_single_wire_poly(
+                party_id,
+                witness,
+                domains,
+                &challenges.b[2..4],
+                zkey,
+                &zkey.map_b,
+            ),
+            Self::compute_single_wire_poly(
+                party_id,
+                witness,
+                domains,
+                &challenges.b[4..6],
+                zkey,
+                &zkey.map_c,
+            )
+        );
+        let (buffer_a, poly_a) = wire_a?;
+        let (buffer_b, poly_b) = wire_b?;
+        let (buffer_c, poly_c) = wire_c?;
 
         if poly_a.poly.len() > zkey.domain_size + 2
             || poly_b.poly.len() > zkey.domain_size + 2
@@ -266,29 +254,13 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         let polys =
             Self::compute_wire_polynomials(&mut driver, &domains, &challenges, zkey, witness)?;
 
-        let mut commit_a = None;
-        let mut commit_b = None;
-        let mut commit_c = None;
         let commit_span = tracing::debug_span!("committing to polys (MSMs)").entered();
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        rayon::scope(|s| {
-            s.spawn(|_| {
-                let result = T::msm_public_points_g1(&p_tau[..polys.a.poly.len()], &polys.a.poly);
-                commit_a = Some(result);
-            });
-            s.spawn(|_| {
-                let result = T::msm_public_points_g1(&p_tau[..polys.b.poly.len()], &polys.b.poly);
-                commit_b = Some(result);
-            });
-            s.spawn(|_| {
-                let result = T::msm_public_points_g1(&p_tau[..polys.c.poly.len()], &polys.c.poly);
-                commit_c = Some(result);
-            });
-        });
-        // rayon scope must be done therefore some values
-        let commit_a = commit_a.unwrap();
-        let commit_b = commit_b.unwrap();
-        let commit_c = commit_c.unwrap();
+        let (commit_a, commit_b, commit_c) = rayon_join!(
+            T::msm_public_points_g1(&p_tau[..polys.a.poly.len()], &polys.a.poly),
+            T::msm_public_points_g1(&p_tau[..polys.b.poly.len()], &polys.b.poly),
+            T::msm_public_points_g1(&p_tau[..polys.c.poly.len()], &polys.c.poly)
+        );
 
         // network round
         commit_span.exit();

@@ -81,6 +81,21 @@ impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P:
         arithmetic::mul_public(shared, public)
     }
 
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField> {
+        arithmetic::local_mul_vec(a, b)
+    }
+
+    async fn io_round_mul_vec(
+        &mut self,
+        a: Vec<P::ScalarField>,
+    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        self.protocol0.degree_reduce_vec(a).await
+    }
+
     async fn mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],

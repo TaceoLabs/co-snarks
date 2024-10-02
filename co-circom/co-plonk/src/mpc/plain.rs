@@ -63,6 +63,21 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         }
     }
 
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField> {
+        izip!(a, b).map(|(a, b)| *a * *b).collect()
+    }
+
+    async fn io_round_mul_vec(
+        &mut self,
+        a: Vec<P::ScalarField>,
+    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        Ok(a)
+    }
+
     fn mul_with_public(
         shared: Self::ArithmeticShare,
         public: P::ScalarField,

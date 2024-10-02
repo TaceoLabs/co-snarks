@@ -124,6 +124,15 @@ mod plonk_utils {
     use num_traits::One;
     use num_traits::Zero;
 
+    macro_rules! rayon_join {
+        ($t1: expr, $t2: expr, $t3: expr) => {{
+            let ((x, y), z) = rayon::join(|| rayon::join(|| $t1, || $t2), || $t3);
+            (x, y, z)
+        }};
+    }
+
+    pub(crate) use rayon_join;
+
     pub(crate) fn get_witness<P: Pairing, T: CircomPlonkProver<P>>(
         party_id: T::PartyID,
         witness: &PlonkWitness<P, T>,
@@ -157,7 +166,7 @@ mod plonk_utils {
         #[allow(unused_mut)]
         poly.par_iter_mut()
             .zip(coeff_rev.par_iter().rev())
-            .with_min_len(32)
+            .with_min_len(512)
             .for_each(|(mut p, c)| {
                 *p = T::sub(*p, *c);
             });

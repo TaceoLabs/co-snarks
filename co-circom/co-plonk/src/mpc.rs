@@ -50,6 +50,17 @@ pub trait CircomPlonkProver<P: Pairing> {
         public: P::ScalarField,
     ) -> Self::ArithmeticShare;
 
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField>;
+
+    async fn io_round_mul_vec(
+        &mut self,
+        a: Vec<P::ScalarField>,
+    ) -> IoResult<Vec<Self::ArithmeticShare>>;
+
     fn mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
