@@ -286,12 +286,6 @@ where
                     predicate,
                 } => self.solve_memory_op(*block_id, op, predicate.to_owned())?,
                 _ => todo!("non assert zero opcode detected, not supported yet"),
-                //Opcode::Call {
-                //    id,
-                //    inputs,
-                //    outputs,
-                //    predicate,
-                //} => todo!(),
             }
         }
         tracing::trace!("we are done! Opening results...");
@@ -304,8 +298,3 @@ where
         Ok(witness_stack)
     }
 }
-
-/*
-  let binary_packages = workspace.into_iter().filter(|package| package.is_binary());
-    for package in binary_packages {
-*/
