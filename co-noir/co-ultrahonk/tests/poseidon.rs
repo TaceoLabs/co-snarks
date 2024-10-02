@@ -1,12 +1,15 @@
 use ark_bn254::Bn254;
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey, SharedBuilderVariable};
 use mpc_core::protocols::plain::PlainDriver;
-use ultrahonk::{prelude::HonkProof, Utils};
+use ultrahonk::{
+    prelude::{HonkProof, UltraHonk},
+    Utils,
+};
 
 #[test]
 fn poseidon_plaindriver_test() {
     const CRS_PATH_G1: &str = "../ultrahonk/crs/bn254_g1.dat";
-    // const CRS_PATH_G2: &str = "crs/bn254_g2.dat";
+    const CRS_PATH_G2: &str = "../ultrahonk/crs/bn254_g2.dat";
     const CIRCUIT_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.json";
     const WITNESS_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.gz";
     const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.proof";
@@ -21,8 +24,8 @@ fn poseidon_plaindriver_test() {
 
     let driver = PlainDriver::default();
 
-    let prover_crs = ProvingKey::get_prover_crs(&builder, CRS_PATH_G1).unwrap();
-    let proving_key = ProvingKey::create(&driver, builder, prover_crs);
+    let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
+    let (proving_key, verifying_key) = ProvingKey::create_keys(&driver, builder, crs).unwrap();
 
     let prover = CoUltraHonk::new(driver);
     let proof = prover.prove(proving_key).unwrap();
@@ -33,4 +36,7 @@ fn poseidon_plaindriver_test() {
 
     let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
     assert_eq!(proof, read_proof);
+
+    let is_valid = UltraHonk::verify(proof, verifying_key).unwrap();
+    assert!(is_valid);
 }

@@ -36,7 +36,7 @@ pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> UltraHonk<P> {
-    fn generate_gate_challenges(transcript: &mut TranscriptType) -> Vec<P::ScalarField> {
+    pub(crate) fn generate_gate_challenges(transcript: &mut TranscriptType) -> Vec<P::ScalarField> {
         tracing::trace!("generate gate challenges");
 
         let mut gate_challenges: Vec<<P as Pairing>::ScalarField> =

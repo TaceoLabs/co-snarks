@@ -1,5 +1,5 @@
 use crate::decider::prover::Decider;
-use crate::decider::sumcheck::round::{SumcheckRound, SumcheckRoundOutput};
+use crate::decider::sumcheck::round_prover::{SumcheckProverRound, SumcheckRoundOutput};
 use crate::decider::sumcheck::SumcheckOutput;
 use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys};
 use crate::honk_curve::HonkCurve;
@@ -77,7 +77,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         let multivariate_n = circuit_size;
         let multivariate_d = Utils::get_msb64(multivariate_n as u64);
 
-        let mut sum_check_round = SumcheckRound::new(multivariate_n as usize);
+        let mut sum_check_round = SumcheckProverRound::new(multivariate_n as usize);
 
         let mut gate_separators = GateSeparatorPolynomial::new(
             self.memory.relation_parameters.gate_challenges.to_owned(),

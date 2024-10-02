@@ -4,14 +4,16 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use co_acvm::solver::Rep3CoSolver;
 use co_ultrahonk::prelude::{
-    CoUltraHonk, HonkProof, ProvingKey, Rep3CoBuilder, SharedBuilderVariable, UltraCircuitVariable,
-    Utils,
+    CoUltraHonk, HonkProof, ProvingKey, Rep3CoBuilder, SharedBuilderVariable, UltraCircuitBuilder,
+    UltraCircuitVariable, UltraHonk, Utils, VerifyingKey,
 };
 use mpc_core::protocols::rep3::{
     network::Rep3Network, witness_extension_impl::Rep3VmType, Rep3Protocol,
 };
 use std::thread;
 use tests::rep3_network::Rep3TestNetwork;
+
+use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 
 fn witness_map_to_witness_vector<P: Pairing, N: Rep3Network>(
     witness_map: WitnessMap<Rep3VmType<P::ScalarField>>,
@@ -51,7 +53,6 @@ fn convert_witness_rep3<P: Pairing, N: Rep3Network>(
 }
 
 fn proof_test(name: &str) {
-    const CRS_PATH_G1: &str = "../co-noir/ultrahonk/crs/bn254_g1.dat";
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
     let proof_file = format!("../test_vectors/noir/{}/kat/{}.proof", name, name);
@@ -82,11 +83,11 @@ fn proof_test(name: &str) {
                 false,
             );
 
-            let prover_crs = ProvingKey::get_prover_crs(&builder, CRS_PATH_G1)
+            let crs = ProvingKey::get_prover_crs(&builder, CRS_PATH_G1)
                 .expect("failed to get prover crs");
 
             let driver = Rep3Protocol::new(net).unwrap();
-            let proving_key = ProvingKey::create(&driver, builder, prover_crs);
+            let proving_key = ProvingKey::create(&driver, builder, crs);
 
             let prover = CoUltraHonk::new(driver);
             prover.prove(proving_key).unwrap()
@@ -109,10 +110,19 @@ fn proof_test(name: &str) {
 
     let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
     assert_eq!(proof, read_proof);
+
+    // Get vk
+    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let builder =
+        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, vec![], true, false);
+    let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
+    let verifying_key = VerifyingKey::create(builder, crs).unwrap();
+
+    let is_valid = UltraHonk::verify(proof, verifying_key).unwrap();
+    assert!(is_valid);
 }
 
 fn witness_and_proof_test(name: &str) {
-    const CRS_PATH_G1: &str = "../co-noir/ultrahonk/crs/bn254_g1.dat";
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", name);
     let proof_file = format!("../test_vectors/noir/{}/kat/{}.proof", name, name);
@@ -171,6 +181,16 @@ fn witness_and_proof_test(name: &str) {
 
     let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
     assert_eq!(proof, read_proof);
+
+    // Get vk
+    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let builder =
+        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, vec![], true, false);
+    let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
+    let verifying_key = VerifyingKey::create(builder, crs).unwrap();
+
+    let is_valid = UltraHonk::verify(proof, verifying_key).unwrap();
+    assert!(is_valid);
 }
 
 #[test]

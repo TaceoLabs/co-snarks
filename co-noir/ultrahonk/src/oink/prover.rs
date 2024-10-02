@@ -177,7 +177,13 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         Utils::batch_invert(self.memory.lookup_inverses.as_mut());
     }
 
-    fn compute_public_input_delta(&self, proving_key: &ProvingKey<P>) -> P::ScalarField {
+    pub(crate) fn compute_public_input_delta(
+        beta: &P::ScalarField,
+        gamma: &P::ScalarField,
+        public_inputs: &[P::ScalarField],
+        circuit_size: u32,
+        pub_inputs_offset: u32,
+    ) -> P::ScalarField {
         tracing::trace!("compute public input delta");
 
         // Let m be the number of public inputs x₀,…, xₘ₋₁.
@@ -205,20 +211,15 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
 
         let mut num = P::ScalarField::one();
         let mut denom = P::ScalarField::one();
-        let mut num_acc = self.memory.challenges.gamma
-            + self.memory.challenges.beta
-                * P::ScalarField::from(
-                    (proving_key.circuit_size + proving_key.pub_inputs_offset) as u64,
-                );
-        let mut denom_acc = self.memory.challenges.gamma
-            - self.memory.challenges.beta
-                * P::ScalarField::from((1 + proving_key.pub_inputs_offset) as u64);
+        let mut num_acc =
+            *gamma + P::ScalarField::from((circuit_size + pub_inputs_offset) as u64) * beta;
+        let mut denom_acc = *gamma - P::ScalarField::from((1 + pub_inputs_offset) as u64) * beta;
 
-        for x_i in proving_key.public_inputs.iter() {
+        for x_i in public_inputs.iter() {
             num *= num_acc + x_i;
             denom *= denom_acc + x_i;
-            num_acc += self.memory.challenges.beta;
-            denom_acc -= self.memory.challenges.beta;
+            num_acc += beta;
+            denom_acc -= beta;
         }
         num / denom
     }
@@ -312,12 +313,14 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
     }
 
     /// Generate relation separators alphas for sumcheck/combiner computation
-    fn generate_alphas_round(&mut self, transcript: &mut TranscriptType) {
+    pub(crate) fn generate_alphas_round(
+        alphas: &mut [P::ScalarField],
+        transcript: &mut TranscriptType,
+    ) {
         tracing::trace!("generate alpha round");
 
-        for idx in 0..self.memory.challenges.alphas.len() {
-            self.memory.challenges.alphas[idx] =
-                transcript.get_challenge::<P>(format!("alpha_{}", idx));
+        for (idx, alpha) in alphas.iter_mut().enumerate() {
+            *alpha = transcript.get_challenge::<P>(format!("alpha_{}", idx));
         }
     }
 
@@ -460,7 +463,13 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
     ) -> HonkProofResult<()> {
         tracing::trace!("executing grand product computation round");
 
-        self.memory.public_input_delta = self.compute_public_input_delta(proving_key);
+        self.memory.public_input_delta = Self::compute_public_input_delta(
+            &self.memory.challenges.beta,
+            &self.memory.challenges.gamma,
+            &proving_key.public_inputs,
+            proving_key.circuit_size,
+            proving_key.pub_inputs_offset,
+        );
         self.compute_grand_product(proving_key);
 
         let z_perm = Utils::commit(self.memory.z_perm.as_ref(), &proving_key.crs)?;
@@ -488,7 +497,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         self.execute_grand_product_computation_round(transcript, proving_key)?;
 
         // Generate relation separators alphas for sumcheck/combiner computation
-        self.generate_alphas_round(transcript);
+        Self::generate_alphas_round(&mut self.memory.challenges.alphas, transcript);
 
         Ok(self.memory)
     }

@@ -283,24 +283,13 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
     }
 
     fn get_g_polyomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyG<Vec<P::ScalarField>> {
-        let tables = [
-            polys.precomputed.table_1(),
-            polys.precomputed.table_2(),
-            polys.precomputed.table_3(),
-            polys.precomputed.table_4(),
-        ];
-
-        let wires = [
-            polys.witness.w_l(),
-            polys.witness.w_r(),
-            polys.witness.w_o(),
-            polys.witness.w_4(),
-        ];
-
         PolyG {
-            tables,
-            wires,
-            z_perm: polys.witness.z_perm(),
+            tables: polys
+                .precomputed
+                .get_table_polynomials()
+                .try_into()
+                .unwrap(),
+            wires: polys.witness.to_be_shifted().try_into().unwrap(),
         }
     }
 

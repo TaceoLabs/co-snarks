@@ -1,5 +1,6 @@
 use crate::{
     decider::polynomial::Polynomial,
+    parse::types::AggregationObjectPubInputIndices,
     prover::{HonkProofError, HonkProofResult},
 };
 use ark_ec::pairing::Pairing;
@@ -15,6 +16,17 @@ pub struct ProvingKey<P: Pairing> {
     pub(crate) polynomials: Polynomials<P::ScalarField>,
     pub(crate) memory_read_records: Vec<u32>,
     pub(crate) memory_write_records: Vec<u32>,
+}
+
+pub struct VerifyingKey<P: Pairing> {
+    pub crs: P::G2Affine,
+    pub circuit_size: u32,
+    pub num_public_inputs: u32,
+    pub pub_inputs_offset: u32,
+    // We so far don't need the next two fields, but for serialization reasons we keep them
+    pub _contains_recursive_proof: bool,
+    pub _recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
+    pub commitments: PrecomputedEntities<P::G1Affine>,
 }
 
 // This is what we get from the proving key, we shift at a later point
@@ -61,6 +73,10 @@ impl<F: PrimeField> HonkProof<F> {
 
     pub(crate) fn new(proof: Vec<F>) -> Self {
         Self { proof }
+    }
+
+    pub(crate) fn inner(self) -> Vec<F> {
+        self.proof
     }
 
     pub fn to_buffer(&self) -> Vec<u8> {
@@ -167,6 +183,10 @@ impl<F: PrimeField> HonkProof<F> {
     }
 }
 
+pub(crate) const NUM_ALL_ENTITIES: usize = WITNESS_ENTITIES_SIZE
+    + PRECOMPUTED_ENTITIES_SIZE
+    + SHIFTED_TABLE_ENTITIES_SIZE
+    + SHIFTED_WITNESS_ENTITIES_SIZE;
 #[derive(Default)]
 pub(crate) struct AllEntities<T: Default> {
     pub(crate) witness: WitnessEntities<T>,
@@ -389,6 +409,10 @@ impl<T: Default> WitnessEntities<T> {
         self.elements.iter_mut()
     }
 
+    pub(crate) fn to_be_shifted(&self) -> &[T] {
+        &self.elements[Self::W_L..=Self::Z_PERM]
+    }
+
     pub(crate) fn to_be_shifted_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::W_L..=Self::Z_PERM]
     }
@@ -423,6 +447,26 @@ impl<T: Default> WitnessEntities<T> {
 
     pub(crate) fn lookup_read_tags(&self) -> &T {
         &self.elements[Self::LOOKUP_READ_TAGS]
+    }
+
+    pub(crate) fn w_l_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_L]
+    }
+
+    pub(crate) fn w_r_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_R]
+    }
+
+    pub(crate) fn w_o_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_O]
+    }
+
+    pub(crate) fn w_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_4]
+    }
+
+    pub(crate) fn z_perm_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Z_PERM]
     }
 
     pub(crate) fn lookup_inverses_mut(&mut self) -> &mut T {

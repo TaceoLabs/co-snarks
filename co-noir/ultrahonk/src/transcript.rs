@@ -45,14 +45,30 @@ where
         }
     }
 
+    pub fn new_verifier(params: &Arc<Poseidon2Params<F, 4, 5>>, proof: HonkProof<F>) -> Self {
+        Self {
+            proof_data: proof.inner(),
+            manifest: Default::default(),
+            num_frs_written: 0,
+            num_frs_read: 0,
+            round_number: 0,
+            is_first_challenge: true,
+            current_round_data: Default::default(),
+            previous_challenge: Default::default(),
+            hasher: Poseidon2::new(params),
+        }
+    }
+
     pub fn get_proof(self) -> HonkProof<F> {
         HonkProof::new(self.proof_data)
     }
 
+    #[allow(unused)]
     pub(crate) fn print(&self) {
         self.manifest.print();
     }
 
+    #[allow(unused)]
     pub(crate) fn get_manifest(&self) -> &TranscriptManifest {
         &self.manifest
     }
@@ -299,6 +315,7 @@ impl TranscriptManifest {
             .push((element_label, element_size));
     }
 
+    #[allow(unused)]
     pub(crate) fn size(&self) -> usize {
         self.manifest.len()
     }

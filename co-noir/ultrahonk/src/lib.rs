@@ -7,9 +7,9 @@ pub(crate) mod poseidon2;
 pub mod prelude;
 pub(crate) mod prover;
 pub(crate) mod sponge_hasher;
-#[allow(unused)] // TODO remove this at a later point
 mod transcript;
 pub(crate) mod types;
+pub(crate) mod verifier;
 
 use acir::{native_types::WitnessStack, FieldElement};
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
@@ -168,9 +168,16 @@ impl Utils {
         poly: &[P::ScalarField],
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<P::G1> {
-        if poly.len() > crs.monomials.len() {
+        Self::commit_inner::<P>(poly, crs.monomials.as_slice())
+    }
+
+    pub fn commit_inner<P: Pairing>(
+        poly: &[P::ScalarField],
+        crs: &[P::G1Affine],
+    ) -> HonkProofResult<P::G1> {
+        if poly.len() > crs.len() {
             return Err(HonkProofError::CrsTooSmall);
         }
-        Ok(P::G1::msm_unchecked(&crs.monomials, poly))
+        Ok(P::G1::msm_unchecked(crs, poly))
     }
 }
