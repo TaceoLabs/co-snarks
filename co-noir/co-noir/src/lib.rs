@@ -1,6 +1,10 @@
 pub mod file_utils;
-use acir::{acir_field::GenericFieldElement, native_types::WitnessMap};
+use acir::{
+    acir_field::GenericFieldElement,
+    native_types::{WitnessMap, WitnessStack},
+};
 use ark_ec::pairing::Pairing;
+use ark_ff::{PrimeField, Zero};
 use clap::{Args, ValueEnum};
 use co_ultrahonk::prelude::{SharedBuilderVariable, UltraCircuitVariable};
 use figment::{
@@ -8,7 +12,10 @@ use figment::{
     Figment,
 };
 use mpc_core::protocols::{
-    rep3::{self, network::Rep3Network, Rep3PrimeFieldShare, Rep3Protocol},
+    rep3::{
+        self, network::Rep3Network, witness_extension_impl::Rep3VmType, Rep3PrimeFieldShare,
+        Rep3Protocol,
+    },
     shamir::{self, network::ShamirNetwork, ShamirProtocol},
 };
 use mpc_net::config::NetworkConfig;
@@ -141,6 +148,46 @@ pub struct SplitInputConfig {
     pub out_dir: PathBuf,
 }
 
+/// Cli arguments for `generate_witness`
+#[derive(Debug, Default, Serialize, Args)]
+pub struct GenerateWitnessCli {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the input share file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub input: Option<PathBuf>,
+    /// The path to the circuit file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub circuit: Option<String>,
+    /// The MPC protocol to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub protocol: Option<MPCProtocol>,
+    /// The output file where the final witness share is written to
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub out: Option<PathBuf>,
+}
+
+/// Config for `generate_witness`
+#[derive(Debug, Deserialize)]
+pub struct GenerateWitnessConfig {
+    /// The path to the input share file
+    pub input: PathBuf,
+    /// The path to the circuit file
+    pub circuit: String,
+    /// The MPC protocol to be used
+    pub protocol: MPCProtocol,
+    /// The output file where the final witness share is written to
+    pub out: PathBuf,
+    /// Network config
+    pub network: NetworkConfig,
+}
+
 /// Cli arguments for `generate_proof`
 #[derive(Debug, Serialize, Args)]
 pub struct GenerateProofCli {
@@ -230,6 +277,7 @@ macro_rules! impl_config {
 
 impl_config!(SplitInputCli, SplitInputConfig);
 impl_config!(SplitWitnessCli, SplitWitnessConfig);
+impl_config!(GenerateWitnessCli, GenerateWitnessConfig);
 impl_config!(GenerateProofCli, GenerateProofConfig);
 
 #[allow(clippy::type_complexity)]
@@ -302,4 +350,47 @@ pub fn share_input_rep3<P: Pairing, N: Rep3Network, R: Rng + CryptoRng>(
     }
 
     witnesses
+}
+
+pub fn translate_witness_share_rep3<F: PrimeField>(
+    witness: WitnessMap<Rep3PrimeFieldShare<F>>,
+) -> WitnessMap<Rep3VmType<F>> {
+    let mut result = WitnessMap::default();
+    for (witness, v) in witness.into_iter() {
+        result.insert(witness, Rep3VmType::Shared(v));
+    }
+
+    result
+}
+
+pub fn convert_witness_to_vec_rep3<P: Pairing, N: Rep3Network>(
+    mut witness_stack: WitnessStack<Rep3VmType<P::ScalarField>>,
+) -> Vec<SharedBuilderVariable<Rep3Protocol<P::ScalarField, N>, P>> {
+    let witness_map = witness_stack
+        .pop()
+        .expect("Witness should be present")
+        .witness;
+
+    let mut wv = Vec::new();
+    let mut index = 0;
+    for (w, f) in witness_map.into_iter() {
+        // ACIR uses a sparse format for WitnessMap where unused witness indices may be left unassigned.
+        // To ensure that witnesses sit at the correct indices in the `WitnessVector`, we fill any indices
+        // which do not exist within the `WitnessMap` with the dummy value of zero.
+        while index < w.0 {
+            wv.push(SharedBuilderVariable::from_public(P::ScalarField::zero()));
+            index += 1;
+        }
+        match f {
+            Rep3VmType::Public(f) => {
+                wv.push(SharedBuilderVariable::from_public(f));
+            }
+            Rep3VmType::Shared(f) => {
+                wv.push(SharedBuilderVariable::from_shared(f));
+            }
+            Rep3VmType::BitShared => panic!("BitShared not supported"),
+        }
+        index += 1;
+    }
+    wv
 }

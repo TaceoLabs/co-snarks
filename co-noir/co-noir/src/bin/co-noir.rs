@@ -1,17 +1,20 @@
+use acir::native_types::WitnessMap;
 use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Parser, Subcommand};
 use co_acvm::solver::Rep3CoSolver;
 use co_noir::{
-    file_utils, share_input_rep3, share_rep3, share_shamir, GenerateProofCli, GenerateProofConfig,
-    MPCProtocol, PubShared, SplitInputCli, SplitInputConfig, SplitWitnessCli, SplitWitnessConfig,
+    convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
+    translate_witness_share_rep3, GenerateProofCli, GenerateProofConfig, GenerateWitnessCli,
+    GenerateWitnessConfig, MPCProtocol, PubShared, SplitInputCli, SplitInputConfig,
+    SplitWitnessCli, SplitWitnessConfig,
 };
 use co_ultrahonk::prelude::{CoUltraHonk, ProvingKey, Rep3CoBuilder, ShamirCoBuilder, Utils};
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
     rep3::{
         network::{Rep3MpcNet, Rep3Network},
-        Rep3Protocol,
+        Rep3PrimeFieldShare, Rep3Protocol,
     },
     shamir::{
         network::{ShamirMpcNet, ShamirNetwork},
@@ -55,6 +58,8 @@ enum Commands {
     SplitWitness(SplitWitnessCli),
     /// Splits a input toml file into secret shares for use in MPC
     SplitInput(SplitInputCli),
+    /// Evaluates the extended witness generation for the specified circuit and input share in MPC
+    GenerateWitness(GenerateWitnessCli),
     /// Evaluates the prover algorithm for the specified circuit and witness share in MPC
     GenerateProof(GenerateProofCli),
 }
@@ -71,6 +76,10 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::SplitInput(cli) => {
             let config = SplitInputConfig::parse(cli).context("while parsing config")?;
             run_split_input(config)
+        }
+        Commands::GenerateWitness(cli) => {
+            let config = GenerateWitnessConfig::parse(cli).context("while parsing config")?;
+            run_generate_witness(config)
         }
         Commands::GenerateProof(cli) => {
             let config = GenerateProofConfig::parse(cli).context("while parsing config")?;
@@ -231,6 +240,64 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
     }
 
     tracing::info!("Split input into shares successfully");
+    Ok(ExitCode::SUCCESS)
+}
+
+#[instrument(skip(config))]
+fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<ExitCode> {
+    let input = config.input;
+    let circuit = config.circuit;
+    let protocol = config.protocol;
+    let out = config.out;
+
+    if protocol != MPCProtocol::REP3 {
+        return Err(eyre!(
+            "Only REP3 protocol is supported for merging input shares"
+        ));
+    }
+    file_utils::check_file_exists(&input)?;
+    let circuit_path = PathBuf::from(&circuit);
+    file_utils::check_file_exists(&circuit_path)?;
+
+    // parse constraint system
+    let compiled_program = Utils::get_program_artifact_from_file(
+        circuit_path
+            .to_str()
+            .context("while opening artifact file")?,
+    )
+    .context("while parsing program artifact")?;
+
+    // parse input shares
+    let input_share_file =
+        BufReader::new(File::open(&input).context("while opening input share file")?);
+    let input_share: WitnessMap<Rep3PrimeFieldShare<ark_bn254::Fr>> =
+        bincode::deserialize_from(input_share_file).context("while deserializing input share")?;
+    let input_share = translate_witness_share_rep3(input_share);
+
+    // connect to network
+    let net = Rep3MpcNet::new(config.network).context("while connecting to network")?;
+    let id = usize::from(net.get_id());
+
+    // init MPC protocol
+    let rep3_vm = Rep3CoSolver::from_network_with_witness(net, compiled_program, input_share)
+        .context("while creating VM")?;
+
+    // execute witness generation in MPC
+    let start = Instant::now();
+    let result_witness_share = rep3_vm
+        .solve()
+        .context("while running witness generation")?;
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Party {}: Witness extension took {} ms", id, duration_ms);
+
+    let result_witness_share =
+        convert_witness_to_vec_rep3::<Bn254, Rep3MpcNet>(result_witness_share);
+
+    // write result to output file
+    let out_file = BufWriter::new(std::fs::File::create(&out)?);
+    bincode::serialize_into(out_file, &result_witness_share)
+        .context("while serializing witness share")?;
+    tracing::info!("Witness successfully written to {}", out.display());
     Ok(ExitCode::SUCCESS)
 }
 

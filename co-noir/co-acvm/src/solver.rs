@@ -132,6 +132,30 @@ where
             memory_access: IntMap::new(),
         })
     }
+
+    pub fn new_bn254_with_witness(
+        driver: T,
+        compiled_program: ProgramArtifact,
+        witness: WitnessMap<T::AcvmType>,
+    ) -> eyre::Result<Self> {
+        let mut witness_map =
+            vec![WitnessMap::default(); compiled_program.bytecode.functions.len()];
+        witness_map[0] = witness;
+        Ok(Self {
+            driver,
+            abi: compiled_program.abi,
+            functions: compiled_program
+                .bytecode
+                .functions
+                .into_iter()
+                // ignore the transformation mapping for now
+                .map(|function| acvm::compiler::transform(function, CO_EXPRESSION_WIDTH).0)
+                .collect::<Vec<_>>(),
+            witness_map,
+            function_index: 0,
+            memory_access: IntMap::new(),
+        })
+    }
 }
 
 impl<N: Rep3Network> Rep3CoSolver<ark_bn254::Fr, N> {
@@ -144,6 +168,16 @@ impl<N: Rep3Network> Rep3CoSolver<ark_bn254::Fr, N> {
         PathBuf: From<P>,
     {
         Self::new_bn254(Rep3Protocol::new(network)?, compiled_program, prover_path)
+    }
+
+    pub fn from_network_with_witness(
+        network: N,
+        compiled_program: ProgramArtifact,
+        witness: WitnessMap<
+            <Rep3Protocol<ark_bn254::Fr, N> as NoirWitnessExtensionProtocol::<ark_bn254::Fr>>::AcvmType,
+        >,
+    ) -> eyre::Result<Self> {
+        Self::new_bn254_with_witness(Rep3Protocol::new(network)?, compiled_program, witness)
     }
 }
 
