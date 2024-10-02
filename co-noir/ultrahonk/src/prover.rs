@@ -12,7 +12,7 @@ use std::{io, marker::PhantomData};
 
 pub type HonkProofResult<T> = std::result::Result<T, HonkProofError>;
 
-/// The errors that may arise during the computation of a co-PLONK proof.
+/// The errors that may arise during the computation of a HONK proof.
 #[derive(Debug, thiserror::Error)]
 pub enum HonkProofError {
     /// Indicates that the witness is too small for the provided circuit.
