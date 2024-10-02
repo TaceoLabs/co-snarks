@@ -89,14 +89,11 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
 
     fn distribute_powers_and_mul_by_const(
         coeffs: &mut [Self::ArithmeticShare],
-        g: P::ScalarField,
-        c: P::ScalarField,
+        roots: &[P::ScalarField],
     ) {
-        let mut pow = c;
         #[allow(unused_mut)]
-        for mut c in coeffs.iter_mut() {
+        for (mut c, pow) in coeffs.iter_mut().zip(roots) {
             *c *= pow;
-            pow *= g;
         }
     }
 

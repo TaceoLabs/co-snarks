@@ -15,12 +15,10 @@ use circom_types::{
 };
 use num_traits::One;
 use num_traits::Zero;
-use tokio::runtime::Runtime;
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
 pub(super) struct Round5<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) driver: T,
-    pub(super) runtime: Runtime,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round4Challenges<P>,
     pub(super) proof: Round4Proof<P>,
@@ -299,10 +297,9 @@ where
     }
 
     // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-    pub(super) fn round5(self) -> PlonkProofResult<PlonkProof<P>> {
+    pub(super) async fn round5(self) -> PlonkProofResult<PlonkProof<P>> {
         let Self {
             mut driver,
-            runtime,
             domains,
             challenges,
             proof,
@@ -346,7 +343,7 @@ where
         let commit_wxi = T::msm_public_points_g1(&p_tau[..wxi.len()], &wxi);
         let commit_wxiw = T::msm_public_points_g1(&p_tau[..wxiw.len()], &wxiw);
 
-        let opened = runtime.block_on(driver.open_point_vec_g1(&[commit_wxi, commit_wxiw]))?;
+        let opened = driver.open_point_vec_g1(&[commit_wxi, commit_wxiw]).await?;
 
         let commit_wxi: P::G1 = opened[0];
         let commit_wxiw: P::G1 = opened[1];
@@ -355,7 +352,7 @@ where
             commit_wxi.into_affine(),
             commit_wxiw.into_affine()
         );
-        runtime.block_on(driver.close_network())?;
+        driver.close_network().await?;
         Ok(proof.into_final_proof(commit_wxi, commit_wxiw))
     }
 }
@@ -386,8 +383,8 @@ pub mod tests {
 
     use ark_ec::pairing::Pairing;
     use std::str::FromStr;
-    #[test]
-    fn test_round5_multiplier2() {
+    #[tokio::test]
+    async fn test_round5_multiplier2() {
         let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
@@ -403,14 +400,13 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let runtime = runtime::Builder::new_current_thread().build().unwrap();
-        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).await.unwrap();
         round1.challenges = challenges;
-        let round2 = round1.round1().unwrap();
-        let round3 = round2.round2().unwrap();
-        let round4 = round3.round3().unwrap();
-        let round5 = round4.round4().unwrap();
-        let proof = round5.round5().unwrap();
+        let round2 = round1.round1().await.unwrap();
+        let round3 = round2.round2().await.unwrap();
+        let round4 = round3.round3().await.unwrap();
+        let round5 = round4.round4().await.unwrap();
+        let proof = round5.round5().await.unwrap();
         assert_eq!(
             proof.wxi,
             g1_from_xy!(

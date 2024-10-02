@@ -9,7 +9,6 @@ use circom_types::groth16::{Groth16Proof, ZKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use co_circom_snarks::SharedWitness;
 use eyre::Result;
-use futures::channel::oneshot;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet};
 use mpc_core::protocols::shamir::network::ShamirMpcNet;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
@@ -20,6 +19,7 @@ use rayon::prelude::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::oneshot;
 use tracing::instrument;
 
 use crate::mpc::plain::PlainGroth16Driver;
@@ -130,9 +130,7 @@ where
                 &private_witness,
             )
             .await?;
-        tracing::debug!("getting r and s...");
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
-        tracing::debug!("done!");
         let proof = self
             .create_proof_with_assignment(zkey, r, s, h, &public_inputs[1..], private_witness)
             .await?;
@@ -151,7 +149,7 @@ where
     ) -> Vec<T::ArithmeticShare> {
         let mut result = matrix
             .par_iter()
-            .with_min_len(512)
+            .with_min_len(32)
             .map(|x| T::evaluate_constraint(party_id, x, public_inputs, private_witness))
             .collect::<Vec<_>>();
         result.resize(domain_size, T::ArithmeticShare::default());
@@ -174,6 +172,17 @@ where
         let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
         let domain = Arc::new(domain);
         let domain_size = domain.size();
+        let (roots_tx, roots_rx) = oneshot::channel();
+        rayon::spawn(move || {
+            let mut roots = Vec::with_capacity(domain_size);
+            let mut c = P::ScalarField::one();
+            for _ in 0..domain_size {
+                roots.push(c);
+                c *= root_of_unity;
+            }
+            roots_tx.send(roots).expect("channel not dropped");
+        });
+
         let party_id = self.driver.get_party_id();
         let eval_constraint_span = tracing::debug_span!("evaluate constraints").entered();
         let (a, b) = rayon::join(
@@ -211,14 +220,14 @@ where
         let c_domain = Arc::clone(&domain);
         let mut a_result = a.clone();
         let mut b_result = b.clone();
+        let roots_to_power_domain = Arc::new(roots_rx.await.expect("channel not dropped"));
+        let a_roots = Arc::clone(&roots_to_power_domain);
+        let b_roots = Arc::clone(&roots_to_power_domain);
+        let c_roots = Arc::clone(&roots_to_power_domain);
         rayon::spawn(move || {
             let a_span = tracing::debug_span!("distribute powers mul a (fft/ifft)").entered();
             a_domain.ifft_in_place(&mut a_result);
-            T::distribute_powers_and_mul_by_const(
-                &mut a_result,
-                root_of_unity,
-                P::ScalarField::one(),
-            );
+            T::distribute_powers_and_mul_by_const(&mut a_result, &a_roots);
             a_domain.fft_in_place(&mut a_result);
             a_tx.send(a_result).expect("channel not droped");
             a_span.exit();
@@ -227,11 +236,7 @@ where
         rayon::spawn(move || {
             let b_span = tracing::debug_span!("distribute powers mul b (fft/ifft)").entered();
             b_domain.ifft_in_place(&mut b_result);
-            T::distribute_powers_and_mul_by_const(
-                &mut b_result,
-                root_of_unity,
-                P::ScalarField::one(),
-            );
+            T::distribute_powers_and_mul_by_const(&mut b_result, &b_roots);
             b_domain.fft_in_place(&mut b_result);
             b_tx.send(b_result).expect("channel not droped");
             b_span.exit();
@@ -245,11 +250,13 @@ where
             c_domain.ifft_in_place(&mut ab);
             ifft_span.exit();
             let dist_pows_span = tracing::debug_span!("c: dist pows").entered();
-            let mut pow = P::ScalarField::one();
-            for share in ab.iter_mut() {
-                *share *= pow;
-                pow *= root_of_unity;
-            }
+            #[allow(unused_mut)]
+            ab.par_iter_mut()
+                .zip_eq(c_roots.par_iter())
+                .with_min_len(512)
+                .for_each(|(share, pow)| {
+                    *share *= pow;
+                });
             dist_pows_span.exit();
             let fft_span = tracing::debug_span!("c: fft in dist pows").entered();
             c_domain.fft_in_place(&mut ab);

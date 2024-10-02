@@ -2,7 +2,6 @@ use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
 use co_circom_snarks::SharedWitness;
-use tokio::runtime::Runtime;
 use tracing::instrument;
 
 use crate::{
@@ -19,7 +18,6 @@ pub(super) struct Round1<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<P, T>,
     pub(super) data: PlonkDataRound1<'a, P, T>,
-    pub(super) runtime: Runtime,
 }
 
 pub(super) struct PlonkDataRound1<'a, P: Pairing, T: CircomPlonkProver<P>> {
@@ -214,20 +212,18 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
     }
 
     #[instrument(level = "debug", name = "Plonk - Round Init", skip_all)]
-    pub(super) fn init_round(
+    pub(super) async fn init_round(
         mut driver: T,
-        runtime: Runtime,
         zkey: &'a ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
         let plonk_witness = Self::calculate_additions(&mut driver, private_witness, zkey)?;
         // TODO: we do not want that to be async
-        let challenges = runtime.block_on(Round1Challenges::random(&mut driver))?;
+        let challenges = Round1Challenges::random(&mut driver).await?;
         let domains = Domains::new(zkey.domain_size)?;
         Ok(Self {
             challenges,
             driver,
-            runtime,
             domains,
             data: PlonkDataRound1 {
                 witness: plonk_witness,
@@ -238,10 +234,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
 
     #[instrument(level = "debug", name = "Plonk - Round 1", skip_all)]
     // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
-    pub(super) fn round1(self) -> PlonkProofResult<Round2<'a, P, T>> {
+    pub(super) async fn round1(self) -> PlonkProofResult<Round2<'a, P, T>> {
         let Self {
             mut driver,
-            runtime,
             domains,
             challenges,
             data,
@@ -265,7 +260,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         // network round
         commit_span.exit();
         let opening_span = tracing::debug_span!("opening commits").entered();
-        let opened = runtime.block_on(driver.open_point_vec_g1(&[commit_a, commit_b, commit_c]))?;
+        let opened = driver
+            .open_point_vec_g1(&[commit_a, commit_b, commit_c])
+            .await?;
         opening_span.exit();
         let proof = Round1Proof::<P> {
             commit_a: opened[0],
@@ -275,7 +272,6 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         tracing::debug!("round1 result: {proof}");
         Ok(Round2 {
             driver,
-            runtime,
             domains,
             challenges,
             proof,
@@ -320,8 +316,8 @@ pub mod tests {
         };
     }
 
-    #[test]
-    fn test_round1_multiplier2() {
+    #[tokio::test]
+    async fn test_round1_multiplier2() {
         let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
@@ -334,11 +330,10 @@ pub mod tests {
             public_inputs: witness.values[..=zkey.n_public].to_vec(),
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
-        let runtime = runtime::Builder::new_current_thread().build().unwrap();
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).await.unwrap();
         round1.challenges = challenges;
-        let round2 = round1.round1().unwrap();
+        let round2 = round1.round1().await.unwrap();
         assert_eq!(
             round2.proof.commit_a,
             g1_bn254_from_xy!(
@@ -362,8 +357,8 @@ pub mod tests {
         );
     }
 
-    #[test]
-    fn test_round1_poseidon_bls12_381() {
+    #[tokio::test]
+    async fn test_round1_poseidon_bls12_381() {
         let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bls12_381/poseidon/circuit.zkey").unwrap(),
@@ -379,11 +374,10 @@ pub mod tests {
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
 
-        let runtime = runtime::Builder::new_current_thread().build().unwrap();
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).await.unwrap();
         round1.challenges = challenges;
-        let round2 = round1.round1().unwrap();
+        let round2 = round1.round1().await.unwrap();
         assert_eq!(
             round2.proof.commit_a.into_affine(),
             g1_bls12_381_from_xy!(

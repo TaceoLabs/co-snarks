@@ -5,6 +5,7 @@ use mpc_core::protocols::shamir::{
     arithmetic, core, network::ShamirNetwork, pointshare, ShamirPointShare, ShamirPrimeFieldShare,
     ShamirProtocol,
 };
+use rayon::prelude::*;
 use tokio::sync::oneshot;
 
 pub struct ShamirGroth16Driver<F: PrimeField, N: ShamirNetwork> {
@@ -109,14 +110,15 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
 
     fn distribute_powers_and_mul_by_const(
         coeffs: &mut [Self::ArithmeticShare],
-        g: P::ScalarField,
-        c: P::ScalarField,
+        roots: &[P::ScalarField],
     ) {
-        let mut pow = c;
-        for share in coeffs.iter_mut() {
-            arithmetic::mul_assign_public(share, pow);
-            pow *= g;
-        }
+        coeffs
+            .par_iter_mut()
+            .zip_eq(roots.par_iter())
+            .with_min_len(512)
+            .for_each(|(c, pow)| {
+                arithmetic::mul_assign_public(c, *pow);
+            })
     }
 
     fn msm_public_points_g1(

@@ -26,8 +26,8 @@ macro_rules! e2e_test {
     ($name: expr) => {
         add_test_impl!(Groth16, Bn254, $name);
         add_test_impl!(Groth16, Bls12_381, $name);
-        //add_test_impl!(Plonk, Bn254, $name);
-        //add_test_impl!(Plonk, Bls12_381, $name);
+        add_test_impl!(Plonk, Bn254, $name);
+        add_test_impl!(Plonk, Bls12_381, $name);
     };
 }
 

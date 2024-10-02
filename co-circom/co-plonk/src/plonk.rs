@@ -16,7 +16,6 @@ use circom_types::{
 use co_circom_snarks::SharedWitness;
 use num_traits::One;
 use num_traits::Zero;
-use tokio::runtime;
 
 use crate::types::Keccak256Transcript;
 
@@ -284,16 +283,15 @@ where
     /// initialized with the [`PlainDriver`].
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
-    pub fn plain_prove(
+    pub async fn plain_prove(
         zkey: &ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> eyre::Result<PlonkProof<P>> {
         let prover = Self {
             driver: PlainPlonkDriver,
-            runtime: runtime::Builder::new_current_thread().build()?,
             phantom_data: PhantomData,
         };
-        Ok(prover.prove(zkey, private_witness)?)
+        Ok(prover.prove(zkey, private_witness).await?)
     }
 }
 

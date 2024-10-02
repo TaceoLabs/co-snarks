@@ -78,8 +78,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     /// Computes the \[coeffs_i\] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     fn distribute_powers_and_mul_by_const(
         coeffs: &mut [Self::ArithmeticShare],
-        g: P::ScalarField,
-        c: P::ScalarField,
+        roots: &[P::ScalarField],
     );
 
     fn msm_public_points_g1(

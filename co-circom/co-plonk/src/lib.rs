@@ -19,8 +19,6 @@ use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
 use std::time::Instant;
-use tokio::runtime;
-use tokio::runtime::Runtime;
 
 pub mod mpc;
 mod plonk;
@@ -60,7 +58,6 @@ pub enum PlonkProofError {
 pub struct CoPlonk<P: Pairing, T: CircomPlonkProver<P>> {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
-    runtime: Runtime,
 }
 
 impl<P, T> CoPlonk<P, T>
@@ -71,16 +68,15 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     /// Creates a new [CoPlonk] protocol with a given MPC driver.
-    pub fn new(driver: T, runtime: Runtime) -> Self {
+    pub fn new(driver: T) -> Self {
         Self {
             driver,
-            runtime,
             phantom_data: PhantomData,
         }
     }
 
     /// Execute the PLONK prover using the internal MPC driver.
-    pub fn prove(
+    pub async fn prove(
         self,
         zkey: &ZKey<P>,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
@@ -100,17 +96,17 @@ where
             zkey.n_vars,
             zkey.n_public
         );
-        let state = Round1::init_round(self.driver, self.runtime, zkey, witness)?;
+        let state = Round1::init_round(self.driver, zkey, witness).await?;
         tracing::debug!("init round done..");
-        let state = state.round1()?;
+        let state = state.round1().await?;
         tracing::debug!("round 1 done..");
-        let state = state.round2()?;
+        let state = state.round2().await?;
         tracing::debug!("round 2 done..");
-        let state = state.round3()?;
+        let state = state.round3().await?;
         tracing::debug!("round 3 done..");
-        let state = state.round4()?;
+        let state = state.round4().await?;
         tracing::debug!("round 4 done..");
-        let result = state.round5();
+        let result = state.round5().await;
         tracing::debug!("round 5 done! We are done!");
         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
         tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
@@ -223,15 +219,13 @@ mod plonk_utils {
 
 impl<P: Pairing> Rep3CoPlonk<P> {
     /// Create a new [Rep3CoPlonk] protocol with a given network configuration.
-    pub fn with_network_config(config: NetworkConfig) -> eyre::Result<Self> {
-        let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
-        let mpc_net = runtime.block_on(Rep3MpcNet::new(config))?;
-        let mut io_context0 = runtime.block_on(IoContext::init(mpc_net))?;
-        let io_context1 = runtime.block_on(io_context0.fork())?;
+    pub async fn with_network_config(config: NetworkConfig) -> eyre::Result<Self> {
+        let mpc_net = Rep3MpcNet::new(config).await?;
+        let mut io_context0 = IoContext::init(mpc_net).await?;
+        let io_context1 = io_context0.fork().await?;
         let driver = Rep3PlonkDriver::new(io_context0, io_context1);
         Ok(CoPlonk {
             driver,
-            runtime,
             phantom_data: PhantomData,
         })
     }
@@ -239,7 +233,7 @@ impl<P: Pairing> Rep3CoPlonk<P> {
 
 impl<P: Pairing> ShamirCoPlonk<P> {
     /// Create a new [ShamirCoPlonk] protocol with a given network configuration.
-    pub fn with_network_config(
+    pub async fn with_network_config(
         threshold: usize,
         config: NetworkConfig,
         zkey: &ZKey<P>,
@@ -247,17 +241,14 @@ impl<P: Pairing> ShamirCoPlonk<P> {
         let domain_size = zkey.domain_size;
         // TODO check and explain numbers
         let num_pairs = domain_size * 218 + 3;
-        let runtime = runtime::Builder::new_multi_thread().enable_all().build()?;
-        let mpc_net = runtime.block_on(ShamirMpcNet::new(config))?;
-        let preprocessing =
-            runtime.block_on(ShamirPreprocessing::new(threshold, mpc_net, num_pairs))?;
+        let mpc_net = ShamirMpcNet::new(config).await?;
+        let preprocessing = ShamirPreprocessing::new(threshold, mpc_net, num_pairs).await?;
         let mut protocol0 = ShamirProtocol::from(preprocessing);
         // TODO check and explain numbers
-        let protocol1 = runtime.block_on(protocol0.fork_with_pairs(domain_size * 7 + 2))?;
+        let protocol1 = protocol0.fork_with_pairs(domain_size * 7 + 2).await?;
         let driver = ShamirPlonkDriver::new(protocol0, protocol1);
         Ok(CoPlonk {
             driver,
-            runtime,
             phantom_data: PhantomData,
         })
     }
@@ -274,8 +265,8 @@ pub mod tests {
 
     use crate::plonk::Plonk;
 
-    #[test]
-    pub fn test_multiplier2_bn254() -> eyre::Result<()> {
+    #[tokio::test]
+    pub async fn test_multiplier2_bn254() -> eyre::Result<()> {
         let zkey_file = "../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey";
         let witness_file = "../../test_vectors/Plonk/bn254/multiplier2/witness.wtns";
         let zkey = ZKey::<Bn254>::from_reader(File::open(zkey_file)?)?;
@@ -296,14 +287,14 @@ pub mod tests {
         )
         .unwrap();
 
-        let proof = Plonk::<Bn254>::plain_prove(&zkey, witness).unwrap();
+        let proof = Plonk::<Bn254>::plain_prove(&zkey, witness).await.unwrap();
         let result = Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
         assert!(result);
         Ok(())
     }
 
-    #[test]
-    pub fn test_poseidon_bn254() {
+    #[tokio::test]
+    pub async fn test_poseidon_bn254() {
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/poseidon/circuit.zkey").unwrap(),
         );
@@ -327,7 +318,7 @@ pub mod tests {
         )
         .unwrap();
 
-        let proof = Plonk::<Bn254>::plain_prove(&zkey, witness).unwrap();
+        let proof = Plonk::<Bn254>::plain_prove(&zkey, witness).await.unwrap();
 
         let mut proof_bytes = vec![];
         serde_json::to_writer(&mut proof_bytes, &proof).unwrap();

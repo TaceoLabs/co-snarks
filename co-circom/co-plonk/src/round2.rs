@@ -16,7 +16,6 @@ use tracing::instrument;
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
 pub(super) struct Round2<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) driver: T,
-    pub(super) runtime: Runtime,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<P, T>,
     pub(super) proof: Round1Proof<P>,
@@ -92,9 +91,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
     // Computes the permutation polynomial z(X) (see https://eprint.iacr.org/2019/953.pdf)
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     #[instrument(level = "info", name = "compute z", skip_all)]
-    fn compute_z(
+    async fn compute_z(
         driver: &mut T,
-        runtime: &mut Runtime,
         zkey: &ZKey<P>,
         domains: &Domains<P::ScalarField>,
         challenges: &Round2Challenges<P, T>,
@@ -168,8 +166,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         num_den_span.exit();
 
         let batched_mul_span = tracing::info_span!("buffer z network round").entered();
-        let (num, den) = runtime.block_on(driver.array_prod_mul2(&n1, &n2, &n3, &d1, &d2, &d3))?;
-        let mut buffer_z = runtime.block_on(driver.mul_vec(&num, &den))?;
+        let (num, den) = driver.array_prod_mul2(&n1, &n2, &n3, &d1, &d2, &d3).await?;
+        let mut buffer_z = driver.mul_vec(&num, &den).await?;
         buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
         batched_mul_span.exit();
 
@@ -196,10 +194,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
 
     // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
     #[instrument(level = "debug", name = "Plonk - Round 2", skip_all)]
-    pub(super) fn round2(self) -> PlonkProofResult<Round3<'a, P, T>> {
+    pub(super) async fn round2(self) -> PlonkProofResult<Round3<'a, P, T>> {
         let Self {
             mut driver,
-            mut runtime,
             data,
             proof,
             challenges,
@@ -232,24 +229,16 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         let gamma = transcript.get_challenge();
         tracing::debug!("beta: {beta}, gamma: {gamma}");
         let challenges = Round2Challenges::new(challenges, beta, gamma);
-        let z = Self::compute_z(
-            &mut driver,
-            &mut runtime,
-            zkey,
-            &domains,
-            &challenges,
-            &polys,
-        )?;
+        let z = Self::compute_z(&mut driver, zkey, &domains, &challenges, &polys).await?;
         // STEP 2.3 - Compute permutation [z]_1
 
         tracing::debug!("committing to poly z (MSMs)");
         let commit_z = T::msm_public_points_g1(&zkey.p_tau[..z.poly.len()], &z.poly);
-        let commit_z = runtime.block_on(driver.open_point_g1(commit_z))?;
+        let commit_z = driver.open_point_g1(commit_z).await?;
         let proof = Round2Proof::new(proof, commit_z);
         tracing::debug!("round2 result: {proof}");
         Ok(Round3 {
             driver,
-            runtime,
             domains,
             challenges,
             proof,
@@ -285,8 +274,8 @@ pub mod tests {
     use ark_ec::pairing::Pairing;
     use std::str::FromStr;
 
-    #[test]
-    fn test_round2_multiplier2() {
+    #[tokio::test]
+    async fn test_round2_multiplier2() {
         let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
@@ -302,11 +291,10 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let runtime = runtime::Builder::new_current_thread().build().unwrap();
-        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).await.unwrap();
         round1.challenges = challenges;
-        let round2 = round1.round1().unwrap();
-        let round3 = round2.round2().unwrap();
+        let round2 = round1.round1().await.unwrap();
+        let round3 = round2.round2().await.unwrap();
         assert_eq!(
             round3.proof.commit_z,
             g1_from_xy!(

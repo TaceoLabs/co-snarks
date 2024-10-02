@@ -17,36 +17,36 @@ use tokio::runtime::Runtime;
 // TODO parallelize these? With a different network structure this might not be needed though
 macro_rules! mul4vec {
     ($driver: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $domain: expr) => {{
-        let a_b = futures::executor::block_on($driver.mul_vec($a, $b))?;
-        let a_bp = futures::executor::block_on($driver.mul_vec($a, $bp))?;
-        let ap_b = futures::executor::block_on($driver.mul_vec($ap, $b))?;
-        let ap_bp = futures::executor::block_on($driver.mul_vec($ap, $bp))?;
+        let a_b = $driver.mul_vec($a, $b).await?;
+        let a_bp = $driver.mul_vec($a, $bp).await?;
+        let ap_b = $driver.mul_vec($ap, $b).await?;
+        let ap_bp = $driver.mul_vec($ap, $bp).await?;
 
-        let c_d = futures::executor::block_on($driver.mul_vec($c, $d))?;
-        let c_dp = futures::executor::block_on($driver.mul_vec($c, $dp))?;
-        let cp_d = futures::executor::block_on($driver.mul_vec($cp, $d))?;
-        let cp_dp = futures::executor::block_on($driver.mul_vec($cp, $dp))?;
+        let c_d = $driver.mul_vec($c, $d).await?;
+        let c_dp = $driver.mul_vec($c, $dp).await?;
+        let cp_d = $driver.mul_vec($cp, $d).await?;
+        let cp_dp = $driver.mul_vec($cp, $dp).await?;
 
-        let r = futures::executor::block_on($driver.mul_vec(&a_b, &c_d))?;
+        let r = $driver.mul_vec(&a_b, &c_d).await?;
 
-        let mut a0 = futures::executor::block_on($driver.mul_vec(&ap_b, &c_d))?;
-        a0 = futures::executor::block_on($driver.add_mul_vec(&a0, &a_bp, &c_d))?;
-        a0 = futures::executor::block_on($driver.add_mul_vec(&a0, &a_b, &cp_d))?;
-        a0 = futures::executor::block_on($driver.add_mul_vec(&a0, &a_b, &c_dp))?;
+        let mut a0 = $driver.mul_vec(&ap_b, &c_d).await?;
+        a0 = $driver.add_mul_vec(&a0, &a_bp, &c_d).await?;
+        a0 = $driver.add_mul_vec(&a0, &a_b, &cp_d).await?;
+        a0 = $driver.add_mul_vec(&a0, &a_b, &c_dp).await?;
 
-        let mut a1 = futures::executor::block_on($driver.mul_vec(&ap_bp, &c_d))?;
-        a1 = futures::executor::block_on($driver.add_mul_vec(&a1, &ap_b, &cp_d))?;
-        a1 = futures::executor::block_on($driver.add_mul_vec(&a1, &ap_b, &c_dp))?;
-        a1 = futures::executor::block_on($driver.add_mul_vec(&a1, &a_bp, &cp_d))?;
-        a1 = futures::executor::block_on($driver.add_mul_vec(&a1, &a_bp, &c_dp))?;
-        a1 = futures::executor::block_on($driver.add_mul_vec(&a1, &a_b, &cp_dp))?;
+        let mut a1 = $driver.mul_vec(&ap_bp, &c_d).await?;
+        a1 = $driver.add_mul_vec(&a1, &ap_b, &cp_d).await?;
+        a1 = $driver.add_mul_vec(&a1, &ap_b, &c_dp).await?;
+        a1 = $driver.add_mul_vec(&a1, &a_bp, &cp_d).await?;
+        a1 = $driver.add_mul_vec(&a1, &a_bp, &c_dp).await?;
+        a1 = $driver.add_mul_vec(&a1, &a_b, &cp_dp).await?;
 
-        let mut a2 = futures::executor::block_on($driver.mul_vec(&a_bp, &cp_dp))?;
-        a2 = futures::executor::block_on($driver.add_mul_vec(&a2, &ap_b, &cp_dp))?;
-        a2 = futures::executor::block_on($driver.add_mul_vec(&a2, &ap_bp, &c_dp))?;
-        a2 = futures::executor::block_on($driver.add_mul_vec(&a2, &ap_bp, &cp_d))?;
+        let mut a2 = $driver.mul_vec(&a_bp, &cp_dp).await?;
+        a2 = $driver.add_mul_vec(&a2, &ap_b, &cp_dp).await?;
+        a2 = $driver.add_mul_vec(&a2, &ap_bp, &c_dp).await?;
+        a2 = $driver.add_mul_vec(&a2, &ap_bp, &cp_d).await?;
 
-        let a3 = futures::executor::block_on($driver.mul_vec(&ap_bp, &cp_dp))?;
+        let a3 = $driver.mul_vec(&ap_bp, &cp_dp).await?;
         [r, a0, a1, a2, a3]
     }};
 }
@@ -73,7 +73,6 @@ macro_rules! mul4vec_post {
 // Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
 pub(super) struct Round3<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) driver: T,
-    pub(super) runtime: Runtime,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round2Challenges<P, T>,
     pub(super) proof: Round2Proof<P>,
@@ -209,7 +208,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
 
     // Compute the quotient polynomial T(X) (see https://eprint.iacr.org/2019/953.pdf)
     // It is implemented with a constant number of communication rounds in MPC
-    fn compute_t(
+    async fn compute_t(
         driver: &mut T,
         domains: &Domains<P::ScalarField>,
         challenges: &Round3Challenges<P, T>,
@@ -441,10 +440,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
     }
 
     // Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
-    pub(super) fn round3(self) -> PlonkProofResult<Round4<'a, P, T>> {
+    pub(super) async fn round3(self) -> PlonkProofResult<Round4<'a, P, T>> {
         let Self {
             mut driver,
-            runtime,
             domains,
             challenges,
             proof,
@@ -463,7 +461,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
         tracing::debug!("alpha: {alpha}, alpha2: {alpha2}");
         let challenges = Round3Challenges::new(challenges, alpha, alpha2);
 
-        let [t1, t2, t3] = Self::compute_t(&mut driver, &domains, &challenges, data.zkey, &polys)?;
+        let [t1, t2, t3] =
+            Self::compute_t(&mut driver, &domains, &challenges, data.zkey, &polys).await?;
 
         tracing::debug!("committing to poly t (MSMs)");
         // Compute [T1]_1, [T2]_1, [T3]_1
@@ -471,15 +470,15 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
         let commit_t2 = T::msm_public_points_g1(&data.zkey.p_tau[..t2.len()], &t2);
         let commit_t3 = T::msm_public_points_g1(&data.zkey.p_tau[..t3.len()], &t3);
 
-        let opened =
-            runtime.block_on(driver.open_point_vec_g1(&[commit_t1, commit_t2, commit_t3]))?;
+        let opened = driver
+            .open_point_vec_g1(&[commit_t1, commit_t2, commit_t3])
+            .await?;
 
         let polys = FinalPolys::new(polys, t1, t2, t3);
         let proof = Round3Proof::new(proof, opened[0], opened[1], opened[2]);
         tracing::debug!("round3 result: {proof}");
         Ok(Round4 {
             driver,
-            runtime,
             domains,
             challenges,
             proof,
@@ -516,8 +515,8 @@ pub mod tests {
         };
     }
 
-    #[test]
-    fn test_round3_multiplier2() {
+    #[tokio::test]
+    async fn test_round3_multiplier2() {
         let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
@@ -533,12 +532,11 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let runtime = runtime::Builder::new_current_thread().build().unwrap();
-        let mut round1 = Round1::init_round(driver, runtime, &zkey, witness).unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).await.unwrap();
         round1.challenges = challenges;
-        let round2 = round1.round1().unwrap();
-        let round3 = round2.round2().unwrap();
-        let round4 = round3.round3().unwrap();
+        let round2 = round1.round1().await.unwrap();
+        let round3 = round2.round2().await.unwrap();
+        let round4 = round3.round3().await.unwrap();
         assert_eq!(
             round4.proof.commit_t1,
             g1_from_xy!(

@@ -6,7 +6,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_mpc_compiler::CoCircomCompiler;
 use circom_types::R1CS;
 use num_traits::Zero;
-use tokio::runtime;
 
 use circom_types::{
     groth16::{
@@ -102,7 +101,8 @@ enum Commands {
     Verify(VerifyCli),
 }
 
-fn main() -> color_eyre::Result<ExitCode> {
+#[tokio::main(flavor = "multi_thread")]
+async fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
     let args = Cli::parse();
 
@@ -138,15 +138,15 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::TranslateWitness(cli) => {
             let config = TranslateWitnessConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_translate_witness::<Bn254>(config),
-                MPCCurve::BLS12_381 => run_translate_witness::<Bls12_381>(config),
+                MPCCurve::BN254 => run_translate_witness::<Bn254>(config).await,
+                MPCCurve::BLS12_381 => run_translate_witness::<Bls12_381>(config).await,
             }
         }
         Commands::GenerateProof(cli) => {
             let config = GenerateProofConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_generate_proof::<Bn254>(config),
-                MPCCurve::BLS12_381 => run_generate_proof::<Bls12_381>(config),
+                MPCCurve::BN254 => run_generate_proof::<Bn254>(config).await,
+                MPCCurve::BLS12_381 => run_generate_proof::<Bls12_381>(config).await,
             }
         }
         Commands::Verify(cli) => {
@@ -411,7 +411,7 @@ where
 }
 
 #[instrument(level = "debug", skip(config))]
-fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
+async fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: TranslateWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -434,31 +434,24 @@ where
     let witness_share: SharedWitness<P::ScalarField, Rep3PrimeFieldShare<P::ScalarField>> =
         co_circom::parse_witness_share(witness_file)?;
 
-    let runtime = runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .context("while building async runtime")?;
     // connect to network
-    let net = runtime
-        .block_on(Rep3MpcNet::new(config.network))
+    let net = Rep3MpcNet::new(config.network)
+        .await
         .context("while connecting to network")?;
     let id = usize::from(net.get_id());
 
     // init MPC protocol
     let threshold = 1;
     let num_pairs = witness_share.witness.len();
-    let preprocessing = runtime
-        .block_on(ShamirPreprocessing::new(
-            threshold,
-            net.to_shamir_net(),
-            num_pairs,
-        ))
+    let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
+        .await
         .context("while shamir preprocessing")?;
     let mut protocol = ShamirProtocol::from(preprocessing);
     // Translate witness to shamir shares
     let start = Instant::now();
-    let translated_witness = runtime
-        .block_on(protocol.translate_primefield_repshare_vec(witness_share.witness))
+    let translated_witness = protocol
+        .translate_primefield_repshare_vec(witness_share.witness)
+        .await
         .context("while translating witness")?;
     let shamir_witness_share: SharedWitness<P::ScalarField, ShamirPrimeFieldShare<P::ScalarField>> =
         SharedWitness {
@@ -468,7 +461,7 @@ where
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Translating witness took {} ms", id, duration_ms);
 
-    runtime.block_on(protocol.close_network())?;
+    protocol.close_network().await?;
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -478,7 +471,7 @@ where
 }
 
 #[instrument(level = "debug", skip(config))]
-fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
+async fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateProofConfig,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -502,9 +495,6 @@ where
 
     // parse Circom zkey file
     let zkey_file = File::open(zkey)?;
-    let rt = runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
 
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
@@ -519,12 +509,12 @@ where
                     let witness_share = co_circom::parse_witness_share(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
                     // connect to network
-                    let prover = rt
-                        .block_on(Rep3CoGroth16::with_network_config(config.network))
+                    let prover = Rep3CoGroth16::with_network_config(config.network)
+                        .await
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = rt.block_on(prover.prove(&zkey, witness_share))?;
+                    let proof = prover.prove(&zkey, witness_share).await?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -532,16 +522,12 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     // connect to network
-                    let prover = rt
-                        .block_on(ShamirCoGroth16::with_network_config(
-                            t,
-                            config.network,
-                            &zkey,
-                        ))
+                    let prover = ShamirCoGroth16::with_network_config(t, config.network, &zkey)
+                        .await
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = rt.block_on(prover.prove(&zkey, witness_share))?;
+                    let proof = prover.prove(&zkey, witness_share).await?;
                     (proof, public_input)
                 }
             };
@@ -572,10 +558,11 @@ where
 
                     //init prover
                     let prover = Rep3CoPlonk::with_network_config(config.network)
+                        .await
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&pk, witness_share)?;
+                    let proof = prover.prove(&pk, witness_share).await?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -584,10 +571,11 @@ where
 
                     //init prover
                     let prover = ShamirCoPlonk::with_network_config(t, config.network, &pk)
+                        .await
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&pk, witness_share)?;
+                    let proof = prover.prove(&pk, witness_share).await?;
                     (proof, public_input)
                 }
             };
