@@ -195,7 +195,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
     }
 
     // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
-    #[instrument(level = "info", name = "Plonk - Round 2", skip_all)]
+    #[instrument(level = "debug", name = "Plonk - Round 2", skip_all)]
     pub(super) fn round2(self) -> PlonkProofResult<Round3<'a, P, T>> {
         let Self {
             mut driver,

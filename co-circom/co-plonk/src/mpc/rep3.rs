@@ -38,6 +38,12 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
 
     type IoContext = IoContext<N>;
 
+    async fn close_network(self) -> IoResult<()> {
+        self.io_context0.network.shutdown().await?;
+        self.io_context1.network.shutdown().await?;
+        Ok(())
+    }
+
     fn debug_print(_: Self::ArithmeticShare) {
         todo!()
     }

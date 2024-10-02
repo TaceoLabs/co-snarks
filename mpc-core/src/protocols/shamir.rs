@@ -245,6 +245,10 @@ pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
 impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     const KING_ID: usize = 0;
 
+    pub async fn close_network(self) -> std::io::Result<()> {
+        self.network.shutdown().await
+    }
+
     pub async fn fork_with_pairs(&mut self, amount: usize) -> std::io::Result<Self> {
         Ok(Self {
             threshold: self.threshold,

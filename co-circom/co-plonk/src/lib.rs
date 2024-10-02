@@ -18,6 +18,7 @@ use mpc_net::config::NetworkConfig;
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
+use std::time::Instant;
 use tokio::runtime;
 use tokio::runtime::Runtime;
 
@@ -84,6 +85,9 @@ where
         zkey: &ZKey<P>,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<PlonkProof<P>> {
+        let id = self.driver.get_party_id();
+        tracing::info!("Party {}: starting proof generation..", id);
+        let start = Instant::now();
         tracing::debug!("starting PLONK prove!");
         tracing::debug!(
             "we have {} constraints and {} addition constraints",
@@ -108,6 +112,8 @@ where
         tracing::debug!("round 4 done..");
         let result = state.round5();
         tracing::debug!("round 5 done! We are done!");
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
         result
     }
 }
@@ -245,11 +251,6 @@ impl<P: Pairing> ShamirCoPlonk<P> {
             runtime,
             phantom_data: PhantomData,
         })
-    }
-
-    pub fn close_network(self) -> io::Result<()> {
-        self.runtime.block_on(self.driver.close_network())?;
-        Ok(())
     }
 }
 

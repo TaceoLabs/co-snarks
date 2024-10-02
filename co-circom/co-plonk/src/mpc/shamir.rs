@@ -40,6 +40,12 @@ impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P:
 
     type IoContext = ShamirProtocol<P::ScalarField, N>;
 
+    async fn close_network(self) -> IoResult<()> {
+        self.protocol0.network.shutdown().await?;
+        self.protocol1.network.shutdown().await?;
+        Ok(())
+    }
+
     fn debug_print(_a: Self::ArithmeticShare) {
         todo!()
     }

@@ -355,6 +355,7 @@ where
             commit_wxi.into_affine(),
             commit_wxiw.into_affine()
         );
+        runtime.block_on(driver.close_network())?;
         Ok(proof.into_final_proof(commit_wxi, commit_wxiw))
     }
 }
