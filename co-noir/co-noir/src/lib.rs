@@ -6,7 +6,10 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
-use mpc_core::protocols::rep3::{self, network::Rep3Network, Rep3Protocol};
+use mpc_core::protocols::{
+    rep3::{self, network::Rep3Network, Rep3Protocol},
+    shamir::{self, network::ShamirNetwork, ShamirProtocol},
+};
 use mpc_net::config::NetworkConfig;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
@@ -206,6 +209,36 @@ pub fn share_rep3<P: Pairing, N: Rep3Network, R: Rng + CryptoRng>(
             PubShared::Shared(f) => {
                 // res.push(SharedBuilderVariable::from_shared(f));
                 let shares = rep3::utils::share_field_element(f, rng);
+                for (r, share) in res.iter_mut().zip(shares) {
+                    r.push(SharedBuilderVariable::from_shared(share));
+                }
+            }
+        }
+    }
+    res
+}
+
+#[allow(clippy::type_complexity)]
+pub fn share_shamir<P: Pairing, N: ShamirNetwork, R: Rng + CryptoRng>(
+    witness: Vec<PubShared<P::ScalarField>>,
+    degree: usize,
+    num_parties: usize,
+    rng: &mut R,
+) -> Vec<Vec<SharedBuilderVariable<ShamirProtocol<P::ScalarField, N>, P>>> {
+    let mut res = (0..num_parties)
+        .map(|_| Vec::with_capacity(witness.len()))
+        .collect::<Vec<_>>();
+
+    for witness in witness {
+        match witness {
+            PubShared::Public(f) => {
+                for r in res.iter_mut() {
+                    r.push(SharedBuilderVariable::from_public(f));
+                }
+            }
+            PubShared::Shared(f) => {
+                // res.push(SharedBuilderVariable::from_shared(f));
+                let shares = shamir::utils::share_field_element(f, degree, num_parties, rng);
                 for (r, share) in res.iter_mut().zip(shares) {
                     r.push(SharedBuilderVariable::from_shared(share));
                 }

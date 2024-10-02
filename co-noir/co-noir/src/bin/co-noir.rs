@@ -2,14 +2,20 @@ use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Parser, Subcommand};
 use co_noir::{
-    file_utils, share_rep3, GenerateProofCli, GenerateProofConfig, MPCProtocol, PubShared,
-    SplitWitnessCli, SplitWitnessConfig,
+    file_utils, share_rep3, share_shamir, GenerateProofCli, GenerateProofConfig, MPCProtocol,
+    PubShared, SplitWitnessCli, SplitWitnessConfig,
 };
-use co_ultrahonk::prelude::{CoUltraHonk, ProvingKey, Rep3CoBuilder, Utils};
+use co_ultrahonk::prelude::{CoUltraHonk, ProvingKey, Rep3CoBuilder, ShamirCoBuilder, Utils};
 use color_eyre::eyre::{eyre, Context, ContextCompat};
-use mpc_core::protocols::rep3::{
-    network::{Rep3MpcNet, Rep3Network},
-    Rep3Protocol,
+use mpc_core::protocols::{
+    rep3::{
+        network::{Rep3MpcNet, Rep3Network},
+        Rep3Protocol,
+    },
+    shamir::{
+        network::{ShamirMpcNet, ShamirNetwork},
+        ShamirProtocol,
+    },
 };
 use std::{
     fs::File,
@@ -137,7 +143,28 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
                 tracing::info!("Wrote witness share {} to file {}", i, path.display());
             }
         }
-        _ => todo!("Implement other MPC protocols"),
+        MPCProtocol::SHAMIR => {
+            // create witness shares
+            let start = Instant::now();
+            let shares = share_shamir::<Bn254, ShamirMpcNet, _>(witness, t, n, &mut rng);
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Sharing took {} ms", duration_ms);
+
+            // write out the shares to the output directory
+            let base_name = witness_path
+                .file_name()
+                .context("we have a file name")?
+                .to_str()
+                .context("witness file name is not valid UTF-8")?;
+            for (i, share) in shares.iter().enumerate() {
+                let path = out_dir.join(format!("{}.{}.shared", base_name, i));
+                let out_file =
+                    BufWriter::new(File::create(&path).context("while creating output file")?);
+                bincode::serialize_into(out_file, share)
+                    .context("while serializing witness share")?;
+                tracing::info!("Wrote witness share {} to file {}", i, path.display());
+            }
+        }
     }
     tracing::info!("Split witness into shares successfully");
     Ok(ExitCode::SUCCESS)
@@ -222,7 +249,54 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
 
             (proof, public_input)
         }
-        _ => todo!("Implement other MPC protocols"),
+        MPCProtocol::SHAMIR => {
+            let witness_share = bincode::deserialize_from(witness_file)
+                .context("while deserializing witness share")?;
+            // connect to network
+            let net = ShamirMpcNet::new(config.network)?;
+            let id = net.get_id();
+
+            // init MPC protocol
+            let protocol = ShamirProtocol::new(t, net)?;
+
+            // Create the circuit
+            tracing::info!("Party {}: starting to generate proving key..", id);
+            let start = Instant::now();
+            let builder = ShamirCoBuilder::<Bn254, _>::create_circuit(
+                constraint_system,
+                0,
+                witness_share,
+                true,
+                false,
+            );
+
+            // parse the crs
+            let prover_crs = ProvingKey::get_prover_crs(
+                &builder,
+                crs_path.to_str().context("while opening crs file")?,
+            )
+            .expect("failed to get prover crs");
+
+            // Get the proving key and prover
+            let proving_key = ProvingKey::create(&protocol, builder, prover_crs);
+            let public_input = proving_key.get_public_inputs();
+            let prover = CoUltraHonk::new(protocol);
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!(
+                "Party {}: Proving key generation took {} ms",
+                id,
+                duration_ms
+            );
+
+            // execute prover in MPC
+            tracing::info!("Party {}: starting proof generation..", id);
+            let start = Instant::now();
+            let proof = prover.prove(proving_key)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+
+            (proof, public_input)
+        }
     };
 
     // write result to output file
