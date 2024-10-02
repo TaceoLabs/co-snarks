@@ -122,7 +122,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
             + *table_index * eta_3
     }
 
-    // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
+    /// Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
     fn compute_write_term(&self, proving_key: &ProvingKey<P>, i: usize) -> P::ScalarField {
         tracing::trace!("compute write term");
 
@@ -311,7 +311,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         }
     }
 
-    // Generate relation separators alphas for sumcheck/combiner computation
+    /// Generate relation separators alphas for sumcheck/combiner computation
     fn generate_alphas_round(&mut self, transcript: &mut TranscriptType) {
         tracing::trace!("generate alpha round");
 
@@ -321,7 +321,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         }
     }
 
-    // Add circuit size public input size and public inputs to transcript
+    /// Add circuit size public input size and public inputs to transcript
     fn execute_preamble_round(
         transcript: &mut TranscriptType,
         proving_key: &ProvingKey<P>,
@@ -352,7 +352,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         Ok(())
     }
 
-    // Compute first three wire commitments
+    /// Compute first three wire commitments
     fn execute_wire_commitments_round(
         &mut self,
         transcript: &mut TranscriptType,
@@ -384,7 +384,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         Ok(())
     }
 
-    // Compute sorted list accumulator and commitment
+    /// Compute sorted list accumulator and commitment
     fn execute_sorted_list_accumulator_round(
         &mut self,
         transcript: &mut TranscriptType,
@@ -428,7 +428,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         Ok(())
     }
 
-    // Fiat-Shamir: beta & gamma
+    /// Fiat-Shamir: beta & gamma
     fn execute_log_derivative_inverse_round(
         &mut self,
         transcript: &mut TranscriptType,
@@ -452,7 +452,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Oink<P> {
         Ok(())
     }
 
-    // Compute grand product(s) and commitments.
+    /// Compute grand product(s) and commitments.
     fn execute_grand_product_computation_round(
         &mut self,
         transcript: &mut TranscriptType,
