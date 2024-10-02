@@ -1,15 +1,41 @@
 use ark_ec::pairing::Pairing;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use mpc_core::traits::PrimeFieldMpcProtocol;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use ultrahonk::prelude::UltraCircuitVariable;
 
+#[derive(Serialize, Deserialize)]
 pub enum SharedBuilderVariable<T, P>
 where
     P: Pairing,
     T: PrimeFieldMpcProtocol<P::ScalarField>,
 {
-    Public(P::ScalarField),
-    Shared(T::FieldShare),
+    Public(#[serde(serialize_with = "ark_se", deserialize_with = "ark_de")] P::ScalarField),
+    Shared(#[serde(serialize_with = "ark_se", deserialize_with = "ark_de")] T::FieldShare),
+}
+
+/// Serialize an object with ark serialization, to be used with serde.
+/// `#[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]`
+pub(crate) fn ark_se<S, A: CanonicalSerialize>(a: &A, s: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let mut bytes = vec![];
+    a.serialize_with_mode(&mut bytes, Compress::Yes)
+        .map_err(serde::ser::Error::custom)?;
+    s.serialize_bytes(&bytes)
+}
+
+/// Deserialize an object with ark deserialization, to be used with serde.
+/// `#[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]`
+pub(crate) fn ark_de<'de, D, A: CanonicalDeserialize>(data: D) -> Result<A, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    let s: Vec<u8> = serde::de::Deserialize::deserialize(data)?;
+    let a = A::deserialize_with_mode(s.as_slice(), Compress::Yes, Validate::Yes);
+    a.map_err(serde::de::Error::custom)
 }
 
 impl<T, P> SharedBuilderVariable<T, P>

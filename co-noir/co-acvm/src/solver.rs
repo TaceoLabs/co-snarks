@@ -2,6 +2,7 @@ use acir::{
     acir_field::GenericFieldElement,
     circuit::{Circuit, ExpressionWidth, Opcode},
     native_types::{WitnessMap, WitnessStack},
+    FieldElement,
 };
 use ark_ff::PrimeField;
 use intmap::IntMap;
@@ -73,7 +74,10 @@ impl<T> CoSolver<T, ark_bn254::Fr>
 where
     T: NoirWitnessExtensionProtocol<ark_bn254::Fr>,
 {
-    pub fn read_abi_bn254<P>(path: P, abi: &Abi) -> eyre::Result<WitnessMap<T::AcvmType>>
+    pub fn read_abi_bn254_fieldelement<P>(
+        path: P,
+        abi: &Abi,
+    ) -> eyre::Result<WitnessMap<FieldElement>>
     where
         PathBuf: From<P>,
     {
@@ -86,14 +90,20 @@ where
             // TODO the return value can be none for the witness extension
             // do we want to keep it like that? Seems not necessary but maybe
             // we need it for proving/verifying
-            let initial_witness = abi.encode(&input_map, return_value.clone())?;
-            let mut witnesses = WitnessMap::<T::AcvmType>::default();
-            for (witness, v) in initial_witness.into_iter() {
-                witnesses.insert(witness, T::AcvmType::from(v.into_repr())); //TODO this can be
-                                                                             //private for some
-            }
-            Ok(witnesses)
+            Ok(abi.encode(&input_map, return_value.clone())?)
         }
+    }
+
+    pub fn read_abi_bn254<P>(path: P, abi: &Abi) -> eyre::Result<WitnessMap<T::AcvmType>>
+    where
+        PathBuf: From<P>,
+    {
+        let initial_witness = Self::read_abi_bn254_fieldelement(path, abi)?;
+        let mut witnesses = WitnessMap::<T::AcvmType>::default();
+        for (witness, v) in initial_witness.into_iter() {
+            witnesses.insert(witness, T::AcvmType::from(v.into_repr())); //TODO this can be private for some
+        }
+        Ok(witnesses)
     }
 
     pub fn new_bn254<P>(
@@ -122,6 +132,30 @@ where
             memory_access: IntMap::new(),
         })
     }
+
+    pub fn new_bn254_with_witness(
+        driver: T,
+        compiled_program: ProgramArtifact,
+        witness: WitnessMap<T::AcvmType>,
+    ) -> eyre::Result<Self> {
+        let mut witness_map =
+            vec![WitnessMap::default(); compiled_program.bytecode.functions.len()];
+        witness_map[0] = witness;
+        Ok(Self {
+            driver,
+            abi: compiled_program.abi,
+            functions: compiled_program
+                .bytecode
+                .functions
+                .into_iter()
+                // ignore the transformation mapping for now
+                .map(|function| acvm::compiler::transform(function, CO_EXPRESSION_WIDTH).0)
+                .collect::<Vec<_>>(),
+            witness_map,
+            function_index: 0,
+            memory_access: IntMap::new(),
+        })
+    }
 }
 
 impl<N: Rep3Network> Rep3CoSolver<ark_bn254::Fr, N> {
@@ -134,6 +168,16 @@ impl<N: Rep3Network> Rep3CoSolver<ark_bn254::Fr, N> {
         PathBuf: From<P>,
     {
         Self::new_bn254(Rep3Protocol::new(network)?, compiled_program, prover_path)
+    }
+
+    pub fn from_network_with_witness(
+        network: N,
+        compiled_program: ProgramArtifact,
+        witness: WitnessMap<
+            <Rep3Protocol<ark_bn254::Fr, N> as NoirWitnessExtensionProtocol::<ark_bn254::Fr>>::AcvmType,
+        >,
+    ) -> eyre::Result<Self> {
+        Self::new_bn254_with_witness(Rep3Protocol::new(network)?, compiled_program, witness)
     }
 }
 
@@ -204,6 +248,27 @@ where
     T: NoirWitnessExtensionProtocol<F>,
     F: PrimeField,
 {
+    fn open_results(&mut self, function: &Circuit<GenericFieldElement<F>>) -> CoAcvmResult<()> {
+        let witness_map = &mut self.witness_map[self.function_index];
+
+        let mut vec = Vec::with_capacity(function.return_values.0.len());
+        for index in function.return_values.0.iter() {
+            let val = witness_map.get(index).expect("witness should be present");
+            if let Some(val) = T::get_shared(val) {
+                vec.push(val.clone());
+            };
+        }
+        let mut opened = self.driver.open_many(&vec)?;
+        for index in function.return_values.0.iter().rev() {
+            let val = witness_map.get(index).expect("witness should be present");
+            if T::is_shared(val) {
+                let opened_val = opened.pop().expect("opened value should be present");
+                witness_map.insert(*index, T::AcvmType::from(opened_val));
+            }
+        }
+        Ok(())
+    }
+
     pub fn solve(mut self) -> CoAcvmResult<WitnessStack<T::AcvmType>> {
         let functions = std::mem::take(&mut self.functions);
 
@@ -229,7 +294,9 @@ where
                 //} => todo!(),
             }
         }
-        tracing::trace!("we are done! Wrap things up.");
+        tracing::trace!("we are done! Opening results...");
+        self.open_results(&functions[self.function_index])?;
+        tracing::trace!("Done! Wrap things up.");
         let mut witness_stack = WitnessStack::default();
         for (idx, witness) in self.witness_map.into_iter().rev().enumerate() {
             witness_stack.push(u32::try_from(idx).expect("usize fits into u32"), witness);
