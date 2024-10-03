@@ -32,14 +32,6 @@ macro_rules! rayon_join {
         let ((x, y), z) = rayon::join(|| rayon::join(|| $t1, || $t2), || $t3);
         (x, y, z)
     }};
-
-    ($t1: expr, $t2: expr, $t3: expr, $t4: expr, $t5: expr) => {{
-        let ((v, w), (x, y, z)) = rayon::join(
-            || rayon::join(|| $t1, || $t2),
-            || rayon_join!($t3, $t4, $t5),
-        );
-        (v, w, x, y, z)
-    }};
 }
 
 /// The plain [`Groth16`] type.
@@ -361,18 +353,40 @@ where
         aux_assignment: Vec<T::ArithmeticShare>,
     ) -> Result<Groth16Proof<P>> {
         let delta_g1 = zkey.delta_g1.into_group();
+        let (h_acc_tx, h_acc_rx) = oneshot::channel();
+        let (l_acc_tx, l_acc_rx) = oneshot::channel();
+        let h_query = Arc::clone(&zkey.h_query);
+        let l_query = Arc::clone(&zkey.l_query);
+
+        rayon::spawn(move || {
+            let msm_l_query = tracing::debug_span!("msm l_query").entered();
+            let result = T::msm_public_points_g1(l_query.as_ref(), &aux_assignment);
+            l_acc_tx
+                .send((result, aux_assignment))
+                .expect("channel not dropped");
+            msm_l_query.exit();
+        });
 
         let io_ab_span = tracing::debug_span!("io part").entered();
+        // theoretically it is possible to do the io_round and the later multiplication
+        // of rs simultaniasly
         let h = self.driver.io_round_mul_vec(h).await?;
         io_ab_span.exit();
+        rayon::spawn(move || {
+            let msm_h_query = tracing::debug_span!("msm h_query").entered();
+            let result = T::msm_public_points_g1(h_query.as_ref(), &h);
+            h_acc_tx.send(result).expect("channel not dropped");
+            msm_h_query.exit();
+        });
         let rs = self.driver.mul(r, s).await?;
         let r_s_delta_g1 = T::scalar_mul_public_point_g1(&delta_g1, rs);
 
+        let h_acc = h_acc_rx.await.expect("channel not dropped");
+        let (l_aux_acc, aux_assignment) = l_acc_rx.await.expect("channel not dropped");
+
         let party_id = self.driver.get_party_id();
         let calculate_coeff_span = tracing::debug_span!("calculate coeff").entered();
-        let (l_aux_acc, h_acc, g_a, g1_b, g2_b) = rayon_join!(
-            { T::msm_public_points_g1(&zkey.l_query, &aux_assignment) },
-            { T::msm_public_points_g1(&zkey.h_query, &h) },
+        let (g_a, g1_b, g2_b) = rayon_join!(
             {
                 // Compute A
                 let r_g1 = T::scalar_mul_public_point_g1(&delta_g1, r);
