@@ -7,10 +7,12 @@ use co_noir::{
     convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
     translate_witness_share_rep3, GenerateProofCli, GenerateProofConfig, GenerateWitnessCli,
     GenerateWitnessConfig, MPCProtocol, PubShared, SplitInputCli, SplitInputConfig,
-    SplitWitnessCli, SplitWitnessConfig, TranslateWitnessCli, TranslateWitnessConfig,
+    SplitWitnessCli, SplitWitnessConfig, TranslateWitnessCli, TranslateWitnessConfig, VerifyCli,
+    VerifyConfig,
 };
 use co_ultrahonk::prelude::{
-    CoUltraHonk, ProvingKey, Rep3CoBuilder, ShamirCoBuilder, SharedBuilderVariable, Utils,
+    CoUltraHonk, HonkProof, ProvingKey, Rep3CoBuilder, ShamirCoBuilder, SharedBuilderVariable,
+    UltraHonk, Utils, VerifyingKey,
 };
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
@@ -68,6 +70,8 @@ enum Commands {
     TranslateWitness(TranslateWitnessCli),
     /// Evaluates the prover algorithm for the specified circuit and witness share in MPC
     GenerateProof(GenerateProofCli),
+    /// Verification of a Noir proof.
+    Verify(VerifyCli),
 }
 
 fn main() -> color_eyre::Result<ExitCode> {
@@ -94,6 +98,10 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::GenerateProof(cli) => {
             let config = GenerateProofConfig::parse(cli).context("while parsing config")?;
             run_generate_proof(config)
+        }
+        Commands::Verify(cli) => {
+            let config = VerifyConfig::parse(cli).context("while parsing config")?;
+            run_verify(config)
         }
     }
 }
@@ -518,4 +526,40 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
 
     tracing::info!("Proof generation finished successfully");
     Ok(ExitCode::SUCCESS)
+}
+
+#[instrument(skip(config))]
+fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
+    let proof = config.proof;
+    let vk = config.vk;
+    let crs_path = config.crs;
+
+    file_utils::check_file_exists(&proof)?;
+    file_utils::check_file_exists(&vk)?;
+    file_utils::check_file_exists(&crs_path)?;
+
+    // parse proof file
+    let proof_u8 = std::fs::read(&proof).context("while reading proof file")?;
+    let proof = HonkProof::from_buffer(&proof_u8).context("while deserializing proof")?;
+
+    // parse the crs
+    let crs = VerifyingKey::get_verifier_crs(crs_path.to_str().context("while opening crs file")?)
+        .expect("failed to get verifier crs");
+
+    // parse verification key file
+    // let vk_file = BufReader::new(File::open(&vk).context("while opening verification key file")?);
+
+    // The actual verifier
+    let start = Instant::now();
+    let res = UltraHonk::verify(proof, verifying_key).context("while verifying proof")?;
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Proof verification took {} ms", duration_ms);
+
+    if res {
+        tracing::info!("Proof verified successfully");
+        Ok(ExitCode::SUCCESS)
+    } else {
+        tracing::error!("Proof verification failed");
+        Ok(ExitCode::FAILURE)
+    }
 }

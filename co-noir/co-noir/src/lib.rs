@@ -285,6 +285,38 @@ pub struct GenerateProofConfig {
     pub network: NetworkConfig,
 }
 
+/// Cli arguments for `verify`
+#[derive(Debug, Serialize, Args)]
+pub struct VerifyCli {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the proof file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub proof: Option<PathBuf>,
+    /// The path to the verification key file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub vk: Option<PathBuf>,
+    /// The path to the crs file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub crs: Option<PathBuf>,
+}
+
+/// Config for `verify`
+#[derive(Debug, Deserialize)]
+pub struct VerifyConfig {
+    /// The path to the proof file
+    pub proof: PathBuf,
+    /// The path to the verification key file
+    pub vk: PathBuf,
+    /// The path to the crs file
+    pub crs: PathBuf,
+}
+
 /// Prefix for config env variables
 pub const CONFIG_ENV_PREFIX: &str = "CONOIR_";
 
@@ -320,6 +352,7 @@ impl_config!(SplitWitnessCli, SplitWitnessConfig);
 impl_config!(GenerateWitnessCli, GenerateWitnessConfig);
 impl_config!(TranslateWitnessCli, TranslateWitnessConfig);
 impl_config!(GenerateProofCli, GenerateProofConfig);
+impl_config!(VerifyCli, VerifyConfig);
 
 #[allow(clippy::type_complexity)]
 pub fn share_rep3<P: Pairing, N: Rep3Network, R: Rng + CryptoRng>(

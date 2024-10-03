@@ -1,5 +1,6 @@
 use super::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable};
 use crate::{
+    prelude::CrsParser,
     prover::HonkProofResult,
     types::{Crs, PrecomputedEntities, ProverCrs, ProvingKey, VerifyingKey},
     Utils,
@@ -20,5 +21,12 @@ impl<P: Pairing> VerifyingKey<P> {
     ) -> Result<Crs<P>> {
         tracing::info!("Getting crs");
         ProvingKey::get_crs(circuit, path_g1, path_g2)
+    }
+
+    pub fn get_verifier_crs<S: UltraCircuitVariable<P::ScalarField>>(
+        path_g2: &str,
+    ) -> Result<P::G2Affine> {
+        tracing::info!("Getting verifier crs");
+        CrsParser::<P>::get_crs_g2(path_g2)
     }
 }
