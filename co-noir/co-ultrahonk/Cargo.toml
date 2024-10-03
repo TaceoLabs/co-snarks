@@ -16,7 +16,7 @@ ark-bn254.workspace = true
 ark-serialize.workspace = true
 eyre.workspace = true
 itertools.workspace = true
-mpc-core = { version = "0.4.0", path = "../../mpc-core" }
+mpc-core = { version = "0.5.0", path = "../../mpc-core" }
 num-bigint.workspace = true
 tracing.workspace = true
 ultrahonk = { version = "0.1.0", path = "../ultrahonk" }

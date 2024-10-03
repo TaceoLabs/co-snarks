@@ -1,5 +1,14 @@
 # Changelog
 
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-compiler bumped from 0.6.0 to 0.6.1
+    * circom-mpc-vm bumped from 0.4.1 to 0.4.2
+    * co-circom-snarks bumped from 0.1.1 to 0.1.2
+    * co-groth16 bumped from 0.5.0 to 0.5.1
+    * co-plonk bumped from 0.3.0 to 0.3.1
+    * mpc-core bumped from 0.4.0 to 0.5.0
+
 ## [0.5.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-circom-v0.4.0...co-circom-v0.5.0) (2024-08-21)
 
 
