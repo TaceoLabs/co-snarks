@@ -19,7 +19,7 @@ resolver = "1" # need resolver 1 because of circom upstream
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.80"
 authors = ["TACEO GmbH <hello@taceo.io>"]
 homepage = "https://www.taceo.io"
 repository = "https:://github.com/TaceoLabs/collaborative-circom"

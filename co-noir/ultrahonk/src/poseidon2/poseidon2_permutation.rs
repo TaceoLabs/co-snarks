@@ -1,18 +1,15 @@
 use super::poseidon2_params::Poseidon2Params;
 use crate::sponge_hasher::FieldHash;
 use ark_ff::PrimeField;
-use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Poseidon2<F: PrimeField, const T: usize, const D: u64> {
-    pub(crate) params: Arc<Poseidon2Params<F, T, D>>,
+    pub(crate) params: &'static Poseidon2Params<F, T, D>,
 }
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
-    pub(crate) fn new(params: &Arc<Poseidon2Params<F, T, D>>) -> Self {
-        Self {
-            params: Arc::clone(params),
-        }
+    pub(crate) fn new(params: &'static Poseidon2Params<F, T, D>) -> Self {
+        Self { params }
     }
 
     fn sbox(input: &mut [F; T]) {
@@ -177,7 +174,7 @@ mod test {
     const TESTRUNS: usize = 10;
 
     fn poseidon2_kat<F: PrimeField, const T: usize, const D: u64>(
-        params: &Arc<Poseidon2Params<F, T, D>>,
+        params: &'static Poseidon2Params<F, T, D>,
         input: &[F; T],
         expected: &[F; T],
     ) {
@@ -187,7 +184,7 @@ mod test {
     }
 
     fn poseidon2_consistent_perm<F: PrimeField, const T: usize, const D: u64>(
-        params: &Arc<Poseidon2Params<F, T, D>>,
+        params: &'static Poseidon2Params<F, T, D>,
     ) {
         let mut rng = &mut thread_rng();
         let input1: Vec<F> = (0..T).map(|_| F::rand(&mut rng)).collect();
