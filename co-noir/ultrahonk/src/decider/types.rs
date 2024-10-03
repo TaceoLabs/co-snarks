@@ -70,7 +70,7 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
         }
     }
 
-    pub fn new_betas(betas: Vec<F>) -> Self {
+    pub fn new_without_products(betas: Vec<F>) -> Self {
         let current_element_idx = 0;
         let periodicity = 2;
         let partial_evaluation_result = F::ONE;

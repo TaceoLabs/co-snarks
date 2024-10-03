@@ -25,7 +25,7 @@ impl<P: HonkCurve<TranscriptFieldType>> DeciderVerifier<P> {
         let multivariate_n = circuit_size;
         let multivariate_d = Utils::get_msb64(multivariate_n as u64);
 
-        let mut gate_separators = GateSeparatorPolynomial::new_betas(
+        let mut gate_separators = GateSeparatorPolynomial::new_without_products(
             self.memory.relation_parameters.gate_challenges.to_owned(),
         );
 
