@@ -83,20 +83,8 @@ impl Utils {
         Ok(witness)
     }
 
-    // from http://supertech.csail.mit.edu/papers/debruijn.pdf
-    pub fn get_msb32(inp: u32) -> u8 {
-        const MULTIPLY_DE_BRUIJNI_BIT_POSIITION: [u8; 32] = [
-            0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30, 8, 12, 20, 28, 15, 17, 24,
-            7, 19, 27, 23, 6, 26, 5, 4, 31,
-        ];
-
-        let mut v = inp | (inp >> 1);
-        v |= v >> 2;
-        v |= v >> 4;
-        v |= v >> 8;
-        v |= v >> 16;
-
-        MULTIPLY_DE_BRUIJNI_BIT_POSIITION[((v.wrapping_mul(0x07C4ACDD)) >> 27) as usize]
+    pub fn get_msb32(inp: u32) -> u32 {
+        inp.ilog2()
     }
 
     pub fn round_up_power_2(inp: usize) -> usize {
@@ -108,21 +96,8 @@ impl Utils {
         }
     }
 
-    pub fn get_msb64(inp: u64) -> u8 {
-        const DE_BRUIJNI_SEQUENCE: [u8; 64] = [
-            0, 47, 1, 56, 48, 27, 2, 60, 57, 49, 41, 37, 28, 16, 3, 61, 54, 58, 35, 52, 50, 42, 21,
-            44, 38, 32, 29, 23, 17, 11, 4, 62, 46, 55, 26, 59, 40, 36, 15, 53, 34, 51, 20, 43, 31,
-            22, 10, 45, 25, 39, 14, 33, 19, 30, 9, 24, 13, 18, 8, 12, 7, 6, 5, 63,
-        ];
-
-        let mut t = inp | (inp >> 1);
-        t |= t >> 2;
-        t |= t >> 4;
-        t |= t >> 8;
-        t |= t >> 16;
-        t |= t >> 32;
-
-        DE_BRUIJNI_SEQUENCE[((t.wrapping_mul(0x03F79D71B4CB0A89)) >> 58) as usize]
+    pub fn get_msb64(inp: u64) -> u32 {
+        inp.ilog2()
     }
 
     fn batch_invert<F: PrimeField>(coeffs: &mut [F]) {
