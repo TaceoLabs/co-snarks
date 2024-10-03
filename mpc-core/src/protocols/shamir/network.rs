@@ -1,6 +1,3 @@
-// TODO remove (same for all others)
-#![allow(async_fn_in_trait)]
-
 //! Shamir Network
 //!
 //! This module contains the trait for specifying a network interface for the Shamir MPC protocol. It also contains an implementation of the trait using the [mpc_net] crate.
@@ -14,6 +11,7 @@ use quinn::{RecvStream, SendStream};
 use std::{collections::HashMap, sync::Arc};
 use tokio_util::codec::LengthDelimitedCodec;
 
+#[allow(async_fn_in_trait)]
 /// This trait defines the network interface for the Shamir protocol.
 pub trait ShamirNetwork: Send {
     /// Returns the id of the party. The id is in the range 0 <= id < num_parties

@@ -74,17 +74,12 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         arithmetic::promote_to_trivial_shares(public_values)
     }
 
-    async fn local_mul_vec(
+    fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
-    ) -> IoResult<Vec<P::ScalarField>> {
-        let (tx, rx) = oneshot::channel();
-        rayon::spawn(move || {
-            let result = arithmetic::local_mul_vec(&a, &b);
-            tx.send(result).expect("channel not dropped");
-        });
-        Ok(rx.await.expect("channel not dropped"))
+    ) -> Vec<P::ScalarField> {
+        arithmetic::local_mul_vec(&a, &b)
     }
 
     async fn msm_and_mul(

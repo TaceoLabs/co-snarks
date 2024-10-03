@@ -1,5 +1,3 @@
-#![allow(async_fn_in_trait)]
-
 use core::fmt;
 use std::{fmt::Debug, future::Future, sync::Arc};
 
@@ -17,6 +15,7 @@ pub use shamir::ShamirGroth16Driver;
 
 type IoResult<T> = std::io::Result<T>;
 
+#[allow(async_fn_in_trait)]
 pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     type ArithmeticShare: CanonicalSerialize
         + CanonicalDeserialize
@@ -51,11 +50,11 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
 
-    async fn local_mul_vec(
+    fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
-    ) -> IoResult<Vec<P::ScalarField>>;
+    ) -> Vec<P::ScalarField>;
 
     async fn msm_and_mul(
         &mut self,

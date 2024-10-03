@@ -251,7 +251,10 @@ where
         });
 
         let local_mul_vec_span = tracing::debug_span!("c: local_mul_vec").entered();
-        let mut ab = self.driver.local_mul_vec(a, b).await?;
+        // this performs some heavy computation on the tokio runtime.
+        // it doesn't matter because we do not perform any IO at this moment, so the thread
+        // is not needed for driving IO
+        let mut ab = self.driver.local_mul_vec(a, b);
         local_mul_vec_span.exit();
         rayon::spawn(move || {
             let ifft_span = tracing::debug_span!("c: ifft in dist pows").entered();
@@ -277,7 +280,8 @@ where
 
         let compute_ab_span = tracing::debug_span!("compute ab").entered();
         let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
-        let mut ab = self.driver.local_mul_vec(a, b).await?;
+        // same as above. No IO task is run at the moment.
+        let mut ab = self.driver.local_mul_vec(a, b);
         let c = c_rx.await?;
         ab.par_iter_mut()
             .zip_eq(c.par_iter())
@@ -443,7 +447,6 @@ where
         let calculate_coeff_span = tracing::debug_span!("calculate coeff").entered();
         let g_a = r_g1_rx.await?;
         let g1_b = s_g1_rx.await?;
-        let g2_b = s_g2_rx.await?;
         calculate_coeff_span.exit();
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
@@ -462,6 +465,7 @@ where
         T::add_assign_points_g1(&mut g_c, &l_aux_acc);
         T::add_assign_points_g1(&mut g_c, &h_acc);
 
+        let g2_b = s_g2_rx.await?;
         let (g_c_opened, g2_b_opened) = self.driver.open_two_points(g_c, g2_b).await?;
         last_round.exit();
         self.driver.close_network().await?;

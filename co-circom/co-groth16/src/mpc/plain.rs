@@ -58,12 +58,12 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         public_values.to_vec()
     }
 
-    async fn local_mul_vec(
+    fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
-    ) -> IoResult<Vec<P::ScalarField>> {
-        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
+    ) -> Vec<P::ScalarField> {
+        a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect()
     }
 
     async fn msm_and_mul(
