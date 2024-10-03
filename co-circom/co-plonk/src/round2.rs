@@ -90,7 +90,7 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round2Polys<P, T> {
 impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
     // Computes the permutation polynomial z(X) (see https://eprint.iacr.org/2019/953.pdf)
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
-    #[instrument(level = "info", name = "compute z", skip_all)]
+    #[instrument(level = "debug", name = "compute z", skip_all)]
     async fn compute_z(
         driver: &mut T,
         zkey: &ZKey<P>,
