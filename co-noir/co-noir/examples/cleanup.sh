@@ -4,3 +4,4 @@ rm proof.0.proof proof.1.proof proof.2.proof
 find . -name "*.shared" -type f -delete
 # delete public input file
 rm public_input.json
+find . -name "verification_key" -type f -delete

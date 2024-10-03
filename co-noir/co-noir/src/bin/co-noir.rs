@@ -12,7 +12,7 @@ use co_noir::{
 };
 use co_ultrahonk::prelude::{
     CoUltraHonk, HonkProof, ProvingKey, Rep3CoBuilder, ShamirCoBuilder, SharedBuilderVariable,
-    UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
+    UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg,
 };
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
@@ -584,28 +584,32 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
 #[instrument(skip(config))]
 fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let proof = config.proof;
-    let vk = config.vk;
+    let vk_path: PathBuf = config.vk;
     let crs_path = config.crs;
 
     file_utils::check_file_exists(&proof)?;
-    file_utils::check_file_exists(&vk)?;
+    file_utils::check_file_exists(&vk_path)?;
     file_utils::check_file_exists(&crs_path)?;
 
     // parse proof file
     let proof_u8 = std::fs::read(&proof).context("while reading proof file")?;
-    // let proof = HonkProof::from_buffer(&proof_u8).context("while deserializing proof")?;
+    let proof = HonkProof::from_buffer(&proof_u8).context("while deserializing proof")?;
 
     // parse the crs
-    // let crs = VerifyingKey::get_verifier_crs(crs_path.to_str().context("while opening crs file")?)
-    // .expect("failed to get verifier crs");
+    let crs = VerifyingKey::<Bn254>::get_verifier_crs(
+        crs_path.to_str().context("while opening crs file")?,
+    )
+    .expect("failed to get verifier crs");
 
     // parse verification key file
-    // let vk_file = BufReader::new(File::open(&vk).context("while opening verification key file")?);
+    let vk_u8 = std::fs::read(&vk_path).context("while reading vk file")?;
+    let vk = VerifyingKeyBarretenberg::<Bn254>::from_buffer(&vk_u8)
+        .context("while deserializing verification key")?;
+    let vk = VerifyingKey::from_barrettenberg_and_crs(vk, crs);
 
     // The actual verifier
     let start = Instant::now();
-    let res = false;
-    // let res = UltraHonk::verify(proof, verifying_key).context("while verifying proof")?;
+    let res = UltraHonk::verify(proof, vk).context("while verifying proof")?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Proof verification took {} ms", duration_ms);
 

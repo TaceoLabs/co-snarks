@@ -21,6 +21,19 @@ impl<P: Pairing> VerifyingKey<P> {
         Ok(vk)
     }
 
+    pub fn from_barrettenberg_and_crs(
+        barretenberg_vk: VerifyingKeyBarretenberg<P>,
+        crs: P::G2Affine,
+    ) -> Self {
+        Self {
+            crs,
+            circuit_size: barretenberg_vk.circuit_size as u32,
+            num_public_inputs: barretenberg_vk.num_public_inputs as u32,
+            pub_inputs_offset: barretenberg_vk.pub_inputs_offset as u32,
+            commitments: barretenberg_vk.commitments,
+        }
+    }
+
     pub fn get_crs<S: UltraCircuitVariable<P::ScalarField>>(
         circuit: &GenericUltraCircuitBuilder<P, S>,
         path_g1: &str,
@@ -38,9 +51,7 @@ impl<P: Pairing> VerifyingKey<P> {
         ProvingKey::get_prover_crs(circuit, path_g1)
     }
 
-    pub fn get_verifier_crs<S: UltraCircuitVariable<P::ScalarField>>(
-        path_g2: &str,
-    ) -> Result<P::G2Affine> {
+    pub fn get_verifier_crs(path_g2: &str) -> Result<P::G2Affine> {
         tracing::info!("Getting verifier crs");
         CrsParser::<P>::get_crs_g2(path_g2)
     }
