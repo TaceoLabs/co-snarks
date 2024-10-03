@@ -254,7 +254,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         tracing::info!("Builder init");
         let mut builder = Self::new(size_hint);
 
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
 
         let len = witness_values.len();
         for witness in witness_values.into_iter().take(varnum) {
@@ -272,7 +272,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         // Add the const zero variable after the acir witness has been
         // incorporated into variables.
         builder.zero_idx = builder.put_constant_variable(P::ScalarField::zero());
-        builder.tau.insert(Self::DUMMY_TAG, Self::DUMMY_TAG); // TODO(luke): explain this
+        builder.tau.insert(Self::DUMMY_TAG, Self::DUMMY_TAG); // AZTEC TODO(luke): explain this
 
         builder.is_recursive_circuit = recursive;
         builder
@@ -911,7 +911,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
 
         let mask = (BigUint::one() << NUM_LIMB_BITS) - BigUint::one();
 
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/911): These are pairing points extracted from a valid
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/911): These are pairing points extracted from a valid
         // proof. This is a workaround because we can't represent the point at infinity in biggroup yet.
         let mut agg_obj_indices = AggregationObjectIndices::default();
         let x0 = Utils::field_from_hex_string::<P::BaseField>(
@@ -982,7 +982,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
     ) {
         let mut table = RomTable::new(init);
 
-        // TODO this is just implemented for the Plain backend
+        // AZTEC TODO this is just implemented for the Plain backend
         for op in constraint.trace.iter() {
             assert_eq!(op.access_type, 0);
             let value = self.poly_to_field_ct(&op.value);
@@ -1216,7 +1216,8 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         block.q_poseidon2_external().push(P::ScalarField::zero());
         block.q_poseidon2_internal().push(P::ScalarField::zero());
 
-        // TODO these are uncommented due to mutability issues
+        // TACEO TODO these are uncommented due to mutability issues
+        // Taken care of by the caller
         // self.check_selector_length_consistency();
         // self.num_gates += 1;
     }

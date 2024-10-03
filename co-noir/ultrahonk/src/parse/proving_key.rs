@@ -61,12 +61,6 @@ impl<P: Pairing> ProvingKey<P> {
             proving_key.public_inputs.push(*input);
         }
 
-        // TODO the following elements are not part of the proving key so far
-        // Set the recursive proof indices
-        // proving_key.recursive_proof_public_input_indices =
-        //     circuit.recursive_proof_public_input_indices;
-        // proving_key.contains_recursive_proof = circuit.contains_recursive_proof;
-
         proving_key
     }
 
@@ -240,7 +234,7 @@ impl<P: Pairing> ProvingKey<P> {
                 if last_node {
                     mapping.sigmas[current_column][current_row].is_tag = true;
 
-                    // TODO(Zac): yikes, std::maps (tau) are expensive. Can we find a way to get rid of this?
+                    // AZTEC TODO(Zac): yikes, std::maps (tau) are expensive. Can we find a way to get rid of this?
                     mapping.sigmas[current_column][current_row].row_index = *circuit_constructor
                         .tau
                         .get(&real_variable_tags[cycle_index])
@@ -280,7 +274,7 @@ impl<P: Pairing> ProvingKey<P> {
             debug_assert_eq!(current_permutation_mappings.len(), num_gates);
             debug_assert_eq!(current_permutation_poly.len(), num_gates);
 
-            // TODO Barrettenberg uses multithreading here
+            // TACEO TODO Barrettenberg uses multithreading here
             for (current_mapping, current_poly) in current_permutation_mappings
                 .into_iter()
                 .zip(current_permutation_poly.iter_mut())
@@ -328,7 +322,7 @@ impl<P: Pairing> ProvingKey<P> {
         //  ^^^^^^^^^  ^^^^^^^^  ^^^^^^^  ^nonzero to ensure uniqueness and to avoid infinity commitments
         //  |          table     randomness
         //  ignored, as used for regular constraints and padding to the next power of 2.
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
         assert!(dyadic_circuit_size > circuit.get_tables_size() + additional_offset);
         let mut offset = dyadic_circuit_size - circuit.get_tables_size() - additional_offset;
 
@@ -350,7 +344,7 @@ impl<P: Pairing> ProvingKey<P> {
         circuit: &mut GenericUltraCircuitBuilder<P, S>,
         dyadic_circuit_size: usize,
     ) {
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
         let offset = dyadic_circuit_size - circuit.get_tables_size();
 
         let mut table_offset = offset; // offset of the present table in the table polynomials

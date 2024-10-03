@@ -9,7 +9,7 @@ pub struct Polynomial<F> {
 
 pub struct ShiftedPoly<'a, F> {
     pub(crate) coefficients: &'a [F],
-    zero: F, // TODO is there are better solution
+    zero: F, // TACEO TODO is there are better solution
 }
 
 impl<'a, F: Clone> ShiftedPoly<'a, F> {

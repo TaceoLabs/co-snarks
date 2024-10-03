@@ -72,12 +72,6 @@ where
             proving_key.public_inputs.push(var.public_into_field());
         }
 
-        // TODO the following elements are not part of the proving key so far
-        // Set the recursive proof indices
-        // proving_key.recursive_proof_public_input_indices =
-        //     circuit.recursive_proof_public_input_indices;
-        // proving_key.contains_recursive_proof = circuit.contains_recursive_proof;
-
         proving_key
     }
 

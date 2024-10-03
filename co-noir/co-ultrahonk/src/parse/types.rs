@@ -98,7 +98,7 @@ where
             }
 
             // Insert the selector values for this block into the selector polynomials at the correct offset
-            // TODO(https://github.com/AztecProtocol/barretenberg/issues/398): implicit arithmetization/flavor consistency
+            // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/398): implicit arithmetization/flavor consistency
             for (selector_poly, selector) in self.selectors.iter_mut().zip(block.selectors.iter()) {
                 debug_assert_eq!(selector.len(), block_size);
 

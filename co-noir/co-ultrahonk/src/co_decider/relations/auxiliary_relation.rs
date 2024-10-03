@@ -10,7 +10,7 @@ use num_bigint::BigUint;
 use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
 
 /**
- * TODO(https://github.com/AztecProtocol/barretenberg/issues/757): Investigate optimizations.
+ * AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): Investigate optimizations.
  * It seems that we could have:
  *     static constexpr std::array<size_t, 6> SUBRELATION_PARTIAL_LENGTHS{
  *     5 // auxiliary sub-relation;
@@ -437,7 +437,7 @@ where
 
         let access_check = &mul[2].sub(driver, &access_type); // check value is 0 or 1; deg 2 or 4
 
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
         // reverse order we could re-use `partial_record_check`  1 -  (w3' * eta_three + w2' * eta_two + w1' *
         // eta) deg 1 or 2
         let tmp1 = w_2_shift.scale(driver, eta_two);

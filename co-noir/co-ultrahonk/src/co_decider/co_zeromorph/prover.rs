@@ -270,7 +270,7 @@ where
         let mut batched_polynomial = zeta_x;
         batched_polynomial.add_scaled(driver, &z_x, &z_challenge);
 
-        // TODO(#742): To complete the degree check, we need to do an opening proof for x_challenge with a univariate
+        // AZTEC TODO(#742): To complete the degree check, we need to do an opening proof for x_challenge with a univariate
         // PCS for the degree-lifted polynomial (\zeta_c + z*Z_x)*X^{N_max - N - 1}. If this PCS is KZG, verification
         // then requires a pairing check similar to the standard KZG check but with [1]_2 replaced by [X^{N_max - N
         // -1}]_2. Two issues: A) we do not have an SRS with these G2 elements (so need to generate a fake setup until
@@ -434,7 +434,7 @@ where
      * @param commitment_key
      * @param transcript
      *
-     * @todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
+     * @AZTEC todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
      */
     pub(crate) fn zeromorph_prove(
         &mut self,
@@ -482,7 +482,7 @@ where
         }
         // Add buffer elements to remove log_N dependence in proof
         for idx in log_n as usize..CONST_PROOF_SIZE_LOG_N {
-            let res = P::G1::generator(); // TODO Is this one?
+            let res = P::G1::generator();
             let label = format!("ZM:C_q_{}", idx);
             transcript.send_point_to_verifier::<P>(label, res.into());
         }
