@@ -15,7 +15,6 @@ use acir::{native_types::WitnessStack, FieldElement};
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
 use ark_ff::PrimeField;
 use eyre::Error;
-use itertools::izip;
 use noirc_artifacts::program::ProgramArtifact;
 use num_bigint::BigUint;
 use num_traits::Num;
@@ -127,41 +126,7 @@ impl Utils {
     }
 
     fn batch_invert<F: PrimeField>(coeffs: &mut [F]) {
-        // This better?
-        // for inv in coeffs.iter_mut() {
-        //     inv.inverse_in_place();
-        // }
-
-        // Assumes that all elements are invertible
-        let n = coeffs.len();
-        let mut temporaries = Vec::with_capacity(n);
-        let mut skipped = Vec::with_capacity(n);
-        let mut acc = F::one();
-        for c in coeffs.iter() {
-            temporaries.push(acc);
-            if c.is_zero() {
-                skipped.push(true);
-                continue;
-            }
-            acc *= c;
-            skipped.push(false);
-        }
-
-        acc.inverse_in_place().unwrap();
-
-        for (c, t, skipped) in izip!(
-            coeffs.iter_mut(),
-            temporaries.into_iter(),
-            skipped.into_iter()
-        )
-        .rev()
-        {
-            if !skipped {
-                let tmp = t * acc;
-                acc *= &*c;
-                *c = tmp;
-            }
-        }
+        ark_ff::batch_inversion(coeffs);
     }
 
     pub fn commit<P: Pairing>(

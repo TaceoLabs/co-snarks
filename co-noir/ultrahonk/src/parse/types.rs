@@ -462,9 +462,6 @@ impl<F: PrimeField> Index<usize> for RomTable<F> {
     type Output = FieldCT<F>;
 
     fn index(&self, index: usize) -> &Self::Output {
-        if index >= self.length {
-            panic!("Index out of bounds");
-        }
         &self.entries[index]
     }
 }
@@ -909,7 +906,7 @@ impl<F: PrimeField> PlookupBasicTable<F> {
 
 #[derive(Default)]
 pub(crate) struct LookupHashMap<F: PrimeField> {
-    pub(crate) index_map: HashMap<[F; 3], usize>, // TODO they have a different hash function
+    pub(crate) index_map: HashMap<[F; 3], usize>,
 }
 
 impl<F: PrimeField> Index<[F; 3]> for LookupHashMap<F> {
@@ -1119,8 +1116,8 @@ pub struct CycleNode {
 pub type CyclicPermutation = Vec<CycleNode>;
 
 pub(crate) struct TraceData<'a, P: Pairing> {
-    pub(crate) wires: [&'a mut Polynomial<P::ScalarField>; NUM_WIRES],
-    pub(crate) selectors: [&'a mut Polynomial<P::ScalarField>; NUM_SELECTORS],
+    pub(crate) wires: &'a mut [Polynomial<P::ScalarField>; NUM_WIRES],
+    pub(crate) selectors: &'a mut [Polynomial<P::ScalarField>; NUM_SELECTORS],
     pub(crate) copy_cycles: Vec<CyclicPermutation>,
     pub(crate) ram_rom_offset: u32,
     pub(crate) pub_inputs_offset: u32,
@@ -1131,39 +1128,21 @@ impl<'a, P: Pairing> TraceData<'a, P> {
         builder: &UltraCircuitBuilder<P>,
         proving_key: &'a mut ProvingKey<P>,
     ) -> Self {
-        let mut iter = proving_key.polynomials.witness.get_wires_mut().iter_mut();
-        let wires = [
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-        ];
-
-        let mut iter = proving_key
-            .polynomials
-            .precomputed
-            .get_selectors_mut()
-            .iter_mut();
-        let selectors = [
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-            iter.next().unwrap(),
-        ];
         let copy_cycles = vec![vec![]; builder.variables.len()];
 
         Self {
-            wires,
-            selectors,
+            wires: proving_key
+                .polynomials
+                .witness
+                .get_wires_mut()
+                .try_into()
+                .unwrap(),
+            selectors: proving_key
+                .polynomials
+                .precomputed
+                .get_selectors_mut()
+                .try_into()
+                .unwrap(),
             copy_cycles,
             ram_rom_offset: 0,
             pub_inputs_offset: 0,
