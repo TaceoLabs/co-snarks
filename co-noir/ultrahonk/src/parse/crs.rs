@@ -173,26 +173,9 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
         Ok(())
     }
 
-    // I don't think this is the nicest way, but the data is arranged slightly different as before
     fn convert_endianness_inplace(buffer: &mut [u8]) {
-        for chunk in buffer.chunks_mut(32) {
-            if chunk.len() == 32 {
-                let mut reversed = [0u8; 32];
-                for i in 0..4 {
-                    let start = i * 8;
-                    let end = (i + 1) * 8;
-                    let reverse_start = chunk.len() - end;
-                    let reverse_end = chunk.len() - start;
-                    reversed[start..end].copy_from_slice(&chunk[reverse_start..reverse_end]);
-                }
-
-                for i in 0..4 {
-                    let start = i * 8;
-                    let end = (i + 1) * 8;
-                    let be = BigEndian::read_u64(&reversed[start..end]);
-                    LittleEndian::write_u64(&mut chunk[start..end], be);
-                }
-            }
+        for chunk in buffer.chunks_exact_mut(32) {
+            chunk.reverse();
         }
     }
 }
