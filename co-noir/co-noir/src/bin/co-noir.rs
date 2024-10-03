@@ -538,7 +538,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
 fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let circuit_path = config.circuit;
     let crs_path = config.crs;
-    let vk = config.vk;
+    let vk_path = config.vk;
 
     file_utils::check_file_exists(&circuit_path)?;
     file_utils::check_file_exists(&crs_path)?;
@@ -561,12 +561,21 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     .expect("failed to get prover crs");
 
     // Get vk
-    todo!();
-
+    let vk = builder
+        .create_vk_barretenberg(prover_crs)
+        .context("while creating vk")?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+
     tracing::info!("Verfication key generation took {} ms", duration_ms);
 
-    todo!("write vk to file");
+    let mut out_file =
+        BufWriter::new(std::fs::File::create(&vk_path).context("while creating output file")?);
+
+    let vk_u8 = vk.to_buffer();
+    out_file
+        .write(vk_u8.as_slice())
+        .context("while writing vk to file")?;
+    tracing::info!("Wrote vk to file {}", vk_path.display());
 
     tracing::info!("Verification key generation finished successfully");
     Ok(ExitCode::SUCCESS)
