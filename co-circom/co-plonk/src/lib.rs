@@ -240,7 +240,7 @@ impl<P: Pairing> ShamirCoPlonk<P> {
     ) -> eyre::Result<Self> {
         let domain_size = zkey.domain_size;
         // TODO check and explain numbers
-        let num_pairs = domain_size * 218 + 3;
+        let num_pairs = domain_size * 223 + 3;
         let mpc_net = ShamirMpcNet::new(config).await?;
         let preprocessing = ShamirPreprocessing::new(threshold, mpc_net, num_pairs).await?;
         let mut protocol0 = ShamirProtocol::from(preprocessing);

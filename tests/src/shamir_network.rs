@@ -1,5 +1,6 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
+use itertools::izip;
 use mpc_core::protocols::shamir::network::ShamirNetwork;
 use std::{cmp::Ordering, collections::HashMap};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -262,5 +263,38 @@ impl ShamirNetwork for PartyTestNetwork {
     async fn shutdown(self) -> std::io::Result<()> {
         // we do not care about gracefull shutdown
         Ok(())
+    }
+
+    async fn send_and_recv_each_many<
+        F: CanonicalSerialize + CanonicalDeserialize + Clone + Send + 'static,
+    >(
+        &mut self,
+        data: Vec<Vec<F>>,
+    ) -> std::io::Result<Vec<Vec<F>>> {
+        debug_assert_eq!(data.len(), self.num_parties);
+        let mut res = vec![Vec::new(); self.num_parties];
+        for id in 0..self.num_parties {
+            if id == self.id {
+                res[id] = data[id].clone();
+            } else {
+                let corr_id = if id > self.id { id - 1 } else { id };
+                let data = data[id].clone();
+                // send
+                let size = data.serialized_size(ark_serialize::Compress::No);
+                let mut to_send = Vec::with_capacity(size);
+                data.serialize_uncompressed(&mut to_send).unwrap();
+
+                self.send[corr_id]
+                    .send(Msg::Data(Bytes::from(to_send)))
+                    .expect("can send");
+
+                // receive
+                let bytes = Vec::from(self.recv[corr_id].recv().await.unwrap().to_data().unwrap());
+                let v = Vec::<F>::deserialize_uncompressed(bytes.as_slice()).unwrap();
+                res[id] = v;
+            }
+        }
+
+        Ok(res)
     }
 }

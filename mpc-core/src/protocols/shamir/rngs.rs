@@ -50,7 +50,6 @@ impl<F: PrimeField> ShamirRng<F> {
     }
 
     // Generates amount * (self.threshold + 1) random double shares
-    // TODO we are generating more than amount triples? depends on threshold? should it stay like this?
     pub(super) async fn buffer_triples<N: ShamirNetwork>(
         &mut self,
         network: &mut N,
@@ -75,17 +74,6 @@ impl<F: PrimeField> ShamirRng<F> {
             }
         }
 
-        let my_id = network.get_id();
-        let mut my_send = Vec::new();
-        // Send
-        for (other_id, shares) in send.into_iter().enumerate() {
-            if my_id == other_id {
-                my_send = shares;
-            } else {
-                network.send_many(other_id, &shares).await?;
-            }
-        }
-        // Receive
         let mut rcv_rt = (0..amount)
             .map(|_| Vec::with_capacity(self.num_parties))
             .collect_vec();
@@ -93,26 +81,13 @@ impl<F: PrimeField> ShamirRng<F> {
             .map(|_| Vec::with_capacity(self.num_parties))
             .collect_vec();
 
-        for other_id in 0..self.num_parties {
-            if my_id == other_id {
-                for (des_r, des_r2, src) in
-                    izip!(&mut rcv_rt, &mut rcv_r2t, my_send.chunks_exact(2))
-                {
-                    des_r.push(src[0]);
-                    des_r2.push(src[1]);
-                }
-            } else {
-                let r = network.recv_many::<F>(other_id).await?;
-                if r.len() != 2 * amount {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "During execution of buffer_triples in MPC: Invalid number of elements received",
-                    ));
-                }
-                for (des_r, des_r2, src) in izip!(&mut rcv_rt, &mut rcv_r2t, r.chunks_exact(2)) {
-                    des_r.push(src[0]);
-                    des_r2.push(src[1]);
-                }
+        // TODO this sometimes runs fast, but often 1 party is fast and the rest take a lot longer
+        let recv = network.send_and_recv_each_many(send).await?;
+
+        for r in recv.into_iter() {
+            for (des_r, des_r2, src) in izip!(&mut rcv_rt, &mut rcv_r2t, r.chunks_exact(2)) {
+                des_r.push(src[0]);
+                des_r2.push(src[1]);
             }
         }
 

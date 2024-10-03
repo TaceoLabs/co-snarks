@@ -17,8 +17,8 @@ const READ_BUFFER_SIZE: usize = 16;
 /// A channel that uses a [`Encoder`] and [`Decoder`] to send and receive messages.
 #[derive(Debug)]
 pub struct Channel<R, W, C> {
-    read_conn: ReadChannel<R, C>,
-    write_conn: WriteChannel<W, C>,
+    pub read_conn: ReadChannel<R, C>,
+    pub write_conn: WriteChannel<W, C>,
 }
 
 /// A channel that uses a [`LengthDelimitedCodec`] to send and receive messages.

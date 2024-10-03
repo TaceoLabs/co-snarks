@@ -3,6 +3,7 @@ use ark_ff::PrimeField;
 use itertools::izip;
 use network::ShamirNetwork;
 use rngs::ShamirRng;
+use std::time::Instant;
 
 use rand::{CryptoRng, Rng, SeedableRng};
 
@@ -16,8 +17,6 @@ mod rngs;
 
 pub use arithmetic::types::ShamirPrimeFieldShare;
 pub use pointshare::types::ShamirPointShare;
-
-const BATCH_SIZE: usize = 1024;
 
 type IoResult<T> = std::io::Result<T>;
 type ShamirShare<F> = ShamirPrimeFieldShare<F>;
@@ -186,9 +185,19 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirPreprocessing<F, N> {
         let seed: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
         let mut rng_buffer = ShamirRng::new(seed, threshold, num_parties);
 
-        for _ in 0..amount.div_ceil(BATCH_SIZE) {
-            rng_buffer.buffer_triples(&mut network, BATCH_SIZE).await?;
-        }
+        tracing::info!(
+            "Party {}: generating correlated randomness..",
+            network.get_id()
+        );
+        let start = Instant::now();
+        // buffer_triple generates amount * (t + 1), so we ceil dive the amount we want
+        let amount = amount.div_ceil(threshold + 1);
+        rng_buffer.buffer_triples(&mut network, amount).await?;
+        tracing::info!(
+            "Party {}: generating took {} ms",
+            network.get_id(),
+            start.elapsed().as_millis()
+        );
 
         Ok(Self {
             threshold,

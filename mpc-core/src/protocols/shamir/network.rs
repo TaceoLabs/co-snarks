@@ -61,6 +61,14 @@ pub trait ShamirNetwork: Send {
         num: usize,
     ) -> std::io::Result<Vec<F>>;
 
+    /// Sends and receives to and from each party. Data must be of shape num_parties x n. The element that is "sent" to yourself is passed back directly.
+    async fn send_and_recv_each_many<
+        F: CanonicalSerialize + CanonicalDeserialize + Clone + Send + 'static,
+    >(
+        &mut self,
+        data: Vec<Vec<F>>,
+    ) -> std::io::Result<Vec<Vec<F>>>;
+
     /// Fork the network into two separate instances with their own connections
     async fn fork(&mut self) -> std::io::Result<Self>
     where
@@ -260,5 +268,66 @@ impl ShamirNetwork for ShamirMpcNet {
         } else {
             Ok(())
         }
+    }
+
+    async fn send_and_recv_each_many<
+        F: CanonicalSerialize + CanonicalDeserialize + Clone + Send + 'static,
+    >(
+        &mut self,
+        data: Vec<Vec<F>>,
+    ) -> std::io::Result<Vec<Vec<F>>> {
+        debug_assert_eq!(data.len(), self.num_parties);
+        let mut res = Vec::with_capacity(data.len());
+
+        // move channels and data out of self and input so we can move them into tokio::spawn
+        let futures = (0..self.num_parties)
+            .zip(data)
+            .map(|(id, data)| {
+                let chan = self.channels.remove(&id);
+                tokio::spawn(async move {
+                    if let Some(mut chan) = chan {
+                        let (_, recv) = tokio::try_join!(
+                            async {
+                                let size = data.serialized_size(ark_serialize::Compress::No);
+                                let mut ser_data = Vec::with_capacity(size);
+                                data.serialize_uncompressed(&mut ser_data).map_err(|e| {
+                                    std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
+                                })?;
+                                chan.write_conn.send(ser_data.into()).await
+                            },
+                            async {
+                                let data = chan.read_conn.next().await.ok_or(
+                                    std::io::Error::new(std::io::ErrorKind::Other, "Received None"),
+                                )??;
+                                let res =
+                                    Vec::<F>::deserialize_uncompressed(&data[..]).map_err(|e| {
+                                        std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+                                    })?;
+                                Ok(res)
+                            }
+                        )?;
+                        Ok::<_, std::io::Error>((Some(chan), recv))
+                    } else {
+                        Ok((None, data))
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        // collect results of futures and move channels back into self.channels
+        for (id, e) in futures::future::try_join_all(futures)
+            .await?
+            .into_iter()
+            .enumerate()
+        {
+            let (chan, recv) = e?;
+            // only insert chan were there was one
+            if let Some(c) = chan {
+                self.channels.insert(id, c);
+            }
+            res.push(recv);
+        }
+
+        Ok(res)
     }
 }
