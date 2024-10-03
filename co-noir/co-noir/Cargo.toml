@@ -19,12 +19,12 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 bincode.workspace = true
 clap.workspace = true
-co-acvm = { workspace = true }
-co-ultrahonk = { workspace = true }
+co-acvm = { version = "0.1.0", path = "../co-acvm" }
+co-ultrahonk = { version = "0.1.0", path = "../co-ultrahonk" }
 color-eyre.workspace = true
 figment.workspace = true
-mpc-core = { workspace = true }
-mpc-net.workspace = true
+mpc-core = { version = "0.4.0", path = "../../mpc-core" }
+mpc-net = { version = "0.1.2", path = "../../mpc-net" }
 rand.workspace = true
 serde_json.workspace = true
 serde.workspace = true

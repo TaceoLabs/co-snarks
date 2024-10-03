@@ -13,10 +13,10 @@ readme.workspace = true
 [dependencies]
 ark-ec.workspace = true
 ark-ff.workspace = true
-co-circom-snarks.workspace = true
+co-circom-snarks = { version = "0.1.1", path = "../co-circom-snarks" }
 eyre.workspace = true
 itertools.workspace = true
-mpc-core.workspace = true
-mpc-net.workspace = true
+mpc-core = { version = "0.4.0", path = "../../mpc-core" }
+mpc-net = { version = "0.1.2", path = "../../mpc-net" }
 serde.workspace = true
 tracing.workspace = true
