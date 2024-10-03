@@ -7,7 +7,7 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{PrimeField, Zero};
-use std::{collections::BTreeMap, ops::Index, sync::Arc};
+use std::{collections::BTreeMap, ops::Index};
 
 pub type TranscriptFieldType = ark_bn254::Fr;
 pub type TranscriptType = Poseidon2Transcript<TranscriptFieldType>;
@@ -31,7 +31,7 @@ impl<F> Poseidon2Transcript<F>
 where
     F: PrimeField,
 {
-    pub fn new(params: &Arc<Poseidon2Params<F, 4, 5>>) -> Self {
+    pub fn new(params: &'static Poseidon2Params<F, 4, 5>) -> Self {
         Self {
             proof_data: Default::default(),
             manifest: Default::default(),
@@ -45,7 +45,7 @@ where
         }
     }
 
-    pub fn new_verifier(params: &Arc<Poseidon2Params<F, 4, 5>>, proof: HonkProof<F>) -> Self {
+    pub fn new_verifier(params: &'static Poseidon2Params<F, 4, 5>, proof: HonkProof<F>) -> Self {
         Self {
             proof_data: proof.inner(),
             manifest: Default::default(),
