@@ -145,7 +145,7 @@ impl<P: HonkCurve<TranscriptFieldType>> DeciderVerifier<P> {
             commitments.push(c_q_k_item);
         });
 
-        Ok(Utils::commit_inner::<P>(&scalars, &commitments)?)
+        Ok(Utils::msm::<P>(&scalars, &commitments)?)
     }
 
     fn compute_c_z_x(
@@ -214,6 +214,6 @@ impl<P: HonkCurve<TranscriptFieldType>> DeciderVerifier<P> {
             }
         }
 
-        Ok(Utils::commit_inner::<P>(&scalars, &commitments)?)
+        Ok(Utils::msm::<P>(&scalars, &commitments)?)
     }
 }

@@ -133,13 +133,10 @@ impl Utils {
         poly: &[P::ScalarField],
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<P::G1> {
-        Self::commit_inner::<P>(poly, crs.monomials.as_slice())
+        Self::msm::<P>(poly, crs.monomials.as_slice())
     }
 
-    pub fn commit_inner<P: Pairing>(
-        poly: &[P::ScalarField],
-        crs: &[P::G1Affine],
-    ) -> HonkProofResult<P::G1> {
+    pub fn msm<P: Pairing>(poly: &[P::ScalarField], crs: &[P::G1Affine]) -> HonkProofResult<P::G1> {
         if poly.len() > crs.len() {
             return Err(HonkProofError::CrsTooSmall);
         }
