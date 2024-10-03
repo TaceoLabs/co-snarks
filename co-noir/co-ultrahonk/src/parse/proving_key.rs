@@ -86,16 +86,12 @@ where
         circuit: CoUltraCircuitBuilder<T, P>,
         crs: Crs<P>,
     ) -> HonkProofResult<(Self, VerifyingKey<P>)> {
-        let contains_recursive_proof = circuit.contains_recursive_proof;
-        let recursive_proof_public_input_indices = circuit.recursive_proof_public_input_indices;
+        let prover_crs = ProverCrs {
+            monomials: crs.monomials,
+        };
+        let verifier_crs = crs.g2_x;
 
-        let pk = ProvingKey::create(
-            driver,
-            circuit,
-            ProverCrs {
-                monomials: crs.monomials,
-            },
-        );
+        let pk = ProvingKey::create(driver, circuit, prover_crs);
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -109,13 +105,11 @@ where
 
         // Create and return the VerifyingKey instance
         let vk = VerifyingKey {
-            crs: crs.g2_x,
+            crs: verifier_crs,
             circuit_size,
             num_public_inputs: pk.num_public_inputs,
             pub_inputs_offset: pk.pub_inputs_offset,
             commitments,
-            _contains_recursive_proof: contains_recursive_proof,
-            _recursive_proof_public_input_indices: recursive_proof_public_input_indices,
         };
 
         Ok((pk, vk))

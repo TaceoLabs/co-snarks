@@ -8,6 +8,7 @@ pub use crate::parse::{
     acir_format::AcirFormat,
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable},
     types::{CycleNode, CyclicPermutation, NUM_SELECTORS, NUM_WIRES},
+    verification_key::VerifyingKeyBarretenberg,
 };
 pub use crate::poseidon2::poseidon2_bn254::POSEIDON2_BN254_T4_PARAMS;
 pub use crate::prover::HonkProofResult;
