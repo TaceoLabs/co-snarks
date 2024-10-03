@@ -55,6 +55,13 @@ impl<P: Pairing> NewFileStructure<P> {
 
         Ok(ProverCrs { monomials })
     }
+
+    pub fn get_crs_g2(path_g2: &str) -> Result<P::G2Affine> {
+        let mut g2_x = P::G2Affine::default();
+        Self::read_transcript_g2(&mut g2_x, path_g2)?;
+
+        Ok(g2_x)
+    }
 }
 
 fn get_file_size(filename: &str) -> std::io::Result<u64> {

@@ -10,5 +10,6 @@ pub use ultrahonk::prelude::UltraCircuitBuilder;
 pub use ultrahonk::prelude::UltraCircuitVariable;
 pub use ultrahonk::prelude::UltraHonk;
 pub use ultrahonk::prelude::VerifyingKey;
+pub use ultrahonk::prelude::VerifyingKeyBarretenberg;
 pub use ultrahonk::prelude::{Crs, ProverCrs};
 pub use ultrahonk::Utils;

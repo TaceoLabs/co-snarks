@@ -7,8 +7,10 @@ use super::{
         ColumnIdx, MulQuad, PlookupBasicTable, PolyTriple, RamTranscript, RangeList, ReadData,
         RomTranscript, UltraTraceBlock, UltraTraceBlocks,
     },
+    verification_key::VerifyingKeyBarretenberg,
 };
 use crate::{
+    decider::sumcheck::verifier,
     parse::{
         plookup::{MultiTableId, Plookup},
         types::{FieldCT, GateCounter, RomRecord, RomTable, NUM_WIRES},
@@ -56,16 +58,45 @@ impl<F: PrimeField> UltraCircuitVariable<F> for F {
 pub type UltraCircuitBuilder<P> = GenericUltraCircuitBuilder<P, <P as Pairing>::ScalarField>;
 
 impl<P: Pairing> UltraCircuitBuilder<P> {
-    pub fn create_keys(self, crs: Crs<P>) -> HonkProofResult<(ProvingKey<P>, VerifyingKey<P>)> {
+    pub fn create_vk_barretenberg(
+        self,
+        crs: ProverCrs<P>,
+    ) -> HonkProofResult<VerifyingKeyBarretenberg<P>> {
         let contains_recursive_proof = self.contains_recursive_proof;
         let recursive_proof_public_input_indices = self.recursive_proof_public_input_indices;
 
-        let pk = ProvingKey::create(
-            self,
-            ProverCrs {
-                monomials: crs.monomials,
-            },
-        );
+        let pk = ProvingKey::create(self, crs);
+        let circuit_size = pk.circuit_size;
+
+        let mut commitments = PrecomputedEntities::default();
+        for (des, src) in commitments
+            .iter_mut()
+            .zip(pk.polynomials.precomputed.iter())
+        {
+            let comm = Utils::commit(src.as_ref(), &pk.crs)?;
+            *des = P::G1Affine::from(comm);
+        }
+
+        let vk = VerifyingKeyBarretenberg {
+            circuit_size: circuit_size as u64,
+            log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
+            num_public_inputs: pk.num_public_inputs as u64,
+            pub_inputs_offset: pk.pub_inputs_offset as u64,
+            contains_recursive_proof,
+            recursive_proof_public_input_indices,
+            commitments,
+        };
+
+        Ok(vk)
+    }
+
+    pub fn create_keys(self, crs: Crs<P>) -> HonkProofResult<(ProvingKey<P>, VerifyingKey<P>)> {
+        let prover_crs = ProverCrs {
+            monomials: crs.monomials,
+        };
+        let verifier_crs = crs.g2_x;
+
+        let pk = ProvingKey::create(self, prover_crs);
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -79,13 +110,11 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
         // Create and return the VerifyingKey instance
         let vk = VerifyingKey {
-            crs: crs.g2_x,
+            crs: verifier_crs,
             circuit_size,
             num_public_inputs: pk.num_public_inputs,
             pub_inputs_offset: pk.pub_inputs_offset,
             commitments,
-            _contains_recursive_proof: contains_recursive_proof,
-            _recursive_proof_public_input_indices: recursive_proof_public_input_indices,
         };
 
         Ok((pk, vk))
