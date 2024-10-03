@@ -1,6 +1,5 @@
 use crate::{
     decider::polynomial::Polynomial,
-    parse::types::AggregationObjectPubInputIndices,
     prover::{HonkProofError, HonkProofResult},
 };
 use ark_ec::pairing::Pairing;
@@ -23,9 +22,6 @@ pub struct VerifyingKey<P: Pairing> {
     pub circuit_size: u32,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
-    // We so far don't need the next two fields, but for serialization reasons we keep them
-    pub _contains_recursive_proof: bool,
-    pub _recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
     pub commitments: PrecomputedEntities<P::G1Affine>,
 }
 
@@ -151,15 +147,19 @@ impl<F: PrimeField> HonkProof<F> {
         res
     }
 
-    fn write_u32(buf: &mut Vec<u8>, val: u32) {
+    pub(crate) fn write_u8(buf: &mut Vec<u8>, val: u8) {
+        buf.push(val);
+    }
+
+    pub(crate) fn write_u32(buf: &mut Vec<u8>, val: u32) {
         buf.extend(val.to_be_bytes());
     }
 
-    fn write_u64(buf: &mut Vec<u8>, val: u64) {
+    pub(crate) fn write_u64(buf: &mut Vec<u8>, val: u64) {
         buf.extend(val.to_be_bytes());
     }
 
-    fn write_field_element(buf: &mut Vec<u8>, el: F) {
+    pub(crate) fn write_field_element(buf: &mut Vec<u8>, el: F) {
         let prev_len = buf.len();
         let el = el.into_bigint(); // Gets rid of montgomery form
 
@@ -614,6 +614,10 @@ impl<T: Default> PrecomputedEntities<T> {
     const LAGRANGE_FIRST: usize = 25;
     /// column 26
     const LAGRANGE_LAST: usize = 26;
+
+    pub(crate) fn len() -> usize {
+        PRECOMPUTED_ENTITIES_SIZE
+    }
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
