@@ -87,23 +87,16 @@ where
         arithmetic::mul(a, b, &mut self.io_context0).await
     }
 
-    async fn mul_vec(
-        &mut self,
-        lhs: &[Self::ArithmeticShare],
-        rhs: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        arithmetic::mul_vec(lhs, rhs, &mut self.io_context0).await
-    }
-
     async fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
     ) -> IoResult<Vec<P::ScalarField>> {
-        let mut forked = self.io_context0.fork().await?;
+        //squeeze all random elements at once in beginning for determinismus
+        let mut correlated_randomness = self.io_context0.fork_randomness();
         let (tx, rx) = oneshot::channel();
         rayon::spawn(move || {
-            let result = arithmetic::local_mul_vec(&a, &b, &mut forked);
+            let result = arithmetic::local_mul_vec(&a, &b, &mut correlated_randomness);
             tx.send(result).expect("channel not dropped");
         });
         Ok(rx.await.expect("channel not dropped"))

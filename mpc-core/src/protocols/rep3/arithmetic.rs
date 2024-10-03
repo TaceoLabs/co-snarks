@@ -107,16 +107,13 @@ pub fn mul_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F) {
 
 /// TODO DOCU - RIGHT THAT ONLY PEOPLE THAT KNOW WHAT THEY
 /// ARE DOING SHOULD USE THIS
-pub fn local_mul_vec<F: PrimeField, N: Rep3Network>(
+pub fn local_mul_vec<F: PrimeField>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
-    io_context: &mut IoContext<N>,
+    rngs: &mut Rep3CorrelatedRng,
 ) -> Vec<F> {
     //squeeze all random elements at once in beginning for determinismus
-    let masking_fes = io_context
-        .rngs
-        .rand
-        .masking_field_elements_vec::<F>(lhs.len());
+    let masking_fes = rngs.rand.masking_field_elements_vec::<F>(lhs.len());
 
     lhs.par_iter()
         .zip_eq(rhs.par_iter())

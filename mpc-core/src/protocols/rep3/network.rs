@@ -35,7 +35,7 @@ use rand::{Rng, SeedableRng};
 // this will be moved later
 pub struct IoContext<N: Rep3Network> {
     pub id: PartyID,
-    pub(crate) rngs: Rep3CorrelatedRng,
+    pub rngs: Rep3CorrelatedRng,
     pub network: N,
 }
 
@@ -94,6 +94,10 @@ impl<N: Rep3Network> IoContext<N> {
 
     pub fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
         self.rngs.rand.random_fes()
+    }
+
+    pub fn fork_randomness(&mut self) -> Rep3CorrelatedRng {
+        self.rngs.fork()
     }
 
     pub async fn fork(&mut self) -> IoResult<Self> {

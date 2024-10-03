@@ -63,9 +63,9 @@ pub struct ZKey<P: Pairing> {
     /// b_query in G2
     pub b_g2_query: Vec<P::G2Affine>,
     /// h_query
-    pub h_query: Arc<Vec<P::G1Affine>>,
+    pub h_query: Vec<P::G1Affine>,
     /// l_query
-    pub l_query: Arc<Vec<P::G1Affine>>,
+    pub l_query: Vec<P::G1Affine>,
     /// The constraint matrices A, B, and C
     pub matrices: ConstraintMatrices<P::ScalarField>,
 }
@@ -242,8 +242,8 @@ where
             a_query: a_query.unwrap()?,
             b_g1_query: b_g1_query.unwrap()?,
             b_g2_query: b_g2_query.unwrap()?,
-            h_query: Arc::new(h_query.unwrap()?),
-            l_query: Arc::new(l_query.unwrap()?),
+            h_query: h_query.unwrap()?,
+            l_query: l_query.unwrap()?,
             matrices,
             vk,
         })

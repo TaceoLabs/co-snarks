@@ -64,14 +64,6 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         Ok(a * b)
     }
 
-    async fn mul_vec(
-        &mut self,
-        a: &[Self::ArithmeticShare],
-        b: &[Self::ArithmeticShare],
-    ) -> super::IoResult<Vec<Self::ArithmeticShare>> {
-        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
-    }
-
     async fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,

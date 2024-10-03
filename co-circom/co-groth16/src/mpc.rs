@@ -57,13 +57,6 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         b: Self::ArithmeticShare,
     ) -> IoResult<Self::ArithmeticShare>;
 
-    /// Elementwise multiplication of two vectors of shares: \[c_i\] = \[a_i\] * \[b_i\].
-    async fn mul_vec(
-        &mut self,
-        a: &[Self::ArithmeticShare],
-        b: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<Self::ArithmeticShare>>;
-
     async fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,

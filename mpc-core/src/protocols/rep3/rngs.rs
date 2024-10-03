@@ -6,7 +6,7 @@ use rand::{Rng, RngCore, SeedableRng};
 use rayon::prelude::*;
 
 #[derive(Debug)]
-pub(crate) struct Rep3CorrelatedRng {
+pub struct Rep3CorrelatedRng {
     pub(crate) rand: Rep3Rand,
     pub(crate) bitcomp1: Rep3RandBitComp,
     pub(crate) bitcomp2: Rep3RandBitComp,
@@ -78,6 +78,7 @@ impl Rep3Rand {
         );
         a.par_chunks(field_size)
             .zip_eq(b.par_chunks(field_size))
+            .with_min_len(512)
             .map(|(a, b)| F::from_be_bytes_mod_order(a) - F::from_be_bytes_mod_order(b))
             .collect()
     }

@@ -80,14 +80,6 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         arithmetic::mul(a, b, &mut self.protocol0).await
     }
 
-    async fn mul_vec(
-        &mut self,
-        a: &[Self::ArithmeticShare],
-        b: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        arithmetic::mul_vec(a, b, &mut self.protocol0).await
-    }
-
     async fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,

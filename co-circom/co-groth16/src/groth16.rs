@@ -32,6 +32,14 @@ macro_rules! rayon_join {
         let ((x, y), z) = rayon::join(|| rayon::join(|| $t1, || $t2), || $t3);
         (x, y, z)
     }};
+
+    ($t1: expr, $t2: expr, $t3: expr, $t4: expr, $t5: expr) => {{
+        let ((v, w), (x, y, z)) = rayon::join(
+            || rayon::join(|| $t1, || $t2),
+            || rayon_join!($t3, $t4, $t5),
+        );
+        (v, w, x, y, z)
+    }};
 }
 
 /// The plain [`Groth16`] type.
@@ -165,28 +173,31 @@ where
         num_inputs: usize,
         public_inputs: &[P::ScalarField],
         private_witness: &[T::ArithmeticShare],
-    ) -> Result<Vec<T::ArithmeticShare>> {
+    ) -> Result<Vec<P::ScalarField>> {
         let mut domain =
             GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
                 .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-        let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
-        let domain = Arc::new(domain);
         let domain_size = domain.size();
-        let (roots_tx, roots_rx) = oneshot::channel();
-        rayon::spawn(move || {
-            let mut roots = Vec::with_capacity(domain_size);
-            let mut c = P::ScalarField::one();
-            for _ in 0..domain_size {
-                roots.push(c);
-                c *= root_of_unity;
-            }
-            roots_tx.send(roots).expect("channel not dropped");
-        });
-
         let party_id = self.driver.get_party_id();
-        let eval_constraint_span = tracing::debug_span!("evaluate constraints").entered();
-        let (a, b) = rayon::join(
-            || {
+        let eval_constraint_span =
+            tracing::debug_span!("evaluate constraints + root of unity computation").entered();
+        let (roots_to_power_domain, a, b) = rayon_join!(
+            {
+                let root_of_unity_span =
+                    tracing::debug_span!("root of unity computation").entered();
+                let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
+                let mut roots = Vec::with_capacity(domain_size);
+                let mut c = P::ScalarField::one();
+                for _ in 0..domain_size {
+                    roots.push(c);
+                    c *= root_of_unity;
+                }
+                root_of_unity_span.exit();
+                Arc::new(roots)
+            },
+            {
+                let eval_constraint_span_a =
+                    tracing::debug_span!("evaluate constraints - a").entered();
                 let mut result = Self::evaluate_constraint(
                     party_id,
                     domain_size,
@@ -197,19 +208,25 @@ where
                 let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
                 result[num_constraints..num_constraints + num_inputs]
                     .clone_from_slice(&promoted_public[..num_inputs]);
+                eval_constraint_span_a.exit();
                 result
             },
-            || {
-                Self::evaluate_constraint(
+            {
+                let eval_constraint_span_b =
+                    tracing::debug_span!("evaluate constraints - a").entered();
+                let result = Self::evaluate_constraint(
                     party_id,
                     domain_size,
                     &matrices.b,
                     public_inputs,
                     private_witness,
-                )
-            },
+                );
+                eval_constraint_span_b.exit();
+                result
+            }
         );
 
+        let domain = Arc::new(domain);
         eval_constraint_span.exit();
 
         let (a_tx, a_rx) = oneshot::channel();
@@ -220,7 +237,6 @@ where
         let c_domain = Arc::clone(&domain);
         let mut a_result = a.clone();
         let mut b_result = b.clone();
-        let roots_to_power_domain = Arc::new(roots_rx.await.expect("channel not dropped"));
         let a_roots = Arc::clone(&roots_to_power_domain);
         let b_roots = Arc::clone(&roots_to_power_domain);
         let c_roots = Arc::clone(&roots_to_power_domain);
@@ -277,11 +293,6 @@ where
             .for_each(|(a, b)| {
                 *a -= b;
             });
-        local_ab_span.exit();
-        let local_ab_span = tracing::debug_span!("io part").entered();
-        // TODO we can return the result as join handle and wait on it later
-        // so we do not need a full network round here
-        let ab = self.driver.io_round_mul_vec(ab).await?;
         local_ab_span.exit();
         compute_ab_span.exit();
         Ok(ab)
@@ -345,38 +356,23 @@ where
         zkey: &ZKey<P>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
-        h: Vec<T::ArithmeticShare>,
+        h: Vec<P::ScalarField>,
         input_assignment: &[P::ScalarField],
         aux_assignment: Vec<T::ArithmeticShare>,
     ) -> Result<Groth16Proof<P>> {
         let delta_g1 = zkey.delta_g1.into_group();
-        let msm_create_proof = tracing::debug_span!("first MSMs").entered();
 
-        let (h_acc_tx, h_acc_rx) = oneshot::channel();
-        let (l_acc_tx, l_acc_rx) = oneshot::channel();
-        let h_query = Arc::clone(&zkey.h_query);
-        let l_query = Arc::clone(&zkey.l_query);
-        rayon::spawn(move || {
-            let result = T::msm_public_points_g1(h_query.as_ref(), &h);
-            h_acc_tx.send(result).expect("channel not dropped");
-        });
-
-        rayon::spawn(move || {
-            let result = T::msm_public_points_g1(l_query.as_ref(), &aux_assignment);
-            l_acc_tx
-                .send((result, aux_assignment))
-                .expect("channel not dropped");
-        });
+        let io_ab_span = tracing::debug_span!("io part").entered();
+        let h = self.driver.io_round_mul_vec(h).await?;
+        io_ab_span.exit();
         let rs = self.driver.mul(r, s).await?;
         let r_s_delta_g1 = T::scalar_mul_public_point_g1(&delta_g1, rs);
-        msm_create_proof.exit();
-
-        let h_acc = h_acc_rx.await.expect("channel not dropped");
-        let (l_aux_acc, aux_assignment) = l_acc_rx.await.expect("channel not dropped");
 
         let party_id = self.driver.get_party_id();
         let calculate_coeff_span = tracing::debug_span!("calculate coeff").entered();
-        let (g_a, g1_b, g2_b) = rayon_join!(
+        let (l_aux_acc, h_acc, g_a, g1_b, g2_b) = rayon_join!(
+            { T::msm_public_points_g1(&zkey.l_query, &aux_assignment) },
+            { T::msm_public_points_g1(&zkey.h_query, &h) },
             {
                 // Compute A
                 let r_g1 = T::scalar_mul_public_point_g1(&delta_g1, r);
