@@ -5,6 +5,10 @@
     * circom-types bumped from 0.4.0 to 0.5.0
     * mpc-core bumped from 0.3.0 to 0.4.0
 
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.4.0 to 0.5.0
+
 ## 0.1.0 (2024-08-14)
 
 

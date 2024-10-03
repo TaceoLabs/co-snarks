@@ -23,7 +23,7 @@ co-acvm = { version = "0.1.0", path = "../co-acvm" }
 co-ultrahonk = { version = "0.1.0", path = "../co-ultrahonk" }
 color-eyre.workspace = true
 figment.workspace = true
-mpc-core = { version = "0.4.0", path = "../../mpc-core" }
+mpc-core = { version = "0.5.0", path = "../../mpc-core" }
 mpc-net = { version = "0.1.2", path = "../../mpc-net" }
 rand.workspace = true
 serde_json.workspace = true
