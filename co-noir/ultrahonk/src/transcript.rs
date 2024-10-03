@@ -219,7 +219,7 @@ where
             assert!(!self.current_round_data.is_empty());
         }
         // concatenate the previous challenge (if this is not the first challenge) with the current round data.
-        // TODO(Adrian): Do we want to use a domain separator as the initial challenge buffer?
+        // AZTEC TODO(Adrian): Do we want to use a domain separator as the initial challenge buffer?
         // We could be cheeky and use the hash of the manifest as domain separator, which would prevent us from having
         // to domain separate all the data. (See https://safe-hash.dev)
 

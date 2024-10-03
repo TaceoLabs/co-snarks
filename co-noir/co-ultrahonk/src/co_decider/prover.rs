@@ -42,7 +42,7 @@ where
         // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
         quotient.factor_roots(driver, &pair.challenge);
         let quotient_commitment = CoUtils::commit(driver, &quotient.coefficients, crs);
-        // TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
+        // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
         // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
         // pthreads) or even the work queue itself
         let quotient_commitment = driver.open_point(&quotient_commitment)?;

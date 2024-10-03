@@ -23,7 +23,7 @@ where
     }
 
     pub(crate) fn promote_poly(driver: &T, poly: Polynomial<P::ScalarField>) -> Self {
-        // TODO remove the FieldShareVec
+        // TACEO TODO remove the FieldShareVec
         let coefficients: T::FieldShareVec = driver.promote_to_trivial_shares(poly.as_ref());
         let coefficients = coefficients.into_iter().collect();
         Self { coefficients }

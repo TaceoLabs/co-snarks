@@ -7,7 +7,7 @@ use ark_ff::{One, PrimeField, Zero};
 use num_bigint::BigUint;
 
 /**
- * TODO(https://github.com/AztecProtocol/barretenberg/issues/757): Investigate optimizations.
+ * AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): Investigate optimizations.
  * It seems that we could have:
  *     static constexpr std::array<size_t, 6> SUBRELATION_PARTIAL_LENGTHS{
  *     5 // auxiliary sub-relation;
@@ -365,7 +365,7 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
         let access_type = w_4.to_owned() - partial_record_check; // will be 0 or 1 for honest Prover; deg 1 or 2
         let access_check = access_type.to_owned() * &access_type - &access_type; // check value is 0 or 1; deg 2 or 4
 
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
         // reverse order we could re-use `partial_record_check`  1 -  (w3' * eta_three + w2' * eta_two + w1' *
         // eta) deg 1 or 2
         let mut next_gate_access_type = w_3_shift.to_owned() * eta_three;
@@ -638,7 +638,7 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
         let access_type = w_4.to_owned() - partial_record_check; // will be 0 or 1 for honest Prover; deg 1 or 2
         let access_check = access_type.to_owned() * access_type - access_type; // check value is 0 or 1; deg 2 or 4
 
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
         // reverse order we could re-use `partial_record_check`  1 -  (w3' * eta_three + w2' * eta_two + w1' *
         // eta) deg 1 or 2
         let mut next_gate_access_type = w_3_shift.to_owned() * eta_three;

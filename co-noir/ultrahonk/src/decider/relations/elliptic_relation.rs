@@ -71,7 +71,7 @@ impl EllipticRelation {
     /**
      * @brief Expression for the Ultra Arithmetic gate.
      * @details The relation is defined as C(in(X)...) =
-     *    TODO(#429): steal description from elliptic_widget.hpp
+     *   AZTEC TODO(#429): steal description from elliptic_widget.hpp
      *
      * @param evals transformed to `evals + C(in(X)...)*scaling_factor`
      * @param in an std::array containing the fully extended Univariate edges.
@@ -86,7 +86,7 @@ impl EllipticRelation {
     ) {
         tracing::trace!("Accumulate EllipticRelation");
 
-        // TODO(@zac - williamson #2608 when Pedersen refactor is completed,
+        // AZTEC TODO(@zac - williamson #2608 when Pedersen refactor is completed,
         // replace old addition relations with these ones and
         // remove endomorphism coefficient in ecc add gate(not used))
 
@@ -170,7 +170,7 @@ impl EllipticRelation {
     {
         tracing::trace!("Accumulate EllipticRelation");
 
-        // TODO(@zac - williamson #2608 when Pedersen refactor is completed,
+        // AZTEC TODO(@zac - williamson #2608 when Pedersen refactor is completed,
         // replace old addition relations with these ones and
         // remove endomorphism coefficient in ecc add gate(not used))
 

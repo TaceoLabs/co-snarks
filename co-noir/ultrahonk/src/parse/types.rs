@@ -523,7 +523,7 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    // TODO this is just implemented for the plain backend
+    // TACEO TODO this is just implemented for the plain backend
     pub(crate) fn from_witness<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
         input: P::ScalarField,
         builder: &mut GenericUltraCircuitBuilder<P, S>,
@@ -553,7 +553,7 @@ impl<F: PrimeField> FieldCT<F> {
         if self.witness_index != Self::IS_CONSTANT {
             let variable = builder
                 .get_variable(self.witness_index as usize)
-                .public_into_field(); // TODO this is just implemented for the Plain backend
+                .public_into_field(); // TACEO TODO this is just implemented for the Plain backend
             self.multiplicative_constant * F::from(variable) + self.additive_constant
         } else {
             self.additive_constant.to_owned()
@@ -593,7 +593,6 @@ impl<F: PrimeField> FieldCT<F> {
             let left = self.normalize(builder);
             let right = other.normalize(builder);
             builder.assert_equal(left.witness_index as usize, right.witness_index as usize);
-            todo!();
         }
     }
 
@@ -624,7 +623,7 @@ impl<F: PrimeField> FieldCT<F> {
             builder
                 .get_variable(self.witness_index as usize)
                 .public_into_field(),
-        ); // TODO this is just implemented for the Plain backend
+        ); // TACEO TODO this is just implemented for the Plain backend
         let out = self.multiplicative_constant * value + self.additive_constant;
 
         result.witness_index = builder.add_variable(S::from_public(P::ScalarField::from(out)));
@@ -665,7 +664,7 @@ impl<F: PrimeField> Default for FieldCT<F> {
     }
 }
 
-// TODO this is just implemented for the Plain backend
+// TACEO TODO this is just implemented for the Plain backend
 pub(crate) struct WitnessCT<F: PrimeField> {
     pub(crate) witness: F,
     pub(crate) witness_index: u32,
@@ -875,7 +874,7 @@ impl<F: PrimeField> PlookupBasicTable<F> {
     }
 
     pub(crate) fn create_basic_table(id: BasicTableId, index: usize) -> Self {
-        // TODO this is a dummy implementation
+        // TACEO TODO this is a dummy implementation
         assert!(id == BasicTableId::HonkDummyBasic1 || id == BasicTableId::HonkDummyBasic2);
 
         match id {
@@ -1183,7 +1182,7 @@ impl<'a, P: Pairing> TraceData<'a, P> {
             }
 
             // Insert the selector values for this block into the selector polynomials at the correct offset
-            // TODO(https://github.com/AztecProtocol/barretenberg/issues/398): implicit arithmetization/flavor consistency
+            // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/398): implicit arithmetization/flavor consistency
             for (selector_poly, selector) in self.selectors.iter_mut().zip(block.selectors.iter()) {
                 debug_assert_eq!(selector.len(), block_size);
 

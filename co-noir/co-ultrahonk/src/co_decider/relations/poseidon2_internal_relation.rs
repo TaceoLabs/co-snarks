@@ -163,7 +163,7 @@ where
 
         let q_pos_by_scaling = q_poseidon2_internal.to_owned() * scaling_factor;
 
-        // TODO this poseidon instance is very hardcoded to the bn254 curve
+        // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
         let internal_matrix_diag_0 = P::ScalarField::from(BigUint::from(
             POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
         ));

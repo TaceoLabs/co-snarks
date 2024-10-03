@@ -87,7 +87,7 @@ where
             let input_string = std::fs::read_to_string(PathBuf::from(path))?;
             let mut input_map = Format::Toml.parse(&input_string, abi)?;
             let return_value = input_map.remove(MAIN_RETURN_NAME);
-            // TODO the return value can be none for the witness extension
+            // TACEO TODO the return value can be none for the witness extension
             // do we want to keep it like that? Seems not necessary but maybe
             // we need it for proving/verifying
             Ok(abi.encode(&input_map, return_value.clone())?)
@@ -101,7 +101,7 @@ where
         let initial_witness = Self::read_abi_bn254_fieldelement(path, abi)?;
         let mut witnesses = WitnessMap::<T::AcvmType>::default();
         for (witness, v) in initial_witness.into_iter() {
-            witnesses.insert(witness, T::AcvmType::from(v.into_repr())); //TODO this can be private for some
+            witnesses.insert(witness, T::AcvmType::from(v.into_repr()));
         }
         Ok(witnesses)
     }

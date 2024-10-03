@@ -117,7 +117,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
             &round_challenge,
         );
         gate_separators.partially_evaluate(round_challenge);
-        sum_check_round.round_size >>= 1; // TODO(#224)(Cody): Maybe partially_evaluate should do this and
+        sum_check_round.round_size >>= 1; // AZTEC TODO(#224)(Cody): Maybe partially_evaluate should do this and
                                           // release memory?        // All but final round
                                           // We operate on partially_evaluated_polynomials in place.
 

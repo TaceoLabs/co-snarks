@@ -87,7 +87,7 @@ where
                 &self.memory.challenges.eta_3,
                 &proving_key.polynomials.witness.w_o()[gate_idx],
             );
-            // TODO add_assign?
+            // TACEO TODO add_assign?
             *target = self.driver.add(target, &mul1);
             *target = self.driver.add(target, &mul2);
             *target = self.driver.add(target, &mul3);
@@ -110,7 +110,7 @@ where
                 &self.memory.challenges.eta_3,
                 &proving_key.polynomials.witness.w_o()[gate_idx],
             );
-            // TODO add_assign?
+            // TACEO TODO add_assign?
             *target = self.driver.add(target, &mul1);
             *target = self.driver.add(target, &mul2);
             *target = self.driver.add(target, &mul3);
@@ -158,7 +158,7 @@ where
 
         // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
         // deg 2 or 3
-        // TODO add_assign?
+        // TACEO TODO add_assign?
         let mul = self.driver.mul_with_public(eta_1, &derived_table_entry_2);
         let res = self.driver.add(&derived_table_entry_1, &mul);
         let mul = &self.driver.mul_with_public(eta_2, &derived_table_entry_3);
@@ -336,7 +336,7 @@ where
         // Step (1)
         // Populate `numerator` and `denominator` with the algebra described by Relation
 
-        // TODO could batch those 4 as well
+        // TACEO TODO could batch those 4 as well
         let denom1 = Self::batched_grand_product_num_denom(
             self.driver,
             proving_key.polynomials.witness.w_l(),
@@ -374,14 +374,14 @@ where
             &self.memory.challenges.gamma,
         )?;
 
-        // TODO could batch here as well
+        // TACEO TODO could batch here as well
         let numerator = self.driver.mul_many(&num1, &num2)?;
         let denominator = self.driver.mul_many(&denom1, &denom2)?;
 
         // Step (2)
         // Compute the accumulating product of the numerator and denominator terms.
 
-        // TODO could batch here as well
+        // TACEO TODO could batch here as well
         // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
         let numerator = self.array_prod_mul(&numerator)?;
         let mut denominator = self.array_prod_mul(&denominator)?;

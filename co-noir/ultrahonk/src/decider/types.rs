@@ -115,7 +115,7 @@ impl<P: Pairing> ProverMemory<P> {
 
         let mut memory = AllEntities::default();
 
-        // TODO Barretenberg uses the same memory for the shifted polynomials as for the non-shifted ones
+        // TACEO TODO Barretenberg uses the same memory for the shifted polynomials as for the non-shifted ones
 
         // Missing lookups
         *memory.witness.lookup_inverses_mut() = prover_memory.lookup_inverses.into_vec();
@@ -135,7 +135,7 @@ impl<P: Pairing> ProverMemory<P> {
                 .chain(iter::once(prover_memory.w_4))
                 .chain(iter::once(prover_memory.z_perm)),
         ) {
-            // TODO use same memory to prevent copying?
+            // TACEO TODO use same memory to prevent copying?
             *des_shifted = src.shifted().to_vec();
             *des = src.into_vec();
         }
@@ -145,7 +145,7 @@ impl<P: Pairing> ProverMemory<P> {
             memory.shifted_tables.iter_mut(),
             polynomials.precomputed.get_table_polynomials()
         ) {
-            // TODO use same memory to prevent copying?
+            // TACEO TODO use same memory to prevent copying?
             *des = src.shifted().to_vec();
         }
 

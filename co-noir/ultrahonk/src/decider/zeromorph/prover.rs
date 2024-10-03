@@ -359,7 +359,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
      * @param commitment_key
      * @param transcript
      *
-     * @todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
+     * @AZTEC todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
      */
     pub(crate) fn zeromorph_prove(
         &self,
@@ -400,7 +400,7 @@ impl<P: HonkCurve<TranscriptFieldType>> Decider<P> {
         }
         // Add buffer elements to remove log_N dependence in proof
         for idx in log_n as usize..CONST_PROOF_SIZE_LOG_N {
-            let res = P::G1::generator(); // TODO Is this one?
+            let res = P::G1::generator();
             let label = format!("ZM:C_q_{}", idx);
             transcript.send_point_to_verifier::<P>(label, res.into());
         }
