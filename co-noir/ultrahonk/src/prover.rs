@@ -27,6 +27,12 @@ pub enum HonkProofError {
     /// Invalid proof length
     #[error("Invalid proof length")]
     InvalidProofLength,
+    /// Invalid key length
+    #[error("Invalid key length")]
+    InvalidKeyLength,
+    /// Corrupted Key
+    #[error("Corrupted Key")]
+    CorruptedKey,
     #[error(transparent)]
     IOError(#[from] io::Error),
 }

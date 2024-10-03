@@ -133,14 +133,21 @@ impl<F: PrimeField> HonkProof<F> {
         res
     }
 
-    fn read_u32(buf: &[u8], offset: &mut usize) -> u32 {
+    pub(crate) fn read_u8(buf: &[u8], offset: &mut usize) -> u8 {
+        const BYTES: usize = 1;
+        let res = buf[*offset];
+        *offset += BYTES;
+        res
+    }
+
+    pub(crate) fn read_u32(buf: &[u8], offset: &mut usize) -> u32 {
         const BYTES: usize = 4;
         let res = u32::from_be_bytes(buf[*offset..*offset + BYTES].try_into().unwrap());
         *offset += BYTES;
         res
     }
 
-    fn read_u64(buf: &[u8], offset: &mut usize) -> u64 {
+    pub(crate) fn read_u64(buf: &[u8], offset: &mut usize) -> u64 {
         const BYTES: usize = 8;
         let res = u64::from_be_bytes(buf[*offset..*offset + BYTES].try_into().unwrap());
         *offset += BYTES;
@@ -170,7 +177,7 @@ impl<F: PrimeField> HonkProof<F> {
         debug_assert_eq!(buf.len() - prev_len, Self::FIELDSIZE_BYTES as usize);
     }
 
-    fn read_field_element(buf: &[u8], offset: &mut usize) -> F {
+    pub(crate) fn read_field_element(buf: &[u8], offset: &mut usize) -> F {
         let mut bigint: BigUint = Default::default();
 
         for _ in 0..Self::NUM_64_LIMBS {
@@ -249,7 +256,7 @@ pub struct ShiftedTableEntities<T: Default> {
     pub(crate) elements: [T; SHIFTED_TABLE_ENTITIES_SIZE],
 }
 
-const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
+pub(crate) const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
 #[derive(Default)]
 pub struct PrecomputedEntities<T: Default> {
     pub(crate) elements: [T; PRECOMPUTED_ENTITIES_SIZE],
@@ -614,10 +621,6 @@ impl<T: Default> PrecomputedEntities<T> {
     const LAGRANGE_FIRST: usize = 25;
     /// column 26
     const LAGRANGE_LAST: usize = 26;
-
-    pub(crate) fn len() -> usize {
-        PRECOMPUTED_ENTITIES_SIZE
-    }
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()

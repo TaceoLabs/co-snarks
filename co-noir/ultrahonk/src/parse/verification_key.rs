@@ -4,8 +4,11 @@ use super::{
 };
 use crate::{
     prelude::{CrsParser, HonkCurve, TranscriptFieldType, TranscriptType},
-    prover::HonkProofResult,
-    types::{Crs, HonkProof, PrecomputedEntities, ProverCrs, ProvingKey, VerifyingKey},
+    prover::{HonkProofError, HonkProofResult},
+    types::{
+        Crs, HonkProof, PrecomputedEntities, ProverCrs, ProvingKey, VerifyingKey,
+        PRECOMPUTED_ENTITIES_SIZE,
+    },
     Utils,
 };
 use ark_ec::{pairing::Pairing, AffineRepr};
@@ -56,6 +59,10 @@ pub struct VerifyingKeyBarretenberg<P: Pairing> {
 impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
     const NUM_64_LIMBS: u32 = P::BaseField::MODULUS_BIT_SIZE.div_ceil(64);
     const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
+    const SER_SIZE: usize = 4 * 8
+        + 1
+        + AGGREGATION_OBJECT_SIZE * 4
+        + PRECOMPUTED_ENTITIES_SIZE * 2 * Self::FIELDSIZE_BYTES as usize;
 
     fn write_g1_element(buf: &mut Vec<u8>, el: &P::G1Affine, write_x_first: bool) {
         let prev_len = buf.len();
@@ -78,13 +85,24 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
         debug_assert_eq!(buf.len() - prev_len, Self::FIELDSIZE_BYTES as usize * 2);
     }
 
-    pub fn to_buffer(&self) -> Vec<u8> {
-        let total_size = 4 * 8
-            + 1
-            + AGGREGATION_OBJECT_SIZE * 4
-            + PrecomputedEntities::<P::G1Affine>::len() * 2 * Self::FIELDSIZE_BYTES as usize;
+    fn read_g1_element(buf: &[u8], offset: &mut usize, read_x_first: bool) -> P::G1Affine {
+        if buf.iter().all(|&x| x == 255) {
+            *offset += Self::FIELDSIZE_BYTES as usize * 2;
+            return P::G1Affine::zero();
+        }
 
-        let mut buffer = Vec::with_capacity(total_size);
+        let first = HonkProof::<P::BaseField>::read_field_element(buf, offset);
+        let second = HonkProof::<P::BaseField>::read_field_element(buf, offset);
+
+        if read_x_first {
+            P::g1_affine_from_xy(first, second)
+        } else {
+            P::g1_affine_from_xy(second, first)
+        }
+    }
+
+    pub fn to_buffer(&self) -> Vec<u8> {
+        let mut buffer = Vec::with_capacity(Self::SER_SIZE);
 
         HonkProof::<P::ScalarField>::write_u64(&mut buffer, self.circuit_size);
         HonkProof::<P::ScalarField>::write_u64(&mut buffer, self.log_circuit_size);
@@ -100,7 +118,53 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
             Self::write_g1_element(&mut buffer, el, true);
         }
 
-        debug_assert_eq!(buffer.len(), total_size);
+        debug_assert_eq!(buffer.len(), Self::SER_SIZE);
         buffer
+    }
+
+    pub fn from_buffer(buf: &[u8]) -> HonkProofResult<Self> {
+        let size = buf.len();
+        let mut offset = 0;
+
+        if size != Self::SER_SIZE {
+            return Err(HonkProofError::InvalidKeyLength);
+        }
+
+        // Read data
+        let circuit_size = HonkProof::<P::ScalarField>::read_u64(buf, &mut offset);
+        let log_circuit_size = HonkProof::<P::ScalarField>::read_u64(buf, &mut offset);
+        if log_circuit_size != Utils::get_msb64(circuit_size) as u64 {
+            return Err(HonkProofError::CorruptedKey);
+        }
+        let num_public_inputs = HonkProof::<P::ScalarField>::read_u64(buf, &mut offset);
+        let pub_inputs_offset = HonkProof::<P::ScalarField>::read_u64(buf, &mut offset);
+        let contains_recursive_proof_u8 = HonkProof::<P::ScalarField>::read_u8(buf, &mut offset);
+        if contains_recursive_proof_u8 > 1 {
+            return Err(HonkProofError::CorruptedKey);
+        }
+        let contains_recursive_proof = contains_recursive_proof_u8 == 1;
+
+        let mut recursive_proof_public_input_indices = AggregationObjectPubInputIndices::default();
+        for val in recursive_proof_public_input_indices.iter_mut() {
+            *val = HonkProof::<P::ScalarField>::read_u32(buf, &mut offset);
+        }
+
+        let mut commitments = PrecomputedEntities::default();
+
+        for el in commitments.iter_mut() {
+            *el = Self::read_g1_element(buf, &mut offset, true);
+        }
+
+        debug_assert_eq!(offset, Self::SER_SIZE);
+
+        Ok(Self {
+            circuit_size,
+            log_circuit_size,
+            num_public_inputs,
+            pub_inputs_offset,
+            contains_recursive_proof,
+            recursive_proof_public_input_indices,
+            commitments,
+        })
     }
 }
