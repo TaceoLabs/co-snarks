@@ -62,7 +62,7 @@ macro_rules! add_test_impl {
                         let runtime = runtime::Builder::new_current_thread().build().unwrap();
                         let preprocessing = runtime.block_on(ShamirPreprocessing::new(1, net, num_pairs)).unwrap();
                         let mut io_context0 = ShamirProtocol::from(preprocessing);
-                        let io_context1 = runtime.block_on(io_context0.fork_with_pairs(1)).unwrap();
+                        let io_context1 = runtime.block_on(io_context0.fork_with_pairs(2)).unwrap();
                         let shamir = [< Shamir $proof_system Driver>]::new(io_context0, io_context1);
                         #[allow(unused_mut)]
                         let mut prover = [< Co $proof_system>]::<

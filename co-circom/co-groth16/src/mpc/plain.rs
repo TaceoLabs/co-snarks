@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::UniformRand;
@@ -56,14 +58,6 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         public_values.to_vec()
     }
 
-    async fn mul(
-        &mut self,
-        a: Self::ArithmeticShare,
-        b: Self::ArithmeticShare,
-    ) -> super::IoResult<Self::ArithmeticShare> {
-        Ok(a * b)
-    }
-
     async fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,
@@ -72,11 +66,14 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
-    async fn io_round_mul_vec(
+    async fn msm_and_mul(
         &mut self,
-        a: Vec<P::ScalarField>,
-    ) -> super::IoResult<Vec<Self::ArithmeticShare>> {
-        Ok(a)
+        h: Vec<<P as Pairing>::ScalarField>,
+        h_query: Arc<Vec<P::G1Affine>>,
+        r: Self::ArithmeticShare,
+        s: Self::ArithmeticShare,
+    ) -> IoResult<(Self::PointShareG1, Self::ArithmeticShare)> {
+        Ok((P::G1::msm_unchecked(h_query.as_ref(), &h), r * s))
     }
 
     fn distribute_powers_and_mul_by_const(

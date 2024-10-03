@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::{CircomGroth16Prover, IoResult};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
@@ -72,14 +74,6 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         arithmetic::promote_to_trivial_shares(public_values)
     }
 
-    async fn mul(
-        &mut self,
-        a: Self::ArithmeticShare,
-        b: Self::ArithmeticShare,
-    ) -> IoResult<Self::ArithmeticShare> {
-        arithmetic::mul(a, b, &mut self.protocol0).await
-    }
-
     async fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,
@@ -93,11 +87,36 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         Ok(rx.await.expect("channel not dropped"))
     }
 
-    async fn io_round_mul_vec(
+    async fn msm_and_mul(
         &mut self,
-        a: Vec<P::ScalarField>,
-    ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        self.protocol0.degree_reduce_vec(a).await
+        h: Vec<<P as Pairing>::ScalarField>,
+        h_query: Arc<Vec<P::G1Affine>>,
+        r: Self::ArithmeticShare,
+        s: Self::ArithmeticShare,
+    ) -> IoResult<(Self::PointShareG1, Self::ArithmeticShare)> {
+        let (h_acc_tx, h_acc_rx) = oneshot::channel();
+        let (h_acc, rs) = tokio::join!(
+            {
+                let h = self.protocol0.degree_reduce_vec(h).await;
+                match h {
+                    Ok(h) => {
+                        rayon::spawn(move || {
+                            let msm_h_query = tracing::debug_span!("msm h_query").entered();
+                            let result = pointshare::msm_public_points(h_query.as_ref(), &h);
+                            h_acc_tx.send(Ok(result)).expect("channel not dropped");
+                            msm_h_query.exit();
+                        });
+                        h_acc_rx
+                    }
+                    Err(err) => {
+                        h_acc_tx.send(Err(err)).expect("channel not dropped");
+                        h_acc_rx
+                    }
+                }
+            },
+            { arithmetic::mul(r, s, &mut self.protocol1) }
+        );
+        Ok((h_acc.expect("channel not dropped")?, rs?))
     }
 
     fn distribute_powers_and_mul_by_const(

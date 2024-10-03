@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ark_ec::pairing::Pairing;
 use mpc_core::protocols::rep3::{
     arithmetic,
@@ -79,14 +81,6 @@ where
             .collect()
     }
 
-    async fn mul(
-        &mut self,
-        a: Self::ArithmeticShare,
-        b: Self::ArithmeticShare,
-    ) -> IoResult<Self::ArithmeticShare> {
-        arithmetic::mul(a, b, &mut self.io_context0).await
-    }
-
     async fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,
@@ -102,11 +96,36 @@ where
         Ok(rx.await.expect("channel not dropped"))
     }
 
-    async fn io_round_mul_vec(
+    async fn msm_and_mul(
         &mut self,
-        a: Vec<P::ScalarField>,
-    ) -> IoResult<Vec<Self::ArithmeticShare>> {
-        arithmetic::io_mul_vec(a, &mut self.io_context0).await
+        h: Vec<<P as Pairing>::ScalarField>,
+        h_query: Arc<Vec<P::G1Affine>>,
+        r: Self::ArithmeticShare,
+        s: Self::ArithmeticShare,
+    ) -> IoResult<(Self::PointShareG1, Self::ArithmeticShare)> {
+        let (h_acc_tx, h_acc_rx) = oneshot::channel();
+        let (h_acc, rs) = tokio::join!(
+            {
+                let h = arithmetic::io_mul_vec(h, &mut self.io_context0).await;
+                match h {
+                    Ok(h) => {
+                        rayon::spawn(move || {
+                            let msm_h_query = tracing::debug_span!("msm h_query").entered();
+                            let result = pointshare::msm_public_points(h_query.as_ref(), &h);
+                            h_acc_tx.send(Ok(result)).expect("channel not dropped");
+                            msm_h_query.exit();
+                        });
+                        h_acc_rx
+                    }
+                    Err(err) => {
+                        h_acc_tx.send(Err(err)).expect("channel not dropped");
+                        h_acc_rx
+                    }
+                }
+            },
+            { arithmetic::mul(r, s, &mut self.io_context1) }
+        );
+        Ok((h_acc.expect("channel not dropped")?, rs?))
     }
 
     fn distribute_powers_and_mul_by_const(

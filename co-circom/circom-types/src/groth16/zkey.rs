@@ -57,11 +57,11 @@ pub struct ZKey<P: Pairing> {
     /// delta
     pub delta_g1: P::G1Affine,
     /// a_query
-    pub a_query: Vec<P::G1Affine>,
+    pub a_query: Arc<Vec<P::G1Affine>>,
     /// b_query in G1
-    pub b_g1_query: Vec<P::G1Affine>,
+    pub b_g1_query: Arc<Vec<P::G1Affine>>,
     /// b_query in G2
-    pub b_g2_query: Vec<P::G2Affine>,
+    pub b_g2_query: Arc<Vec<P::G2Affine>>,
     /// h_query
     pub h_query: Arc<Vec<P::G1Affine>>,
     /// l_query
@@ -239,9 +239,9 @@ where
             beta_g1: header.beta_g1,
             delta_g1: header.delta_g1,
             // unwrap is fine, because we are guaranteed to have a Some value (rayon scope)
-            a_query: a_query.unwrap()?,
-            b_g1_query: b_g1_query.unwrap()?,
-            b_g2_query: b_g2_query.unwrap()?,
+            a_query: Arc::new(a_query.unwrap()?),
+            b_g1_query: Arc::new(b_g1_query.unwrap()?),
+            b_g2_query: Arc::new(b_g2_query.unwrap()?),
             h_query: Arc::new(h_query.unwrap()?),
             l_query: Arc::new(l_query.unwrap()?),
             matrices,
@@ -409,9 +409,9 @@ mod tests {
         ];
         assert_eq!(beta_g1, pk.beta_g1);
         assert_eq!(delta_g1, pk.delta_g1);
-        assert_eq!(a_query, pk.a_query);
-        assert_eq!(b_g1_query, pk.b_g1_query);
-        assert_eq!(b_g2_query, pk.b_g2_query);
+        assert_eq!(a_query, *pk.a_query);
+        assert_eq!(b_g1_query, *pk.b_g1_query);
+        assert_eq!(b_g2_query, *pk.b_g2_query);
         assert_eq!(h_query, Arc::into_inner(pk.h_query).unwrap());
         assert_eq!(l_query, Arc::into_inner(pk.l_query).unwrap());
         let vk = pk.vk;
@@ -525,9 +525,9 @@ mod tests {
         ];
         assert_eq!(beta_g1, pk.beta_g1);
         assert_eq!(delta_g1, pk.delta_g1);
-        assert_eq!(a_query, pk.a_query);
-        assert_eq!(b_g1_query, pk.b_g1_query);
-        assert_eq!(b_g2_query, pk.b_g2_query);
+        assert_eq!(a_query, *pk.a_query);
+        assert_eq!(b_g1_query, *pk.b_g1_query);
+        assert_eq!(b_g2_query, *pk.b_g2_query);
         assert_eq!(h_query, Arc::into_inner(pk.h_query).unwrap());
         assert_eq!(l_query, Arc::into_inner(pk.l_query).unwrap());
         let vk = pk.vk;

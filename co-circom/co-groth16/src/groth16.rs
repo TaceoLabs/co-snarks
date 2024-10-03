@@ -118,21 +118,21 @@ where
         let matrices = &zkey.matrices;
         let num_inputs = matrices.num_instance_variables;
         let num_constraints = matrices.num_constraints;
-        let public_inputs = &private_witness.public_inputs;
-        let private_witness = private_witness.witness;
+        let public_inputs = Arc::new(private_witness.public_inputs);
+        let private_witness = Arc::new(private_witness.witness);
         let h = self
             .witness_map_from_matrices(
                 zkey.pow,
                 matrices,
                 num_constraints,
                 num_inputs,
-                public_inputs,
+                &public_inputs,
                 &private_witness,
             )
             .await?;
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
         let proof = self
-            .create_proof_with_assignment(zkey, r, s, h, &public_inputs[1..], private_witness)
+            .create_proof_with_assignment(zkey, r, s, h, public_inputs, private_witness)
             .await?;
 
         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -349,82 +349,101 @@ where
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
         h: Vec<P::ScalarField>,
-        input_assignment: &[P::ScalarField],
-        aux_assignment: Vec<T::ArithmeticShare>,
+        input_assignment: Arc<Vec<P::ScalarField>>,
+        aux_assignment: Arc<Vec<T::ArithmeticShare>>,
     ) -> Result<Groth16Proof<P>> {
         let delta_g1 = zkey.delta_g1.into_group();
-        let (h_acc_tx, h_acc_rx) = oneshot::channel();
         let (l_acc_tx, l_acc_rx) = oneshot::channel();
         let h_query = Arc::clone(&zkey.h_query);
         let l_query = Arc::clone(&zkey.l_query);
 
+        let party_id = self.driver.get_party_id();
+        let (r_g1_tx, r_g1_rx) = oneshot::channel();
+        let (s_g1_tx, s_g1_rx) = oneshot::channel();
+        let (s_g2_tx, s_g2_rx) = oneshot::channel();
+        let a_query = Arc::clone(&zkey.a_query);
+        let b_g1_query = Arc::clone(&zkey.b_g1_query);
+        let b_g2_query = Arc::clone(&zkey.b_g2_query);
+        let input_assignment1 = Arc::clone(&input_assignment);
+        let input_assignment2 = Arc::clone(&input_assignment);
+        let input_assignment3 = Arc::clone(&input_assignment);
+        let aux_assignment1 = Arc::clone(&aux_assignment);
+        let aux_assignment2 = Arc::clone(&aux_assignment);
+        let aux_assignment3 = Arc::clone(&aux_assignment);
+        let aux_assignment4 = Arc::clone(&aux_assignment);
+        let alpha_g1 = zkey.vk.alpha_g1;
+        let beta_g1 = zkey.beta_g1;
+        let beta_g2 = zkey.vk.beta_g2;
+        let delta_g2 = zkey.vk.delta_g2.into_group();
+
+        rayon::spawn(move || {
+            let compute_a =
+                tracing::debug_span!("compute A in create proof with assignment").entered();
+            // Compute A
+            let r_g1 = T::scalar_mul_public_point_g1(&delta_g1, r);
+            let r_g1 = Self::calculate_coeff_g1(
+                party_id,
+                r_g1,
+                &a_query,
+                alpha_g1,
+                &input_assignment1[1..],
+                &aux_assignment1,
+            );
+            r_g1_tx.send(r_g1).expect("not dropped");
+            compute_a.exit();
+        });
+
+        rayon::spawn(move || {
+            let compute_b =
+                tracing::debug_span!("compute B/G1 in create proof with assignment").entered();
+            // Compute B in G1
+            // In original implementation this is skipped if r==0, however r is shared in our case
+            let s_g1 = T::scalar_mul_public_point_g1(&delta_g1, s);
+            let s_g1 = Self::calculate_coeff_g1(
+                party_id,
+                s_g1,
+                &b_g1_query,
+                beta_g1,
+                &input_assignment2[1..],
+                &aux_assignment2,
+            );
+            s_g1_tx.send(s_g1).expect("not dropped");
+            compute_b.exit();
+        });
+
+        rayon::spawn(move || {
+            let compute_b =
+                tracing::debug_span!("compute B/G2 in create proof with assignment").entered();
+            // Compute B in G2
+            let s_g2 = T::scalar_mul_public_point_g2(&delta_g2, s);
+            let s_g2 = Self::calculate_coeff_g2(
+                party_id,
+                s_g2,
+                &b_g2_query,
+                beta_g2,
+                &input_assignment3[1..],
+                &aux_assignment3,
+            );
+            s_g2_tx.send(s_g2).expect("not dropped");
+            compute_b.exit();
+        });
+
         rayon::spawn(move || {
             let msm_l_query = tracing::debug_span!("msm l_query").entered();
-            let result = T::msm_public_points_g1(l_query.as_ref(), &aux_assignment);
-            l_acc_tx
-                .send((result, aux_assignment))
-                .expect("channel not dropped");
+            let result = T::msm_public_points_g1(l_query.as_ref(), &aux_assignment4);
+            l_acc_tx.send(result).expect("channel not dropped");
             msm_l_query.exit();
         });
 
-        let io_ab_span = tracing::debug_span!("io part").entered();
-        // theoretically it is possible to do the io_round and the later multiplication
-        // of rs simultaniasly
-        let h = self.driver.io_round_mul_vec(h).await?;
-        io_ab_span.exit();
-        rayon::spawn(move || {
-            let msm_h_query = tracing::debug_span!("msm h_query").entered();
-            let result = T::msm_public_points_g1(h_query.as_ref(), &h);
-            h_acc_tx.send(result).expect("channel not dropped");
-            msm_h_query.exit();
-        });
-        let rs = self.driver.mul(r, s).await?;
+        let (h_acc, rs) = self.driver.msm_and_mul(h, h_query, r, s).await?;
         let r_s_delta_g1 = T::scalar_mul_public_point_g1(&delta_g1, rs);
 
-        let h_acc = h_acc_rx.await.expect("channel not dropped");
-        let (l_aux_acc, aux_assignment) = l_acc_rx.await.expect("channel not dropped");
+        let l_aux_acc = l_acc_rx.await.expect("channel not dropped");
 
-        let party_id = self.driver.get_party_id();
         let calculate_coeff_span = tracing::debug_span!("calculate coeff").entered();
-        let (g_a, g1_b, g2_b) = rayon_join!(
-            {
-                // Compute A
-                let r_g1 = T::scalar_mul_public_point_g1(&delta_g1, r);
-                Self::calculate_coeff_g1(
-                    party_id,
-                    r_g1,
-                    &zkey.a_query,
-                    zkey.vk.alpha_g1,
-                    input_assignment,
-                    &aux_assignment,
-                )
-            },
-            {
-                // Compute B in G1
-                // In original implementation this is skipped if r==0, however r is shared in our case
-                let s_g1 = T::scalar_mul_public_point_g1(&delta_g1, s);
-                Self::calculate_coeff_g1(
-                    party_id,
-                    s_g1,
-                    &zkey.b_g1_query,
-                    zkey.beta_g1,
-                    input_assignment,
-                    &aux_assignment,
-                )
-            },
-            {
-                // Compute B in G2
-                let s_g2 = T::scalar_mul_public_point_g2(&zkey.vk.delta_g2.into_group(), s);
-                Self::calculate_coeff_g2(
-                    party_id,
-                    s_g2,
-                    &zkey.b_g2_query,
-                    zkey.vk.beta_g2,
-                    input_assignment,
-                    &aux_assignment,
-                )
-            }
-        );
+        let g_a = r_g1_rx.await?;
+        let g1_b = s_g1_rx.await?;
+        let g2_b = s_g2_rx.await?;
         calculate_coeff_span.exit();
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
@@ -494,8 +513,9 @@ where
         let mpc_net = ShamirMpcNet::new(config).await?;
         let preprocessing = ShamirPreprocessing::new(threshold, mpc_net, num_pairs).await?;
         let mut protocol0 = ShamirProtocol::from(preprocessing);
-        // the protocol1 is only used for scalar_mul which uses degree_reduce_point and needs 1 pair
-        let protocol1 = protocol0.fork_with_pairs(1).await?;
+        // the protocol1 is only used for scalar_mul and a field_mul which need 1 pair each (ergo 2
+        // pairs)
+        let protocol1 = protocol0.fork_with_pairs(2).await?;
         let driver = ShamirGroth16Driver::new(protocol0, protocol1);
         Ok(CoGroth16 {
             driver,

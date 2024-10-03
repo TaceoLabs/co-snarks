@@ -1,7 +1,7 @@
 #![allow(async_fn_in_trait)]
 
 use core::fmt;
-use std::{fmt::Debug, future::Future};
+use std::{fmt::Debug, future::Future, sync::Arc};
 
 use ark_ec::pairing::Pairing;
 use ark_poly::{domain::DomainCoeff, EvaluationDomain};
@@ -51,22 +51,19 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
 
-    async fn mul(
-        &mut self,
-        a: Self::ArithmeticShare,
-        b: Self::ArithmeticShare,
-    ) -> IoResult<Self::ArithmeticShare>;
-
     async fn local_mul_vec(
         &mut self,
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
     ) -> IoResult<Vec<P::ScalarField>>;
 
-    async fn io_round_mul_vec(
+    async fn msm_and_mul(
         &mut self,
-        a: Vec<P::ScalarField>,
-    ) -> IoResult<Vec<Self::ArithmeticShare>>;
+        h: Vec<<P as Pairing>::ScalarField>,
+        h_query: Arc<Vec<P::G1Affine>>,
+        r: Self::ArithmeticShare,
+        s: Self::ArithmeticShare,
+    ) -> IoResult<(Self::PointShareG1, Self::ArithmeticShare)>;
 
     /// Computes the \[coeffs_i\] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     fn distribute_powers_and_mul_by_const(
