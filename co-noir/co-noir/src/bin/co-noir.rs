@@ -70,7 +70,7 @@ enum Commands {
     TranslateWitness(TranslateWitnessCli),
     /// Evaluates the prover algorithm for the specified circuit and witness share in MPC
     GenerateProof(GenerateProofCli),
-    /// Verification of a Noir proof.
+    /// Create a verification key for the specified circuit
     CreateVK(CreateVKCli),
     /// Verification of a Noir proof.
     Verify(VerifyCli),
