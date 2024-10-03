@@ -23,6 +23,14 @@ impl<P: Pairing> VerifyingKey<P> {
         ProvingKey::get_crs(circuit, path_g1, path_g2)
     }
 
+    pub fn get_prover_crs<S: UltraCircuitVariable<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, S>,
+        path_g1: &str,
+    ) -> Result<ProverCrs<P>> {
+        tracing::info!("Getting crs");
+        ProvingKey::get_prover_crs(circuit, path_g1)
+    }
+
     pub fn get_verifier_crs<S: UltraCircuitVariable<P::ScalarField>>(
         path_g2: &str,
     ) -> Result<P::G2Affine> {
