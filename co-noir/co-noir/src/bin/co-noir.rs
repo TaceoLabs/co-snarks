@@ -1,4 +1,3 @@
-use acir::native_types::WitnessMap;
 use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Parser, Subcommand};
@@ -6,9 +5,10 @@ use co_acvm::solver::Rep3CoSolver;
 use co_noir::{
     convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
     translate_witness_share_rep3, CreateVKCli, CreateVKConfig, GenerateProofCli,
-    GenerateProofConfig, GenerateWitnessCli, GenerateWitnessConfig, MPCProtocol, PubShared,
-    SplitInputCli, SplitInputConfig, SplitWitnessCli, SplitWitnessConfig, TranslateWitnessCli,
-    TranslateWitnessConfig, VerifyCli, VerifyConfig,
+    GenerateProofConfig, GenerateWitnessCli, GenerateWitnessConfig, MPCProtocol,
+    MergeInputSharesCli, MergeInputSharesConfig, PubShared, SplitInputCli, SplitInputConfig,
+    SplitWitnessCli, SplitWitnessConfig, TranslateWitnessCli, TranslateWitnessConfig, VerifyCli,
+    VerifyConfig,
 };
 use co_ultrahonk::prelude::{
     CoUltraHonk, HonkProof, ProvingKey, Rep3CoBuilder, ShamirCoBuilder, SharedBuilderVariable,
@@ -28,6 +28,7 @@ use mpc_core::protocols::{
     },
 };
 use std::{
+    collections::BTreeMap,
     fs::File,
     io::{BufReader, BufWriter, Write},
     path::PathBuf,
@@ -64,6 +65,8 @@ enum Commands {
     SplitWitness(SplitWitnessCli),
     /// Splits a input toml file into secret shares for use in MPC
     SplitInput(SplitInputCli),
+    /// Merge multiple shared inputs received from multiple parties into a single one
+    MergeInputShares(MergeInputSharesCli),
     /// Evaluates the extended witness generation for the specified circuit and input share in MPC
     GenerateWitness(GenerateWitnessCli),
     /// Translates the witness generated with one MPC protocol to a witness for a different one
@@ -88,6 +91,10 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::SplitInput(cli) => {
             let config = SplitInputConfig::parse(cli).context("while parsing config")?;
             run_split_input(config)
+        }
+        Commands::MergeInputShares(cli) => {
+            let config = MergeInputSharesConfig::parse(cli).context("while parsing config")?;
+            run_merge_input_shares(config)
         }
         Commands::GenerateWitness(cli) => {
             let config = GenerateWitnessConfig::parse(cli).context("while parsing config")?;
@@ -226,8 +233,10 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
         .context("while parsing program artifact")?;
 
     // read the input file
-    let inputs =
-        Rep3CoSolver::<_, Rep3MpcNet>::read_abi_bn254_fieldelement(&input, &compiled_program.abi)?;
+    let inputs = Rep3CoSolver::<_, Rep3MpcNet>::partially_read_abi_bn254_fieldelement(
+        &input,
+        &compiled_program.abi,
+    )?;
 
     // create input shares
     let mut rng = rand::thread_rng();
@@ -254,6 +263,60 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
 }
 
 #[instrument(skip(config))]
+fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<ExitCode> {
+    let inputs = config.inputs;
+    let protocol = config.protocol;
+    let out = config.out;
+
+    if protocol != MPCProtocol::REP3 {
+        return Err(eyre!(
+            "Only REP3 protocol is supported for splitting/merging inputs"
+        ));
+    }
+
+    if inputs.len() < 2 {
+        return Err(eyre!("Need at least two input shares to merge"));
+    }
+    for input in &inputs {
+        file_utils::check_file_exists(input)?;
+    }
+
+    let start = Instant::now();
+    let input_shares = inputs
+        .iter()
+        .map(|input| {
+            // parse input shares
+            let input_share_file =
+                BufReader::new(File::open(input).context("while opening input share file")?);
+            let input_share: BTreeMap<String, Rep3PrimeFieldShare<ark_bn254::Fr>> =
+                bincode::deserialize_from(input_share_file)
+                    .context("while deserializing input share")?;
+            color_eyre::Result::<_>::Ok(input_share)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut result = BTreeMap::new();
+
+    for input_share in input_shares.into_iter() {
+        for (wit, share) in input_share.into_iter() {
+            if result.contains_key(&wit) {
+                return Err(eyre!("Duplicate witness found in input shares"));
+            }
+            result.insert(wit, share);
+        }
+    }
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Merging took {} ms", duration_ms);
+
+    // write out the shares to the output file
+    let out_file = BufWriter::new(File::create(&out).context("while creating output file")?);
+    bincode::serialize_into(out_file, &result).context("while serializing witness share")?;
+    tracing::info!("Witness successfully written to {}", out.display());
+
+    tracing::info!("Merge input into shares successfully");
+    Ok(ExitCode::SUCCESS)
+}
+
+#[instrument(skip(config))]
 fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<ExitCode> {
     let input = config.input;
     let circuit = config.circuit;
@@ -276,9 +339,9 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     // parse input shares
     let input_share_file =
         BufReader::new(File::open(&input).context("while opening input share file")?);
-    let input_share: WitnessMap<Rep3PrimeFieldShare<ark_bn254::Fr>> =
+    let input_share: BTreeMap<String, Rep3PrimeFieldShare<ark_bn254::Fr>> =
         bincode::deserialize_from(input_share_file).context("while deserializing input share")?;
-    let input_share = translate_witness_share_rep3(input_share);
+    let input_share = translate_witness_share_rep3(input_share, &compiled_program.abi)?;
 
     // connect to network
     let net = Rep3MpcNet::new(config.network).context("while connecting to network")?;
