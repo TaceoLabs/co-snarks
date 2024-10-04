@@ -6,9 +6,10 @@ use co_acvm::solver::Rep3CoSolver;
 use co_noir::{
     convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
     translate_witness_share_rep3, CreateVKCli, CreateVKConfig, GenerateProofCli,
-    GenerateProofConfig, GenerateWitnessCli, GenerateWitnessConfig, MPCProtocol, PubShared,
-    SplitInputCli, SplitInputConfig, SplitWitnessCli, SplitWitnessConfig, TranslateWitnessCli,
-    TranslateWitnessConfig, VerifyCli, VerifyConfig,
+    GenerateProofConfig, GenerateWitnessCli, GenerateWitnessConfig, MPCProtocol,
+    MergeInputSharesCli, MergeInputSharesConfig, PubShared, SplitInputCli, SplitInputConfig,
+    SplitWitnessCli, SplitWitnessConfig, TranslateWitnessCli, TranslateWitnessConfig, VerifyCli,
+    VerifyConfig,
 };
 use co_ultrahonk::prelude::{
     CoUltraHonk, HonkProof, ProvingKey, Rep3CoBuilder, ShamirCoBuilder, SharedBuilderVariable,
@@ -64,6 +65,8 @@ enum Commands {
     SplitWitness(SplitWitnessCli),
     /// Splits a input toml file into secret shares for use in MPC
     SplitInput(SplitInputCli),
+    /// Merge multiple shared inputs received from multiple parties into a single one
+    MergeInputShares(MergeInputSharesCli),
     /// Evaluates the extended witness generation for the specified circuit and input share in MPC
     GenerateWitness(GenerateWitnessCli),
     /// Translates the witness generated with one MPC protocol to a witness for a different one
@@ -88,6 +91,10 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::SplitInput(cli) => {
             let config = SplitInputConfig::parse(cli).context("while parsing config")?;
             run_split_input(config)
+        }
+        Commands::MergeInputShares(cli) => {
+            let config = MergeInputSharesConfig::parse(cli).context("while parsing config")?;
+            run_merge_input_shares(config)
         }
         Commands::GenerateWitness(cli) => {
             let config = GenerateWitnessConfig::parse(cli).context("while parsing config")?;
@@ -252,6 +259,62 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
     }
 
     tracing::info!("Split input into shares successfully");
+    Ok(ExitCode::SUCCESS)
+}
+
+#[instrument(skip(config))]
+fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<ExitCode> {
+    let inputs = config.inputs;
+    let protocol = config.protocol;
+    let out = config.out;
+
+    if protocol != MPCProtocol::REP3 {
+        return Err(eyre!(
+            "Only REP3 protocol is supported for splitting/merging inputs"
+        ));
+    }
+
+    if inputs.len() < 2 {
+        return Err(eyre!("Need at least two input shares to merge"));
+    }
+    for input in &inputs {
+        file_utils::check_file_exists(input)?;
+    }
+
+    let start = Instant::now();
+    let input_shares = inputs
+        .iter()
+        .map(|input| {
+            // parse input shares
+            let input_share_file =
+                BufReader::new(File::open(input).context("while opening input share file")?);
+            let input_share: WitnessMap<Rep3PrimeFieldShare<ark_bn254::Fr>> =
+                bincode::deserialize_from(input_share_file)
+                    .context("while deserializing input share")?;
+            color_eyre::Result::<_>::Ok(input_share)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut result = WitnessMap::new();
+    let mut offset = 0;
+
+    for input_share in input_shares.into_iter() {
+        let mut els = 0;
+        for (wit, share) in input_share.into_iter() {
+            let wit = wit.0 + offset;
+            result.insert(wit.into(), share);
+            els += 1;
+        }
+        offset += els;
+    }
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Merging took {} ms", duration_ms);
+
+    // write out the shares to the output file
+    let out_file = BufWriter::new(File::create(&out).context("while creating output file")?);
+    bincode::serialize_into(out_file, &result).context("while serializing witness share")?;
+    tracing::info!("Witness successfully written to {}", out.display());
+
+    tracing::info!("Merge input into shares successfully");
     Ok(ExitCode::SUCCESS)
 }
 

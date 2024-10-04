@@ -148,6 +148,37 @@ pub struct SplitInputConfig {
     pub out_dir: PathBuf,
 }
 
+/// Cli arguments for `merge_input_shares`
+#[derive(Debug, Default, Serialize, Args)]
+pub struct MergeInputSharesCli {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the input JSON file
+    #[arg(long)]
+    pub inputs: Vec<PathBuf>,
+    /// The MPC protocol to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub protocol: Option<MPCProtocol>,
+    /// The output file where the merged input share is written to
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub out: Option<PathBuf>,
+}
+
+/// Config for `merge_input_shares`
+#[derive(Debug, Deserialize)]
+pub struct MergeInputSharesConfig {
+    /// The path to the input JSON file
+    pub inputs: Vec<PathBuf>,
+    /// The MPC protocol to be used
+    pub protocol: MPCProtocol,
+    /// The output file where the merged input share is written to
+    pub out: PathBuf,
+}
+
 /// Cli arguments for `generate_witness`
 #[derive(Debug, Default, Serialize, Args)]
 pub struct GenerateWitnessCli {
@@ -381,6 +412,7 @@ macro_rules! impl_config {
 
 impl_config!(SplitInputCli, SplitInputConfig);
 impl_config!(SplitWitnessCli, SplitWitnessConfig);
+impl_config!(MergeInputSharesCli, MergeInputSharesConfig);
 impl_config!(GenerateWitnessCli, GenerateWitnessConfig);
 impl_config!(TranslateWitnessCli, TranslateWitnessConfig);
 impl_config!(GenerateProofCli, GenerateProofConfig);
