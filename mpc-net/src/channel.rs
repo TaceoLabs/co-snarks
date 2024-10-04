@@ -17,8 +17,8 @@ const READ_BUFFER_SIZE: usize = 16;
 /// A channel that uses a [`Encoder`] and [`Decoder`] to send and receive messages.
 #[derive(Debug)]
 pub struct Channel<R, W, C> {
-    pub read_conn: ReadChannel<R, C>,
-    pub write_conn: WriteChannel<W, C>,
+    read_conn: ReadChannel<R, C>,
+    write_conn: WriteChannel<W, C>,
 }
 
 /// A channel that uses a [`LengthDelimitedCodec`] to send and receive messages.
@@ -38,9 +38,18 @@ impl<R, W, C> Channel<R, W, C> {
             read_conn: FramedRead::new(read_half, codec),
         }
     }
+
     /// Split Connection into a ([`WriteChannel`],[`ReadChannel`]) pair.
     pub fn split(self) -> (WriteChannel<W, C>, ReadChannel<R, C>) {
         (self.write_conn, self.read_conn)
+    }
+
+    /// Join ([`WriteChannel`],[`ReadChannel`]) pair back into a [`Channel`].
+    pub fn join(write_conn: WriteChannel<W, C>, read_conn: ReadChannel<R, C>) -> Self {
+        Self {
+            write_conn,
+            read_conn,
+        }
     }
 
     /// Returns mutable reference to the ([`WriteChannel`],[`ReadChannel`]) pair.

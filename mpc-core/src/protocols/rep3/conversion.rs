@@ -1,3 +1,7 @@
+//! Conversions
+//!
+//! This module contains conversions between share types
+
 use ark_ff::PrimeField;
 use num_bigint::BigUint;
 
@@ -45,6 +49,7 @@ pub async fn a2b<F: PrimeField, N: Rep3Network>(
         .await
 }
 
+/// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
 pub async fn b2a_consume<F: PrimeField, N: Rep3Network>(
     x: Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,

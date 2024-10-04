@@ -1,3 +1,7 @@
+//! Arithmetic
+//!
+//! This module contains operations with arithmetic shares
+
 use core::panic;
 use num_traits::cast::ToPrimitive;
 
@@ -14,7 +18,9 @@ use super::{
     binary, conversion, network::IoContext, rngs::Rep3CorrelatedRng, IoResult, Rep3BigUintShare,
 };
 
+/// Type alias for a [`Rep3PrimeFieldShare`]
 pub type FieldShare<F> = Rep3PrimeFieldShare<F>;
+/// Type alias for a [`Rep3BigUintShare`]
 pub type BinaryShare<F> = Rep3BigUintShare<F>;
 
 mod ops;
@@ -25,6 +31,7 @@ pub fn add<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>) -> FieldShare<F> {
     a + b
 }
 
+/// Performs addition between two shared values in place
 pub fn add_assign<F: PrimeField>(shared: &mut FieldShare<F>, b: FieldShare<F>) {
     *shared += b;
 }
@@ -40,6 +47,7 @@ pub fn add_public<F: PrimeField>(shared: FieldShare<F>, public: F, id: PartyID) 
     res
 }
 
+/// Performs addition between a shared value and a public value in place.
 pub fn add_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F, id: PartyID) {
     match id {
         PartyID::ID0 => shared.a += public,
@@ -48,6 +56,7 @@ pub fn add_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F, i
     }
 }
 
+/// Performs element-wise addition of two vectors of shared values in place.
 pub fn add_vec_assign<F: PrimeField>(lhs: &mut [FieldShare<F>], rhs: &[FieldShare<F>]) {
     for (a, b) in izip!(lhs.iter_mut(), rhs.iter()) {
         *a += b;
@@ -59,6 +68,7 @@ pub fn sub<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>) -> FieldShare<F> {
     a - b
 }
 
+/// Performs subtraction between two shared values in place.
 pub fn sub_assign<F: PrimeField>(shared: &mut FieldShare<F>, b: FieldShare<F>) {
     *shared -= b;
 }
@@ -105,8 +115,11 @@ pub fn mul_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F) {
     *shared *= public;
 }
 
-/// TODO DOCU - RIGHT THAT ONLY PEOPLE THAT KNOW WHAT THEY
-/// ARE DOING SHOULD USE THIS
+/// Performs element-wise multiplication of two vectors of shared values. *DOES NOT PERFORM RESHARE*
+///
+/// # Security
+/// If you want to perform additional non-linear operations on the result of this function,
+/// you *MUST* call [`io_mul_vec`] first. Only then, a reshare is performed.
 pub fn local_mul_vec<F: PrimeField>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
@@ -123,6 +136,7 @@ pub fn local_mul_vec<F: PrimeField>(
         .collect()
 }
 
+/// Performs a reshare on all shares in the vector.
 pub async fn io_mul_vec<F: PrimeField, N: Rep3Network>(
     local_a: Vec<F>,
     io_context: &mut IoContext<N>,
@@ -140,6 +154,8 @@ pub async fn io_mul_vec<F: PrimeField, N: Rep3Network>(
 }
 
 /// Performs element-wise multiplication of two vectors of shared values.
+///
+/// Use this function for small vecs. For large vecs see [`local_mul_vec`] and [`io_mul_vec`]
 pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
@@ -323,6 +339,7 @@ pub async fn mul_open_vec<F: PrimeField, N: Rep3Network>(
     Ok(a)
 }
 
+/// Generate a random [`FieldShare`].
 pub fn rand<F: PrimeField, N: Rep3Network>(io_context: &mut IoContext<N>) -> FieldShare<F> {
     let (a, b) = io_context.random_fes();
     FieldShare::new(a, b)

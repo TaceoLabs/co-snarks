@@ -1061,6 +1061,7 @@ impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
         Self::from_network(parser, network, mpc_accelerator, config)
     }
 
+    /// Gracefully shutdown the netowork. Waits until all data is sent and received
     pub fn close_network(self) -> Result<()> {
         self.driver.close_network()
     }

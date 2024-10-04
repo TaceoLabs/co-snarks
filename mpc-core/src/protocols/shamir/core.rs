@@ -1,3 +1,7 @@
+//! # Shamir Core
+//!
+//! This module implements core functionality of shamir share and combine operations
+
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use rand::Rng;
@@ -100,6 +104,7 @@ pub(crate) fn reconstruct<F: PrimeField>(shares: &[F], lagrange: &[F]) -> F {
     res
 }
 
+/// Reconstructs a curve point from its Shamir shares and lagrange coefficients.
 pub fn reconstruct_point<C: CurveGroup>(shares: &[C], lagrange: &[C::ScalarField]) -> C {
     debug_assert_eq!(shares.len(), lagrange.len());
     let mut res = C::zero();

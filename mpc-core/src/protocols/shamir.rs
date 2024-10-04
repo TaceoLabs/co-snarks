@@ -1,3 +1,7 @@
+//! # Shamir
+//!
+//! This module implements the shamir share and combine opertions and shamir preprocessing
+
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use itertools::izip;
@@ -21,6 +25,7 @@ pub use pointshare::types::ShamirPointShare;
 type IoResult<T> = std::io::Result<T>;
 type ShamirShare<F> = ShamirPrimeFieldShare<F>;
 
+/// Share a field element into Shamir shares with given `degree` and `num_parties`
 pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
     val: F,
     degree: usize,
@@ -166,13 +171,16 @@ pub fn combine_curve_point<C: CurveGroup>(
     Ok(rec)
 }
 
+/// This type is used to construct a [`SahmirProtocol`].
+/// Preprocess `amount` number of corre;ated randomness pairs that are consumed while using the protocol.
 pub struct ShamirPreprocessing<F: PrimeField, N: ShamirNetwork> {
     threshold: usize,
-    pub(crate) rng_buffer: ShamirRng<F>,
-    pub network: N,
+    rng_buffer: ShamirRng<F>,
+    network: N,
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirPreprocessing<F, N> {
+    /// Construct a new [`ShamirPreprocessing`] type and generate `amount` number of corr rand pairs
     pub async fn new(threshold: usize, mut network: N, amount: usize) -> eyre::Result<Self> {
         let num_parties = network.get_num_parties();
 
@@ -241,23 +249,28 @@ impl<F: PrimeField, N: ShamirNetwork> From<ShamirPreprocessing<F, N>> for Shamir
 
 /// This struct handles the Shamir MPC protocol, including proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], and [MSMProvider] traits.
 pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
-    pub threshold: usize, // degree of the polynomial
+    /// The threshold, degree of polynomial
+    pub threshold: usize,
+    /// The open lagrange coeffs
     pub open_lagrange_t: Vec<F>,
     pub(crate) open_lagrange_2t: Vec<F>,
     mul_lagrange_2t: Vec<F>,
     rng: RngType,
     pub(crate) r_t: Vec<F>,
     pub(crate) r_2t: Vec<F>,
+    /// The underlying [`ShamirNetwork`]
     pub network: N,
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     const KING_ID: usize = 0;
 
+    /// Gracefully shutdown the netowork. Waits until all data is sent and received
     pub async fn close_network(self) -> std::io::Result<()> {
         self.network.shutdown().await
     }
 
+    /// Create a forked [`ShamirProtocol`] that consumes `amount` number of corr rand pairs from its parent
     pub async fn fork_with_pairs(&mut self, amount: usize) -> std::io::Result<Self> {
         Ok(Self {
             threshold: self.threshold,
@@ -271,6 +284,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         })
     }
 
+    /// Get a correlated randomness pair
     pub fn get_pair(&mut self) -> std::io::Result<(F, F)> {
         if let (Some(r_t), Some(r_2t)) = (self.r_t.pop(), self.r_2t.pop()) {
             Ok((r_t, r_2t))
@@ -332,6 +346,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         Ok(ShamirShare::new(my_share - r_t))
     }
 
+    /// Degree reduce all inputs
     pub async fn degree_reduce_vec(
         &mut self,
         mut inputs: Vec<F>,

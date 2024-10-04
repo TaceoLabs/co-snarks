@@ -14,6 +14,7 @@
 //! Major changes and optimizations are expected in the near future.
 
 mod accelerator;
+/// This module contains the MPC-VM witness extension trait
 pub mod mpc;
 /// This module contains the MPC-VM
 pub mod mpc_vm;

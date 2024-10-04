@@ -167,7 +167,6 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
-    use tokio::runtime;
 
     use crate::{
         mpc::plain::PlainPlonkDriver,

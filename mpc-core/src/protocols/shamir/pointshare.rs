@@ -1,9 +1,11 @@
+//! Pointshare
+//!
+//! This module contains operations with point shares
+
 mod ops;
 pub(super) mod types;
 
 use ark_ec::CurveGroup;
-use ark_ff::PrimeField;
-use rayon::prelude::*;
 
 use super::{
     core, network::ShamirNetwork, IoResult, ShamirPointShare, ShamirPrimeFieldShare,

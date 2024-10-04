@@ -11,7 +11,7 @@ pub enum Msg {
 }
 
 impl Msg {
-    fn to_recv(self) -> Option<UnboundedReceiver<Msg>> {
+    fn into_recv(self) -> Option<UnboundedReceiver<Msg>> {
         if let Msg::Recv(x) = self {
             Some(x)
         } else {
@@ -19,7 +19,7 @@ impl Msg {
         }
     }
 
-    fn to_data(self) -> Option<Bytes> {
+    fn into_data(self) -> Option<Bytes> {
         if let Msg::Data(x) = self {
             Some(x)
         } else {

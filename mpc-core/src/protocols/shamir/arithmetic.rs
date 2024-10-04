@@ -1,5 +1,9 @@
+//! Arithmetic
+//!
+//! This module contains operations with arithmetic shares
+
 use ark_ff::PrimeField;
-use itertools::{izip, Itertools};
+use itertools::izip;
 
 use super::{core, network::ShamirNetwork, IoResult, ShamirProtocol};
 use rayon::prelude::*;
@@ -56,7 +60,7 @@ pub async fn mul<F: PrimeField, N: ShamirNetwork>(
     shamir.degree_reduce(mul).await
 }
 
-//does not reduce the degree
+/// Performs multiplication between two shares. *DOES NOT REDUCE DEGREE*
 pub fn local_mul_vec<F: PrimeField>(a: &[ShamirShare<F>], b: &[ShamirShare<F>]) -> Vec<F> {
     a.par_iter()
         .zip_eq(b.par_iter())

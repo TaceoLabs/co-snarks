@@ -35,7 +35,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
         let forked = runtime.block_on(io_context.fork()).unwrap();
         Self {
             runtime,
-            lut_provider: NaiveRep3LookupTable { io_context: forked },
+            lut_provider: NaiveRep3LookupTable::new(forked),
             io_context,
             plain_solver,
             phantom_data: PhantomData,
@@ -65,7 +65,7 @@ impl<F: PrimeField> std::fmt::Display for Rep3AcvmType<F> {
         match self {
             Self::Public(field) => f.write_str(&format!("Public ({field})")),
             Self::Shared(arithmetic) => {
-                let (a, b) = arithmetic.clone().ab();
+                let (a, b) = arithmetic.ab();
                 f.write_str(&format!("Arithmetic (a: {}, b: {})", a, b))
             }
         }

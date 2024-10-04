@@ -1,3 +1,7 @@
+//! Pointshare
+//!
+//! This module contains operations with point shares
+
 mod ops;
 mod types;
 
@@ -13,25 +17,32 @@ use super::{
     IoResult, Rep3PrimeFieldShare,
 };
 
+/// Type alias for a [`Rep3PrimeFieldShare`]
 type FieldShare<C> = Rep3PrimeFieldShare<C>;
+/// Type alias for a [`Rep3PointShare`]
 type PointShare<C> = Rep3PointShare<C>;
 
+/// Performs addition between two shared values.
 pub fn add<C: CurveGroup>(a: &PointShare<C>, b: &PointShare<C>) -> PointShare<C> {
     a + b
 }
 
+/// Performs subtraction between two shared values.
 pub fn sub<C: CurveGroup>(a: &PointShare<C>, b: &PointShare<C>) -> PointShare<C> {
     a - b
 }
 
+/// Performs addition between two shared values in place
 pub fn add_assign<C: CurveGroup>(a: &mut PointShare<C>, b: &PointShare<C>) {
     *a += b;
 }
 
+/// Performs subtraction between two shared values in place
 pub fn sub_assign<C: CurveGroup>(a: &mut PointShare<C>, b: &PointShare<C>) {
     *a -= b;
 }
 
+/// Performs addition between a shared value and a public value in place.
 pub fn add_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: PartyID) {
     match id {
         PartyID::ID0 => a.a += b,
@@ -40,6 +51,7 @@ pub fn add_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: PartyI
     }
 }
 
+/// Performs subtraction between a shared value and a public value in place.
 pub fn sub_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: PartyID) {
     match id {
         PartyID::ID0 => a.a -= b,
@@ -48,6 +60,7 @@ pub fn sub_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: PartyI
     }
 }
 
+/// Perform scalar multiplication of point * shared scalar
 pub fn scalar_mul_public_point<C: CurveGroup>(
     a: &C,
     b: FieldShare<C::ScalarField>,
@@ -58,6 +71,7 @@ pub fn scalar_mul_public_point<C: CurveGroup>(
     }
 }
 
+/// Perform scalar multiplication of shared point * scalar
 pub fn scalar_mul_public_scalar<C: CurveGroup>(
     a: &PointShare<C>,
     b: C::ScalarField,
@@ -65,6 +79,7 @@ pub fn scalar_mul_public_scalar<C: CurveGroup>(
     a * b
 }
 
+/// Perform scalar multiplication
 pub async fn scalar_mul<C: CurveGroup, N: Rep3Network>(
     a: &PointShare<C>,
     b: FieldShare<C::ScalarField>,
@@ -78,6 +93,7 @@ pub async fn scalar_mul<C: CurveGroup, N: Rep3Network>(
     })
 }
 
+/// Open the shared point
 pub async fn open_point<C: CurveGroup, N: Rep3Network>(
     a: &PointShare<C>,
     io_context: &mut IoContext<N>,
@@ -86,6 +102,7 @@ pub async fn open_point<C: CurveGroup, N: Rep3Network>(
     Ok(a.a + a.b + c)
 }
 
+/// Open the vector of [`PointShare`]s
 pub async fn open_point_many<C: CurveGroup, N: Rep3Network>(
     a: &[PointShare<C>],
     io_context: &mut IoContext<N>,
@@ -95,6 +112,7 @@ pub async fn open_point_many<C: CurveGroup, N: Rep3Network>(
     Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
 }
 
+/// Perform msm between `points` and `scalars`
 pub fn msm_public_points<C: CurveGroup>(
     points: &[C::Affine],
     scalars: &[FieldShare<C::ScalarField>],

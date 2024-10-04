@@ -9,7 +9,9 @@ use crate::protocols::rep3::{
 /// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Rep3PrimeFieldShare<F: PrimeField> {
+    /// Share of this party
     pub a: F,
+    /// Share of the prev party
     pub b: F,
 }
 
@@ -25,6 +27,7 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
         Self { a, b }
     }
 
+    /// Constructs a zero share.
     pub fn zero_share() -> Self {
         Self {
             a: F::zero(),
@@ -37,11 +40,13 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
         (self.a, self.b)
     }
 
+    /// Double the share in place
     pub fn double(&mut self) {
         self.a.double_in_place();
         self.b.double_in_place();
     }
 
+    /// Generate a random share
     pub fn rand<N: Rep3Network>(io_context: &mut IoContext<N>) -> Self {
         let (a, b) = io_context.rngs.rand.random_fes();
         Self::new(a, b)

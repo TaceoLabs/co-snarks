@@ -7,7 +7,9 @@ use num_bigint::BigUint;
 /// This type represents a packed vector of replicated shared bits. Each additively shared vector is represented as [BigUint]. Thus, this type contains two [BigUint]s.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Rep3BigUintShare<F: PrimeField> {
+    /// Share of this party
     pub a: BigUint,
+    /// Share of the prev party
     pub b: BigUint,
     pub(crate) phantom: PhantomData<F>,
 }
@@ -28,6 +30,7 @@ impl<F: PrimeField> Rep3BigUintShare<F> {
         }
     }
 
+    /// Constructs a zero share.
     pub fn zero_share() -> Self {
         Self {
             a: BigUint::ZERO,

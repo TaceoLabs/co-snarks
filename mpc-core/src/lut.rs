@@ -1,3 +1,7 @@
+//! Lookup table provider
+//!
+//! This module contains the abstraction to lookup tables
+
 use std::{
     collections::{HashMap, HashSet},
     io,
@@ -9,6 +13,7 @@ use ark_ff::PrimeField;
 #[allow(async_fn_in_trait)]
 /// This is some place holder definition. This will change most likely
 pub trait LookupTableProvider<F: PrimeField> {
+    /// The type used in LUTs
     type SecretShare;
     /// A LUT for performing membership checks (like `HashSet`). Mostly used for range checks.
     type SecretSharedSet;
@@ -74,6 +79,7 @@ pub trait LookupTableProvider<F: PrimeField> {
     ) -> io::Result<()>;
 }
 
+/// LUT provider for public values
 #[derive(Default)]
 pub struct PlainLookupTableProvider<F: PrimeField> {
     phantom_data: PhantomData<F>,

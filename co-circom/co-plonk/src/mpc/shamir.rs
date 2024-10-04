@@ -11,23 +11,21 @@ use mpc_core::protocols::shamir::{
 
 use super::{CircomPlonkProver, IoResult};
 
+/// A Plonk driver unsing shamir secret sharing
+///
+/// Contains two [`ShamirProtocol`]s, `protocol0` for the main execution and `protocol0` for parts that can run concurrently.
 pub struct ShamirPlonkDriver<F: PrimeField, N: ShamirNetwork> {
     protocol0: ShamirProtocol<F, N>,
     protocol1: ShamirProtocol<F, N>,
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirPlonkDriver<F, N> {
+    /// Create a new [`ShamirPlonkDriver`] with two [`ShamirProtocol`]s
     pub fn new(protocol0: ShamirProtocol<F, N>, protocol1: ShamirProtocol<F, N>) -> Self {
         Self {
             protocol0,
             protocol1,
         }
-    }
-
-    pub(crate) async fn close_network(self) -> IoResult<()> {
-        self.protocol0.network.shutdown().await?;
-        self.protocol1.network.shutdown().await?;
-        Ok(())
     }
 }
 
@@ -44,10 +42,6 @@ impl<P: Pairing, N: ShamirNetwork> CircomPlonkProver<P> for ShamirPlonkDriver<P:
         self.protocol0.network.shutdown().await?;
         self.protocol1.network.shutdown().await?;
         Ok(())
-    }
-
-    fn debug_print(_a: Self::ArithmeticShare) {
-        todo!()
     }
 
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {

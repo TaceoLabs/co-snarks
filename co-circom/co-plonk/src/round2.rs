@@ -10,7 +10,6 @@ use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
 use num_traits::One;
-use tokio::runtime::Runtime;
 use tracing::instrument;
 
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
@@ -186,7 +185,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         } else {
             tracing::debug!("computing z polynomial done!");
             Ok(PolyEval {
-                poly: poly_z.into(),
+                poly: poly_z,
                 eval: eval_z,
             })
         }
@@ -257,7 +256,6 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
-    use tokio::runtime;
 
     use crate::mpc::plain::PlainPlonkDriver;
     use crate::round1::Round1;

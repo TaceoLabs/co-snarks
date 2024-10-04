@@ -1,6 +1,5 @@
-use super::network::RepToShamirNetwork;
 use crate::protocols::{
-    rep3::{network::Rep3Network, Rep3PointShare, Rep3PrimeFieldShare},
+    rep3::{Rep3PointShare, Rep3PrimeFieldShare},
     shamir::{network::ShamirNetwork, ShamirPointShare, ShamirPrimeFieldShare, ShamirProtocol},
 };
 use ark_ec::CurveGroup;

@@ -11,6 +11,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 #[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
 #[repr(transparent)]
 pub struct ShamirPointShare<C: CurveGroup> {
+    /// The point share
     pub a: C,
 }
 impl<C: CurveGroup> ShamirPointShare<C> {

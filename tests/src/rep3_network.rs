@@ -1,11 +1,9 @@
 use super::shamir_network::PartyTestNetwork as ShamirPartyTestNetwork;
-use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
     rep3::{id::PartyID, network::Rep3Network},
-    shamir::ShamirProtocol,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
@@ -132,8 +130,8 @@ impl Rep3Network for PartyTestNetwork {
         &mut self,
         data: &[F],
     ) -> std::io::Result<(Vec<F>, Vec<F>)> {
-        self.send_many(self.id.next_id(), &data).await?;
-        self.send_many(self.id.prev_id(), &data).await?;
+        self.send_many(self.id.next_id(), data).await?;
+        self.send_many(self.id.prev_id(), data).await?;
         let prev = self.recv_many(self.id.prev_id()).await?;
         let next = self.recv_many(self.id.next_id()).await?;
         Ok((prev, next))
@@ -166,10 +164,10 @@ impl Rep3Network for PartyTestNetwork {
         from: PartyID,
     ) -> std::io::Result<Vec<F>> {
         if self.id.next_id() == from {
-            let data = Vec::from(self.recv_next.recv().await.unwrap().to_data().unwrap());
+            let data = Vec::from(self.recv_next.recv().await.unwrap().into_data().unwrap());
             Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         } else if self.id.prev_id() == from {
-            let data = Vec::from(self.recv_prev.recv().await.unwrap().to_data().unwrap());
+            let data = Vec::from(self.recv_prev.recv().await.unwrap().into_data().unwrap());
             Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         } else {
             panic!("You want to read from yourself?")
@@ -186,8 +184,8 @@ impl Rep3Network for PartyTestNetwork {
         self.send_next.send(Msg::Recv(ch_next.1)).unwrap();
         self.send_prev.send(Msg::Recv(ch_prev.1)).unwrap();
 
-        let recv_prev = self.recv_prev.recv().await.unwrap().to_recv().unwrap();
-        let recv_next = self.recv_next.recv().await.unwrap().to_recv().unwrap();
+        let recv_prev = self.recv_prev.recv().await.unwrap().into_recv().unwrap();
+        let recv_next = self.recv_next.recv().await.unwrap().into_recv().unwrap();
 
         let id = self.id;
 

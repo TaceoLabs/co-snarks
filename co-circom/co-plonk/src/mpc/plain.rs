@@ -11,6 +11,7 @@ use num_traits::Zero;
 use super::CircomPlonkProver;
 use rand::thread_rng;
 
+/// A plain Plonk driver
 pub struct PlainPlonkDriver;
 
 impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
@@ -28,10 +29,6 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
 
     async fn close_network(self) -> IoResult<()> {
         Ok(())
-    }
-
-    fn debug_print(a: Self::ArithmeticShare) {
-        println!("{a}")
     }
 
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {

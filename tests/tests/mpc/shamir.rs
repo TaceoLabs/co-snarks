@@ -2,9 +2,7 @@ mod field_share {
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
     use itertools::{izip, Itertools};
-    use mpc_core::protocols::shamir::{
-        self, arithmetic, ShamirPointShare, ShamirPreprocessing, ShamirProtocol,
-    };
+    use mpc_core::protocols::shamir::{self, arithmetic, ShamirPreprocessing};
     use rand::thread_rng;
     use std::{str::FromStr, thread};
     use tests::shamir_network::ShamirTestNetwork;

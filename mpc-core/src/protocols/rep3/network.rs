@@ -1,15 +1,10 @@
+//! Rep3 Network
+//!
+//! This module contains implementation of the rep3 mpc network
+
 use std::{io, sync::Arc};
 
-use crate::{
-    protocols::{
-        bridges::network::RepToShamirNetwork,
-        shamir::{
-            network::{ShamirMpcNet, ShamirNetwork},
-            ShamirProtocol,
-        },
-    },
-    RngType,
-};
+use crate::RngType;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
@@ -31,9 +26,13 @@ use super::{
 use rand::{Rng, SeedableRng};
 
 // this will be moved later
+/// This struct handles networking and rng
 pub struct IoContext<N: Rep3Network> {
+    /// The party id
     pub id: PartyID,
+    /// The rng
     pub rngs: Rep3CorrelatedRng,
+    /// The underlying network
     pub network: N,
 }
 
@@ -78,6 +77,8 @@ impl<N: Rep3Network> IoContext<N> {
             }
         }
     }
+
+    /// Construct  a new [`IoContext`] with the given network
     pub async fn init(mut network: N) -> IoResult<Self> {
         let mut rand = Self::setup_prf(&mut network).await?;
         let bitcomps = Self::setup_bitcomp(&mut network, &mut rand).await?;
@@ -90,14 +91,12 @@ impl<N: Rep3Network> IoContext<N> {
         })
     }
 
+    /// Generate two random field elements
     pub fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
         self.rngs.rand.random_fes()
     }
 
-    pub fn fork_randomness(&mut self) -> Rep3CorrelatedRng {
-        self.rngs.fork()
-    }
-
+    /// Cronstruct a fork of the [`IoContext`]. This fork can be used concurrently with its parent.
     pub async fn fork(&mut self) -> IoResult<Self> {
         let network = self.network.fork().await?;
         let rngs = self.rngs.fork();
@@ -132,11 +131,13 @@ pub trait Rep3Network: Send {
         }
     }
 
+    /// Perform multiple reshares with one networking round
     async fn reshare_many<F: CanonicalSerialize + CanonicalDeserialize>(
         &mut self,
         data: &[F],
     ) -> std::io::Result<Vec<F>>;
 
+    /// Broadcast data to the other two parties and receive data from them
     async fn broadcast<F: CanonicalSerialize + CanonicalDeserialize>(
         &mut self,
         data: F,
@@ -155,6 +156,7 @@ pub trait Rep3Network: Send {
         }
     }
 
+    /// Broadcast data to the other two parties and receive data from them
     async fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
         &mut self,
         data: &[F],

@@ -285,7 +285,8 @@ impl ShamirNetwork for ShamirMpcNet {
             .map(|(id, data)| {
                 let chan = self.channels.remove(&id);
                 tokio::spawn(async move {
-                    if let Some(mut chan) = chan {
+                    if let Some(chan) = chan {
+                        let (mut write, mut read) = chan.split();
                         let (_, recv) = tokio::try_join!(
                             async {
                                 let size = data.serialized_size(ark_serialize::Compress::No);
@@ -293,12 +294,13 @@ impl ShamirNetwork for ShamirMpcNet {
                                 data.serialize_uncompressed(&mut ser_data).map_err(|e| {
                                     std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
                                 })?;
-                                chan.write_conn.send(ser_data.into()).await
+                                write.send(ser_data.into()).await
                             },
                             async {
-                                let data = chan.read_conn.next().await.ok_or(
-                                    std::io::Error::new(std::io::ErrorKind::Other, "Received None"),
-                                )??;
+                                let data = read.next().await.ok_or(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    "Received None",
+                                ))??;
                                 let res =
                                     Vec::<F>::deserialize_uncompressed(&data[..]).map_err(|e| {
                                         std::io::Error::new(std::io::ErrorKind::InvalidData, e)
@@ -306,7 +308,7 @@ impl ShamirNetwork for ShamirMpcNet {
                                 Ok(res)
                             }
                         )?;
-                        Ok::<_, std::io::Error>((Some(chan), recv))
+                        Ok::<_, std::io::Error>((Some(Channel::join(write, read)), recv))
                     } else {
                         Ok((None, data))
                     }

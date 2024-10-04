@@ -3,7 +3,7 @@ mod translate_share {
     use itertools::Itertools;
     use mpc_core::protocols::{
         bridges::network::RepToShamirNetwork,
-        rep3::{self, network::IoContext},
+        rep3::{self},
         shamir::{self, ShamirPreprocessing, ShamirProtocol},
     };
     use rand::thread_rng;

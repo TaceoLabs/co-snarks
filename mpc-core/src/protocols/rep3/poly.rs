@@ -1,3 +1,7 @@
+//! Polynomial Evaluation
+//!
+//! This module contains functions to evaluate shared polynomials
+
 use rayon::prelude::*;
 use std::cmp::max;
 
@@ -31,6 +35,7 @@ fn horner_evaluate<F: PrimeField>(poly_coeffs: &[FieldShare<F>], point: F) -> Fi
 
 // This is copied from
 // https://docs.rs/ark-poly/latest/src/ark_poly/polynomial/univariate/dense.rs.html#56
+/// Evaluate the shared polynomial at a public point.
 pub fn eval_poly<F: PrimeField>(coeffs: &[FieldShare<F>], point: F) -> FieldShare<F> {
     if point.is_zero() {
         return coeffs[0];

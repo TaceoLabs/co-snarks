@@ -1,3 +1,7 @@
+//! # REP3
+//!
+//! This module implements the rep3 share and combine operations
+
 pub mod arithmetic;
 pub mod binary;
 pub mod conversion;

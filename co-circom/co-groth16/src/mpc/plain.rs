@@ -9,6 +9,7 @@ use super::CircomGroth16Prover;
 
 type IoResult<T> = std::io::Result<T>;
 
+/// A plain Groth16 driver
 pub struct PlainGroth16Driver;
 
 impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {

@@ -135,7 +135,7 @@ where
         let zkey = &data.zkey;
         let public_inputs = &data.witness.public_inputs;
         let (l, xin) = plonk_utils::calculate_lagrange_evaluations::<P>(
-            data.zkey.power,
+            data.zkey.pow,
             data.zkey.n_public,
             &challenges.xi,
             domains,
@@ -238,8 +238,8 @@ where
         let mut res = vec![T::ArithmeticShare::default(); data.zkey.domain_size + 6];
 
         // R
-        for (inout, add) in res.iter_mut().zip(poly_r.into_iter()) {
-            *inout = add.clone();
+        for (inout, add) in res.iter_mut().zip(poly_r.iter()) {
+            *inout = *add;
         }
         // A
         for (inout, add) in res.iter_mut().zip(polys.a.poly.clone().into_iter()) {
@@ -293,7 +293,7 @@ where
         Self::div_by_zerofier(&mut res, 1, xiw);
 
         tracing::debug!("computing wxiw polynomial done!");
-        res.into()
+        res
     }
 
     // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
@@ -366,7 +366,6 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
-    use tokio::runtime;
 
     use crate::{
         mpc::plain::PlainPlonkDriver,

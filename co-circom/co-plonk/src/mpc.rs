@@ -10,24 +10,31 @@ pub(crate) mod shamir;
 
 pub use plain::PlainPlonkDriver;
 pub use rep3::Rep3PlonkDriver;
+pub use shamir::ShamirPlonkDriver;
 
 type IoResult<T> = std::io::Result<T>;
 
+/// This trait represents the operations used during Groth16 proof generation
+#[allow(async_fn_in_trait)]
 pub trait CircomPlonkProver<P: Pairing> {
+    /// The arithemitc share type
     type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Copy + Clone + Default + Send;
+    /// The G1 point share type
     type PointShareG1: Send;
+    /// The G2 point share type
     type PointShareG2: Send;
-
+    /// The party id type
     type PartyID: Send + Sync + Copy + std::fmt::Display;
-
+    /// The IoContext type
     type IoContext;
 
+    /// Gracefully shutdown the netowork. Waits until all data is sent and received
     async fn close_network(self) -> IoResult<()>;
 
-    fn debug_print(a: Self::ArithmeticShare);
-
+    /// Generate a random arithmetic share
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
 
+    /// Get the party id
     fn get_party_id(&self) -> Self::PartyID;
 
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
@@ -52,23 +59,36 @@ pub trait CircomPlonkProver<P: Pairing> {
         public: P::ScalarField,
     ) -> Self::ArithmeticShare;
 
+    /// Performs element-wise multiplication of two vectors of shared values.
+    /// Does not perform any networking.
+    ///
+    /// # Security
+    /// If you want to perform additional non-linear operations on the result of this function,
+    /// you *MUST* call [`io_round_mul_vec`] first. Only then the relevant network round is performed.
     fn local_mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> Vec<P::ScalarField>;
 
+    /// Performs networking round of `local_mul_vec`
     async fn io_round_mul_vec(
         &mut self,
         a: Vec<P::ScalarField>,
     ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
+    /// Performs element-wise multiplication of two vectors of shared values.
+    ///
+    /// Use this function for small vecs. For large vecs see [`local_mul_vec`]
     fn mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
 
+    /// Performs element-wise multiplication of three vectors of shared values.
+    ///
+    /// Use this function for small vecs. For large vecs see [`local_mul_vec`]
     fn mul_vecs(
         &mut self,
         a: &[Self::ArithmeticShare],
@@ -131,24 +151,29 @@ pub trait CircomPlonkProver<P: Pairing> {
         domain: &D,
     ) -> Vec<Self::ArithmeticShare>;
 
-    /// Reconstructs many shared points: A = Open(\[A\]).
+    /// Reconstructs a shared point: A = Open(\[A\]).
     fn open_point_g1(&mut self, a: Self::PointShareG1) -> impl Future<Output = IoResult<P::G1>>;
+
+    /// Reconstructs many shared points: A = Open(\[A\]).
     fn open_point_vec_g1(
         &mut self,
         a: &[Self::PointShareG1],
     ) -> impl Future<Output = IoResult<Vec<P::G1>>>;
 
-    // WE NEED THIS ALSO FOR GROTH16
+    /// Perform msm between G1 `points` and `scalars`
     fn msm_public_points_g1(
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1;
 
+    /// Evaluate the shared polynomial at the public point.
+    /// Returns the evaluation and the polynomial
     fn evaluate_poly_public(
         poly: Vec<Self::ArithmeticShare>,
         point: P::ScalarField,
     ) -> (Self::ArithmeticShare, Vec<Self::ArithmeticShare>);
 
+    /// Perform elementwise multiplication of the three vectors of shares and then perform the array_prod_mul protocol
     async fn array_prod_mul(
         io_context: &mut Self::IoContext,
         inv: bool,
@@ -157,6 +182,7 @@ pub trait CircomPlonkProver<P: Pairing> {
         arr3: &[Self::ArithmeticShare],
     ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
+    /// Perform `array_prod_mul` for two sets of three inputs concurrently
     async fn array_prod_mul2(
         &mut self,
         n1: &[Self::ArithmeticShare],

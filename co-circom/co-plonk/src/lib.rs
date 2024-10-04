@@ -20,6 +20,7 @@ use std::io;
 use std::marker::PhantomData;
 use std::time::Instant;
 
+/// This module contains the Plonk prover trait
 pub mod mpc;
 mod plonk;
 mod round1;
@@ -33,7 +34,9 @@ pub use plonk::Plonk;
 
 type PlonkProofResult<T> = std::result::Result<T, PlonkProofError>;
 
+/// A type alias for a [CoPlonk] protocol using replicated secret sharing.
 pub type Rep3CoPlonk<P> = CoPlonk<P, Rep3PlonkDriver<Rep3MpcNet>>;
+/// A type alias for a [CoPlonk] protocol using shamir secret sharing.
 pub type ShamirCoPlonk<P> =
     CoPlonk<P, ShamirPlonkDriver<<P as Pairing>::ScalarField, ShamirMpcNet>>;
 
@@ -147,7 +150,7 @@ mod plonk_utils {
             T::promote_to_trivial_share(party_id, witness.public_inputs[index])
         } else if index < zkey.n_vars - zkey.n_additions {
             tracing::trace!("indexing private input!");
-            witness.witness[index - zkey.n_public - 1].clone()
+            witness.witness[index - zkey.n_public - 1]
         } else if index < zkey.n_vars {
             tracing::trace!("indexing additions!");
             witness.addition_witness[index + zkey.n_additions - zkey.n_vars].to_owned()
@@ -240,7 +243,7 @@ impl<P: Pairing> ShamirCoPlonk<P> {
     ) -> eyre::Result<Self> {
         let domain_size = zkey.domain_size;
         // TODO check and explain numbers
-        let num_pairs = domain_size * 223 + 3;
+        let num_pairs = domain_size * 222 + 15;
         let mpc_net = ShamirMpcNet::new(config).await?;
         let preprocessing = ShamirPreprocessing::new(threshold, mpc_net, num_pairs).await?;
         let mut protocol0 = ShamirProtocol::from(preprocessing);

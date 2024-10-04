@@ -19,10 +19,14 @@ use tokio::runtime::{self};
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 type BinaryShare<F> = Rep3BigUintShare<F>;
 
+/// This type represents a public, arithmetic share, or binary share type used in the co-cricom MPC-VM
 #[derive(Clone)]
 pub enum Rep3VmType<F: PrimeField> {
+    /// The public variant
     Public(F),
+    /// The arithemtic share variant
     Arithmetic(ArithmeticShare<F>),
+    /// The binary share variant
     Binary(BinaryShare<F>),
 }
 
@@ -766,7 +770,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Binary(b)) => {
                 // some special casing
                 if a == F::zero() {
-                    return Ok(Rep3VmType::Public(F::zero()));
+                    Ok(Rep3VmType::Public(F::zero()))
                 } else {
                     let res = self.runtime.block_on(binary::shift_l_public_by_shared(
                         a,

@@ -1,6 +1,7 @@
 //! A library for creating and verifying Groth16 proofs in a collaborative fashion using MPC.
 #![warn(missing_docs)]
 mod groth16;
+/// This module contains the Groth16 prover trait
 pub mod mpc;
 #[cfg(feature = "verifier")]
 mod verifier;

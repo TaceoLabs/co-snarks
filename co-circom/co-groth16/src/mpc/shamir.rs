@@ -10,12 +10,16 @@ use mpc_core::protocols::shamir::{
 use rayon::prelude::*;
 use tokio::sync::oneshot;
 
+/// A Groth16 dirver unsing shamir secret sharing
+///
+/// Contains two [`ShamirProtocol`]s, `protocol0` for the main execution and `protocol0` for parts that can run concurrently.
 pub struct ShamirGroth16Driver<F: PrimeField, N: ShamirNetwork> {
     protocol0: ShamirProtocol<F, N>,
     protocol1: ShamirProtocol<F, N>,
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirGroth16Driver<F, N> {
+    /// Create a new [`ShamirGroth16Driver`] with two [`ShamirProtocol`]s
     pub fn new(protocol0: ShamirProtocol<F, N>, protocol1: ShamirProtocol<F, N>) -> Self {
         Self {
             protocol0,

@@ -3,7 +3,7 @@ use ark_bn254::Bn254;
 use circom_types::Witness;
 use circom_types::{
     groth16::{Groth16Proof, JsonPublicInput, JsonVerificationKey as Groth16VK, ZKey as Groth16ZK},
-    plonk::{JsonVerificationKey as PlonkVK, ZKey as PlonkZK},
+    plonk::{JsonVerificationKey as PlonkVK, PlonkProof, ZKey as PlonkZK},
     R1CS,
 };
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
@@ -12,6 +12,9 @@ use co_circom_snarks::SharedWitness;
 use co_groth16::mpc::ShamirGroth16Driver;
 use co_groth16::CoGroth16;
 use co_groth16::Groth16;
+use co_plonk::mpc::ShamirPlonkDriver;
+use co_plonk::CoPlonk;
+use co_plonk::Plonk;
 use itertools::izip;
 use rand::thread_rng;
 use std::{fs::File, thread};
@@ -22,8 +25,8 @@ macro_rules! e2e_test {
     ($name: expr) => {
         add_test_impl!(Groth16, Bn254, $name);
         add_test_impl!(Groth16, Bls12_381, $name);
-        //add_test_impl!(Plonk, Bn254, $name);
-        //add_test_impl!(Plonk, Bls12_381, $name);
+        add_test_impl!(Plonk, Bn254, $name);
+        add_test_impl!(Plonk, Bls12_381, $name);
     };
 }
 
@@ -57,12 +60,20 @@ macro_rules! add_test_impl {
                 ) {
                     threads.push(thread::spawn(move || {
                         let domain_size = 2usize.pow(u32::try_from(zkey.pow).expect("pow fits into u32"));
-                        // we need domain_size + 2 + 1 number of corr rand pairs in witness_map_from_matrices (degree_reduce_vec + r and s + 1 for fork)
-                        let num_pairs = domain_size + 2 + 1;
+                        let num_pairs = match stringify!($proof_system) {
+                            "Groth16" => domain_size + 2 + 1,
+                            "Plonk"=> domain_size * 222 + 15,
+                            _ => unreachable!()
+                        };
+                        let num_pairs_fork = match stringify!($proof_system) {
+                            "Groth16" =>  2,
+                            "Plonk"=> domain_size * 7 + 2,
+                            _ => unreachable!()
+                        };
                         let runtime = runtime::Builder::new_current_thread().build().unwrap();
                         let preprocessing = runtime.block_on(ShamirPreprocessing::new(1, net, num_pairs)).unwrap();
                         let mut io_context0 = ShamirProtocol::from(preprocessing);
-                        let io_context1 = runtime.block_on(io_context0.fork_with_pairs(2)).unwrap();
+                        let io_context1 = runtime.block_on(io_context0.fork_with_pairs(num_pairs_fork)).unwrap();
                         let shamir = [< Shamir $proof_system Driver>]::new(io_context0, io_context1);
                         #[allow(unused_mut)]
                         let mut prover = [< Co $proof_system>]::<

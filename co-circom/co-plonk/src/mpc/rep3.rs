@@ -9,23 +9,21 @@ use mpc_core::protocols::rep3::{
 
 use super::{CircomPlonkProver, IoResult};
 
+/// A Plonk driver for REP3 secret sharing
+///
+/// Contains two [`IoContext`]s, `io_context0` for the main execution and `io_context1` for parts that can run concurrently.
 pub struct Rep3PlonkDriver<N: Rep3Network> {
     io_context0: IoContext<N>,
     io_context1: IoContext<N>,
 }
 
 impl<N: Rep3Network> Rep3PlonkDriver<N> {
+    /// Create a new [`Rep3PlonkDriver`] with two [`IoContext`]s
     pub fn new(io_context0: IoContext<N>, io_context1: IoContext<N>) -> Self {
         Self {
             io_context0,
             io_context1,
         }
-    }
-
-    pub(crate) async fn close_network(self) -> IoResult<()> {
-        self.io_context0.network.shutdown().await?;
-        self.io_context1.network.shutdown().await?;
-        Ok(())
     }
 }
 
@@ -42,10 +40,6 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         self.io_context0.network.shutdown().await?;
         self.io_context1.network.shutdown().await?;
         Ok(())
-    }
-
-    fn debug_print(_: Self::ArithmeticShare) {
-        todo!()
     }
 
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
@@ -160,14 +154,14 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare> {
-        domain.fft(&data)
+        domain.fft(data)
     }
 
     fn ifft<D: ark_poly::EvaluationDomain<P::ScalarField>>(
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare> {
-        domain.ifft(&data)
+        domain.ifft(data)
     }
 
     async fn open_point_g1(&mut self, a: Self::PointShareG1) -> IoResult<P::G1> {

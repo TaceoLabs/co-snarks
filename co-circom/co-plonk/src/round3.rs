@@ -12,7 +12,6 @@ use circom_types::plonk::ZKey;
 use itertools::izip;
 use num_traits::One;
 use num_traits::Zero;
-use tokio::runtime::Runtime;
 
 // TODO parallelize these? With a different network structure this might not be needed though
 macro_rules! mul4vec {
@@ -289,7 +288,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
 
             let w_w = w * pow_root_of_unity;
             let w_w2 = w_w.square();
-            let zw = polys.z.eval[(zkey.domain_size * 4 + 4 + i) % (zkey.domain_size * 4)].clone();
+            let zw = polys.z.eval[(zkey.domain_size * 4 + 4 + i) % (zkey.domain_size * 4)];
             let zwp_lhs = T::mul_with_public(challenges.b[6], w_w2);
             let zwp_rhs = T::mul_with_public(challenges.b[7], w_w);
             let zwp_ = T::add(zwp_lhs, zwp_rhs);
@@ -300,7 +299,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
             let mod_i = i % 4;
             if mod_i != 0 {
                 let z1 = z1[mod_i];
-                let ap_bp = ap_bp[i].clone();
+                let ap_bp = ap_bp[i];
                 let tmp = T::mul_with_public(ap_bp, z1);
                 a0 = T::add(a0, tmp);
             }
@@ -372,13 +371,13 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
         let mut tz_vec = Vec::with_capacity(zkey.domain_size * 4);
         // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
         (0..zkey.domain_size * 4).for_each(|i| {
-            let mut e2 = e2[i].clone();
+            let mut e2 = e2[i];
             let mut e2z = mul4vec_post!(party_id, e2z_0, e2z_1, e2z_2, e2z_3, i, z1, z2, z3);
-            let mut e3 = e3[i].clone();
+            let mut e3 = e3[i];
             let mut e3z = mul4vec_post!(party_id, e3z_0, e3z_1, e3z_2, e3z_3, i, z1, z2, z3);
 
-            let z = polys.z.eval[i].clone();
-            let zp = zp[i].clone();
+            let z = polys.z.eval[i];
+            let zp = zp[i];
 
             e2 = T::mul_with_public(e2, challenges.alpha);
             e2z = T::mul_with_public(e2z, challenges.alpha);
@@ -436,7 +435,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
 
         t3[0] = T::sub(t3[0], challenges.b[10]);
         tracing::debug!("computing t polynomial done!");
-        Ok([t1.into(), t2.into(), t3.into()])
+        Ok([t1, t2, t3])
     }
 
     // Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
@@ -497,7 +496,6 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
-    use tokio::runtime;
 
     use crate::{
         mpc::plain::PlainPlonkDriver,

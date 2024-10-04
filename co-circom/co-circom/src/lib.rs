@@ -26,7 +26,6 @@ use mpc_core::protocols::rep3::{
 };
 use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
-use tokio::runtime;
 
 /// A module for file utility functions.
 pub mod file_utils;
@@ -507,7 +506,7 @@ where
 /// 2. Compile the circuit to MPC VM bytecode.
 /// 3. Set up a network connection to the MPC network.
 /// 4. Execute the bytecode on the MPC VM to generate the witness.
-pub fn generate_witness_rep3<P: Pairing>(
+pub fn generate_witness_rep3<P>(
     circuit: String,
     input_share: SharedInput<P::ScalarField, Rep3PrimeFieldShare<P::ScalarField>>,
     config: GenerateWitnessConfig,
@@ -573,7 +572,7 @@ where
         .enable_all()
         .build()
         .context("while building runtime")?;
-    let mut prover = rt.block_on(Rep3CoGroth16::with_network_config(config))?;
+    let prover = rt.block_on(Rep3CoGroth16::with_network_config(config))?;
     // connect to network
     tracing::info!("done!");
     tracing::info!("starting prover...");

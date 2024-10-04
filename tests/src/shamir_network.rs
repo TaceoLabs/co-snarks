@@ -1,6 +1,5 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
-use itertools::izip;
 use mpc_core::protocols::shamir::network::ShamirNetwork;
 use std::{cmp::Ordering, collections::HashMap};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -145,7 +144,7 @@ impl ShamirNetwork for PartyTestNetwork {
             // to get index for the Vec
             from -= 1;
         }
-        let data = Vec::from(self.recv[from].recv().await.unwrap().to_data().unwrap());
+        let data = Vec::from(self.recv[from].recv().await.unwrap().into_data().unwrap());
         Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
     }
 
@@ -175,7 +174,7 @@ impl ShamirNetwork for PartyTestNetwork {
                 res.push(data.to_owned());
             }
 
-            let data = Vec::from(recv.recv().await.unwrap().to_data().unwrap());
+            let data = Vec::from(recv.recv().await.unwrap().into_data().unwrap());
             res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
         }
         if self.id == self.num_parties - 1 {
@@ -225,7 +224,14 @@ impl ShamirNetwork for PartyTestNetwork {
                     continue;
                 }
             }
-            let data = Vec::from(self.recv[other_id].recv().await.unwrap().to_data().unwrap());
+            let data = Vec::from(
+                self.recv[other_id]
+                    .recv()
+                    .await
+                    .unwrap()
+                    .into_data()
+                    .unwrap(),
+            );
             res.push(F::deserialize_uncompressed(data.as_slice()).unwrap());
         }
 
@@ -245,7 +251,7 @@ impl ShamirNetwork for PartyTestNetwork {
 
         let mut recv = Vec::with_capacity(self.num_parties - 1);
         for recveiver in self.recv.iter_mut() {
-            let r = recveiver.recv().await.unwrap().to_recv().unwrap();
+            let r = recveiver.recv().await.unwrap().into_recv().unwrap();
             recv.push(r);
         }
 
@@ -289,7 +295,14 @@ impl ShamirNetwork for PartyTestNetwork {
                     .expect("can send");
 
                 // receive
-                let bytes = Vec::from(self.recv[corr_id].recv().await.unwrap().to_data().unwrap());
+                let bytes = Vec::from(
+                    self.recv[corr_id]
+                        .recv()
+                        .await
+                        .unwrap()
+                        .into_data()
+                        .unwrap(),
+                );
                 let v = Vec::<F>::deserialize_uncompressed(bytes.as_slice()).unwrap();
                 res[id] = v;
             }

@@ -12,12 +12,16 @@ use tokio::sync::oneshot;
 
 use super::{CircomGroth16Prover, IoResult};
 
+/// A Groth16 driver for REP3 secret sharing
+///
+/// Contains two [`IoContext`]s, `io_context0` for the main execution and `io_context1` for parts that can run concurrently.
 pub struct Rep3Groth16Driver<N: Rep3Network> {
     io_context0: IoContext<N>,
     io_context1: IoContext<N>,
 }
 
 impl<N: Rep3Network> Rep3Groth16Driver<N> {
+    /// Create a new [`Rep3Groth16Driver`] with two [`IoContext`]s
     pub fn new(io_context0: IoContext<N>, io_context1: IoContext<N>) -> Self {
         Self {
             io_context0,

@@ -1,3 +1,7 @@
+//! Lookup Table
+//!
+//! This module contains implementation of a LUT
+
 use ark_ff::PrimeField;
 use itertools::izip;
 
@@ -11,10 +15,18 @@ use super::{
     IoResult, Rep3PrimeFieldShare,
 };
 
-pub type MpcMap<F> = Vec<(F, F)>;
+type MpcMap<F> = Vec<(F, F)>;
 
+/// Rep3 lookup table
 pub struct NaiveRep3LookupTable<N: Rep3Network> {
-    pub io_context: IoContext<N>,
+    io_context: IoContext<N>,
+}
+
+impl<N: Rep3Network> NaiveRep3LookupTable<N> {
+    /// Construct a new [`NaiveRep3LookupTable`]
+    pub fn new(io_context: IoContext<N>) -> Self {
+        Self { io_context }
+    }
 }
 
 impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for NaiveRep3LookupTable<N> {

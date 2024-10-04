@@ -1,3 +1,7 @@
+//! Binary
+//!
+//! This module contains operations with binary shares
+
 use ark_ff::{One, PrimeField};
 use futures::{stream::FuturesOrdered, StreamExt};
 use itertools::izip;
@@ -116,6 +120,7 @@ pub fn shift_l_public<F: PrimeField>(shared: &BinaryShare<F>, public: F) -> Bina
     shared << shift
 }
 
+/// Shifts a public value `F` by a share to the left.
 pub async fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
     public: F,
     shared: &BinaryShare<F>,
@@ -134,7 +139,7 @@ pub async fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
     let io_5 = io_context.fork().await?;
     let io_6 = io_context.fork().await?;
     let io_7 = io_context.fork().await?;
-    let mut contexts = vec![io_0, io_1, io_2, io_3, io_4, io_5, io_6, io_7];
+    let mut contexts = [io_0, io_1, io_2, io_3, io_4, io_5, io_6, io_7];
     let party_id = io_context.id;
     let mut futures_ordered = FuturesOrdered::new();
     for (i, context) in izip!((0..8), contexts.iter_mut()) {
@@ -239,6 +244,7 @@ pub async fn cmux<F: PrimeField, N: Rep3Network>(
 //do not have to perform an or over the whole length of prime field
 //but only one bit.
 //Do we want that to be configurable? Semms like a waste?
+/// Compute a OR tree of the input vec
 pub async fn or_tree<F: PrimeField, N: Rep3Network>(
     mut inputs: Vec<BinaryShare<F>>,
     io_context: &mut IoContext<N>,
@@ -258,7 +264,7 @@ pub async fn or_tree<F: PrimeField, N: Rep3Network>(
         // TODO WE WANT THIS BATCHED!!!
         // THIS IS SUPER BAD
         for (a, b) in izip!(a_vec.iter(), b_vec.iter()) {
-            res.push(or(&a, &b, io_context).await?);
+            res.push(or(a, b, io_context).await?);
         }
 
         res.extend_from_slice(leftover);

@@ -7,10 +7,20 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 pub(crate) mod plain;
 pub(crate) mod rep3;
 
+/// This trait represents the operations used during witness extension by the co-circom MPC-VM
 pub trait VmCircomWitnessExtension<F: PrimeField> {
+    /// The arithemitc share type
     type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
+    /// The binary share type
     type BinaryShare;
-    type VmType: Clone + Default + fmt::Debug + fmt::Display + From<F> + From<Self::ArithmeticShare>;
+    /// The VM type
+    type VmType: Clone
+        + Default
+        + fmt::Debug
+        + fmt::Display
+        + From<F>
+        + From<Self::ArithmeticShare>
+        + From<Self::BinaryShare>;
 
     /// Add two VM-types: c = a + b.
     fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;

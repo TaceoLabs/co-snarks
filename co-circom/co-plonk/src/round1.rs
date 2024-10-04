@@ -90,6 +90,7 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
 }
 
 // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
+#[allow(clippy::type_complexity)]
 impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
     fn compute_single_wire_poly(
         party_id: T::PartyID,
@@ -100,8 +101,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         map: &[usize],
     ) -> PlonkProofResult<(Vec<T::ArithmeticShare>, PolyEval<P, T>)> {
         let mut buffer = Vec::with_capacity(zkey.n_constraints);
-        for i in 0..zkey.n_constraints {
-            match plonk_utils::get_witness(party_id, witness, zkey, map[i]) {
+        debug_assert_eq!(zkey.n_constraints, map.len());
+        for index in map {
+            match plonk_utils::get_witness(party_id, witness, zkey, *index) {
                 Ok(witness) => buffer.push(witness),
                 Err(err) => return Err(err),
             }
@@ -289,7 +291,6 @@ pub mod tests {
     use ark_bn254::Bn254;
     use circom_types::plonk::ZKey;
     use co_circom_snarks::SharedWitness;
-    use tokio::runtime;
 
     use crate::mpc::plain::PlainPlonkDriver;
 

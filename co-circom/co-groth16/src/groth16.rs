@@ -48,6 +48,7 @@ pub type Groth16<P> = CoGroth16<P, PlainGroth16Driver>;
 
 /// A type alias for a [CoGroth16] protocol using replicated secret sharing.
 pub type Rep3CoGroth16<P, N> = CoGroth16<P, Rep3Groth16Driver<N>>;
+/// A type alias for a [CoGroth16] protocol using shamir secret sharing.
 pub type ShamirCoGroth16<P, N> = CoGroth16<P, ShamirGroth16Driver<<P as Pairing>::ScalarField, N>>;
 
 /* old way of computing root of unity, does not work for bls12_381:
@@ -439,6 +440,7 @@ where
             msm_l_query.exit();
         });
 
+        // TODO we can remove the networking round in msm_and_mul because we only have linear operations afterwards
         let (h_acc, rs) = self.driver.msm_and_mul(h, h_query, r, s).await?;
         let r_s_delta_g1 = T::scalar_mul_public_point_g1(&delta_g1, rs);
 

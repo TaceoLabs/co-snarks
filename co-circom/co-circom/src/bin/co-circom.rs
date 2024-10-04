@@ -101,8 +101,7 @@ enum Commands {
     Verify(VerifyCli),
 }
 
-#[tokio::main(flavor = "multi_thread")]
-async fn main() -> color_eyre::Result<ExitCode> {
+fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
     let args = Cli::parse();
 
@@ -138,15 +137,15 @@ async fn main() -> color_eyre::Result<ExitCode> {
         Commands::TranslateWitness(cli) => {
             let config = TranslateWitnessConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_translate_witness::<Bn254>(config).await,
-                MPCCurve::BLS12_381 => run_translate_witness::<Bls12_381>(config).await,
+                MPCCurve::BN254 => run_translate_witness::<Bn254>(config),
+                MPCCurve::BLS12_381 => run_translate_witness::<Bls12_381>(config),
             }
         }
         Commands::GenerateProof(cli) => {
             let config = GenerateProofConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_generate_proof::<Bn254>(config).await,
-                MPCCurve::BLS12_381 => run_generate_proof::<Bls12_381>(config).await,
+                MPCCurve::BN254 => run_generate_proof::<Bn254>(config),
+                MPCCurve::BLS12_381 => run_generate_proof::<Bls12_381>(config),
             }
         }
         Commands::Verify(cli) => {
@@ -410,6 +409,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
+#[tokio::main(flavor = "multi_thread")]
 #[instrument(level = "debug", skip(config))]
 async fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: TranslateWitnessConfig,
@@ -470,6 +470,7 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
+#[tokio::main(flavor = "multi_thread")]
 #[instrument(level = "debug", skip(config))]
 async fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateProofConfig,
