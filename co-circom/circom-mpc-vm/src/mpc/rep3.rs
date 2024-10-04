@@ -282,12 +282,14 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                     .into())
             }
             (Rep3VmType::Binary(a), Rep3VmType::Arithmetic(b)) => {
-                let a = self
-                    .runtime
-                    .block_on(conversion::b2a(&a, &mut self.io_context0))?;
-                let b = self
-                    .runtime
-                    .block_on(arithmetic::inv(b, &mut self.io_context0))?;
+                let (a, b) = self.runtime.block_on(async {
+                    tokio::join!(
+                        conversion::b2a(&a, &mut self.io_context0),
+                        arithmetic::inv(b, &mut self.io_context1),
+                    )
+                });
+                let a = a?;
+                let b = b?;
                 Ok(self
                     .runtime
                     .block_on(arithmetic::mul(a, b, &mut self.io_context0))?
