@@ -1,4 +1,3 @@
-use acir::native_types::WitnessMap;
 use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Parser, Subcommand};
@@ -29,6 +28,7 @@ use mpc_core::protocols::{
     },
 };
 use std::{
+    collections::BTreeMap,
     fs::File,
     io::{BufReader, BufWriter, Write},
     path::PathBuf,
@@ -288,23 +288,21 @@ fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<
             // parse input shares
             let input_share_file =
                 BufReader::new(File::open(input).context("while opening input share file")?);
-            let input_share: WitnessMap<Rep3PrimeFieldShare<ark_bn254::Fr>> =
+            let input_share: BTreeMap<String, Rep3PrimeFieldShare<ark_bn254::Fr>> =
                 bincode::deserialize_from(input_share_file)
                     .context("while deserializing input share")?;
             color_eyre::Result::<_>::Ok(input_share)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let mut result = WitnessMap::new();
-    let mut offset = 0;
+    let mut result = BTreeMap::new();
 
     for input_share in input_shares.into_iter() {
-        let mut els = 0;
         for (wit, share) in input_share.into_iter() {
-            let wit = wit.0 + offset;
-            result.insert(wit.into(), share);
-            els += 1;
+            if result.contains_key(&wit) {
+                return Err(eyre!("Duplicate witness found in input shares"));
+            }
+            result.insert(wit, share);
         }
-        offset += els;
     }
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Merging took {} ms", duration_ms);
@@ -341,9 +339,9 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     // parse input shares
     let input_share_file =
         BufReader::new(File::open(&input).context("while opening input share file")?);
-    let input_share: WitnessMap<Rep3PrimeFieldShare<ark_bn254::Fr>> =
+    let input_share: BTreeMap<String, Rep3PrimeFieldShare<ark_bn254::Fr>> =
         bincode::deserialize_from(input_share_file).context("while deserializing input share")?;
-    let input_share = translate_witness_share_rep3(input_share);
+    let input_share = translate_witness_share_rep3(input_share, &compiled_program.abi)?;
 
     // connect to network
     let net = Rep3MpcNet::new(config.network).context("while connecting to network")?;

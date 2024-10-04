@@ -4,8 +4,9 @@ use acir::{
     native_types::{WitnessMap, WitnessStack},
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{PrimeField, Zero};
+use ark_ff::Zero;
 use clap::{Args, ValueEnum};
+use co_acvm::solver::Rep3CoSolver;
 use co_ultrahonk::prelude::{SharedBuilderVariable, UltraCircuitVariable};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
@@ -13,15 +14,18 @@ use figment::{
 };
 use mpc_core::protocols::{
     rep3::{
-        self, network::Rep3Network, witness_extension_impl::Rep3VmType, Rep3PrimeFieldShare,
-        Rep3Protocol,
+        self,
+        network::{Rep3MpcNet, Rep3Network},
+        witness_extension_impl::Rep3VmType,
+        Rep3PrimeFieldShare, Rep3Protocol,
     },
     shamir::{self, network::ShamirNetwork, ShamirProtocol},
 };
 use mpc_net::config::NetworkConfig;
+use noirc_abi::Abi;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-use std::{array, path::PathBuf};
+use std::{array, collections::BTreeMap, path::PathBuf};
 
 #[derive(Clone, Debug)]
 pub enum PubShared<F: Clone> {
@@ -476,30 +480,26 @@ pub fn share_shamir<P: Pairing, N: ShamirNetwork, R: Rng + CryptoRng>(
 }
 
 pub fn share_input_rep3<P: Pairing, N: Rep3Network, R: Rng + CryptoRng>(
-    initial_witness: WitnessMap<GenericFieldElement<P::ScalarField>>,
+    initial_witness: BTreeMap<String, GenericFieldElement<P::ScalarField>>,
     rng: &mut R,
-) -> [WitnessMap<Rep3PrimeFieldShare<P::ScalarField>>; 3] {
-    let mut witnesses = array::from_fn(|_| WitnessMap::default());
+) -> [BTreeMap<String, Rep3PrimeFieldShare<P::ScalarField>>; 3] {
+    let mut witnesses = array::from_fn(|_| BTreeMap::default());
     for (witness, v) in initial_witness.into_iter() {
         let v = v.into_repr();
         let shares = rep3::utils::share_field_element(v, rng);
         for (w, share) in witnesses.iter_mut().zip(shares) {
-            w.insert(witness, share);
+            w.insert(witness.to_owned(), share);
         }
     }
 
     witnesses
 }
 
-pub fn translate_witness_share_rep3<F: PrimeField>(
-    witness: WitnessMap<Rep3PrimeFieldShare<F>>,
-) -> WitnessMap<Rep3VmType<F>> {
-    let mut result = WitnessMap::default();
-    for (witness, v) in witness.into_iter() {
-        result.insert(witness, Rep3VmType::Shared(v));
-    }
-
-    result
+pub fn translate_witness_share_rep3(
+    witness: BTreeMap<String, Rep3PrimeFieldShare<ark_bn254::Fr>>,
+    abi: &Abi,
+) -> color_eyre::Result<WitnessMap<Rep3VmType<ark_bn254::Fr>>> {
+    Rep3CoSolver::<ark_bn254::Fr, Rep3MpcNet>::witness_map_from_string_map(witness, abi)
 }
 
 pub fn convert_witness_to_vec_rep3<P: Pairing, N: Rep3Network>(

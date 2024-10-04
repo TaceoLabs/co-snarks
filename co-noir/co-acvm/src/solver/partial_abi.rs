@@ -1,4 +1,6 @@
 use super::CoSolver;
+use acir::{native_types::WitnessMap, FieldElement};
+use eyre::eyre;
 use mpc_core::traits::NoirWitnessExtensionProtocol;
 use noirc_abi::Abi;
 use serde::{Deserialize, Serialize};
@@ -51,5 +53,61 @@ where
         }
 
         Ok(res_abi)
+    }
+
+    pub(crate) fn create_string_map(
+        abi: &Abi,
+        witness: WitnessMap<FieldElement>,
+    ) -> eyre::Result<BTreeMap<String, FieldElement>> {
+        let mut res_map = BTreeMap::new();
+        let mut wit_iter = witness.into_iter();
+
+        for param in abi.parameters.iter() {
+            let arg_name = &param.name;
+            let typ_field_len = param.typ.field_count();
+            for i in 0..typ_field_len {
+                let name = format!("{}[{}]", arg_name, i);
+                let (_, el) = wit_iter
+                    .next()
+                    .ok_or(eyre!("Corrupted Witness: Too little witnesses"))?;
+                res_map.insert(name, el);
+            }
+        }
+        if wit_iter.next().is_some() {
+            return Err(eyre!("Corrupted Witness: Too much witnesses"));
+        }
+
+        Ok(res_map)
+    }
+
+    pub fn witness_map_from_string_map<I, O>(
+        witness: BTreeMap<String, I>,
+        abi: &Abi,
+    ) -> eyre::Result<WitnessMap<O>>
+    where
+        I: Clone,
+        O: From<I> + Default,
+    {
+        let mut result = WitnessMap::default();
+
+        let mut index = 0;
+        for params in abi.parameters.iter() {
+            let arg_name = &params.name;
+            let typ_field_len = params.typ.field_count();
+            for i in 0..typ_field_len {
+                let should_name = format!("{}[{}]", arg_name, i);
+                let el = witness
+                    .get(&should_name)
+                    .ok_or(eyre!("Corrupted Witness: Missing witness"))?;
+
+                result.insert(index.into(), O::from(el.to_owned()));
+                index += 1;
+            }
+        }
+        if index as usize != witness.len() {
+            return Err(eyre!("Corrupted Witness: Too many witnesses"));
+        }
+
+        Ok(result)
     }
 }
