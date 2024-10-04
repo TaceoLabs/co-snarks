@@ -1,6 +1,6 @@
 [package]
 name = "tests"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 publish = false
 license = "GPL-3.0" # due to circom-mpc-compiler dep
@@ -16,7 +16,7 @@ bytes = { workspace = true }
 circom-mpc-compiler = { version = "0.6.1", path = "../co-circom/circom-mpc-compiler" }
 circom-mpc-vm = { version = "0.4.2", path = "../co-circom/circom-mpc-vm" }
 circom-types = { version = "0.5.0", path = "../co-circom/circom-types" }
-co-acvm = { version = "0.1.0", path = "../co-noir/co-acvm" }
+co-acvm = { version = "0.2.0", path = "../co-noir/co-acvm" }
 co-circom-snarks = { version = "0.1.2", path = "../co-circom/co-circom-snarks" }
 co-groth16 = { version = "0.5.1", path = "../co-circom/co-groth16", features = [
     "verifier",
