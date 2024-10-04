@@ -226,8 +226,10 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
         .context("while parsing program artifact")?;
 
     // read the input file
-    let inputs =
-        Rep3CoSolver::<_, Rep3MpcNet>::read_abi_bn254_fieldelement(&input, &compiled_program.abi)?;
+    let inputs = Rep3CoSolver::<_, Rep3MpcNet>::partially_read_abi_bn254_fieldelement(
+        &input,
+        &compiled_program.abi,
+    )?;
 
     // create input shares
     let mut rng = rand::thread_rng();

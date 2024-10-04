@@ -21,6 +21,7 @@ pub(crate) const CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounded
 
 mod assert_zero_solver;
 mod memory_solver;
+mod partial_abi;
 pub type PlainCoSolver<F> = CoSolver<PlainDriver<F>, F>;
 pub type Rep3CoSolver<F, N> = CoSolver<Rep3Protocol<F, N>, F>;
 
@@ -91,6 +92,28 @@ where
             // do we want to keep it like that? Seems not necessary but maybe
             // we need it for proving/verifying
             Ok(abi.encode(&input_map, return_value.clone())?)
+        }
+    }
+
+    // This is the same as read_abi_bn254_fieldelement, but only warns if parameters are missing instead of throwing an error.
+    pub fn partially_read_abi_bn254_fieldelement<P>(
+        path: P,
+        abi: &Abi,
+    ) -> eyre::Result<WitnessMap<FieldElement>>
+    where
+        PathBuf: From<P>,
+    {
+        if abi.is_empty() {
+            Ok(WitnessMap::default())
+        } else {
+            let input_string = std::fs::read_to_string(PathBuf::from(path))?;
+            let abi_ = Self::create_partial_abi(&input_string, abi)?;
+            let mut input_map = Format::Toml.parse(&input_string, &abi_)?;
+            let return_value = input_map.remove(MAIN_RETURN_NAME);
+            // TACEO TODO the return value can be none for the witness extension
+            // do we want to keep it like that? Seems not necessary but maybe
+            // we need it for proving/verifying
+            Ok(abi_.encode(&input_map, return_value.clone())?)
         }
     }
 
