@@ -102,7 +102,13 @@ enum Commands {
 }
 
 fn main() -> color_eyre::Result<ExitCode> {
-    install_tracing();
+    // install_tracing();
+    if std::env::var("FOO").is_ok() {
+        // console_subscriber::init();
+        install_tracing();
+    } else {
+        install_tracing();
+    }
     let args = Cli::parse();
 
     match args.command {

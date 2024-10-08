@@ -9,7 +9,7 @@ use circom_types::groth16::{Groth16Proof, ZKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use co_circom_snarks::SharedWitness;
 use eyre::Result;
-use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet};
+use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet, Rep3Network};
 use mpc_core::protocols::shamir::network::ShamirMpcNet;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
 use mpc_net::config::NetworkConfig;
@@ -490,7 +490,10 @@ where
 {
     /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
     pub async fn with_network_config(config: NetworkConfig) -> Result<Self> {
-        let mpc_net = Rep3MpcNet::new(config).await?;
+        let mut mpc_net = Rep3MpcNet::new(config).await?;
+        mpc_net.send_next(P::ScalarField::default()).await.unwrap();
+        let _ = mpc_net.recv_prev::<P::ScalarField>().await.unwrap();
+        tracing::info!("Party {}: first recv done", mpc_net.get_id());
         let mut io_context0 = IoContext::init(mpc_net).await?;
         let io_context1 = io_context0.fork().await?;
         let driver = Rep3Groth16Driver::new(io_context0, io_context1);

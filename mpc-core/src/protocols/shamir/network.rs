@@ -3,13 +3,14 @@
 //! This module contains the trait for specifying a network interface for the Shamir MPC protocol. It also contains an implementation of the trait using the [mpc_net] crate.
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use async_smux::MuxStream;
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, Report};
 use futures::{SinkExt, StreamExt};
 use mpc_net::{channel::Channel, config::NetworkConfig, MpcNetworkHandler};
-use quinn::{RecvStream, SendStream};
 use std::{collections::HashMap, sync::Arc};
-use tokio_util::codec::LengthDelimitedCodec;
+use tokio::{net::TcpStream, sync::Mutex};
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 #[allow(async_fn_in_trait)]
 /// This trait defines the network interface for the Shamir protocol.
@@ -82,8 +83,8 @@ pub trait ShamirNetwork: Send {
 pub struct ShamirMpcNet {
     pub(crate) id: usize, // 0 <= id < num_parties
     pub(crate) num_parties: usize,
-    pub(crate) net_handler: Arc<MpcNetworkHandler>,
-    pub(crate) channels: HashMap<usize, Channel<RecvStream, SendStream, LengthDelimitedCodec>>,
+    pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
+    pub(crate) channels: HashMap<usize, Framed<MuxStream<TcpStream>, LengthDelimitedCodec>>,
 }
 
 impl ShamirMpcNet {
@@ -99,13 +100,13 @@ impl ShamirMpcNet {
             bail!("Invalid party id={} for {} parties", id, num_parties)
         }
 
-        let net_handler = MpcNetworkHandler::establish(config).await?;
+        let mut net_handler = MpcNetworkHandler::establish(config).await?;
         let channels = net_handler.get_byte_channels().await?;
 
         Ok(Self {
             id,
             num_parties,
-            net_handler: Arc::new(net_handler),
+            net_handler: Arc::new(Mutex::new(net_handler)),
             channels,
         })
     }
@@ -252,7 +253,7 @@ impl ShamirNetwork for ShamirMpcNet {
         let id = self.id;
         let num_parties = self.num_parties;
         let net_handler = Arc::clone(&self.net_handler);
-        let channels = net_handler.get_byte_channels().await?;
+        let channels = net_handler.lock().await.get_byte_channels().await?;
 
         Ok(Self {
             id,
@@ -264,7 +265,7 @@ impl ShamirNetwork for ShamirMpcNet {
 
     async fn shutdown(self) -> std::io::Result<()> {
         if let Some(net_handler) = Arc::into_inner(self.net_handler) {
-            net_handler.shutdown().await
+            net_handler.into_inner().shutdown().await
         } else {
             Ok(())
         }
@@ -276,60 +277,61 @@ impl ShamirNetwork for ShamirMpcNet {
         &mut self,
         data: Vec<Vec<F>>,
     ) -> std::io::Result<Vec<Vec<F>>> {
-        debug_assert_eq!(data.len(), self.num_parties);
-        let mut res = Vec::with_capacity(data.len());
+        // debug_assert_eq!(data.len(), self.num_parties);
+        // let mut res = Vec::with_capacity(data.len());
 
-        // move channels and data out of self and input so we can move them into tokio::spawn
-        let futures = (0..self.num_parties)
-            .zip(data)
-            .map(|(id, data)| {
-                let chan = self.channels.remove(&id);
-                tokio::spawn(async move {
-                    if let Some(chan) = chan {
-                        let (mut write, mut read) = chan.split();
-                        let (_, recv) = tokio::try_join!(
-                            async {
-                                let size = data.serialized_size(ark_serialize::Compress::No);
-                                let mut ser_data = Vec::with_capacity(size);
-                                data.serialize_uncompressed(&mut ser_data).map_err(|e| {
-                                    std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
-                                })?;
-                                write.send(ser_data.into()).await
-                            },
-                            async {
-                                let data = read.next().await.ok_or(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    "Received None",
-                                ))??;
-                                let res =
-                                    Vec::<F>::deserialize_uncompressed(&data[..]).map_err(|e| {
-                                        std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-                                    })?;
-                                Ok(res)
-                            }
-                        )?;
-                        Ok::<_, std::io::Error>((Some(Channel::join(write, read)), recv))
-                    } else {
-                        Ok((None, data))
-                    }
-                })
-            })
-            .collect::<Vec<_>>();
+        // // move channels and data out of self and input so we can move them into tokio::spawn
+        // let futures = (0..self.num_parties)
+        //     .zip(data)
+        //     .map(|(id, data)| {
+        //         let chan = self.channels.remove(&id);
+        //         tokio::spawn(async move {
+        //             if let Some(chan) = chan {
+        //                 let (mut write, mut read) = chan.split();
+        //                 let (_, recv) = tokio::try_join!(
+        //                     async {
+        //                         let size = data.serialized_size(ark_serialize::Compress::No);
+        //                         let mut ser_data = Vec::with_capacity(size);
+        //                         data.serialize_uncompressed(&mut ser_data).map_err(|e| {
+        //                             std::io::Error::new(std::io::ErrorKind::InvalidInput, e)
+        //                         })?;
+        //                         write.send(ser_data.into()).await
+        //                     },
+        //                     async {
+        //                         let data = read.next().await.ok_or(std::io::Error::new(
+        //                             std::io::ErrorKind::Other,
+        //                             "Received None",
+        //                         ))??;
+        //                         let res =
+        //                             Vec::<F>::deserialize_uncompressed(&data[..]).map_err(|e| {
+        //                                 std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+        //                             })?;
+        //                         Ok(res)
+        //                     }
+        //                 )?;
+        //                 Ok::<_, std::io::Error>((Some(Channel::join(write, read)), recv))
+        //             } else {
+        //                 Ok((None, data))
+        //             }
+        //         })
+        //     })
+        //     .collect::<Vec<_>>();
 
-        // collect results of futures and move channels back into self.channels
-        for (id, e) in futures::future::try_join_all(futures)
-            .await?
-            .into_iter()
-            .enumerate()
-        {
-            let (chan, recv) = e?;
-            // only insert chan were there was one
-            if let Some(c) = chan {
-                self.channels.insert(id, c);
-            }
-            res.push(recv);
-        }
+        // // collect results of futures and move channels back into self.channels
+        // for (id, e) in futures::future::try_join_all(futures)
+        //     .await?
+        //     .into_iter()
+        //     .enumerate()
+        // {
+        //     let (chan, recv) = e?;
+        //     // only insert chan were there was one
+        //     if let Some(c) = chan {
+        //         self.channels.insert(id, c);
+        //     }
+        //     res.push(recv);
+        // }
 
-        Ok(res)
+        // Ok(res)
+        todo!()
     }
 }
