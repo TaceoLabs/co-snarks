@@ -1,6 +1,6 @@
 [package]
 name = "mpc-core"
-version = "0.4.0"
+version = "0.5.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -16,7 +16,6 @@ default = []
 dangerous = []
 
 [dependencies]
-acir = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-poly = { workspace = true }
@@ -25,13 +24,14 @@ bytes = { workspace = true }
 eyre = { workspace = true }
 futures.workspace= true
 itertools = { workspace = true }
-mpc-net = { workspace = true }
+mpc-net = { version = "0.1.2", path = "../mpc-net" }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 quinn.workspace = true
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rayon = { workspace = true }
+serde = { workspace = true }
 tokio = { workspace = true }
 tokio-util.workspace = true
 tracing.workspace = true

@@ -1,6 +1,6 @@
 [package]
 name = "tests"
-version = "0.1.5"
+version = "0.1.7"
 edition = "2021"
 publish = false
 license = "GPL-3.0" # due to circom-mpc-compiler dep
@@ -14,18 +14,21 @@ ark-ff = { workspace = true }
 ark-std = { workspace = true }
 ark-serialize = { workspace = true }
 bytes = { workspace = true }
-circom-mpc-compiler = { workspace = true }
-circom-mpc-vm = { workspace = true }
-circom-types = { workspace = true }
-co-acvm = { workspace = true }
-co-circom-snarks = { workspace = true }
-co-groth16 = { workspace = true, features = ["verifier"] }
-co-plonk = { workspace = true }
+circom-mpc-compiler = { version = "0.6.1", path = "../co-circom/circom-mpc-compiler" }
+circom-mpc-vm = { version = "0.4.2", path = "../co-circom/circom-mpc-vm" }
+circom-types = { version = "0.5.0", path = "../co-circom/circom-types" }
+co-acvm = { version = "0.2.0", path = "../co-noir/co-acvm" }
+co-circom-snarks = { version = "0.1.2", path = "../co-circom/co-circom-snarks" }
+co-groth16 = { version = "0.5.1", path = "../co-circom/co-groth16", features = [
+    "verifier",
+] }
+co-plonk = { version = "0.3.1", path = "../co-circom/co-plonk" }
+co-ultrahonk = { version = "0.1.0", path = "../co-noir/co-ultrahonk" }
 criterion = { workspace = true }
 eyre = { workspace = true }
 futures.workspace = true
 itertools = { workspace = true }
-mpc-core = { workspace = true }
+mpc-core = { version = "0.5.0", path = "../mpc-core" }
 noirc-artifacts = { workspace = true }
 rand = { workspace = true }
 serde_json = { workspace = true }

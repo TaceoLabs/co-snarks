@@ -1,12 +1,16 @@
 {
-  "circom-mpc-compiler": "0.6.0",
-  "circom-mpc-vm": "0.4.1",
-  "circom-types": "0.5.0",
-  "co-circom-snarks": "0.1.1",
-  "co-circom": "0.5.0",
-  "co-groth16": "0.5.0",
-  "co-plonk": "0.3.0",
-  "mpc-core": "0.4.0",
+  "co-circom/circom-mpc-compiler": "0.6.1",
+  "co-circom/circom-mpc-vm": "0.4.2",
+  "co-circom/circom-types": "0.5.0",
+  "co-circom/co-circom-snarks": "0.1.2",
+  "co-circom/co-circom": "0.5.1",
+  "co-circom/co-groth16": "0.5.1",
+  "co-circom/co-plonk": "0.3.1",
+  "co-noir/co-acvm": "0.2.0",
+  "co-noir/co-noir": "0.2.0",
+  "co-noir/co-ultrahonk": "0.1.0",
+  "co-noir/ultrahonk": "0.1.0",
+  "mpc-core": "0.5.0",
   "mpc-net": "0.1.2",
-  "tests": "0.1.5"
+  "tests": "0.1.7"
 }
