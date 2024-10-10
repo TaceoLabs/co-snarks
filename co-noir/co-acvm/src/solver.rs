@@ -195,10 +195,10 @@ impl<N: Rep3Network> Rep3CoSolver<ark_bn254::Fr, N> {
         network: N,
         compiled_program: ProgramArtifact,
         witness: WitnessMap<
-            <Rep3Protocol<ark_bn254::Fr, N> as NoirWitnessExtensionProtocol::<ark_bn254::Fr>>::AcvmType,
+            <Rep3AcvmSolver<ark_bn254::Fr, N> as NoirWitnessExtensionProtocol::<ark_bn254::Fr>>::AcvmType,
         >,
     ) -> eyre::Result<Self> {
-        Self::new_bn254_with_witness(Rep3Protocol::new(network)?, compiled_program, witness)
+        Self::new_bn254_with_witness(Rep3AcvmSolver::new(network), compiled_program, witness)
     }
 }
 

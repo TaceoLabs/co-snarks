@@ -10,7 +10,7 @@ pub(super) mod rep3;
 /// The operations are generic over public and private (i.e., secret-shared) inputs.
 pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     type Lookup: LookupTableProvider<F>;
-    type ArithmeticShare;
+    type ArithmeticShare: Clone;
     /// A type representing the values encountered during Circom compilation. It should at least contain public field elements and shared values.
     type AcvmType: Clone
         + Default
@@ -78,4 +78,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         value: Self::AcvmType,
         lut: &mut <Self::Lookup as LookupTableProvider<F>>::SecretSharedMap,
     ) -> io::Result<()>;
+
+    /// Returns true if the value is shared
+    fn is_shared(a: &Self::AcvmType) -> bool;
+
+    /// Returns the share if the value is shared
+    fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare>;
+
+    // TODO do we want this here?
+    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>>;
 }

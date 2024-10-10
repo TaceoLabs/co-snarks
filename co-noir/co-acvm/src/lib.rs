@@ -1,6 +1,6 @@
 //![warn(missing_docs)]
 
-mod mpc;
+pub mod mpc;
 pub mod solver;
 
 pub use mpc::plain::PlainAcvmSolver;

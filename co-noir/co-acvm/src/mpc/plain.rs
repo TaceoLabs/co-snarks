@@ -81,4 +81,16 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     ) -> io::Result<()> {
         futures::executor::block_on(self.plain_lut.write_to_lut(index, value, map))
     }
+
+    fn is_shared(_: &Self::AcvmType) -> bool {
+        false
+    }
+
+    fn get_shared(_: &Self::AcvmType) -> Option<Self::ArithmeticShare> {
+        None
+    }
+
+    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>> {
+        Ok(a.to_vec())
+    }
 }

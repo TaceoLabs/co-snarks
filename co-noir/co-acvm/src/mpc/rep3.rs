@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use ark_ff::PrimeField;
+use itertools::{izip, Itertools};
 use mpc_core::protocols::rep3::arithmetic;
 use mpc_core::{
     lut::LookupTableProvider,
@@ -267,5 +268,29 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         };
         self.runtime.block_on(future)?;
         Ok(())
+    }
+
+    fn is_shared(a: &Self::AcvmType) -> bool {
+        matches!(a, Rep3AcvmType::Shared(_))
+    }
+
+    fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare> {
+        match a {
+            Rep3AcvmType::Shared(shared) => Some(*shared),
+            _ => None,
+        }
+    }
+
+    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<F>> {
+        let bs = a.iter().map(|x| x.b).collect_vec();
+        self.runtime
+            .block_on(self.io_context.network.send_next(bs))?;
+        let mut cs = self
+            .runtime
+            .block_on(self.io_context.network.recv_prev::<Vec<F>>())?;
+
+        izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
+
+        Ok(cs)
     }
 }
