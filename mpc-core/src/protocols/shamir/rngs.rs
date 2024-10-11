@@ -1,112 +1,438 @@
+use std::cmp::Ordering;
+
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
 
 use crate::RngType;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 
 use super::network::ShamirNetwork;
 
 pub(super) struct ShamirRng<F> {
+    pub(super) id: usize,
     pub(super) rng: RngType,
     pub(super) threshold: usize,
     pub(super) num_parties: usize,
+    precomputed_interpolation_r_t: Vec<Vec<F>>,
+    precomputed_interpolation_r_2t: Vec<Vec<F>>,
+    pub(super) shared_rngs: Vec<RngType>,
+    pub(super) matrix: Vec<Vec<F>>,
     pub(super) r_t: Vec<F>,
     pub(super) r_2t: Vec<F>,
 }
 
 impl<F: PrimeField> ShamirRng<F> {
-    pub fn new(seed: [u8; crate::SEED_SIZE], threshold: usize, num_parties: usize) -> Self {
-        Self {
-            rng: RngType::from_seed(seed),
+    pub fn new<N: ShamirNetwork>(
+        seed: [u8; crate::SEED_SIZE],
+        threshold: usize,
+        network: &mut N,
+    ) -> std::io::Result<Self> {
+        let mut rng = RngType::from_seed(seed);
+        let num_parties = network.get_num_parties();
+
+        let shared_rngs = Self::get_shared_rngs(network, &mut rng)?;
+
+        // We use the DN07 Vandermonde matrix to create t+1 random double shares at once.
+        // We do not use Atlas to create n shares at once, since only t+1 out of n shares would be uniformly random, thus the King server during multiplication would have to be rotated.
+
+        // let atlas_dn_matrix = Self::generate_atlas_dn_matrix(num_parties, threshold);
+        let matrix = Self::create_vandermonde_matrix(num_parties, threshold);
+
+        let id = network.get_id();
+        let (p_r_t, p_r_2_t) = if num_parties == 3 && threshold == 1 {
+            let p_r_t = super::core::precompute_interpolation_polys::<F>(&[
+                (id + 1) % 3 + 1,
+                (id + 2) % 3 + 1,
+            ]);
+            let p_r_2_t = Self::precompute_interpolation_polys(id, 2, 3);
+            (p_r_t, p_r_2_t)
+        } else {
+            let p_r_t = Self::precompute_interpolation_polys(id, threshold, num_parties);
+            let p_r_2_t = Self::precompute_interpolation_polys(id, threshold * 2, num_parties);
+            (p_r_t, p_r_2_t)
+        };
+
+        Ok(Self {
+            id,
+            rng,
             threshold,
             num_parties,
+            shared_rngs,
+            precomputed_interpolation_r_t: p_r_t,
+            precomputed_interpolation_r_2t: p_r_2_t,
+            matrix,
             r_t: Vec::new(),
             r_2t: Vec::new(),
-        }
+        })
     }
 
-    // I use the following matrix:
+    // For DN07 we generate t+1 double shares at once, for Atlas it is n
+    pub fn get_size_per_batch(&self) -> usize {
+        self.matrix.len()
+    }
+
+    fn get_shared_rngs<N: ShamirNetwork>(
+        network: &mut N,
+        rng: &mut RngType,
+    ) -> std::io::Result<Vec<RngType>> {
+        type SeedType = [u8; crate::SEED_SIZE];
+        let id = network.get_id();
+        let num_parties = network.get_num_parties();
+
+        let mut rngs = Vec::with_capacity(num_parties - 1);
+        let mut seeds = vec![<SeedType>::default(); num_parties];
+        let to_interact_with_parties = num_parties - 1;
+
+        let mut send = to_interact_with_parties / 2;
+        if to_interact_with_parties & 1 == 1 && id < num_parties / 2 {
+            send += 1;
+        }
+        let receive = to_interact_with_parties - send;
+        for id_off in 1..=send {
+            let rcv_id = (id + id_off) % num_parties;
+            let seed: SeedType = rng.gen();
+            seeds[rcv_id] = seed;
+            network.send(rcv_id, seed)?;
+        }
+        for id_off in 1..=receive {
+            let send_id = (id + num_parties - id_off) % num_parties;
+            let seed = network.recv(send_id)?;
+            seeds[send_id] = seed;
+        }
+
+        let after = seeds.split_off(id);
+        for seed in seeds {
+            debug_assert_ne!(seed, SeedType::default());
+            rngs.push(RngType::from_seed(seed));
+        }
+        debug_assert_eq!(after[0], SeedType::default());
+        for seed in after.into_iter().skip(1) {
+            debug_assert_ne!(seed, SeedType::default());
+            rngs.push(RngType::from_seed(seed));
+        }
+
+        Ok(rngs)
+    }
+
+    // We use the following (t+1 x n) Vandermonde matrix for DN07:
     // [1, 1  , 1  , 1  , ..., 1  ]
     // [1, 2  , 3  , 4  , ..., n  ]
     // [1, 2^2, 3^2, 4^2, ..., n^2]
     // ...
     // [1, 2^t, 3^t, 4^t, ..., n^t]
-    fn vandermonde_mul(inputs: &[F], res: &mut [F], num_parties: usize, threshold: usize) {
-        debug_assert_eq!(inputs.len(), num_parties);
-        debug_assert_eq!(res.len(), threshold + 1);
+    #[allow(unused)]
+    fn create_vandermonde_matrix(num_parties: usize, threshold: usize) -> Vec<Vec<F>> {
+        let mut result = Vec::with_capacity(threshold + 1);
+        let first_row = vec![F::one(); num_parties];
+        result.push(first_row);
+        for row in 1..=threshold {
+            let tmp = (1..=num_parties as u64)
+                .map(|col| F::from(col).pow([row as u64]))
+                .collect::<Vec<_>>();
+            result.push(tmp);
+        }
+        result
+    }
 
-        let row = (1..=num_parties as u64).map(F::from).collect::<Vec<_>>();
-        let mut current_row = row.clone();
+    // We use the following (t+1 x n) Vandermonde matrix for DN07:
+    // [1, 1  , 1  , 1  , ..., 1  ]
+    // [1, 2  , 3  , 4  , ..., n  ]
+    // [1, 2^2, 3^2, 4^2, ..., n^2]
+    // ...
+    // [1, 2^t, 3^t, 4^t, ..., n^t]
 
-        res[0] = inputs.iter().sum();
+    // We use the following (n x t+1) Vandermonde matrix for Atlas:
+    // [1, 1  , 1  , 1  , ..., 1  ]
+    // [1, 2  , 3  , 4  , ..., t  ]
+    // [1, 2^2, 3^2, 4^2, ..., t^2]
+    // ...
+    // [1, 2^n, 3^n, 4^n, ..., t^n]
 
-        for ri in res.iter_mut().skip(1) {
-            *ri = F::zero();
-            for (c, r, i) in izip!(&mut current_row, &row, inputs) {
-                *ri += *c * i;
-                *c *= r; // Update current_row
+    // This gives the resulting (n x n) matrix = Atlas x DN07: Each cell (row, col) has the value: sum_{i=0}^{t} (i + 1) ^ row * (col + 1) ^ i
+    #[allow(unused)]
+    fn generate_atlas_dn_matrix(num_parties: usize, threshold: usize) -> Vec<Vec<F>> {
+        let mut result = Vec::with_capacity(num_parties);
+        for row in 0..num_parties {
+            let mut row_result = Vec::with_capacity(num_parties);
+            for col in 0..num_parties {
+                let mut val = F::zero();
+                for i in 0..=threshold {
+                    val += F::from(i as u64 + 1).pow([row as u64])
+                        * F::from(col as u64 + 1).pow([i as u64]);
+                }
+                row_result.push(val);
+            }
+            result.push(row_result);
+        }
+
+        result
+    }
+
+    fn mamtul(mat: &[Vec<F>], inp: &[F], outp: &mut [F]) {
+        debug_assert_eq!(outp.len(), mat.len());
+        for (res, row) in outp.iter_mut().zip(mat.iter()) {
+            debug_assert_eq!(row.len(), inp.len());
+            for (v, cell) in inp.iter().cloned().zip(row.iter()) {
+                *res += v * cell;
             }
         }
     }
 
-    // Generates amount * (self.threshold + 1) random double shares
+    // get shared_rng_mut
+    fn get_rng_mut(&mut self, other_id: usize) -> &mut RngType {
+        match other_id.cmp(&self.id) {
+            Ordering::Less => &mut self.shared_rngs[other_id],
+            Ordering::Greater => &mut self.shared_rngs[other_id - 1],
+            Ordering::Equal => &mut self.rng,
+        }
+    }
+
+    fn receive_seeded(&mut self, degree: usize, output: &mut [Vec<F>]) {
+        for i in 1..=degree {
+            let send_id = (self.id + self.num_parties - i) % self.num_parties;
+            let rng = self.get_rng_mut(send_id);
+            for r in output.iter_mut() {
+                r[send_id] = F::rand(rng);
+            }
+        }
+    }
+
+    fn receive_seeded_prev(&mut self, degree: usize, output: &mut [Vec<F>]) {
+        for i in 1..=degree {
+            let send_id = (self.id + self.num_parties - i) % self.num_parties;
+            if send_id > self.id {
+                continue;
+            }
+            let rng = self.get_rng_mut(send_id);
+            for r in output.iter_mut() {
+                r[send_id] = F::rand(rng);
+            }
+        }
+    }
+
+    fn receive_seeded_next(&mut self, degree: usize, output: &mut [Vec<F>]) {
+        for i in 1..=degree {
+            let send_id = (self.id + self.num_parties - i) % self.num_parties;
+            if send_id < self.id {
+                continue;
+            }
+            let rng = self.get_rng_mut(send_id);
+            for r in output.iter_mut() {
+                r[send_id] = F::rand(rng);
+            }
+        }
+    }
+
+    fn precompute_interpolation_polys(id: usize, degree: usize, num_parties: usize) -> Vec<Vec<F>> {
+        let mut ids = Vec::with_capacity(degree + 1);
+        ids.push(0); // my randomness acts as the secret
+        for i in 1..=degree {
+            let rcv_id = (id + i) % num_parties;
+            ids.push(rcv_id + 1);
+        }
+        super::core::precompute_interpolation_polys::<F>(&ids)
+    }
+
+    fn get_interpolation_polys_from_precomputed<const T: bool>(
+        &mut self,
+        my_rands: &[F],
+        degree: usize,
+    ) -> Vec<Vec<F>> {
+        let amount = my_rands.len();
+        let mut shares = (0..amount)
+            .map(|_| Vec::with_capacity(degree + 1))
+            .collect_vec();
+        // Put secret to first place of shares
+        for (s, r) in shares.iter_mut().zip(my_rands.iter()) {
+            s.push(*r);
+        }
+        for i in 1..=degree {
+            let rcv_id = (self.id + i) % self.num_parties;
+            let rng = self.get_rng_mut(rcv_id);
+            for s in shares.iter_mut() {
+                s.push(F::rand(rng));
+            }
+        }
+
+        let precomputed = if T {
+            &self.precomputed_interpolation_r_t
+        } else {
+            &self.precomputed_interpolation_r_2t
+        };
+        debug_assert_eq!(precomputed.len(), degree + 1);
+
+        // Interpolate polys
+        shares
+            .into_iter()
+            .map(|s| super::core::interpolate_poly_from_precomputed::<F>(&s, precomputed))
+            .collect_vec()
+    }
+
+    fn set_my_share(&self, output: &mut [Vec<F>], polys: &[Vec<F>]) {
+        let id_f = F::from(self.id as u64 + 1);
+        for (r, p) in output.iter_mut().zip(polys.iter()) {
+            r[self.id] = super::core::evaluate_poly(p, id_f);
+        }
+    }
+
+    fn send_share_of_randomness<N: ShamirNetwork>(
+        &self,
+        degree: usize,
+        polys: &[Vec<F>],
+        network: &mut N,
+    ) -> std::io::Result<()> {
+        let sending = self.num_parties - degree - 1;
+        let mut to_send = vec![F::zero(); polys.len()]; // Allocate buffer only once
+        for i in 1..=sending {
+            let rcv_id = (self.id + i + degree) % self.num_parties;
+            let rcv_id_f = F::from(rcv_id as u64 + 1);
+            for (des, p) in to_send.iter_mut().zip(polys.iter()) {
+                *des = super::core::evaluate_poly(p, rcv_id_f);
+            }
+            network.send_many(rcv_id, &to_send)?;
+        }
+        Ok(())
+    }
+
+    fn receive_share_of_randomness<N: ShamirNetwork>(
+        &self,
+        degree: usize,
+        output: &mut [Vec<F>],
+        network: &mut N,
+    ) -> std::io::Result<()> {
+        let sending = self.num_parties - degree - 1;
+        for i in 1..=sending {
+            let send_id = (self.id + self.num_parties - degree - i) % self.num_parties;
+            let shares = network.recv_many(send_id)?;
+            for (r, s) in output.iter_mut().zip(shares.iter()) {
+                r[send_id] = *s;
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn random_double_share<N: ShamirNetwork>(
+        &mut self,
+        amount: usize,
+        network: &mut N,
+    ) -> std::io::Result<(Vec<Vec<F>>, Vec<Vec<F>>)> {
+        let mut rcv_t = vec![vec![F::default(); self.num_parties]; amount];
+        let mut rcv_2t = vec![vec![F::default(); self.num_parties]; amount];
+
+        // These are the parties for which I act as a receiver using the seeds
+        self.receive_seeded(self.threshold, &mut rcv_t);
+
+        // for my share I will use the seed for the next parties alongside mine
+        let my_rands = (0..amount)
+            .map(|_| F::rand(&mut self.rng))
+            .collect::<Vec<_>>();
+        let polys_t =
+            self.get_interpolation_polys_from_precomputed::<true>(&my_rands, self.threshold);
+
+        // Do the same for rcv_2t (do afterwards due to seeds being used here)
+        // Be careful about the order of calling the rngs
+        self.receive_seeded_next(self.threshold * 2, &mut rcv_2t);
+        let polys_2t =
+            self.get_interpolation_polys_from_precomputed::<false>(&my_rands, self.threshold * 2);
+        self.receive_seeded_prev(self.threshold * 2, &mut rcv_2t);
+
+        // Set my share
+        self.set_my_share(&mut rcv_t, &polys_t);
+        self.set_my_share(&mut rcv_2t, &polys_2t);
+
+        // Send the share of my randomness
+        self.send_share_of_randomness(self.threshold, &polys_t, network)?;
+        self.send_share_of_randomness(self.threshold * 2, &polys_2t, network)?;
+
+        // Receive the remaining shares
+        self.receive_share_of_randomness(self.threshold, &mut rcv_t, network)?;
+        self.receive_share_of_randomness(self.threshold * 2, &mut rcv_2t, network)?;
+
+        Ok((rcv_t, rcv_2t))
+    }
+
+    fn random_double_share_3_party(&mut self, amount: usize) -> (Vec<Vec<F>>, Vec<Vec<F>>) {
+        assert_eq!(self.num_parties, 3);
+        assert_eq!(self.threshold, 1);
+
+        let mut rcv_t = vec![vec![F::default(); 3]; amount];
+        let mut rcv_2t = vec![vec![F::default(); 3]; amount];
+
+        // These are the parties for which I act as a receiver using the seeds
+        // Be careful about the order of calling the rngs
+        self.receive_seeded_next(2, &mut rcv_t);
+
+        // Generate
+        let mut shares = vec![[F::zero(); 2]; amount];
+        for i in 1..=2 {
+            let rcv_id = (self.id + i) % 3;
+            let rng = self.get_rng_mut(rcv_id);
+            for s in shares.iter_mut() {
+                s[i - 1] = F::rand(rng);
+            }
+        }
+
+        // Receive the remaining now to clock rngs in the correct order
+        self.receive_seeded_prev(2, &mut rcv_t);
+
+        // Interpolate polys
+        let polys_t = shares
+            .into_iter()
+            .map(|s| {
+                super::core::interpolate_poly_from_precomputed::<F>(
+                    &s,
+                    &self.precomputed_interpolation_r_t,
+                )
+            })
+            .collect_vec();
+
+        // Set my rand on the polynomial and calculate the share
+        let mut rands = Vec::with_capacity(amount);
+        for (r, p) in rcv_t.iter_mut().zip(polys_t.iter()) {
+            r[self.id] = super::core::evaluate_poly(p, F::from(self.id as u64 + 1));
+            rands.push(p[0]);
+        }
+
+        // Do the same for rcv_2t (do afterwards due to seeds being used here)
+        // Be careful about the order of calling the rngs
+        self.receive_seeded_next(2, &mut rcv_2t);
+        let polys_2t = self.get_interpolation_polys_from_precomputed::<false>(&rands, 2);
+        self.receive_seeded_prev(2, &mut rcv_2t);
+        self.set_my_share(&mut rcv_2t, &polys_2t);
+
+        (rcv_t, rcv_2t)
+    }
+
+    // Generates amount * matrix.len() random double shares
+    // We use DN07 to generate t+1 double shares from the randomness of the n parties.
+    // With Atlas we would be able to expand this to n double shares, but only t+1 of them would be uniformly random.
+    // Thus, with Atlas we would have to rotate the King server during multiplication.
     pub(super) fn buffer_triples<N: ShamirNetwork>(
         &mut self,
         network: &mut N,
         amount: usize,
     ) -> std::io::Result<()> {
-        let rand = (0..amount)
-            .map(|_| F::rand(&mut self.rng))
-            .collect::<Vec<_>>();
-
-        let mut send = (0..self.num_parties)
-            .map(|_| Vec::with_capacity(amount * 2))
-            .collect::<Vec<_>>();
-
-        for r in rand {
-            let shares_t = super::core::share(r, self.num_parties, self.threshold, &mut self.rng);
-            let shares_2t =
-                super::core::share(r, self.num_parties, 2 * self.threshold, &mut self.rng);
-
-            for (des, src1, src2) in izip!(&mut send, shares_t, shares_2t) {
-                des.push(src1);
-                des.push(src2);
-            }
-        }
-
-        let mut rcv_rt = (0..amount)
-            .map(|_| Vec::with_capacity(self.num_parties))
-            .collect_vec();
-        let mut rcv_r2t = (0..amount)
-            .map(|_| Vec::with_capacity(self.num_parties))
-            .collect_vec();
-
-        // TODO would the old setup work again? is it better or worse?
-        let recv = network.send_and_recv_each_many(send)?;
-
-        for r in recv.into_iter() {
-            for (des_r, des_r2, src) in izip!(&mut rcv_rt, &mut rcv_r2t, r.chunks_exact(2)) {
-                des_r.push(src[0]);
-                des_r2.push(src[1]);
-            }
-        }
+        let (rcv_rt, rcv_r2t) = if self.num_parties == 3 && self.threshold == 1 {
+            self.random_double_share_3_party(amount)
+        } else {
+            self.random_double_share(amount, network)?
+        };
 
         // reserve buffer
-        let mut r_t = Vec::with_capacity(amount * (self.threshold + 1));
-        let mut r_2t = Vec::with_capacity(amount * (self.threshold + 1));
+        let size = self.matrix.len();
+        let mut r_t = vec![F::default(); amount * size];
+        let mut r_2t = vec![F::default(); amount * size];
 
-        r_t.resize(amount * (self.threshold + 1), F::default());
-        r_2t.resize(amount * (self.threshold + 1), F::default());
+        // Now make the matrix multiplication
+        let r_t_chunks = r_t.chunks_exact_mut(size);
+        let r_2t_chunks = r_2t.chunks_exact_mut(size);
 
-        // Now make vandermonde multiplication
-        let r_t_chunks = r_t.chunks_exact_mut(self.threshold + 1);
-        let r_2t_chunks = r_2t.chunks_exact_mut(self.threshold + 1);
-
-        for (r_t_des, r_2t_des, r_t_src, r_2t_src) in
-            izip!(r_t_chunks, r_2t_chunks, rcv_rt, rcv_r2t)
-        {
-            Self::vandermonde_mul(&r_t_src, r_t_des, self.num_parties, self.threshold);
-            Self::vandermonde_mul(&r_2t_src, r_2t_des, self.num_parties, self.threshold);
+        for (des, src) in izip!(r_t_chunks, rcv_rt) {
+            Self::mamtul(&self.matrix, &src, des);
+        }
+        for (des, src) in izip!(r_2t_chunks, rcv_r2t) {
+            Self::mamtul(&self.matrix, &src, des);
         }
 
         self.r_t.extend(r_t);
