@@ -221,9 +221,8 @@ mod plonk_utils {
 }
 
 impl<P: Pairing> Rep3CoPlonk<P> {
-    /// Create a new [Rep3CoPlonk] protocol with a given network configuration.
-    pub fn with_network_config(config: NetworkConfig) -> eyre::Result<Self> {
-        let mpc_net = Rep3MpcNet::new(config)?;
+    /// Create a new [Rep3CoPlonk] protocol with a given network.
+    pub fn with_network(mpc_net: Rep3MpcNet) -> eyre::Result<Self> {
         let mut io_context0 = IoContext::init(mpc_net)?;
         let io_context1 = io_context0.fork()?;
         let driver = Rep3PlonkDriver::new(io_context0, io_context1);
@@ -231,6 +230,12 @@ impl<P: Pairing> Rep3CoPlonk<P> {
             driver,
             phantom_data: PhantomData,
         })
+    }
+
+    /// Create a new [Rep3CoPlonk] protocol with a given network configuration.
+    pub fn with_network_config(config: NetworkConfig) -> eyre::Result<Self> {
+        let mpc_net = Rep3MpcNet::new(config)?;
+        Self::with_network(mpc_net)
     }
 }
 
