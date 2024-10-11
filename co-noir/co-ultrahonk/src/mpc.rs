@@ -18,9 +18,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         + std::fmt::Debug
         + 'static;
     /// The G1 point share type
-    type PointShareG1: std::fmt::Debug + Send + 'static;
-    /// The G2 point share type
-    type PointShareG2: std::fmt::Debug + Send + 'static;
+    type PointShare: std::fmt::Debug + Send + 'static;
     /// The party id type
     type PartyID: Copy;
 
@@ -73,10 +71,10 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     ) -> Vec<Self::ArithmeticShare>;
 
     /// Reconstructs a shared point: A = Open(\[A\]).
-    fn open_point(&mut self, a: Self::PointShareG1) -> std::io::Result<P::G1>;
+    fn open_point(&mut self, a: Self::PointShare) -> std::io::Result<P::G1>;
 
     /// Reconstructs many shared points: A = Open(\[A\]).
-    fn open_point_many(&mut self, a: &[Self::PointShareG1]) -> std::io::Result<Vec<P::G1>>;
+    fn open_point_many(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<P::G1>>;
 
     /// Reconstructs many shared values: a = Open(\[a\]).
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<P::ScalarField>>;
@@ -98,15 +96,9 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     /// This function ignores the case of one share to be zero and maps it to zero.
     fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()>;
 
-    /// Perform msm between G1 `points` and `scalars`
-    fn msm_public_points_g1(
+    /// Perform msm between `points` and `scalars`
+    fn msm_public_points(
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG1;
-
-    /// Perform msm between G2 `points` and `scalars`
-    fn msm_public_points_g2(
-        points: &[P::G2Affine],
-        scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG2;
+    ) -> Self::PointShare;
 }
