@@ -38,7 +38,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoUltraHonk<T
         gate_challenges
     }
 
-    pub async fn prove(
+    pub fn prove(
         mut self,
         proving_key: ProvingKey<T, P>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
@@ -47,7 +47,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoUltraHonk<T
         let mut transcript = TranscriptType::new(&POSEIDON2_BN254_T4_PARAMS);
 
         let oink = CoOink::new(&mut self.driver);
-        let oink_result = oink.prove(&proving_key, &mut transcript).await?;
+        let oink_result = oink.prove(&proving_key, &mut transcript)?;
 
         let cicruit_size = proving_key.circuit_size;
         let crs = proving_key.crs;
@@ -58,6 +58,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoUltraHonk<T
             Self::generate_gate_challenges(&mut transcript);
 
         let decider = CoDecider::new(self.driver, memory);
-        decider.prove(cicruit_size, &crs, transcript).await
+        decider.prove(cicruit_size, &crs, transcript)
     }
 }

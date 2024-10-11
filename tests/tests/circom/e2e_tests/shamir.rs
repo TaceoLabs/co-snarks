@@ -19,7 +19,6 @@ use itertools::izip;
 use rand::thread_rng;
 use std::{fs::File, thread};
 use tests::shamir_network::{PartyTestNetwork, ShamirTestNetwork};
-use tokio::runtime;
 
 macro_rules! e2e_test {
     ($name: expr) => {
@@ -70,16 +69,15 @@ macro_rules! add_test_impl {
                             "Plonk"=> domain_size * 7 + 2,
                             _ => unreachable!()
                         };
-                        let runtime = runtime::Builder::new_current_thread().build().unwrap();
-                        let preprocessing = runtime.block_on(ShamirPreprocessing::new(1, net, num_pairs)).unwrap();
+                        let preprocessing = ShamirPreprocessing::new(1, net, num_pairs).unwrap();
                         let mut io_context0 = ShamirProtocol::from(preprocessing);
-                        let io_context1 = runtime.block_on(io_context0.fork_with_pairs(num_pairs_fork)).unwrap();
+                        let io_context1 = io_context0.fork_with_pairs(num_pairs_fork).unwrap();
                         let shamir = [< Shamir $proof_system Driver>]::new(io_context0, io_context1);
                         #[allow(unused_mut)]
                         let mut prover = [< Co $proof_system>]::<
                             $curve, [< Shamir $proof_system Driver>]<[< ark_ $curve:lower >]::Fr, PartyTestNetwork>
                         >::new(shamir);
-                        runtime.block_on(prover.prove(&zkey, x)).unwrap()
+                        prover.prove(&zkey, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();

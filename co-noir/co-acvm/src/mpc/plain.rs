@@ -70,7 +70,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         index: &Self::AcvmType,
         lut: &HashMap<F, F>,
     ) -> io::Result<F> {
-        futures::executor::block_on(self.plain_lut.get_from_lut(*index, lut))
+        self.plain_lut.get_from_lut(*index, lut)
     }
 
     fn write_lut_by_acvm_type(
@@ -79,7 +79,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         value: Self::AcvmType,
         map: &mut HashMap<F, F>,
     ) -> io::Result<()> {
-        futures::executor::block_on(self.plain_lut.write_to_lut(index, value, map))
+        self.plain_lut.write_to_lut(index, value, map)
     }
 
     fn is_shared(_: &Self::AcvmType) -> bool {

@@ -44,7 +44,7 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for NaiveRep3LookupTa
         values.into_iter().collect()
     }
 
-    async fn contains_set(
+    fn contains_set(
         &mut self,
         needle: &Self::SecretShare,
         set: &Self::SecretSharedSet,
@@ -59,20 +59,20 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for NaiveRep3LookupTa
         //           .map(|ele| arithmetic::equals_bit(*needle, *ele, &mut self.io_context))
         //           .collect::<FuturesOrdered<_>>()
         //           .collect::<Vec<_>>()
-        //           .await
+        //
         //           .into_iter()
         //           .collect::<IoResult<Vec<_>>>()?;
         let mut equals_vec = Vec::with_capacity(set.len());
         for ele in set.iter() {
-            let bit = arithmetic::eq_bit(*needle, *ele, &mut self.io_context).await?;
+            let bit = arithmetic::eq_bit(*needle, *ele, &mut self.io_context)?;
             equals_vec.push(bit);
         }
 
         tracing::debug!("got binary equals vec now or tree..");
         //or tree to get result
-        let binary_result = binary::or_tree(equals_vec, &mut self.io_context).await?;
+        let binary_result = binary::or_tree(equals_vec, &mut self.io_context)?;
         tracing::debug!("one last conversion from binary to arithmetic...");
-        conversion::b2a(&binary_result, &mut self.io_context).await
+        conversion::b2a(&binary_result, &mut self.io_context)
     }
 
     fn init_map(
@@ -83,7 +83,7 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for NaiveRep3LookupTa
         values.into_iter().collect()
     }
 
-    async fn get_from_lut(
+    fn get_from_lut(
         &mut self,
         needle: Self::SecretShare,
         map: &Self::SecretSharedMap,
@@ -98,7 +98,7 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for NaiveRep3LookupTa
         zeros_a.resize_with(map.len(), || {
             self.io_context.rngs.rand.masking_field_element::<F>()
         });
-        let zeros_b = self.io_context.network.reshare_many(&zeros_a).await?;
+        let zeros_b = self.io_context.network.reshare_many(&zeros_a)?;
         tracing::debug!("now perform equals and cmux...");
         let mut result = Self::SecretShare::default();
         for ((key, map), zero_a, zero_b) in
@@ -106,15 +106,15 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for NaiveRep3LookupTa
         {
             // this is super slow - we can batch it?
             let zero_share = Self::SecretShare::new(zero_a, zero_b);
-            let equals = arithmetic::eq(needle, *key, &mut self.io_context).await?;
-            let cmux = arithmetic::cmux(equals, *map, zero_share, &mut self.io_context).await?;
+            let equals = arithmetic::eq(needle, *key, &mut self.io_context)?;
+            let cmux = arithmetic::cmux(equals, *map, zero_share, &mut self.io_context)?;
             result = arithmetic::add(result, cmux);
         }
         tracing::debug!("got a result!");
         Ok(result)
     }
 
-    async fn write_to_lut(
+    fn write_to_lut(
         &mut self,
         needle: Self::SecretShare,
         value: Self::SecretShare,
@@ -124,8 +124,8 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for NaiveRep3LookupTa
         // we do not need any zeros here
         for (key, map) in map.iter_mut() {
             // this is super slow - we can batch it?
-            let equals = arithmetic::eq(needle, *key, &mut self.io_context).await?;
-            let cmux = arithmetic::cmux(equals, value, *map, &mut self.io_context).await?;
+            let equals = arithmetic::eq(needle, *key, &mut self.io_context)?;
+            let cmux = arithmetic::cmux(equals, value, *map, &mut self.io_context)?;
             *map = cmux;
         }
         tracing::debug!("we are done");

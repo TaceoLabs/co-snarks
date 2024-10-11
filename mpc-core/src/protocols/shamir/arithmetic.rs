@@ -51,13 +51,13 @@ pub fn add_vec_assign<F: PrimeField>(lhs: &mut [ShamirShare<F>], rhs: &[ShamirSh
 }
 
 /// Performs multiplication between two shares.
-pub async fn mul<F: PrimeField, N: ShamirNetwork>(
+pub fn mul<F: PrimeField, N: ShamirNetwork>(
     a: ShamirShare<F>,
     b: ShamirShare<F>,
     shamir: &mut ShamirProtocol<F, N>,
 ) -> IoResult<ShamirShare<F>> {
     let mul = a.a * b.a;
-    shamir.degree_reduce(mul).await
+    shamir.degree_reduce(mul)
 }
 
 /// Performs multiplication between two shares. *DOES NOT REDUCE DEGREE*
@@ -70,7 +70,7 @@ pub fn local_mul_vec<F: PrimeField>(a: &[ShamirShare<F>], b: &[ShamirShare<F>]) 
 }
 
 /// Performs element-wise multiplication of two slices of shares.
-pub async fn mul_vec<F: PrimeField, N: ShamirNetwork>(
+pub fn mul_vec<F: PrimeField, N: ShamirNetwork>(
     a: &[ShamirShare<F>],
     b: &[ShamirShare<F>],
     shamir: &mut ShamirProtocol<F, N>,
@@ -83,7 +83,7 @@ pub async fn mul_vec<F: PrimeField, N: ShamirNetwork>(
         .zip(b.iter())
         .map(|(a, b)| a.a * b.a)
         .collect::<Vec<_>>();
-    shamir.degree_reduce_vec(mul).await
+    shamir.degree_reduce_vec(mul)
 }
 
 /// Performs multiplication between a share and a public value.
@@ -97,12 +97,12 @@ pub fn mul_assign_public<F: PrimeField>(shared: &mut ShamirShare<F>, public: F) 
 }
 
 /// Computes the inverse of a shared field element
-pub async fn inv<F: PrimeField, N: ShamirNetwork>(
+pub fn inv<F: PrimeField, N: ShamirNetwork>(
     a: ShamirShare<F>,
     shamir: &mut ShamirProtocol<F, N>,
 ) -> std::io::Result<ShamirShare<F>> {
     let r = shamir.rand()?;
-    let y = mul_open(a, r, shamir).await?;
+    let y = mul_open(a, r, shamir)?;
     if y.is_zero() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -114,14 +114,14 @@ pub async fn inv<F: PrimeField, N: ShamirNetwork>(
 }
 
 /// Computes the inverse of a vector of shared field elements
-pub async fn inv_vec<F: PrimeField, N: ShamirNetwork>(
+pub fn inv_vec<F: PrimeField, N: ShamirNetwork>(
     a: &[ShamirShare<F>],
     shamir: &mut ShamirProtocol<F, N>,
 ) -> std::io::Result<Vec<ShamirShare<F>>> {
     let r = (0..a.len())
         .map(|_| shamir.rand())
         .collect::<std::io::Result<Vec<_>>>()?;
-    let y = mul_open_vec(a, &r, shamir).await?;
+    let y = mul_open_vec(a, &r, shamir)?;
     if y.iter().any(|y| y.is_zero()) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -139,20 +139,17 @@ pub fn neg<F: PrimeField>(a: ShamirShare<F>) -> ShamirShare<F> {
 }
 
 /// Opens a shared value and returns the corresponding field element.
-pub async fn open<F: PrimeField, N: ShamirNetwork>(
+pub fn open<F: PrimeField, N: ShamirNetwork>(
     a: ShamirShare<F>,
     shamir: &mut ShamirProtocol<F, N>,
 ) -> IoResult<F> {
-    let rcv = shamir
-        .network
-        .broadcast_next(a.a, shamir.threshold + 1)
-        .await?;
+    let rcv = shamir.network.broadcast_next(a.a, shamir.threshold + 1)?;
     let res = core::reconstruct(&rcv, &shamir.open_lagrange_t);
     Ok(res)
 }
 
 /// Opens a vector of shared values and returns the corresponding field elements.
-pub async fn open_vec<F: PrimeField, N: ShamirNetwork>(
+pub fn open_vec<F: PrimeField, N: ShamirNetwork>(
     a: &[ShamirShare<F>],
     shamir: &mut ShamirProtocol<F, N>,
 ) -> IoResult<Vec<F>> {
@@ -160,8 +157,7 @@ pub async fn open_vec<F: PrimeField, N: ShamirNetwork>(
 
     let rcv = shamir
         .network
-        .broadcast_next(a_a.to_owned(), shamir.threshold + 1)
-        .await?;
+        .broadcast_next(a_a.to_owned(), shamir.threshold + 1)?;
 
     let mut transposed = vec![vec![F::zero(); shamir.threshold + 1]; a.len()];
 
@@ -213,7 +209,7 @@ fn clone_from_slice(
 */
 
 /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
-async fn mul_open<F: PrimeField, N: ShamirNetwork>(
+fn mul_open<F: PrimeField, N: ShamirNetwork>(
     a: ShamirShare<F>,
     b: ShamirShare<F>,
     shamir: &mut ShamirProtocol<F, N>,
@@ -221,13 +217,12 @@ async fn mul_open<F: PrimeField, N: ShamirNetwork>(
     let mul = a * b;
     let rcv = shamir
         .network
-        .broadcast_next(mul.a, 2 * shamir.threshold + 1)
-        .await?;
+        .broadcast_next(mul.a, 2 * shamir.threshold + 1)?;
     Ok(core::reconstruct(&rcv, &shamir.open_lagrange_2t))
 }
 
 /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
-pub async fn mul_open_vec<F: PrimeField, N: ShamirNetwork>(
+pub fn mul_open_vec<F: PrimeField, N: ShamirNetwork>(
     a: &[ShamirShare<F>],
     b: &[ShamirShare<F>],
     shamir: &mut ShamirProtocol<F, N>,
@@ -241,8 +236,7 @@ pub async fn mul_open_vec<F: PrimeField, N: ShamirNetwork>(
 
     let rcv = shamir
         .network
-        .broadcast_next(mul, 2 * shamir.threshold + 1)
-        .await?;
+        .broadcast_next(mul, 2 * shamir.threshold + 1)?;
 
     let mut transposed = vec![vec![F::zero(); 2 * shamir.threshold + 1]; a.len()];
 

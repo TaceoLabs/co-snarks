@@ -34,7 +34,7 @@ pub trait LookupTableProvider<F: PrimeField> {
     ///
     /// Can fail due to networking problems.
     ///
-    async fn contains_set(
+    fn contains_set(
         &mut self,
         needle: &Self::SecretShare,
         set: &Self::SecretSharedSet,
@@ -57,7 +57,7 @@ pub trait LookupTableProvider<F: PrimeField> {
     ///
     /// Can fail due to networking problems.
     ///
-    async fn get_from_lut(
+    fn get_from_lut(
         &mut self,
         key: Self::SecretShare,
         map: &Self::SecretSharedMap,
@@ -71,7 +71,7 @@ pub trait LookupTableProvider<F: PrimeField> {
     ///
     /// #Returns
     /// Can fail due to networking problems.
-    async fn write_to_lut(
+    fn write_to_lut(
         &mut self,
         index: Self::SecretShare,
         value: Self::SecretShare,
@@ -99,7 +99,7 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         values.into_iter().collect::<HashSet<_>>()
     }
 
-    async fn contains_set(
+    fn contains_set(
         &mut self,
         value: &Self::SecretShare,
         set: &Self::SecretSharedSet,
@@ -118,11 +118,11 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         values.into_iter().collect::<HashMap<_, _>>()
     }
 
-    async fn get_from_lut(&mut self, key: F, map: &Self::SecretSharedMap) -> io::Result<F> {
+    fn get_from_lut(&mut self, key: F, map: &Self::SecretSharedMap) -> io::Result<F> {
         Ok(map[&key])
     }
 
-    async fn write_to_lut(
+    fn write_to_lut(
         &mut self,
         key: F,
         value: F,

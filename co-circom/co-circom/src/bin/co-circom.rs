@@ -409,9 +409,8 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
-#[tokio::main(flavor = "multi_thread")]
 #[instrument(level = "debug", skip(config))]
-async fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
+fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: TranslateWitnessConfig,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -435,23 +434,19 @@ where
         co_circom::parse_witness_share(witness_file)?;
 
     // connect to network
-    let net = Rep3MpcNet::new(config.network)
-        .await
-        .context("while connecting to network")?;
+    let net = Rep3MpcNet::new(config.network).context("while connecting to network")?;
     let id = usize::from(net.get_id());
 
     // init MPC protocol
     let threshold = 1;
     let num_pairs = witness_share.witness.len();
     let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
-        .await
         .context("while shamir preprocessing")?;
     let mut protocol = ShamirProtocol::from(preprocessing);
     // Translate witness to shamir shares
     let start = Instant::now();
     let translated_witness = protocol
         .translate_primefield_repshare_vec(witness_share.witness)
-        .await
         .context("while translating witness")?;
     let shamir_witness_share: SharedWitness<P::ScalarField, ShamirPrimeFieldShare<P::ScalarField>> =
         SharedWitness {
@@ -461,8 +456,6 @@ where
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Translating witness took {} ms", id, duration_ms);
 
-    protocol.close_network().await?;
-
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
     bincode::serialize_into(out_file, &shamir_witness_share)?;
@@ -470,9 +463,8 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
-#[tokio::main(flavor = "multi_thread")]
 #[instrument(level = "debug", skip(config))]
-async fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
+fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateProofConfig,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -511,11 +503,10 @@ where
                     let public_input = witness_share.public_inputs.clone();
                     // connect to network
                     let prover = Rep3CoGroth16::with_network_config(config.network)
-                        .await
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&zkey, witness_share).await?;
+                    let proof = prover.prove(&zkey, witness_share)?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -524,11 +515,10 @@ where
 
                     // connect to network
                     let prover = ShamirCoGroth16::with_network_config(t, config.network, &zkey)
-                        .await
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&zkey, witness_share).await?;
+                    let proof = prover.prove(&zkey, witness_share)?;
                     (proof, public_input)
                 }
             };
@@ -559,11 +549,10 @@ where
 
                     //init prover
                     let prover = Rep3CoPlonk::with_network_config(config.network)
-                        .await
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&pk, witness_share).await?;
+                    let proof = prover.prove(&pk, witness_share)?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -572,11 +561,10 @@ where
 
                     //init prover
                     let prover = ShamirCoPlonk::with_network_config(t, config.network, &pk)
-                        .await
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&pk, witness_share).await?;
+                    let proof = prover.prove(&pk, witness_share)?;
                     (proof, public_input)
                 }
             };

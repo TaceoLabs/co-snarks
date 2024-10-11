@@ -1,5 +1,3 @@
-use std::future::Future;
-
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -15,7 +13,6 @@ pub use shamir::ShamirPlonkDriver;
 type IoResult<T> = std::io::Result<T>;
 
 /// This trait represents the operations used during Groth16 proof generation
-#[allow(async_fn_in_trait)]
 pub trait CircomPlonkProver<P: Pairing> {
     /// The arithemitc share type
     type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Copy + Clone + Default + Send;
@@ -27,9 +24,6 @@ pub trait CircomPlonkProver<P: Pairing> {
     type PartyID: Send + Sync + Copy + std::fmt::Display;
     /// The IoContext type
     type IoContext;
-
-    /// Gracefully shutdown the netowork. Waits until all data is sent and received
-    async fn close_network(self) -> IoResult<()>;
 
     /// Generate a random arithmetic share
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
@@ -72,10 +66,7 @@ pub trait CircomPlonkProver<P: Pairing> {
     ) -> Vec<P::ScalarField>;
 
     /// Performs networking round of `local_mul_vec`
-    async fn io_round_mul_vec(
-        &mut self,
-        a: Vec<P::ScalarField>,
-    ) -> IoResult<Vec<Self::ArithmeticShare>>;
+    fn io_round_mul_vec(&mut self, a: Vec<P::ScalarField>) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Performs element-wise multiplication of two vectors of shared values.
     ///
@@ -84,7 +75,7 @@ pub trait CircomPlonkProver<P: Pairing> {
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
-    ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
+    ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Performs element-wise multiplication of three vectors of shared values.
     ///
@@ -94,7 +85,7 @@ pub trait CircomPlonkProver<P: Pairing> {
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
-    ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
+    ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Convenience method for \[a\] + \[b\] * \[c\]
     fn add_mul_vec(
@@ -102,7 +93,7 @@ pub trait CircomPlonkProver<P: Pairing> {
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
-    ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
+    ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Convenience method for \[a\] + \[b\] * c
     fn add_mul_public(
@@ -119,19 +110,13 @@ pub trait CircomPlonkProver<P: Pairing> {
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
-    ) -> impl Future<Output = IoResult<Vec<P::ScalarField>>>;
+    ) -> IoResult<Vec<P::ScalarField>>;
 
     /// Reconstructs many shared values: a = Open(\[a\]).
-    fn open_vec(
-        &mut self,
-        a: &[Self::ArithmeticShare],
-    ) -> impl Future<Output = IoResult<Vec<P::ScalarField>>>;
+    fn open_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>>;
 
     /// Computes the inverse of many shared values: \[b\] = \[a\] ^ -1. Requires network communication.
-    fn inv_vec(
-        &mut self,
-        a: &[Self::ArithmeticShare],
-    ) -> impl Future<Output = IoResult<Vec<Self::ArithmeticShare>>>;
+    fn inv_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Transforms a public value into a shared value: \[a\] = a.
     fn promote_to_trivial_share(
@@ -152,13 +137,10 @@ pub trait CircomPlonkProver<P: Pairing> {
     ) -> Vec<Self::ArithmeticShare>;
 
     /// Reconstructs a shared point: A = Open(\[A\]).
-    fn open_point_g1(&mut self, a: Self::PointShareG1) -> impl Future<Output = IoResult<P::G1>>;
+    fn open_point_g1(&mut self, a: Self::PointShareG1) -> IoResult<P::G1>;
 
     /// Reconstructs many shared points: A = Open(\[A\]).
-    fn open_point_vec_g1(
-        &mut self,
-        a: &[Self::PointShareG1],
-    ) -> impl Future<Output = IoResult<Vec<P::G1>>>;
+    fn open_point_vec_g1(&mut self, a: &[Self::PointShareG1]) -> IoResult<Vec<P::G1>>;
 
     /// Perform msm between G1 `points` and `scalars`
     fn msm_public_points_g1(
@@ -174,7 +156,7 @@ pub trait CircomPlonkProver<P: Pairing> {
     ) -> (Self::ArithmeticShare, Vec<Self::ArithmeticShare>);
 
     /// Perform elementwise multiplication of the three vectors of shares and then perform the array_prod_mul protocol
-    async fn array_prod_mul(
+    fn array_prod_mul(
         io_context: &mut Self::IoContext,
         inv: bool,
         arr1: &[Self::ArithmeticShare],
@@ -183,7 +165,7 @@ pub trait CircomPlonkProver<P: Pairing> {
     ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Perform `array_prod_mul` for two sets of three inputs concurrently
-    async fn array_prod_mul2(
+    fn array_prod_mul2(
         &mut self,
         n1: &[Self::ArithmeticShare],
         n2: &[Self::ArithmeticShare],

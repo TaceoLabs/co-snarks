@@ -6,7 +6,6 @@ pub(crate) mod rep3;
 pub(crate) mod shamir;
 
 /// This trait represents the operations used during UltraHonk proof generation
-#[allow(async_fn_in_trait)]
 pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     /// The arithemitc share type
     type ArithmeticShare: CanonicalSerialize
@@ -48,7 +47,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     ) -> Self::ArithmeticShare;
 
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
-    async fn mul_many(
+    fn mul_many(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -74,33 +73,30 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     ) -> Vec<Self::ArithmeticShare>;
 
     /// Reconstructs a shared point: A = Open(\[A\]).
-    async fn open_point(&mut self, a: Self::PointShareG1) -> std::io::Result<P::G1>;
+    fn open_point(&mut self, a: Self::PointShareG1) -> std::io::Result<P::G1>;
 
     /// Reconstructs many shared points: A = Open(\[A\]).
-    async fn open_point_many(&mut self, a: &[Self::PointShareG1]) -> std::io::Result<Vec<P::G1>>;
+    fn open_point_many(&mut self, a: &[Self::PointShareG1]) -> std::io::Result<Vec<P::G1>>;
 
     /// Reconstructs many shared values: a = Open(\[a\]).
-    async fn open_many(
-        &mut self,
-        a: &[Self::ArithmeticShare],
-    ) -> std::io::Result<Vec<P::ScalarField>>;
+    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<P::ScalarField>>;
 
     /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
-    async fn mul_open_many(
+    fn mul_open_many(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<P::ScalarField>>;
 
     /// Computes the inverse of many shared values: \[b\] = \[a\] ^ -1. Requires network communication.
-    async fn inv_many(
+    fn inv_many(
         &mut self,
         a: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
 
     /// Computes the inverse of many shared values: \[a\] = \[a\] ^ -1. Requires network communication.
     /// This function ignores the case of one share to be zero and maps it to zero.
-    async fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()>;
+    fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()>;
 
     /// Perform msm between G1 `points` and `scalars`
     fn msm_public_points_g1(

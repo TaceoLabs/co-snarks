@@ -44,10 +44,10 @@ impl CoUtils {
         T::msm_public_points_g1(&crs.monomials[..len], poly)
     }
 
-    pub(crate) async fn batch_invert<T: NoirUltraHonkProver<P>, P: Pairing>(
+    pub(crate) fn batch_invert<T: NoirUltraHonkProver<P>, P: Pairing>(
         driver: &mut T,
         poly: &mut [T::ArithmeticShare],
     ) -> std::io::Result<()> {
-        driver.inv_many_in_place(poly).await
+        driver.inv_many_in_place(poly)
     }
 }

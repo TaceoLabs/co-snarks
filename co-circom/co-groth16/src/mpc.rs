@@ -16,7 +16,6 @@ pub use shamir::ShamirGroth16Driver;
 type IoResult<T> = std::io::Result<T>;
 
 /// This trait represents the operations used during Groth16 proof generation
-#[allow(async_fn_in_trait)]
 pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     /// The arithemitc share type
     type ArithmeticShare: CanonicalSerialize
@@ -34,9 +33,6 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     type PointShareG2: Debug + Send + 'static;
     /// The party id type
     type PartyID: Send + Sync + Copy + fmt::Display + 'static;
-
-    /// Gracefully shutdown the netowork. Waits until all data is sent and received
-    async fn close_network(self) -> IoResult<()>;
 
     /// Generate a random arithemitc share
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
@@ -70,7 +66,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     ) -> Vec<P::ScalarField>;
 
     /// Compute the msm of `h` and `h_query` and multiplication `r` * `s`.
-    async fn msm_and_mul(
+    fn msm_and_mul(
         &mut self,
         h: Vec<<P as Pairing>::ScalarField>,
         h_query: Arc<Vec<P::G1Affine>>,
@@ -106,10 +102,10 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     fn add_assign_points_public_g1(id: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1);
 
     /// Reconstructs a shared point: A = Open(\[A\]).
-    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1>;
+    fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1>;
 
     /// Multiplies a share b to the shared point A: \[A\] *= \[b\]. Requires network communication.
-    async fn scalar_mul_g1(
+    fn scalar_mul_g1(
         &mut self,
         a: &Self::PointShareG1,
         b: Self::ArithmeticShare,
@@ -128,14 +124,14 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     fn add_assign_points_public_g2(id: Self::PartyID, a: &mut Self::PointShareG2, b: &P::G2);
 
     /// Reconstructs a shared points: A = Open(\[A\]), B = Open(\[B\]).
-    async fn open_two_points(
+    fn open_two_points(
         &mut self,
         a: Self::PointShareG1,
         b: Self::PointShareG2,
     ) -> std::io::Result<(P::G1, P::G2)>;
 
     /// Reconstruct point G_a and perform scalar multiplication of G1_b and r concurrently
-    async fn open_point_and_scalar_mul(
+    fn open_point_and_scalar_mul(
         &mut self,
         g_a: &Self::PointShareG1,
         g1_b: &Self::PointShareG1,

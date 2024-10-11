@@ -24,6 +24,3 @@ ultrahonk = { version = "0.1.0", path = "../ultrahonk" }
 rand.workspace = true
 rayon.workspace = true
 serde.workspace = true
-
-[dev-dependencies]
-tokio.workspace = true

@@ -12,7 +12,7 @@ use super::{
 };
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
-pub async fn a2b<F: PrimeField, N: Rep3Network>(
+pub fn a2b<F: PrimeField, N: Rep3Network>(
     x: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3BigUintShare<F>> {
@@ -41,27 +41,26 @@ pub async fn a2b<F: PrimeField, N: Rep3Network>(
     }
 
     // reshare x01
-    io_context.network.send_next(x01.a.to_owned()).await?;
-    let local_b = io_context.network.recv_prev().await?;
+    io_context.network.send_next(x01.a.to_owned())?;
+    let local_b = io_context.network.recv_prev()?;
     x01.b = local_b;
 
     detail::low_depth_binary_add_mod_p::<F, N>(&x01, &x2, io_context, F::MODULUS_BIT_SIZE as usize)
-        .await
 }
 
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
-pub async fn b2a_consume<F: PrimeField, N: Rep3Network>(
+pub fn b2a_consume<F: PrimeField, N: Rep3Network>(
     x: Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3PrimeFieldShare<F>> {
-    b2a(&x, io_context).await
+    b2a(&x, io_context)
 }
 
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
 
 // Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 // If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
-pub async fn b2a<F: PrimeField, N: Rep3Network>(
+pub fn b2a<F: PrimeField, N: Rep3Network>(
     x: &Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3PrimeFieldShare<F>> {
@@ -101,33 +100,36 @@ pub async fn b2a<F: PrimeField, N: Rep3Network>(
     }
 
     // reshare y
-    io_context.network.send_next(y.a.to_owned()).await?;
-    let local_b = io_context.network.recv_prev().await?;
+    io_context.network.send_next(y.a.to_owned())?;
+    let local_b = io_context.network.recv_prev()?;
     y.b = local_b;
 
-    let z =
-        detail::low_depth_binary_add_mod_p::<F, N>(x, &y, io_context, F::MODULUS_BIT_SIZE as usize)
-            .await?;
+    let z = detail::low_depth_binary_add_mod_p::<F, N>(
+        x,
+        &y,
+        io_context,
+        F::MODULUS_BIT_SIZE as usize,
+    )?;
 
     match io_context.id {
         PartyID::ID0 => {
-            io_context.network.send_next(z.b.to_owned()).await?;
-            let rcv: BigUint = io_context.network.recv_prev().await?;
+            io_context.network.send_next(z.b.to_owned())?;
+            let rcv: BigUint = io_context.network.recv_prev()?;
             res.a = (z.a ^ z.b ^ rcv).into();
         }
         PartyID::ID1 => {
-            let rcv: BigUint = io_context.network.recv_prev().await?;
+            let rcv: BigUint = io_context.network.recv_prev()?;
             res.b = (z.a ^ z.b ^ rcv).into();
         }
         PartyID::ID2 => {
-            io_context.network.send_next(z.b).await?;
+            io_context.network.send_next(z.b)?;
         }
     }
     Ok(res)
 }
 
 /// Translates one shared bit into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
-pub async fn bit_inject<F: PrimeField, N: Rep3Network>(
+pub fn bit_inject<F: PrimeField, N: Rep3Network>(
     x: &Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3PrimeFieldShare<F>> {
@@ -153,7 +155,7 @@ pub async fn bit_inject<F: PrimeField, N: Rep3Network>(
         }
     };
 
-    let d = arithmetic::arithmetic_xor(b0, b1, io_context).await?;
-    let e = arithmetic::arithmetic_xor(d, b2, io_context).await?;
+    let d = arithmetic::arithmetic_xor(b0, b1, io_context)?;
+    let e = arithmetic::arithmetic_xor(d, b2, io_context)?;
     Ok(e)
 }

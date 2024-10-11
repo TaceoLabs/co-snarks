@@ -12,7 +12,6 @@ use co_ultrahonk::{
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
 use std::thread;
 use tests::shamir_network::ShamirTestNetwork;
-use tokio::runtime;
 
 fn proof_test(name: &str, num_parties: usize, threshold: usize) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
@@ -52,7 +51,6 @@ fn proof_test(name: &str, num_parties: usize, threshold: usize) {
 
             let proving_key = ProvingKey::create(id, builder, prover_crs);
 
-            let runtime = runtime::Builder::new_current_thread().build().unwrap();
             let n = proving_key.circuit_size as usize;
             let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
                 + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
@@ -61,15 +59,13 @@ fn proof_test(name: &str, num_parties: usize, threshold: usize) {
             let num_pairs_sumcheck_prove =
                 SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
             let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
-            let preprocessing = runtime
-                .block_on(ShamirPreprocessing::new(threshold, net, num_pairs))
-                .unwrap();
+            let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs).unwrap();
             let mut io_context0 = ShamirProtocol::from(preprocessing);
-            let io_context1 = runtime.block_on(io_context0.fork_with_pairs(0)).unwrap();
+            let io_context1 = io_context0.fork_with_pairs(0).unwrap();
             let driver = ShamirUltraHonkDriver::new(io_context0, io_context1);
 
             let prover = CoUltraHonk::new(driver);
-            runtime.block_on(prover.prove(proving_key)).unwrap()
+            prover.prove(proving_key).unwrap()
         }));
     }
 

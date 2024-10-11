@@ -18,22 +18,18 @@ dangerous = []
 [dependencies]
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
-ark-poly = { workspace = true }
 ark-serialize = { workspace = true }
 bytes = { workspace = true }
 eyre = { workspace = true }
-futures.workspace= true
 itertools = { workspace = true }
 mpc-net = { version = "0.1.2", path = "../mpc-net" }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-quinn.workspace = true
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
-tokio-util.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

@@ -7,7 +7,7 @@ use ark_ff::PrimeField;
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     /// Translate a Rep3 prime field share into a 3-party Shamir prime field share, where the underlying sharing polynomial is of degree 1 (i.e., the threshold t = 1).
-    pub async fn translate_primefield_repshare(
+    pub fn translate_primefield_repshare(
         &mut self,
         input: Rep3PrimeFieldShare<F>,
     ) -> std::io::Result<ShamirPrimeFieldShare<F>> {
@@ -16,11 +16,11 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             .inverse()
             .expect("lagrange coeff must be invertible");
         let mul = input.a * my_lagrange_coeff;
-        self.degree_reduce(mul).await
+        self.degree_reduce(mul)
     }
 
     /// Translate a Rep3 prime field share vector into a 3-party Shamir prime field share vector, where the underlying sharing polynomial is of degree 1 (i.e., the threshold t = 1).
-    pub async fn translate_primefield_repshare_vec(
+    pub fn translate_primefield_repshare_vec(
         &mut self,
         input: Vec<Rep3PrimeFieldShare<F>>,
     ) -> std::io::Result<Vec<ShamirPrimeFieldShare<F>>> {
@@ -34,11 +34,11 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             .into_iter()
             .map(|rep_share| rep_share.a * my_lagrange_coeff)
             .collect::<Vec<_>>();
-        self.degree_reduce_vec(muls).await
+        self.degree_reduce_vec(muls)
     }
 
     /// Translate a Rep3 point share into a 3-party Shamir point share, where the underlying sharing polynomial is of degree 1 (i.e., the threshold t = 1).
-    pub async fn translate_point_repshare<C>(
+    pub fn translate_point_repshare<C>(
         &mut self,
         input: Rep3PointShare<C>,
     ) -> std::io::Result<ShamirPointShare<C>>
@@ -50,6 +50,6 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             .inverse()
             .expect("lagrange coeff must be invertible");
         let mul = input.a * my_lagrange_coeff;
-        self.degree_reduce_point(mul).await
+        self.degree_reduce_point(mul)
     }
 }

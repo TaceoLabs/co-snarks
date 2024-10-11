@@ -64,10 +64,7 @@ impl UltraPermutationRelation {
 }
 
 impl UltraPermutationRelation {
-    async fn compute_grand_product_numerator_and_denominator<
-        T: NoirUltraHonkProver<P>,
-        P: Pairing,
-    >(
+    fn compute_grand_product_numerator_and_denominator<T: NoirUltraHonkProver<P>, P: Pairing>(
         driver: &mut T,
         input: &ProverUnivariates<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
@@ -101,9 +98,9 @@ impl UltraPermutationRelation {
 
         let lhs = SharedUnivariate::univariates_to_vec(&[wid1, wsigma1, wid3, wsigma3]);
         let rhs = SharedUnivariate::univariates_to_vec(&[wid2, wsigma2, wid4, wsigma4]);
-        let mul1 = driver.mul_many(&lhs, &rhs).await?;
+        let mul1 = driver.mul_many(&lhs, &rhs)?;
         let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
-        let mul2 = driver.mul_many(lhs, rhs).await?;
+        let mul2 = driver.mul_many(lhs, rhs)?;
         // We need the result as input to the mul operations
         // let (num, den) = mul2.split_at(mul2.len() >> 1);
         // let num = SharedUnivariate::from_vec(num);
@@ -141,7 +138,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     * @param parameters contains beta, gamma, and public_input_delta, ....
     * @param scaling_factor optional term to scale the evaluation before adding to evals.
     */
-    async fn accumulate(
+    fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariates<T, P>,
@@ -163,8 +160,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             driver,
             input,
             relation_parameters,
-        )
-        .await?;
+        )?;
 
         let tmp_lhs = z_perm.add_public(driver, lagrange_first);
         let tmp_rhs =
@@ -172,7 +168,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let lhs = num_den;
         let rhs = SharedUnivariate::univariates_to_vec(&[tmp_lhs, tmp_rhs]);
-        let mul1 = driver.mul_many(&lhs, &rhs).await?;
+        let mul1 = driver.mul_many(&lhs, &rhs)?;
         let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
         let lhs = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::from_vec(lhs);
         let rhs = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::from_vec(rhs);

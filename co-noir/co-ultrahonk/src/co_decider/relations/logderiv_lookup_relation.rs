@@ -191,7 +191,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @note This relation utilizes functionality in the log-derivative library to compute the polynomial of inverses
      *
      */
-    async fn accumulate(
+    fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariates<T, P>,
@@ -207,9 +207,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let inverse_exists = Self::compute_inverse_exists(input); // Degree 2
         let read_term = Self::compute_read_term(driver, input, relation_parameters); // Degree 2 (3)
         let write_term = Self::compute_write_term(input, relation_parameters); // Degree 1 (2)
-        let mul = driver
-            .mul_many(read_term.as_ref(), inverses.as_ref())
-            .await?;
+        let mul = driver.mul_many(read_term.as_ref(), inverses.as_ref())?;
         let write_inverse = SharedUnivariate::from_vec(&mul); // Degree 3 (4)
         let read_inverse = inverses.mul_public(driver, &write_term); // Degree 2 (3)
 

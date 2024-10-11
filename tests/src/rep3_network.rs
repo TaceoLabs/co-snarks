@@ -1,3 +1,5 @@
+use std::sync::mpsc::{self, Receiver, Sender};
+
 use super::shamir_network::PartyTestNetwork as ShamirPartyTestNetwork;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
@@ -5,23 +7,22 @@ use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
     rep3::{id::PartyID, network::Rep3Network},
 };
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::Msg;
 
 pub struct Rep3TestNetwork {
-    p1_p2_sender: UnboundedSender<Msg>,
-    p1_p3_sender: UnboundedSender<Msg>,
-    p2_p3_sender: UnboundedSender<Msg>,
-    p2_p1_sender: UnboundedSender<Msg>,
-    p3_p1_sender: UnboundedSender<Msg>,
-    p3_p2_sender: UnboundedSender<Msg>,
-    p1_p2_receiver: UnboundedReceiver<Msg>,
-    p1_p3_receiver: UnboundedReceiver<Msg>,
-    p2_p3_receiver: UnboundedReceiver<Msg>,
-    p2_p1_receiver: UnboundedReceiver<Msg>,
-    p3_p1_receiver: UnboundedReceiver<Msg>,
-    p3_p2_receiver: UnboundedReceiver<Msg>,
+    p1_p2_sender: Sender<Msg>,
+    p1_p3_sender: Sender<Msg>,
+    p2_p3_sender: Sender<Msg>,
+    p2_p1_sender: Sender<Msg>,
+    p3_p1_sender: Sender<Msg>,
+    p3_p2_sender: Sender<Msg>,
+    p1_p2_receiver: Receiver<Msg>,
+    p1_p3_receiver: Receiver<Msg>,
+    p2_p3_receiver: Receiver<Msg>,
+    p2_p1_receiver: Receiver<Msg>,
+    p3_p1_receiver: Receiver<Msg>,
+    p3_p2_receiver: Receiver<Msg>,
 }
 
 impl Default for Rep3TestNetwork {
@@ -33,12 +34,12 @@ impl Default for Rep3TestNetwork {
 impl Rep3TestNetwork {
     pub fn new() -> Self {
         // AT Most 1 message is buffered before they are read so this should be fine
-        let p1_p2 = mpsc::unbounded_channel();
-        let p1_p3 = mpsc::unbounded_channel();
-        let p2_p3 = mpsc::unbounded_channel();
-        let p2_p1 = mpsc::unbounded_channel();
-        let p3_p1 = mpsc::unbounded_channel();
-        let p3_p2 = mpsc::unbounded_channel();
+        let p1_p2 = mpsc::channel();
+        let p1_p3 = mpsc::channel();
+        let p2_p3 = mpsc::channel();
+        let p2_p1 = mpsc::channel();
+        let p3_p1 = mpsc::channel();
+        let p3_p2 = mpsc::channel();
 
         Self {
             p1_p2_sender: p1_p2.0,
@@ -91,10 +92,10 @@ impl Rep3TestNetwork {
 #[derive(Debug)]
 pub struct PartyTestNetwork {
     pub id: PartyID,
-    pub send_prev: UnboundedSender<Msg>,
-    pub send_next: UnboundedSender<Msg>,
-    pub recv_prev: UnboundedReceiver<Msg>,
-    pub recv_next: UnboundedReceiver<Msg>,
+    pub send_prev: Sender<Msg>,
+    pub send_next: Sender<Msg>,
+    pub recv_prev: Receiver<Msg>,
+    pub recv_next: Receiver<Msg>,
     pub _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
 }
 
@@ -103,41 +104,41 @@ impl Rep3Network for PartyTestNetwork {
         self.id
     }
 
-    async fn reshare_many<F: CanonicalSerialize + CanonicalDeserialize>(
+    fn reshare_many<F: CanonicalSerialize + CanonicalDeserialize>(
         &mut self,
         data: &[F],
     ) -> std::io::Result<Vec<F>> {
-        self.send_next_many(data).await?;
-        self.recv_prev_many().await
+        self.send_next_many(data)?;
+        self.recv_prev_many()
     }
 
-    async fn broadcast<F: CanonicalSerialize + CanonicalDeserialize>(
+    fn broadcast<F: CanonicalSerialize + CanonicalDeserialize>(
         &mut self,
         data: F,
     ) -> std::io::Result<(F, F)> {
         let data = [data];
-        self.send_many(self.id.next_id(), &data).await?;
-        self.send_many(self.id.prev_id(), &data).await?;
-        let mut prev = self.recv_many(self.id.prev_id()).await?;
-        let mut next = self.recv_many(self.id.next_id()).await?;
+        self.send_many(self.id.next_id(), &data)?;
+        self.send_many(self.id.prev_id(), &data)?;
+        let mut prev = self.recv_many(self.id.prev_id())?;
+        let mut next = self.recv_many(self.id.next_id())?;
         if next.len() != 1 || prev.len() != 1 {
             panic!("got more than one from next or prev");
         }
         Ok((prev.pop().unwrap(), next.pop().unwrap()))
     }
 
-    async fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
+    fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
         &mut self,
         data: &[F],
     ) -> std::io::Result<(Vec<F>, Vec<F>)> {
-        self.send_many(self.id.next_id(), data).await?;
-        self.send_many(self.id.prev_id(), data).await?;
-        let prev = self.recv_many(self.id.prev_id()).await?;
-        let next = self.recv_many(self.id.next_id()).await?;
+        self.send_many(self.id.next_id(), data)?;
+        self.send_many(self.id.prev_id(), data)?;
+        let prev = self.recv_many(self.id.prev_id())?;
+        let next = self.recv_many(self.id.next_id())?;
         Ok((prev, next))
     }
 
-    async fn send_many<F: CanonicalSerialize>(
+    fn send_many<F: CanonicalSerialize>(
         &mut self,
         target: PartyID,
         data: &[F],
@@ -159,33 +160,30 @@ impl Rep3Network for PartyTestNetwork {
         Ok(())
     }
 
-    async fn recv_many<F: CanonicalDeserialize>(
-        &mut self,
-        from: PartyID,
-    ) -> std::io::Result<Vec<F>> {
+    fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
         if self.id.next_id() == from {
-            let data = Vec::from(self.recv_next.recv().await.unwrap().into_data().unwrap());
+            let data = Vec::from(self.recv_next.recv().unwrap().into_data().unwrap());
             Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         } else if self.id.prev_id() == from {
-            let data = Vec::from(self.recv_prev.recv().await.unwrap().into_data().unwrap());
+            let data = Vec::from(self.recv_prev.recv().unwrap().into_data().unwrap());
             Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         } else {
             panic!("You want to read from yourself?")
         }
     }
 
-    async fn fork(&mut self) -> std::io::Result<Self>
+    fn fork(&mut self) -> std::io::Result<Self>
     where
         Self: Sized,
     {
-        let ch_prev = mpsc::unbounded_channel();
-        let ch_next = mpsc::unbounded_channel();
+        let ch_prev = mpsc::channel();
+        let ch_next = mpsc::channel();
 
         self.send_next.send(Msg::Recv(ch_next.1)).unwrap();
         self.send_prev.send(Msg::Recv(ch_prev.1)).unwrap();
 
-        let recv_prev = self.recv_prev.recv().await.unwrap().into_recv().unwrap();
-        let recv_next = self.recv_next.recv().await.unwrap().into_recv().unwrap();
+        let recv_prev = self.recv_prev.recv().unwrap().into_recv().unwrap();
+        let recv_next = self.recv_next.recv().unwrap().into_recv().unwrap();
 
         let id = self.id;
 
@@ -197,10 +195,6 @@ impl Rep3Network for PartyTestNetwork {
             recv_next,
             _stats: [0; 4],
         })
-    }
-
-    async fn shutdown(self) -> std::io::Result<()> {
-        Ok(())
     }
 }
 

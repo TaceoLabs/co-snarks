@@ -21,10 +21,6 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
 
     type PartyID = usize;
 
-    async fn close_network(self) -> super::IoResult<()> {
-        Ok(())
-    }
-
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))
@@ -67,7 +63,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect()
     }
 
-    async fn msm_and_mul(
+    fn msm_and_mul(
         &mut self,
         h: Vec<<P as Pairing>::ScalarField>,
         h_query: Arc<Vec<P::G1Affine>>,
@@ -113,11 +109,11 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         *a += b;
     }
 
-    async fn open_point_g1(&mut self, a: &Self::PointShareG1) -> super::IoResult<P::G1> {
+    fn open_point_g1(&mut self, a: &Self::PointShareG1) -> super::IoResult<P::G1> {
         Ok(*a)
     }
 
-    async fn scalar_mul_g1(
+    fn scalar_mul_g1(
         &mut self,
         a: &Self::PointShareG1,
         b: Self::ArithmeticShare,
@@ -141,7 +137,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         *a += b;
     }
 
-    async fn open_two_points(
+    fn open_two_points(
         &mut self,
         a: Self::PointShareG1,
         b: Self::PointShareG2,
@@ -149,7 +145,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         Ok((a, b))
     }
 
-    async fn open_point_and_scalar_mul(
+    fn open_point_and_scalar_mul(
         &mut self,
         g_a: &Self::PointShareG1,
         g1_b: &Self::PointShareG1,

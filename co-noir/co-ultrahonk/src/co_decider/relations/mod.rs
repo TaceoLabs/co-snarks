@@ -37,7 +37,8 @@ pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFiel
     }
 
     fn skip(input: &ProverUnivariates<T, P>) -> bool;
-    async fn accumulate(
+
+    fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariates<T, P>,

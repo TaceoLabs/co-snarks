@@ -1057,12 +1057,7 @@ impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
         mpc_accelerator: MpcAccelerator<F, CircomRep3VmWitnessExtension<F, Rep3MpcNet>>,
         config: VMConfig,
     ) -> Result<Self> {
-        let network = futures::executor::block_on(Rep3MpcNet::new(network_config))?;
+        let network = Rep3MpcNet::new(network_config)?;
         Self::from_network(parser, network, mpc_accelerator, config)
-    }
-
-    /// Gracefully shutdown the netowork. Waits until all data is sent and received
-    pub fn close_network(self) -> Result<()> {
-        self.driver.close_network()
     }
 }

@@ -8,7 +8,6 @@ use co_ultrahonk::prelude::{
     CoUltraHonk, HonkProof, PlainCoBuilder, PlainUltraHonkDriver, ProvingKey,
     SharedBuilderVariable, UltraCircuitVariable, UltraHonk, Utils,
 };
-use tokio::runtime;
 
 fn witness_map_to_witness_vector<P: Pairing>(
     witness_map: WitnessMap<P::ScalarField>,
@@ -58,10 +57,8 @@ fn proof_test(name: &str) {
     let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).expect("failed to get crs");
     let (proving_key, verifying_key) = ProvingKey::create_keys(0, builder, crs).unwrap();
 
-    let runtime = runtime::Builder::new_current_thread().build().unwrap();
-
     let prover = CoUltraHonk::new(driver);
-    let proof = runtime.block_on(prover.prove(proving_key)).unwrap();
+    let proof = prover.prove(proving_key).unwrap();
     let proof_u8 = proof.to_buffer();
 
     let read_proof_u8 = std::fs::read(&proof_file).unwrap();
@@ -95,10 +92,8 @@ fn witness_and_proof_test(name: &str) {
     let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).expect("failed to get crs");
     let (proving_key, verifying_key) = ProvingKey::create_keys(0, builder, crs).unwrap();
 
-    let runtime = runtime::Builder::new_current_thread().build().unwrap();
-
     let prover = CoUltraHonk::new(driver);
-    let proof = runtime.block_on(prover.prove(proving_key)).unwrap();
+    let proof = prover.prove(proving_key).unwrap();
     let proof_u8 = proof.to_buffer();
 
     let read_proof_u8 = std::fs::read(&proof_file).unwrap();

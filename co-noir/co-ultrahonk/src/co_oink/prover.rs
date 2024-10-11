@@ -179,7 +179,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
         *table_1 + gamma + *table_2 * eta_1 + *table_3 * eta_2 + *table_4 * eta_3
     }
 
-    async fn compute_logderivative_inverses(
+    fn compute_logderivative_inverses(
         &mut self,
         proving_key: &ProvingKey<T, P>,
     ) -> HonkProofResult<()> {
@@ -218,7 +218,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
             self.memory.lookup_inverses[i] = self.driver.mul_with_public(write_term, read_term);
         }
 
-        CoUtils::batch_invert::<T, P>(self.driver, self.memory.lookup_inverses.as_mut()).await?;
+        CoUtils::batch_invert::<T, P>(self.driver, self.memory.lookup_inverses.as_mut())?;
         Ok(())
     }
 
@@ -268,7 +268,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
         num / denom
     }
 
-    async fn batched_grand_product_num_denom(
+    fn batched_grand_product_num_denom(
         driver: &mut T,
         shared1: &Polynomial<T::ArithmeticShare>,
         shared2: &Polynomial<T::ArithmeticShare>,
@@ -293,11 +293,11 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
             mul2.push(m2);
         }
 
-        Ok(driver.mul_many(&mul1, &mul2).await?)
+        Ok(driver.mul_many(&mul1, &mul2)?)
     }
 
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
-    async fn array_prod_mul(
+    fn array_prod_mul(
         &mut self,
         inp: &[T::ArithmeticShare],
     ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
@@ -307,13 +307,13 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
         let r = (0..=len)
             .map(|_| self.driver.rand())
             .collect::<Result<Vec<_>, _>>()?;
-        let r_inv = self.driver.inv_many(&r).await?;
+        let r_inv = self.driver.inv_many(&r)?;
         let r_inv0 = vec![r_inv[0]; len];
 
-        let mut unblind = self.driver.mul_many(&r_inv0, &r[1..]).await?;
+        let mut unblind = self.driver.mul_many(&r_inv0, &r[1..])?;
 
-        let mul = self.driver.mul_many(&r[..len], inp).await?;
-        let mut open = self.driver.mul_open_many(&mul, &r_inv[1..]).await?;
+        let mul = self.driver.mul_many(&r[..len], inp)?;
+        let mut open = self.driver.mul_open_many(&mul, &r_inv[1..])?;
 
         for i in 1..open.len() {
             open[i] = open[i] * open[i - 1];
@@ -325,10 +325,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
         Ok(unblind)
     }
 
-    async fn compute_grand_product(
-        &mut self,
-        proving_key: &ProvingKey<T, P>,
-    ) -> HonkProofResult<()> {
+    fn compute_grand_product(&mut self, proving_key: &ProvingKey<T, P>) -> HonkProofResult<()> {
         tracing::trace!("compute grand product");
         // Barratenberg uses multithreading here
 
@@ -345,8 +342,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
             proving_key.polynomials.precomputed.sigma_2(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
-        )
-        .await?;
+        )?;
         let denom2 = Self::batched_grand_product_num_denom(
             self.driver,
             proving_key.polynomials.witness.w_o(),
@@ -355,8 +351,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
             proving_key.polynomials.precomputed.sigma_4(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
-        )
-        .await?;
+        )?;
         let num1 = Self::batched_grand_product_num_denom(
             self.driver,
             proving_key.polynomials.witness.w_l(),
@@ -365,8 +360,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
             proving_key.polynomials.precomputed.id_2(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
-        )
-        .await?;
+        )?;
         let num2 = Self::batched_grand_product_num_denom(
             self.driver,
             proving_key.polynomials.witness.w_o(),
@@ -375,26 +369,25 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
             proving_key.polynomials.precomputed.id_4(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
-        )
-        .await?;
+        )?;
 
         // TACEO TODO could batch here as well
-        let numerator = self.driver.mul_many(&num1, &num2).await?;
-        let denominator = self.driver.mul_many(&denom1, &denom2).await?;
+        let numerator = self.driver.mul_many(&num1, &num2)?;
+        let denominator = self.driver.mul_many(&denom1, &denom2)?;
 
         // Step (2)
         // Compute the accumulating product of the numerator and denominator terms.
 
         // TACEO TODO could batch here as well
         // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
-        let numerator = self.array_prod_mul(&numerator).await?;
-        let mut denominator = self.array_prod_mul(&denominator).await?;
+        let numerator = self.array_prod_mul(&numerator)?;
+        let mut denominator = self.array_prod_mul(&denominator)?;
 
         // invert denominator
-        CoUtils::batch_invert::<T, P>(self.driver, &mut denominator).await?;
+        CoUtils::batch_invert::<T, P>(self.driver, &mut denominator)?;
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
-        let mut z_perm = self.driver.mul_many(&numerator, &denominator).await?;
+        let mut z_perm = self.driver.mul_many(&numerator, &denominator)?;
         z_perm.insert(0, T::ArithmeticShare::default()); // insert a default element at the beginning
         self.memory.z_perm = Polynomial::new(z_perm);
         Ok(())
@@ -442,7 +435,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
     }
 
     // Compute first three wire commitments
-    async fn execute_wire_commitments_round(
+    fn execute_wire_commitments_round(
         &mut self,
         transcript: &mut TranscriptType,
         proving_key: &ProvingKey<T, P>,
@@ -465,7 +458,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
             &proving_key.crs,
         );
 
-        let open = self.driver.open_point_many(&[w_l, w_r, w_o]).await?;
+        let open = self.driver.open_point_many(&[w_l, w_r, w_o])?;
 
         transcript.send_point_to_verifier::<P>("W_L".to_string(), open[0].into());
         transcript.send_point_to_verifier::<P>("W_R".to_string(), open[1].into());
@@ -476,7 +469,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
     }
 
     // Compute sorted list accumulator and commitment
-    async fn execute_sorted_list_accumulator_round(
+    fn execute_sorted_list_accumulator_round(
         &mut self,
         transcript: &mut TranscriptType,
         proving_key: &ProvingKey<T, P>,
@@ -507,7 +500,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
             &proving_key.crs,
         )?;
         let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), &proving_key.crs);
-        let w_4 = self.driver.open_point(w_4).await?;
+        let w_4 = self.driver.open_point(w_4)?;
 
         transcript.send_point_to_verifier::<P>(
             "LOOKUP_READ_COUNTS".to_string(),
@@ -521,7 +514,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
     }
 
     // Fiat-Shamir: beta & gamma
-    async fn execute_log_derivative_inverse_round(
+    fn execute_log_derivative_inverse_round(
         &mut self,
         transcript: &mut TranscriptType,
         proving_key: &ProvingKey<T, P>,
@@ -532,7 +525,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
         self.memory.challenges.beta = challs[0];
         self.memory.challenges.gamma = challs[1];
 
-        self.compute_logderivative_inverses(proving_key).await?;
+        self.compute_logderivative_inverses(proving_key)?;
 
         // We moved the commiting and opening of the lookup inverses to be at the same time as z_perm
 
@@ -541,7 +534,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
     }
 
     // Compute grand product(s) and commitments.
-    async fn execute_grand_product_computation_round(
+    fn execute_grand_product_computation_round(
         &mut self,
         transcript: &mut TranscriptType,
         proving_key: &ProvingKey<T, P>,
@@ -549,7 +542,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
         tracing::trace!("executing grand product computation round");
 
         self.memory.public_input_delta = self.compute_public_input_delta(proving_key);
-        self.compute_grand_product(proving_key).await?;
+        self.compute_grand_product(proving_key)?;
 
         // This is from the previous round, but we open it here with z_perm
         let lookup_inverses =
@@ -557,17 +550,14 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
 
         let z_perm = CoUtils::commit::<T, P>(self.memory.z_perm.as_ref(), &proving_key.crs);
 
-        let open = self
-            .driver
-            .open_point_many(&[lookup_inverses, z_perm])
-            .await?;
+        let open = self.driver.open_point_many(&[lookup_inverses, z_perm])?;
 
         transcript.send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), open[0].into());
         transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), open[1].into());
         Ok(())
     }
 
-    pub(crate) async fn prove(
+    pub(crate) fn prove(
         mut self,
         proving_key: &ProvingKey<T, P>,
         transcript: &mut TranscriptType,
@@ -577,18 +567,14 @@ impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoOink<'a
         // Add circuit size public input size and public inputs to transcript
         Self::execute_preamble_round(transcript, proving_key)?;
         // Compute first three wire commitments
-        self.execute_wire_commitments_round(transcript, proving_key)
-            .await?;
+        self.execute_wire_commitments_round(transcript, proving_key)?;
         // Compute sorted list accumulator and commitment
-        self.execute_sorted_list_accumulator_round(transcript, proving_key)
-            .await?;
+        self.execute_sorted_list_accumulator_round(transcript, proving_key)?;
 
         // Fiat-Shamir: beta & gamma
-        self.execute_log_derivative_inverse_round(transcript, proving_key)
-            .await?;
+        self.execute_log_derivative_inverse_round(transcript, proving_key)?;
         // Compute grand product(s) and commitments.
-        self.execute_grand_product_computation_round(transcript, proving_key)
-            .await?;
+        self.execute_grand_product_computation_round(transcript, proving_key)?;
 
         // Generate relation separators alphas for sumcheck/combiner computation
         self.generate_alphas_round(transcript);

@@ -19,7 +19,6 @@ use rayon::prelude::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::oneshot;
 use tracing::instrument;
 
 use crate::mpc::plain::PlainGroth16Driver;
@@ -108,7 +107,7 @@ where
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
-    pub async fn prove(
+    pub fn prove(
         mut self,
         zkey: &ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
@@ -121,20 +120,17 @@ where
         let num_constraints = matrices.num_constraints;
         let public_inputs = Arc::new(private_witness.public_inputs);
         let private_witness = Arc::new(private_witness.witness);
-        let h = self
-            .witness_map_from_matrices(
-                zkey.pow,
-                matrices,
-                num_constraints,
-                num_inputs,
-                &public_inputs,
-                &private_witness,
-            )
-            .await?;
+        let h = self.witness_map_from_matrices(
+            zkey.pow,
+            matrices,
+            num_constraints,
+            num_inputs,
+            &public_inputs,
+            &private_witness,
+        )?;
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
-        let proof = self
-            .create_proof_with_assignment(zkey, r, s, h, public_inputs, private_witness)
-            .await?;
+        let proof =
+            self.create_proof_with_assignment(zkey, r, s, h, public_inputs, private_witness)?;
 
         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
         tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
@@ -158,7 +154,7 @@ where
     }
 
     #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
-    async fn witness_map_from_matrices(
+    fn witness_map_from_matrices(
         &mut self,
         power: usize,
         matrices: &ConstraintMatrices<P::ScalarField>,
@@ -222,9 +218,9 @@ where
         let domain = Arc::new(domain);
         eval_constraint_span.exit();
 
-        let (a_tx, a_rx) = oneshot::channel();
-        let (b_tx, b_rx) = oneshot::channel();
-        let (c_tx, c_rx) = oneshot::channel();
+        let (a_tx, a_rx) = std::sync::mpsc::channel();
+        let (b_tx, b_rx) = std::sync::mpsc::channel();
+        let (c_tx, c_rx) = std::sync::mpsc::channel();
         let a_domain = Arc::clone(&domain);
         let b_domain = Arc::clone(&domain);
         let c_domain = Arc::clone(&domain);
@@ -252,9 +248,6 @@ where
         });
 
         let local_mul_vec_span = tracing::debug_span!("c: local_mul_vec").entered();
-        // this performs some heavy computation on the tokio runtime.
-        // it doesn't matter because we do not perform any IO at this moment, so the thread
-        // is not needed for driving IO
         let mut ab = self.driver.local_mul_vec(a, b);
         local_mul_vec_span.exit();
         rayon::spawn(move || {
@@ -276,14 +269,14 @@ where
             c_tx.send(ab).expect("channel not dropped");
         });
 
-        let a = a_rx.await?;
-        let b = b_rx.await?;
+        let a = a_rx.recv()?;
+        let b = b_rx.recv()?;
 
         let compute_ab_span = tracing::debug_span!("compute ab").entered();
         let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
         // same as above. No IO task is run at the moment.
         let mut ab = self.driver.local_mul_vec(a, b);
-        let c = c_rx.await?;
+        let c = c_rx.recv()?;
         ab.par_iter_mut()
             .zip_eq(c.par_iter())
             .with_min_len(512)
@@ -348,7 +341,7 @@ where
     }
 
     #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
-    async fn create_proof_with_assignment(
+    fn create_proof_with_assignment(
         mut self,
         zkey: &ZKey<P>,
         r: T::ArithmeticShare,
@@ -358,14 +351,14 @@ where
         aux_assignment: Arc<Vec<T::ArithmeticShare>>,
     ) -> Result<Groth16Proof<P>> {
         let delta_g1 = zkey.delta_g1.into_group();
-        let (l_acc_tx, l_acc_rx) = oneshot::channel();
+        let (l_acc_tx, l_acc_rx) = std::sync::mpsc::channel();
         let h_query = Arc::clone(&zkey.h_query);
         let l_query = Arc::clone(&zkey.l_query);
 
         let party_id = self.driver.get_party_id();
-        let (r_g1_tx, r_g1_rx) = oneshot::channel();
-        let (s_g1_tx, s_g1_rx) = oneshot::channel();
-        let (s_g2_tx, s_g2_rx) = oneshot::channel();
+        let (r_g1_tx, r_g1_rx) = std::sync::mpsc::channel();
+        let (s_g1_tx, s_g1_rx) = std::sync::mpsc::channel();
+        let (s_g2_tx, s_g2_rx) = std::sync::mpsc::channel();
         let a_query = Arc::clone(&zkey.a_query);
         let b_g1_query = Arc::clone(&zkey.b_g1_query);
         let b_g2_query = Arc::clone(&zkey.b_g2_query);
@@ -441,21 +434,18 @@ where
         });
 
         // TODO we can remove the networking round in msm_and_mul because we only have linear operations afterwards
-        let (h_acc, rs) = self.driver.msm_and_mul(h, h_query, r, s).await?;
+        let (h_acc, rs) = self.driver.msm_and_mul(h, h_query, r, s)?;
         let r_s_delta_g1 = T::scalar_mul_public_point_g1(&delta_g1, rs);
 
-        let l_aux_acc = l_acc_rx.await.expect("channel not dropped");
+        let l_aux_acc = l_acc_rx.recv().expect("channel not dropped");
 
         let calculate_coeff_span = tracing::debug_span!("calculate coeff").entered();
-        let g_a = r_g1_rx.await?;
-        let g1_b = s_g1_rx.await?;
+        let g_a = r_g1_rx.recv()?;
+        let g1_b = s_g1_rx.recv()?;
         calculate_coeff_span.exit();
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
-        let (g_a_opened, r_g1_b) = self
-            .driver
-            .open_point_and_scalar_mul(&g_a, &g1_b, r)
-            .await?;
+        let (g_a_opened, r_g1_b) = self.driver.open_point_and_scalar_mul(&g_a, &g1_b, r)?;
         network_round.exit();
 
         let last_round = tracing::debug_span!("finish open two points and some adds").entered();
@@ -467,10 +457,9 @@ where
         T::add_assign_points_g1(&mut g_c, &l_aux_acc);
         T::add_assign_points_g1(&mut g_c, &h_acc);
 
-        let g2_b = s_g2_rx.await?;
-        let (g_c_opened, g2_b_opened) = self.driver.open_two_points(g_c, g2_b).await?;
+        let g2_b = s_g2_rx.recv()?;
+        let (g_c_opened, g2_b_opened) = self.driver.open_two_points(g_c, g2_b)?;
         last_round.exit();
-        self.driver.close_network().await?;
 
         Ok(Groth16Proof {
             pi_a: g_a_opened.into_affine(),
@@ -489,10 +478,10 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
-    pub async fn with_network_config(config: NetworkConfig) -> Result<Self> {
-        let mpc_net = Rep3MpcNet::new(config).await?;
-        let mut io_context0 = IoContext::init(mpc_net).await?;
-        let io_context1 = io_context0.fork().await?;
+    pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
+        let mpc_net = Rep3MpcNet::new(config)?;
+        let mut io_context0 = IoContext::init(mpc_net)?;
+        let io_context1 = io_context0.fork()?;
         let driver = Rep3Groth16Driver::new(io_context0, io_context1);
         Ok(CoGroth16 {
             driver,
@@ -508,7 +497,7 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a new [ShamirCoGroth16] protocol with a given network configuration.
-    pub async fn with_network_config(
+    pub fn with_network_config(
         threshold: usize,
         config: NetworkConfig,
         zkey: &ZKey<P>,
@@ -516,12 +505,12 @@ where
         let domain_size = 2usize.pow(u32::try_from(zkey.pow).expect("pow fits into u32"));
         // we need domain_size + 2 + 1 number of corr rand pairs in witness_map_from_matrices (degree_reduce_vec + r and s + 1 for fork)
         let num_pairs = domain_size + 2 + 1;
-        let mpc_net = ShamirMpcNet::new(config).await?;
-        let preprocessing = ShamirPreprocessing::new(threshold, mpc_net, num_pairs).await?;
+        let mpc_net = ShamirMpcNet::new(config)?;
+        let preprocessing = ShamirPreprocessing::new(threshold, mpc_net, num_pairs)?;
         let mut protocol0 = ShamirProtocol::from(preprocessing);
         // the protocol1 is only used for scalar_mul and a field_mul which need 1 pair each (ergo 2
         // pairs)
-        let protocol1 = protocol0.fork_with_pairs(2).await?;
+        let protocol1 = protocol0.fork_with_pairs(2)?;
         let driver = ShamirGroth16Driver::new(protocol0, protocol1);
         Ok(CoGroth16 {
             driver,
@@ -540,7 +529,7 @@ where
     /// initialized with the [`PlainDriver`].
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
-    pub async fn plain_prove(
+    pub fn plain_prove(
         zkey: &ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> Result<Groth16Proof<P>> {
@@ -548,6 +537,6 @@ where
             driver: PlainGroth16Driver,
             phantom_data: PhantomData,
         };
-        prover.prove(zkey, private_witness).await
+        prover.prove(zkey, private_witness)
     }
 }

@@ -66,12 +66,12 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
         arithmetic::mul_public(shared, public)
     }
 
-    async fn mul_many(
+    fn mul_many(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        arithmetic::mul_vec(a, b, &mut self.protocol0).await
+        arithmetic::mul_vec(a, b, &mut self.protocol0)
     }
 
     fn add_with_public(
@@ -100,37 +100,34 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
             .collect()
     }
 
-    async fn open_point(&mut self, a: Self::PointShareG1) -> std::io::Result<P::G1> {
-        pointshare::open_point(&a, &mut self.protocol0).await
+    fn open_point(&mut self, a: Self::PointShareG1) -> std::io::Result<P::G1> {
+        pointshare::open_point(&a, &mut self.protocol0)
     }
 
-    async fn open_point_many(&mut self, a: &[Self::PointShareG1]) -> std::io::Result<Vec<P::G1>> {
-        pointshare::open_point_many(a, &mut self.protocol0).await
+    fn open_point_many(&mut self, a: &[Self::PointShareG1]) -> std::io::Result<Vec<P::G1>> {
+        pointshare::open_point_many(a, &mut self.protocol0)
     }
 
-    async fn open_many(
-        &mut self,
-        a: &[Self::ArithmeticShare],
-    ) -> std::io::Result<Vec<P::ScalarField>> {
-        arithmetic::open_vec(a, &mut self.protocol0).await
+    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<P::ScalarField>> {
+        arithmetic::open_vec(a, &mut self.protocol0)
     }
 
-    async fn mul_open_many(
+    fn mul_open_many(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<P::ScalarField>> {
-        arithmetic::mul_open_vec(a, b, &mut self.protocol0).await
+        arithmetic::mul_open_vec(a, b, &mut self.protocol0)
     }
 
-    async fn inv_many(
+    fn inv_many(
         &mut self,
         a: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        arithmetic::inv_vec(a, &mut self.protocol0).await
+        arithmetic::inv_vec(a, &mut self.protocol0)
     }
 
-    async fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()> {
+    fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()> {
         let r = (0..a.len())
             .map(|_| {
                 <ShamirUltraHonkDriver<P::ScalarField, N> as NoirUltraHonkProver<P>>::rand(self)
@@ -139,8 +136,7 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
         let y: Vec<P::ScalarField> =
             <ShamirUltraHonkDriver<P::ScalarField, N> as NoirUltraHonkProver<P>>::mul_open_many(
                 self, a, &r,
-            )
-            .await?;
+            )?;
 
         for (a, r, y) in izip!(a.iter_mut(), r, y) {
             if y.is_zero() {

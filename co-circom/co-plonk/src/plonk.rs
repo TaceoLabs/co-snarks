@@ -283,7 +283,7 @@ where
     /// initialized with the [`PlainDriver`].
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
-    pub async fn plain_prove(
+    pub fn plain_prove(
         zkey: &ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> eyre::Result<PlonkProof<P>> {
@@ -291,7 +291,7 @@ where
             driver: PlainPlonkDriver,
             phantom_data: PhantomData,
         };
-        Ok(prover.prove(zkey, private_witness).await?)
+        Ok(prover.prove(zkey, private_witness)?)
     }
 }
 

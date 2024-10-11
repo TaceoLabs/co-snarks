@@ -80,30 +80,27 @@ pub fn scalar_mul_public_scalar<C: CurveGroup>(
 }
 
 /// Performs scalar multiplication between a point share and a field share.
-pub async fn scalar_mul<C: CurveGroup, N: ShamirNetwork>(
+pub fn scalar_mul<C: CurveGroup, N: ShamirNetwork>(
     a: &PointShare<C>,
     b: ShamirShare<C::ScalarField>,
     shamir: &mut ShamirProtocol<C::ScalarField, N>,
 ) -> IoResult<PointShare<C>> {
     let mul = (b * a).a;
-    shamir.degree_reduce_point(mul).await
+    shamir.degree_reduce_point(mul)
 }
 
 /// Performs opening of a point share.
-pub async fn open_point<C: CurveGroup, N: ShamirNetwork>(
+pub fn open_point<C: CurveGroup, N: ShamirNetwork>(
     a: &PointShare<C>,
     shamir: &mut ShamirProtocol<C::ScalarField, N>,
 ) -> IoResult<C> {
-    let rcv = shamir
-        .network
-        .broadcast_next(a.a, shamir.threshold + 1)
-        .await?;
+    let rcv = shamir.network.broadcast_next(a.a, shamir.threshold + 1)?;
     let res = core::reconstruct_point(&rcv, &shamir.open_lagrange_t);
     Ok(res)
 }
 
 /// Performs opening of a vector of point shares.
-pub async fn open_point_many<C: CurveGroup, N: ShamirNetwork>(
+pub fn open_point_many<C: CurveGroup, N: ShamirNetwork>(
     a: &[PointShare<C>],
     shamir: &mut ShamirProtocol<C::ScalarField, N>,
 ) -> IoResult<Vec<C>> {
@@ -111,8 +108,7 @@ pub async fn open_point_many<C: CurveGroup, N: ShamirNetwork>(
 
     let rcv = shamir
         .network
-        .broadcast_next(a_a.to_owned(), shamir.threshold + 1)
-        .await?;
+        .broadcast_next(a_a.to_owned(), shamir.threshold + 1)?;
 
     let mut transposed = vec![vec![C::zero(); shamir.threshold + 1]; a.len()];
 

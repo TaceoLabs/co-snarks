@@ -516,11 +516,6 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .context("while building runtime")?;
-
     let circuit_path = PathBuf::from(&circuit);
     file_utils::check_file_exists(&circuit_path)?;
 
@@ -529,9 +524,7 @@ where
         .context("while parsing circuit file")?;
 
     // connect to network
-    let net = rt
-        .block_on(Rep3MpcNet::new(config.network))
-        .context("while connecting to network")?;
+    let net = Rep3MpcNet::new(config.network).context("while connecting to network")?;
     let id = usize::from(net.get_id());
 
     // init MPC protocol
@@ -547,8 +540,6 @@ where
 
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Witness extension took {} ms", id, duration_ms);
-
-    rep3_vm.close_network()?;
 
     Ok(result_witness_share.into_shared_witness())
 }
@@ -568,14 +559,10 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     tracing::info!("establishing network and building protocol....");
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .context("while building runtime")?;
-    let prover = rt.block_on(Rep3CoGroth16::with_network_config(config))?;
+    let prover = Rep3CoGroth16::with_network_config(config)?;
     // connect to network
     tracing::info!("done!");
     tracing::info!("starting prover...");
     // execute prover in MPC
-    rt.block_on(prover.prove(&zkey, witness_share))
+    prover.prove(&zkey, witness_share)
 }

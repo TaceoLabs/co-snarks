@@ -433,7 +433,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
      *
      * @AZTEC todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
      */
-    pub(crate) async fn zeromorph_prove(
+    pub(crate) fn zeromorph_prove(
         &mut self,
         transcript: &mut TranscriptType,
         circuit_size: u32,
@@ -472,7 +472,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
             let commitment = CoUtils::commit::<T, P>(q.as_ref(), commitment_key);
             commitments.push(commitment);
         }
-        let commitments = self.driver.open_point_many(&commitments).await?;
+        let commitments = self.driver.open_point_many(&commitments)?;
         for (idx, val) in commitments.into_iter().enumerate() {
             let label = format!("ZM:C_q_{}", idx);
             transcript.send_point_to_verifier::<P>(label, val.into());
@@ -497,7 +497,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
 
         // Compute and send the commitment C_q = [\hat{q}]
         let q_commitment = CoUtils::commit::<T, P>(&batched_quotient.coefficients, commitment_key);
-        let q_commitment = self.driver.open_point(q_commitment).await?;
+        let q_commitment = self.driver.open_point(q_commitment)?;
         transcript.send_point_to_verifier::<P>("ZM:C_q".to_string(), q_commitment.into());
 
         // Get challenges x and z

@@ -30,7 +30,6 @@ co-groth16 = { version = "0.5.1", path = "../co-groth16", features = [
 co-plonk = { version = "0.3.1", path = "../co-plonk" }
 color-eyre.workspace = true
 figment.workspace = true
-futures.workspace = true
 mpc-core = { version = "0.5.0", path = "../../mpc-core" }
 mpc-net = { version = "0.1.2", path = "../../mpc-net" }
 num-bigint.workspace = true
@@ -40,7 +39,6 @@ serde_json.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 toml.workspace = true
-tokio.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing.workspace = true
 

@@ -98,7 +98,7 @@ impl<P: Pairing> Round4Proof<P> {
 // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
 impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
     // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
-    pub(super) async fn round4(self) -> PlonkProofResult<Round5<'a, P, T>> {
+    pub(super) fn round4(self) -> PlonkProofResult<Round5<'a, P, T>> {
         let Self {
             mut driver,
             domains,
@@ -135,7 +135,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
         polys.c.poly = poly_c;
         polys.z.poly = poly_z;
 
-        let opened = driver.open_vec(&[eval_a, eval_b, eval_c, eval_z]).await?;
+        let opened = driver.open_vec(&[eval_a, eval_b, eval_c, eval_z])?;
 
         let eval_a = opened[0];
         let eval_b = opened[1];
@@ -174,8 +174,9 @@ pub mod tests {
     };
 
     use std::str::FromStr;
-    #[tokio::test]
-    async fn test_round4_multiplier2() {
+
+    #[test]
+    fn test_round4_multiplier2() {
         let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
@@ -191,12 +192,12 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).await.unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
         round1.challenges = challenges;
-        let round2 = round1.round1().await.unwrap();
-        let round3 = round2.round2().await.unwrap();
-        let round4 = round3.round3().await.unwrap();
-        let round5 = round4.round4().await.unwrap();
+        let round2 = round1.round1().unwrap();
+        let round3 = round2.round2().unwrap();
+        let round4 = round3.round3().unwrap();
+        let round5 = round4.round4().unwrap();
         assert_eq!(
             round5.proof.eval_a,
             ark_bn254::Fr::from_str(

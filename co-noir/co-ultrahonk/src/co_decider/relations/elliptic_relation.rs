@@ -85,7 +85,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    async fn accumulate(
+    fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariates<T, P>,
@@ -134,7 +134,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             x_3.sub(driver, x_1),
             x_1.to_owned(),
         ]);
-        let mul1 = driver.mul_many(&lhs, &rhs).await?;
+        let mul1 = driver.mul_many(&lhs, &rhs)?;
         let mul1 = SharedUnivariate::vec_to_univariates(&mul1);
 
         // Second round of multiplications
@@ -158,7 +158,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             x_1.sub(driver, x_3),
             y1_plus_y3,
         ]);
-        let mul2 = driver.mul_many(&lhs, &rhs).await?;
+        let mul2 = driver.mul_many(&lhs, &rhs)?;
         let mul2 = SharedUnivariate::vec_to_univariates(&mul2);
 
         // Contribution (1) point addition, x-coordinate check

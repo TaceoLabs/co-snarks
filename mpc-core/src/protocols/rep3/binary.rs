@@ -3,7 +3,6 @@
 //! This module contains operations with binary shares
 
 use ark_ff::{One, PrimeField};
-use futures::{stream::FuturesOrdered, StreamExt};
 use itertools::izip;
 use num_bigint::BigUint;
 use types::Rep3BigUintShare;
@@ -46,13 +45,13 @@ pub fn xor_public<F: PrimeField>(
 }
 
 /// Performs a bitwise OR operation on two shared values.
-pub async fn or<F: PrimeField, N: Rep3Network>(
+pub fn or<F: PrimeField, N: Rep3Network>(
     a: &BinaryShare<F>,
     b: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
     let xor = a ^ b;
-    let and = and(a, b, io_context).await?;
+    let and = and(a, b, io_context)?;
     Ok(xor ^ and)
 }
 
@@ -68,7 +67,7 @@ pub fn or_public<F: PrimeField>(
 }
 
 /// Performs a bitwise AND operation on two shared values.
-pub async fn and<F: PrimeField, N: Rep3Network>(
+pub fn and<F: PrimeField, N: Rep3Network>(
     a: &BinaryShare<F>,
     b: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
@@ -81,7 +80,7 @@ pub async fn and<F: PrimeField, N: Rep3Network>(
         .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
     mask ^= mask_b;
     let local_a = (a & b) ^ mask;
-    let local_b = io_context.network.reshare(local_a.clone()).await?;
+    let local_b = io_context.network.reshare(local_a.clone())?;
     Ok(BinaryShare::new(local_a, local_b))
 }
 
@@ -121,7 +120,7 @@ pub fn shift_l_public<F: PrimeField>(shared: &BinaryShare<F>, public: F) -> Bina
 }
 
 /// Shifts a public value `F` by a share to the left.
-pub async fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
+pub fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
     public: F,
     shared: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
@@ -131,27 +130,23 @@ pub async fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
     // bit-decompose b into bits b_i
 
     // TODO: this sucks... we need something better here...
-    let io_0 = io_context.fork().await?;
-    let io_1 = io_context.fork().await?;
-    let io_2 = io_context.fork().await?;
-    let io_3 = io_context.fork().await?;
-    let io_4 = io_context.fork().await?;
-    let io_5 = io_context.fork().await?;
-    let io_6 = io_context.fork().await?;
-    let io_7 = io_context.fork().await?;
+    let io_0 = io_context.fork()?;
+    let io_1 = io_context.fork()?;
+    let io_2 = io_context.fork()?;
+    let io_3 = io_context.fork()?;
+    let io_4 = io_context.fork()?;
+    let io_5 = io_context.fork()?;
+    let io_6 = io_context.fork()?;
+    let io_7 = io_context.fork()?;
     let mut contexts = [io_0, io_1, io_2, io_3, io_4, io_5, io_6, io_7];
     let party_id = io_context.id;
-    let mut futures_ordered = FuturesOrdered::new();
+    let mut individual_bit_shares = Vec::with_capacity(8);
     for (i, context) in izip!((0..8), contexts.iter_mut()) {
         let bit = Rep3BigUintShare::new(
             (shared.a.clone() >> i) & BigUint::one(),
             (shared.b.clone() >> i) & BigUint::one(),
         );
-        futures_ordered.push_back(conversion::b2a_consume(bit, context));
-    }
-    let mut individual_bit_shares = Vec::with_capacity(8);
-    while let Some(result) = futures_ordered.next().await {
-        individual_bit_shares.push(result?);
+        individual_bit_shares.push(conversion::b2a_consume(bit, context)?);
     }
     // v_i = 2^2^i * <b_i> + 1 - <b_i>
     let mut vs: Vec<_> = individual_bit_shares
@@ -171,20 +166,20 @@ pub async fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
     // TODO: This should be done in a multiplication tree
     let mut v = vs.pop().unwrap();
     for v_i in vs {
-        v = arithmetic::mul(v, v_i, io_context).await?;
+        v = arithmetic::mul(v, v_i, io_context)?;
     }
     // TODO could use try_fold from futures::stream
     // let last = vs.pop().unwrap();
     // let v = self.runtime.block_on(
     //     futures::stream::iter(vs.into_iter().map(|v| Ok(v)))
-    //         .try_fold(last, |a, b| async move {
-    //             arithmetic::mul(a, b, &mut self.io_context).await
+    //         .try_fold(last, |a, b|  move {
+    //             arithmetic::mul(a, b, &mut self.io_context)
     //         }),
     // )?;
     Ok(arithmetic::mul_public(v, public))
 }
 
-//pub async fn and_vec(
+//pub  fn and_vec(
 //    a: &FieldShareVec<F>,
 //    b: &FieldShareVec<F>,
 //    io_context: &mut IoContext<N>,
@@ -207,11 +202,11 @@ pub async fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
 //}
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub async fn open<F: PrimeField, N: Rep3Network>(
+pub fn open<F: PrimeField, N: Rep3Network>(
     a: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BigUint> {
-    let c = io_context.network.reshare(a.b.clone()).await?;
+    let c = io_context.network.reshare(a.b.clone())?;
     Ok(&a.a ^ &a.b ^ c)
 }
 
@@ -228,14 +223,14 @@ pub fn promote_to_trivial_share<F: PrimeField>(
 }
 
 /// Computes a CMUX: If `c` is `1`, returns `x_t`, otherwise returns `x_f`.
-pub async fn cmux<F: PrimeField, N: Rep3Network>(
+pub fn cmux<F: PrimeField, N: Rep3Network>(
     c: &BinaryShare<F>,
     x_t: &BinaryShare<F>,
     x_f: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
     let xor = x_f ^ x_t;
-    let mut and = and(c, &xor, io_context).await?;
+    let mut and = and(c, &xor, io_context)?;
     and ^= x_f;
     Ok(and)
 }
@@ -245,7 +240,7 @@ pub async fn cmux<F: PrimeField, N: Rep3Network>(
 //but only one bit.
 //Do we want that to be configurable? Semms like a waste?
 /// Compute a OR tree of the input vec
-pub async fn or_tree<F: PrimeField, N: Rep3Network>(
+pub fn or_tree<F: PrimeField, N: Rep3Network>(
     mut inputs: Vec<BinaryShare<F>>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
@@ -264,7 +259,7 @@ pub async fn or_tree<F: PrimeField, N: Rep3Network>(
         // TODO WE WANT THIS BATCHED!!!
         // THIS IS SUPER BAD
         for (a, b) in izip!(a_vec.iter(), b_vec.iter()) {
-            res.push(or(a, b, io_context).await?);
+            res.push(or(a, b, io_context)?);
         }
 
         res.extend_from_slice(leftover);
@@ -278,7 +273,7 @@ pub async fn or_tree<F: PrimeField, N: Rep3Network>(
 }
 
 /// Computes a binary circuit to check whether the replicated binary-shared input x is zero or not. The output is a binary sharing of one bit.
-pub async fn is_zero<F: PrimeField, N: Rep3Network>(
+pub fn is_zero<F: PrimeField, N: Rep3Network>(
     x: &BinaryShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
@@ -302,7 +297,7 @@ pub async fn is_zero<F: PrimeField, N: Rep3Network>(
         len /= 2;
         let mask = (BigUint::from(1u64) << len) - BigUint::one();
         let y = &x >> len;
-        x = and(&(&x & &mask), &(&y & &mask), io_context).await?;
+        x = and(&(&x & &mask), &(&y & &mask), io_context)?;
     }
     // extract LSB
     Ok(x & BigUint::one())

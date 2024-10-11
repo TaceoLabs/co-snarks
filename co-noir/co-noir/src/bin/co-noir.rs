@@ -39,7 +39,6 @@ use std::{
     process::ExitCode,
     time::Instant,
 };
-use tokio::runtime;
 use tracing::instrument;
 
 fn install_tracing() {
@@ -348,15 +347,8 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
         bincode::deserialize_from(input_share_file).context("while deserializing input share")?;
     let input_share = translate_witness_share_rep3(input_share, &compiled_program.abi)?;
 
-    let runtime = runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-
     // connect to network
-    let net = runtime
-        .block_on(Rep3MpcNet::new(config.network))
-        .context("while connecting to network")?;
+    let net = Rep3MpcNet::new(config.network).context("while connecting to network")?;
     let id = usize::from(net.get_id());
 
     // init MPC protocol
@@ -382,9 +374,8 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     Ok(ExitCode::SUCCESS)
 }
 
-#[tokio::main(flavor = "multi_thread")]
 #[instrument(skip(config))]
-async fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<ExitCode> {
+fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<ExitCode> {
     let witness = config.witness;
     let src_protocol = config.src_protocol;
     let target_protocol = config.target_protocol;
@@ -410,24 +401,21 @@ async fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Re
     }
 
     // connect to network
-    let net = Rep3MpcNet::new(config.network).await?;
+    let net = Rep3MpcNet::new(config.network)?;
     let id = usize::from(net.get_id());
 
     // init MPC protocol
     let threshold = 1;
     let num_pairs = shares.len();
     let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
-        .await
         .context("while shamir preprocessing")?;
     let mut protocol = ShamirProtocol::from(preprocessing);
 
     // Translate witness to shamir shares
     let start = Instant::now();
-    let transalted_shares = protocol.translate_primefield_repshare_vec(shares).await?;
+    let transalted_shares = protocol.translate_primefield_repshare_vec(shares)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Translating witness took {} ms", id, duration_ms);
-
-    protocol.close_network().await?;
 
     let mut result: Vec<
         SharedBuilderVariable<ShamirUltraHonkDriver<ark_bn254::Fr, ShamirMpcNet>, Bn254>,
@@ -452,9 +440,8 @@ async fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Re
     Ok(ExitCode::SUCCESS)
 }
 
-#[tokio::main(flavor = "multi_thread")]
 #[instrument(skip(config))]
-async fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCode> {
+fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCode> {
     let witness = config.witness;
     let circuit_path = config.circuit;
     let crs_path = config.crs;
@@ -483,11 +470,11 @@ async fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<E
             let witness_share = bincode::deserialize_from(witness_file)
                 .context("while deserializing witness share")?;
             // connect to network
-            let net = Rep3MpcNet::new(config.network).await?;
+            let net = Rep3MpcNet::new(config.network)?;
             let id = net.get_id();
 
-            let mut io_context0 = IoContext::init(net).await?;
-            let io_context1 = io_context0.fork().await?;
+            let mut io_context0 = IoContext::init(net)?;
+            let io_context1 = io_context0.fork()?;
             // init MPC protocol
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
 
@@ -523,7 +510,7 @@ async fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<E
             // execute prover in MPC
             tracing::info!("Party {}: starting proof generation..", id);
             let start = Instant::now();
-            let proof = prover.prove(proving_key).await?;
+            let proof = prover.prove(proving_key)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
 
@@ -533,7 +520,7 @@ async fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<E
             let witness_share = bincode::deserialize_from(witness_file)
                 .context("while deserializing witness share")?;
             // connect to network
-            let net = ShamirMpcNet::new(config.network).await?;
+            let net = ShamirMpcNet::new(config.network)?;
             let id = net.get_id();
 
             // Create the circuit
@@ -574,16 +561,16 @@ async fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<E
             let num_pairs_sumcheck_prove =
                 SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
             let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
-            let preprocessing = ShamirPreprocessing::new(t, net, num_pairs).await?;
+            let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
             let mut protocol0 = ShamirProtocol::from(preprocessing);
-            let protocol1 = protocol0.fork_with_pairs(0).await?;
+            let protocol1 = protocol0.fork_with_pairs(0)?;
             let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
 
             // execute prover in MPC
             tracing::info!("Party {}: starting proof generation..", id);
             let start = Instant::now();
             let prover = CoUltraHonk::new(driver);
-            let proof = prover.prove(proving_key).await?;
+            let proof = prover.prove(proving_key)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
 

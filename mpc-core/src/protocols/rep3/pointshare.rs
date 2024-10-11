@@ -80,13 +80,13 @@ pub fn scalar_mul_public_scalar<C: CurveGroup>(
 }
 
 /// Perform scalar multiplication
-pub async fn scalar_mul<C: CurveGroup, N: Rep3Network>(
+pub fn scalar_mul<C: CurveGroup, N: Rep3Network>(
     a: &PointShare<C>,
     b: FieldShare<C::ScalarField>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<PointShare<C>> {
     let local_a = b * a + io_context.rngs.rand.masking_ec_element::<C>();
-    let local_b = io_context.network.reshare(local_a).await?;
+    let local_b = io_context.network.reshare(local_a)?;
     Ok(PointShare {
         a: local_a,
         b: local_b,
@@ -94,21 +94,21 @@ pub async fn scalar_mul<C: CurveGroup, N: Rep3Network>(
 }
 
 /// Open the shared point
-pub async fn open_point<C: CurveGroup, N: Rep3Network>(
+pub fn open_point<C: CurveGroup, N: Rep3Network>(
     a: &PointShare<C>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<C> {
-    let c = io_context.network.reshare(a.b).await?;
+    let c = io_context.network.reshare(a.b)?;
     Ok(a.a + a.b + c)
 }
 
 /// Open the vector of [`PointShare`]s
-pub async fn open_point_many<C: CurveGroup, N: Rep3Network>(
+pub fn open_point_many<C: CurveGroup, N: Rep3Network>(
     a: &[PointShare<C>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<C>> {
     let bs = a.iter().map(|x| x.b).collect_vec();
-    let cs = io_context.network.reshare(bs).await?;
+    let cs = io_context.network.reshare(bs)?;
     Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
 }
 

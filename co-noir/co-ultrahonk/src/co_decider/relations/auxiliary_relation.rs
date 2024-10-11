@@ -166,7 +166,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    async fn accumulate(
+    fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariates<T, P>,
@@ -225,7 +225,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             w_3.to_owned(),
             w_2_shift.to_owned(),
         ]);
-        let mul = driver.mul_many(&lhs, &rhs).await?;
+        let mul = driver.mul_many(&lhs, &rhs)?;
         let mul = SharedUnivariate::vec_to_univariates(&mul);
 
         let mut limb_subproduct = mul[0].add(driver, &mul[1]);
@@ -396,7 +396,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             access_type.to_owned(),
             index_delta_one.to_owned(),
         ]);
-        let mul = driver.mul_many(&lhs, &rhs).await?;
+        let mul = driver.mul_many(&lhs, &rhs)?;
         let mul = SharedUnivariate::vec_to_univariates(&mul);
 
         let index_is_monotonically_increasing = mul[0].sub(driver, &index_delta); // deg 2
@@ -453,7 +453,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             next_gate_access_type.to_owned(),
             timestamp_delta,
         ]);
-        let mul = driver.mul_many(&lhs, &rhs).await?;
+        let mul = driver.mul_many(&lhs, &rhs)?;
         let mul = SharedUnivariate::vec_to_univariates(&mul);
 
         let adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation =

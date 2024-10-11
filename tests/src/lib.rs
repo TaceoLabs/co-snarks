@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use tokio::sync::mpsc::UnboundedReceiver;
+use std::sync::mpsc::Receiver;
 
 pub mod rep3_network;
 pub mod shamir_network;
@@ -7,11 +7,11 @@ pub mod shamir_network;
 #[derive(Debug)]
 pub enum Msg {
     Data(Bytes),
-    Recv(UnboundedReceiver<Msg>),
+    Recv(Receiver<Msg>),
 }
 
 impl Msg {
-    fn into_recv(self) -> Option<UnboundedReceiver<Msg>> {
+    fn into_recv(self) -> Option<Receiver<Msg>> {
         if let Msg::Recv(x) = self {
             Some(x)
         } else {

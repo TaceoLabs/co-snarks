@@ -44,7 +44,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         shared * public
     }
 
-    async fn mul_many(
+    fn mul_many(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -74,25 +74,25 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         public_values.to_vec()
     }
 
-    async fn open_point(&mut self, a: Self::PointShareG1) -> std::io::Result<<P as Pairing>::G1> {
+    fn open_point(&mut self, a: Self::PointShareG1) -> std::io::Result<<P as Pairing>::G1> {
         Ok(a)
     }
 
-    async fn open_point_many(
+    fn open_point_many(
         &mut self,
         a: &[Self::PointShareG1],
     ) -> std::io::Result<Vec<<P as Pairing>::G1>> {
         Ok(a.to_vec())
     }
 
-    async fn open_many(
+    fn open_many(
         &mut self,
         a: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<<P as Pairing>::ScalarField>> {
         Ok(a.to_vec())
     }
 
-    async fn mul_open_many(
+    fn mul_open_many(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -100,7 +100,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
-    async fn inv_many(
+    fn inv_many(
         &mut self,
         a: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
@@ -119,7 +119,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok(res)
     }
 
-    async fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()> {
+    fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()> {
         for a in a.iter_mut() {
             if !a.is_zero() {
                 a.inverse_in_place().unwrap();

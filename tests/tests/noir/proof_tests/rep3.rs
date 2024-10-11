@@ -10,7 +10,6 @@ use co_ultrahonk::prelude::{
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use std::thread;
 use tests::rep3_network::Rep3TestNetwork;
-use tokio::runtime;
 
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 
@@ -86,14 +85,13 @@ fn proof_test(name: &str) {
 
             let id = net.id;
 
-            let runtime = runtime::Builder::new_current_thread().build().unwrap();
-            let mut io_context0 = runtime.block_on(IoContext::init(net)).unwrap();
-            let io_context1 = runtime.block_on(io_context0.fork()).unwrap();
+            let mut io_context0 = IoContext::init(net).unwrap();
+            let io_context1 = io_context0.fork().unwrap();
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
             let proving_key = ProvingKey::create(id, builder, crs);
 
             let prover = CoUltraHonk::new(driver);
-            runtime.block_on(prover.prove(proving_key)).unwrap()
+            prover.prove(proving_key).unwrap()
         }));
     }
 
@@ -162,14 +160,13 @@ fn witness_and_proof_test(name: &str) {
 
             let id = net2.id;
 
-            let runtime = runtime::Builder::new_current_thread().build().unwrap();
-            let mut io_context0 = runtime.block_on(IoContext::init(net2)).unwrap();
-            let io_context1 = runtime.block_on(io_context0.fork()).unwrap();
+            let mut io_context0 = IoContext::init(net2).unwrap();
+            let io_context1 = io_context0.fork().unwrap();
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
             let proving_key = ProvingKey::create(id, builder, prover_crs);
 
             let prover = CoUltraHonk::new(driver);
-            runtime.block_on(prover.prove(proving_key)).unwrap()
+            prover.prove(proving_key).unwrap()
         }));
     }
 

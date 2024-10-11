@@ -4,11 +4,10 @@ mod field_share {
     use itertools::{izip, Itertools};
     use mpc_core::protocols::shamir::{self, arithmetic, ShamirPreprocessing};
     use rand::thread_rng;
-    use std::{str::FromStr, thread};
+    use std::{str::FromStr, sync::mpsc, thread};
     use tests::shamir_network::ShamirTestNetwork;
-    use tokio::sync::oneshot;
 
-    async fn shamir_add_inner(num_parties: usize, threshold: usize) {
+    fn shamir_add_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -19,7 +18,7 @@ mod field_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
@@ -30,7 +29,7 @@ mod field_share {
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -40,13 +39,13 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_add() {
-        shamir_add_inner(3, 1).await;
-        shamir_add_inner(10, 4).await;
+    #[test]
+    fn shamir_add() {
+        shamir_add_inner(3, 1);
+        shamir_add_inner(10, 4);
     }
 
-    async fn shamir_sub_inner(num_parties: usize, threshold: usize) {
+    fn shamir_sub_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -57,7 +56,7 @@ mod field_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
@@ -68,7 +67,7 @@ mod field_share {
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -78,13 +77,13 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_sub() {
-        shamir_sub_inner(3, 1).await;
-        shamir_sub_inner(10, 4).await;
+    #[test]
+    fn shamir_sub() {
+        shamir_sub_inner(3, 1);
+        shamir_sub_inner(10, 4);
     }
 
-    async fn shamir_mul2_then_add_inner(num_parties: usize, threshold: usize) {
+    fn shamir_mul2_then_add_inner(num_parties: usize, threshold: usize) {
         let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -96,26 +95,23 @@ mod field_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
-            tokio::spawn(async move {
-                let mut shamir = ShamirPreprocessing::new(threshold, net, 2)
-                    .await
-                    .unwrap()
-                    .into();
-                let mul = arithmetic::mul(x, y, &mut shamir).await.unwrap();
-                let mul = arithmetic::mul(mul, y, &mut shamir).await.unwrap();
+            thread::spawn(move || {
+                let mut shamir = ShamirPreprocessing::new(threshold, net, 2).unwrap().into();
+                let mul = arithmetic::mul(x, y, &mut shamir).unwrap();
+                let mul = arithmetic::mul(mul, y, &mut shamir).unwrap();
                 tx.send(arithmetic::add(mul, x))
             });
         }
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -125,13 +121,13 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_mul2_then_add() {
-        shamir_mul2_then_add_inner(3, 1).await;
-        shamir_mul2_then_add_inner(10, 4).await;
+    #[test]
+    fn shamir_mul2_then_add() {
+        shamir_mul2_then_add_inner(3, 1);
+        shamir_mul2_then_add_inner(10, 4);
     }
 
-    async fn shamir_mul_vec_bn_inner(num_parties: usize, threshold: usize) {
+    fn shamir_mul_vec_bn_inner(num_parties: usize, threshold: usize) {
         let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = [
@@ -195,25 +191,24 @@ mod field_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
-            tokio::spawn(async move {
+            thread::spawn(move || {
                 let mut shamir = ShamirPreprocessing::new(threshold, net, x.len())
-                    .await
                     .unwrap()
                     .into();
-                let mul = arithmetic::mul_vec(&x, &y, &mut shamir).await.unwrap();
+                let mul = arithmetic::mul_vec(&x, &y, &mut shamir).unwrap();
                 tx.send(mul)
             });
         }
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -223,13 +218,13 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_mul_vec_bn() {
-        shamir_mul_vec_bn_inner(3, 1).await;
-        shamir_mul_vec_bn_inner(10, 4).await;
+    #[test]
+    fn shamir_mul_vec_bn() {
+        shamir_mul_vec_bn_inner(3, 1);
+        shamir_mul_vec_bn_inner(10, 4);
     }
 
-    async fn shamir_mul_vec_inner(num_parties: usize, threshold: usize) {
+    fn shamir_mul_vec_inner(num_parties: usize, threshold: usize) {
         let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = (0..1)
@@ -250,26 +245,25 @@ mod field_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
 
         for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
-            tokio::spawn(async move {
+            thread::spawn(move || {
                 let mut shamir = ShamirPreprocessing::new(threshold, net, x.len() * 2)
-                    .await
                     .unwrap()
                     .into();
-                let mul = arithmetic::mul_vec(&x, &y, &mut shamir).await.unwrap();
-                let mul = arithmetic::mul_vec(&mul, &y, &mut shamir).await.unwrap();
+                let mul = arithmetic::mul_vec(&x, &y, &mut shamir).unwrap();
+                let mul = arithmetic::mul_vec(&mul, &y, &mut shamir).unwrap();
                 tx.send(mul)
             });
         }
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -279,13 +273,13 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_mul_vec() {
-        shamir_mul_vec_inner(3, 1).await;
-        shamir_mul_vec_inner(10, 4).await;
+    #[test]
+    fn shamir_mul_vec() {
+        shamir_mul_vec_inner(3, 1);
+        shamir_mul_vec_inner(10, 4);
     }
 
-    async fn shamir_neg_inner(num_parties: usize, threshold: usize) {
+    fn shamir_neg_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = shamir::share_field_element(x, threshold, num_parties, &mut rng);
@@ -294,7 +288,7 @@ mod field_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
@@ -305,7 +299,7 @@ mod field_share {
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -315,13 +309,13 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_neg() {
-        shamir_neg_inner(3, 1).await;
-        shamir_neg_inner(10, 4).await;
+    #[test]
+    fn shamir_neg() {
+        shamir_neg_inner(3, 1);
+        shamir_neg_inner(10, 4);
     }
 
-    async fn shamir_inv_inner(num_parties: usize, threshold: usize) {
+    fn shamir_inv_inner(num_parties: usize, threshold: usize) {
         let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
         let mut x = ark_bn254::Fr::rand(&mut rng);
@@ -334,24 +328,21 @@ mod field_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
 
         for (net, tx, x) in izip!(test_network.get_party_networks(), tx, x_shares) {
-            tokio::spawn(async move {
-                let mut shamir = ShamirPreprocessing::new(threshold, net, 1)
-                    .await
-                    .unwrap()
-                    .into();
-                tx.send(arithmetic::inv(x, &mut shamir).await.unwrap())
+            thread::spawn(move || {
+                let mut shamir = ShamirPreprocessing::new(threshold, net, 1).unwrap().into();
+                tx.send(arithmetic::inv(x, &mut shamir).unwrap())
             });
         }
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -361,23 +352,22 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_inv() {
-        shamir_inv_inner(3, 1).await;
-        shamir_inv_inner(10, 4).await;
+    #[test]
+    fn shamir_inv() {
+        shamir_inv_inner(3, 1);
+        shamir_inv_inner(10, 4);
     }
 }
 
 mod curve_share {
-    use std::thread;
+    use std::{sync::mpsc, thread};
 
     use ark_ff::UniformRand;
     use itertools::{izip, Itertools};
     use mpc_core::protocols::shamir::{self, pointshare};
     use rand::thread_rng;
-    use tokio::sync::oneshot;
 
-    async fn shamir_add_inner(num_parties: usize, threshold: usize) {
+    fn shamir_add_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
@@ -388,7 +378,7 @@ mod curve_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
@@ -399,7 +389,7 @@ mod curve_share {
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -409,13 +399,13 @@ mod curve_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_add() {
-        shamir_add_inner(3, 1).await;
-        shamir_add_inner(10, 4).await;
+    #[test]
+    fn shamir_add() {
+        shamir_add_inner(3, 1);
+        shamir_add_inner(10, 4);
     }
 
-    async fn shamir_sub_inner(num_parties: usize, threshold: usize) {
+    fn shamir_sub_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
@@ -426,7 +416,7 @@ mod curve_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
@@ -437,7 +427,7 @@ mod curve_share {
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -447,13 +437,13 @@ mod curve_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_sub() {
-        shamir_sub_inner(3, 1).await;
-        shamir_sub_inner(10, 4).await;
+    #[test]
+    fn shamir_sub() {
+        shamir_sub_inner(3, 1);
+        shamir_sub_inner(10, 4);
     }
 
-    async fn shamir_scalar_mul_public_point_inner(num_parties: usize, threshold: usize) {
+    fn shamir_scalar_mul_public_point_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
         let public_point = ark_bn254::G1Projective::rand(&mut rng);
         let scalar = ark_bn254::Fr::rand(&mut rng);
@@ -463,7 +453,7 @@ mod curve_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
@@ -476,7 +466,7 @@ mod curve_share {
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -486,13 +476,13 @@ mod curve_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_scalar_mul_public_point() {
-        shamir_scalar_mul_public_point_inner(3, 1).await;
-        shamir_scalar_mul_public_point_inner(10, 4).await;
+    #[test]
+    fn shamir_scalar_mul_public_point() {
+        shamir_scalar_mul_public_point_inner(3, 1);
+        shamir_scalar_mul_public_point_inner(10, 4);
     }
 
-    async fn shamir_scalar_mul_public_scalar_inner(num_parties: usize, threshold: usize) {
+    fn shamir_scalar_mul_public_scalar_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
         let point = ark_bn254::G1Projective::rand(&mut rng);
         let public_scalar = ark_bn254::Fr::rand(&mut rng);
@@ -502,7 +492,7 @@ mod curve_share {
         let mut tx = Vec::with_capacity(num_parties);
         let mut rx = Vec::with_capacity(num_parties);
         for _ in 0..num_parties {
-            let (t, r) = oneshot::channel();
+            let (t, r) = mpsc::channel();
             tx.push(t);
             rx.push(r);
         }
@@ -515,7 +505,7 @@ mod curve_share {
 
         let mut results = Vec::with_capacity(num_parties);
         for r in rx {
-            results.push(r.await.unwrap());
+            results.push(r.recv().unwrap());
         }
 
         let is_result =
@@ -525,9 +515,9 @@ mod curve_share {
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn shamir_scalar_mul_public_scalar() {
-        shamir_scalar_mul_public_scalar_inner(3, 1).await;
-        shamir_scalar_mul_public_scalar_inner(10, 4).await;
+    #[test]
+    fn shamir_scalar_mul_public_scalar() {
+        shamir_scalar_mul_public_scalar_inner(3, 1);
+        shamir_scalar_mul_public_scalar_inner(10, 4);
     }
 }

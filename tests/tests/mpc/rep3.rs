@@ -6,62 +6,64 @@ mod field_share {
     use mpc_core::protocols::rep3::id::PartyID;
     use mpc_core::protocols::rep3::{self, arithmetic, network::IoContext};
     use rand::thread_rng;
+    use std::sync::mpsc;
     use std::thread;
     use tests::rep3_network::Rep3TestNetwork;
-    use tokio::sync::oneshot;
 
-    #[tokio::test]
-    async fn rep3_add() {
+    // TODO we dont need channels, we can just join
+
+    #[test]
+    fn rep3_add() {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
         let y_shares = rep3::share_field_element(y, &mut rng);
         let should_result = x + y;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
             thread::spawn(move || tx.send(arithmetic::add(x, y)));
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_sub() {
+    #[test]
+    fn rep3_sub() {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
         let y_shares = rep3::share_field_element(y, &mut rng);
         let should_result = x - y;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
             thread::spawn(move || tx.send(arithmetic::sub(x, y)));
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_sub_shared_by_public() {
+    #[test]
+    fn rep3_sub_shared_by_public() {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
         let should_result = x - y;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (tx, x, id) in izip!(
             [tx1, tx2, tx3],
             x_shares.into_iter(),
@@ -69,23 +71,23 @@ mod field_share {
         ) {
             thread::spawn(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)));
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_sub_public_by_shared() {
+    #[test]
+    fn rep3_sub_public_by_shared() {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
         let y_shares = rep3::share_field_element(y, &mut rng);
         let should_result = x - y;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (tx, y, id) in izip!(
             [tx1, tx2, tx3],
             y_shares.into_iter(),
@@ -93,15 +95,15 @@ mod field_share {
         ) {
             thread::spawn(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)));
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_mul() {
+    #[test]
+    fn rep3_mul() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -109,30 +111,30 @@ mod field_share {
         let x_shares = rep3::share_field_element(x, &mut rng);
         let y_shares = rep3::share_field_element(y, &mut rng);
         let should_result = x * y;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y) in izip!(
             test_network.get_party_networks().into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            tokio::spawn(async move {
-                let mut ctx = IoContext::init(net).await.unwrap();
-                let mul = arithmetic::mul(x, y, &mut ctx).await.unwrap();
+            thread::spawn(move || {
+                let mut ctx = IoContext::init(net).unwrap();
+                let mul = arithmetic::mul(x, y, &mut ctx).unwrap();
                 tx.send(mul)
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_div() {
+    #[test]
+    fn rep3_div() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -140,30 +142,30 @@ mod field_share {
         let x_shares = rep3::share_field_element(x, &mut rng);
         let y_shares = rep3::share_field_element(y, &mut rng);
         let should_result = x / y;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y) in izip!(
             test_network.get_party_networks().into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            tokio::spawn(async move {
-                let mut ctx = IoContext::init(net).await.unwrap();
-                let mul = arithmetic::div(x, y, &mut ctx).await.unwrap();
+            thread::spawn(move || {
+                let mut ctx = IoContext::init(net).unwrap();
+                let mul = arithmetic::div(x, y, &mut ctx).unwrap();
                 tx.send(mul)
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_fork_mul() {
+    #[test]
+    fn rep3_fork_mul() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x0 = ark_bn254::Fr::rand(&mut rng);
@@ -176,36 +178,33 @@ mod field_share {
         let y_shares1 = rep3::share_field_element(y1, &mut rng);
         let should_result0 = x0 * y0;
         let should_result1 = x1 * y1;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
-        for (net, tx, (x0, y0), (x1, y1)) in izip!(
+        let mut threads = vec![];
+        for (net, (x0, y0), (x1, y1)) in izip!(
             test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
             x_shares0.into_iter().zip(y_shares0),
             x_shares1.into_iter().zip(y_shares1)
         ) {
-            tokio::spawn(async move {
-                let mut ctx0 = IoContext::init(net).await.unwrap();
-                let mut ctx1 = ctx0.fork().await.unwrap();
-                let (res0, res1) = tokio::join!(
-                    arithmetic::mul(x0, y0, &mut ctx0),
-                    arithmetic::mul(x1, y1, &mut ctx1)
-                );
-                tx.send((res0.unwrap(), res1.unwrap()))
-            });
+            threads.push(thread::spawn(move || {
+                let mut ctx0 = IoContext::init(net).unwrap();
+                let mut ctx1 = ctx0.fork().unwrap();
+                std::thread::scope(|s| {
+                    let mul0 = s.spawn(|| arithmetic::mul(x0, y0, &mut ctx0));
+                    let mul1 = arithmetic::mul(x1, y1, &mut ctx1).unwrap();
+                    (mul0.join().expect("can join").unwrap(), mul1)
+                })
+            }));
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result3 = threads.pop().unwrap().join().unwrap();
+        let result2 = threads.pop().unwrap().join().unwrap();
+        let result1 = threads.pop().unwrap().join().unwrap();
         let is_result0 = rep3::combine_field_element(result1.0, result2.0, result3.0);
         let is_result1 = rep3::combine_field_element(result1.1, result2.1, result3.1);
         assert_eq!(is_result0, should_result0);
         assert_eq!(is_result1, should_result1);
     }
 
-    #[tokio::test]
-    async fn rep3_mul2_then_add() {
+    #[test]
+    fn rep3_mul2_then_add() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -213,32 +212,32 @@ mod field_share {
         let x_shares = rep3::share_field_element(x, &mut rng);
         let y_shares = rep3::share_field_element(y, &mut rng);
         let should_result = ((x * y) * y) + x;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y) in izip!(
             test_network.get_party_networks().into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            tokio::spawn(async move {
-                let mut rep3 = IoContext::init(net).await.unwrap();
-                let mul = arithmetic::mul(x, y, &mut rep3).await.unwrap();
-                let mul = arithmetic::mul(mul, y, &mut rep3).await.unwrap();
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                let mul = arithmetic::mul(x, y, &mut rep3).unwrap();
+                let mul = arithmetic::mul(mul, y, &mut rep3).unwrap();
                 tx.send(arithmetic::add(mul, x))
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     use std::str::FromStr;
-    #[tokio::test]
-    async fn rep3_mul_vec_bn() {
+    #[test]
+    fn rep3_mul_vec_bn() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = [
@@ -312,30 +311,30 @@ mod field_share {
             y_shares3.push(y3);
         }
 
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y) in izip!(
             test_network.get_party_networks(),
             [tx1, tx2, tx3],
             [x_shares1, x_shares2, x_shares3,],
             [y_shares1, y_shares2, y_shares3,],
         ) {
-            tokio::spawn(async move {
-                let mut rep3 = IoContext::init(net).await.unwrap();
-                let mul = arithmetic::mul_vec(&x, &y, &mut rep3).await.unwrap();
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                let mul = arithmetic::mul_vec(&x, &y, &mut rep3).unwrap();
                 tx.send(mul)
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_elements(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_mul_vec() {
+    #[test]
+    fn rep3_mul_vec() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = (0..1)
@@ -362,9 +361,9 @@ mod field_share {
             y_shares3.push(y3);
             should_result.push((x * y) * y);
         }
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
             test_network.get_party_networks(),
@@ -372,41 +371,41 @@ mod field_share {
             [x_shares1, x_shares2, x_shares3,],
             [y_shares1, y_shares2, y_shares3,],
         ) {
-            tokio::spawn(async move {
-                let mut rep3 = IoContext::init(net).await.unwrap();
-                let mul = arithmetic::mul_vec(&x, &y, &mut rep3).await.unwrap();
-                let mul = arithmetic::mul_vec(&mul, &y, &mut rep3).await.unwrap();
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                let mul = arithmetic::mul_vec(&x, &y, &mut rep3).unwrap();
+                let mul = arithmetic::mul_vec(&mul, &y, &mut rep3).unwrap();
                 tx.send(mul)
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_elements(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_neg() {
+    #[test]
+    fn rep3_neg() {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
         let should_result = -x;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (tx, x) in izip!([tx1, tx2, tx3], x_shares.into_iter()) {
             thread::spawn(move || tx.send(arithmetic::neg(x)));
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_inv() {
+    #[test]
+    fn rep3_inv() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let mut x = ark_bn254::Fr::rand(&mut rng);
@@ -415,46 +414,46 @@ mod field_share {
         }
         let x_shares = rep3::share_field_element(x, &mut rng);
         let should_result = x.inverse().unwrap();
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for ((net, tx), x) in test_network
             .get_party_networks()
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            tokio::spawn(async move {
-                let mut rep3 = IoContext::init(net).await.unwrap();
-                tx.send(arithmetic::inv(x, &mut rep3).await.unwrap())
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(arithmetic::inv(x, &mut rep3).unwrap())
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_sqrt() {
+    #[test]
+    fn rep3_sqrt() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x_ = ark_bn254::Fr::rand(&mut rng);
         let x = x_.square(); // Guarantees a square root exists
         let x_shares = rep3::share_field_element(x, &mut rng);
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (net, tx, x) in izip!(test_network.get_party_networks(), [tx1, tx2, tx3], x_shares,) {
-            tokio::spawn(async move {
-                let mut rep3 = IoContext::init(net).await.unwrap();
-                tx.send(arithmetic::sqrt(x, &mut rep3).await.unwrap())
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(arithmetic::sqrt(x, &mut rep3).unwrap())
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert!(is_result == x_ || is_result == -x_);
     }
@@ -466,8 +465,8 @@ mod field_share {
     macro_rules! bool_op_test {
         ($name: ident, $op: tt) => {
             paste::item! {
-                #[tokio::test]
-                async fn $name() {
+                #[test]
+                 fn $name() {
                     let constant_number = ark_bn254::Fr::from_str("50").unwrap();
                     for i in -1..=1 {
                         let compare = constant_number + ark_bn254::Fr::from(i);
@@ -476,9 +475,9 @@ mod field_share {
                         let x_shares = rep3::share_field_element(constant_number, &mut rng);
                         let y_shares = rep3::share_field_element(compare, &mut rng);
                         let should_result = ark_bn254::Fr::from(constant_number $op compare);
-                        let (tx1, rx1) = oneshot::channel();
-                        let (tx2, rx2) = oneshot::channel();
-                        let (tx3, rx3) = oneshot::channel();
+                        let (tx1, rx1) = mpsc::channel();
+                        let (tx2, rx2) = mpsc::channel();
+                        let (tx3, rx3) = mpsc::channel();
                         for (net, tx, x, y, public) in izip!(
                             test_network.get_party_networks(),
                             [tx1, tx2, tx3],
@@ -486,16 +485,16 @@ mod field_share {
                             y_shares,
                             vec![compare; 3]
                         ) {
-                            tokio::spawn(async move  {
-                                let mut rep3 = IoContext::init(net).await.unwrap();
-                                let shared_compare = arithmetic::$name(x, y, &mut rep3).await.unwrap();
-                                let rhs_const =[< $name _public >](x, public, &mut rep3).await.unwrap();
+            thread::spawn(move || {
+                                let mut rep3 = IoContext::init(net).unwrap();
+                                let shared_compare = arithmetic::$name(x, y, &mut rep3).unwrap();
+                                let rhs_const =[< $name _public >](x, public, &mut rep3).unwrap();
                                 tx.send([shared_compare, rhs_const])
                             });
                         }
-                        let results1 = rx1.await.unwrap();
-                        let results2 = rx2.await.unwrap();
-                        let results3 = rx3.await.unwrap();
+                        let results1 = rx1.recv().unwrap();
+                        let results2 = rx2.recv().unwrap();
+                        let results3 = rx3.recv().unwrap();
                         for (a, b, c) in izip!(results1, results2, results3) {
                             let is_result = rep3::combine_field_element(a, b, c);
                             println!("{constant_number} {} {compare} = {is_result}", stringify!($op));
@@ -511,60 +510,60 @@ mod field_share {
     bool_op_test!(gt, >);
     bool_op_test!(ge, >=);
 
-    #[tokio::test]
-    async fn rep3_a2b_zero() {
+    #[test]
+    fn rep3_a2b_zero() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::zero();
         let x_shares = rep3::share_field_element(x, &mut rng);
 
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for ((net, tx), x) in test_network
             .get_party_networks()
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            tokio::spawn(async move {
-                let mut rep3 = IoContext::init(net).await.unwrap();
-                tx.send(conversion::a2b(x, &mut rep3).await.unwrap())
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(conversion::a2b(x, &mut rep3).unwrap())
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
         let should_result = x.into();
         assert_eq!(is_result, should_result);
         let is_result_f: ark_bn254::Fr = is_result.into();
         assert_eq!(is_result_f, x);
     }
-    #[tokio::test]
-    async fn rep3_a2b() {
+    #[test]
+    fn rep3_a2b() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
 
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for ((net, tx), x) in test_network
             .get_party_networks()
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            tokio::spawn(async move {
-                let mut rep3 = IoContext::init(net).await.unwrap();
-                tx.send(conversion::a2b(x, &mut rep3).await.unwrap())
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(conversion::a2b(x, &mut rep3).unwrap())
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
 
         let should_result = x.into();
@@ -573,129 +572,130 @@ mod field_share {
         assert_eq!(is_result_f, x);
     }
 
-    #[tokio::test]
-    async fn rep3_b2a() {
+    #[test]
+    fn rep3_b2a() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
 
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for ((net, tx), x) in test_network
             .get_party_networks()
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            tokio::spawn(async move {
-                let mut rep3 = IoContext::init(net).await.unwrap();
-                tx.send(conversion::b2a(&x, &mut rep3).await.unwrap())
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(conversion::b2a(&x, &mut rep3).unwrap())
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert_eq!(is_result, x);
     }
 }
 
 mod curve_share {
+    use std::{sync::mpsc, thread};
+
     use ark_std::UniformRand;
     use itertools::izip;
 
     use mpc_core::protocols::rep3::{self, pointshare};
     use rand::thread_rng;
-    use tokio::sync::oneshot;
 
-    #[tokio::test]
-    async fn rep3_add() {
+    #[test]
+    fn rep3_add() {
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
         let x_shares = rep3::share_curve_point(x, &mut rng);
         let y_shares = rep3::share_curve_point(y, &mut rng);
         let should_result = x + y;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
 
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            tokio::spawn(async move { tx.send(pointshare::add(&x, &y)) });
+            thread::spawn(move || tx.send(pointshare::add(&x, &y)));
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_sub() {
+    #[test]
+    fn rep3_sub() {
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let y = ark_bn254::G1Projective::rand(&mut rng);
         let x_shares = rep3::share_curve_point(x, &mut rng);
         let y_shares = rep3::share_curve_point(y, &mut rng);
         let should_result = x - y;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            tokio::spawn(async move { tx.send(pointshare::sub(&x, &y)) });
+            thread::spawn(move || tx.send(pointshare::sub(&x, &y)));
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_scalar_mul_public_point() {
+    #[test]
+    fn rep3_scalar_mul_public_point() {
         let mut rng = thread_rng();
         let public_point = ark_bn254::G1Projective::rand(&mut rng);
         let scalar = ark_bn254::Fr::rand(&mut rng);
         let scalar_shares = rep3::share_field_element(scalar, &mut rng);
         let should_result = public_point * scalar;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
 
         for (tx, scalar) in izip!([tx1, tx2, tx3], scalar_shares,) {
-            tokio::spawn(async move {
+            thread::spawn(move || {
                 tx.send(pointshare::scalar_mul_public_point(&public_point, scalar))
             });
         }
 
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
-    #[tokio::test]
-    async fn rep3_scalar_mul_public_scalar() {
+    #[test]
+    fn rep3_scalar_mul_public_scalar() {
         let mut rng = thread_rng();
         let point = ark_bn254::G1Projective::rand(&mut rng);
         let public_scalar = ark_bn254::Fr::rand(&mut rng);
         let point_shares = rep3::share_curve_point(point, &mut rng);
         let should_result = point * public_scalar;
-        let (tx1, rx1) = oneshot::channel();
-        let (tx2, rx2) = oneshot::channel();
-        let (tx3, rx3) = oneshot::channel();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
 
         for (tx, point) in izip!([tx1, tx2, tx3], point_shares) {
-            tokio::spawn(async move {
+            thread::spawn(move || {
                 tx.send(pointshare::scalar_mul_public_scalar(&point, public_scalar))
             });
         }
-        let result1 = rx1.await.unwrap();
-        let result2 = rx2.await.unwrap();
-        let result3 = rx3.await.unwrap();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }

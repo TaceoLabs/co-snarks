@@ -27,10 +27,6 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
     //doesn't matter
     type IoContext = ();
 
-    async fn close_network(self) -> IoResult<()> {
-        Ok(())
-    }
-
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))
@@ -72,10 +68,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         izip!(a, b).map(|(a, b)| *a * *b).collect()
     }
 
-    async fn io_round_mul_vec(
-        &mut self,
-        a: Vec<P::ScalarField>,
-    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+    fn io_round_mul_vec(&mut self, a: Vec<P::ScalarField>) -> IoResult<Vec<Self::ArithmeticShare>> {
         Ok(a)
     }
 
@@ -86,7 +79,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         shared * public
     }
 
-    async fn mul_vec(
+    fn mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -94,7 +87,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         Ok(izip!(a, b).map(|(a, b)| *a * *b).collect())
     }
 
-    async fn mul_vecs(
+    fn mul_vecs(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -103,7 +96,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         Ok(izip!(a, b, c).map(|(a, b, c)| *a * *b * *c).collect())
     }
 
-    async fn add_mul_vec(
+    fn add_mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -112,7 +105,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         Ok(izip!(a, b, c).map(|(a, b, c)| *a + *b * *c).collect())
     }
 
-    async fn mul_open_vec(
+    fn mul_open_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -120,14 +113,11 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         Ok(izip!(a, b).map(|(a, b)| *a * *b).collect())
     }
 
-    async fn open_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>> {
+    fn open_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>> {
         Ok(a.to_vec())
     }
 
-    async fn inv_vec(
-        &mut self,
-        a: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+    fn inv_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<Self::ArithmeticShare>> {
         let mut res = Vec::with_capacity(a.len());
         for a in a {
             if a.is_zero() {
@@ -162,11 +152,11 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         domain.ifft(data)
     }
 
-    async fn open_point_g1(&mut self, a: Self::PointShareG1) -> IoResult<P::G1> {
+    fn open_point_g1(&mut self, a: Self::PointShareG1) -> IoResult<P::G1> {
         Ok(a)
     }
 
-    async fn open_point_vec_g1(&mut self, a: &[Self::PointShareG1]) -> IoResult<Vec<P::G1>> {
+    fn open_point_vec_g1(&mut self, a: &[Self::PointShareG1]) -> IoResult<Vec<P::G1>> {
         Ok(a.to_vec())
     }
 
@@ -186,7 +176,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         (result, poly.coeffs)
     }
 
-    async fn array_prod_mul(
+    fn array_prod_mul(
         _: &mut Self::IoContext,
         inv: bool,
         arr1: &[Self::ArithmeticShare],
@@ -246,7 +236,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         }
     }
 
-    async fn array_prod_mul2(
+    fn array_prod_mul2(
         &mut self,
         n1: &[Self::ArithmeticShare],
         n2: &[Self::ArithmeticShare],
@@ -257,10 +247,10 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
     ) -> IoResult<(Vec<Self::ArithmeticShare>, Vec<Self::ArithmeticShare>)> {
         let mut io_context0 = ();
         let mut io_context1 = ();
-        let (num, den) = tokio::join!(
-            <Self as CircomPlonkProver<P>>::array_prod_mul(&mut io_context0, false, n1, n2, n3),
-            <Self as CircomPlonkProver<P>>::array_prod_mul(&mut io_context1, true, d1, d2, d3),
-        );
-        Ok((num?, den?))
+        let num =
+            <Self as CircomPlonkProver<P>>::array_prod_mul(&mut io_context0, false, n1, n2, n3)?;
+        let den =
+            <Self as CircomPlonkProver<P>>::array_prod_mul(&mut io_context1, true, d1, d2, d3)?;
+        Ok((num, den))
     }
 }

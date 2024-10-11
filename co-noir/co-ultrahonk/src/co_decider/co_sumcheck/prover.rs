@@ -88,7 +88,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
         );
     }
 
-    async fn extract_claimed_evaluations(
+    fn extract_claimed_evaluations(
         driver: &mut T,
         partially_evaluated_polynomials: PartiallyEvaluatePolys<T, P>,
     ) -> HonkProofResult<ClaimedEvaluations<P::ScalarField>> {
@@ -106,7 +106,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
             .map(|x| x[0].to_owned())
             .collect::<Vec<_>>();
 
-        let opened = driver.open_many(&shared).await?;
+        let opened = driver.open_many(&shared)?;
 
         for (src, des) in opened
             .into_iter()
@@ -118,7 +118,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
         Ok(multivariate_evaluations)
     }
 
-    pub(crate) async fn sumcheck_prove(
+    pub(crate) fn sumcheck_prove(
         &mut self,
         transcript: &mut TranscriptType,
         circuit_size: u32,
@@ -143,16 +143,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
         // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
         // compute_univariate also takes into account the zk_sumcheck_data.
-        let round_univariate = sum_check_round
-            .compute_univariate::<T, P>(
-                &mut self.driver,
-                round_idx,
-                &self.memory.relation_parameters,
-                &gate_separators,
-                &self.memory.polys,
-            )
-            .await?;
-        let round_univariate = self.driver.open_many(&round_univariate.evaluations).await?;
+        let round_univariate = sum_check_round.compute_univariate::<T, P>(
+            &mut self.driver,
+            round_idx,
+            &self.memory.relation_parameters,
+            &gate_separators,
+            &self.memory.polys,
+        )?;
+        let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
 
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
@@ -181,16 +179,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
             tracing::trace!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript
 
-            let round_univariate = sum_check_round
-                .compute_univariate::<T, P>(
-                    &mut self.driver,
-                    round_idx,
-                    &self.memory.relation_parameters,
-                    &gate_separators,
-                    &partially_evaluated_polys,
-                )
-                .await?;
-            let round_univariate = self.driver.open_many(&round_univariate.evaluations).await?;
+            let round_univariate = sum_check_round.compute_univariate::<T, P>(
+                &mut self.driver,
+                round_idx,
+                &self.memory.relation_parameters,
+                &gate_separators,
+                &partially_evaluated_polys,
+            )?;
+            let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
 
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
@@ -226,7 +222,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
         // evaluations of all witnesses are masked.
         let multivariate_evaluations =
-            Self::extract_claimed_evaluations(&mut self.driver, partially_evaluated_polys).await?;
+            Self::extract_claimed_evaluations(&mut self.driver, partially_evaluated_polys)?;
         Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
 
         let res = SumcheckOutput {

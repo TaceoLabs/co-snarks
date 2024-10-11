@@ -14,11 +14,9 @@ use mpc_core::{
 
 use super::plain::PlainAcvmSolver;
 use super::NoirWitnessExtensionProtocol;
-use tokio::runtime::{self, Runtime};
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
 pub struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
-    runtime: Runtime,
     lut_provider: NaiveRep3LookupTable<N>,
     io_context: IoContext<N>,
     plain_solver: PlainAcvmSolver<F>,
@@ -26,16 +24,12 @@ pub struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
 }
 
 impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
+    // TODO remove unwrap
     pub(crate) fn new(network: N) -> Self {
-        let runtime = runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap();
         let plain_solver = PlainAcvmSolver::<F>::default();
-        let mut io_context = runtime.block_on(IoContext::init(network)).unwrap();
-        let forked = runtime.block_on(io_context.fork()).unwrap();
+        let mut io_context = IoContext::init(network).unwrap();
+        let forked = io_context.fork().unwrap();
         Self {
-            runtime,
             lut_provider: NaiveRep3LookupTable::new(forked),
             io_context,
             plain_solver,
@@ -171,8 +165,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Shared(arithmetic::mul_public(shared, public))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let future = arithmetic::mul(lhs, rhs, &mut self.io_context);
-                let shared_mul = self.runtime.block_on(future)?;
+                let shared_mul = arithmetic::mul(lhs, rhs, &mut self.io_context)?;
                 Rep3AcvmType::Shared(arithmetic::mul_public(shared_mul, c))
             }
         };
@@ -195,13 +188,11 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Shared(arithmetic::div_shared_by_public(arithmetic::neg(c), q_l)?)
             }
             (Rep3AcvmType::Shared(q_l), Rep3AcvmType::Public(c)) => {
-                let future = arithmetic::div_public_by_shared(-c, q_l, io_context);
-                let result = self.runtime.block_on(future)?;
+                let result = arithmetic::div_public_by_shared(-c, q_l, io_context)?;
                 Rep3AcvmType::Shared(result)
             }
             (Rep3AcvmType::Shared(q_l), Rep3AcvmType::Shared(c)) => {
-                let future = arithmetic::div(arithmetic::neg(c), q_l, io_context);
-                let result = self.runtime.block_on(future)?;
+                let result = arithmetic::div(arithmetic::neg(c), q_l, io_context)?;
                 Rep3AcvmType::Shared(result)
             }
         };
@@ -237,8 +228,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             Rep3AcvmType::Shared(shared) => self.lut_provider.get_from_lut(*shared, lut),
         };
-        let value = self.runtime.block_on(value)?;
-        Ok(Rep3AcvmType::Shared(value))
+        Ok(Rep3AcvmType::Shared(value?))
     }
 
     fn write_lut_by_acvm_type(
@@ -248,7 +238,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap,
     ) -> std::io::Result<()> {
         let id = self.io_context.id;
-        let future = match (index, value) {
+        match (index, value) {
             (Rep3AcvmType::Public(index), Rep3AcvmType::Public(value)) => {
                 let index = arithmetic::promote_to_trivial_share(id, index);
                 let value = arithmetic::promote_to_trivial_share(id, value);
@@ -265,9 +255,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             (Rep3AcvmType::Shared(index), Rep3AcvmType::Shared(value)) => {
                 self.lut_provider.write_to_lut(index, value, lut)
             }
-        };
-        self.runtime.block_on(future)?;
-        Ok(())
+        }
     }
 
     fn is_shared(a: &Self::AcvmType) -> bool {
@@ -283,11 +271,8 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<F>> {
         let bs = a.iter().map(|x| x.b).collect_vec();
-        self.runtime
-            .block_on(self.io_context.network.send_next(bs))?;
-        let mut cs = self
-            .runtime
-            .block_on(self.io_context.network.recv_prev::<Vec<F>>())?;
+        self.io_context.network.send_next(bs)?;
+        let mut cs = self.io_context.network.recv_prev::<Vec<F>>()?;
 
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 

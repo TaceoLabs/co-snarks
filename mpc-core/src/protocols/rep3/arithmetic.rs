@@ -92,13 +92,13 @@ pub fn sub_public_by_shared<F: PrimeField>(
 }
 
 /// Performs multiplication of two shared values.
-pub async fn mul<F: PrimeField, N: Rep3Network>(
+pub fn mul<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let local_a = a * b + io_context.rngs.rand.masking_field_element::<F>();
-    let local_b = io_context.network.reshare(local_a).await?;
+    let local_b = io_context.network.reshare(local_a)?;
     Ok(FieldShare {
         a: local_a,
         b: local_b,
@@ -137,11 +137,11 @@ pub fn local_mul_vec<F: PrimeField>(
 }
 
 /// Performs a reshare on all shares in the vector.
-pub async fn io_mul_vec<F: PrimeField, N: Rep3Network>(
+pub fn io_mul_vec<F: PrimeField, N: Rep3Network>(
     local_a: Vec<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<FieldShare<F>>> {
-    let local_b = io_context.network.reshare_many(&local_a).await?;
+    let local_b = io_context.network.reshare_many(&local_a)?;
     if local_b.len() != local_a.len() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -156,12 +156,12 @@ pub async fn io_mul_vec<F: PrimeField, N: Rep3Network>(
 /// Performs element-wise multiplication of two vectors of shared values.
 ///
 /// Use this function for small vecs. For large vecs see [`local_mul_vec`] and [`io_mul_vec`]
-pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
+pub fn mul_vec<F: PrimeField, N: Rep3Network>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<FieldShare<F>>> {
-    // do not use local_mul_vec here!!! We are async, this means we
+    // do not use local_mul_vec here!!! We are , this means we
     // run on a tokio runtime. local_mul_vec uses rayon and starves the
     // runtime. This method is for small multiplications of vecs.
     // If you want a larger one use local_mul_vec and then io_mul_vec.
@@ -174,16 +174,16 @@ pub async fn mul_vec<F: PrimeField, N: Rep3Network>(
                 + io_context.rngs.rand.masking_field_element::<F>()
         })
         .collect_vec();
-    io_mul_vec(local_a, io_context).await
+    io_mul_vec(local_a, io_context)
 }
 
 /// Performs division of two shared values, returning a / b.
-pub async fn div<F: PrimeField, N: Rep3Network>(
+pub fn div<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    mul(a, inv(b, io_context).await?, io_context).await
+    mul(a, inv(b, io_context)?, io_context)
 }
 
 /// Performs division of a shared value by a public value, returning shared / public.
@@ -199,12 +199,12 @@ pub fn div_shared_by_public<F: PrimeField>(
 }
 
 /// Performs division of a public value by a shared value, returning public / shared.
-pub async fn div_public_by_shared<F: PrimeField, N: Rep3Network>(
+pub fn div_public_by_shared<F: PrimeField, N: Rep3Network>(
     public: F,
     shared: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    Ok(mul_public(inv(shared, io_context).await?, public))
+    Ok(mul_public(inv(shared, io_context)?, public))
 }
 
 /// Negates a shared value.
@@ -213,12 +213,12 @@ pub fn neg<F: PrimeField>(a: FieldShare<F>) -> FieldShare<F> {
 }
 
 /// Computes the inverse of a shared value.
-pub async fn inv<F: PrimeField, N: Rep3Network>(
+pub fn inv<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let r = FieldShare::rand(io_context);
-    let y = mul_open(a, r, io_context).await?;
+    let y = mul_open(a, r, io_context)?;
     if y.is_zero() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -232,14 +232,14 @@ pub async fn inv<F: PrimeField, N: Rep3Network>(
 }
 
 /// Computes the inverse of a vector of shared field elements
-pub async fn inv_vec<F: PrimeField, N: Rep3Network>(
+pub fn inv_vec<F: PrimeField, N: Rep3Network>(
     a: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<FieldShare<F>>> {
     let r = (0..a.len())
         .map(|_| FieldShare::rand(io_context))
         .collect_vec();
-    let y = mul_open_vec(a, &r, io_context).await?;
+    let y = mul_open_vec(a, &r, io_context)?;
     if y.iter().any(|y| y.is_zero()) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -252,16 +252,16 @@ pub async fn inv_vec<F: PrimeField, N: Rep3Network>(
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub async fn open<F: PrimeField, N: Rep3Network>(
+pub fn open<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<F> {
-    let c = io_context.network.reshare(a.b).await?;
+    let c = io_context.network.reshare(a.b)?;
     Ok(a.a + a.b + c)
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub async fn open_vec<F: PrimeField, N: Rep3Network>(
+pub fn open_vec<F: PrimeField, N: Rep3Network>(
     a: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<F>> {
@@ -272,20 +272,20 @@ pub async fn open_vec<F: PrimeField, N: Rep3Network>(
         .iter()
         .map(|share| (share.a, share.b))
         .collect::<(Vec<F>, Vec<F>)>();
-    let c = io_context.network.reshare_many(&b).await?;
+    let c = io_context.network.reshare_many(&b)?;
     Ok(izip!(a, b, c).map(|(a, b, c)| a + b + c).collect_vec())
 }
 
 /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
 /// Implementations should not overwrite this method.
-pub async fn cmux<F: PrimeField, N: Rep3Network>(
+pub fn cmux<F: PrimeField, N: Rep3Network>(
     cond: FieldShare<F>,
     truthy: FieldShare<F>,
     falsy: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let b_min_a = sub(truthy, falsy);
-    let d = mul(cond, b_min_a, io_context).await?;
+    let d = mul(cond, b_min_a, io_context)?;
     Ok(add(falsy, d))
 }
 
@@ -295,13 +295,13 @@ pub fn add_mul_public<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>, c: F) -
 }
 
 /// Convenience method for \[a\] + \[b\] * \[c\]
-pub async fn add_mul<F: PrimeField, N: Rep3Network>(
+pub fn add_mul<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     c: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let mul = mul(c, b, io_context).await?;
+    let mul = mul(c, b, io_context)?;
     Ok(add(a, mul))
 }
 
@@ -315,18 +315,18 @@ pub fn promote_to_trivial_share<F: PrimeField>(id: PartyID, public_value: F) -> 
 }
 
 /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
-pub async fn mul_open<F: PrimeField, N: Rep3Network>(
+pub fn mul_open<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<F> {
     let a = a * b + io_context.rngs.rand.masking_field_element::<F>();
-    let (b, c) = io_context.network.broadcast(a).await?;
+    let (b, c) = io_context.network.broadcast(a)?;
     Ok(a + b + c)
 }
 
 /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
-pub async fn mul_open_vec<F: PrimeField, N: Rep3Network>(
+pub fn mul_open_vec<F: PrimeField, N: Rep3Network>(
     a: &[FieldShare<F>],
     b: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
@@ -334,7 +334,7 @@ pub async fn mul_open_vec<F: PrimeField, N: Rep3Network>(
     let mut a = izip!(a, b)
         .map(|(a, b)| a * b + io_context.rngs.rand.masking_field_element::<F>())
         .collect_vec();
-    let (b, c) = io_context.network.broadcast_many(&a).await?;
+    let (b, c) = io_context.network.broadcast_many(&a)?;
     izip!(a.iter_mut(), b, c).for_each(|(a, b, c)| *a += b + c);
     Ok(a)
 }
@@ -346,26 +346,25 @@ pub fn rand<F: PrimeField, N: Rep3Network>(io_context: &mut IoContext<N>) -> Fie
 }
 
 /// Computes the square root of a shared value.
-pub async fn sqrt<F: PrimeField, N: Rep3Network>(
+pub fn sqrt<F: PrimeField, N: Rep3Network>(
     share: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let r_squ = rand(io_context);
     let r_inv = rand(io_context);
 
-    let rr = mul(r_squ, r_squ, io_context).await?;
+    let rr = mul(r_squ, r_squ, io_context)?;
 
     // parallel mul of rr with a and r_squ with r_inv
     let lhs = vec![rr, r_squ];
     let rhs = vec![share, r_inv];
-    let mul = mul_vec(&lhs, &rhs, io_context).await?;
+    let mul = mul_vec(&lhs, &rhs, io_context)?;
 
     // Open mul
     io_context
         .network
-        .send_next_many(&mul.iter().map(|s| s.b.to_owned()).collect_vec())
-        .await?;
-    let c = io_context.network.recv_prev_many::<F>().await?;
+        .send_next_many(&mul.iter().map(|s| s.b.to_owned()).collect_vec())?;
+    let c = io_context.network.recv_prev_many::<F>()?;
     if c.len() != 2 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -401,7 +400,7 @@ pub async fn sqrt<F: PrimeField, N: Rep3Network>(
 }
 
 /// Performs a pow operation using a shared value as base and a public value as exponent.
-pub async fn pow_public<F: PrimeField, N: Rep3Network>(
+pub fn pow_public<F: PrimeField, N: Rep3Network>(
     shared: FieldShare<F>,
     public: F,
     io_context: &mut IoContext<N>,
@@ -413,96 +412,96 @@ pub async fn pow_public<F: PrimeField, N: Rep3Network>(
     while !public.is_zero() {
         if public.bit(0) {
             public -= 1u64;
-            res = mul(res, shared, io_context).await?;
+            res = mul(res, shared, io_context)?;
         }
-        shared = mul(shared, shared, io_context).await?;
+        shared = mul(shared, shared, io_context)?;
         public >>= 1;
     }
-    mul(res, shared, io_context).await
+    mul(res, shared, io_context)
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if one shared value is less than another shared value. The result is a shared value that has value 1 if the first shared value is less than the second shared value and 0 otherwise.
-pub async fn lt<F: PrimeField, N: Rep3Network>(
+pub fn lt<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     // a < b is equivalent to !(a >= b)
-    let tmp = ge(lhs, rhs, io_context).await?;
+    let tmp = ge(lhs, rhs, io_context)?;
     Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if a shared value is less than the public value. The result is a shared value that has value 1 if the shared value is less than the public value and 0 otherwise.
-pub async fn lt_public<F: PrimeField, N: Rep3Network>(
+pub fn lt_public<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     // a < b is equivalent to !(a >= b)
-    let tmp = ge_public(lhs, rhs, io_context).await?;
+    let tmp = ge_public(lhs, rhs, io_context)?;
     Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
 }
 
 /// Returns 1 if lhs <= rhs and 0 otherwise. Checks if one shared value is less than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is less than or equal to the second shared value and 0 otherwise.
-pub async fn le<F: PrimeField, N: Rep3Network>(
+pub fn le<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     // a <= b is equivalent to b >= a
-    ge(rhs, lhs, io_context).await
+    ge(rhs, lhs, io_context)
 }
 
 /// Returns 1 if lhs <= rhs and 0 otherwise. Checks if a shared value is less than or equal to a public value. The result is a shared value that has value 1 if the shared value is less than or equal to the public value and 0 otherwise.
-pub async fn le_public<F: PrimeField, N: Rep3Network>(
+pub fn le_public<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let res = detail::unsigned_ge_const_lhs(rhs, lhs, io_context).await?;
-    conversion::bit_inject(&res, io_context).await
+    let res = detail::unsigned_ge_const_lhs(rhs, lhs, io_context)?;
+    conversion::bit_inject(&res, io_context)
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if one shared value is greater than another shared value. The result is a shared value that has value 1 if the first shared value is greater than the second shared value and 0 otherwise.
-pub async fn gt<F: PrimeField, N: Rep3Network>(
+pub fn gt<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     // a > b is equivalent to !(a <= b)
-    let tmp = le(lhs, rhs, io_context).await?;
+    let tmp = le(lhs, rhs, io_context)?;
     Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if a shared value is greater than the public value. The result is a shared value that has value 1 if the shared value is greater than the public value and 0 otherwise.
-pub async fn gt_public<F: PrimeField, N: Rep3Network>(
+pub fn gt_public<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     // a > b is equivalent to !(a <= b)
-    let tmp = le_public(lhs, rhs, io_context).await?;
+    let tmp = le_public(lhs, rhs, io_context)?;
     Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
-pub async fn ge<F: PrimeField, N: Rep3Network>(
+pub fn ge<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let res = detail::unsigned_ge(lhs, rhs, io_context).await?;
-    conversion::bit_inject(&res, io_context).await
+    let res = detail::unsigned_ge(lhs, rhs, io_context)?;
+    conversion::bit_inject(&res, io_context)
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.
-pub async fn ge_public<F: PrimeField, N: Rep3Network>(
+pub fn ge_public<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let res = detail::unsigned_ge_const_rhs(lhs, rhs, io_context).await?;
-    conversion::bit_inject(&res, io_context).await
+    let res = detail::unsigned_ge_const_rhs(lhs, rhs, io_context)?;
+    conversion::bit_inject(&res, io_context)
 }
 
 //TODO FN REMARK - I think we can skip the bit_inject.
@@ -513,68 +512,68 @@ pub async fn ge_public<F: PrimeField, N: Rep3Network>(
 //We leave it like that and come back to that later. Maybe it doesn't matter...
 
 /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
-pub async fn eq<F: PrimeField, N: Rep3Network>(
+pub fn eq<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let diff = sub(a, b);
-    let bits = conversion::a2b(diff, io_context).await?;
-    let is_zero = binary::is_zero(&bits, io_context).await?;
-    let res = conversion::bit_inject(&is_zero, io_context).await?;
+    let bits = conversion::a2b(diff, io_context)?;
+    let is_zero = binary::is_zero(&bits, io_context)?;
+    let res = conversion::bit_inject(&is_zero, io_context)?;
     Ok(res)
 }
 
 /// Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
-pub async fn eq_public<F: PrimeField, N: Rep3Network>(
+pub fn eq_public<F: PrimeField, N: Rep3Network>(
     shared: FieldShare<F>,
     public: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let public = promote_to_trivial_share(io_context.id, public);
-    eq(shared, public, io_context).await
+    eq(shared, public, io_context)
 }
 
 /// Same as eq but without using bit_inject on the result. Checks whether two prime field shares are equal and return a binary share of 0 or 1. 1 means they are equal.
-pub async fn eq_bit<F: PrimeField, N: Rep3Network>(
+pub fn eq_bit<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
     let diff = sub(a, b);
-    let bits = conversion::a2b(diff, io_context).await?;
-    let is_zero = binary::is_zero(&bits, io_context).await?;
+    let bits = conversion::a2b(diff, io_context)?;
+    let is_zero = binary::is_zero(&bits, io_context)?;
     Ok(is_zero)
 }
 
 /// Checks if two shared values are not equal. The result is a shared value that has value 1 if the two values are not equal and 0 otherwise.
-pub async fn neq<F: PrimeField, N: Rep3Network>(
+pub fn neq<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let eq = eq(a, b, io_context).await?;
+    let eq = eq(a, b, io_context)?;
     Ok(sub_public_by_shared(F::one(), eq, io_context.id))
 }
 
 /// Checks if a shared value is not equal to a public value. The result is a shared value that has value 1 if the two values are not equal and 0 otherwise.
-pub async fn neq_public<F: PrimeField, N: Rep3Network>(
+pub fn neq_public<F: PrimeField, N: Rep3Network>(
     shared: FieldShare<F>,
     public: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let public = promote_to_trivial_share(io_context.id, public);
-    neq(shared, public, io_context).await
+    neq(shared, public, io_context)
 }
 
 /// Outputs whether a shared value is zero (true) or not (false).
-pub async fn is_zero<F: PrimeField, N: Rep3Network>(
+pub fn is_zero<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<bool> {
     let zero_share = FieldShare::default();
-    let res = eq(zero_share, a, io_context).await?;
-    let x = open(res, io_context).await?;
+    let res = eq(zero_share, a, io_context)?;
+    let x = open(res, io_context)?;
     Ok(x.is_one())
 }
 
@@ -601,12 +600,12 @@ pub fn pow_2_public<F: PrimeField>(shared: FieldShare<F>, public: F) -> FieldSha
 }
 
 /// computes XOR using arithmetic operations, only valid when x and y are known to be 0 or 1.
-pub(crate) async fn arithmetic_xor<F: PrimeField, N: Rep3Network>(
+pub(crate) fn arithmetic_xor<F: PrimeField, N: Rep3Network>(
     x: Rep3PrimeFieldShare<F>,
     y: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3PrimeFieldShare<F>> {
-    let d = mul(x, y, io_context).await?;
+    let d = mul(x, y, io_context)?;
     let d = add(d, d);
     let e = add(x, y);
     let d = sub(e, d);

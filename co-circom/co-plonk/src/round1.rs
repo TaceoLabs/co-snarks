@@ -69,7 +69,7 @@ impl<P: Pairing> std::fmt::Display for Round1Proof<P> {
 }
 
 impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
-    pub(super) async fn random(driver: &mut T) -> PlonkProofResult<Self> {
+    pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::ArithmeticShare::default());
         #[allow(unused_mut)]
         for mut x in b.iter_mut() {
@@ -214,14 +214,14 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
     }
 
     #[instrument(level = "debug", name = "Plonk - Round Init", skip_all)]
-    pub(super) async fn init_round(
+    pub(super) fn init_round(
         mut driver: T,
         zkey: &'a ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
         let plonk_witness = Self::calculate_additions(&mut driver, private_witness, zkey)?;
-        // TODO: we do not want that to be async
-        let challenges = Round1Challenges::random(&mut driver).await?;
+        // TODO: we do not want that to be
+        let challenges = Round1Challenges::random(&mut driver)?;
         let domains = Domains::new(zkey.domain_size)?;
         Ok(Self {
             challenges,
@@ -236,7 +236,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
 
     #[instrument(level = "debug", name = "Plonk - Round 1", skip_all)]
     // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
-    pub(super) async fn round1(self) -> PlonkProofResult<Round2<'a, P, T>> {
+    pub(super) fn round1(self) -> PlonkProofResult<Round2<'a, P, T>> {
         let Self {
             mut driver,
             domains,
@@ -262,9 +262,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         // network round
         commit_span.exit();
         let opening_span = tracing::debug_span!("opening commits").entered();
-        let opened = driver
-            .open_point_vec_g1(&[commit_a, commit_b, commit_c])
-            .await?;
+        let opened = driver.open_point_vec_g1(&[commit_a, commit_b, commit_c])?;
         opening_span.exit();
         let proof = Round1Proof::<P> {
             commit_a: opened[0],
@@ -317,8 +315,8 @@ pub mod tests {
         };
     }
 
-    #[tokio::test]
-    async fn test_round1_multiplier2() {
+    #[test]
+    fn test_round1_multiplier2() {
         let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
@@ -332,9 +330,9 @@ pub mod tests {
             witness: witness.values[zkey.n_public + 1..].to_vec(),
         };
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).await.unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
         round1.challenges = challenges;
-        let round2 = round1.round1().await.unwrap();
+        let round2 = round1.round1().unwrap();
         assert_eq!(
             round2.proof.commit_a,
             g1_bn254_from_xy!(
@@ -358,8 +356,8 @@ pub mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_round1_poseidon_bls12_381() {
+    #[test]
+    fn test_round1_poseidon_bls12_381() {
         let mut driver = PlainPlonkDriver;
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bls12_381/poseidon/circuit.zkey").unwrap(),
@@ -376,9 +374,9 @@ pub mod tests {
         };
 
         let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).await.unwrap();
+        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
         round1.challenges = challenges;
-        let round2 = round1.round1().await.unwrap();
+        let round2 = round1.round1().unwrap();
         assert_eq!(
             round2.proof.commit_a.into_affine(),
             g1_bls12_381_from_xy!(

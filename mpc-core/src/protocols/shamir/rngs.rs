@@ -50,7 +50,7 @@ impl<F: PrimeField> ShamirRng<F> {
     }
 
     // Generates amount * (self.threshold + 1) random double shares
-    pub(super) async fn buffer_triples<N: ShamirNetwork>(
+    pub(super) fn buffer_triples<N: ShamirNetwork>(
         &mut self,
         network: &mut N,
         amount: usize,
@@ -81,8 +81,8 @@ impl<F: PrimeField> ShamirRng<F> {
             .map(|_| Vec::with_capacity(self.num_parties))
             .collect_vec();
 
-        // TODO this sometimes runs fast, but often 1 party is fast and the rest take a lot longer
-        let recv = network.send_and_recv_each_many(send).await?;
+        // TODO would the old setup work again? is it better or worse?
+        let recv = network.send_and_recv_each_many(send)?;
 
         for r in recv.into_iter() {
             for (des_r, des_r2, src) in izip!(&mut rcv_rt, &mut rcv_r2t, r.chunks_exact(2)) {

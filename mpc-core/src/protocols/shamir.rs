@@ -181,7 +181,7 @@ pub struct ShamirPreprocessing<F: PrimeField, N: ShamirNetwork> {
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirPreprocessing<F, N> {
     /// Construct a new [`ShamirPreprocessing`] type and generate `amount` number of corr rand pairs
-    pub async fn new(threshold: usize, mut network: N, amount: usize) -> eyre::Result<Self> {
+    pub fn new(threshold: usize, mut network: N, amount: usize) -> eyre::Result<Self> {
         let num_parties = network.get_num_parties();
 
         if 2 * threshold + 1 > num_parties {
@@ -200,7 +200,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirPreprocessing<F, N> {
         let start = Instant::now();
         // buffer_triple generates amount * (t + 1), so we ceil dive the amount we want
         let amount = amount.div_ceil(threshold + 1);
-        rng_buffer.buffer_triples(&mut network, amount).await?;
+        rng_buffer.buffer_triples(&mut network, amount)?;
         tracing::info!(
             "Party {}: generating took {} ms",
             network.get_id(),
@@ -265,13 +265,8 @@ pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
 impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     const KING_ID: usize = 0;
 
-    /// Gracefully shutdown the netowork. Waits until all data is sent and received
-    pub async fn close_network(self) -> std::io::Result<()> {
-        self.network.shutdown().await
-    }
-
     /// Create a forked [`ShamirProtocol`] that consumes `amount` number of corr rand pairs from its parent
-    pub async fn fork_with_pairs(&mut self, amount: usize) -> std::io::Result<Self> {
+    pub fn fork_with_pairs(&mut self, amount: usize) -> std::io::Result<Self> {
         Ok(Self {
             threshold: self.threshold,
             open_lagrange_t: self.open_lagrange_t.clone(),
@@ -280,7 +275,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             rng: RngType::from_seed(self.rng.gen()),
             r_t: self.r_t.drain(0..amount).collect(),
             r_2t: self.r_2t.drain(0..amount).collect(),
-            network: self.network.fork().await?,
+            network: self.network.fork()?,
         })
     }
 
@@ -301,7 +296,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         self.get_pair().map(|(r, _)| ShamirPrimeFieldShare::new(r))
     }
 
-    pub(crate) async fn degree_reduce(&mut self, mut input: F) -> std::io::Result<ShamirShare<F>> {
+    pub(crate) fn degree_reduce(&mut self, mut input: F) -> std::io::Result<ShamirShare<F>> {
         let (r_t, r_2t) = self.get_pair()?;
         input += r_2t;
 
@@ -313,7 +308,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 if other_id == Self::KING_ID {
                     acc += input * lagrange;
                 } else {
-                    let r = self.network.recv::<F>(other_id).await?;
+                    let r = self.network.recv::<F>(other_id)?;
                     acc += r * lagrange;
                 }
             }
@@ -331,23 +326,23 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 if my_id == other_id {
                     my_share = share;
                 } else {
-                    self.network.send(other_id, share).await?;
+                    self.network.send(other_id, share)?;
                 }
             }
             my_share
         } else {
             if my_id <= self.threshold * 2 {
                 // Only send if my items are required
-                self.network.send(Self::KING_ID, input).await?;
+                self.network.send(Self::KING_ID, input)?;
             }
-            self.network.recv(Self::KING_ID).await?
+            self.network.recv(Self::KING_ID)?
         };
 
         Ok(ShamirShare::new(my_share - r_t))
     }
 
     /// Degree reduce all inputs
-    pub async fn degree_reduce_vec(
+    pub fn degree_reduce_vec(
         &mut self,
         mut inputs: Vec<F>,
     ) -> std::io::Result<Vec<ShamirShare<F>>> {
@@ -370,7 +365,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                         *acc += *muls * lagrange;
                     }
                 } else {
-                    let r = self.network.recv_many::<F>(other_id).await?;
+                    let r = self.network.recv_many::<F>(other_id)?;
                     if r.len() != len {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,"During execution of degree_reduce_vec in MPC: Invalid number of elements received",
@@ -405,16 +400,16 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 if my_id == other_id {
                     my_share = share;
                 } else {
-                    self.network.send_many(other_id, &share).await?;
+                    self.network.send_many(other_id, &share)?;
                 }
             }
             my_share
         } else {
             if my_id <= self.threshold * 2 {
                 // Only send if my items are required
-                self.network.send_many(Self::KING_ID, &inputs).await?;
+                self.network.send_many(Self::KING_ID, &inputs)?;
             }
-            let r = self.network.recv_many::<F>(Self::KING_ID).await?;
+            let r = self.network.recv_many::<F>(Self::KING_ID)?;
             if r.len() != len {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,"During execution of degree_reduce_vec in MPC: Invalid number of elements received",
@@ -429,7 +424,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         Ok(ShamirShare::convert_vec_rev(my_shares))
     }
 
-    pub(crate) async fn degree_reduce_point<C>(
+    pub(crate) fn degree_reduce_point<C>(
         &mut self,
         mut input: C,
     ) -> std::io::Result<ShamirPointShare<C>>
@@ -450,7 +445,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 if other_id == Self::KING_ID {
                     acc += input * lagrange;
                 } else {
-                    let r = self.network.recv::<C>(other_id).await?;
+                    let r = self.network.recv::<C>(other_id)?;
                     acc += r * lagrange;
                 }
             }
@@ -468,16 +463,16 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 if my_id == other_id {
                     my_share = share;
                 } else {
-                    self.network.send(other_id, share).await?;
+                    self.network.send(other_id, share)?;
                 }
             }
             my_share
         } else {
             if my_id <= self.threshold * 2 {
                 // Only send if my items are required
-                self.network.send(Self::KING_ID, input).await?;
+                self.network.send(Self::KING_ID, input)?;
             }
-            self.network.recv(Self::KING_ID).await?
+            self.network.recv(Self::KING_ID)?
         };
 
         Ok(ShamirPointShare::new(my_share - r_t))

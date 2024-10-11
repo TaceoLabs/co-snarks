@@ -125,7 +125,7 @@ impl SumcheckRound {
         res
     }
 
-    async fn accumulate_one_relation_univariates<
+    fn accumulate_one_relation_univariates<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
         R: Relation<T, P>,
@@ -147,10 +147,9 @@ impl SumcheckRound {
             relation_parameters,
             scaling_factor,
         )
-        .await
     }
 
-    async fn accumulate_relation_univariates<
+    fn accumulate_relation_univariates<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
     >(
@@ -167,68 +166,60 @@ impl SumcheckRound {
             extended_edges,
             relation_parameters,
             scaling_factor,
-        )
-        .await?;
+        )?;
         Self::accumulate_one_relation_univariates::<_, _, UltraPermutationRelation>(
             driver,
             &mut univariate_accumulators.r_perm,
             extended_edges,
             relation_parameters,
             scaling_factor,
-        )
-        .await?;
+        )?;
         Self::accumulate_one_relation_univariates::<_, _, DeltaRangeConstraintRelation>(
             driver,
             &mut univariate_accumulators.r_delta,
             extended_edges,
             relation_parameters,
             scaling_factor,
-        )
-        .await?;
+        )?;
         Self::accumulate_one_relation_univariates::<_, _, EllipticRelation>(
             driver,
             &mut univariate_accumulators.r_elliptic,
             extended_edges,
             relation_parameters,
             scaling_factor,
-        )
-        .await?;
+        )?;
         Self::accumulate_one_relation_univariates::<_, _, AuxiliaryRelation>(
             driver,
             &mut univariate_accumulators.r_aux,
             extended_edges,
             relation_parameters,
             scaling_factor,
-        )
-        .await?;
+        )?;
         Self::accumulate_one_relation_univariates::<_, _, LogDerivLookupRelation>(
             driver,
             &mut univariate_accumulators.r_lookup,
             extended_edges,
             relation_parameters,
             scaling_factor,
-        )
-        .await?;
+        )?;
         Self::accumulate_one_relation_univariates::<_, _, Poseidon2ExternalRelation>(
             driver,
             &mut univariate_accumulators.r_pos_ext,
             extended_edges,
             relation_parameters,
             scaling_factor,
-        )
-        .await?;
+        )?;
         Self::accumulate_one_relation_univariates::<_, _, Poseidon2InternalRelation>(
             driver,
             &mut univariate_accumulators.r_pos_int,
             extended_edges,
             relation_parameters,
             scaling_factor,
-        )
-        .await?;
+        )?;
         Ok(())
     }
 
-    pub(crate) async fn compute_univariate<
+    pub(crate) fn compute_univariate<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
     >(
@@ -262,8 +253,7 @@ impl SumcheckRound {
                 &extended_edge,
                 relation_parameters,
                 &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
-            )
-            .await?;
+            )?;
         }
         let res = Self::batch_over_relations_univariates(
             driver,

@@ -22,7 +22,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
         }
     }
 
-    async fn compute_opening_proof(
+    fn compute_opening_proof(
         driver: &mut T,
         opening_claim: ZeroMorphOpeningClaim<T, P>,
         transcript: &mut TranscriptType,
@@ -38,7 +38,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
         // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
         // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
         // pthreads) or even the work queue itself
-        let quotient_commitment = driver.open_point(quotient_commitment).await?;
+        let quotient_commitment = driver.open_point(quotient_commitment)?;
         transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
         Ok(())
     }
@@ -48,13 +48,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
      * challenges and all evaluations at u being calculated.
      *
      */
-    async fn execute_relation_check_rounds(
+    fn execute_relation_check_rounds(
         &mut self,
         transcript: &mut TranscriptType,
         circuit_size: u32,
     ) -> HonkProofResult<SumcheckOutput<P::ScalarField>> {
         // This is just Sumcheck.prove
-        self.sumcheck_prove(transcript, circuit_size).await
+        self.sumcheck_prove(transcript, circuit_size)
     }
 
     /**
@@ -63,20 +63,19 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
      * @details See https://hackmd.io/dlf9xEwhTQyE3hiGbq4FsA?view for a complete description of the unrolled protocol.
      *
      * */
-    async fn execute_pcs_rounds(
+    fn execute_pcs_rounds(
         &mut self,
         transcript: &mut TranscriptType,
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
     ) -> HonkProofResult<()> {
-        let prover_opening_claim = self
-            .zeromorph_prove(transcript, circuit_size, crs, sumcheck_output)
-            .await?;
-        Self::compute_opening_proof(&mut self.driver, prover_opening_claim, transcript, crs).await
+        let prover_opening_claim =
+            self.zeromorph_prove(transcript, circuit_size, crs, sumcheck_output)?;
+        Self::compute_opening_proof(&mut self.driver, prover_opening_claim, transcript, crs)
     }
 
-    pub(crate) async fn prove(
+    pub(crate) fn prove(
         mut self,
         circuit_size: u32,
         crs: &ProverCrs<P>,
@@ -85,14 +84,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
-        let sumcheck_output = self
-            .execute_relation_check_rounds(&mut transcript, circuit_size)
-            .await?;
+        let sumcheck_output = self.execute_relation_check_rounds(&mut transcript, circuit_size)?;
 
         // Fiat-Shamir: rho, y, x, z
         // Execute Zeromorph multilinear PCS
-        self.execute_pcs_rounds(&mut transcript, circuit_size, crs, sumcheck_output)
-            .await?;
+        self.execute_pcs_rounds(&mut transcript, circuit_size, crs, sumcheck_output)?;
 
         Ok(transcript.get_proof())
     }

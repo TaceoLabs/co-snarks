@@ -20,7 +20,6 @@ use itertools::izip;
 use rand::thread_rng;
 use std::{fs::File, thread};
 use tests::rep3_network::{PartyTestNetwork, Rep3TestNetwork};
-use tokio::runtime;
 
 macro_rules! e2e_test {
     ($name: expr) => {
@@ -60,15 +59,14 @@ macro_rules! add_test_impl {
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
                     threads.push(thread::spawn(move || {
-                        let runtime = runtime::Builder::new_current_thread().build().unwrap();
-                        let mut io_context0 = runtime.block_on(IoContext::init(net)).unwrap();
-                        let io_context1 = runtime.block_on(io_context0.fork()).unwrap();
+                        let mut io_context0 = IoContext::init(net).unwrap();
+                        let io_context1 = io_context0.fork().unwrap();
                         let rep3 = [< Rep3 $proof_system Driver>]::new(io_context0, io_context1);
                         #[allow(unused_mut)]
                         let mut prover = [< Co $proof_system>]::<
                             $curve, [< Rep3 $proof_system Driver>]<PartyTestNetwork>
                         >::new(rep3);
-                        runtime.block_on(prover.prove(&zkey, x)).unwrap()
+                        prover.prove(&zkey, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();
