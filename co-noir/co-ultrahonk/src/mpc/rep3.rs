@@ -30,8 +30,7 @@ impl<N: Rep3Network> Rep3UltraHonkDriver<N> {
 
 impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<N> {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
-    type PointShareG1 = Rep3PointShare<P::G1>;
-    type PointShareG2 = Rep3PointShare<P::G2>;
+    type PointShare = Rep3PointShare<P::G1>;
     type PartyID = PartyID;
 
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
@@ -97,13 +96,13 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
             .collect()
     }
 
-    fn open_point(&mut self, a: Self::PointShareG1) -> std::io::Result<<P as Pairing>::G1> {
+    fn open_point(&mut self, a: Self::PointShare) -> std::io::Result<<P as Pairing>::G1> {
         pointshare::open_point(&a, &mut self.io_context0)
     }
 
     fn open_point_many(
         &mut self,
-        a: &[Self::PointShareG1],
+        a: &[Self::PointShare],
     ) -> std::io::Result<Vec<<P as Pairing>::G1>> {
         pointshare::open_point_many(a, &mut self.io_context0)
     }
@@ -148,17 +147,10 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         Ok(())
     }
 
-    fn msm_public_points_g1(
+    fn msm_public_points(
         points: &[<P as Pairing>::G1Affine],
         scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG1 {
-        pointshare::msm_public_points(points, scalars)
-    }
-
-    fn msm_public_points_g2(
-        points: &[<P as Pairing>::G2Affine],
-        scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG2 {
+    ) -> Self::PointShare {
         pointshare::msm_public_points(points, scalars)
     }
 }

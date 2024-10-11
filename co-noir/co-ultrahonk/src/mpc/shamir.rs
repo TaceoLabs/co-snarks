@@ -34,8 +34,7 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
     for ShamirUltraHonkDriver<P::ScalarField, N>
 {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
-    type PointShareG1 = ShamirPointShare<P::G1>;
-    type PointShareG2 = ShamirPointShare<P::G2>;
+    type PointShare = ShamirPointShare<P::G1>;
     type PartyID = usize;
 
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
@@ -100,11 +99,11 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
             .collect()
     }
 
-    fn open_point(&mut self, a: Self::PointShareG1) -> std::io::Result<P::G1> {
+    fn open_point(&mut self, a: Self::PointShare) -> std::io::Result<P::G1> {
         pointshare::open_point(&a, &mut self.protocol0)
     }
 
-    fn open_point_many(&mut self, a: &[Self::PointShareG1]) -> std::io::Result<Vec<P::G1>> {
+    fn open_point_many(&mut self, a: &[Self::PointShare]) -> std::io::Result<Vec<P::G1>> {
         pointshare::open_point_many(a, &mut self.protocol0)
     }
 
@@ -149,17 +148,10 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
         Ok(())
     }
 
-    fn msm_public_points_g1(
+    fn msm_public_points(
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG1 {
-        pointshare::msm_public_points(points, scalars)
-    }
-
-    fn msm_public_points_g2(
-        points: &[P::G2Affine],
-        scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG2 {
+    ) -> Self::PointShare {
         pointshare::msm_public_points(points, scalars)
     }
 }

@@ -11,8 +11,7 @@ pub struct PlainUltraHonkDriver;
 
 impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     type ArithmeticShare = P::ScalarField;
-    type PointShareG1 = P::G1;
-    type PointShareG2 = P::G2;
+    type PointShare = P::G1;
     type PartyID = usize;
 
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
@@ -74,13 +73,13 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         public_values.to_vec()
     }
 
-    fn open_point(&mut self, a: Self::PointShareG1) -> std::io::Result<<P as Pairing>::G1> {
+    fn open_point(&mut self, a: Self::PointShare) -> std::io::Result<<P as Pairing>::G1> {
         Ok(a)
     }
 
     fn open_point_many(
         &mut self,
-        a: &[Self::PointShareG1],
+        a: &[Self::PointShare],
     ) -> std::io::Result<Vec<<P as Pairing>::G1>> {
         Ok(a.to_vec())
     }
@@ -128,17 +127,10 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok(())
     }
 
-    fn msm_public_points_g1(
+    fn msm_public_points(
         points: &[<P as Pairing>::G1Affine],
         scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG1 {
+    ) -> Self::PointShare {
         P::G1::msm_unchecked(points, scalars)
-    }
-
-    fn msm_public_points_g2(
-        points: &[<P as Pairing>::G2Affine],
-        scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG2 {
-        P::G2::msm_unchecked(points, scalars)
     }
 }
