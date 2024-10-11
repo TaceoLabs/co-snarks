@@ -39,9 +39,9 @@ impl CoUtils {
     pub(crate) fn commit<T: NoirUltraHonkProver<P>, P: Pairing>(
         poly: &[T::ArithmeticShare],
         crs: &ProverCrs<P>,
-    ) -> T::PointShareG1 {
+    ) -> T::PointShare {
         let len = poly.len();
-        T::msm_public_points_g1(&crs.monomials[..len], poly)
+        T::msm_public_points(&crs.monomials[..len], poly)
     }
 
     pub(crate) fn batch_invert<T: NoirUltraHonkProver<P>, P: Pairing>(
