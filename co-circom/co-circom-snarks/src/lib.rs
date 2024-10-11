@@ -13,8 +13,6 @@ use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, Seeda
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-mod serde_compat;
-
 /// This type represents the serialized version of a Rep3 witness. Its share can be either additive or replicated, and in both cases also compressed.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
@@ -25,8 +23,8 @@ where
     /// The public inputs (which are the outputs of the circom circuit).
     /// This also includes the constant 1 at position 0.
     #[serde(
-        serialize_with = "crate::serde_compat::ark_se",
-        deserialize_with = "crate::serde_compat::ark_de"
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
     )]
     pub public_inputs: Vec<F>,
     /// The secret-shared witness elements.
@@ -54,15 +52,15 @@ where
     S: CanonicalSerialize + CanonicalDeserialize + Clone,
 {
     #[serde(
-        serialize_with = "crate::serde_compat::ark_se",
-        deserialize_with = "crate::serde_compat::ark_de"
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
     )]
     /// The public inputs (which are the outputs of the circom circuit).
     /// This also includes the constant 1 at position 0.
     pub public_inputs: Vec<F>,
     #[serde(
-        serialize_with = "crate::serde_compat::ark_se",
-        deserialize_with = "crate::serde_compat::ark_de"
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
     )]
     /// The secret-shared witness elements.
     pub witness: Vec<S>,
@@ -76,8 +74,8 @@ where
     U::Seed: Serialize + for<'a> Deserialize<'a> + Clone + std::fmt::Debug,
 {
     #[serde(
-        serialize_with = "crate::serde_compat::ark_se",
-        deserialize_with = "crate::serde_compat::ark_de"
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
     )]
     /// A map from variable names to the public field elements.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
@@ -184,15 +182,15 @@ where
     S: CanonicalSerialize + CanonicalDeserialize + Clone,
 {
     #[serde(
-        serialize_with = "crate::serde_compat::ark_se",
-        deserialize_with = "crate::serde_compat::ark_de"
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
     )]
     /// A map from variable names to the public field elements.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub public_inputs: BTreeMap<String, Vec<F>>,
     #[serde(
-        serialize_with = "crate::serde_compat::ark_se",
-        deserialize_with = "crate::serde_compat::ark_de"
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
     )]
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
