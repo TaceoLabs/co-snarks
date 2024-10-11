@@ -8,24 +8,36 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use std::marker::PhantomData;
 use ultrahonk::prelude::{
-    HonkCurve, HonkProof, HonkProofResult, TranscriptFieldType, TranscriptType,
-    POSEIDON2_BN254_T4_PARAMS,
+    HonkCurve, HonkProof, HonkProofResult, Transcript, TranscriptFieldType, TranscriptHasher,
 };
 
-pub struct CoUltraHonk<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> {
+pub struct CoUltraHonk<
+    T: NoirUltraHonkProver<P>,
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+> {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
+    phantom_hasher: PhantomData<H>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoUltraHonk<T, P> {
+impl<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+    > CoUltraHonk<T, P, H>
+{
     pub fn new(driver: T) -> Self {
         Self {
             driver,
             phantom_data: PhantomData,
+            phantom_hasher: PhantomData,
         }
     }
 
-    fn generate_gate_challenges(transcript: &mut TranscriptType) -> Vec<P::ScalarField> {
+    fn generate_gate_challenges(
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+    ) -> Vec<P::ScalarField> {
         tracing::trace!("generate gate challenges");
 
         let mut gate_challenges: Vec<<P as Pairing>::ScalarField> =
@@ -44,7 +56,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoUltraHonk<T
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("CoUltraHonk prove");
 
-        let mut transcript = TranscriptType::new(&POSEIDON2_BN254_T4_PARAMS);
+        let mut transcript = Transcript::<TranscriptFieldType, H>::new();
 
         let oink = CoOink::new(&mut self.driver);
         let oink_result = oink.prove(&proving_key, &mut transcript)?;

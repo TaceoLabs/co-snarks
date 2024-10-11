@@ -11,14 +11,19 @@ use crate::{
 };
 use ultrahonk::{
     prelude::{
-        GateSeparatorPolynomial, HonkCurve, HonkProofResult, TranscriptFieldType, TranscriptType,
-        Univariate,
+        GateSeparatorPolynomial, HonkCurve, HonkProofResult, Transcript, TranscriptFieldType,
+        TranscriptHasher, Univariate,
     },
     Utils,
 };
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, P> {
+impl<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+    > CoDecider<T, P, H>
+{
     pub(crate) fn partially_evaluate_init(
         driver: &mut T,
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<T, P>,
@@ -77,7 +82,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
     }
 
     fn add_evals_to_transcript(
-        transcript: &mut TranscriptType,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) {
         tracing::trace!("Add Evals to Transcript");
@@ -120,7 +125,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
 
     pub(crate) fn sumcheck_prove(
         &mut self,
-        transcript: &mut TranscriptType,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
     ) -> HonkProofResult<SumcheckOutput<P::ScalarField>> {
         tracing::trace!("Sumcheck prove");

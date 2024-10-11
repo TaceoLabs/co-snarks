@@ -4,28 +4,40 @@ use super::{
 use crate::{mpc::NoirUltraHonkProver, CoUtils};
 use std::marker::PhantomData;
 use ultrahonk::prelude::{
-    HonkCurve, HonkProof, HonkProofResult, ProverCrs, TranscriptFieldType, TranscriptType,
+    HonkCurve, HonkProof, HonkProofResult, ProverCrs, Transcript, TranscriptFieldType,
+    TranscriptHasher,
 };
 
-pub(crate) struct CoDecider<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> {
+pub(crate) struct CoDecider<
+    T: NoirUltraHonkProver<P>,
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+> {
     pub(crate) driver: T,
     pub(super) memory: ProverMemory<T, P>,
     phantom_data: PhantomData<P>,
+    phantom_hasher: PhantomData<H>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, P> {
+impl<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+    > CoDecider<T, P, H>
+{
     pub fn new(driver: T, memory: ProverMemory<T, P>) -> Self {
         Self {
             driver,
             memory,
             phantom_data: PhantomData,
+            phantom_hasher: PhantomData,
         }
     }
 
     fn compute_opening_proof(
         driver: &mut T,
         opening_claim: ZeroMorphOpeningClaim<T, P>,
-        transcript: &mut TranscriptType,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         let mut quotient = opening_claim.polynomial;
@@ -50,7 +62,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
      */
     fn execute_relation_check_rounds(
         &mut self,
-        transcript: &mut TranscriptType,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
     ) -> HonkProofResult<SumcheckOutput<P::ScalarField>> {
         // This is just Sumcheck.prove
@@ -65,7 +77,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
      * */
     fn execute_pcs_rounds(
         &mut self,
-        transcript: &mut TranscriptType,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
@@ -79,7 +91,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
         mut self,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        mut transcript: TranscriptType,
+        mut transcript: Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("Decider prove");
 

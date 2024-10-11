@@ -33,6 +33,7 @@ serde_json = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [dev-dependencies]
+sha3.workspace = true
 paste.workspace = true
 
 [[bench]]

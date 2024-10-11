@@ -12,9 +12,9 @@ use co_noir::{
 };
 use co_ultrahonk::{
     prelude::{
-        CoUltraHonk, HonkProof, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver, ShamirCoBuilder,
-        ShamirUltraHonkDriver, SharedBuilderVariable, UltraCircuitBuilder, UltraHonk, Utils,
-        VerifyingKey, VerifyingKeyBarretenberg,
+        CoUltraHonk, HonkProof, Poseidon2Sponge, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver,
+        ShamirCoBuilder, ShamirUltraHonkDriver, SharedBuilderVariable, UltraCircuitBuilder,
+        UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg,
     },
     MAX_PARTIAL_RELATION_LENGTH, OINK_CRAND_PAIRS_CONST, OINK_CRAND_PAIRS_FACTOR_N,
     OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE, SUMCHECK_ROUND_CRAND_PAIRS_FACTOR,
@@ -499,7 +499,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             // Get the proving key and prover
             let proving_key = ProvingKey::create(id, builder, prover_crs);
             let public_input = proving_key.get_public_inputs();
-            let prover = CoUltraHonk::new(driver);
+            let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!(
                 "Party {}: Proving key generation took {} ms",
@@ -569,7 +569,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             // execute prover in MPC
             tracing::info!("Party {}: starting proof generation..", id);
             let start = Instant::now();
-            let prover = CoUltraHonk::new(driver);
+            let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
             let proof = prover.prove(proving_key)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
@@ -693,7 +693,8 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
 
     // The actual verifier
     let start = Instant::now();
-    let res = UltraHonk::verify(proof, vk).context("while verifying proof")?;
+    let res =
+        UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk).context("while verifying proof")?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Proof verification took {} ms", duration_ms);
 

@@ -110,12 +110,8 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
             }
 
             // If the trace is structured, we populate the data from the next block at a fixed block size offset
-            if is_structured {
-                offset += block.get_fixed_size() as usize;
-            } else {
-                // otherwise, the next block starts immediately following the previous one
-                offset += block_size;
-            }
+            // otherwise, the next block starts immediately following the previous one
+            offset += block.get_fixed_size(is_structured) as usize;
         }
     }
 }

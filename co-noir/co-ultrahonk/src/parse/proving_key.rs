@@ -28,8 +28,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         crs: ProverCrs<P>,
     ) -> Self {
         tracing::info!("ProvingKey create");
-        circuit.add_gates_to_ensure_all_polys_are_non_zero();
-        circuit.finalize_circuit();
+        circuit.finalize_circuit(true);
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
         let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);

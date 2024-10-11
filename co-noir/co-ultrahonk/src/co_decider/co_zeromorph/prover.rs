@@ -16,12 +16,18 @@ use ark_ff::{Field, One, Zero};
 use itertools::izip;
 use ultrahonk::{
     prelude::{
-        HonkCurve, HonkProofResult, Polynomial, ProverCrs, TranscriptFieldType, TranscriptType,
+        HonkCurve, HonkProofResult, Polynomial, ProverCrs, Transcript, TranscriptFieldType,
+        TranscriptHasher,
     },
     Utils,
 };
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, P> {
+impl<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+    > CoDecider<T, P, H>
+{
     // /**
     //  * @brief Compute multivariate quotients q_k(X_0, ..., X_{k-1}) for f(X_0, ..., X_{n-1})
     //  * @details Starting from the coefficients of f, compute q_k inductively from k = n - 1, to k = 0.
@@ -333,7 +339,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
 
     fn compute_batched_polys(
         &mut self,
-        transcript: &mut TranscriptType,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         claimed_evaluations: AllEntities<P::ScalarField, P::ScalarField>,
         n: usize,
     ) -> (
@@ -435,7 +441,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> CoDecider<T, 
      */
     pub(crate) fn zeromorph_prove(
         &mut self,
-        transcript: &mut TranscriptType,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
