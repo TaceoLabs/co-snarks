@@ -477,9 +477,8 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
-    pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
-        let mpc_net = Rep3MpcNet::new(config)?;
+    /// Create a new [Rep3CoGroth16] protocol with a given network.
+    pub fn with_network(mpc_net: Rep3MpcNet) -> Result<Self> {
         let mut io_context0 = IoContext::init(mpc_net)?;
         let io_context1 = io_context0.fork()?;
         let driver = Rep3Groth16Driver::new(io_context0, io_context1);
@@ -487,6 +486,12 @@ where
             driver,
             phantom_data: PhantomData,
         })
+    }
+
+    /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
+    pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
+        let mpc_net = Rep3MpcNet::new(config)?;
+        Self::with_network(mpc_net)
     }
 }
 
