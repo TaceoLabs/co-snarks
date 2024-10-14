@@ -1,7 +1,7 @@
 use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Parser, Subcommand};
-use co_acvm::solver::Rep3CoSolver;
+use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
 use co_noir::{
     convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
     translate_witness_share_rep3, CreateVKCli, CreateVKConfig, GenerateProofCli,
@@ -22,10 +22,7 @@ use co_ultrahonk::{
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
-    rep3::{
-        network::{IoContext, Rep3MpcNet, Rep3Network},
-        Rep3PrimeFieldShare,
-    },
+    rep3::network::{IoContext, Rep3MpcNet, Rep3Network},
     shamir::{
         network::{ShamirMpcNet, ShamirNetwork},
         ShamirPreprocessing, ShamirProtocol,
@@ -240,6 +237,7 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
     let inputs = Rep3CoSolver::<_, Rep3MpcNet>::partially_read_abi_bn254_fieldelement(
         &input,
         &compiled_program.abi,
+        &compiled_program.bytecode,
     )?;
 
     // create input shares
@@ -258,7 +256,7 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
     for (i, share) in shares.iter().enumerate() {
         let path = out_dir.join(format!("{}.{}.shared", base_name, i));
         let out_file = BufWriter::new(File::create(&path).context("while creating output file")?);
-        bincode::serialize_into(out_file, share).context("while serializing witness share")?;
+        bincode::serialize_into(out_file, share).context("while serializing input share")?;
         tracing::info!("Wrote input share {} to file {}", i, path.display());
     }
 
@@ -292,7 +290,7 @@ fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<
             // parse input shares
             let input_share_file =
                 BufReader::new(File::open(input).context("while opening input share file")?);
-            let input_share: BTreeMap<String, Rep3PrimeFieldShare<ark_bn254::Fr>> =
+            let input_share: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>> =
                 bincode::deserialize_from(input_share_file)
                     .context("while deserializing input share")?;
             color_eyre::Result::<_>::Ok(input_share)
@@ -343,7 +341,7 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     // parse input shares
     let input_share_file =
         BufReader::new(File::open(&input).context("while opening input share file")?);
-    let input_share: BTreeMap<String, Rep3PrimeFieldShare<ark_bn254::Fr>> =
+    let input_share: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>> =
         bincode::deserialize_from(input_share_file).context("while deserializing input share")?;
     let input_share = translate_witness_share_rep3(input_share, &compiled_program.abi)?;
 
