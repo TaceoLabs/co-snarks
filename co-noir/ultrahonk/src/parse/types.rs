@@ -1,6 +1,7 @@
 use super::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable};
 use super::plookup::{BasicTableId, MultiTableId};
 use crate::decider::polynomial::Polynomial;
+use crate::prover::HonkProofResult;
 use crate::types::ProvingKey;
 use crate::Utils;
 use ark_ec::pairing::Pairing;
@@ -428,7 +429,9 @@ impl<F: PrimeField> RomTable<F> {
         assert!(val < BigUint::from(self.length));
 
         let witness_index = index.normalize(builder).get_witness_index();
-        let output_idx = builder.read_rom_array(self.rom_id, witness_index);
+        let output_idx = builder
+            .read_rom_array(self.rom_id, witness_index)
+            .expect("Not implemented for other cases");
         FieldCT::from_witness_index(output_idx)
     }
 
@@ -558,7 +561,8 @@ impl<F: PrimeField> FieldCT<F> {
         if self.witness_index != Self::IS_CONSTANT {
             let variable = builder
                 .get_variable(self.witness_index as usize)
-                .public_into_field(); // TACEO TODO this is just implemented for the Plain backend
+                .public_into_field()
+                .expect("Not implemented for other cases"); // TACEO TODO this is just implemented for the Plain backend
             self.multiplicative_constant * F::from(variable) + self.additive_constant
         } else {
             self.additive_constant.to_owned()
@@ -627,8 +631,9 @@ impl<F: PrimeField> FieldCT<F> {
         let value = F::from(
             builder
                 .get_variable(self.witness_index as usize)
-                .public_into_field(),
-        ); // TACEO TODO this is just implemented for the Plain backend
+                .public_into_field()
+                .expect("Not implemented for other cases"), // TACEO TODO this is just implemented for the Plain backend
+        );
         let out = self.multiplicative_constant * value + self.additive_constant;
 
         result.witness_index = builder.add_variable(S::from_public(P::ScalarField::from(out)));
