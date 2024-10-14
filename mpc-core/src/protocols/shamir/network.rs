@@ -140,7 +140,7 @@ impl ShamirMpcNet {
         }
         if let Some(net_handler) = Arc::into_inner(net_handler) {
             runtime.block_on(async {
-                net_handler.shutdown().await;
+                let _ = net_handler.shutdown().await;
             });
         }
     }

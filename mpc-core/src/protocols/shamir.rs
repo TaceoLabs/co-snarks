@@ -262,7 +262,8 @@ pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
     pub threshold: usize,
     /// The open lagrange coeffs
     pub open_lagrange_t: Vec<F>,
-    pub(crate) open_lagrange_2t: Vec<F>,
+    /// The open lagrange coeffs for threshold * 2
+    pub open_lagrange_2t: Vec<F>,
     mul_lagrange_2t: Vec<F>,
     mul_reconstruct_with_zeros: Vec<F>,
     rng: RngType,

@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{fmt::Debug, sync::Arc};
+use std::fmt::Debug;
 
 use ark_ec::pairing::Pairing;
 use ark_poly::domain::DomainCoeff;
@@ -66,13 +66,11 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     ) -> Vec<P::ScalarField>;
 
     /// Compute the msm of `h` and `h_query` and multiplication `r` * `s`.
-    fn msm_and_mul(
+    fn mul(
         &mut self,
-        h: Vec<<P as Pairing>::ScalarField>,
-        h_query: Arc<Vec<P::G1Affine>>,
         r: Self::ArithmeticShare,
         s: Self::ArithmeticShare,
-    ) -> IoResult<(Self::PointShareG1, Self::ArithmeticShare)>;
+    ) -> IoResult<Self::ArithmeticShare>;
 
     /// Computes the \[coeffs_i\] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     fn distribute_powers_and_mul_by_const(
@@ -97,6 +95,9 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
 
     /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
     fn add_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1);
+
+    /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
+    fn add_points_g1_half_share(a: Self::PointShareG1, b: &P::G1) -> P::G1;
 
     /// Add a public point B in place to the shared point A
     fn add_assign_points_public_g1(id: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1);
@@ -126,7 +127,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     /// Reconstructs a shared points: A = Open(\[A\]), B = Open(\[B\]).
     fn open_two_points(
         &mut self,
-        a: Self::PointShareG1,
+        a: P::G1,
         b: Self::PointShareG2,
     ) -> std::io::Result<(P::G1, P::G2)>;
 

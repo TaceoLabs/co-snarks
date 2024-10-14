@@ -15,4 +15,9 @@ impl<C: CurveGroup> Rep3PointShare<C> {
     pub fn new(a: C, b: C) -> Self {
         Self { a, b }
     }
+
+    /// Unwraps the type into two additive shares.
+    pub fn ab(self) -> (C, C) {
+        (self.a, self.b)
+    }
 }
