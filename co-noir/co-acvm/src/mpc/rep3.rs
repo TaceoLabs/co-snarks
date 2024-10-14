@@ -11,6 +11,7 @@ use mpc_core::{
         Rep3PrimeFieldShare,
     },
 };
+use serde::{Deserialize, Serialize};
 
 use super::plain::PlainAcvmSolver;
 use super::NoirWitnessExtensionProtocol;
@@ -40,10 +41,22 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
 
 // TODO maybe we want to merge that with the Rep3VmType?? Atm we do not need
 // binary shares so maybe it is ok..
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Rep3AcvmType<F: PrimeField> {
-    Public(F),
-    Shared(ArithmeticShare<F>),
+    Public(
+        #[serde(
+            serialize_with = "mpc_core::ark_se",
+            deserialize_with = "mpc_core::ark_de"
+        )]
+        F,
+    ),
+    Shared(
+        #[serde(
+            serialize_with = "mpc_core::ark_se",
+            deserialize_with = "mpc_core::ark_de"
+        )]
+        ArithmeticShare<F>,
+    ),
 }
 
 impl<F: PrimeField> std::fmt::Debug for Rep3AcvmType<F> {

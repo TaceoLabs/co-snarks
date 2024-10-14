@@ -20,7 +20,7 @@ pub enum HonkProofError {
     /// Indicates that the crs is too small
     #[error("CRS too small")]
     CrsTooSmall,
-    /// The proof has too little elements
+    /// The proof has too few elements
     #[error("Proof too small")]
     ProofTooSmall,
     /// Invalid proof length
