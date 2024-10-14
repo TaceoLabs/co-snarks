@@ -9,7 +9,9 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
-use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
+use mpc_net::{
+    channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler, MpcNetworkHandlerWrapper,
+};
 
 use super::{
     id::PartyID,
@@ -214,8 +216,7 @@ pub trait Rep3Network: Send {
 #[derive(Debug)]
 pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
-    pub(crate) runtime: Arc<tokio::runtime::Runtime>,
-    pub(crate) net_handler: Arc<MpcNetworkHandler>,
+    pub(crate) net_handler: Arc<MpcNetworkHandlerWrapper>,
     pub(crate) chan_next: ChannelHandle<Bytes, BytesMut>,
     pub(crate) chan_prev: ChannelHandle<Bytes, BytesMut>,
 }
@@ -249,28 +250,27 @@ impl Rep3MpcNet {
         })?;
         Ok(Self {
             id,
-            runtime: Arc::new(runtime),
-            net_handler: Arc::new(net_handler),
+            net_handler: Arc::new(MpcNetworkHandlerWrapper::new(runtime, net_handler)),
             chan_next,
             chan_prev,
         })
     }
 
     /// Shuts down the network interface.
-    pub fn shutdown(self) {
-        let Self {
-            id: _,
-            runtime,
-            net_handler,
-            chan_next,
-            chan_prev,
-        } = self;
-        drop(chan_next);
-        drop(chan_prev);
-        if let Some(net_handler) = Arc::into_inner(net_handler) {
-            runtime.block_on(net_handler.shutdown());
-        }
-    }
+    // pub fn shutdown(self) {
+    //     let Self {
+    //         id: _,
+    //         runtime,
+    //         net_handler,
+    //         chan_next,
+    //         chan_prev,
+    //     } = self;
+    //     drop(chan_next);
+    //     drop(chan_prev);
+    //     if let Some(net_handler) = Arc::into_inner(net_handler) {
+    //         runtime.block_on(net_handler.shutdown());
+    //     }
+    // }
 
     /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: PartyID, data: Bytes) -> std::io::Result<()> {
@@ -355,9 +355,8 @@ impl Rep3Network for Rep3MpcNet {
     fn fork(&mut self) -> std::io::Result<Self> {
         let id = self.id;
         let net_handler = Arc::clone(&self.net_handler);
-        let runtime = Arc::clone(&self.runtime);
-        let (chan_next, chan_prev) = runtime.block_on(async {
-            let mut channels = net_handler.get_byte_channels().await?;
+        let (chan_next, chan_prev) = net_handler.runtime.block_on(async {
+            let mut channels = net_handler.inner.get_byte_channels().await?;
 
             let chan_next = channels
                 .remove(&id.next_id().into())
@@ -376,7 +375,6 @@ impl Rep3Network for Rep3MpcNet {
 
         Ok(Self {
             id,
-            runtime,
             net_handler,
             chan_next,
             chan_prev,
