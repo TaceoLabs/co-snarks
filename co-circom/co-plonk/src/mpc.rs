@@ -11,6 +11,7 @@ pub use rep3::Rep3PlonkDriver;
 pub use shamir::ShamirPlonkDriver;
 
 type IoResult<T> = std::io::Result<T>;
+type VecShares<T> = (Vec<T>, Vec<T>);
 
 /// This trait represents the operations used during Groth16 proof generation
 pub trait CircomPlonkProver<P: Pairing> {
@@ -173,5 +174,5 @@ pub trait CircomPlonkProver<P: Pairing> {
         d1: &[Self::ArithmeticShare],
         d2: &[Self::ArithmeticShare],
         d3: &[Self::ArithmeticShare],
-    ) -> IoResult<(Vec<Self::ArithmeticShare>, Vec<Self::ArithmeticShare>)>;
+    ) -> IoResult<VecShares<Self::ArithmeticShare>>;
 }

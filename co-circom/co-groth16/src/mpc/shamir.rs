@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use super::{CircomGroth16Prover, IoResult};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
@@ -79,24 +77,12 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         arithmetic::local_mul_vec(&a, &b)
     }
 
-    fn msm_and_mul(
+    fn mul(
         &mut self,
-        h: Vec<<P as Pairing>::ScalarField>,
-        h_query: Arc<Vec<P::G1Affine>>,
         r: Self::ArithmeticShare,
         s: Self::ArithmeticShare,
-    ) -> IoResult<(Self::PointShareG1, Self::ArithmeticShare)> {
-        std::thread::scope(|scope| {
-            let h_acc = scope.spawn(|| {
-                let msm_h_query = tracing::debug_span!("msm h_query").entered();
-                let h = self.protocol0.degree_reduce_vec(h)?;
-                let result = pointshare::msm_public_points(h_query.as_ref(), &h);
-                msm_h_query.exit();
-                Ok::<_, std::io::Error>(result)
-            });
-            let mul = arithmetic::mul(r, s, &mut self.protocol1)?;
-            Ok((h_acc.join().expect("can join")?, mul))
-        })
+    ) -> IoResult<Self::ArithmeticShare> {
+        arithmetic::mul(r, s, &mut self.protocol1)
     }
 
     fn distribute_powers_and_mul_by_const(
@@ -134,6 +120,10 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         pointshare::add_assign(a, b)
     }
 
+    fn add_points_g1_half_share(a: Self::PointShareG1, b: &P::G1) -> P::G1 {
+        a.inner() + b
+    }
+
     fn add_assign_points_public_g1(_id: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1) {
         pointshare::add_assign_public(a, b)
     }
@@ -168,21 +158,26 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
 
     fn open_two_points(
         &mut self,
-        a: Self::PointShareG1,
+        a: P::G1,
         b: Self::PointShareG2,
     ) -> std::io::Result<(P::G1, P::G2)> {
-        let s1 = a.a;
+        let s1 = a;
         let s2 = b.a;
-
-        let rcv: Vec<(P::G1, P::G2)> = self
-            .protocol0
-            .network
-            .broadcast_next((s1, s2), self.protocol0.threshold + 1)?;
-        let (r1, r2): (Vec<P::G1>, Vec<P::G2>) = rcv.into_iter().unzip();
-
-        let r1 = core::reconstruct_point(&r1, &self.protocol0.open_lagrange_t);
-        let r2 = core::reconstruct_point(&r2, &self.protocol0.open_lagrange_t);
-
+        let (r1, r2) = std::thread::scope(|s| {
+            let r1 = s.spawn(|| {
+                self.protocol0
+                    .network
+                    .broadcast_next(s1, self.protocol0.threshold * 2 + 1)
+            });
+            let r2 = s.spawn(|| {
+                self.protocol1
+                    .network
+                    .broadcast_next(s2, self.protocol0.threshold + 1)
+            });
+            (r1.join().expect("can join"), r2.join().expect("can join"))
+        });
+        let r1 = core::reconstruct_point(&r1?, &self.protocol0.open_lagrange_2t);
+        let r2 = core::reconstruct_point(&r2?, &self.protocol0.open_lagrange_t);
         Ok((r1, r2))
     }
 

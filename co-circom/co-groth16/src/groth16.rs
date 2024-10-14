@@ -19,6 +19,7 @@ use rayon::prelude::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::oneshot;
 use tracing::instrument;
 
 use crate::mpc::plain::PlainGroth16Driver;
@@ -218,9 +219,9 @@ where
         let domain = Arc::new(domain);
         eval_constraint_span.exit();
 
-        let (a_tx, a_rx) = std::sync::mpsc::channel();
-        let (b_tx, b_rx) = std::sync::mpsc::channel();
-        let (c_tx, c_rx) = std::sync::mpsc::channel();
+        let (a_tx, a_rx) = oneshot::channel();
+        let (b_tx, b_rx) = oneshot::channel();
+        let (c_tx, c_rx) = oneshot::channel();
         let a_domain = Arc::clone(&domain);
         let b_domain = Arc::clone(&domain);
         let c_domain = Arc::clone(&domain);
@@ -269,14 +270,14 @@ where
             c_tx.send(ab).expect("channel not dropped");
         });
 
-        let a = a_rx.recv()?;
-        let b = b_rx.recv()?;
+        let a = a_rx.blocking_recv()?;
+        let b = b_rx.blocking_recv()?;
 
         let compute_ab_span = tracing::debug_span!("compute ab").entered();
         let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
         // same as above. No IO task is run at the moment.
         let mut ab = self.driver.local_mul_vec(a, b);
-        let c = c_rx.recv()?;
+        let c = c_rx.blocking_recv()?;
         ab.par_iter_mut()
             .zip_eq(c.par_iter())
             .with_min_len(512)
@@ -351,14 +352,15 @@ where
         aux_assignment: Arc<Vec<T::ArithmeticShare>>,
     ) -> Result<Groth16Proof<P>> {
         let delta_g1 = zkey.delta_g1.into_group();
-        let (l_acc_tx, l_acc_rx) = std::sync::mpsc::channel();
+        let (l_acc_tx, l_acc_rx) = oneshot::channel();
+        let (h_acc_tx, h_acc_rx) = oneshot::channel();
         let h_query = Arc::clone(&zkey.h_query);
         let l_query = Arc::clone(&zkey.l_query);
 
         let party_id = self.driver.get_party_id();
-        let (r_g1_tx, r_g1_rx) = std::sync::mpsc::channel();
-        let (s_g1_tx, s_g1_rx) = std::sync::mpsc::channel();
-        let (s_g2_tx, s_g2_rx) = std::sync::mpsc::channel();
+        let (r_g1_tx, r_g1_rx) = oneshot::channel();
+        let (s_g1_tx, s_g1_rx) = oneshot::channel();
+        let (s_g2_tx, s_g2_rx) = oneshot::channel();
         let a_query = Arc::clone(&zkey.a_query);
         let b_g1_query = Arc::clone(&zkey.b_g1_query);
         let b_g2_query = Arc::clone(&zkey.b_g2_query);
@@ -433,15 +435,20 @@ where
             msm_l_query.exit();
         });
 
-        // TODO we can remove the networking round in msm_and_mul because we only have linear operations afterwards
-        let (h_acc, rs) = self.driver.msm_and_mul(h, h_query, r, s)?;
+        rayon::spawn(move || {
+            //perform the msm for h
+            let result = P::G1::msm_unchecked(h_query.as_ref(), &h);
+            h_acc_tx.send(result).expect("channel not dropped");
+        });
+
+        let rs = self.driver.mul(r, s)?;
         let r_s_delta_g1 = T::scalar_mul_public_point_g1(&delta_g1, rs);
 
-        let l_aux_acc = l_acc_rx.recv().expect("channel not dropped");
+        let l_aux_acc = l_acc_rx.blocking_recv().expect("channel not dropped");
 
         let calculate_coeff_span = tracing::debug_span!("calculate coeff").entered();
-        let g_a = r_g1_rx.recv()?;
-        let g1_b = s_g1_rx.recv()?;
+        let g_a = r_g1_rx.blocking_recv()?;
+        let g1_b = s_g1_rx.blocking_recv()?;
         calculate_coeff_span.exit();
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
@@ -455,9 +462,11 @@ where
         T::add_assign_points_g1(&mut g_c, &r_g1_b);
         T::sub_assign_points_g1(&mut g_c, &r_s_delta_g1);
         T::add_assign_points_g1(&mut g_c, &l_aux_acc);
-        T::add_assign_points_g1(&mut g_c, &h_acc);
 
-        let g2_b = s_g2_rx.recv()?;
+        let h_acc = h_acc_rx.blocking_recv()?;
+        let g_c = T::add_points_g1_half_share(g_c, &h_acc);
+
+        let g2_b = s_g2_rx.blocking_recv()?;
         let (g_c_opened, g2_b_opened) = self.driver.open_two_points(g_c, g2_b)?;
         last_round.exit();
 
