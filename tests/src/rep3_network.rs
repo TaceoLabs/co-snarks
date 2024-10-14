@@ -1,21 +1,28 @@
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use bytes::Bytes;
-use mpc_core::protocols::rep3::{id::PartyID, network::Rep3Network};
 use std::sync::mpsc::{self, Receiver, Sender};
 
+use super::shamir_network::PartyTestNetwork as ShamirPartyTestNetwork;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use bytes::Bytes;
+use mpc_core::protocols::{
+    bridges::network::RepToShamirNetwork,
+    rep3::{id::PartyID, network::Rep3Network},
+};
+
+use crate::Msg;
+
 pub struct Rep3TestNetwork {
-    p1_p2_sender: Sender<Bytes>,
-    p1_p3_sender: Sender<Bytes>,
-    p2_p3_sender: Sender<Bytes>,
-    p2_p1_sender: Sender<Bytes>,
-    p3_p1_sender: Sender<Bytes>,
-    p3_p2_sender: Sender<Bytes>,
-    p1_p2_receiver: Receiver<Bytes>,
-    p1_p3_receiver: Receiver<Bytes>,
-    p2_p3_receiver: Receiver<Bytes>,
-    p2_p1_receiver: Receiver<Bytes>,
-    p3_p1_receiver: Receiver<Bytes>,
-    p3_p2_receiver: Receiver<Bytes>,
+    p1_p2_sender: Sender<Msg>,
+    p1_p3_sender: Sender<Msg>,
+    p2_p3_sender: Sender<Msg>,
+    p2_p1_sender: Sender<Msg>,
+    p3_p1_sender: Sender<Msg>,
+    p3_p2_sender: Sender<Msg>,
+    p1_p2_receiver: Receiver<Msg>,
+    p1_p3_receiver: Receiver<Msg>,
+    p2_p3_receiver: Receiver<Msg>,
+    p2_p1_receiver: Receiver<Msg>,
+    p3_p1_receiver: Receiver<Msg>,
+    p3_p2_receiver: Receiver<Msg>,
 }
 
 impl Default for Rep3TestNetwork {
@@ -84,12 +91,12 @@ impl Rep3TestNetwork {
 
 #[derive(Debug)]
 pub struct PartyTestNetwork {
-    id: PartyID,
-    send_prev: Sender<Bytes>,
-    send_next: Sender<Bytes>,
-    recv_prev: Receiver<Bytes>,
-    recv_next: Receiver<Bytes>,
-    _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
+    pub id: PartyID,
+    pub send_prev: Sender<Msg>,
+    pub send_next: Sender<Msg>,
+    pub recv_prev: Receiver<Msg>,
+    pub recv_next: Receiver<Msg>,
+    pub _stats: [usize; 4], // [sent_prev, sent_next, recv_prev, recv_next]
 }
 
 impl Rep3Network for PartyTestNetwork {
@@ -97,20 +104,55 @@ impl Rep3Network for PartyTestNetwork {
         self.id
     }
 
+    fn reshare_many<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: &[F],
+    ) -> std::io::Result<Vec<F>> {
+        self.send_next_many(data)?;
+        self.recv_prev_many()
+    }
+
+    fn broadcast<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: F,
+    ) -> std::io::Result<(F, F)> {
+        let data = [data];
+        self.send_many(self.id.next_id(), &data)?;
+        self.send_many(self.id.prev_id(), &data)?;
+        let mut prev = self.recv_many(self.id.prev_id())?;
+        let mut next = self.recv_many(self.id.next_id())?;
+        if next.len() != 1 || prev.len() != 1 {
+            panic!("got more than one from next or prev");
+        }
+        Ok((prev.pop().unwrap(), next.pop().unwrap()))
+    }
+
+    fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: &[F],
+    ) -> std::io::Result<(Vec<F>, Vec<F>)> {
+        self.send_many(self.id.next_id(), data)?;
+        self.send_many(self.id.prev_id(), data)?;
+        let prev = self.recv_many(self.id.prev_id())?;
+        let next = self.recv_many(self.id.next_id())?;
+        Ok((prev, next))
+    }
+
     fn send_many<F: CanonicalSerialize>(
         &mut self,
         target: PartyID,
         data: &[F],
     ) -> std::io::Result<()> {
-        let mut to_send = Vec::with_capacity(data.len() * 32);
+        let size = data.serialized_size(ark_serialize::Compress::No);
+        let mut to_send = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut to_send).unwrap();
         if self.id.next_id() == target {
             self.send_next
-                .send(Bytes::from(to_send))
+                .send(Msg::Data(Bytes::from(to_send)))
                 .expect("can send to next")
         } else if self.id.prev_id() == target {
             self.send_prev
-                .send(Bytes::from(to_send))
+                .send(Msg::Data(Bytes::from(to_send)))
                 .expect("can send to next");
         } else {
             panic!("You want to send to yourself?")
@@ -120,45 +162,82 @@ impl Rep3Network for PartyTestNetwork {
 
     fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
         if self.id.next_id() == from {
-            let data = Vec::from(self.recv_next.recv().unwrap());
+            let data = Vec::from(self.recv_next.recv().unwrap().into_data().unwrap());
             Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         } else if self.id.prev_id() == from {
-            let data = Vec::from(self.recv_prev.recv().unwrap());
+            let data = Vec::from(self.recv_prev.recv().unwrap().into_data().unwrap());
             Ok(Vec::<F>::deserialize_uncompressed(data.as_slice()).unwrap())
         } else {
             panic!("You want to read from yourself?")
         }
     }
 
-    fn send<F: CanonicalSerialize>(&mut self, target: PartyID, data: F) -> std::io::Result<()> {
-        self.send_many(target, &[data])
-    }
+    fn fork(&mut self) -> std::io::Result<Self>
+    where
+        Self: Sized,
+    {
+        let ch_prev = mpsc::channel();
+        let ch_next = mpsc::channel();
 
-    fn send_next<F: CanonicalSerialize>(&mut self, data: F) -> std::io::Result<()> {
-        self.send(self.get_id().next_id(), data)
-    }
+        self.send_next.send(Msg::Recv(ch_next.1)).unwrap();
+        self.send_prev.send(Msg::Recv(ch_prev.1)).unwrap();
 
-    fn send_next_many<F: CanonicalSerialize>(&mut self, data: &[F]) -> std::io::Result<()> {
-        self.send_many(self.get_id().next_id(), data)
-    }
+        let recv_prev = self.recv_prev.recv().unwrap().into_recv().unwrap();
+        let recv_next = self.recv_next.recv().unwrap().into_recv().unwrap();
 
-    fn recv<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<F> {
-        let mut res = self.recv_many(from)?;
-        if res.len() != 1 {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Expected 1 element, got more",
-            ))
-        } else {
-            Ok(res.pop().unwrap())
+        let id = self.id;
+
+        Ok(Self {
+            id,
+            send_prev: ch_prev.0,
+            send_next: ch_next.0,
+            recv_prev,
+            recv_next,
+            _stats: [0; 4],
+        })
+    }
+}
+
+impl RepToShamirNetwork<ShamirPartyTestNetwork> for PartyTestNetwork {
+    fn to_shamir_net(self) -> ShamirPartyTestNetwork {
+        let Self {
+            id,
+            send_prev,
+            send_next,
+            recv_prev,
+            recv_next,
+            _stats,
+        } = self;
+
+        let mut send = Vec::with_capacity(2);
+        let mut recv = Vec::with_capacity(2);
+
+        match id {
+            PartyID::ID0 => {
+                send.push(send_next);
+                send.push(send_prev);
+                recv.push(recv_next);
+                recv.push(recv_prev);
+            }
+            PartyID::ID1 => {
+                send.push(send_prev);
+                send.push(send_next);
+                recv.push(recv_prev);
+                recv.push(recv_next);
+            }
+            PartyID::ID2 => {
+                send.push(send_next);
+                send.push(send_prev);
+                recv.push(recv_next);
+                recv.push(recv_prev);
+            }
         }
-    }
 
-    fn recv_prev<F: CanonicalDeserialize>(&mut self) -> std::io::Result<F> {
-        self.recv(self.get_id().prev_id())
-    }
-
-    fn recv_prev_many<F: CanonicalDeserialize>(&mut self) -> std::io::Result<Vec<F>> {
-        self.recv_many(self.get_id().prev_id())
+        ShamirPartyTestNetwork {
+            id: id.into(),
+            num_parties: 3,
+            send,
+            recv,
+        }
     }
 }
