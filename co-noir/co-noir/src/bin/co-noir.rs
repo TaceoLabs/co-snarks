@@ -134,9 +134,9 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
     file_utils::check_dir_exists(&out_dir)?;
 
     // parse constraint system
-    let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
+    let program = Utils::get_program_artifact_from_file(&circuit_path)
         .context("while parsing program artifact")?;
-    let pub_inputs = constraint_system.public_inputs;
+    let circuit = &program.bytecode.functions[0];
 
     // parse witness
     let witness = Utils::get_witness_from_file(&witness_path).context("while parsing witness")?;
@@ -146,8 +146,13 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
         .into_iter()
         .map(PubShared::from_shared)
         .collect::<Vec<_>>();
-    for index in pub_inputs {
-        let index = index as usize;
+    for index in circuit
+        .public_parameters
+        .0
+        .iter()
+        .chain(circuit.return_values.0.iter())
+    {
+        let index = index.0 as usize;
         if index >= witness.len() {
             return Err(eyre!("Public input index out of bounds"));
         }
