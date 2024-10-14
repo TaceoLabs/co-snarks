@@ -135,7 +135,7 @@ where
                 };
                 let el = witness
                     .get(&should_name)
-                    .ok_or(eyre!("Corrupted Witness: Missing witness"))?;
+                    .ok_or(eyre!("Corrupted Witness: Missing witness: {}", should_name))?;
 
                 result.insert(index.into(), O::from(el.to_owned()));
                 index += 1;
