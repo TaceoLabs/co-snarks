@@ -1,7 +1,7 @@
 use ark_ec::pairing::Pairing;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use ultrahonk::prelude::UltraCircuitVariable;
+use ultrahonk::prelude::{HonkProofError, HonkProofResult, UltraCircuitVariable};
 
 use crate::mpc::NoirUltraHonkProver;
 
@@ -80,10 +80,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraCircuitVariable<P::ScalarField>
         }
     }
 
-    fn public_into_field(self) -> P::ScalarField {
+    fn public_into_field(self) -> HonkProofResult<P::ScalarField> {
         match self {
-            SharedBuilderVariable::Public(val) => val,
-            SharedBuilderVariable::Shared(_) => panic!("Expected public value"),
+            SharedBuilderVariable::Public(val) => Ok(val),
+            SharedBuilderVariable::Shared(_) => Err(HonkProofError::ExpectedPublicWitness),
         }
     }
 }
