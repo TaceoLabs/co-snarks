@@ -1,6 +1,6 @@
 use super::CoSolver;
 use crate::mpc::NoirWitnessExtensionProtocol;
-use acir::{native_types::WitnessMap, FieldElement};
+use acir::{circuit::PublicInputs, native_types::WitnessMap, FieldElement};
 use eyre::eyre;
 use noirc_abi::Abi;
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,11 @@ enum TomlTypes {
     Array(Vec<TomlTypes>),
     // Struct of TomlTypes
     Table(BTreeMap<String, TomlTypes>),
+}
+
+pub enum PublicMarker<F> {
+    Public(F),
+    Private(F),
 }
 
 impl<T> CoSolver<T, ark_bn254::Fr>
@@ -56,21 +61,49 @@ where
     }
 
     pub(crate) fn create_string_map(
-        abi: &Abi,
+        original_abi: &Abi,
+        partial_abi: &Abi,
         witness: WitnessMap<FieldElement>,
-    ) -> eyre::Result<BTreeMap<String, FieldElement>> {
+        public_parameters: &PublicInputs,
+    ) -> eyre::Result<BTreeMap<String, PublicMarker<FieldElement>>> {
         let mut res_map = BTreeMap::new();
         let mut wit_iter = witness.into_iter();
 
-        for param in abi.parameters.iter() {
+        let mut orig_params = original_abi.parameters.iter();
+        let mut offset = 0;
+
+        for param in partial_abi.parameters.iter() {
             let arg_name = &param.name;
             let typ_field_len = param.typ.field_count();
+
+            // Calculate real witness offset for the public parameter marker
+            loop {
+                let next = orig_params
+                    .next()
+                    .ok_or(eyre!("Corrupted Witness: Too few witnesses"))?;
+
+                if &next.name == arg_name {
+                    break;
+                }
+                offset += next.typ.field_count();
+            }
+
             for i in 0..typ_field_len {
-                let name = format!("{}[{}]", arg_name, i);
+                let name = if typ_field_len == 1 {
+                    arg_name.to_owned()
+                } else {
+                    format!("{}[{}]", arg_name, i)
+                };
+
                 let (_, el) = wit_iter
                     .next()
-                    .ok_or(eyre!("Corrupted Witness: Too little witnesses"))?;
-                res_map.insert(name, el);
+                    .ok_or(eyre!("Corrupted Witness: Too few witnesses"))?;
+                if public_parameters.contains((offset) as usize) {
+                    res_map.insert(name, PublicMarker::Public(el));
+                } else {
+                    res_map.insert(name, PublicMarker::Private(el));
+                }
+                offset += 1;
             }
         }
         if wit_iter.next().is_some() {
@@ -95,10 +128,14 @@ where
             let arg_name = &params.name;
             let typ_field_len = params.typ.field_count();
             for i in 0..typ_field_len {
-                let should_name = format!("{}[{}]", arg_name, i);
+                let should_name = if typ_field_len == 1 {
+                    arg_name.to_owned()
+                } else {
+                    format!("{}[{}]", arg_name, i)
+                };
                 let el = witness
                     .get(&should_name)
-                    .ok_or(eyre!("Corrupted Witness: Missing witness"))?;
+                    .ok_or(eyre!("Corrupted Witness: Missing witness: {}", should_name))?;
 
                 result.insert(index.into(), O::from(el.to_owned()));
                 index += 1;
