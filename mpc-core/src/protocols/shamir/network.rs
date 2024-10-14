@@ -5,7 +5,9 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
-use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
+use mpc_net::{
+    channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler, MpcNetworkHandlerWrapper,
+};
 use std::{collections::HashMap, sync::Arc};
 
 /// This trait defines the network interface for the Shamir protocol.
@@ -75,8 +77,7 @@ pub trait ShamirNetwork: Send {
 pub struct ShamirMpcNet {
     pub(crate) id: usize, // 0 <= id < num_parties
     pub(crate) num_parties: usize,
-    pub(crate) runtime: Arc<tokio::runtime::Runtime>,
-    pub(crate) net_handler: Arc<MpcNetworkHandler>,
+    pub(crate) net_handler: Arc<MpcNetworkHandlerWrapper>,
     pub(crate) channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
 }
 
@@ -120,30 +121,28 @@ impl ShamirMpcNet {
         Ok(Self {
             id,
             num_parties,
-            runtime: Arc::new(runtime),
-            net_handler: Arc::new(net_handler),
+            net_handler: Arc::new(MpcNetworkHandlerWrapper::new(runtime, net_handler)),
             channels,
         })
     }
 
     /// Shuts down the network interface.
-    pub fn shutdown(self) {
-        let Self {
-            id: _,
-            num_parties: _,
-            runtime,
-            net_handler,
-            channels,
-        } = self;
-        for chan in channels.into_iter() {
-            drop(chan);
-        }
-        if let Some(net_handler) = Arc::into_inner(net_handler) {
-            runtime.block_on(async {
-                let _ = net_handler.shutdown().await;
-            });
-        }
-    }
+    // pub fn shutdown(self) {
+    //     let Self {
+    //         id: _,
+    //         num_parties: _,
+    //         net_handler,
+    //         channels,
+    //     } = self;
+    //     for chan in channels.into_iter() {
+    //         drop(chan);
+    //     }
+    //     if let Some(net_handler) = Arc::into_inner(net_handler) {
+    //         runtime.block_on(async {
+    //             net_handler.shutdown().await;
+    //         });
+    //     }
+    // }
 
     /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: usize, data: Bytes) -> std::io::Result<()> {
@@ -284,9 +283,8 @@ impl ShamirNetwork for ShamirMpcNet {
         let id = self.id;
         let num_parties = self.num_parties;
         let net_handler = Arc::clone(&self.net_handler);
-        let runtime = Arc::clone(&self.runtime);
-        let channels = runtime.block_on(async {
-            let mut channels = net_handler.get_byte_channels().await?;
+        let channels = net_handler.runtime.block_on(async {
+            let mut channels = net_handler.inner.get_byte_channels().await?;
 
             let mut channels_ = HashMap::with_capacity(num_parties - 1);
 
@@ -307,7 +305,6 @@ impl ShamirNetwork for ShamirMpcNet {
         Ok(Self {
             id,
             num_parties,
-            runtime,
             net_handler,
             channels,
         })
