@@ -39,18 +39,16 @@ impl<F: PrimeField> ShamirRng<F> {
         let matrix = Self::create_vandermonde_matrix(num_parties, threshold);
 
         let id = network.get_id();
-        let (p_r_t, p_r_2_t) = if num_parties == 3 && threshold == 1 {
-            let p_r_t = super::core::precompute_interpolation_polys::<F>(&[
-                (id + 1) % 3 + 1,
-                (id + 2) % 3 + 1,
-            ]);
-            let p_r_2_t = Self::precompute_interpolation_polys(id, 2, 3);
-            (p_r_t, p_r_2_t)
-        } else {
-            let p_r_t = Self::precompute_interpolation_polys(id, threshold, num_parties);
-            let p_r_2_t = Self::precompute_interpolation_polys(id, threshold * 2, num_parties);
-            (p_r_t, p_r_2_t)
-        };
+        let mut ids = Vec::with_capacity(threshold + 1);
+        for i in 1..=threshold + 1 {
+            let id_ = (id + i) % num_parties + 1;
+            ids.push(id_);
+        }
+        let precomputed_interpolation_r_t = super::core::precompute_interpolation_polys::<F>(&ids);
+
+        // let p_r_t = Self::precompute_interpolation_polys(id, threshold + 1, num_parties);
+        let precomputed_interpolation_r_2t =
+            Self::precompute_interpolation_polys(id, threshold * 2, num_parties);
 
         Ok(Self {
             id,
@@ -58,8 +56,8 @@ impl<F: PrimeField> ShamirRng<F> {
             threshold,
             num_parties,
             shared_rngs,
-            precomputed_interpolation_r_t: p_r_t,
-            precomputed_interpolation_r_2t: p_r_2_t,
+            precomputed_interpolation_r_t,
+            precomputed_interpolation_r_2t,
             matrix,
             r_t: Vec::new(),
             r_2t: Vec::new(),
@@ -187,16 +185,6 @@ impl<F: PrimeField> ShamirRng<F> {
         }
     }
 
-    fn receive_seeded(&mut self, degree: usize, output: &mut [Vec<F>]) {
-        for i in 1..=degree {
-            let send_id = (self.id + self.num_parties - i) % self.num_parties;
-            let rng = self.get_rng_mut(send_id);
-            for r in output.iter_mut() {
-                r[send_id] = F::rand(rng);
-            }
-        }
-    }
-
     fn receive_seeded_prev(&mut self, degree: usize, output: &mut [Vec<F>]) {
         for i in 1..=degree {
             let send_id = (self.id + self.num_parties - i) % self.num_parties;
@@ -277,14 +265,17 @@ impl<F: PrimeField> ShamirRng<F> {
 
     fn send_share_of_randomness<N: ShamirNetwork>(
         &self,
-        degree: usize,
+        seeded: usize,
         polys: &[Vec<F>],
         network: &mut N,
     ) -> std::io::Result<()> {
-        let sending = self.num_parties - degree - 1;
+        let sending = self.num_parties - seeded - 1;
+        if sending == 0 {
+            return Ok(());
+        }
         let mut to_send = vec![F::zero(); polys.len()]; // Allocate buffer only once
         for i in 1..=sending {
-            let rcv_id = (self.id + i + degree) % self.num_parties;
+            let rcv_id = (self.id + i + seeded) % self.num_parties;
             let rcv_id_f = F::from(rcv_id as u64 + 1);
             for (des, p) in to_send.iter_mut().zip(polys.iter()) {
                 *des = super::core::evaluate_poly(p, rcv_id_f);
@@ -296,13 +287,16 @@ impl<F: PrimeField> ShamirRng<F> {
 
     fn receive_share_of_randomness<N: ShamirNetwork>(
         &self,
-        degree: usize,
+        seeded: usize,
         output: &mut [Vec<F>],
         network: &mut N,
     ) -> std::io::Result<()> {
-        let sending = self.num_parties - degree - 1;
-        for i in 1..=sending {
-            let send_id = (self.id + self.num_parties - degree - i) % self.num_parties;
+        let receiving = self.num_parties - seeded - 1;
+        if receiving == 0 {
+            return Ok(());
+        }
+        for i in 1..=receiving {
+            let send_id = (self.id + self.num_parties - seeded - i) % self.num_parties;
             let shares = network.recv_many(send_id)?;
             for (r, s) in output.iter_mut().zip(shares.iter()) {
                 r[send_id] = *s;
@@ -321,52 +315,15 @@ impl<F: PrimeField> ShamirRng<F> {
         let mut rcv_2t = vec![vec![F::default(); self.num_parties]; amount];
 
         // These are the parties for which I act as a receiver using the seeds
-        self.receive_seeded(self.threshold, &mut rcv_t);
-
-        // for my share I will use the seed for the next parties alongside mine
-        let my_rands = (0..amount)
-            .map(|_| F::rand(&mut self.rng))
-            .collect::<Vec<_>>();
-        let polys_t =
-            self.get_interpolation_polys_from_precomputed::<true>(&my_rands, self.threshold);
-
-        // Do the same for rcv_2t (do afterwards due to seeds being used here)
         // Be careful about the order of calling the rngs
-        self.receive_seeded_next(self.threshold * 2, &mut rcv_2t);
-        let polys_2t =
-            self.get_interpolation_polys_from_precomputed::<false>(&my_rands, self.threshold * 2);
-        self.receive_seeded_prev(self.threshold * 2, &mut rcv_2t);
+        self.receive_seeded_next(self.threshold + 1, &mut rcv_t);
 
-        // Set my share
-        self.set_my_share(&mut rcv_t, &polys_t);
-        self.set_my_share(&mut rcv_2t, &polys_2t);
-
-        // Send the share of my randomness
-        self.send_share_of_randomness(self.threshold, &polys_t, network)?;
-        self.send_share_of_randomness(self.threshold * 2, &polys_2t, network)?;
-
-        // Receive the remaining shares
-        self.receive_share_of_randomness(self.threshold, &mut rcv_t, network)?;
-        self.receive_share_of_randomness(self.threshold * 2, &mut rcv_2t, network)?;
-
-        Ok((rcv_t, rcv_2t))
-    }
-
-    fn random_double_share_3_party(&mut self, amount: usize) -> (Vec<Vec<F>>, Vec<Vec<F>>) {
-        assert_eq!(self.num_parties, 3);
-        assert_eq!(self.threshold, 1);
-
-        let mut rcv_t = vec![vec![F::default(); 3]; amount];
-        let mut rcv_2t = vec![vec![F::default(); 3]; amount];
-
-        // These are the parties for which I act as a receiver using the seeds
-        // Be careful about the order of calling the rngs
-        self.receive_seeded_next(2, &mut rcv_t);
-
-        // Generate
-        let mut shares = vec![[F::zero(); 2]; amount];
-        for i in 1..=2 {
-            let rcv_id = (self.id + i) % 3;
+        // Generate the seeds
+        let mut shares = (0..amount)
+            .map(|_| vec![F::zero(); self.threshold + 1])
+            .collect_vec();
+        for i in 1..=self.threshold + 1 {
+            let rcv_id = (self.id + i) % self.num_parties;
             let rng = self.get_rng_mut(rcv_id);
             for s in shares.iter_mut() {
                 s[i - 1] = F::rand(rng);
@@ -374,7 +331,7 @@ impl<F: PrimeField> ShamirRng<F> {
         }
 
         // Receive the remaining now to clock rngs in the correct order
-        self.receive_seeded_prev(2, &mut rcv_t);
+        self.receive_seeded_prev(self.threshold + 1, &mut rcv_t);
 
         // Interpolate polys
         let polys_t = shares
@@ -396,12 +353,23 @@ impl<F: PrimeField> ShamirRng<F> {
 
         // Do the same for rcv_2t (do afterwards due to seeds being used here)
         // Be careful about the order of calling the rngs
-        self.receive_seeded_next(2, &mut rcv_2t);
-        let polys_2t = self.get_interpolation_polys_from_precomputed::<false>(&rands, 2);
-        self.receive_seeded_prev(2, &mut rcv_2t);
+        self.receive_seeded_next(self.threshold * 2, &mut rcv_2t);
+        let polys_2t =
+            self.get_interpolation_polys_from_precomputed::<false>(&rands, self.threshold * 2);
+        self.receive_seeded_prev(self.threshold * 2, &mut rcv_2t);
+
+        // Set my share
         self.set_my_share(&mut rcv_2t, &polys_2t);
 
-        (rcv_t, rcv_2t)
+        // Send the share of my randomness
+        self.send_share_of_randomness(self.threshold + 1, &polys_t, network)?;
+        self.send_share_of_randomness(self.threshold * 2, &polys_2t, network)?;
+
+        // Receive the remaining shares
+        self.receive_share_of_randomness(self.threshold + 1, &mut rcv_t, network)?;
+        self.receive_share_of_randomness(self.threshold * 2, &mut rcv_2t, network)?;
+
+        Ok((rcv_t, rcv_2t))
     }
 
     // Generates amount * matrix.len() random double shares
@@ -413,11 +381,7 @@ impl<F: PrimeField> ShamirRng<F> {
         network: &mut N,
         amount: usize,
     ) -> std::io::Result<()> {
-        let (rcv_rt, rcv_r2t) = if self.num_parties == 3 && self.threshold == 1 {
-            self.random_double_share_3_party(amount)
-        } else {
-            self.random_double_share(amount, network)?
-        };
+        let (rcv_rt, rcv_r2t) = self.random_double_share(amount, network)?;
 
         // reserve buffer
         let size = self.matrix.len();
