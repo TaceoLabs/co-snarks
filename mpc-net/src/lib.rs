@@ -195,7 +195,7 @@ impl MpcNetworkHandler {
 
     /// Sets up a new [BytesChannel] between each party. The resulting map maps the id of the party to its respective [BytesChannel].
     pub async fn get_byte_channels(
-        &mut self,
+        &self,
     ) -> std::io::Result<HashMap<usize, BytesChannel<RecvStream, SendStream>>> {
         let mut codec = LengthDelimitedCodec::new();
         codec.set_max_frame_length(1_000_000_000);
@@ -204,7 +204,7 @@ impl MpcNetworkHandler {
 
     /// Set up a new [Channel] using [BincodeCodec] between each party. The resulting map maps the id of the party to its respective [Channel].
     pub async fn get_serde_bincode_channels<M: Serialize + DeserializeOwned + 'static>(
-        &mut self,
+        &self,
     ) -> std::io::Result<HashMap<usize, Channel<RecvStream, SendStream, BincodeCodec<M>>>> {
         let bincodec = BincodeCodec::<M>::new();
         self.get_custom_channels(bincodec).await
@@ -219,11 +219,11 @@ impl MpcNetworkHandler {
             + 'static
             + Clone,
     >(
-        &mut self,
+        &self,
         codec: C,
     ) -> std::io::Result<HashMap<usize, Channel<RecvStream, SendStream, C>>> {
         let mut channels = HashMap::with_capacity(self.connections.len() - 1);
-        for (&id, conn) in &mut self.connections {
+        for (&id, conn) in self.connections.iter() {
             if id < self.my_id {
                 // we are the client, so we are the receiver
                 let (mut send_stream, mut recv_stream) = conn.open_bi().await?;
