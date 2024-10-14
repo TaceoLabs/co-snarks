@@ -1,18 +1,159 @@
 //! Rep3 Network
 //!
-//! This module contains the trait for specifying a network interface for the Rep3 MPC protocol. It also contains an implementation of the trait using the [mpc_net] crate.
+//! This module contains implementation of the rep3 mpc network
 
+use std::sync::Arc;
+
+use crate::RngType;
+use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
 use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
 
-use super::id::PartyID;
+use super::{
+    id::PartyID,
+    rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp},
+    IoResult,
+};
+use rand::{Rng, SeedableRng};
 
+// this will be moved later
+/// This struct handles networking and rng
+pub struct IoContext<N: Rep3Network> {
+    /// The party id
+    pub id: PartyID,
+    /// The rng
+    pub rngs: Rep3CorrelatedRng,
+    /// The underlying network
+    pub network: N,
+}
+
+impl<N: Rep3Network> IoContext<N> {
+    fn setup_prf(network: &mut N) -> IoResult<Rep3Rand> {
+        let seed1: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
+        network.send_next(seed1)?;
+        let seed2: [u8; crate::SEED_SIZE] = network.recv_prev()?;
+
+        Ok(Rep3Rand::new(seed1, seed2))
+    }
+
+    fn setup_bitcomp(
+        network: &mut N,
+        rands: &mut Rep3Rand,
+    ) -> IoResult<(Rep3RandBitComp, Rep3RandBitComp)> {
+        let (k1a, k1c) = rands.random_seeds();
+        let (k2a, k2c) = rands.random_seeds();
+
+        match network.get_id() {
+            PartyID::ID0 => {
+                network.send_next(k1c)?;
+                let k2b: [u8; crate::SEED_SIZE] = network.recv_prev()?;
+                let bitcomp1 = Rep3RandBitComp::new_2keys(k1a, k1c);
+                let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
+                Ok((bitcomp1, bitcomp2))
+            }
+            PartyID::ID1 => {
+                network.send_next((k1c, k2c))?;
+                let k1b: [u8; crate::SEED_SIZE] = network.recv_prev()?;
+                let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
+                let bitcomp2 = Rep3RandBitComp::new_2keys(k2a, k2c);
+                Ok((bitcomp1, bitcomp2))
+            }
+            PartyID::ID2 => {
+                network.send_next(k2c)?;
+                let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) =
+                    network.recv_prev()?;
+                let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
+                let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
+                Ok((bitcomp1, bitcomp2))
+            }
+        }
+    }
+
+    /// Construct  a new [`IoContext`] with the given network
+    pub fn init(mut network: N) -> IoResult<Self> {
+        let mut rand = Self::setup_prf(&mut network)?;
+        let bitcomps = Self::setup_bitcomp(&mut network, &mut rand)?;
+        let rngs = Rep3CorrelatedRng::new(rand, bitcomps.0, bitcomps.1);
+
+        Ok(Self {
+            id: network.get_id(), //shorthand access
+            network,
+            rngs,
+        })
+    }
+
+    /// Generate two random field elements
+    pub fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
+        self.rngs.rand.random_fes()
+    }
+
+    /// Cronstruct a fork of the [`IoContext`]. This fork can be used concurrently with its parent.
+    pub fn fork(&mut self) -> IoResult<Self> {
+        let network = self.network.fork()?;
+        let rngs = self.rngs.fork();
+        let id = self.id;
+
+        Ok(Self { id, rngs, network })
+    }
+}
+
+#[allow(async_fn_in_trait)]
 /// This trait defines the network interface for the REP3 protocol.
-pub trait Rep3Network {
+pub trait Rep3Network: Send {
     /// Returns the id of the party. The id is in the range 0 <= id < 3
     fn get_id(&self) -> PartyID;
+
+    /// Sends `data` to the next party and receives from the previous party. Use this whenever
+    /// possible in contrast to calling [`Self::send_next()`] and [`Self::recv_prev()`] sequential. This method
+    /// executes send/receive concurrently.
+    fn reshare<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: F,
+    ) -> std::io::Result<F> {
+        let mut res = self.reshare_many(&[data])?;
+        if res.len() != 1 {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Expected 1 element, got more",
+            ))
+        } else {
+            //we checked that there is really one element
+            Ok(res.pop().unwrap())
+        }
+    }
+
+    /// Perform multiple reshares with one networking round
+    fn reshare_many<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: &[F],
+    ) -> std::io::Result<Vec<F>>;
+
+    /// Broadcast data to the other two parties and receive data from them
+    fn broadcast<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: F,
+    ) -> std::io::Result<(F, F)> {
+        let (mut prev, mut next) = self.broadcast_many(&[data])?;
+        if prev.len() != 1 || next.len() != 1 {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Expected 1 element, got more",
+            ))
+        } else {
+            //we checked that there is really one element
+            let prev = prev.pop().unwrap();
+            let next = next.pop().unwrap();
+            Ok((prev, next))
+        }
+    }
+
+    /// Broadcast data to the other two parties and receive data from them
+    fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: &[F],
+    ) -> std::io::Result<(Vec<F>, Vec<F>)>;
 
     /// Sends data to the target party. This function has a default implementation for calling [Rep3Network::send_many].
     fn send<F: CanonicalSerialize>(&mut self, target: PartyID, data: F) -> std::io::Result<()> {
@@ -61,14 +202,20 @@ pub trait Rep3Network {
     fn recv_prev_many<F: CanonicalDeserialize>(&mut self) -> std::io::Result<Vec<F>> {
         self.recv_many(self.get_id().prev_id())
     }
+
+    /// Fork the network into two separate instances with their own connections
+    fn fork(&mut self) -> std::io::Result<Self>
+    where
+        Self: Sized;
 }
 
+// TODO make generic over codec?
 /// This struct can be used to facilitate network communication for the REP3 MPC protocol.
 #[derive(Debug)]
 pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
-    pub(crate) runtime: tokio::runtime::Runtime,
-    pub(crate) net_handler: MpcNetworkHandler,
+    pub(crate) runtime: Arc<tokio::runtime::Runtime>,
+    pub(crate) net_handler: Arc<MpcNetworkHandler>,
     pub(crate) chan_next: ChannelHandle<Bytes, BytesMut>,
     pub(crate) chan_prev: ChannelHandle<Bytes, BytesMut>,
 }
@@ -81,11 +228,10 @@ impl Rep3MpcNet {
         }
         let id = PartyID::try_from(config.my_id)?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
             .enable_all()
             .build()?;
         let (net_handler, chan_next, chan_prev) = runtime.block_on(async {
-            let mut net_handler = MpcNetworkHandler::establish(config).await?;
+            let net_handler = MpcNetworkHandler::establish(config).await?;
             let mut channels = net_handler.get_byte_channels().await?;
             let chan_next = channels
                 .remove(&id.next_id().into())
@@ -103,8 +249,8 @@ impl Rep3MpcNet {
         })?;
         Ok(Self {
             id,
-            runtime,
-            net_handler,
+            runtime: Arc::new(runtime),
+            net_handler: Arc::new(net_handler),
             chan_next,
             chan_prev,
         })
@@ -121,9 +267,9 @@ impl Rep3MpcNet {
         } = self;
         drop(chan_next);
         drop(chan_prev);
-        runtime.block_on(async {
-            net_handler.shutdown().await;
-        });
+        if let Some(net_handler) = Arc::into_inner(net_handler) {
+            runtime.block_on(net_handler.shutdown());
+        }
     }
 
     /// Sends bytes over the network to the target party.
@@ -159,14 +305,30 @@ impl Rep3MpcNet {
         })??;
         Ok(data)
     }
-    pub(crate) fn _id(&self) -> PartyID {
-        self.id
-    }
 }
 
 impl Rep3Network for Rep3MpcNet {
     fn get_id(&self) -> PartyID {
         self.id
+    }
+
+    fn reshare_many<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: &[F],
+    ) -> std::io::Result<Vec<F>> {
+        self.send_many(self.id.next_id(), data)?;
+        self.recv_many(self.id.prev_id())
+    }
+
+    fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
+        &mut self,
+        data: &[F],
+    ) -> std::io::Result<(Vec<F>, Vec<F>)> {
+        self.send_many(self.id.next_id(), data)?;
+        self.send_many(self.id.prev_id(), data)?;
+        let recv_next = self.recv_many(self.id.next_id())?;
+        let recv_prev = self.recv_many(self.id.prev_id())?;
+        Ok((recv_prev, recv_next))
     }
 
     fn send_many<F: CanonicalSerialize>(
@@ -188,5 +350,36 @@ impl Rep3Network for Rep3MpcNet {
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         Ok(res)
+    }
+
+    fn fork(&mut self) -> std::io::Result<Self> {
+        let id = self.id;
+        let net_handler = Arc::clone(&self.net_handler);
+        let runtime = Arc::clone(&self.runtime);
+        let (chan_next, chan_prev) = runtime.block_on(async {
+            let mut channels = net_handler.get_byte_channels().await?;
+
+            let chan_next = channels
+                .remove(&id.next_id().into())
+                .expect("to find next channel");
+            let chan_prev = channels
+                .remove(&id.prev_id().into())
+                .expect("to find prev channel");
+            if !channels.is_empty() {
+                panic!("unexpected channels found")
+            }
+
+            let chan_next = ChannelHandle::manage(chan_next);
+            let chan_prev = ChannelHandle::manage(chan_prev);
+            Ok::<_, std::io::Error>((chan_next, chan_prev))
+        })?;
+
+        Ok(Self {
+            id,
+            runtime,
+            net_handler,
+            chan_next,
+            chan_prev,
+        })
     }
 }

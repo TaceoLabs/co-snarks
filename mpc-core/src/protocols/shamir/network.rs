@@ -6,10 +6,10 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
 use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 /// This trait defines the network interface for the Shamir protocol.
-pub trait ShamirNetwork {
+pub trait ShamirNetwork: Send {
     /// Returns the id of the party. The id is in the range 0 <= id < num_parties
     fn get_id(&self) -> usize;
 
@@ -56,14 +56,27 @@ pub trait ShamirNetwork {
         data: F,
         num: usize,
     ) -> std::io::Result<Vec<F>>;
+
+    /// Sends and receives to and from each party. Data must be of shape num_parties x n. The element that is "sent" to yourself is passed back directly.
+    fn send_and_recv_each_many<
+        F: CanonicalSerialize + CanonicalDeserialize + Clone + Send + 'static,
+    >(
+        &mut self,
+        data: Vec<Vec<F>>,
+    ) -> std::io::Result<Vec<Vec<F>>>;
+
+    /// Fork the network into two separate instances with their own connections
+    fn fork(&mut self) -> std::io::Result<Self>
+    where
+        Self: Sized;
 }
 
 /// This struct can be used to facilitate network communication for the Shamir MPC protocol.
 pub struct ShamirMpcNet {
     pub(crate) id: usize, // 0 <= id < num_parties
     pub(crate) num_parties: usize,
-    pub(crate) runtime: tokio::runtime::Runtime,
-    pub(crate) net_handler: MpcNetworkHandler,
+    pub(crate) runtime: Arc<tokio::runtime::Runtime>,
+    pub(crate) net_handler: Arc<MpcNetworkHandler>,
     pub(crate) channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
 }
 
@@ -79,12 +92,12 @@ impl ShamirMpcNet {
         if id >= num_parties {
             bail!("Invalid party id={} for {} parties", id, num_parties)
         }
+
         let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(num_parties - 1)
             .enable_all()
             .build()?;
         let (net_handler, channels) = runtime.block_on(async {
-            let mut net_handler = MpcNetworkHandler::establish(config).await?;
+            let net_handler = MpcNetworkHandler::establish(config).await?;
             let mut channels = net_handler.get_byte_channels().await?;
 
             let mut channels_ = HashMap::with_capacity(num_parties - 1);
@@ -107,8 +120,8 @@ impl ShamirMpcNet {
         Ok(Self {
             id,
             num_parties,
-            runtime,
-            net_handler,
+            runtime: Arc::new(runtime),
+            net_handler: Arc::new(net_handler),
             channels,
         })
     }
@@ -125,9 +138,11 @@ impl ShamirMpcNet {
         for chan in channels.into_iter() {
             drop(chan);
         }
-        runtime.block_on(async {
-            net_handler.shutdown().await;
-        });
+        if let Some(net_handler) = Arc::into_inner(net_handler) {
+            runtime.block_on(async {
+                net_handler.shutdown().await;
+            });
+        }
     }
 
     /// Sends bytes over the network to the target party.
@@ -260,6 +275,62 @@ impl ShamirNetwork for ShamirMpcNet {
             let deser = F::deserialize_uncompressed(&data[..])
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             res.push(deser);
+        }
+
+        Ok(res)
+    }
+
+    fn fork(&mut self) -> std::io::Result<Self> {
+        let id = self.id;
+        let num_parties = self.num_parties;
+        let net_handler = Arc::clone(&self.net_handler);
+        let runtime = Arc::clone(&self.runtime);
+        let channels = runtime.block_on(async {
+            let mut channels = net_handler.get_byte_channels().await?;
+
+            let mut channels_ = HashMap::with_capacity(num_parties - 1);
+
+            for other_id in 0..num_parties {
+                if other_id != id {
+                    let chan = channels.remove(&other_id).expect("to find channel");
+                    channels_.insert(other_id, ChannelHandle::manage(chan));
+                }
+            }
+
+            if !channels.is_empty() {
+                panic!("unexpected channels found")
+            }
+
+            Ok::<_, std::io::Error>(channels_)
+        })?;
+
+        Ok(Self {
+            id,
+            num_parties,
+            runtime,
+            net_handler,
+            channels,
+        })
+    }
+
+    fn send_and_recv_each_many<
+        F: CanonicalSerialize + CanonicalDeserialize + Clone + Send + 'static,
+    >(
+        &mut self,
+        data: Vec<Vec<F>>,
+    ) -> std::io::Result<Vec<Vec<F>>> {
+        debug_assert_eq!(data.len(), self.num_parties);
+        let mut res = Vec::with_capacity(data.len());
+
+        // move channels and data out of self and input so we can move them into tokio::spawn
+        for (id, data) in (0..self.num_parties).zip(data) {
+            if self.channels.contains_key(&id) {
+                self.send_many(id, &data)?;
+                let recv = self.recv_many(id)?;
+                res.push(recv);
+            } else {
+                res.push(data);
+            }
         }
 
         Ok(res)
