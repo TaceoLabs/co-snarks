@@ -5,10 +5,10 @@ use crate::{
         prover::CoDecider,
         types::{ClaimedEvaluations, PartiallyEvaluatePolys, MAX_PARTIAL_RELATION_LENGTH},
     },
+    mpc::NoirUltraHonkProver,
     types::AllEntities,
-    FieldShare, CONST_PROOF_SIZE_LOG_N,
+    CONST_PROOF_SIZE_LOG_N,
 };
-use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use ultrahonk::{
     prelude::{
         GateSeparatorPolynomial, HonkCurve, HonkProofResult, Transcript, TranscriptFieldType,
@@ -18,15 +18,16 @@ use ultrahonk::{
 };
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
-impl<T, P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    CoDecider<T, P, H>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
+impl<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+    > CoDecider<T, P, H>
 {
     pub(crate) fn partially_evaluate_init(
         driver: &mut T,
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<T, P>,
-        polys: &AllEntities<Vec<FieldShare<T, P>>, Vec<P::ScalarField>>,
+        polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
         round_size: usize,
         round_challenge: &P::ScalarField,
     ) {
@@ -48,9 +49,9 @@ where
             .zip(partially_evaluated_poly.shared_iter_mut())
         {
             for i in (0..round_size).step_by(2) {
-                let tmp = driver.sub(&poly_src[i + 1], &poly_src[i]);
-                let tmp = driver.mul_with_public(round_challenge, &tmp);
-                poly_des[i >> 1] = driver.add(&poly_src[i], &tmp);
+                let tmp = driver.sub(poly_src[i + 1], poly_src[i]);
+                let tmp = driver.mul_with_public(*round_challenge, tmp);
+                poly_des[i >> 1] = driver.add(poly_src[i], tmp);
             }
         }
     }
@@ -73,9 +74,9 @@ where
 
         for poly in partially_evaluated_poly.shared_iter_mut() {
             for i in (0..round_size).step_by(2) {
-                let tmp = driver.sub(&poly[i + 1], &poly[i]);
-                let tmp = driver.mul_with_public(round_challenge, &tmp);
-                poly[i >> 1] = driver.add(&poly[i], &tmp);
+                let tmp = driver.sub(poly[i + 1], poly[i]);
+                let tmp = driver.mul_with_public(*round_challenge, tmp);
+                poly[i >> 1] = driver.add(poly[i], tmp);
             }
         }
     }
@@ -110,7 +111,7 @@ where
             .map(|x| x[0].to_owned())
             .collect::<Vec<_>>();
 
-        let opened = driver.open_many(&shared).unwrap();
+        let opened = driver.open_many(&shared)?;
 
         for (src, des) in opened
             .into_iter()

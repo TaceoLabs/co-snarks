@@ -18,10 +18,9 @@
 // clang-format on
 
 use super::types::ProverMemory;
-use crate::{types::ProvingKey, CoUtils, FieldShare};
+use crate::{mpc::NoirUltraHonkProver, types::ProvingKey, CoUtils};
 use ark_ff::One;
 use itertools::izip;
-use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use std::{array, marker::PhantomData};
 use ultrahonk::{
     prelude::{
@@ -33,22 +32,22 @@ use ultrahonk::{
 
 pub(crate) struct CoOink<
     'a,
-    T,
+    T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-> where
-    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
-{
+> {
     driver: &'a mut T,
     memory: ProverMemory<T, P>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
 }
 
-impl<'a, T, P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    CoOink<'a, T, P, H>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
+impl<
+        'a,
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+    > CoOink<'a, T, P, H>
 {
     pub(crate) fn new(driver: &'a mut T) -> Self {
         Self {
@@ -75,7 +74,7 @@ where
         self.memory.w_4 = proving_key.polynomials.witness.w_4().clone();
         self.memory.w_4.resize(
             proving_key.polynomials.witness.w_l().len(),
-            FieldShare::<T, P>::default(),
+            T::ArithmeticShare::default(),
         );
 
         // Compute read record values
@@ -84,21 +83,21 @@ where
             let target = &mut self.memory.w_4[gate_idx];
 
             let mul1 = self.driver.mul_with_public(
-                &self.memory.challenges.eta_1,
-                &proving_key.polynomials.witness.w_l()[gate_idx],
+                self.memory.challenges.eta_1,
+                proving_key.polynomials.witness.w_l()[gate_idx],
             );
             let mul2 = self.driver.mul_with_public(
-                &self.memory.challenges.eta_2,
-                &proving_key.polynomials.witness.w_r()[gate_idx],
+                self.memory.challenges.eta_2,
+                proving_key.polynomials.witness.w_r()[gate_idx],
             );
             let mul3 = self.driver.mul_with_public(
-                &self.memory.challenges.eta_3,
-                &proving_key.polynomials.witness.w_o()[gate_idx],
+                self.memory.challenges.eta_3,
+                proving_key.polynomials.witness.w_o()[gate_idx],
             );
             // TACEO TODO add_assign?
-            *target = self.driver.add(target, &mul1);
-            *target = self.driver.add(target, &mul2);
-            *target = self.driver.add(target, &mul3);
+            *target = self.driver.add(*target, mul1);
+            *target = self.driver.add(*target, mul2);
+            *target = self.driver.add(*target, mul3);
         }
 
         // Compute write record values
@@ -107,71 +106,75 @@ where
             let target = &mut self.memory.w_4[gate_idx];
 
             let mul1 = self.driver.mul_with_public(
-                &self.memory.challenges.eta_1,
-                &proving_key.polynomials.witness.w_l()[gate_idx],
+                self.memory.challenges.eta_1,
+                proving_key.polynomials.witness.w_l()[gate_idx],
             );
             let mul2 = self.driver.mul_with_public(
-                &self.memory.challenges.eta_2,
-                &proving_key.polynomials.witness.w_r()[gate_idx],
+                self.memory.challenges.eta_2,
+                proving_key.polynomials.witness.w_r()[gate_idx],
             );
             let mul3 = self.driver.mul_with_public(
-                &self.memory.challenges.eta_3,
-                &proving_key.polynomials.witness.w_o()[gate_idx],
+                self.memory.challenges.eta_3,
+                proving_key.polynomials.witness.w_o()[gate_idx],
             );
             // TACEO TODO add_assign?
-            *target = self.driver.add(target, &mul1);
-            *target = self.driver.add(target, &mul2);
-            *target = self.driver.add(target, &mul3);
-            *target = self.driver.add_with_public(&P::ScalarField::one(), target);
+            *target = self.driver.add(*target, mul1);
+            *target = self.driver.add(*target, mul2);
+            *target = self.driver.add(*target, mul3);
+            *target = self.driver.add_with_public(P::ScalarField::one(), *target);
         }
     }
 
-    fn compute_read_term(&mut self, proving_key: &ProvingKey<T, P>, i: usize) -> FieldShare<T, P> {
+    fn compute_read_term(
+        &mut self,
+        proving_key: &ProvingKey<T, P>,
+        i: usize,
+    ) -> T::ArithmeticShare {
         tracing::trace!("compute read term");
 
-        let gamma = &self.memory.challenges.gamma;
-        let eta_1 = &self.memory.challenges.eta_1;
-        let eta_2 = &self.memory.challenges.eta_2;
-        let eta_3 = &self.memory.challenges.eta_3;
-        let w_1 = &proving_key.polynomials.witness.w_l()[i];
-        let w_2 = &proving_key.polynomials.witness.w_r()[i];
-        let w_3 = &proving_key.polynomials.witness.w_o()[i];
-        let w_1_shift = &proving_key.polynomials.witness.w_l().shifted()[i];
-        let w_2_shift = &proving_key.polynomials.witness.w_r().shifted()[i];
-        let w_3_shift = &proving_key.polynomials.witness.w_o().shifted()[i];
-        let table_index = &proving_key.polynomials.precomputed.q_o()[i];
-        let negative_column_1_step_size = &proving_key.polynomials.precomputed.q_r()[i];
-        let negative_column_2_step_size = &proving_key.polynomials.precomputed.q_m()[i];
-        let negative_column_3_step_size = &proving_key.polynomials.precomputed.q_c()[i];
+        let gamma = self.memory.challenges.gamma;
+        let eta_1 = self.memory.challenges.eta_1;
+        let eta_2 = self.memory.challenges.eta_2;
+        let eta_3 = self.memory.challenges.eta_3;
+        let w_1 = proving_key.polynomials.witness.w_l()[i];
+        let w_2 = proving_key.polynomials.witness.w_r()[i];
+        let w_3 = proving_key.polynomials.witness.w_o()[i];
+        let w_1_shift = proving_key.polynomials.witness.w_l().shifted()[i];
+        let w_2_shift = proving_key.polynomials.witness.w_r().shifted()[i];
+        let w_3_shift = proving_key.polynomials.witness.w_o().shifted()[i];
+        let table_index = proving_key.polynomials.precomputed.q_o()[i];
+        let negative_column_1_step_size = proving_key.polynomials.precomputed.q_r()[i];
+        let negative_column_2_step_size = proving_key.polynomials.precomputed.q_m()[i];
+        let negative_column_3_step_size = proving_key.polynomials.precomputed.q_c()[i];
 
         // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
         // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
         // method get_lookup_accumulators() in  for a detailed explanation.
 
-        let mul = &self
+        let mul = self
             .driver
             .mul_with_public(negative_column_1_step_size, w_1_shift);
-        let add = &self.driver.add_with_public(gamma, mul);
+        let add = self.driver.add_with_public(gamma, mul);
         let derived_table_entry_1 = self.driver.add(w_1, add);
 
         let mul = self
             .driver
             .mul_with_public(negative_column_2_step_size, w_2_shift);
-        let derived_table_entry_2 = self.driver.add(w_2, &mul);
+        let derived_table_entry_2 = self.driver.add(w_2, mul);
 
         let mul = self
             .driver
             .mul_with_public(negative_column_3_step_size, w_3_shift);
-        let derived_table_entry_3 = self.driver.add(w_3, &mul);
+        let derived_table_entry_3 = self.driver.add(w_3, mul);
 
         // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
         // deg 2 or 3
         // TACEO TODO add_assign?
-        let mul = self.driver.mul_with_public(eta_1, &derived_table_entry_2);
-        let res = self.driver.add(&derived_table_entry_1, &mul);
-        let mul = &self.driver.mul_with_public(eta_2, &derived_table_entry_3);
-        let res = self.driver.add(&res, mul);
-        self.driver.add_with_public(&(*table_index * eta_3), &res)
+        let mul = self.driver.mul_with_public(eta_1, derived_table_entry_2);
+        let res = self.driver.add(derived_table_entry_1, mul);
+        let mul = self.driver.mul_with_public(eta_2, derived_table_entry_3);
+        let res = self.driver.add(res, mul);
+        self.driver.add_with_public(table_index * eta_3, res)
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
@@ -226,7 +229,7 @@ where
             // READ_TERMS and WRITE_TERMS are 1, so we skip the loop
             let read_term = self.compute_read_term(proving_key, i);
             let write_term = self.compute_write_term(proving_key, i);
-            self.memory.lookup_inverses[i] = self.driver.mul_with_public(&write_term, &read_term);
+            self.memory.lookup_inverses[i] = self.driver.mul_with_public(write_term, read_term);
         }
 
         // Compute inverse polynomial I in place by inverting the product at each row
@@ -283,13 +286,13 @@ where
 
     fn batched_grand_product_num_denom(
         driver: &mut T,
-        shared1: &Polynomial<FieldShare<T, P>>,
-        shared2: &Polynomial<FieldShare<T, P>>,
+        shared1: &Polynomial<T::ArithmeticShare>,
+        shared2: &Polynomial<T::ArithmeticShare>,
         pub1: &Polynomial<P::ScalarField>,
         pub2: &Polynomial<P::ScalarField>,
         beta: &P::ScalarField,
         gamma: &P::ScalarField,
-    ) -> HonkProofResult<Vec<FieldShare<T, P>>> {
+    ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
         let len = shared1.len();
         debug_assert_eq!(len, shared2.len());
 
@@ -300,8 +303,8 @@ where
         for (s1, s2, p1, p2) in
             izip!(shared1.iter(), shared2.iter(), pub1.iter(), pub2.iter()).take(len - 1)
         {
-            let m1 = driver.add_with_public(&(*p1 * beta + gamma), s1);
-            let m2 = driver.add_with_public(&(*p2 * beta + gamma), s2);
+            let m1 = driver.add_with_public(*p1 * beta + gamma, *s1);
+            let m2 = driver.add_with_public(*p2 * beta + gamma, *s2);
             mul1.push(m1);
             mul2.push(m2);
         }
@@ -312,8 +315,8 @@ where
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     fn array_prod_mul(
         &mut self,
-        inp: &[FieldShare<T, P>],
-    ) -> HonkProofResult<Vec<FieldShare<T, P>>> {
+        inp: &[T::ArithmeticShare],
+    ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
         // Do the multiplications of inp[i] * inp[i-1] in constant rounds
         let len = inp.len();
 
@@ -321,7 +324,7 @@ where
             .map(|_| self.driver.rand())
             .collect::<Result<Vec<_>, _>>()?;
         let r_inv = self.driver.inv_many(&r)?;
-        let r_inv0 = vec![r_inv[0].clone(); len];
+        let r_inv0 = vec![r_inv[0]; len];
 
         let mut unblind = self.driver.mul_many(&r_inv0, &r[1..])?;
 
@@ -333,7 +336,7 @@ where
         }
 
         for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
-            *unblind = self.driver.mul_with_public(open, unblind);
+            *unblind = self.driver.mul_with_public(*open, *unblind);
         }
         Ok(unblind)
     }
@@ -401,7 +404,7 @@ where
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
         let mut z_perm = self.driver.mul_many(&numerator, &denominator)?;
-        z_perm.insert(0, FieldShare::<T, P>::default()); // insert a default element at the beginning
+        z_perm.insert(0, T::ArithmeticShare::default()); // insert a default element at the beginning
         self.memory.z_perm = Polynomial::new(z_perm);
         Ok(())
     }
@@ -459,18 +462,15 @@ where
         // Commit to the first three wire polynomials of the instance
         // We only commit to the fourth wire polynomial after adding memory records
 
-        let w_l = CoUtils::commit(
-            self.driver,
+        let w_l = CoUtils::commit::<T, P>(
             proving_key.polynomials.witness.w_l().as_ref(),
             &proving_key.crs,
         );
-        let w_r = CoUtils::commit(
-            self.driver,
+        let w_r = CoUtils::commit::<T, P>(
             proving_key.polynomials.witness.w_r().as_ref(),
             &proving_key.crs,
         );
-        let w_o = CoUtils::commit(
-            self.driver,
+        let w_o = CoUtils::commit::<T, P>(
             proving_key.polynomials.witness.w_o().as_ref(),
             &proving_key.crs,
         );
@@ -516,8 +516,8 @@ where
             proving_key.polynomials.witness.lookup_read_tags().as_ref(),
             &proving_key.crs,
         )?;
-        let w_4 = CoUtils::commit(self.driver, self.memory.w_4.as_ref(), &proving_key.crs);
-        let w_4 = self.driver.open_point(&w_4)?;
+        let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), &proving_key.crs);
+        let w_4 = self.driver.open_point(w_4)?;
 
         transcript.send_point_to_verifier::<P>(
             "LOOKUP_READ_COUNTS".to_string(),
@@ -562,13 +562,10 @@ where
         self.compute_grand_product(proving_key)?;
 
         // This is from the previous round, but we open it here with z_perm
-        let lookup_inverses = CoUtils::commit(
-            self.driver,
-            self.memory.lookup_inverses.as_ref(),
-            &proving_key.crs,
-        );
+        let lookup_inverses =
+            CoUtils::commit::<T, P>(self.memory.lookup_inverses.as_ref(), &proving_key.crs);
 
-        let z_perm = CoUtils::commit(self.driver, self.memory.z_perm.as_ref(), &proving_key.crs);
+        let z_perm = CoUtils::commit::<T, P>(self.memory.z_perm.as_ref(), &proving_key.crs);
 
         let open = self.driver.open_point_many(&[lookup_inverses, z_perm])?;
 

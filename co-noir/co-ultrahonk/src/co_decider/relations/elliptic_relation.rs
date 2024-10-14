@@ -1,26 +1,22 @@
 use super::Relation;
-use crate::co_decider::{
-    types::{ProverUnivariates, RelationParameters},
-    univariates::SharedUnivariate,
+use crate::{
+    co_decider::{
+        types::{ProverUnivariates, RelationParameters},
+        univariates::SharedUnivariate,
+    },
+    mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
-use mpc_core::traits::PrimeFieldMpcProtocol;
 use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
-pub(crate) struct EllipticRelationAcc<T, P: Pairing>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
+pub(crate) struct EllipticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 6>,
 }
 
-impl<T, P: Pairing> Default for EllipticRelationAcc<T, P>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
+impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EllipticRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -29,14 +25,11 @@ where
     }
 }
 
-impl<T, P: Pairing> EllipticRelationAcc<T, P>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
+impl<T: NoirUltraHonkProver<P>, P: Pairing> EllipticRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
         assert!(elements.len() == EllipticRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, &elements[0]);
-        self.r1.scale_inplace(driver, &elements[1]);
+        self.r0.scale_inplace(driver, elements[0]);
+        self.r1.scale_inplace(driver, elements[1]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -68,11 +61,11 @@ pub(crate) struct EllipticRelation {}
 
 impl EllipticRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
+    pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
 }
 
-impl<T, P: HonkCurve<TranscriptFieldType>> Relation<T, P> for EllipticRelation
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
+    for EllipticRelation
 {
     type Acc = EllipticRelationAcc<T, P>;
     const SKIPPABLE: bool = true;
@@ -153,7 +146,7 @@ where
 
         let lhs = SharedUnivariate::univariates_to_vec(&[
             x_3.add(driver, x_2).add(driver, x_1),
-            y1_sqr.sub_scalar(driver, &curve_b),
+            y1_sqr.sub_scalar(driver, curve_b),
             x_3.add(driver, x_1).add(driver, x_1),
             x1_sqr_mul_3.to_owned(),
             y_1.add(driver, y_1),
@@ -214,15 +207,15 @@ where
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] = driver.add(
-                &univariate_accumulator.r0.evaluations[i],
-                &tmp_1.evaluations[i],
+                univariate_accumulator.r0.evaluations[i],
+                tmp_1.evaluations[i],
             );
         }
 
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] = driver.add(
-                &univariate_accumulator.r1.evaluations[i],
-                &tmp_2.evaluations[i],
+                univariate_accumulator.r1.evaluations[i],
+                tmp_2.evaluations[i],
             );
         }
 

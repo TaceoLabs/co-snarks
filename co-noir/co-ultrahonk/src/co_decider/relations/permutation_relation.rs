@@ -1,25 +1,21 @@
 use super::Relation;
-use crate::co_decider::{
-    types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
-    univariates::SharedUnivariate,
+use crate::{
+    co_decider::{
+        types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        univariates::SharedUnivariate,
+    },
+    mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use mpc_core::traits::PrimeFieldMpcProtocol;
 use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
-pub(crate) struct UltraPermutationRelationAcc<T, P: Pairing>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
+pub(crate) struct UltraPermutationRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 3>,
 }
 
-impl<T, P: Pairing> Default for UltraPermutationRelationAcc<T, P>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
+impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraPermutationRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -28,14 +24,11 @@ where
     }
 }
 
-impl<T, P: Pairing> UltraPermutationRelationAcc<T, P>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
+impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraPermutationRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
         assert!(elements.len() == UltraPermutationRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, &elements[0]);
-        self.r1.scale_inplace(driver, &elements[1]);
+        self.r0.scale_inplace(driver, elements[0]);
+        self.r1.scale_inplace(driver, elements[1]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -67,17 +60,15 @@ pub(crate) struct UltraPermutationRelation {}
 
 impl UltraPermutationRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
+    pub(crate) const CRAND_PAIRS_FACTOR: usize = 8;
 }
 
 impl UltraPermutationRelation {
-    fn compute_grand_product_numerator_and_denominator<T, P: Pairing>(
+    fn compute_grand_product_numerator_and_denominator<T: NoirUltraHonkProver<P>, P: Pairing>(
         driver: &mut T,
         input: &ProverUnivariates<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
-    ) -> HonkProofResult<Vec<T::FieldShare>>
-    where
-        T: PrimeFieldMpcProtocol<P::ScalarField>,
-    {
+    ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
         let w_3 = input.witness.w_o();
@@ -119,9 +110,8 @@ impl UltraPermutationRelation {
     }
 }
 
-impl<T, P: HonkCurve<TranscriptFieldType>> Relation<T, P> for UltraPermutationRelation
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
+    for UltraPermutationRelation
 {
     type Acc = UltraPermutationRelationAcc<T, P>;
     const SKIPPABLE: bool = false;
@@ -183,26 +173,22 @@ where
         let lhs = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::from_vec(lhs);
         let rhs = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::from_vec(rhs);
 
-        let tmp = lhs.sub(driver, &rhs).scale(driver, scaling_factor);
+        let tmp = lhs.sub(driver, &rhs).scale(driver, *scaling_factor);
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] = driver.add(
-                &univariate_accumulator.r0.evaluations[i],
-                &tmp.evaluations[i],
-            );
+            univariate_accumulator.r0.evaluations[i] =
+                driver.add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
 
         let tmp = z_perm_shift
             .mul_public(driver, lagrange_last)
-            .scale(driver, scaling_factor);
+            .scale(driver, *scaling_factor);
 
         for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] = driver.add(
-                &univariate_accumulator.r1.evaluations[i],
-                &tmp.evaluations[i],
-            );
+            univariate_accumulator.r1.evaluations[i] =
+                driver.add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
         }
 
         Ok(())

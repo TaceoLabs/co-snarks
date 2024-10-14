@@ -10,22 +10,25 @@ use co_noir::{
     SplitWitnessCli, SplitWitnessConfig, TranslateWitnessCli, TranslateWitnessConfig, VerifyCli,
     VerifyConfig,
 };
-use co_ultrahonk::prelude::{
-    CoUltraHonk, HonkProof, Poseidon2Sponge, ProvingKey, Rep3CoBuilder, ShamirCoBuilder,
-    SharedBuilderVariable, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
-    VerifyingKeyBarretenberg,
+use co_ultrahonk::{
+    prelude::{
+        CoUltraHonk, HonkProof, Poseidon2Sponge, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver,
+        ShamirCoBuilder, ShamirUltraHonkDriver, SharedBuilderVariable, UltraCircuitBuilder,
+        UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg,
+    },
+    MAX_PARTIAL_RELATION_LENGTH, OINK_CRAND_PAIRS_CONST, OINK_CRAND_PAIRS_FACTOR_N,
+    OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE, SUMCHECK_ROUND_CRAND_PAIRS_FACTOR,
 };
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
+    bridges::network::RepToShamirNetwork,
     rep3::{
-        fieldshare::Rep3PrimeFieldShareVec,
-        network::{Rep3MpcNet, Rep3Network},
-        Rep3PrimeFieldShare, Rep3Protocol,
+        network::{IoContext, Rep3MpcNet, Rep3Network},
+        Rep3PrimeFieldShare,
     },
     shamir::{
-        fieldshare::ShamirPrimeFieldShareVec,
         network::{ShamirMpcNet, ShamirNetwork},
-        ShamirProtocol,
+        ShamirPreprocessing, ShamirProtocol,
     },
 };
 use std::{
@@ -386,7 +389,7 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     // parse witness shares
     let witness_file =
         BufReader::new(File::open(witness).context("trying to open witness share file")?);
-    let witness_share: Vec<SharedBuilderVariable<Rep3Protocol<ark_bn254::Fr, Rep3MpcNet>, Bn254>> =
+    let witness_share: Vec<SharedBuilderVariable<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254>> =
         bincode::deserialize_from(witness_file).context("while deserializing witness share")?;
 
     // extract shares only
@@ -402,19 +405,22 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     let id = usize::from(net.get_id());
 
     // init MPC protocol
-    let protocol = Rep3Protocol::<ark_bn254::Fr, Rep3MpcNet>::new(net)?;
-    let mut protocol = protocol.get_shamir_protocol()?;
+    let threshold = 1;
+    let num_pairs = shares.len();
+    let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
+        .context("while shamir preprocessing")?;
+    let mut protocol = ShamirProtocol::from(preprocessing);
 
     // Translate witness to shamir shares
     let start = Instant::now();
-    let result_shares: ShamirPrimeFieldShareVec<ark_bn254::Fr> =
-        protocol.translate_primefield_repshare_vec(Rep3PrimeFieldShareVec::from(shares))?;
+    let transalted_shares = protocol.translate_primefield_repshare_vec(shares)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Translating witness took {} ms", id, duration_ms);
 
-    let mut result: Vec<SharedBuilderVariable<ShamirProtocol<ark_bn254::Fr, ShamirMpcNet>, Bn254>> =
-        Vec::with_capacity(witness_share.len());
-    let mut iter = result_shares.into_iter();
+    let mut result: Vec<
+        SharedBuilderVariable<ShamirUltraHonkDriver<ark_bn254::Fr, ShamirMpcNet>, Bn254>,
+    > = Vec::with_capacity(witness_share.len());
+    let mut iter = transalted_shares.into_iter();
     for val in witness_share.into_iter() {
         match val {
             SharedBuilderVariable::Public(value) => {
@@ -465,10 +471,12 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 .context("while deserializing witness share")?;
             // connect to network
             let net = Rep3MpcNet::new(config.network)?;
-            let id = usize::from(net.get_id());
+            let id = net.get_id();
 
+            let mut io_context0 = IoContext::init(net)?;
+            let io_context1 = io_context0.fork()?;
             // init MPC protocol
-            let protocol = Rep3Protocol::new(net)?;
+            let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
 
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
@@ -489,9 +497,9 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             .expect("failed to get prover crs");
 
             // Get the proving key and prover
-            let proving_key = ProvingKey::create(&protocol, builder, prover_crs);
+            let proving_key = ProvingKey::create(id, builder, prover_crs);
             let public_input = proving_key.get_public_inputs();
-            let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(protocol);
+            let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!(
                 "Party {}: Proving key generation took {} ms",
@@ -515,9 +523,6 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let net = ShamirMpcNet::new(config.network)?;
             let id = net.get_id();
 
-            // init MPC protocol
-            let protocol = ShamirProtocol::new(t, net)?;
-
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
@@ -537,9 +542,8 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             .expect("failed to get prover crs");
 
             // Get the proving key and prover
-            let proving_key = ProvingKey::create(&protocol, builder, prover_crs);
+            let proving_key = ProvingKey::create(id, builder, prover_crs);
             let public_input = proving_key.get_public_inputs();
-            let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(protocol);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!(
                 "Party {}: Proving key generation took {} ms",
@@ -547,9 +551,25 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 duration_ms
             );
 
+            // init MPC protocol
+            // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+            let n = proving_key.circuit_size as usize;
+            let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
+                + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
+                + OINK_CRAND_PAIRS_CONST;
+            // log2(n) * ((n >>= 1) / 2) == n - 1
+            let num_pairs_sumcheck_prove =
+                SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+            let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
+            let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
+            let mut protocol0 = ShamirProtocol::from(preprocessing);
+            let protocol1 = protocol0.fork_with_pairs(0)?;
+            let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
+
             // execute prover in MPC
             tracing::info!("Party {}: starting proof generation..", id);
             let start = Instant::now();
+            let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
             let proof = prover.prove(proving_key)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
