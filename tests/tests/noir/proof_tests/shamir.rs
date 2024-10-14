@@ -53,7 +53,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
 
             let id = net.id;
 
-            let proving_key = ProvingKey::create(id, builder, prover_crs);
+            let proving_key = ProvingKey::create(id, builder, prover_crs).unwrap();
 
             let n = proving_key.circuit_size as usize;
             let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n

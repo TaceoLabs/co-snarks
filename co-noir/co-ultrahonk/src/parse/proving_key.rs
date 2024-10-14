@@ -26,7 +26,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         id: T::PartyID,
         mut circuit: CoUltraCircuitBuilder<T, P>,
         crs: ProverCrs<P>,
-    ) -> Self {
+    ) -> HonkProofResult<Self> {
         tracing::info!("ProvingKey create");
         circuit.finalize_circuit(true);
 
@@ -69,10 +69,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             .cloned()
         {
             let var = circuit.get_variable(var_idx as usize);
-            proving_key.public_inputs.push(var.public_into_field());
+            proving_key.public_inputs.push(var.public_into_field()?);
         }
 
-        proving_key
+        Ok(proving_key)
     }
 
     pub fn create_keys(
@@ -85,7 +85,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         };
         let verifier_crs = crs.g2_x;
 
-        let pk = ProvingKey::create(id, circuit, prover_crs);
+        let pk = ProvingKey::create(id, circuit, prover_crs)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
