@@ -188,26 +188,30 @@ where
         buffer: &mut VecDeque<Result<MRecv, io::Error>>,
         read_recv: &mut mpsc::Receiver<ReadJob<MRecv>>,
         frame_reader: &mut FramedRead<R, C>,
-    ) where
+    ) -> bool
+    where
         C: 'static,
         R: AsyncReadExt + Unpin + 'static,
         FramedRead<R, C>: Stream<Item = Result<MRecv, io::Error>> + Send,
     {
-        //we did not get a job so far so just put into buffer
-        //also if we get None we maybe need to close everything but for now just this
-        let read_result = match frame {
-            None => Err(io::Error::new(io::ErrorKind::BrokenPipe, "closed pipe")),
-            Some(res) => res,
-        };
-        if buffer.len() >= READ_BUFFER_SIZE {
-            //wait for a read job as buffer is full
-            if let Some(read_job) = read_recv.recv().await {
-                Self::handle_read_job(read_job, buffer, frame_reader).await;
-            } else {
-                tracing::warn!("still have frames in buffer but channel dropped?");
+        // we did not get a job so far so just put into buffer
+        // if the frame is None (either because the other party is done, or the connection was closed) we return false and stop read task
+        if let Some(read_result) = frame {
+            if buffer.len() >= READ_BUFFER_SIZE {
+                //wait for a read job as buffer is full
+                if let Some(read_job) = read_recv.recv().await {
+                    Self::handle_read_job(read_job, buffer, frame_reader).await;
+                } else {
+                    tracing::warn!(
+                        "[handel_read_frame] still have frames in buffer but channel dropped?"
+                    );
+                }
             }
+            buffer.push_back(read_result);
+            true
+        } else {
+            false
         }
-        buffer.push_back(read_result);
     }
 
     /// Create a new [`ChannelHandle`] from a [`Channel`]. This spawns a new tokio task that handles the read and write jobs so they can happen concurrently.
@@ -239,9 +243,10 @@ where
                     //futures::stream::StreamExt::next on any Stream is cancellation safe but also
                     //when using quinn? Should be...
                     frame = read.next() => {
-                        //if this method returns true we break
-                        //this happens when the read job channel dropped
-                        Self::handle_read_frame(frame, &mut buffer, &mut read_recv, &mut read).await
+                        //if this method returns false we break
+                        if !Self::handle_read_frame(frame, &mut buffer, &mut read_recv, &mut read).await {
+                            break;
+                        }
                     }
                 }
             }
