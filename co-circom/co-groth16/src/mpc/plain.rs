@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::UniformRand;
@@ -63,14 +61,12 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect()
     }
 
-    fn msm_and_mul(
+    fn mul(
         &mut self,
-        h: Vec<<P as Pairing>::ScalarField>,
-        h_query: Arc<Vec<P::G1Affine>>,
         r: Self::ArithmeticShare,
         s: Self::ArithmeticShare,
-    ) -> IoResult<(Self::PointShareG1, Self::ArithmeticShare)> {
-        Ok((P::G1::msm_unchecked(h_query.as_ref(), &h), r * s))
+    ) -> IoResult<Self::ArithmeticShare> {
+        Ok(r * s)
     }
 
     fn distribute_powers_and_mul_by_const(
@@ -103,6 +99,10 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
 
     fn add_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1) {
         *a += b;
+    }
+
+    fn add_points_g1_half_share(a: Self::PointShareG1, b: &P::G1) -> P::G1 {
+        a + b
     }
 
     fn add_assign_points_public_g1(_: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1) {

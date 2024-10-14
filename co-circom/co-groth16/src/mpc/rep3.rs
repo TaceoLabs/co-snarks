@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ark_ec::pairing::Pairing;
 use mpc_core::protocols::rep3::{
     arithmetic,
@@ -86,24 +84,12 @@ where
         arithmetic::local_mul_vec(&a, &b, &mut self.io_context0.rngs)
     }
 
-    fn msm_and_mul(
+    fn mul(
         &mut self,
-        h: Vec<<P as Pairing>::ScalarField>,
-        h_query: Arc<Vec<P::G1Affine>>,
         r: Self::ArithmeticShare,
         s: Self::ArithmeticShare,
-    ) -> IoResult<(Self::PointShareG1, Self::ArithmeticShare)> {
-        std::thread::scope(|scope| {
-            let h_acc = scope.spawn(|| {
-                let msm_h_query = tracing::debug_span!("msm h_query").entered();
-                let h = arithmetic::io_mul_vec(h, &mut self.io_context0)?;
-                let result = pointshare::msm_public_points(h_query.as_ref(), &h);
-                msm_h_query.exit();
-                Ok::<_, std::io::Error>(result)
-            });
-            let mul = arithmetic::mul(r, s, &mut self.io_context1)?;
-            Ok((h_acc.join().expect("can join")?, mul))
-        })
+    ) -> IoResult<Self::ArithmeticShare> {
+        arithmetic::mul(r, s, &mut self.io_context1)
     }
 
     fn distribute_powers_and_mul_by_const(
@@ -142,6 +128,11 @@ where
         pointshare::add_assign(a, b)
     }
 
+    fn add_points_g1_half_share(a: Self::PointShareG1, b: &P::G1) -> P::G1 {
+        let (a, _) = a.ab();
+        a + b
+    }
+
     fn add_assign_points_public_g1(id: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1) {
         pointshare::add_assign_public(a, b, id)
     }
@@ -176,15 +167,21 @@ where
 
     fn open_two_points(
         &mut self,
-        a: Self::PointShareG1,
+        a: P::G1,
         b: Self::PointShareG2,
     ) -> std::io::Result<(P::G1, P::G2)> {
-        let s1 = a.b;
+        let mut s1 = a;
         let s2 = b.b;
-        let (mut r1, mut r2) = self.io_context0.network.reshare((s1, s2))?;
-        r1 += a.a + a.b;
+        let (r1, r2) = std::thread::scope(|s| {
+            let r1 = s.spawn(|| self.io_context0.network.broadcast(s1));
+            let r2 = s.spawn(|| self.io_context1.network.reshare(s2));
+            (r1.join().expect("can join"), r2.join().expect("can join"))
+        });
+        let (r1b, r1c) = r1?;
+        let mut r2 = r2?;
+        s1 += r1b + r1c;
         r2 += b.a + b.b;
-        Ok((r1, r2))
+        Ok((s1, r2))
     }
 
     fn open_point_and_scalar_mul(
