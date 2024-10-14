@@ -1,6 +1,6 @@
 use acir::{
     acir_field::GenericFieldElement,
-    circuit::{Circuit, ExpressionWidth, Opcode},
+    circuit::{Circuit, ExpressionWidth, Opcode, Program},
     native_types::{WitnessMap, WitnessStack},
     FieldElement,
 };
@@ -9,6 +9,7 @@ use intmap::IntMap;
 use mpc_core::{lut::LookupTableProvider, protocols::rep3::network::Rep3Network};
 use noirc_abi::{input_parser::Format, Abi, MAIN_RETURN_NAME};
 use noirc_artifacts::program::ProgramArtifact;
+use partial_abi::PublicMarker;
 use std::{collections::BTreeMap, io, path::PathBuf};
 
 use crate::mpc::{plain::PlainAcvmSolver, rep3::Rep3AcvmSolver, NoirWitnessExtensionProtocol};
@@ -72,6 +73,8 @@ impl<T> CoSolver<T, ark_bn254::Fr>
 where
     T: NoirWitnessExtensionProtocol<ark_bn254::Fr>,
 {
+    const DEFAULT_FUNCTION_INDEX: usize = 0;
+
     pub fn read_abi_bn254_fieldelement<P>(
         path: P,
         abi: &Abi,
@@ -96,7 +99,8 @@ where
     pub fn partially_read_abi_bn254_fieldelement<P>(
         path: P,
         abi: &Abi,
-    ) -> eyre::Result<BTreeMap<String, FieldElement>>
+        public_inputs: &Program<FieldElement>,
+    ) -> eyre::Result<BTreeMap<String, PublicMarker<FieldElement>>>
     where
         PathBuf: From<P>,
     {
@@ -111,7 +115,11 @@ where
             // do we want to keep it like that? Seems not necessary but maybe
             // we need it for proving/verifying
             let encoded = abi_.encode(&input_map, return_value.clone())?;
-            Ok(Self::create_string_map(&abi_, encoded)?)
+            Ok(Self::create_string_map(
+                &abi_,
+                encoded,
+                &public_inputs.functions[Self::DEFAULT_FUNCTION_INDEX].public_parameters,
+            )?)
         }
     }
 
@@ -137,7 +145,8 @@ where
     {
         let mut witness_map =
             vec![WitnessMap::default(); compiled_program.bytecode.functions.len()];
-        witness_map[0] = Self::read_abi_bn254(prover_path, &compiled_program.abi)?;
+        witness_map[Self::DEFAULT_FUNCTION_INDEX] =
+            Self::read_abi_bn254(prover_path, &compiled_program.abi)?;
         Ok(Self {
             driver,
             abi: compiled_program.abi,
@@ -149,7 +158,7 @@ where
                 .map(|function| acvm::compiler::transform(function, CO_EXPRESSION_WIDTH).0)
                 .collect::<Vec<_>>(),
             witness_map,
-            function_index: 0,
+            function_index: Self::DEFAULT_FUNCTION_INDEX,
             memory_access: IntMap::new(),
         })
     }
@@ -161,7 +170,7 @@ where
     ) -> eyre::Result<Self> {
         let mut witness_map =
             vec![WitnessMap::default(); compiled_program.bytecode.functions.len()];
-        witness_map[0] = witness;
+        witness_map[Self::DEFAULT_FUNCTION_INDEX] = witness;
         Ok(Self {
             driver,
             abi: compiled_program.abi,
@@ -173,7 +182,7 @@ where
                 .map(|function| acvm::compiler::transform(function, CO_EXPRESSION_WIDTH).0)
                 .collect::<Vec<_>>(),
             witness_map,
-            function_index: 0,
+            function_index: Self::DEFAULT_FUNCTION_INDEX,
             memory_access: IntMap::new(),
         })
     }
