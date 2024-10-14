@@ -77,8 +77,8 @@ pub trait ShamirNetwork: Send {
 pub struct ShamirMpcNet {
     pub(crate) id: usize, // 0 <= id < num_parties
     pub(crate) num_parties: usize,
-    pub(crate) net_handler: Arc<MpcNetworkHandlerWrapper>,
     pub(crate) channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
+    pub(crate) net_handler: Arc<MpcNetworkHandlerWrapper>,
 }
 
 impl ShamirMpcNet {
