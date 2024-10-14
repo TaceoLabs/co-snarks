@@ -1163,7 +1163,7 @@ impl<'a, P: Pairing> TraceData<'a, P> {
         builder: &mut UltraCircuitBuilder<P>,
         is_structured: bool,
     ) {
-        tracing::info!("Construct trace data");
+        tracing::trace!("Construct trace data");
         // Complete the public inputs execution trace block from builder.public_inputs
         builder.populate_public_inputs_block();
 

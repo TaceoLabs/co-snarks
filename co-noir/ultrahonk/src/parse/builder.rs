@@ -171,7 +171,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         honk_recursion: bool,           // true for ultrahonk
         collect_gates_per_opcode: bool, // false for ultrahonk
     ) -> Self {
-        tracing::info!("Builder create circuit");
+        tracing::trace!("Builder create circuit");
 
         let has_valid_witness_assignments = !witness.is_empty();
 
@@ -194,7 +194,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
     }
 
     fn new(size_hint: usize) -> Self {
-        tracing::info!("Builder new");
+        tracing::trace!("Builder new");
         let variables = Vec::with_capacity(size_hint * 3);
         let variable_names = HashMap::with_capacity(size_hint * 3);
         let next_var_index = Vec::with_capacity(size_hint * 3);
@@ -252,7 +252,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         varnum: usize,
         recursive: bool,
     ) -> Self {
-        tracing::info!("Builder init");
+        tracing::trace!("Builder init");
         let mut builder = Self::new(size_hint);
 
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
@@ -557,7 +557,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         honk_recursion: bool,
         collect_gates_per_opcode: bool,
     ) {
-        tracing::info!("Builder build constraints");
+        tracing::trace!("Builder build constraints");
         if collect_gates_per_opcode {
             constraint_system
                 .gates_per_opcode
@@ -1784,7 +1784,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         //  */
         if self.circuit_finalized {
             // Gates added after first call to finalize will not be processed since finalization is only performed once
-            tracing::info!("WARNING: Redundant call to finalize_circuit(). Is this intentional?");
+            tracing::warn!("WARNING: Redundant call to finalize_circuit(). Is this intentional?");
         } else {
             if ensure_nonzero {
                 self.add_gates_to_ensure_all_polys_are_non_zero();
@@ -1889,7 +1889,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
     }
 
     pub fn populate_public_inputs_block(&mut self) {
-        tracing::info!("Populating public inputs block");
+        tracing::debug!("Populating public inputs block");
 
         // Update the public inputs block
         for idx in self.public_inputs.iter() {
