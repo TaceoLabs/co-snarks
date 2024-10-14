@@ -3,22 +3,20 @@ use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
-use co_acvm::solver::Rep3CoSolver;
+use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
 use co_ultrahonk::prelude::{
-    CoUltraHonk, Poseidon2Sponge, ProvingKey, Rep3CoBuilder, SharedBuilderVariable,
-    TranscriptFieldType, TranscriptHasher, UltraCircuitBuilder, UltraCircuitVariable, UltraHonk,
-    Utils, VerifyingKey,
+    CoUltraHonk, Poseidon2Sponge, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver,
+    SharedBuilderVariable, TranscriptFieldType, TranscriptHasher, UltraCircuitBuilder,
+    UltraCircuitVariable, UltraHonk, Utils, VerifyingKey,
 };
-use mpc_core::protocols::rep3::{
-    network::Rep3Network, witness_extension_impl::Rep3VmType, Rep3Protocol,
-};
+use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use sha3::Keccak256;
 use std::thread;
 use tests::rep3_network::Rep3TestNetwork;
 
 fn witness_map_to_witness_vector<P: Pairing, N: Rep3Network>(
-    witness_map: WitnessMap<Rep3VmType<P::ScalarField>>,
-) -> Vec<SharedBuilderVariable<Rep3Protocol<P::ScalarField, N>, P>> {
+    witness_map: WitnessMap<Rep3AcvmType<P::ScalarField>>,
+) -> Vec<SharedBuilderVariable<Rep3UltraHonkDriver<N>, P>> {
     let mut wv = Vec::new();
     let mut index = 0;
     for (w, f) in witness_map.into_iter() {
@@ -30,13 +28,12 @@ fn witness_map_to_witness_vector<P: Pairing, N: Rep3Network>(
             index += 1;
         }
         match f {
-            Rep3VmType::Public(f) => {
+            Rep3AcvmType::Public(f) => {
                 wv.push(SharedBuilderVariable::from_public(f));
             }
-            Rep3VmType::Shared(f) => {
+            Rep3AcvmType::Shared(f) => {
                 wv.push(SharedBuilderVariable::from_shared(f));
             }
-            Rep3VmType::BitShared => panic!("BitShared not supported"),
         }
         index += 1;
     }
@@ -44,8 +41,8 @@ fn witness_map_to_witness_vector<P: Pairing, N: Rep3Network>(
 }
 
 fn convert_witness_rep3<P: Pairing, N: Rep3Network>(
-    mut witness_stack: WitnessStack<Rep3VmType<P::ScalarField>>,
-) -> Vec<SharedBuilderVariable<Rep3Protocol<P::ScalarField, N>, P>> {
+    mut witness_stack: WitnessStack<Rep3AcvmType<P::ScalarField>>,
+) -> Vec<SharedBuilderVariable<Rep3UltraHonkDriver<N>, P>> {
     let witness_map = witness_stack
         .pop()
         .expect("Witness should be present")
@@ -86,8 +83,12 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
             let crs = ProvingKey::get_prover_crs(&builder, CRS_PATH_G1)
                 .expect("failed to get prover crs");
 
-            let driver = Rep3Protocol::new(net).unwrap();
-            let proving_key = ProvingKey::create(&driver, builder, crs);
+            let id = net.id;
+
+            let mut io_context0 = IoContext::init(net).unwrap();
+            let io_context1 = io_context0.fork().unwrap();
+            let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
+            let proving_key = ProvingKey::create(id, builder, crs);
 
             let prover = CoUltraHonk::<_, _, H>::new(driver);
             prover.prove(proving_key).unwrap()
@@ -148,8 +149,12 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
             let prover_crs = ProvingKey::get_prover_crs(&builder, CRS_PATH_G1)
                 .expect("failed to get prover crs");
 
-            let driver = Rep3Protocol::new(net2).unwrap();
-            let proving_key = ProvingKey::create(&driver, builder, prover_crs);
+            let id = net2.id;
+
+            let mut io_context0 = IoContext::init(net2).unwrap();
+            let io_context1 = io_context0.fork().unwrap();
+            let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
+            let proving_key = ProvingKey::create(id, builder, prover_crs);
 
             let prover = CoUltraHonk::<_, _, H>::new(driver);
             prover.prove(proving_key).unwrap()

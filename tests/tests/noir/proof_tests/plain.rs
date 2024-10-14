@@ -5,15 +5,15 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use co_acvm::solver::PlainCoSolver;
 use co_ultrahonk::prelude::{
-    CoUltraHonk, PlainCoBuilder, Poseidon2Sponge, ProvingKey, SharedBuilderVariable,
-    TranscriptFieldType, TranscriptHasher, UltraCircuitVariable, UltraHonk, Utils,
+    CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey,
+    SharedBuilderVariable, TranscriptFieldType, TranscriptHasher, UltraCircuitVariable, UltraHonk,
+    Utils,
 };
-use mpc_core::protocols::plain::PlainDriver;
 use sha3::Keccak256;
 
 fn witness_map_to_witness_vector<P: Pairing>(
     witness_map: WitnessMap<P::ScalarField>,
-) -> Vec<SharedBuilderVariable<PlainDriver<P::ScalarField>, P>> {
+) -> Vec<SharedBuilderVariable<PlainUltraHonkDriver, P>> {
     let mut wv = Vec::new();
     let mut index = 0;
     for (w, f) in witness_map.into_iter() {
@@ -32,7 +32,7 @@ fn witness_map_to_witness_vector<P: Pairing>(
 
 fn convert_witness_plain<P: Pairing>(
     mut witness_stack: WitnessStack<P::ScalarField>,
-) -> Vec<SharedBuilderVariable<PlainDriver<P::ScalarField>, P>> {
+) -> Vec<SharedBuilderVariable<PlainUltraHonkDriver, P>> {
     let witness_map = witness_stack
         .pop()
         .expect("Witness should be present")
@@ -53,10 +53,10 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let builder =
         PlainCoBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
 
-    let driver = PlainDriver::default();
+    let driver = PlainUltraHonkDriver;
 
     let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).expect("failed to get crs");
-    let (proving_key, verifying_key) = ProvingKey::create_keys(&driver, builder, crs).unwrap();
+    let (proving_key, verifying_key) = ProvingKey::create_keys(0, builder, crs).unwrap();
 
     let prover = CoUltraHonk::<_, _, H>::new(driver);
     let proof = prover.prove(proving_key).unwrap();
@@ -80,10 +80,10 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     let builder =
         PlainCoBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
 
-    let driver = PlainDriver::default();
+    let driver = PlainUltraHonkDriver;
 
     let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).expect("failed to get crs");
-    let (proving_key, verifying_key) = ProvingKey::create_keys(&driver, builder, crs).unwrap();
+    let (proving_key, verifying_key) = ProvingKey::create_keys(0, builder, crs).unwrap();
 
     let prover = CoUltraHonk::<_, _, H>::new(driver);
     let proof = prover.prove(proving_key).unwrap();
