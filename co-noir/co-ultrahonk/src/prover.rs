@@ -1,32 +1,31 @@
 use crate::{
     co_decider::{prover::CoDecider, types::ProverMemory},
     co_oink::prover::CoOink,
+    mpc::NoirUltraHonkProver,
     types::ProvingKey,
     CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::pairing::Pairing;
-use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
 use std::marker::PhantomData;
 use ultrahonk::prelude::{
     HonkCurve, HonkProof, HonkProofResult, Transcript, TranscriptFieldType, TranscriptHasher,
 };
 
 pub struct CoUltraHonk<
-    T,
+    T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-> where
-    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
-{
+> {
     pub(crate) driver: T,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
 }
 
-impl<T, P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    CoUltraHonk<T, P, H>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
+impl<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+    > CoUltraHonk<T, P, H>
 {
     pub fn new(driver: T) -> Self {
         Self {

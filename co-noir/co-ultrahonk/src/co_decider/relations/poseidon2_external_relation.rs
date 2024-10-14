@@ -1,28 +1,24 @@
 use super::Relation;
-use crate::co_decider::{
-    types::{ProverUnivariates, RelationParameters},
-    univariates::SharedUnivariate,
+use crate::{
+    co_decider::{
+        types::{ProverUnivariates, RelationParameters},
+        univariates::SharedUnivariate,
+    },
+    mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
-use mpc_core::traits::PrimeFieldMpcProtocol;
 use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
-pub(crate) struct Poseidon2ExternalRelationAcc<T, P: Pairing>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
+pub(crate) struct Poseidon2ExternalRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r0: SharedUnivariate<T, P, 7>,
     pub(crate) r1: SharedUnivariate<T, P, 7>,
     pub(crate) r2: SharedUnivariate<T, P, 7>,
     pub(crate) r3: SharedUnivariate<T, P, 7>,
 }
 
-impl<T, P: Pairing> Default for Poseidon2ExternalRelationAcc<T, P>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
+impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for Poseidon2ExternalRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -33,16 +29,13 @@ where
     }
 }
 
-impl<T, P: Pairing> Poseidon2ExternalRelationAcc<T, P>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
-{
+impl<T: NoirUltraHonkProver<P>, P: Pairing> Poseidon2ExternalRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
         assert!(elements.len() == Poseidon2ExternalRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, &elements[0]);
-        self.r1.scale_inplace(driver, &elements[1]);
-        self.r2.scale_inplace(driver, &elements[2]);
-        self.r3.scale_inplace(driver, &elements[3]);
+        self.r0.scale_inplace(driver, elements[0]);
+        self.r1.scale_inplace(driver, elements[1]);
+        self.r2.scale_inplace(driver, elements[2]);
+        self.r3.scale_inplace(driver, elements[3]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -90,11 +83,11 @@ pub(crate) struct Poseidon2ExternalRelation {}
 
 impl Poseidon2ExternalRelation {
     pub(crate) const NUM_RELATIONS: usize = 4;
+    pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
 }
 
-impl<T, P: HonkCurve<TranscriptFieldType>> Relation<T, P> for Poseidon2ExternalRelation
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField>,
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
+    for Poseidon2ExternalRelation
 {
     type Acc = Poseidon2ExternalRelationAcc<T, P>;
     const SKIPPABLE: bool = true;
@@ -183,10 +176,8 @@ where
             .sub(driver, w_l_shift)
             .mul_public(driver, &q_pos_by_scaling);
         for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] = driver.add(
-                &univariate_accumulator.r0.evaluations[i],
-                &tmp.evaluations[i],
-            );
+            univariate_accumulator.r0.evaluations[i] =
+                driver.add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
@@ -196,10 +187,8 @@ where
             .mul_public(driver, &q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] = driver.add(
-                &univariate_accumulator.r1.evaluations[i],
-                &tmp.evaluations[i],
-            );
+            univariate_accumulator.r1.evaluations[i] =
+                driver.add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
@@ -209,10 +198,8 @@ where
             .mul_public(driver, &q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] = driver.add(
-                &univariate_accumulator.r2.evaluations[i],
-                &tmp.evaluations[i],
-            );
+            univariate_accumulator.r2.evaluations[i] =
+                driver.add(univariate_accumulator.r2.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
@@ -222,10 +209,8 @@ where
             .mul_public(driver, &q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] = driver.add(
-                &univariate_accumulator.r3.evaluations[i],
-                &tmp.evaluations[i],
-            );
+            univariate_accumulator.r3.evaluations[i] =
+                driver.add(univariate_accumulator.r3.evaluations[i], tmp.evaluations[i]);
         }
 
         Ok(())

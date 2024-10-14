@@ -1,8 +1,7 @@
 use super::{
     co_sumcheck::SumcheckOutput, co_zeromorph::ZeroMorphOpeningClaim, types::ProverMemory,
 };
-use crate::CoUtils;
-use mpc_core::traits::{MSMProvider, PrimeFieldMpcProtocol};
+use crate::{mpc::NoirUltraHonkProver, CoUtils};
 use std::marker::PhantomData;
 use ultrahonk::prelude::{
     HonkCurve, HonkProof, HonkProofResult, ProverCrs, Transcript, TranscriptFieldType,
@@ -10,22 +9,21 @@ use ultrahonk::prelude::{
 };
 
 pub(crate) struct CoDecider<
-    T,
+    T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-> where
-    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
-{
+> {
     pub(crate) driver: T,
     pub(super) memory: ProverMemory<T, P>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
 }
 
-impl<T, P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    CoDecider<T, P, H>
-where
-    T: PrimeFieldMpcProtocol<P::ScalarField> + MSMProvider<P::G1>,
+impl<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+    > CoDecider<T, P, H>
 {
     pub fn new(driver: T, memory: ProverMemory<T, P>) -> Self {
         Self {
@@ -45,14 +43,14 @@ where
         let mut quotient = opening_claim.polynomial;
         let pair = opening_claim.opening_pair;
 
-        quotient[0] = driver.add_with_public(&-pair.evaluation, &quotient[0]);
+        quotient[0] = driver.add_with_public(-pair.evaluation, quotient[0]);
         // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
         quotient.factor_roots(driver, &pair.challenge);
-        let quotient_commitment = CoUtils::commit(driver, &quotient.coefficients, crs);
+        let quotient_commitment = CoUtils::commit::<T, P>(&quotient.coefficients, crs);
         // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
         // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
         // pthreads) or even the work queue itself
-        let quotient_commitment = driver.open_point(&quotient_commitment)?;
+        let quotient_commitment = driver.open_point(quotient_commitment)?;
         transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
         Ok(())
     }
