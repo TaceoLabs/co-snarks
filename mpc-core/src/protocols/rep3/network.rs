@@ -216,9 +216,9 @@ pub trait Rep3Network: Send {
 #[derive(Debug)]
 pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
-    pub(crate) net_handler: Arc<MpcNetworkHandlerWrapper>,
     pub(crate) chan_next: ChannelHandle<Bytes, BytesMut>,
     pub(crate) chan_prev: ChannelHandle<Bytes, BytesMut>,
+    pub(crate) net_handler: Arc<MpcNetworkHandlerWrapper>,
 }
 
 impl Rep3MpcNet {
