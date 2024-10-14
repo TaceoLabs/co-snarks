@@ -9,6 +9,7 @@ test-all:
 test-examples:
   cd co-circom/co-circom/examples/groth16 && ./run.sh
   cd co-circom/co-circom/examples/plonk && ./run.sh
+  cd co-noir/co-noir/examples && ./run.sh
 
 check-pr: lint test-all test-examples
 

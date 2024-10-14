@@ -52,3 +52,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test plonk examples
         run: cd co-circom/co-circom/examples/plonk && ./run.sh
+  test-noir-examples:
+    name: Test noir examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - run: sudo apt-get install lld
+      - uses: Swatinem/rust-cache@v2
+      - name: Test noir examples
+        run: cd co-noir/co-noir/examples && ./run.sh
