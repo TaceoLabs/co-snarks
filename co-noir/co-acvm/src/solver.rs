@@ -99,7 +99,7 @@ where
     pub fn partially_read_abi_bn254_fieldelement<P>(
         path: P,
         abi: &Abi,
-        public_inputs: &Program<FieldElement>,
+        program: &Program<FieldElement>,
     ) -> eyre::Result<BTreeMap<String, PublicMarker<FieldElement>>>
     where
         PathBuf: From<P>,
@@ -116,9 +116,10 @@ where
             // we need it for proving/verifying
             let encoded = abi_.encode(&input_map, return_value.clone())?;
             Ok(Self::create_string_map(
+                abi,
                 &abi_,
                 encoded,
-                &public_inputs.functions[Self::DEFAULT_FUNCTION_INDEX].public_parameters,
+                &program.functions[Self::DEFAULT_FUNCTION_INDEX].public_parameters,
             )?)
         }
     }

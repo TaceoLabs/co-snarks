@@ -61,30 +61,49 @@ where
     }
 
     pub(crate) fn create_string_map(
-        abi: &Abi,
+        original_abi: &Abi,
+        partial_abi: &Abi,
         witness: WitnessMap<FieldElement>,
         public_parameters: &PublicInputs,
     ) -> eyre::Result<BTreeMap<String, PublicMarker<FieldElement>>> {
         let mut res_map = BTreeMap::new();
         let mut wit_iter = witness.into_iter();
 
-        for param in abi.parameters.iter() {
+        let mut orig_params = original_abi.parameters.iter();
+        let mut offset = 0;
+
+        for param in partial_abi.parameters.iter() {
             let arg_name = &param.name;
             let typ_field_len = param.typ.field_count();
+
+            // Calculate real witness offset for the public parameter marker
+            loop {
+                let next = orig_params
+                    .next()
+                    .ok_or(eyre!("Corrupted Witness: Too little witnesses"))?;
+
+                if &next.name == arg_name {
+                    break;
+                }
+                offset += next.typ.field_count();
+            }
+
             for i in 0..typ_field_len {
                 let name = if typ_field_len == 1 {
                     arg_name.to_owned()
                 } else {
                     format!("{}[{}]", arg_name, i)
                 };
-                let (witness, el) = wit_iter
+
+                let (_, el) = wit_iter
                     .next()
                     .ok_or(eyre!("Corrupted Witness: Too little witnesses"))?;
-                if public_parameters.contains(witness.0 as usize) {
+                if public_parameters.contains((offset) as usize) {
                     res_map.insert(name, PublicMarker::Public(el));
                 } else {
                     res_map.insert(name, PublicMarker::Private(el));
                 }
+                offset += 1;
             }
         }
         if wit_iter.next().is_some() {
