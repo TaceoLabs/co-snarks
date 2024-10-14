@@ -32,6 +32,9 @@ pub enum HonkProofError {
     /// Corrupted Key
     #[error("Corrupted Key")]
     CorruptedKey,
+    /// Expected Public Witness, Shared received
+    #[error("Expected Public Witness, Shared received")]
+    ExpectedPublicWitness,
     #[error(transparent)]
     IOError(#[from] io::Error),
 }

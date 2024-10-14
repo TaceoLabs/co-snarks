@@ -495,7 +495,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             .expect("failed to get prover crs");
 
             // Get the proving key and prover
-            let proving_key = ProvingKey::create(id, builder, prover_crs);
+            let proving_key = ProvingKey::create(id, builder, prover_crs)?;
             let public_input = proving_key.get_public_inputs();
             let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -540,7 +540,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             .expect("failed to get prover crs");
 
             // Get the proving key and prover
-            let proving_key = ProvingKey::create(id, builder, prover_crs);
+            let proving_key = ProvingKey::create(id, builder, prover_crs)?;
             let public_input = proving_key.get_public_inputs();
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!(

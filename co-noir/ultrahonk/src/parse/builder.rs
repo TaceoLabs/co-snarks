@@ -32,7 +32,8 @@ pub trait UltraCircuitVariable<F>: Clone + PartialEq + Debug {
     fn from_public(value: F) -> Self;
     fn from_shared(value: Self::Shared) -> Self;
     fn is_public(&self) -> bool;
-    fn public_into_field(self) -> F;
+    // Returns Error if the variable is not public
+    fn public_into_field(self) -> HonkProofResult<F>;
 }
 
 impl<F: PrimeField> UltraCircuitVariable<F> for F {
@@ -50,8 +51,8 @@ impl<F: PrimeField> UltraCircuitVariable<F> for F {
         true
     }
 
-    fn public_into_field(self) -> F {
-        self
+    fn public_into_field(self) -> HonkProofResult<F> {
+        Ok(self)
     }
 }
 
@@ -1155,11 +1156,15 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         self.num_gates += 1;
     }
 
-    pub(crate) fn read_rom_array(&mut self, rom_id: usize, index_witness: u32) -> u32 {
+    pub(crate) fn read_rom_array(
+        &mut self,
+        rom_id: usize,
+        index_witness: u32,
+    ) -> HonkProofResult<u32> {
         assert!(self.rom_arrays.len() > rom_id);
         let val: BigUint = self
             .get_variable(index_witness as usize)
-            .public_into_field()
+            .public_into_field()?
             .into();
         let index: usize = val.try_into().unwrap();
 
@@ -1179,7 +1184,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         self.rom_arrays[rom_id].records.push(new_record);
 
         // create_read_gate
-        value_witness
+        Ok(value_witness)
     }
 
     fn apply_aux_selectors(&mut self, type_: AuxSelectors) {
