@@ -80,7 +80,7 @@ where
             loop {
                 let next = orig_params
                     .next()
-                    .ok_or(eyre!("Corrupted Witness: Too little witnesses"))?;
+                    .ok_or(eyre!("Corrupted Witness: Too few witnesses"))?;
 
                 if &next.name == arg_name {
                     break;
@@ -97,7 +97,7 @@ where
 
                 let (_, el) = wit_iter
                     .next()
-                    .ok_or(eyre!("Corrupted Witness: Too little witnesses"))?;
+                    .ok_or(eyre!("Corrupted Witness: Too few witnesses"))?;
                 if public_parameters.contains((offset) as usize) {
                     res_map.insert(name, PublicMarker::Public(el));
                 } else {
