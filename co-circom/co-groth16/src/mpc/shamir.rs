@@ -1,5 +1,5 @@
 use super::{CircomGroth16Prover, IoResult};
-use ark_ec::pairing::Pairing;
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use mpc_core::protocols::shamir::{
     arithmetic, core, network::ShamirNetwork, pointshare, ShamirPointShare, ShamirPrimeFieldShare,
@@ -29,8 +29,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     for ShamirGroth16Driver<P::ScalarField, N>
 {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
-    type PointShareG1 = ShamirPointShare<P::G1>;
-    type PointShareG2 = ShamirPointShare<P::G2>;
+    type PointShare<C> = ShamirPointShare<C> where C: CurveGroup;
 
     type PartyID = usize;
 
@@ -98,68 +97,65 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
             })
     }
 
-    fn msm_public_points_g1(
-        points: &[P::G1Affine],
+    fn msm_public_points<C>(
+        points: &[C::Affine],
         scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG1 {
+    ) -> Self::PointShare<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>,
+    {
         pointshare::msm_public_points(points, scalars)
     }
 
-    fn msm_public_points_g2(
-        points: &[P::G2Affine],
-        scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG2 {
-        pointshare::msm_public_points(points, scalars)
-    }
-
-    fn scalar_mul_public_point_g1(a: &P::G1, b: Self::ArithmeticShare) -> Self::PointShareG1 {
+    fn scalar_mul_public_point<C>(a: &C, b: Self::ArithmeticShare) -> Self::PointShare<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>,
+    {
         pointshare::scalar_mul_public_point(b, a)
     }
 
-    fn add_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1) {
+    fn add_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>) {
         pointshare::add_assign(a, b)
     }
 
-    fn add_points_g1_half_share(a: Self::PointShareG1, b: &P::G1) -> P::G1 {
+    fn add_points_half_share<C: CurveGroup>(a: Self::PointShare<C>, b: &C) -> C {
         a.inner() + b
     }
 
-    fn add_assign_points_public_g1(_id: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1) {
+    fn add_assign_points_public<C: CurveGroup>(
+        _id: Self::PartyID,
+        a: &mut Self::PointShare<C>,
+        b: &C,
+    ) {
         pointshare::add_assign_public(a, b)
     }
 
-    fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1> {
+    fn open_point<C>(&mut self, a: &Self::PointShare<C>) -> IoResult<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>,
+    {
         pointshare::open_point(a, &mut self.protocol0)
     }
 
-    fn scalar_mul_g1(
+    fn scalar_mul<C>(
         &mut self,
-        a: &Self::PointShareG1,
+        a: &Self::PointShare<C>,
         b: Self::ArithmeticShare,
-    ) -> IoResult<Self::PointShareG1> {
+    ) -> IoResult<Self::PointShare<C>>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>,
+    {
         pointshare::scalar_mul(a, b, &mut self.protocol0)
     }
 
-    fn sub_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1) {
+    fn sub_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>) {
         pointshare::sub_assign(a, b);
-    }
-
-    fn scalar_mul_public_point_g2(a: &P::G2, b: Self::ArithmeticShare) -> Self::PointShareG2 {
-        pointshare::scalar_mul_public_point(b, a)
-    }
-
-    fn add_assign_points_g2(a: &mut Self::PointShareG2, b: &Self::PointShareG2) {
-        pointshare::add_assign(a, b)
-    }
-
-    fn add_assign_points_public_g2(_id: Self::PartyID, a: &mut Self::PointShareG2, b: &P::G2) {
-        pointshare::add_assign_public(a, b)
     }
 
     fn open_two_points(
         &mut self,
         a: P::G1,
-        b: Self::PointShareG2,
+        b: Self::PointShare<P::G2>,
     ) -> std::io::Result<(P::G1, P::G2)> {
         let s1 = a;
         let s2 = b.a;
@@ -183,10 +179,10 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
 
     fn open_point_and_scalar_mul(
         &mut self,
-        g_a: &Self::PointShareG1,
-        g1_b: &Self::PointShareG1,
+        g_a: &Self::PointShare<P::G1>,
+        g1_b: &Self::PointShare<P::G1>,
         r: Self::ArithmeticShare,
-    ) -> super::IoResult<(P::G1, Self::PointShareG1)> {
+    ) -> super::IoResult<(P::G1, Self::PointShare<P::G1>)> {
         std::thread::scope(|s| {
             let opened = s.spawn(|| pointshare::open_point(g_a, &mut self.protocol0));
             let mul_result = pointshare::scalar_mul(g1_b, r, &mut self.protocol1)?;

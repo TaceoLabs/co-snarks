@@ -291,12 +291,12 @@ where
 
     fn calculate_coeff_g1(
         id: T::PartyID,
-        initial: T::PointShareG1,
+        initial: T::PointShare<P::G1>,
         query: &[P::G1Affine],
         vk_param: P::G1Affine,
         input_assignment: &[P::ScalarField],
         aux_assignment: &[T::ArithmeticShare],
-    ) -> T::PointShareG1 {
+    ) -> T::PointShare<P::G1> {
         let pub_len = input_assignment.len();
 
         // we block this thread of the runtime here.
@@ -304,25 +304,25 @@ where
         // runtime.
         let (pub_acc, priv_acc) = rayon::join(
             || P::G1::msm_unchecked(&query[1..=pub_len], input_assignment),
-            || T::msm_public_points_g1(&query[1 + pub_len..], aux_assignment),
+            || T::msm_public_points(&query[1 + pub_len..], aux_assignment),
         );
 
         let mut res = initial;
-        T::add_assign_points_public_g1(id, &mut res, &query[0].into_group());
-        T::add_assign_points_public_g1(id, &mut res, &vk_param.into_group());
-        T::add_assign_points_public_g1(id, &mut res, &pub_acc);
-        T::add_assign_points_g1(&mut res, &priv_acc);
+        T::add_assign_points_public(id, &mut res, &query[0].into_group());
+        T::add_assign_points_public(id, &mut res, &vk_param.into_group());
+        T::add_assign_points_public(id, &mut res, &pub_acc);
+        T::add_assign_points(&mut res, &priv_acc);
         res
     }
 
     fn calculate_coeff_g2(
         id: T::PartyID,
-        initial: T::PointShareG2,
+        initial: T::PointShare<P::G2>,
         query: &[P::G2Affine],
         vk_param: P::G2Affine,
         input_assignment: &[P::ScalarField],
         aux_assignment: &[T::ArithmeticShare],
-    ) -> T::PointShareG2 {
+    ) -> T::PointShare<P::G2> {
         let pub_len = input_assignment.len();
 
         // we block this thread of the runtime here.
@@ -330,14 +330,14 @@ where
         // runtime.
         let (pub_acc, priv_acc) = rayon::join(
             || P::G2::msm_unchecked(&query[1..=pub_len], input_assignment),
-            || T::msm_public_points_g2(&query[1 + pub_len..], aux_assignment),
+            || T::msm_public_points(&query[1 + pub_len..], aux_assignment),
         );
 
         let mut res = initial;
-        T::add_assign_points_public_g2(id, &mut res, &query[0].into_group());
-        T::add_assign_points_public_g2(id, &mut res, &vk_param.into_group());
-        T::add_assign_points_public_g2(id, &mut res, &pub_acc);
-        T::add_assign_points_g2(&mut res, &priv_acc);
+        T::add_assign_points_public(id, &mut res, &query[0].into_group());
+        T::add_assign_points_public(id, &mut res, &vk_param.into_group());
+        T::add_assign_points_public(id, &mut res, &pub_acc);
+        T::add_assign_points(&mut res, &priv_acc);
         res
     }
 
@@ -380,7 +380,7 @@ where
             let compute_a =
                 tracing::debug_span!("compute A in create proof with assignment").entered();
             // Compute A
-            let r_g1 = T::scalar_mul_public_point_g1(&delta_g1, r);
+            let r_g1 = T::scalar_mul_public_point(&delta_g1, r);
             let r_g1 = Self::calculate_coeff_g1(
                 party_id,
                 r_g1,
@@ -398,7 +398,7 @@ where
                 tracing::debug_span!("compute B/G1 in create proof with assignment").entered();
             // Compute B in G1
             // In original implementation this is skipped if r==0, however r is shared in our case
-            let s_g1 = T::scalar_mul_public_point_g1(&delta_g1, s);
+            let s_g1 = T::scalar_mul_public_point(&delta_g1, s);
             let s_g1 = Self::calculate_coeff_g1(
                 party_id,
                 s_g1,
@@ -415,7 +415,7 @@ where
             let compute_b =
                 tracing::debug_span!("compute B/G2 in create proof with assignment").entered();
             // Compute B in G2
-            let s_g2 = T::scalar_mul_public_point_g2(&delta_g2, s);
+            let s_g2 = T::scalar_mul_public_point(&delta_g2, s);
             let s_g2 = Self::calculate_coeff_g2(
                 party_id,
                 s_g2,
@@ -430,7 +430,7 @@ where
 
         rayon::spawn(move || {
             let msm_l_query = tracing::debug_span!("msm l_query").entered();
-            let result = T::msm_public_points_g1(l_query.as_ref(), &aux_assignment4);
+            let result = T::msm_public_points(l_query.as_ref(), &aux_assignment4);
             l_acc_tx.send(result).expect("channel not dropped");
             msm_l_query.exit();
         });
@@ -442,7 +442,7 @@ where
         });
 
         let rs = self.driver.mul(r, s)?;
-        let r_s_delta_g1 = T::scalar_mul_public_point_g1(&delta_g1, rs);
+        let r_s_delta_g1 = T::scalar_mul_public_point(&delta_g1, rs);
 
         let l_aux_acc = l_acc_rx.blocking_recv().expect("channel not dropped");
 
@@ -456,15 +456,15 @@ where
         network_round.exit();
 
         let last_round = tracing::debug_span!("finish open two points and some adds").entered();
-        let s_g_a = T::scalar_mul_public_point_g1(&g_a_opened, s);
+        let s_g_a = T::scalar_mul_public_point(&g_a_opened, s);
 
         let mut g_c = s_g_a;
-        T::add_assign_points_g1(&mut g_c, &r_g1_b);
-        T::sub_assign_points_g1(&mut g_c, &r_s_delta_g1);
-        T::add_assign_points_g1(&mut g_c, &l_aux_acc);
+        T::add_assign_points(&mut g_c, &r_g1_b);
+        T::sub_assign_points(&mut g_c, &r_s_delta_g1);
+        T::add_assign_points(&mut g_c, &l_aux_acc);
 
         let h_acc = h_acc_rx.blocking_recv()?;
-        let g_c = T::add_points_g1_half_share(g_c, &h_acc);
+        let g_c = T::add_points_half_share(g_c, &h_acc);
 
         let g2_b = s_g2_rx.blocking_recv()?;
         let (g_c_opened, g2_b_opened) = self.driver.open_two_points(g_c, g2_b)?;

@@ -1,5 +1,5 @@
 use ark_ec::pairing::Pairing;
-use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
+use ark_ec::CurveGroup;
 use ark_ff::UniformRand;
 use rand::thread_rng;
 
@@ -13,9 +13,7 @@ pub struct PlainGroth16Driver;
 impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     type ArithmeticShare = P::ScalarField;
 
-    type PointShareG1 = P::G1;
-
-    type PointShareG2 = P::G2;
+    type PointShare<C> = C where C: CurveGroup;
 
     type PartyID = usize;
 
@@ -79,78 +77,75 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         }
     }
 
-    fn msm_public_points_g1(
-        points: &[P::G1Affine],
+    fn msm_public_points<C>(
+        points: &[C::Affine],
         scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG1 {
-        P::G1::msm_unchecked(points, scalars)
+    ) -> Self::PointShare<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>,
+    {
+        C::msm_unchecked(points, scalars)
     }
 
-    fn msm_public_points_g2(
-        points: &[P::G2Affine],
-        scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG2 {
-        P::G2::msm_unchecked(points, scalars)
-    }
-
-    fn scalar_mul_public_point_g1(a: &P::G1, b: Self::ArithmeticShare) -> Self::PointShareG1 {
+    fn scalar_mul_public_point<C>(a: &C, b: Self::ArithmeticShare) -> Self::PointShare<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>,
+    {
         *a * b
     }
 
-    fn add_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1) {
+    fn add_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>) {
         *a += b;
     }
 
-    fn add_points_g1_half_share(a: Self::PointShareG1, b: &P::G1) -> P::G1 {
+    fn add_points_half_share<C: CurveGroup>(a: Self::PointShare<C>, b: &C) -> C {
         a + b
     }
 
-    fn add_assign_points_public_g1(_: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1) {
+    fn add_assign_points_public<C: CurveGroup>(
+        _: Self::PartyID,
+        a: &mut Self::PointShare<C>,
+        b: &C,
+    ) {
         *a += b;
     }
 
-    fn open_point_g1(&mut self, a: &Self::PointShareG1) -> super::IoResult<P::G1> {
+    fn open_point<C>(&mut self, a: &Self::PointShare<C>) -> super::IoResult<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>,
+    {
         Ok(*a)
     }
 
-    fn scalar_mul_g1(
+    fn scalar_mul<C>(
         &mut self,
-        a: &Self::PointShareG1,
+        a: &Self::PointShare<C>,
         b: Self::ArithmeticShare,
-    ) -> super::IoResult<Self::PointShareG1> {
+    ) -> super::IoResult<Self::PointShare<C>>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>,
+    {
         Ok(*a * b)
     }
 
-    fn sub_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1) {
+    fn sub_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>) {
         *a -= b;
-    }
-
-    fn scalar_mul_public_point_g2(a: &P::G2, b: Self::ArithmeticShare) -> Self::PointShareG2 {
-        *a * b
-    }
-
-    fn add_assign_points_g2(a: &mut Self::PointShareG2, b: &Self::PointShareG2) {
-        *a += b;
-    }
-
-    fn add_assign_points_public_g2(_: Self::PartyID, a: &mut Self::PointShareG2, b: &P::G2) {
-        *a += b;
     }
 
     fn open_two_points(
         &mut self,
-        a: Self::PointShareG1,
-        b: Self::PointShareG2,
+        a: Self::PointShare<P::G1>,
+        b: Self::PointShare<P::G2>,
     ) -> std::io::Result<(P::G1, P::G2)> {
         Ok((a, b))
     }
 
     fn open_point_and_scalar_mul(
         &mut self,
-        g_a: &Self::PointShareG1,
-        g1_b: &Self::PointShareG1,
+        g_a: &Self::PointShare<P::G1>,
+        g1_b: &Self::PointShare<P::G1>,
         r: Self::ArithmeticShare,
-    ) -> super::IoResult<(P::G1, Self::PointShareG1)> {
+    ) -> super::IoResult<(P::G1, Self::PointShare<P::G1>)> {
         Ok((*g_a, *g1_b * r))
     }
 }
