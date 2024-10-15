@@ -108,7 +108,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         let mut w = P::ScalarField::one();
         // TODO: multithread me - this is not so easy as other
         // parts as we go through the roots of unity but it is doable
-        let num_den_span = tracing::info_span!("compute num/den").entered();
+        let num_den_span = tracing::debug_span!("compute num/den").entered();
         for i in 0..zkey.domain_size {
             let a = &polys.buffer_a[i];
             let b = &polys.buffer_b[i];
@@ -164,13 +164,13 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
 
         num_den_span.exit();
 
-        let batched_mul_span = tracing::info_span!("buffer z network round").entered();
+        let batched_mul_span = tracing::debug_span!("buffer z network round").entered();
         let (num, den) = driver.array_prod_mul2(&n1, &n2, &n3, &d1, &d2, &d3)?;
         let mut buffer_z = driver.mul_vec(&num, &den)?;
         buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
         batched_mul_span.exit();
 
-        let fft_span = tracing::info_span!("fft-ifft for z(x)").entered();
+        let fft_span = tracing::debug_span!("fft-ifft for z(x)").entered();
 
         // Compute polynomial coefficients z(X) from buffer_z
         let mut poly_z = T::ifft(&buffer_z, &domains.domain);
