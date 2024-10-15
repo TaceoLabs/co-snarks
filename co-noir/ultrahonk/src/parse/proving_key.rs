@@ -16,7 +16,7 @@ use eyre::Result;
 impl<P: Pairing> ProvingKey<P> {
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
     pub fn create(mut circuit: UltraCircuitBuilder<P>, crs: ProverCrs<P>) -> Self {
-        tracing::info!("ProvingKey create");
+        tracing::trace!("ProvingKey create");
         circuit.finalize_circuit(true);
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
@@ -83,7 +83,7 @@ impl<P: Pairing> ProvingKey<P> {
         circuit: &GenericUltraCircuitBuilder<P, S>,
         path_g1: &str,
     ) -> Result<ProverCrs<P>> {
-        tracing::info!("Getting prover crs");
+        tracing::trace!("Getting prover crs");
 
         let srs_size = Self::get_crs_size(circuit);
         CrsParser::<P>::get_crs_g1(path_g1, srs_size)
@@ -94,14 +94,14 @@ impl<P: Pairing> ProvingKey<P> {
         path_g1: &str,
         path_g2: &str,
     ) -> Result<Crs<P>> {
-        tracing::info!("Getting crs");
+        tracing::trace!("Getting crs");
 
         let srs_size = Self::get_crs_size(circuit);
         CrsParser::<P>::get_crs(path_g1, path_g2, srs_size)
     }
 
     fn new(circuit_size: usize, num_public_inputs: usize, crs: ProverCrs<P>) -> Self {
-        tracing::info!("ProvingKey new");
+        tracing::trace!("ProvingKey new");
         let polynomials = Polynomials::new(circuit_size);
 
         Self {
@@ -117,7 +117,7 @@ impl<P: Pairing> ProvingKey<P> {
     }
 
     fn populate_trace(&mut self, builder: &mut UltraCircuitBuilder<P>, is_strucutred: bool) {
-        tracing::info!("Populating trace");
+        tracing::trace!("Populating trace");
 
         let mut trace_data = TraceData::new(builder, self);
         trace_data.construct_trace_data(builder, is_strucutred);
@@ -149,7 +149,7 @@ impl<P: Pairing> ProvingKey<P> {
         memory_read_records: &mut Vec<u32>,
         memory_write_records: &mut Vec<u32>,
     ) {
-        tracing::info!("Adding memory records to proving key");
+        tracing::trace!("Adding memory records to proving key");
 
         assert!(memory_read_records.is_empty());
         assert!(memory_write_records.is_empty());
@@ -170,7 +170,7 @@ impl<P: Pairing> ProvingKey<P> {
         circuit_size: usize,
         pub_inputs_offset: usize,
     ) {
-        tracing::info!("Computing permutation argument polynomials");
+        tracing::trace!("Computing permutation argument polynomials");
         let mapping = Self::compute_permutation_mapping(
             circuit_size,
             pub_inputs_offset,

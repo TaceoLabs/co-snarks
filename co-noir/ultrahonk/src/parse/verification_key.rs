@@ -39,7 +39,7 @@ impl<P: Pairing> VerifyingKey<P> {
         path_g1: &str,
         path_g2: &str,
     ) -> Result<Crs<P>> {
-        tracing::info!("Getting crs");
+        tracing::trace!("Getting crs");
         ProvingKey::get_crs(circuit, path_g1, path_g2)
     }
 
@@ -47,12 +47,12 @@ impl<P: Pairing> VerifyingKey<P> {
         circuit: &GenericUltraCircuitBuilder<P, S>,
         path_g1: &str,
     ) -> Result<ProverCrs<P>> {
-        tracing::info!("Getting crs");
+        tracing::trace!("Getting crs");
         ProvingKey::get_prover_crs(circuit, path_g1)
     }
 
     pub fn get_verifier_crs(path_g2: &str) -> Result<P::G2Affine> {
-        tracing::info!("Getting verifier crs");
+        tracing::trace!("Getting verifier crs");
         CrsParser::<P>::get_crs_g2(path_g2)
     }
 }
