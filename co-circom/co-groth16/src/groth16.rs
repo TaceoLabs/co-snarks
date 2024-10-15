@@ -223,8 +223,8 @@ where
             }
         );
 
-        let domain = Arc::new(domain);
         eval_constraint_span.exit();
+        let domain = Arc::new(domain);
 
         let (a_tx, a_rx) = oneshot::channel();
         let (b_tx, b_rx) = oneshot::channel();
@@ -238,7 +238,7 @@ where
         let b_roots = Arc::clone(&roots_to_power_domain);
         let c_roots = Arc::clone(&roots_to_power_domain);
         rayon::spawn(move || {
-            let a_span = tracing::debug_span!("distribute powers mul a (fft/ifft)").entered();
+            let a_span = tracing::debug_span!("a: distribute powers mul a (fft/ifft)").entered();
             a_domain.ifft_in_place(&mut a_result);
             T::distribute_powers_and_mul_by_const(&mut a_result, &a_roots);
             a_domain.fft_in_place(&mut a_result);
@@ -247,7 +247,7 @@ where
         });
 
         rayon::spawn(move || {
-            let b_span = tracing::debug_span!("distribute powers mul b (fft/ifft)").entered();
+            let b_span = tracing::debug_span!("b: distribute powers mul b (fft/ifft)").entered();
             b_domain.ifft_in_place(&mut b_result);
             T::distribute_powers_and_mul_by_const(&mut b_result, &b_roots);
             b_domain.fft_in_place(&mut b_result);
@@ -284,6 +284,7 @@ where
         let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
         // same as above. No IO task is run at the moment.
         let mut ab = self.driver.local_mul_vec(a, b);
+        local_ab_span.exit();
         let c = c_rx.blocking_recv()?;
         ab.par_iter_mut()
             .zip_eq(c.par_iter())
@@ -291,7 +292,6 @@ where
             .for_each(|(a, b)| {
                 *a -= b;
             });
-        local_ab_span.exit();
         compute_ab_span.exit();
         Ok(ab)
     }
@@ -306,12 +306,9 @@ where
     ) -> T::PointShare<P::G1> {
         let pub_len = input_assignment.len();
 
-        // we block this thread of the runtime here.
-        // It should not matter too much, as we have multithreaded
-        // runtime.
-        let (pub_acc, priv_acc) = rayon::join(
-            || P::G1::msm_unchecked(&query[1..=pub_len], input_assignment),
+        let (priv_acc, pub_acc) = rayon::join(
             || T::msm_public_points(&query[1 + pub_len..], aux_assignment),
+            || P::G1::msm_unchecked(&query[1..=pub_len], input_assignment),
         );
 
         let mut res = initial;
@@ -331,13 +328,9 @@ where
         aux_assignment: &[T::ArithmeticShare],
     ) -> T::PointShare<P::G2> {
         let pub_len = input_assignment.len();
-
-        // we block this thread of the runtime here.
-        // It should not matter too much, as we have multithreaded
-        // runtime.
-        let (pub_acc, priv_acc) = rayon::join(
-            || P::G2::msm_unchecked(&query[1..=pub_len], input_assignment),
+        let (priv_acc, pub_acc) = rayon::join(
             || T::msm_public_points(&query[1 + pub_len..], aux_assignment),
+            || P::G2::msm_unchecked(&query[1..=pub_len], input_assignment),
         );
 
         let mut res = initial;
@@ -443,26 +436,28 @@ where
         });
 
         rayon::spawn(move || {
+            let msm_h_query = tracing::debug_span!("msm h_query").entered();
             //perform the msm for h
             let result = P::G1::msm_unchecked(&h_query.h_query, &h);
             h_acc_tx.send(result).expect("channel not dropped");
+            msm_h_query.exit();
         });
 
         // TODO we should move this to seperate thread so that we not block here
         // we can do some additional work so we don't necessary need to block
+        let rs_span = tracing::debug_span!("r*s with networking").entered();
         let rs = self.driver.mul(r, s)?;
         let r_s_delta_g1 = T::scalar_mul_public_point(&delta_g1, rs);
+        rs_span.exit();
 
-        let calculate_coeff_span = tracing::debug_span!("calculate coeff").entered();
         let g_a = r_g1_rx.blocking_recv()?;
         let g1_b = s_g1_rx.blocking_recv()?;
-        calculate_coeff_span.exit();
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
         let (g_a_opened, r_g1_b) = self.driver.open_point_and_scalar_mul(&g_a, &g1_b, r)?;
         network_round.exit();
 
-        let last_round = tracing::debug_span!("finish open two points and some adds").entered();
+        let last_round = tracing::debug_span!("finish - open two points and some adds").entered();
         let s_g_a = T::scalar_mul_public_point(&g_a_opened, s);
 
         let mut g_c = s_g_a;
