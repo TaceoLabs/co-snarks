@@ -7,6 +7,7 @@ use circom_types::{
     R1CS,
 };
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
+use std::sync::Arc;
 
 use co_circom_snarks::SharedWitness;
 use co_groth16::mpc::ShamirGroth16Driver;
@@ -41,9 +42,9 @@ macro_rules! add_test_impl {
                 let witness_file =
                     File::open(format!("../test_vectors/{}/{}/{}/witness.wtns", stringify!($proof_system), stringify!([< $curve:lower >]), $name)).unwrap();
                 let witness = Witness::<[< ark_ $curve:lower >]::Fr>::from_reader(witness_file).unwrap();
-                let zkey1 = [< $proof_system ZK >]::<$curve>::from_reader(zkey_file).unwrap();
-                let zkey2 = zkey1.clone();
-                let zkey3 = zkey1.clone();
+                let zkey1 = Arc::new([< $proof_system ZK >]::<$curve>::from_reader(zkey_file).unwrap());
+                let zkey2 = Arc::clone(&zkey1);
+                let zkey3 = Arc::clone(&zkey1);
                 let r1cs = R1CS::<$curve>::from_reader(r1cs_file).unwrap();
                 //ignore leading 1 for verification
                 let public_input = witness.values[1..r1cs.num_inputs].to_vec();
@@ -77,7 +78,7 @@ macro_rules! add_test_impl {
                         let mut prover = [< Co $proof_system>]::<
                             $curve, [< Shamir $proof_system Driver>]<[< ark_ $curve:lower >]::Fr, PartyTestNetwork>
                         >::new(shamir);
-                        prover.prove(&zkey, x).unwrap()
+                        prover.prove(zkey, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();

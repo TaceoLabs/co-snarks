@@ -5,6 +5,7 @@ use ark_ff::PrimeField;
 use circom_mpc_compiler::CoCircomCompiler;
 use circom_types::R1CS;
 use num_traits::Zero;
+use std::sync::Arc;
 
 use circom_types::{
     groth16::{
@@ -498,7 +499,7 @@ where
 
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
-            let zkey = Groth16ZKey::<P>::from_reader(zkey_file).context("reading zkey")?;
+            let zkey = Arc::new(Groth16ZKey::<P>::from_reader(zkey_file).context("reading zkey")?);
 
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
@@ -515,7 +516,7 @@ where
                         Rep3CoGroth16::with_network(mpc_net).context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&zkey, witness_share)?;
+                    let proof = prover.prove(zkey, witness_share)?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -527,7 +528,7 @@ where
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&zkey, witness_share)?;
+                    let proof = prover.prove(zkey, witness_share)?;
                     (proof, public_input)
                 }
             };
@@ -545,7 +546,8 @@ where
             public_input
         }
         ProofSystem::Plonk => {
-            let pk = PlonkZKey::<P>::from_reader(zkey_file).context("while parsing zkey")?;
+            let zkey =
+                Arc::new(PlonkZKey::<P>::from_reader(zkey_file).context("while parsing zkey")?);
 
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
@@ -564,7 +566,7 @@ where
                         Rep3CoPlonk::with_network(mpc_net).context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&pk, witness_share)?;
+                    let proof = prover.prove(zkey, witness_share)?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -572,11 +574,11 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     //init prover
-                    let prover = ShamirCoPlonk::with_network_config(t, config.network, &pk)
+                    let prover = ShamirCoPlonk::with_network_config(t, config.network, &zkey)
                         .context("while building prover")?;
 
                     // execute prover in MPC
-                    let proof = prover.prove(&pk, witness_share)?;
+                    let proof = prover.prove(zkey, witness_share)?;
                     (proof, public_input)
                 }
             };

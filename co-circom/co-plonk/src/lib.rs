@@ -18,6 +18,7 @@ use mpc_net::config::NetworkConfig;
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
+use std::sync::Arc;
 use std::time::Instant;
 
 /// This module contains the Plonk prover trait
@@ -81,7 +82,7 @@ where
     /// Execute the PLONK prover using the internal MPC driver.
     pub fn prove(
         self,
-        zkey: &ZKey<P>,
+        zkey: Arc<ZKey<P>>,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<PlonkProof<P>> {
         let id = self.driver.get_party_id();
@@ -99,7 +100,7 @@ where
             zkey.n_vars,
             zkey.n_public
         );
-        let state = Round1::init_round(self.driver, zkey, witness)?;
+        let state = Round1::init_round(self.driver, zkey.as_ref(), witness)?;
         tracing::debug!("init round done..");
         let state = state.round1()?;
         tracing::debug!("round 1 done..");
@@ -267,6 +268,7 @@ pub mod tests {
     use circom_types::plonk::{JsonVerificationKey, ZKey};
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
+    use std::sync::Arc;
     use std::{fs::File, io::BufReader};
 
     use crate::plonk::Plonk;
@@ -275,7 +277,7 @@ pub mod tests {
     pub fn test_multiplier2_bn254() -> eyre::Result<()> {
         let zkey_file = "../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey";
         let witness_file = "../../test_vectors/Plonk/bn254/multiplier2/witness.wtns";
-        let zkey = ZKey::<Bn254>::from_reader(File::open(zkey_file)?)?;
+        let zkey = Arc::new(ZKey::<Bn254>::from_reader(File::open(zkey_file)?)?);
         let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
 
         let witness = SharedWitness {
@@ -293,7 +295,7 @@ pub mod tests {
         )
         .unwrap();
 
-        let proof = Plonk::<Bn254>::plain_prove(&zkey, witness).unwrap();
+        let proof = Plonk::<Bn254>::plain_prove(zkey, witness).unwrap();
         let result = Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
         assert!(result);
         Ok(())
@@ -304,7 +306,7 @@ pub mod tests {
         let mut reader = BufReader::new(
             File::open("../../test_vectors/Plonk/bn254/poseidon/circuit.zkey").unwrap(),
         );
-        let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
+        let zkey = Arc::new(ZKey::<Bn254>::from_reader(&mut reader).unwrap());
         let witness_file =
             File::open("../../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
         let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
@@ -324,7 +326,7 @@ pub mod tests {
         )
         .unwrap();
 
-        let proof = Plonk::<Bn254>::plain_prove(&zkey, witness).unwrap();
+        let proof = Plonk::<Bn254>::plain_prove(zkey, witness).unwrap();
 
         let mut proof_bytes = vec![];
         serde_json::to_writer(&mut proof_bytes, &proof).unwrap();
