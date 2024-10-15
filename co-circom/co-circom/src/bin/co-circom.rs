@@ -524,7 +524,7 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     // connect to network
-                    let prover = ShamirCoGroth16::with_network_config(t, config.network, &zkey)
+                    let prover = ShamirCoGroth16::with_network_config(t, config.network)
                         .context("while building prover")?;
 
                     // execute prover in MPC

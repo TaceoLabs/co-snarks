@@ -495,14 +495,10 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a new [ShamirCoGroth16] protocol with a given network configuration.
-    pub fn with_network_config(
-        threshold: usize,
-        config: NetworkConfig,
-        zkey: &ZKey<P>,
-    ) -> Result<Self> {
-        let domain_size = 2usize.pow(u32::try_from(zkey.pow).expect("pow fits into u32"));
-        // we need domain_size + 2 + 1 number of corr rand pairs in witness_map_from_matrices (degree_reduce_vec + r and s + 1 for fork)
-        let num_pairs = domain_size + 2 + 1;
+    pub fn with_network_config(threshold: usize, config: NetworkConfig) -> Result<Self> {
+        // we need 2 + 1 number of corr rand pairs. We need the values r/s (1 pair) and 2 muls (2
+        // pairs)
+        let num_pairs = 3;
         let mpc_net = ShamirMpcNet::new(config)?;
         let preprocessing = ShamirPreprocessing::new(threshold, mpc_net, num_pairs)?;
         let mut protocol0 = ShamirProtocol::from(preprocessing);
