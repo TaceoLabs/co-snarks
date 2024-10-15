@@ -4,7 +4,7 @@
 //! You will most likely need the plain PLONK implementation to verify a proof from co-PLONK. For that
 //! see the [`Plonk::verify`] method.
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::Arc};
 
 use crate::{mpc::plain::PlainPlonkDriver, plonk_utils, types::Domains, CoPlonk};
 use ark_ec::{pairing::Pairing, Group};
@@ -284,7 +284,7 @@ where
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
     pub fn plain_prove(
-        zkey: &ZKey<P>,
+        zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> eyre::Result<PlonkProof<P>> {
         let prover = Self {

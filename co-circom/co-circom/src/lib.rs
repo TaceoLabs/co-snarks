@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 //! This crate provides a binary and associated helper library for running collaborative SNARK proofs.
-use std::{collections::BTreeMap, io::Read, path::PathBuf, time::Instant};
+use std::{collections::BTreeMap, io::Read, path::PathBuf, sync::Arc, time::Instant};
 
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
@@ -707,5 +707,6 @@ where
     tracing::info!("done!");
     tracing::info!("starting prover...");
     // execute prover in MPC
-    prover.prove(&zkey, witness_share)
+    let zkey = Arc::new(zkey);
+    prover.prove(zkey, witness_share)
 }

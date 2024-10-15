@@ -110,7 +110,7 @@ where
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
     pub fn prove(
         mut self,
-        zkey: &ZKey<P>,
+        zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> Result<Groth16Proof<P>> {
         let id = self.driver.get_party_id();
@@ -130,8 +130,15 @@ where
             &private_witness,
         )?;
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
-        let proof =
-            self.create_proof_with_assignment(zkey, r, s, h, public_inputs, private_witness)?;
+
+        let proof = self.create_proof_with_assignment(
+            Arc::clone(&zkey),
+            r,
+            s,
+            h,
+            public_inputs,
+            private_witness,
+        )?;
 
         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
         tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
@@ -344,7 +351,7 @@ where
     #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
     fn create_proof_with_assignment(
         mut self,
-        zkey: &ZKey<P>,
+        zkey: Arc<ZKey<P>>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
         h: Vec<P::ScalarField>,
@@ -354,16 +361,16 @@ where
         let delta_g1 = zkey.delta_g1.into_group();
         let (l_acc_tx, l_acc_rx) = oneshot::channel();
         let (h_acc_tx, h_acc_rx) = oneshot::channel();
-        let h_query = Arc::clone(&zkey.h_query);
-        let l_query = Arc::clone(&zkey.l_query);
+        let h_query = Arc::clone(&zkey);
+        let l_query = Arc::clone(&zkey);
 
         let party_id = self.driver.get_party_id();
         let (r_g1_tx, r_g1_rx) = oneshot::channel();
         let (s_g1_tx, s_g1_rx) = oneshot::channel();
         let (s_g2_tx, s_g2_rx) = oneshot::channel();
-        let a_query = Arc::clone(&zkey.a_query);
-        let b_g1_query = Arc::clone(&zkey.b_g1_query);
-        let b_g2_query = Arc::clone(&zkey.b_g2_query);
+        let a_query = Arc::clone(&zkey);
+        let b_g1_query = Arc::clone(&zkey);
+        let b_g2_query = Arc::clone(&zkey);
         let input_assignment1 = Arc::clone(&input_assignment);
         let input_assignment2 = Arc::clone(&input_assignment);
         let input_assignment3 = Arc::clone(&input_assignment);
@@ -384,7 +391,7 @@ where
             let r_g1 = Self::calculate_coeff_g1(
                 party_id,
                 r_g1,
-                &a_query,
+                &a_query.a_query,
                 alpha_g1,
                 &input_assignment1[1..],
                 &aux_assignment1,
@@ -402,7 +409,7 @@ where
             let s_g1 = Self::calculate_coeff_g1(
                 party_id,
                 s_g1,
-                &b_g1_query,
+                &b_g1_query.b_g1_query,
                 beta_g1,
                 &input_assignment2[1..],
                 &aux_assignment2,
@@ -419,7 +426,7 @@ where
             let s_g2 = Self::calculate_coeff_g2(
                 party_id,
                 s_g2,
-                &b_g2_query,
+                &b_g2_query.b_g2_query,
                 beta_g2,
                 &input_assignment3[1..],
                 &aux_assignment3,
@@ -430,21 +437,21 @@ where
 
         rayon::spawn(move || {
             let msm_l_query = tracing::debug_span!("msm l_query").entered();
-            let result = T::msm_public_points(l_query.as_ref(), &aux_assignment4);
+            let result = T::msm_public_points(&l_query.l_query, &aux_assignment4);
             l_acc_tx.send(result).expect("channel not dropped");
             msm_l_query.exit();
         });
 
         rayon::spawn(move || {
             //perform the msm for h
-            let result = P::G1::msm_unchecked(h_query.as_ref(), &h);
+            let result = P::G1::msm_unchecked(&h_query.h_query, &h);
             h_acc_tx.send(result).expect("channel not dropped");
         });
 
+        // TODO we should move this to seperate thread so that we not block here
+        // we can do some additional work so we don't necessary need to block
         let rs = self.driver.mul(r, s)?;
         let r_s_delta_g1 = T::scalar_mul_public_point(&delta_g1, rs);
-
-        let l_aux_acc = l_acc_rx.blocking_recv().expect("channel not dropped");
 
         let calculate_coeff_span = tracing::debug_span!("calculate coeff").entered();
         let g_a = r_g1_rx.blocking_recv()?;
@@ -461,6 +468,7 @@ where
         let mut g_c = s_g_a;
         T::add_assign_points(&mut g_c, &r_g1_b);
         T::sub_assign_points(&mut g_c, &r_s_delta_g1);
+        let l_aux_acc = l_acc_rx.blocking_recv().expect("channel not dropped");
         T::add_assign_points(&mut g_c, &l_aux_acc);
 
         let h_acc = h_acc_rx.blocking_recv()?;
@@ -544,7 +552,7 @@ where
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
     pub fn plain_prove(
-        zkey: &ZKey<P>,
+        zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> Result<Groth16Proof<P>> {
         let prover = Self {
