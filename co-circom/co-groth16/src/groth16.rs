@@ -154,7 +154,7 @@ where
     ) -> Vec<T::ArithmeticShare> {
         let mut result = matrix
             .par_iter()
-            .with_min_len(32)
+            .with_min_len(256)
             .map(|x| T::evaluate_constraint(party_id, x, public_inputs, private_witness))
             .collect::<Vec<_>>();
         result.resize(domain_size, T::ArithmeticShare::default());
@@ -296,41 +296,22 @@ where
         Ok(ab)
     }
 
-    fn calculate_coeff_g1(
+    fn calculate_coeff<C>(
         id: T::PartyID,
-        initial: T::PointShare<P::G1>,
-        query: &[P::G1Affine],
-        vk_param: P::G1Affine,
+        initial: T::PointShare<C>,
+        query: &[C::Affine],
+        vk_param: C::Affine,
         input_assignment: &[P::ScalarField],
         aux_assignment: &[T::ArithmeticShare],
-    ) -> T::PointShare<P::G1> {
+    ) -> T::PointShare<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>,
+    {
         let pub_len = input_assignment.len();
 
         let (priv_acc, pub_acc) = rayon::join(
             || T::msm_public_points(&query[1 + pub_len..], aux_assignment),
-            || P::G1::msm_unchecked(&query[1..=pub_len], input_assignment),
-        );
-
-        let mut res = initial;
-        T::add_assign_points_public(id, &mut res, &query[0].into_group());
-        T::add_assign_points_public(id, &mut res, &vk_param.into_group());
-        T::add_assign_points_public(id, &mut res, &pub_acc);
-        T::add_assign_points(&mut res, &priv_acc);
-        res
-    }
-
-    fn calculate_coeff_g2(
-        id: T::PartyID,
-        initial: T::PointShare<P::G2>,
-        query: &[P::G2Affine],
-        vk_param: P::G2Affine,
-        input_assignment: &[P::ScalarField],
-        aux_assignment: &[T::ArithmeticShare],
-    ) -> T::PointShare<P::G2> {
-        let pub_len = input_assignment.len();
-        let (priv_acc, pub_acc) = rayon::join(
-            || T::msm_public_points(&query[1 + pub_len..], aux_assignment),
-            || P::G2::msm_unchecked(&query[1..=pub_len], input_assignment),
+            || C::msm_unchecked(&query[1..=pub_len], input_assignment),
         );
 
         let mut res = initial;
@@ -381,7 +362,7 @@ where
                 tracing::debug_span!("compute A in create proof with assignment").entered();
             // Compute A
             let r_g1 = T::scalar_mul_public_point(&delta_g1, r);
-            let r_g1 = Self::calculate_coeff_g1(
+            let r_g1 = Self::calculate_coeff(
                 party_id,
                 r_g1,
                 &a_query.a_query,
@@ -399,7 +380,7 @@ where
             // Compute B in G1
             // In original implementation this is skipped if r==0, however r is shared in our case
             let s_g1 = T::scalar_mul_public_point(&delta_g1, s);
-            let s_g1 = Self::calculate_coeff_g1(
+            let s_g1 = Self::calculate_coeff(
                 party_id,
                 s_g1,
                 &b_g1_query.b_g1_query,
@@ -416,7 +397,7 @@ where
                 tracing::debug_span!("compute B/G2 in create proof with assignment").entered();
             // Compute B in G2
             let s_g2 = T::scalar_mul_public_point(&delta_g2, s);
-            let s_g2 = Self::calculate_coeff_g2(
+            let s_g2 = Self::calculate_coeff(
                 party_id,
                 s_g2,
                 &b_g2_query.b_g2_query,
