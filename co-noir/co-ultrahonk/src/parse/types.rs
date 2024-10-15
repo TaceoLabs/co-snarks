@@ -61,7 +61,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
         builder: &mut CoUltraCircuitBuilder<T, P>,
         is_structured: bool,
     ) {
-        tracing::info!("Construct trace data");
+        tracing::trace!("Construct trace data");
         // Complete the public inputs execution trace block from builder.public_inputs
         builder.populate_public_inputs_block();
 
