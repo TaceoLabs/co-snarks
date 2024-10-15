@@ -4,5 +4,6 @@ cargo run --release --bin co-circom -- split-witness --witness test_vectors/kyc/
 cargo run --release --bin co-circom -- generate-proof plonk --witness test_vectors/kyc/witness.wtns.0.shared --zkey test_vectors/kyc/bls12/kyc.zkey --protocol REP3 --curve BLS12-381 --config ../configs/party1.toml --out proof.0.json --public-input public_input.json &
 cargo run --release --bin co-circom -- generate-proof plonk --witness test_vectors/kyc/witness.wtns.1.shared --zkey test_vectors/kyc/bls12/kyc.zkey --protocol REP3 --curve BLS12-381 --config ../configs/party2.toml --out proof.1.json &
 cargo run --release --bin co-circom -- generate-proof plonk --witness test_vectors/kyc/witness.wtns.2.shared --zkey test_vectors/kyc/bls12/kyc.zkey --protocol REP3 --curve BLS12-381 --config ../configs/party3.toml --out proof.2.json
+wait $(jobs -p)
 # verify proof
 cargo run --release --bin co-circom -- verify plonk --proof proof.0.json --vk test_vectors/kyc/bls12/verification_key.json --public-input public_input.json --curve BLS12-381
