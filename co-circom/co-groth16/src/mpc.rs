@@ -1,7 +1,7 @@
 use core::fmt;
 use std::fmt::Debug;
 
-use ark_ec::pairing::Pairing;
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_poly::domain::DomainCoeff;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
@@ -28,9 +28,9 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         + DomainCoeff<P::ScalarField>
         + 'static;
     /// The G1 point share type
-    type PointShareG1: Debug + Send + 'static;
-    /// The G2 point share type
-    type PointShareG2: Debug + Send + 'static;
+    type PointShare<C>: Debug + Send + 'static
+    where
+        C: CurveGroup;
     /// The party id type
     type PartyID: Send + Sync + Copy + fmt::Display + 'static;
 
@@ -78,64 +78,62 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         roots: &[P::ScalarField],
     );
 
-    /// Perform msm between G1 `points` and `scalars`
-    fn msm_public_points_g1(
-        points: &[P::G1Affine],
+    /// Perform msm between `points` and `scalars`
+    fn msm_public_points<C>(
+        points: &[C::Affine],
         scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG1;
-
-    /// Perform msm between G2 `points` and `scalars`
-    fn msm_public_points_g2(
-        points: &[P::G2Affine],
-        scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShareG2;
+    ) -> Self::PointShare<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>;
 
     /// Multiplies a public point B to the shared point A in place: \[A\] *= B
-    fn scalar_mul_public_point_g1(a: &P::G1, b: Self::ArithmeticShare) -> Self::PointShareG1;
+    fn scalar_mul_public_point<C>(a: &C, b: Self::ArithmeticShare) -> Self::PointShare<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>;
 
     /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
-    fn add_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1);
-
-    /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
-    fn add_points_g1_half_share(a: Self::PointShareG1, b: &P::G1) -> P::G1;
-
-    /// Add a public point B in place to the shared point A
-    fn add_assign_points_public_g1(id: Self::PartyID, a: &mut Self::PointShareG1, b: &P::G1);
-
-    /// Reconstructs a shared point: A = Open(\[A\]).
-    fn open_point_g1(&mut self, a: &Self::PointShareG1) -> IoResult<P::G1>;
-
-    /// Multiplies a share b to the shared point A: \[A\] *= \[b\]. Requires network communication.
-    fn scalar_mul_g1(
-        &mut self,
-        a: &Self::PointShareG1,
-        b: Self::ArithmeticShare,
-    ) -> IoResult<Self::PointShareG1>;
+    fn add_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>);
 
     /// Subtract a shared point B in place from the shared point A: \[A\] -= \[B\]
-    fn sub_assign_points_g1(a: &mut Self::PointShareG1, b: &Self::PointShareG1);
-
-    /// Perform scalar multiplication of point A with a shared scalar b
-    fn scalar_mul_public_point_g2(a: &P::G2, b: Self::ArithmeticShare) -> Self::PointShareG2;
+    fn sub_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>);
 
     /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
-    fn add_assign_points_g2(a: &mut Self::PointShareG2, b: &Self::PointShareG2);
+    fn add_points_half_share<C: CurveGroup>(a: Self::PointShare<C>, b: &C) -> C;
 
     /// Add a public point B in place to the shared point A
-    fn add_assign_points_public_g2(id: Self::PartyID, a: &mut Self::PointShareG2, b: &P::G2);
+    fn add_assign_points_public<C: CurveGroup>(
+        id: Self::PartyID,
+        a: &mut Self::PointShare<C>,
+        b: &C,
+    );
+
+    /// Reconstructs a shared point: A = Open(\[A\]).
+    fn open_point<C>(&mut self, a: &Self::PointShare<C>) -> IoResult<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>;
+
+    /// Multiplies a share b to the shared point A: \[A\] *= \[b\]. Requires network communication.
+    fn scalar_mul<C>(
+        &mut self,
+        a: &Self::PointShare<C>,
+        b: Self::ArithmeticShare,
+    ) -> IoResult<Self::PointShare<C>>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>;
 
     /// Reconstructs a shared points: A = Open(\[A\]), B = Open(\[B\]).
     fn open_two_points(
         &mut self,
         a: P::G1,
-        b: Self::PointShareG2,
+        b: Self::PointShare<P::G2>,
     ) -> std::io::Result<(P::G1, P::G2)>;
 
     /// Reconstruct point G_a and perform scalar multiplication of G1_b and r concurrently
+    #[allow(clippy::type_complexity)]
     fn open_point_and_scalar_mul(
         &mut self,
-        g_a: &Self::PointShareG1,
-        g1_b: &Self::PointShareG1,
+        g_a: &Self::PointShare<P::G1>,
+        g1_b: &Self::PointShare<P::G1>,
         r: Self::ArithmeticShare,
-    ) -> std::io::Result<(P::G1, Self::PointShareG1)>;
+    ) -> std::io::Result<(P::G1, Self::PointShare<P::G1>)>;
 }
