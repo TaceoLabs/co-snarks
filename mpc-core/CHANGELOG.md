@@ -2,6 +2,36 @@
 
 
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.5.0...mpc-core-v0.6.0) (2024-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* breaks all interfaces. Removed Rep3Protocol monster struct. Added IOContext and split rep3/shamir better. Removed duplicated code. Added naive LUT
+
+### Features
+
+* added conversions a&lt;-&gt;b ([d1c806c](https://github.com/TaceoLabs/co-snarks/commit/d1c806c0d165569c16d11cc15fc9dbd4f908b807))
+* added new rep3 impl ([d9b8412](https://github.com/TaceoLabs/co-snarks/commit/d9b8412d794fe9596a3292f717f00e11f2bc08f2))
+* added plain prover shorthand function ([b365fcd](https://github.com/TaceoLabs/co-snarks/commit/b365fcd89390dad585933f39a2db32473081d060))
+* Optimize shamir double randomnes generation using seeds ([#214](https://github.com/TaceoLabs/co-snarks/issues/214)) ([f6ad386](https://github.com/TaceoLabs/co-snarks/commit/f6ad3863affb42754ae56935102d19af63a068b7))
+* prepare functions for compressed rep3 sharing ([55bef10](https://github.com/TaceoLabs/co-snarks/commit/55bef10313378e8ca14f2f22f312c84462a92a7e))
+* rewrite all mpc related functions ([ed8fcb7](https://github.com/TaceoLabs/co-snarks/commit/ed8fcb73aca24ee2dfda2770ef0512eba8695650))
+* unify the 3-party and n-party shamir double-randomness generation case ([b4d4141](https://github.com/TaceoLabs/co-snarks/commit/b4d41411de001fb84ea953ea20360ebd36edb1cc))
+
+
+### Bug Fixes
+
+* add gracefull shutdown ensure all data received from the quinn stack ([a9cbcbf](https://github.com/TaceoLabs/co-snarks/commit/a9cbcbf8a5fa00f01c94cd80eae45cbf7f65390f))
+* fixed read task breaking too early, caused error during proof gen ([6a8e829](https://github.com/TaceoLabs/co-snarks/commit/6a8e82913b88414ee05a7159fbd390a32db70b9d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-net bumped from 0.1.2 to 0.2.0
+
 ## [0.5.0](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-core-v0.4.0...mpc-core-v0.5.0) (2024-10-03)
 
 

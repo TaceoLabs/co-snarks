@@ -10,6 +10,26 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.4.2...circom-mpc-vm-v0.5.0) (2024-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* now uses new mpc-core and networking model. Also uses binary shares and does not convert to arithmetic shares everytime
+
+### Features
+
+* rewrite that witness extension for circom to use forked networking and implements binary shares ([4c7e9ff](https://github.com/TaceoLabs/co-snarks/commit/4c7e9ff09aaf533f54ac60222b7981c6000f1f1e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-snarks bumped from 0.1.2 to 0.2.0
+    * mpc-core bumped from 0.5.0 to 0.6.0
+    * mpc-net bumped from 0.1.2 to 0.2.0
+
 ## [0.4.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-vm-v0.3.0...circom-mpc-vm-v0.4.0) (2024-08-14)
 
 

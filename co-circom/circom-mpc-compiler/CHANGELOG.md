@@ -7,6 +7,28 @@
     * co-groth16 bumped from 0.5.0 to 0.5.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-compiler-v0.6.1...circom-mpc-compiler-v0.7.0) (2024-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* Small refactor to use API changes
+
+### Code Refactoring
+
+* Small refactor to use API changes ([639f438](https://github.com/TaceoLabs/co-snarks/commit/639f438adc9480e1b6c0e2d1f068ed82adee3cf1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.5.0 to 0.6.0
+    * circom-mpc-vm bumped from 0.4.2 to 0.5.0
+  * dev-dependencies
+    * co-groth16 bumped from 0.5.1 to 0.6.0
+    * mpc-core bumped from 0.5.0 to 0.6.0
+
 ## [0.6.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-compiler-v0.5.0...circom-mpc-compiler-v0.6.0) (2024-08-21)
 
 
