@@ -214,8 +214,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
         zkey: &ZKey<P>,
         polys: &Round2Polys<P, T>,
     ) -> PlonkProofResult<[Vec<T::ArithmeticShare>; 3]> {
-        tracing::debug!("computing t polynomial...");
-        tracing::info!("lzul");
+        tracing::trace!("computing t polynomial...");
         let z1 = Self::get_z1(domains);
         let z2 = Self::get_z2(domains);
         let z3 = Self::get_z3(domains);
