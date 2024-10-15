@@ -63,7 +63,7 @@ pub fn combine_field_element<F: PrimeField>(
     Ok(rec)
 }
 
-/// Secret shares a vector of field element using Shamir secret sharing and the provided random number generator. The field elements are split into num_parties shares each, where each party holds just one. The outputs are of type [ShamirShareVec]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
+/// Secret shares a vector of field element using Shamir secret sharing and the provided random number generator. The field elements are split into num_parties shares each, where each party holds just one. The outputs are `Vecs` of `Vecs` of type [`ShamirPrimeFieldShare`]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
 pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
     vals: &[F],
     degree: usize,
@@ -85,7 +85,7 @@ pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
     result
 }
 
-/// Reconstructs a vector of field elements from its Shamir shares and lagrange coefficients. The input is structured as one [ShamirShareVec] per party. Thus, shares\[i\]\[j\] represents the j-th share of party i. Thereby at least `degree` + 1 shares need to be present per field element (i.e., i > degree).
+/// Reconstructs a vector of field elements from its Shamir shares and lagrange coefficients. The input is a slice of `Vecs` of [ShamirPrimeFieldShare] per party. Thus, shares\[i\]\[j\] represents the j-th share of party i. Thereby at least `degree` + 1 shares need to be present per field element (i.e., i > degree).
 pub fn combine_field_elements<F: PrimeField>(
     shares: &[Vec<ShamirShare<F>>],
     coeffs: &[usize],
@@ -256,7 +256,9 @@ impl<F: PrimeField, N: ShamirNetwork> From<ShamirPreprocessing<F, N>> for Shamir
     }
 }
 
-/// This struct handles the Shamir MPC protocol, including proof generation. Thus, it implements the [PrimeFieldMpcProtocol], [EcMpcProtocol], [PairingEcMpcProtocol], [FFTProvider], and [MSMProvider] traits.
+/// This struct holds all necessary information for an MPC protocol based on Shamir. It contains
+/// a [`ShamirNetwork`], the randomness, the threshold and the lagrange
+/// polynomials for opening.
 pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
     /// The threshold, degree of polynomial
     pub threshold: usize,

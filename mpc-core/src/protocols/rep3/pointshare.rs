@@ -102,7 +102,7 @@ pub fn open_point<C: CurveGroup, N: Rep3Network>(
     Ok(a.a + a.b + c)
 }
 
-/// Open the vector of [`PointShare`]s
+/// Open the vector of [`Rep3PointShare`]s
 pub fn open_point_many<C: CurveGroup, N: Rep3Network>(
     a: &[PointShare<C>],
     io_context: &mut IoContext<N>,

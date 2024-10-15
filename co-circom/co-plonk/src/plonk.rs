@@ -22,7 +22,7 @@ use crate::types::Keccak256Transcript;
 /// The plain [`Plonk`] type.
 ///
 /// This type is actually the [`CoPlonk`] type initialized with
-/// the [`PlainDriver`], a single party (you) MPC protocol (i.e., your everyday PLONK).
+/// the [`PlainPlonkDriver`], a single party (you) MPC protocol (i.e., your everyday PLONK).
 /// You can use this instance to create a proof, but we recommend against it for a real use-case.
 /// The co-PLONK prover uses some MPC optimizations (for the product check), which are not optimal
 /// for a plain run.
@@ -280,7 +280,7 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// *Locally* create a `Plonk` proof. This is just the [`CoPlonk`] prover
-    /// initialized with the [`PlainDriver`].
+    /// initialized with the [`PlainPlonkDriver`].
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
     pub fn plain_prove(

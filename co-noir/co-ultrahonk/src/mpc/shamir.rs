@@ -21,7 +21,7 @@ pub struct ShamirUltraHonkDriver<F: PrimeField, N: ShamirNetwork> {
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirUltraHonkDriver<F, N> {
-    /// Create a new [`ShamirGroth16Driver`] with two [`ShamirProtocol`]s
+    /// Create a new [`ShamirUltraHonkDriver`] with two [`ShamirProtocol`]s
     pub fn new(protocol0: ShamirProtocol<F, N>, protocol1: ShamirProtocol<F, N>) -> Self {
         Self {
             protocol0,

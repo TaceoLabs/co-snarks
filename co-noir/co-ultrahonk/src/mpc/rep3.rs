@@ -19,7 +19,7 @@ pub struct Rep3UltraHonkDriver<N: Rep3Network> {
 }
 
 impl<N: Rep3Network> Rep3UltraHonkDriver<N> {
-    /// Create a new [`Rep3Groth16Driver`] with two [`IoContext`]s
+    /// Create a new [`Rep3UltraHonkDriver`] with two [`IoContext`]s
     pub fn new(io_context0: IoContext<N>, io_context1: IoContext<N>) -> Self {
         Self {
             io_context0,

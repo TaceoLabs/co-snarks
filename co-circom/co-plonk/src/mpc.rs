@@ -59,7 +59,7 @@ pub trait CircomPlonkProver<P: Pairing> {
     ///
     /// # Security
     /// If you want to perform additional non-linear operations on the result of this function,
-    /// you *MUST* call [`io_round_mul_vec`] first. Only then the relevant network round is performed.
+    /// you *MUST* call [`CircomPlonkProver::io_round_mul_vec`] first. Only then the relevant network round is performed.
     fn local_mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
@@ -71,7 +71,7 @@ pub trait CircomPlonkProver<P: Pairing> {
 
     /// Performs element-wise multiplication of two vectors of shared values.
     ///
-    /// Use this function for small vecs. For large vecs see [`local_mul_vec`]
+    /// Use this function for small vecs. For large vecs see [`CircomPlonkProver::local_mul_vec`]
     fn mul_vec(
         &mut self,
         a: &[Self::ArithmeticShare],
@@ -80,7 +80,7 @@ pub trait CircomPlonkProver<P: Pairing> {
 
     /// Performs element-wise multiplication of three vectors of shared values.
     ///
-    /// Use this function for small vecs. For large vecs see [`local_mul_vec`]
+    /// Use this function for small vecs. For large vecs see [`CircomPlonkProver::local_mul_vec`]
     fn mul_vecs(
         &mut self,
         a: &[Self::ArithmeticShare],

@@ -51,7 +51,7 @@ pub struct WitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
 /// This type is mostly used for testing purposes, so use with care in production environments.
 pub type PlainWitnessExtension<F> = WitnessExtension<F, CircomPlainVmWitnessExtension<F>>;
 
-/// Shorthand type for the MPC-VM instantiated with the [`Rep3Protocol`].
+/// Shorthand type for the MPC-VM instantiated with a `Rep3` protocol.
 ///
 /// This is the only supported protocol at the moment.
 pub type Rep3WitnessExtension<F, N> = WitnessExtension<F, CircomRep3VmWitnessExtension<F, N>>;
@@ -912,7 +912,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     ///
     /// # Arguments
     ///
-    /// * `input_signals` - A `Vec` of [`CircomWitnessExtensionProtocol::VmType`].
+    /// * `input_signals` - A `Vec` of [`VmCircomWitnessExtension::VmType`].
     /// * `amount_public_inputs` - The amount of public inputs, necessary for later building the [`SharedWitness`].
     ///
     /// # Returns

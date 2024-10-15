@@ -208,7 +208,7 @@ pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
     [share1, share2, share3]
 }
 
-/// Secret shares a field element using additive secret sharing and the provided random number generator. The field element is split into three additive shares. The outputs are of type [F].
+/// Secret shares a field element using additive secret sharing and the provided random number generator. The field element is split into three additive shares. The outputs are three [PrimeField].
 pub fn share_field_element_additive<F: PrimeField, R: Rng + CryptoRng>(
     val: F,
     rng: &mut R,
@@ -219,7 +219,7 @@ pub fn share_field_element_additive<F: PrimeField, R: Rng + CryptoRng>(
     [a, b, c]
 }
 
-/// Secret shares a field element using replicated secret sharing, whereas only one additive share is stored while the others are compressed as seeds derived form the provided random number generator. The outputs are of type [Rep3ShareType].
+/// Secret shares a field element using replicated secret sharing, whereas only one additive share is stored while the others are compressed as seeds derived form the provided random number generator. The outputs are of type [ReplicatedSeedType].
 pub fn share_field_element_seeded<
     F: PrimeField,
     R: Rng + CryptoRng,
@@ -288,7 +288,7 @@ where
     [a, b, c]
 }
 
-/// Secret shares a vector of field element using replicated secret sharing and the provided random number generator. The field elements are split into three additive shares each, where each party holds two. The outputs are of type [Rep3PrimeFieldShareVec].
+/// Secret shares a vector of field element using replicated secret sharing and the provided random number generator. The field elements are split into three additive shares each, where each party holds two. The outputs are of type [Rep3PrimeFieldShare].
 pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
     vals: &[F],
     rng: &mut R,
@@ -305,7 +305,7 @@ pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
     [shares1, shares2, shares3]
 }
 
-/// Secret shares a vector of field element using additive secret sharing and the provided random number generator. The field elements are split into three additive shares each. The outputs are of type [Rep3PrimeFieldShareVec].
+/// Secret shares a vector of field element using additive secret sharing and the provided random number generator. The field elements are split into three additive shares each. The outputs are `Vecs` of type [`PrimeField`].
 pub fn share_field_elements_additive<F: PrimeField, R: Rng + CryptoRng>(
     vals: &[F],
     rng: &mut R,
