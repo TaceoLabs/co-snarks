@@ -689,9 +689,9 @@ where
 
 /// Invoke the MPC proof generation process. It will return a [`Groth16Proof`] if successful.
 /// It executes several steps:
-/// 1. Construct a [Rep3Protocol] from the network configuration.
-/// 2. Construct a [CoGroth16] prover from the protocol.
-/// 3. Execute the proof in MPC
+/// 1. Establishes a TLS connection from the network configuration.
+/// 2. Constructs a [`Rep3CoGroth16`] prover from the protocol.
+/// 3. Executes the prover in MPC
 pub fn prove_with_matrices_rep3<P: Pairing + CircomArkworksPairingBridge>(
     witness_share: SharedWitness<P::ScalarField, Rep3PrimeFieldShare<P::ScalarField>>,
     config: NetworkConfig,
