@@ -61,7 +61,7 @@ macro_rules! add_test_impl {
                     threads.push(thread::spawn(move || {
                         let domain_size = 2usize.pow(u32::try_from(zkey.pow).expect("pow fits into u32"));
                         let num_pairs = match stringify!($proof_system) {
-                            "Groth16" => domain_size + 2 + 1,
+                            "Groth16" => 3,
                             "Plonk"=> domain_size * 222 + 15,
                             _ => unreachable!()
                         };
