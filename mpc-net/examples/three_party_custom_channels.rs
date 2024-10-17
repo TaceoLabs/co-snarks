@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use bytes::{Buf, BufMut};
 use clap::Parser;
-use color_eyre::{eyre::Context, Result};
+use color_eyre::{
+    eyre::{Context, ContextCompat},
+    Result,
+};
 use futures::{SinkExt, StreamExt};
 use mpc_net::{config::NetworkConfig, MpcNetworkHandler};
 use tokio_util::codec::{Decoder, Encoder};
@@ -22,10 +25,10 @@ async fn main() -> Result<()> {
         toml::from_str(&std::fs::read_to_string(args.config_file).context("opening config file")?)
             .context("parsing config file")?;
 
-    let network = MpcNetworkHandler::establish(config.clone()).await?;
+    let mut network = MpcNetworkHandler::establish(config.clone()).await?;
 
     let codec = MessageCodec;
-    let mut channels = network.get_custom_channels(codec).await?;
+    let mut channels = network.get_custom_channels(codec).context("get channels")?;
 
     // send to all channels
     for (&i, channel) in channels.iter_mut() {
