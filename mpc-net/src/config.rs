@@ -1,6 +1,5 @@
 //! Data structures and helpers for the network configuration.
 use color_eyre::eyre;
-use quinn::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Formatter,
@@ -9,6 +8,7 @@ use std::{
     path::PathBuf,
     str::FromStr,
 };
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
 /// A network address wrapper.
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]

@@ -129,19 +129,10 @@ pub fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
     // Strategy: limit size of b to k bits
     // bit-decompose b into bits b_i
 
-    // TODO: this sucks... we need something better here...
-    let io_0 = io_context.fork()?;
-    let io_1 = io_context.fork()?;
-    let io_2 = io_context.fork()?;
-    let io_3 = io_context.fork()?;
-    let io_4 = io_context.fork()?;
-    let io_5 = io_context.fork()?;
-    let io_6 = io_context.fork()?;
-    let io_7 = io_context.fork()?;
-    let mut contexts = [io_0, io_1, io_2, io_3, io_4, io_5, io_6, io_7];
+    // TODO: make the b2a conversion concurrent again
     let party_id = io_context.id;
     let mut individual_bit_shares = Vec::with_capacity(8);
-    for (i, context) in izip!((0..8), contexts.iter_mut()) {
+    for i in 0..8 {
         let bit = Rep3BigUintShare::new(
             (shared.a.clone() >> i) & BigUint::one(),
             (shared.b.clone() >> i) & BigUint::one(),
