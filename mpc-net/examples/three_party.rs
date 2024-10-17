@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use color_eyre::{eyre::Context, Result};
+use color_eyre::{
+    eyre::{Context, ContextCompat},
+    Result,
+};
 use futures::{SinkExt, StreamExt};
 use mpc_net::{config::NetworkConfig, MpcNetworkHandler};
 
@@ -20,9 +23,9 @@ async fn main() -> Result<()> {
         toml::from_str(&std::fs::read_to_string(args.config_file).context("opening config file")?)
             .context("parsing config file")?;
 
-    let network = MpcNetworkHandler::establish(config.clone()).await?;
+    let mut network = MpcNetworkHandler::establish(config.clone()).await?;
 
-    let mut channels = network.get_byte_channels().await?;
+    let mut channels = network.get_byte_channels().context("get channels")?;
 
     // send to all channels
     for (&i, channel) in channels.iter_mut() {
