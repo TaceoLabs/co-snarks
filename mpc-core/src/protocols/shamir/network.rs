@@ -2,6 +2,7 @@
 //!
 //! This module contains the trait for specifying a network interface for the Shamir MPC protocol. It also contains an implementation of the trait using the [mpc_net] crate.
 
+use crate::param::SERDE_COMPRESS_MODE;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
@@ -193,7 +194,7 @@ impl ShamirNetwork for ShamirMpcNet {
         target: usize,
         data: &[F],
     ) -> std::io::Result<()> {
-        let size = data.serialized_size(ark_serialize::Compress::No);
+        let size = data.serialized_size(SERDE_COMPRESS_MODE);
         let mut ser_data = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut ser_data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
@@ -214,7 +215,7 @@ impl ShamirNetwork for ShamirMpcNet {
         data: F,
     ) -> std::io::Result<Vec<F>> {
         // Serialize
-        let size = data.serialized_size(ark_serialize::Compress::No);
+        let size = data.serialized_size(SERDE_COMPRESS_MODE);
         let mut ser_data = Vec::with_capacity(size);
         data.to_owned()
             .serialize_uncompressed(&mut ser_data)
@@ -250,7 +251,7 @@ impl ShamirNetwork for ShamirMpcNet {
         num: usize,
     ) -> std::io::Result<Vec<F>> {
         // Serialize
-        let size = data.serialized_size(ark_serialize::Compress::No);
+        let size = data.serialized_size(SERDE_COMPRESS_MODE);
         let mut ser_data = Vec::with_capacity(size);
         data.to_owned()
             .serialize_uncompressed(&mut ser_data)

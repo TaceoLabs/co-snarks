@@ -5,7 +5,9 @@
 #![warn(missing_docs)]
 
 pub mod lut;
+pub mod param;
 pub mod protocols;
+
 pub use protocols::serde_compat::{ark_de, ark_se};
 
 pub(crate) type RngType = rand_chacha::ChaCha12Rng;
