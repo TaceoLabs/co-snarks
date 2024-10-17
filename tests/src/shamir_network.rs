@@ -1,13 +1,13 @@
+use crate::Msg;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
+use mpc_core::param::SERDE_COMPRESS_MODE;
 use mpc_core::protocols::shamir::network::ShamirNetwork;
 use std::{
     cmp::Ordering,
     collections::HashMap,
     sync::mpsc::{Receiver, Sender},
 };
-
-use crate::Msg;
 
 pub struct ShamirTestNetwork {
     num_parties: usize,
@@ -110,7 +110,7 @@ impl ShamirNetwork for PartyTestNetwork {
             target -= 1;
         }
 
-        let size = data.serialized_size(ark_serialize::Compress::No);
+        let size = data.serialized_size(SERDE_COMPRESS_MODE);
         let mut to_send = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut to_send).unwrap();
 
@@ -153,7 +153,7 @@ impl ShamirNetwork for PartyTestNetwork {
         data: F,
     ) -> std::io::Result<Vec<F>> {
         // Serialize
-        let size = data.serialized_size(ark_serialize::Compress::No);
+        let size = data.serialized_size(SERDE_COMPRESS_MODE);
         let mut ser_data = Vec::with_capacity(size);
         data.to_owned()
             .serialize_uncompressed(&mut ser_data)
@@ -191,7 +191,7 @@ impl ShamirNetwork for PartyTestNetwork {
         num: usize,
     ) -> std::io::Result<Vec<F>> {
         // Serialize
-        let size = data.serialized_size(ark_serialize::Compress::No);
+        let size = data.serialized_size(SERDE_COMPRESS_MODE);
         let mut ser_data = Vec::with_capacity(size);
         data.to_owned()
             .serialize_uncompressed(&mut ser_data)

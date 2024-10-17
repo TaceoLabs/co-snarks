@@ -3,6 +3,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use super::shamir_network::PartyTestNetwork as ShamirPartyTestNetwork;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
+use mpc_core::param::SERDE_COMPRESS_MODE;
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
     rep3::{id::PartyID, network::Rep3Network},
@@ -143,7 +144,7 @@ impl Rep3Network for PartyTestNetwork {
         target: PartyID,
         data: &[F],
     ) -> std::io::Result<()> {
-        let size = data.serialized_size(ark_serialize::Compress::No);
+        let size = data.serialized_size(SERDE_COMPRESS_MODE);
         let mut to_send = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut to_send).unwrap();
         if self.id.next_id() == target {
