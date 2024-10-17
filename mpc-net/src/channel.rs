@@ -7,6 +7,8 @@ use tokio::{
 };
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
+use crate::codecs::BincodeCodec;
+
 /// A read end of the channel, just a type alias for [`FramedRead`].
 pub type ReadChannel<T, D> = FramedRead<T, D>;
 /// A write end of the channel, just a type alias for [`FramedWrite`].
@@ -21,6 +23,9 @@ pub struct Channel<R, W, C> {
 
 /// A channel that uses a [`LengthDelimitedCodec`] to send and receive messages.
 pub type BytesChannel<R, W> = Channel<R, W, LengthDelimitedCodec>;
+
+/// A channel that uses a [`BincodeCodec`] to send and receive messages.
+pub type BincodeChannel<R, W, M> = Channel<R, W, BincodeCodec<M>>;
 
 impl<R, W, C> Channel<R, W, C> {
     /// Create a new [`Channel`], backed by a read and write half. Read and write buffers

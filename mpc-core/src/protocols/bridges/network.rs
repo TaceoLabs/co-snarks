@@ -20,6 +20,7 @@ impl RepToShamirNetwork<ShamirMpcNet> for Rep3MpcNet {
         let Self {
             id,
             net_handler,
+            runtime,
             chan_next,
             chan_prev,
         } = self;
@@ -31,6 +32,7 @@ impl RepToShamirNetwork<ShamirMpcNet> for Rep3MpcNet {
         ShamirMpcNet {
             id: id.into(),
             num_parties: 3,
+            runtime,
             net_handler,
             channels,
         }

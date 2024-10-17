@@ -3,27 +3,26 @@
 use std::{
     collections::{BTreeMap, HashMap},
     io,
-    net::{SocketAddr, ToSocketAddrs},
+    net::ToSocketAddrs,
     sync::Arc,
     time::Duration,
 };
 
-use channel::{BytesChannel, Channel};
+use channel::{BincodeChannel, BytesChannel, Channel};
 use codecs::BincodeCodec;
-use color_eyre::eyre::{self, Context, Report};
+use color_eyre::eyre::{self, bail, Context, ContextCompat, Report};
 use config::NetworkConfig;
-use quinn::{
-    crypto::rustls::QuicClientConfig,
-    rustls::{pki_types::CertificateDer, RootCertStore},
-};
-use quinn::{
-    ClientConfig, Connection, Endpoint, IdleTimeout, RecvStream, SendStream, TransportConfig,
-    VarInt,
-};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    runtime::Runtime,
+    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
+    net::{TcpListener, TcpStream},
+};
+use tokio_rustls::{
+    rustls::{
+        pki_types::{CertificateDer, ServerName},
+        ClientConfig, RootCertStore, ServerConfig,
+    },
+    TlsAcceptor, TlsConnector,
 };
 use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
 
@@ -31,36 +30,17 @@ pub mod channel;
 pub mod codecs;
 pub mod config;
 
-/// A warapper for a runtime and a network handler for MPC protocols.
-/// Ensures a gracefull shutdown on drop
-#[derive(Debug)]
-pub struct MpcNetworkHandlerWrapper {
-    /// The runtime used by the network handler
-    pub runtime: Runtime,
-    /// The wrapped network handler
-    pub inner: MpcNetworkHandler,
-}
+// TODO get this from network config
+const STREAMS_PER_CONN: usize = 8;
 
-impl MpcNetworkHandlerWrapper {
-    /// Create a new wrapper
-    pub fn new(runtime: Runtime, inner: MpcNetworkHandler) -> Self {
-        Self { runtime, inner }
-    }
-}
-
-impl Drop for MpcNetworkHandlerWrapper {
-    fn drop(&mut self) {
-        // ignore errors in drop
-        let _ = self.runtime.block_on(self.inner.shutdown());
-    }
-}
+/// Type alias for a [rustls::TcpStream] over a [TcpStream].
+type TlsStream = tokio_rustls::TlsStream<TcpStream>;
 
 /// A network handler for MPC protocols.
 #[derive(Debug)]
 pub struct MpcNetworkHandler {
     // this is a btreemap because we rely on iteration order
-    connections: BTreeMap<usize, Connection>,
-    endpoints: Vec<Endpoint>,
+    connections: BTreeMap<usize, Vec<TlsStream>>,
     my_id: usize,
 }
 
@@ -68,6 +48,10 @@ impl MpcNetworkHandler {
     /// Tries to establish a connection to other parties in the network based on the provided [NetworkConfig].
     pub async fn establish(config: NetworkConfig) -> Result<Self, Report> {
         config.check_config()?;
+        // TODO should mayb be called in application not lib
+        tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .expect("Failed to install rustls crypto provider");
         let certs: HashMap<usize, CertificateDer> = config
             .parties
             .iter()
@@ -80,32 +64,27 @@ impl MpcNetworkHandler {
                 .add(cert.clone())
                 .with_context(|| format!("adding certificate for party {} to root store", id))?;
         }
-        let crypto = quinn::rustls::ClientConfig::builder()
+        let client_config = ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
-        let client_config = {
-            let mut transport_config = TransportConfig::default();
-            transport_config.max_idle_timeout(Some(
-                IdleTimeout::try_from(Duration::from_secs(60)).unwrap(),
-            ));
-            // atm clients send keepalive packets
-            transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
-            let mut client_config =
-                ClientConfig::new(Arc::new(QuicClientConfig::try_from(crypto)?));
-            client_config.transport_config(Arc::new(transport_config));
-            client_config
-        };
-
-        let server_config =
-            quinn::ServerConfig::with_single_cert(vec![certs[&config.my_id].clone()], config.key)
-                .context("creating our server config")?;
+        let server_config = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![certs[&config.my_id].clone()], config.key)
+            .context("creating our server config")?;
         let our_socket_addr = config.bind_addr;
 
-        let mut endpoints = Vec::new();
-        let server_endpoint = quinn::Endpoint::server(server_config.clone(), our_socket_addr)?;
+        let listener = TcpListener::bind(our_socket_addr).await?;
+        let acceptor = TlsAcceptor::from(Arc::new(server_config));
+        let connector = TlsConnector::from(Arc::new(client_config));
 
-        let mut connections = BTreeMap::new();
+        tracing::trace!("Party {}: listening on {our_socket_addr}", config.my_id);
+
+        let mut connections: BTreeMap<usize, Vec<_>> = BTreeMap::new();
+
+        let mut accpected_streams = BTreeMap::new();
+
+        let num_parties = config.parties.len();
 
         for party in config.parties {
             if party.id == config.my_id {
@@ -114,131 +93,148 @@ impl MpcNetworkHandler {
             }
             if party.id < config.my_id {
                 // connect to party, we are client
-
-                let party_addresses: Vec<SocketAddr> = party
+                let party_addr = party
                     .dns_name
                     .to_socket_addrs()
                     .with_context(|| format!("while resolving DNS name for {}", party.dns_name))?
-                    .collect();
-                if party_addresses.is_empty() {
-                    return Err(eyre::eyre!("could not resolve DNS name {}", party.dns_name));
+                    .next()
+                    .context(format!("could not resolve DNS name {}", party.dns_name))?;
+
+                let domain = ServerName::try_from(party.dns_name.hostname.clone())
+                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?
+                    .to_owned();
+
+                // create all streams for this connection
+                for stream_id in 0..STREAMS_PER_CONN {
+                    let stream = loop {
+                        if let Ok(stream) = TcpStream::connect(party_addr).await {
+                            break stream;
+                        }
+                        std::thread::sleep(Duration::from_millis(100));
+                    };
+                    tracing::trace!(
+                        "Party {}: connected stream {stream_id} to party {}",
+                        party.id,
+                        config.my_id
+                    );
+                    let mut stream = connector.connect(domain.clone(), stream).await?;
+                    stream.write_u64(config.my_id as u64).await?;
+                    stream.write_u64(stream_id as u64).await?;
+
+                    if let Some(streams) = connections.get_mut(&party.id) {
+                        streams.push(stream.into());
+                    } else {
+                        connections.insert(party.id, vec![stream.into()]);
+                    }
                 }
-                let party_addr = party_addresses[0];
-                let local_client_socket: SocketAddr = match party_addr {
-                    SocketAddr::V4(_) => {
-                        "0.0.0.0:0".parse().expect("hardcoded IP address is valid")
-                    }
-                    SocketAddr::V6(_) => "[::]:0".parse().expect("hardcoded IP address is valid"),
-                };
-                let endpoint = quinn::Endpoint::client(local_client_socket)
-                    .with_context(|| format!("creating client endpoint to party {}", party.id))?;
-                let conn = endpoint
-                    .connect_with(client_config.clone(), party_addr, &party.dns_name.hostname)
-                    .with_context(|| {
-                        format!("setting up client connection with party {}", party.id)
-                    })?
-                    .await
-                    .with_context(|| format!("connecting as a client to party {}", party.id))?;
-                let mut uni = conn.open_uni().await?;
-                uni.write_u32(u32::try_from(config.my_id).expect("party id fits into u32"))
-                    .await?;
-                uni.flush().await?;
-                uni.finish()?;
-                tracing::trace!(
-                    "Conn with id {} from {} to {}",
-                    conn.stable_id(),
-                    endpoint.local_addr().unwrap(),
-                    conn.remote_address(),
-                );
-                assert!(connections.insert(party.id, conn).is_none());
-                endpoints.push(endpoint);
             } else {
-                // we are the server, accept a connection
-                match tokio::time::timeout(Duration::from_secs(60), server_endpoint.accept()).await
-                {
-                    Ok(Some(maybe_conn)) => {
-                        let conn = maybe_conn.await?;
-                        tracing::trace!(
-                            "Conn with id {} from {} to {}",
-                            conn.stable_id(),
-                            server_endpoint.local_addr().unwrap(),
-                            conn.remote_address(),
-                        );
-                        let mut uni = conn.accept_uni().await?;
-                        let other_party_id = uni.read_u32().await?;
-                        assert!(connections
-                            .insert(
-                                usize::try_from(other_party_id).expect("u32 fits into usize"),
-                                conn
-                            )
-                            .is_none());
-                    }
-                    Ok(None) => {
-                        return Err(eyre::eyre!(
-                            "server endpoint did not accept a connection from party {}",
-                            party.id
-                        ))
-                    }
-                    Err(_) => {
-                        return Err(eyre::eyre!(
-                            "party {} did not connect within 60 seconds - timeout",
-                            party.id
-                        ))
+                // we are the server, accept connections
+                // accept all streams and store them with key (party_id, stream_id)
+                for _ in 0..STREAMS_PER_CONN {
+                    match tokio::time::timeout(Duration::from_secs(60), listener.accept()).await {
+                        Ok(Ok((stream, _peer_addr))) => {
+                            let mut stream = acceptor.accept(stream).await?;
+                            let party_id = stream.read_u64().await? as usize;
+                            let stream_id = stream.read_u64().await? as usize;
+                            tracing::trace!(
+                                "Party {}: accpeted stream {stream_id} from party {party_id}",
+                                config.my_id
+                            );
+                            assert!(accpected_streams
+                                .insert((party_id, stream_id), stream.into())
+                                .is_none());
+                        }
+                        Ok(Err(_)) => {
+                            return Err(eyre::eyre!(
+                                "server endpoint did not accept a connection from party {}",
+                                party.id
+                            ))
+                        }
+                        Err(_) => {
+                            return Err(eyre::eyre!(
+                                "party {} did not connect within 60 seconds - timeout",
+                                party.id
+                            ))
+                        }
                     }
                 }
             }
         }
-        endpoints.push(server_endpoint);
+
+        // assign streams to the right party and stream id
+        // we accepted streams for all parties with id > my-id, so we can iter from my_id + 1..num_parties
+        for party_id in config.my_id + 1..num_parties {
+            for stream_id in 0..STREAMS_PER_CONN {
+                let stream = accpected_streams
+                    .remove(&(party_id, stream_id))
+                    .context(format!("get recv for stream {stream_id} party {party_id}"))?;
+                if let Some(streams) = connections.get_mut(&party_id) {
+                    streams.push(stream);
+                } else {
+                    connections.insert(party_id, vec![stream]);
+                }
+            }
+        }
+
+        if !accpected_streams.is_empty() {
+            bail!("not accepted connections should remain");
+        }
+
+        tracing::trace!("Party {}: established network handler", config.my_id);
 
         Ok(MpcNetworkHandler {
             connections,
-            endpoints,
             my_id: config.my_id,
         })
     }
 
+    // TODO add stats tracking
     /// Returns the number of sent and received bytes.
-    pub fn get_send_receive(&self, i: usize) -> std::io::Result<(u64, u64)> {
-        let conn = self
-            .connections
-            .get(&i)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such connection"))?;
-        let stats = conn.stats();
-        Ok((stats.udp_tx.bytes, stats.udp_rx.bytes))
+    pub fn get_send_receive(&self, _i: usize) -> std::io::Result<(u64, u64)> {
+        // let conn = self
+        //     .connections
+        //     .get(&i)
+        //     .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such connection"))?;
+        // let stats = conn.stats();
+        // Ok((stats.udp_tx.bytes, stats.udp_rx.bytes))
+        todo!()
     }
 
     /// Prints the connection statistics.
-    pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
-        for (i, conn) in &self.connections {
-            let stats = conn.stats();
-            writeln!(
-                out,
-                "Connection {} stats:\n\tSENT: {} bytes\n\tRECV: {} bytes",
-                i, stats.udp_tx.bytes, stats.udp_rx.bytes
-            )?;
-        }
+    pub fn print_connection_stats(&self, _out: &mut impl std::io::Write) -> std::io::Result<()> {
+        // for (i, conn) in &self.connections {
+        //     let stats = conn.stats();
+        //     writeln!(
+        //         out,
+        //         "Connection {} stats:\n\tSENT: {} bytes\n\tRECV: {} bytes",
+        //         i, stats.udp_tx.bytes, stats.udp_rx.bytes
+        //     )?;
+        // }
         Ok(())
     }
 
-    /// Sets up a new [BytesChannel] between each party. The resulting map maps the id of the party to its respective [BytesChannel].
-    pub async fn get_byte_channels(
-        &self,
-    ) -> std::io::Result<HashMap<usize, BytesChannel<RecvStream, SendStream>>> {
+    /// Get a [Channel] to party with `id`. This pops a stream from the pool.
+    pub fn get_byte_channel(
+        &mut self,
+        id: &usize,
+    ) -> Option<BytesChannel<ReadHalf<TlsStream>, WriteHalf<TlsStream>>> {
         let mut codec = LengthDelimitedCodec::new();
         codec.set_max_frame_length(1_000_000_000);
-        self.get_custom_channels(codec).await
+        self.get_custom_channel(id, codec)
     }
 
-    /// Set up a new [Channel] using [BincodeCodec] between each party. The resulting map maps the id of the party to its respective [Channel].
-    pub async fn get_serde_bincode_channels<M: Serialize + DeserializeOwned + 'static>(
-        &self,
-    ) -> std::io::Result<HashMap<usize, Channel<RecvStream, SendStream, BincodeCodec<M>>>> {
+    /// Get a [Channel] to party with `id`. This pops a stream from the pool.
+    pub fn get_serde_bincode_channel<M: Serialize + DeserializeOwned + 'static>(
+        &mut self,
+        id: &usize,
+    ) -> Option<Channel<ReadHalf<TlsStream>, WriteHalf<TlsStream>, BincodeCodec<M>>> {
         let bincodec = BincodeCodec::<M>::new();
-        self.get_custom_channels(bincodec).await
+        self.get_custom_channel(id, bincodec)
     }
 
-    /// Set up a new [Channel] using the provided codec between each party. The resulting map maps the id of the party to its respective [Channel].
-    pub async fn get_custom_channels<
+    /// Get a [Channel] to party with `id` using the provided codec. This pops a stream from the pool.
+    #[allow(clippy::type_complexity)]
+    pub fn get_custom_channel<
         MSend,
         MRecv,
         C: Encoder<MSend, Error = io::Error>
@@ -246,63 +242,62 @@ impl MpcNetworkHandler {
             + 'static
             + Clone,
     >(
-        &self,
+        &mut self,
+        id: &usize,
         codec: C,
-    ) -> std::io::Result<HashMap<usize, Channel<RecvStream, SendStream, C>>> {
-        let mut channels = HashMap::with_capacity(self.connections.len() - 1);
-        for (&id, conn) in self.connections.iter() {
-            if id < self.my_id {
-                // we are the client, so we are the receiver
-                let (mut send_stream, mut recv_stream) = conn.open_bi().await?;
-                send_stream.write_u32(self.my_id as u32).await?;
-                let their_id = recv_stream.read_u32().await?;
-                assert!(their_id == id as u32);
-                let conn = Channel::new(recv_stream, send_stream, codec.clone());
-                assert!(channels.insert(id, conn).is_none());
-            } else {
-                // we are the server, so we are the sender
-                let (mut send_stream, mut recv_stream) = conn.accept_bi().await?;
-                let their_id = recv_stream.read_u32().await?;
-                assert!(their_id == id as u32);
-                send_stream.write_u32(self.my_id as u32).await?;
-                let conn = Channel::new(recv_stream, send_stream, codec.clone());
-                assert!(channels.insert(id, conn).is_none());
+    ) -> Option<Channel<ReadHalf<TlsStream>, WriteHalf<TlsStream>, C>> {
+        debug_assert!(*id != self.my_id);
+        if let Some(pool) = self.connections.get_mut(id) {
+            if let Some(stream) = pool.pop() {
+                // TODO split adds a BiLock, we could avoid this using 1 stream for send and 1 for recv
+                let (recv, send) = tokio::io::split(stream);
+                return Some(Channel::new(recv, send, codec));
             }
         }
-        Ok(channels)
+        None
     }
 
-    /// Shutdown all connections, and call [`quinn::Endpoint::wait_idle`] on all of them
-    pub async fn shutdown(&self) -> std::io::Result<()> {
-        tracing::debug!(
-            "party {} shutting down, conns = {:?}",
-            self.my_id,
-            self.connections.keys()
-        );
+    /// Get a [Channel] to each party using the provided codec. This pops a stream from each pool.
+    #[allow(clippy::type_complexity)]
+    pub fn get_custom_channels<
+        MSend,
+        MRecv,
+        C: Encoder<MSend, Error = io::Error>
+            + Decoder<Item = MRecv, Error = io::Error>
+            + 'static
+            + Clone,
+    >(
+        &mut self,
+        codec: C,
+    ) -> Option<HashMap<usize, Channel<ReadHalf<TlsStream>, WriteHalf<TlsStream>, C>>> {
+        self.connections
+            .iter_mut()
+            .map(|(id, streams)| {
+                debug_assert!(*id != self.my_id);
+                let stream = streams.pop()?;
+                // TODO split adds a BiLock, we could avoid this using 1 stream for send and 1 for recv
+                let (recv, send) = tokio::io::split(stream);
+                Some((*id, Channel::new(recv, send, codec.clone())))
+            })
+            .collect()
+    }
 
-        for (id, conn) in self.connections.iter() {
-            if self.my_id < *id {
-                let mut send = conn.open_uni().await?;
-                send.write_all(b"done").await?;
-            } else {
-                let mut recv = conn.accept_uni().await?;
-                let mut buffer = vec![0u8; b"done".len()];
-                recv.read_exact(&mut buffer).await.map_err(|_| {
-                    std::io::Error::new(std::io::ErrorKind::BrokenPipe, "failed to recv done msg")
-                })?;
+    /// Get a [Channel] to each party. This pops a stream from each pool.
+    #[allow(clippy::type_complexity)]
+    pub fn get_byte_channels(
+        &mut self,
+    ) -> Option<HashMap<usize, BytesChannel<ReadHalf<TlsStream>, WriteHalf<TlsStream>>>> {
+        let mut codec = LengthDelimitedCodec::new();
+        codec.set_max_frame_length(1_000_000_000);
+        self.get_custom_channels(codec)
+    }
 
-                tracing::debug!("party {} closing conn = {id}", self.my_id);
-
-                conn.close(
-                    0u32.into(),
-                    format!("close from party {}", self.my_id).as_bytes(),
-                );
-            }
-        }
-        for endpoint in self.endpoints.iter() {
-            endpoint.wait_idle().await;
-            endpoint.close(VarInt::from_u32(0), &[]);
-        }
-        Ok(())
+    /// Get a [Channel] to each party. This pops a stream from each pool.
+    #[allow(clippy::type_complexity)]
+    pub fn get_serde_bincode_channels<M: Serialize + DeserializeOwned + 'static>(
+        &mut self,
+    ) -> Option<HashMap<usize, BincodeChannel<ReadHalf<TlsStream>, WriteHalf<TlsStream>, M>>> {
+        let bincodec = BincodeCodec::<M>::new();
+        self.get_custom_channels(bincodec)
     }
 }
