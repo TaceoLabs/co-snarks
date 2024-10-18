@@ -14,7 +14,7 @@ use color_eyre::eyre::{self, bail, Context, ContextCompat, Report};
 use config::NetworkConfig;
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
+    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
 use tokio_rustls::{
@@ -36,11 +36,29 @@ const STREAMS_PER_CONN: usize = 8;
 /// Type alias for a [rustls::TcpStream] over a [TcpStream].
 type TlsStream = tokio_rustls::TlsStream<TcpStream>;
 
+/// A duplex TLS stream that uses one stream for sending and one for receiving.
+/// Splitting a single stream would add unwanted syncronization primitives.
+#[derive(Debug)]
+pub(crate) struct DuplexTlsStream {
+    send: TlsStream,
+    recv: TlsStream,
+}
+
+impl DuplexTlsStream {
+    const SPLIT0: u8 = 0;
+    const SPLIT1: u8 = 1;
+
+    /// Create a new [DuplexTlsStream].
+    pub(crate) fn new(send: TlsStream, recv: TlsStream) -> Self {
+        Self { send, recv }
+    }
+}
+
 /// A network handler for MPC protocols.
 #[derive(Debug)]
 pub struct MpcNetworkHandler {
     // this is a btreemap because we rely on iteration order
-    connections: BTreeMap<usize, Vec<TlsStream>>,
+    connections: BTreeMap<usize, Vec<DuplexTlsStream>>,
     my_id: usize,
 }
 
@@ -48,10 +66,8 @@ impl MpcNetworkHandler {
     /// Tries to establish a connection to other parties in the network based on the provided [NetworkConfig].
     pub async fn establish(config: NetworkConfig) -> Result<Self, Report> {
         config.check_config()?;
-        // TODO should mayb be called in application not lib
-        tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
-            .install_default()
-            .expect("Failed to install rustls crypto provider");
+        // ignore error if default provider was already set
+        let _ = tokio_rustls::rustls::crypto::aws_lc_rs::default_provider().install_default();
         let certs: HashMap<usize, CertificateDer> = config
             .parties
             .iter()
@@ -98,7 +114,7 @@ impl MpcNetworkHandler {
                     .to_socket_addrs()
                     .with_context(|| format!("while resolving DNS name for {}", party.dns_name))?
                     .next()
-                    .context(format!("could not resolve DNS name {}", party.dns_name))?;
+                    .with_context(|| format!("could not resolve DNS name {}", party.dns_name))?;
 
                 let domain = ServerName::try_from(party.dns_name.hostname.clone())
                     .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?
@@ -106,42 +122,61 @@ impl MpcNetworkHandler {
 
                 // create all streams for this connection
                 for stream_id in 0..STREAMS_PER_CONN {
-                    let stream = loop {
-                        if let Ok(stream) = TcpStream::connect(party_addr).await {
-                            break stream;
+                    let mut send = None;
+                    let mut recv = None;
+                    // create 2 streams per stream to get full duplex with tls streams
+                    for split in [DuplexTlsStream::SPLIT0, DuplexTlsStream::SPLIT1] {
+                        let stream = loop {
+                            if let Ok(stream) = TcpStream::connect(party_addr).await {
+                                break stream;
+                            }
+                            std::thread::sleep(Duration::from_millis(100));
+                        };
+                        let mut stream = connector.connect(domain.clone(), stream).await?;
+                        stream.write_u64(config.my_id as u64).await?;
+                        stream.write_u64(stream_id as u64).await?;
+                        stream.write_u8(split).await?;
+                        if split == DuplexTlsStream::SPLIT0 {
+                            send = Some(stream);
+                        } else {
+                            recv = Some(stream);
                         }
-                        std::thread::sleep(Duration::from_millis(100));
-                    };
+                    }
+
                     tracing::trace!(
                         "Party {}: connected stream {stream_id} to party {}",
                         party.id,
                         config.my_id
                     );
-                    let mut stream = connector.connect(domain.clone(), stream).await?;
-                    stream.write_u64(config.my_id as u64).await?;
-                    stream.write_u64(stream_id as u64).await?;
+
+                    let send = send.expect("not none after connect was succesful");
+                    let recv = recv.expect("not none after connect was succesful");
 
                     if let Some(streams) = connections.get_mut(&party.id) {
-                        streams.push(stream.into());
+                        streams.push(DuplexTlsStream::new(send.into(), recv.into()));
                     } else {
-                        connections.insert(party.id, vec![stream.into()]);
+                        connections.insert(
+                            party.id,
+                            vec![DuplexTlsStream::new(send.into(), recv.into())],
+                        );
                     }
                 }
             } else {
                 // we are the server, accept connections
-                // accept all streams and store them with key (party_id, stream_id)
-                for _ in 0..STREAMS_PER_CONN {
+                // accept all 2 splits for n streams and store them with (party_id, stream_id, split) so we know were they belong
+                for _ in 0..STREAMS_PER_CONN * 2 {
                     match tokio::time::timeout(Duration::from_secs(60), listener.accept()).await {
                         Ok(Ok((stream, _peer_addr))) => {
                             let mut stream = acceptor.accept(stream).await?;
                             let party_id = stream.read_u64().await? as usize;
                             let stream_id = stream.read_u64().await? as usize;
+                            let split = stream.read_u8().await?;
                             tracing::trace!(
                                 "Party {}: accpeted stream {stream_id} from party {party_id}",
                                 config.my_id
                             );
                             assert!(accpected_streams
-                                .insert((party_id, stream_id), stream.into())
+                                .insert((party_id, stream_id, split), stream)
                                 .is_none());
                         }
                         Ok(Err(_)) => {
@@ -161,17 +196,24 @@ impl MpcNetworkHandler {
             }
         }
 
-        // assign streams to the right party and stream id
-        // we accepted streams for all parties with id > my-id, so we can iter from my_id + 1..num_parties
+        // assign streams to the right party, stream and duplex half
+        // we accepted streams for all parties with id > my_id, so we can iter from my_id + 1..num_parties
         for party_id in config.my_id + 1..num_parties {
             for stream_id in 0..STREAMS_PER_CONN {
-                let stream = accpected_streams
-                    .remove(&(party_id, stream_id))
+                // send and recv is swapped here compared to above
+                let recv = accpected_streams
+                    .remove(&(party_id, stream_id, DuplexTlsStream::SPLIT0))
                     .context(format!("get recv for stream {stream_id} party {party_id}"))?;
+                let send = accpected_streams
+                    .remove(&(party_id, stream_id, DuplexTlsStream::SPLIT1))
+                    .context(format!("get send for stream {stream_id} party {party_id}"))?;
                 if let Some(streams) = connections.get_mut(&party_id) {
-                    streams.push(stream);
+                    streams.push(DuplexTlsStream::new(send.into(), recv.into()));
                 } else {
-                    connections.insert(party_id, vec![stream]);
+                    connections.insert(
+                        party_id,
+                        vec![DuplexTlsStream::new(send.into(), recv.into())],
+                    );
                 }
             }
         }
@@ -214,10 +256,7 @@ impl MpcNetworkHandler {
     }
 
     /// Get a [Channel] to party with `id`. This pops a stream from the pool.
-    pub fn get_byte_channel(
-        &mut self,
-        id: &usize,
-    ) -> Option<BytesChannel<ReadHalf<TlsStream>, WriteHalf<TlsStream>>> {
+    pub fn get_byte_channel(&mut self, id: &usize) -> Option<BytesChannel<TlsStream, TlsStream>> {
         let mut codec = LengthDelimitedCodec::new();
         codec.set_max_frame_length(1_000_000_000);
         self.get_custom_channel(id, codec)
@@ -227,7 +266,7 @@ impl MpcNetworkHandler {
     pub fn get_serde_bincode_channel<M: Serialize + DeserializeOwned + 'static>(
         &mut self,
         id: &usize,
-    ) -> Option<Channel<ReadHalf<TlsStream>, WriteHalf<TlsStream>, BincodeCodec<M>>> {
+    ) -> Option<Channel<TlsStream, TlsStream, BincodeCodec<M>>> {
         let bincodec = BincodeCodec::<M>::new();
         self.get_custom_channel(id, bincodec)
     }
@@ -245,20 +284,17 @@ impl MpcNetworkHandler {
         &mut self,
         id: &usize,
         codec: C,
-    ) -> Option<Channel<ReadHalf<TlsStream>, WriteHalf<TlsStream>, C>> {
+    ) -> Option<Channel<TlsStream, TlsStream, C>> {
         debug_assert!(*id != self.my_id);
         if let Some(pool) = self.connections.get_mut(id) {
             if let Some(stream) = pool.pop() {
-                // TODO split adds a BiLock, we could avoid this using 1 stream for send and 1 for recv
-                let (recv, send) = tokio::io::split(stream);
-                return Some(Channel::new(recv, send, codec));
+                return Some(Channel::new(stream.recv, stream.send, codec));
             }
         }
         None
     }
 
     /// Get a [Channel] to each party using the provided codec. This pops a stream from each pool.
-    #[allow(clippy::type_complexity)]
     pub fn get_custom_channels<
         MSend,
         MRecv,
@@ -269,34 +305,30 @@ impl MpcNetworkHandler {
     >(
         &mut self,
         codec: C,
-    ) -> Option<HashMap<usize, Channel<ReadHalf<TlsStream>, WriteHalf<TlsStream>, C>>> {
+    ) -> Option<HashMap<usize, Channel<TlsStream, TlsStream, C>>> {
         self.connections
             .iter_mut()
             .map(|(id, streams)| {
                 debug_assert!(*id != self.my_id);
                 let stream = streams.pop()?;
-                // TODO split adds a BiLock, we could avoid this using 1 stream for send and 1 for recv
-                let (recv, send) = tokio::io::split(stream);
-                Some((*id, Channel::new(recv, send, codec.clone())))
+                Some((*id, Channel::new(stream.recv, stream.send, codec.clone())))
             })
             .collect()
     }
 
     /// Get a [Channel] to each party. This pops a stream from each pool.
-    #[allow(clippy::type_complexity)]
     pub fn get_byte_channels(
         &mut self,
-    ) -> Option<HashMap<usize, BytesChannel<ReadHalf<TlsStream>, WriteHalf<TlsStream>>>> {
+    ) -> Option<HashMap<usize, BytesChannel<TlsStream, TlsStream>>> {
         let mut codec = LengthDelimitedCodec::new();
         codec.set_max_frame_length(1_000_000_000);
         self.get_custom_channels(codec)
     }
 
     /// Get a [Channel] to each party. This pops a stream from each pool.
-    #[allow(clippy::type_complexity)]
     pub fn get_serde_bincode_channels<M: Serialize + DeserializeOwned + 'static>(
         &mut self,
-    ) -> Option<HashMap<usize, BincodeChannel<ReadHalf<TlsStream>, WriteHalf<TlsStream>, M>>> {
+    ) -> Option<HashMap<usize, BincodeChannel<TlsStream, TlsStream, M>>> {
         let bincodec = BincodeCodec::<M>::new();
         self.get_custom_channels(bincodec)
     }
