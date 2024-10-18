@@ -50,4 +50,10 @@ impl CoUtils {
     ) -> std::io::Result<()> {
         driver.inv_many_in_place(poly)
     }
+    pub(crate) fn batch_invert_leaking_zeros<T: NoirUltraHonkProver<P>, P: Pairing>(
+        driver: &mut T,
+        poly: &mut [T::ArithmeticShare],
+    ) -> std::io::Result<()> {
+        driver.inv_many_in_place_leaking_zeros(poly)
+    }
 }

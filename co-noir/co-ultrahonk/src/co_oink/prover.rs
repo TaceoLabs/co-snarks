@@ -234,7 +234,10 @@ impl<
 
         // Compute inverse polynomial I in place by inverting the product at each row
         // Note: zeroes are ignored as they are not used anyway
-        CoUtils::batch_invert::<T, P>(self.driver, self.memory.lookup_inverses.as_mut())?;
+        CoUtils::batch_invert_leaking_zeros::<T, P>(
+            self.driver,
+            self.memory.lookup_inverses.as_mut(),
+        )?;
         Ok(())
     }
 

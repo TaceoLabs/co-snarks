@@ -118,11 +118,27 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok(res)
     }
 
-    fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()> {
+    fn inv_many_in_place_leaking_zeros(
+        &mut self,
+        a: &mut [Self::ArithmeticShare],
+    ) -> std::io::Result<()> {
         for a in a.iter_mut() {
             if !a.is_zero() {
                 a.inverse_in_place().unwrap();
             }
+        }
+        Ok(())
+    }
+
+    fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()> {
+        for a in a.iter_mut() {
+            if a.is_zero() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Cannot invert zero",
+                ));
+            }
+            a.inverse_in_place().unwrap();
         }
         Ok(())
     }

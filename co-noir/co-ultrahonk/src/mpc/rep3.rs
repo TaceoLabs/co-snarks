@@ -136,6 +136,29 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         let y: Vec<P::ScalarField> =
             <Rep3UltraHonkDriver<N> as NoirUltraHonkProver<P>>::mul_open_many(self, a, &r)?;
 
+        if y.iter().any(|y| y.is_zero()) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "During execution of inverse in MPC: cannot compute inverse of zero",
+            ));
+        }
+        for (a, r, y) in izip!(a.iter_mut(), r, y) {
+            *a = r * y.inverse().unwrap();
+        }
+
+        Ok(())
+    }
+
+    fn inv_many_in_place_leaking_zeros(
+        &mut self,
+        a: &mut [Self::ArithmeticShare],
+    ) -> std::io::Result<()> {
+        let r = (0..a.len())
+            .map(|_| <Rep3UltraHonkDriver<N> as NoirUltraHonkProver<P>>::rand(self))
+            .collect::<Result<Vec<_>, _>>()?;
+        let y: Vec<P::ScalarField> =
+            <Rep3UltraHonkDriver<N> as NoirUltraHonkProver<P>>::mul_open_many(self, a, &r)?;
+
         for (a, r, y) in izip!(a.iter_mut(), r, y) {
             if y.is_zero() {
                 *a = Self::ArithmeticShare::default();
