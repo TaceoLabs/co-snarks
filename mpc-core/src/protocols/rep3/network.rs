@@ -2,15 +2,19 @@
 //!
 //! This module contains implementation of the rep3 mpc network
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::RngType;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
-use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
-use tokio::{runtime::Runtime, sync::Mutex};
+use mpc_net::{
+    channel::{ChannelHandle, ChannelTasks},
+    config::NetworkConfig,
+    MpcNetworkHandler,
+};
+use tokio::runtime::Runtime;
 
 use super::{
     conversion::A2BType,
@@ -253,6 +257,8 @@ pub struct Rep3MpcNet {
     pub(crate) chan_prev: ChannelHandle<Bytes, BytesMut>,
     // TODO we should be able to get rid of this mutex once we dont remove streams from the pool anymore
     pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
+    pub(crate) tasks: ChannelTasks,
+    // order is important, runtime MUST be dropped after tasks
     pub(crate) runtime: Arc<Runtime>,
 }
 
@@ -266,26 +272,26 @@ impl Rep3MpcNet {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        let (net_handler, chan_next, chan_prev) = runtime.block_on(async {
-            let mut net_handler = MpcNetworkHandler::establish(config).await?;
+        let mut net_handler = runtime.block_on(MpcNetworkHandler::establish(config))?;
 
-            let chan_next = net_handler
-                .get_byte_channel(&id.next_id().into())
-                .ok_or(eyre!("no next channel found"))?;
-            let chan_prev = net_handler
-                .get_byte_channel(&id.prev_id().into())
-                .ok_or(eyre!("no prev channel found"))?;
+        let chan_next = net_handler
+            .get_byte_channel(&id.next_id().into())
+            .ok_or(eyre!("no next channel found"))?;
+        let chan_prev = net_handler
+            .get_byte_channel(&id.prev_id().into())
+            .ok_or(eyre!("no prev channel found"))?;
 
-            let chan_next = ChannelHandle::manage(chan_next);
-            let chan_prev = ChannelHandle::manage(chan_prev);
-            Ok::<_, eyre::Report>((net_handler, chan_next, chan_prev))
-        })?;
+        let mut tasks = ChannelTasks::new(runtime.handle().clone());
+        let chan_next = tasks.spawn(chan_next);
+        let chan_prev = tasks.spawn(chan_prev);
+
         Ok(Self {
             id,
             net_handler: Arc::new(Mutex::new(net_handler)),
-            runtime: Arc::new(runtime),
             chan_next,
             chan_prev,
+            tasks,
+            runtime: Arc::new(runtime),
         })
     }
 
@@ -373,28 +379,27 @@ impl Rep3Network for Rep3MpcNet {
         let id = self.id;
         let net_handler = Arc::clone(&self.net_handler);
         let runtime = Arc::clone(&self.runtime);
-        let (chan_next, chan_prev) = runtime.block_on(async {
-            let chan_next = net_handler
-                .lock()
-                .await
-                .get_byte_channel(&id.next_id().into())
-                .expect("no next channel found");
-            let chan_prev = net_handler
-                .lock()
-                .await
-                .get_byte_channel(&id.prev_id().into())
-                .expect("no prev channel found");
-            let chan_next = ChannelHandle::manage(chan_next);
-            let chan_prev = ChannelHandle::manage(chan_prev);
-            Ok::<_, std::io::Error>((chan_next, chan_prev))
-        })?;
+        let mut tasks = self.tasks.clone();
+        let chan_next = net_handler
+            .lock()
+            .expect("fork")
+            .get_byte_channel(&id.next_id().into())
+            .expect("no next channel found");
+        let chan_prev = net_handler
+            .lock()
+            .expect("fork")
+            .get_byte_channel(&id.prev_id().into())
+            .expect("no prev channel found");
+        let chan_next = tasks.spawn(chan_next);
+        let chan_prev = tasks.spawn(chan_prev);
 
         Ok(Self {
             id,
             net_handler,
-            runtime,
             chan_next,
             chan_prev,
+            tasks,
+            runtime,
         })
     }
 }
