@@ -5,7 +5,8 @@ use color_eyre::{
     eyre::{Context, ContextCompat},
     Result,
 };
-use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
+use mpc_net::{channel::ChannelTasks, config::NetworkConfig, MpcNetworkHandler};
+use tokio::runtime::Handle;
 
 #[derive(Parser)]
 struct Args {
@@ -25,9 +26,10 @@ async fn main() -> Result<()> {
     let mut network = MpcNetworkHandler::establish(config.clone()).await?;
 
     let channels = network.get_byte_channels().context("get channels")?;
+    let mut tasks = ChannelTasks::new(Handle::current());
     let mut managed_channels = channels
         .into_iter()
-        .map(|(i, c)| (i, ChannelHandle::manage(c)))
+        .map(|(i, c)| (i, tasks.spawn(c)))
         .collect::<HashMap<_, _>>();
 
     // send to all channels

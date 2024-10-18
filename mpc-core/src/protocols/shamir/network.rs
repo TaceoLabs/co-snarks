@@ -5,9 +5,16 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
-use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
-use std::{collections::HashMap, sync::Arc};
-use tokio::{runtime::Runtime, sync::Mutex};
+use mpc_net::{
+    channel::{ChannelHandle, ChannelTasks},
+    config::NetworkConfig,
+    MpcNetworkHandler,
+};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+use tokio::runtime::Runtime;
 
 /// This trait defines the network interface for the Shamir protocol.
 pub trait ShamirNetwork: Send {
@@ -79,6 +86,8 @@ pub struct ShamirMpcNet {
     pub(crate) channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
     // TODO we should be able to get rid of this mutex once we dont remove streams from the pool anymore
     pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
+    pub(crate) tasks: ChannelTasks,
+    // order is important, runtime MUST be dropped after tasks
     pub(crate) runtime: Arc<Runtime>,
 }
 
@@ -98,28 +107,27 @@ impl ShamirMpcNet {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        let (net_handler, channels) = runtime.block_on(async {
-            let mut net_handler = MpcNetworkHandler::establish(config).await?;
+        let mut net_handler = runtime.block_on(MpcNetworkHandler::establish(config))?;
 
-            let mut channels = HashMap::with_capacity(num_parties - 1);
+        let mut tasks = ChannelTasks::new(runtime.handle().clone());
+        let mut channels = HashMap::with_capacity(num_parties - 1);
 
-            for other_id in 0..num_parties {
-                if other_id != id {
-                    let chan = net_handler
-                        .get_byte_channel(&other_id)
-                        .ok_or_else(|| eyre!("no channel found for party id={}", other_id))?;
-                    channels.insert(other_id, ChannelHandle::manage(chan));
-                }
+        for other_id in 0..num_parties {
+            if other_id != id {
+                let chan = net_handler
+                    .get_byte_channel(&other_id)
+                    .ok_or_else(|| eyre!("no channel found for party id={}", other_id))?;
+                channels.insert(other_id, tasks.spawn(chan));
             }
+        }
 
-            Ok::<_, eyre::Report>((net_handler, channels))
-        })?;
         Ok(Self {
             id,
             num_parties,
-            runtime: Arc::new(runtime),
             net_handler: Arc::new(Mutex::new(net_handler)),
             channels,
+            tasks,
+            runtime: Arc::new(runtime),
         })
     }
 
@@ -261,29 +269,28 @@ impl ShamirNetwork for ShamirMpcNet {
     fn fork(&mut self) -> std::io::Result<Self> {
         let id = self.id;
         let num_parties = self.num_parties;
-        let runtime = Arc::clone(&self.runtime);
         let net_handler = Arc::clone(&self.net_handler);
-        let channels = runtime.block_on(async {
-            let mut channels = HashMap::with_capacity(num_parties - 1);
-            for other_id in 0..num_parties {
-                if other_id != id {
-                    let chan = net_handler
-                        .lock()
-                        .await
-                        .get_byte_channel(&other_id)
-                        .expect("to find channel");
-                    channels.insert(other_id, ChannelHandle::manage(chan));
-                }
+        let runtime = Arc::clone(&self.runtime);
+        let mut tasks = self.tasks.clone();
+        let mut channels = HashMap::with_capacity(num_parties - 1);
+        for other_id in 0..num_parties {
+            if other_id != id {
+                let chan = net_handler
+                    .lock()
+                    .expect("fork")
+                    .get_byte_channel(&other_id)
+                    .expect("to find channel");
+                channels.insert(other_id, tasks.spawn(chan));
             }
-            Ok::<_, std::io::Error>(channels)
-        })?;
+        }
 
         Ok(Self {
             id,
             num_parties,
-            runtime,
             net_handler,
             channels,
+            tasks,
+            runtime,
         })
     }
 

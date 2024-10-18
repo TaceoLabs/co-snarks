@@ -20,9 +20,10 @@ impl RepToShamirNetwork<ShamirMpcNet> for Rep3MpcNet {
         let Self {
             id,
             net_handler,
-            runtime,
             chan_next,
             chan_prev,
+            tasks,
+            runtime,
         } = self;
 
         let mut channels = HashMap::with_capacity(2);
@@ -32,9 +33,10 @@ impl RepToShamirNetwork<ShamirMpcNet> for Rep3MpcNet {
         ShamirMpcNet {
             id: id.into(),
             num_parties: 3,
-            runtime,
             net_handler,
             channels,
+            tasks,
+            runtime,
         }
     }
 }
