@@ -1,8 +1,12 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
-use color_eyre::{eyre::Context, Result};
-use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
+use color_eyre::{
+    eyre::{Context, ContextCompat},
+    Result,
+};
+use mpc_net::{channel::ChannelTasks, config::NetworkConfig, MpcNetworkHandler};
+use tokio::runtime::Handle;
 
 #[derive(Parser)]
 struct Args {
@@ -19,12 +23,13 @@ async fn main() -> Result<()> {
         toml::from_str(&std::fs::read_to_string(args.config_file).context("opening config file")?)
             .context("parsing config file")?;
 
-    let network = MpcNetworkHandler::establish(config.clone()).await?;
+    let mut network = MpcNetworkHandler::establish(config.clone()).await?;
 
-    let channels = network.get_byte_channels().await?;
+    let channels = network.get_byte_channels().context("get channels")?;
+    let mut tasks = ChannelTasks::new(Handle::current());
     let mut managed_channels = channels
         .into_iter()
-        .map(|(i, c)| (i, ChannelHandle::manage(c)))
+        .map(|(i, c)| (i, tasks.spawn(c)))
         .collect::<HashMap<_, _>>();
 
     // send to all channels
