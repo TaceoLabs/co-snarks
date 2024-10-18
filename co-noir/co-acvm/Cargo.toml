@@ -1,6 +1,6 @@
 [package]
 name = "co-acvm"
-version = "0.2.0"
+version = "0.3.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -17,7 +17,7 @@ ark-ff.workspace = true
 eyre.workspace = true
 intmap.workspace = true
 itertools.workspace = true
-mpc-core = { version = "0.5.0", path = "../../mpc-core" }
+mpc-core = { version = "0.6.0", path = "../../mpc-core" }
 noirc-abi.workspace = true
 noirc-artifacts.workspace = true
 serde.workspace = true
