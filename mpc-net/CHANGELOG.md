@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.1.2...mpc-net-v0.2.0) (2024-10-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* Refactor to better handle new networking with forks
+
+### Bug Fixes
+
+* add gracefull shutdown ensure all data received from the quinn stack ([a9cbcbf](https://github.com/TaceoLabs/co-snarks/commit/a9cbcbf8a5fa00f01c94cd80eae45cbf7f65390f))
+* fixed read task breaking too early, caused error during proof gen ([6a8e829](https://github.com/TaceoLabs/co-snarks/commit/6a8e82913b88414ee05a7159fbd390a32db70b9d))
+
+
+### Code Refactoring
+
+* Refactor to better handle new networking with forks ([ce8fef9](https://github.com/TaceoLabs/co-snarks/commit/ce8fef922327db1e0d87b0546dd089100edf643f))
+
 ## [0.1.2](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-net-v0.1.1...mpc-net-v0.1.2) (2024-07-10)
 
 

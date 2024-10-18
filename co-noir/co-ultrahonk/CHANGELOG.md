@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.2.0](https://github.com/TaceoLabs/co-snarks/compare/co-ultrahonk-v0.1.0...co-ultrahonk-v0.2.0) (2024-10-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* removed point G2 from ultra-honk prover
+* The interface of the UltraCircuitVariable trait has change. Thus, also ProvingKey::create() throws an error now.
+* The produced proofs are now different due to new transcript handling in bb 0.55.1, and they are no longer backwards compatible.
+
+### Features
+
+* Replace a panic from the ultracircuitbuilder with an Error ([#217](https://github.com/TaceoLabs/co-snarks/issues/217)) ([5d9c870](https://github.com/TaceoLabs/co-snarks/commit/5d9c8703525e90ee3d9215006df527ad6a6ae777))
+* squashed commit of co-noir ([b132afc](https://github.com/TaceoLabs/co-snarks/commit/b132afcadb96914cd85070f87d7aa03bf9f87bfd))
+* Upgrade UltraHonk to be compatible with Barretenberg v0.55.1  ([#211](https://github.com/TaceoLabs/co-snarks/issues/211)) ([f817d76](https://github.com/TaceoLabs/co-snarks/commit/f817d768760ffbbf6b58489562aed5327567c561))
+
+
+### Code Refactoring
+
+* removed point G2 from ultra-honk prover ([1840fb4](https://github.com/TaceoLabs/co-snarks/commit/1840fb4821c597b7ad2d2c0ae83217582b1b5ad5))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.5.0 to 0.6.0
+    * ultrahonk bumped from 0.1.0 to 0.2.0
+
 ## [0.1.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-ultrahonk-v0.0.1...co-ultrahonk-v0.1.0) (2024-10-03)
 
 

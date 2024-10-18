@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-noir-v0.2.0...co-noir-v0.3.0) (2024-10-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* The interface of the UltraCircuitVariable trait has change. Thus, also ProvingKey::create() throws an error now.
+* co-noir now stores shared inputs in a different format (`BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>>` instead of `BTreeMap<String, Rep3PrimeFieldShare<ark_bn254::Fr>>`)
+* The produced proofs are now different due to new transcript handling in bb 0.55.1, and they are no longer backwards compatible.
+
+### Features
+
+* Do not use the builder in co-noir split witness ([d304986](https://github.com/TaceoLabs/co-snarks/commit/d304986495f4f6f94db60d4ad15e5f4cd29c0e32))
+* Replace a panic from the ultracircuitbuilder with an Error ([#217](https://github.com/TaceoLabs/co-snarks/issues/217)) ([5d9c870](https://github.com/TaceoLabs/co-snarks/commit/5d9c8703525e90ee3d9215006df527ad6a6ae777))
+* squashed commit of co-noir ([b132afc](https://github.com/TaceoLabs/co-snarks/commit/b132afcadb96914cd85070f87d7aa03bf9f87bfd))
+* Upgrade UltraHonk to be compatible with Barretenberg v0.55.1  ([#211](https://github.com/TaceoLabs/co-snarks/issues/211)) ([f817d76](https://github.com/TaceoLabs/co-snarks/commit/f817d768760ffbbf6b58489562aed5327567c561))
+
+
+### Bug Fixes
+
+* Adapt co-noir binary to handle public noir inputs correctly ([#216](https://github.com/TaceoLabs/co-snarks/issues/216)) ([bed3996](https://github.com/TaceoLabs/co-snarks/commit/bed399621558ca5d2ee22e9bdaa42f14f66b74d9))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.2.0 to 0.3.0
+    * co-ultrahonk bumped from 0.1.0 to 0.2.0
+    * mpc-core bumped from 0.5.0 to 0.6.0
+    * mpc-net bumped from 0.1.2 to 0.2.0
+
 ## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-noir-v0.1.0...co-noir-v0.2.0) (2024-10-04)
 
 
