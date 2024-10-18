@@ -3,7 +3,9 @@ use futures::{Sink, SinkExt, Stream, StreamExt};
 use std::{io, marker::Unpin, pin::Pin};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
+    runtime::Handle,
     sync::{mpsc, oneshot},
+    task::{JoinError, JoinHandle},
 };
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
@@ -159,58 +161,6 @@ where
     MRecv: Send + std::fmt::Debug + 'static,
     MSend: Send + std::fmt::Debug + 'static,
 {
-    /// Create a new [`ChannelHandle`] from a [`Channel`]. This spawns a new tokio task that handles the read and write jobs so they can happen concurrently.
-    pub fn manage<R, W, C>(chan: Channel<R, W, C>) -> ChannelHandle<MSend, MRecv>
-    where
-        C: 'static,
-        R: AsyncReadExt + Unpin + 'static,
-        W: AsyncWriteExt + Unpin + 'static,
-        FramedRead<R, C>: Stream<Item = Result<MRecv, io::Error>> + Send,
-        FramedWrite<W, C>: Sink<MSend, Error = io::Error> + Send,
-    {
-        let (write_send, mut write_recv) = mpsc::channel::<WriteJob<MSend>>(1024);
-        let (read_send, mut read_recv) = mpsc::channel::<ReadJob<MRecv>>(1024);
-
-        let (mut write, mut read) = chan.split();
-
-        tokio::spawn(async move {
-            while let Some(frame) = read.next().await {
-                let job = read_recv.recv().await;
-                match job {
-                    Some(job) => {
-                        if job.ret.send(frame).is_err() {
-                            tracing::warn!("Warning: Read Job finished but receiver is gone!");
-                        }
-                    }
-                    None => {
-                        if frame.is_ok() {
-                            tracing::warn!("Warning: received Ok frame but receiver is gone!");
-                        }
-                        break;
-                    }
-                }
-            }
-        });
-        tokio::spawn(async move {
-            while let Some(write_job) = write_recv.recv().await {
-                let write_result = write.send(write_job.data).await;
-                // we don't really care if the receiver for a write job is gone, as this is a common case
-                // therefore we only emit a trace message
-                match write_job.ret.send(write_result) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        tracing::trace!("Debug: Write Job finished but receiver is gone!");
-                    }
-                }
-            }
-        });
-
-        ChannelHandle {
-            write_job_queue: write_send,
-            read_job_queue: read_send,
-        }
-    }
-
     /// Instructs the channel to send a message. Returns a [oneshot::Receiver] that will return the result of the send operation.
     pub async fn send(&mut self, data: MSend) -> oneshot::Receiver<Result<(), io::Error>> {
         let (ret, recv) = oneshot::channel();
@@ -281,5 +231,109 @@ where
                 .unwrap(),
         }
         recv
+    }
+}
+
+/// Handles spawing and shutdown of channels. On drop, joins all [`JoinHandle`]s. The [`Handle`] musst be valid for the entire lifetime of this type.
+#[derive(Debug)]
+pub struct ChannelTasks {
+    tasks: Vec<JoinHandle<()>>,
+    handle: Handle,
+}
+
+impl ChannelTasks {
+    /// Create a new [`ChannelTasks`] instance.
+    pub fn new(handle: Handle) -> Self {
+        Self {
+            tasks: Vec::new(),
+            handle,
+        }
+    }
+
+    /// Create a new [`ChannelHandle`] from a [`Channel`]. This spawns a new tokio task that handles the read and write jobs so they can happen concurrently.
+    pub fn spawn<MSend, MRecv, R, W, C>(
+        &mut self,
+        chan: Channel<R, W, C>,
+    ) -> ChannelHandle<MSend, MRecv>
+    where
+        C: 'static,
+        R: AsyncReadExt + Unpin + 'static,
+        W: AsyncWriteExt + Unpin + std::marker::Send + 'static,
+        FramedRead<R, C>: Stream<Item = Result<MRecv, io::Error>> + Send,
+        FramedWrite<W, C>: Sink<MSend, Error = io::Error> + Send,
+        MRecv: Send + std::fmt::Debug + 'static,
+        MSend: Send + std::fmt::Debug + 'static,
+    {
+        let (write_send, mut write_recv) = mpsc::channel::<WriteJob<MSend>>(1024);
+        let (read_send, mut read_recv) = mpsc::channel::<ReadJob<MRecv>>(1024);
+
+        let (mut write, mut read) = chan.split();
+
+        self.tasks.push(self.handle.spawn(async move {
+            while let Some(frame) = read.next().await {
+                let job = read_recv.recv().await;
+                match job {
+                    Some(job) => {
+                        if job.ret.send(frame).is_err() {
+                            tracing::warn!("Warning: Read Job finished but receiver is gone!");
+                        }
+                    }
+                    None => {
+                        if frame.is_ok() {
+                            tracing::warn!("Warning: received Ok frame but receiver is gone!");
+                        }
+                        break;
+                    }
+                }
+            }
+        }));
+        self.tasks.push(self.handle.spawn(async move {
+            while let Some(write_job) = write_recv.recv().await {
+                let write_result = write.send(write_job.data).await;
+                // we don't really care if the receiver for a write job is gone, as this is a common case
+                // therefore we only emit a trace message
+                match write_job.ret.send(write_result) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        tracing::trace!("Debug: Write Job finished but receiver is gone!");
+                    }
+                }
+            }
+            // make sure all data is sent
+            if write.into_inner().shutdown().await.is_err() {
+                tracing::warn!("Warning: shutdown of stream failed!");
+            }
+        }));
+
+        ChannelHandle {
+            write_job_queue: write_send,
+            read_job_queue: read_send,
+        }
+    }
+
+    /// Join all [`JoinHandle`]s and remove them.
+    pub async fn shutdown(&mut self) -> Result<(), JoinError> {
+        futures::future::try_join_all(std::mem::take(&mut self.tasks))
+            .await
+            .map(|_| ())
+    }
+}
+
+impl Clone for ChannelTasks {
+    fn clone(&self) -> Self {
+        Self {
+            tasks: Vec::new(),
+            handle: self.handle.clone(),
+        }
+    }
+}
+
+impl Drop for ChannelTasks {
+    fn drop(&mut self) {
+        self.handle.block_on(async {
+            futures::future::try_join_all(std::mem::take(&mut self.tasks))
+                .await
+                .expect("can join all tasks");
+        });
     }
 }
