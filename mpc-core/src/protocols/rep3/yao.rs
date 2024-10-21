@@ -6,56 +6,6 @@ use scuttlebutt::AbstractChannel;
 
 mod circuits;
 
-/// A structure that contains both the garbler and the evaluators
-/// wires. This structure simplifies the API of the garbled circuit.
-struct GCInputs<F> {
-    pub garbler_wires: BinaryBundle<F>,
-    pub evaluator_wires: BinaryBundle<F>,
-}
-
-fn biguint_to_bits_as_u16(input: BigUint, n_bits: usize) -> Vec<u16> {
-    let mut res = Vec::with_capacity(n_bits);
-    let mut bits = 0;
-    for mut el in input.to_u64_digits() {
-        for _ in 0..64 {
-            res.push((el & 1) as u16);
-            el >>= 1;
-            bits += 1;
-            if bits == n_bits {
-                break;
-            }
-        }
-    }
-    res.resize(n_bits, 0);
-    res
-}
-
-fn field_to_bits_as_u16<F: PrimeField>(field: F) -> Vec<u16> {
-    let n_bits = F::MODULUS_BIT_SIZE as usize;
-    let bigint: BigUint = field.into();
-
-    biguint_to_bits_as_u16(bigint, n_bits)
-}
-
-// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
-fn encode_field<F: PrimeField, C: AbstractChannel, R: Rng + CryptoRng>(
-    field: F,
-    garbler: &mut Garbler<C, R, WireMod2>,
-) -> GCInputs<WireMod2> {
-    let bits = field_to_bits_as_u16(field);
-    let mut garbler_wires = Vec::with_capacity(bits.len());
-    let mut evaluator_wires = Vec::with_capacity(bits.len());
-    for bit in bits {
-        let (mine, theirs) = garbler.encode_wire(bit, 2);
-        garbler_wires.push(mine);
-        evaluator_wires.push(theirs);
-    }
-    GCInputs {
-        garbler_wires: BinaryBundle::new(garbler_wires),
-        evaluator_wires: BinaryBundle::new(evaluator_wires),
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -71,6 +21,56 @@ mod test {
     };
 
     const TESTRUNS: usize = 5;
+
+    /// A structure that contains both the garbler and the evaluators
+    /// wires. This structure simplifies the API of the garbled circuit.
+    struct GCInputs<F> {
+        pub garbler_wires: BinaryBundle<F>,
+        pub evaluator_wires: BinaryBundle<F>,
+    }
+
+    fn biguint_to_bits_as_u16(input: BigUint, n_bits: usize) -> Vec<u16> {
+        let mut res = Vec::with_capacity(n_bits);
+        let mut bits = 0;
+        for mut el in input.to_u64_digits() {
+            for _ in 0..64 {
+                res.push((el & 1) as u16);
+                el >>= 1;
+                bits += 1;
+                if bits == n_bits {
+                    break;
+                }
+            }
+        }
+        res.resize(n_bits, 0);
+        res
+    }
+
+    fn field_to_bits_as_u16<F: PrimeField>(field: F) -> Vec<u16> {
+        let n_bits = F::MODULUS_BIT_SIZE as usize;
+        let bigint: BigUint = field.into();
+
+        biguint_to_bits_as_u16(bigint, n_bits)
+    }
+
+    // This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
+    fn encode_field<F: PrimeField, C: AbstractChannel, R: Rng + CryptoRng>(
+        field: F,
+        garbler: &mut Garbler<C, R, WireMod2>,
+    ) -> GCInputs<WireMod2> {
+        let bits = field_to_bits_as_u16(field);
+        let mut garbler_wires = Vec::with_capacity(bits.len());
+        let mut evaluator_wires = Vec::with_capacity(bits.len());
+        for bit in bits {
+            let (mine, theirs) = garbler.encode_wire(bit, 2);
+            garbler_wires.push(mine);
+            evaluator_wires.push(theirs);
+        }
+        GCInputs {
+            garbler_wires: BinaryBundle::new(garbler_wires),
+            evaluator_wires: BinaryBundle::new(evaluator_wires),
+        }
+    }
 
     fn bits_to_field<F: PrimeField>(bits: Vec<u16>) -> F {
         let mut res = BigUint::zero();
