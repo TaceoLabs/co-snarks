@@ -1,34 +1,16 @@
 use ark_ff::PrimeField;
-use fancy_garbling::{
-    BinaryBundle, BinaryGadgets, Bundle, Evaluator, FancyBinary, Garbler, WireMod2,
-};
+use fancy_garbling::{BinaryBundle, Garbler, WireMod2};
 use num_bigint::BigUint;
-use rand::{CryptoRng, Rng, SeedableRng};
-use rand_chacha::ChaCha12Rng;
+use rand::{CryptoRng, Rng};
 use scuttlebutt::AbstractChannel;
+
+mod circuits;
 
 /// A structure that contains both the garbler and the evaluators
 /// wires. This structure simplifies the API of the garbled circuit.
 struct GCInputs<F> {
     pub garbler_wires: BinaryBundle<F>,
     pub evaluator_wires: BinaryBundle<F>,
-}
-
-fn biguint_to_bits(input: BigUint, n_bits: usize) -> Vec<bool> {
-    let mut res = Vec::with_capacity(n_bits);
-    let mut bits = 0;
-    for mut el in input.to_u64_digits() {
-        for _ in 0..64 {
-            res.push(el & 1 == 1);
-            el >>= 1;
-            bits += 1;
-            if bits == n_bits {
-                break;
-            }
-        }
-    }
-    res.resize(n_bits, false);
-    res
 }
 
 fn biguint_to_bits_as_u16(input: BigUint, n_bits: usize) -> Vec<u16> {
@@ -69,100 +51,19 @@ fn encode_field<F: PrimeField, C: AbstractChannel, R: Rng + CryptoRng>(
         evaluator_wires.push(theirs);
     }
     GCInputs {
-        garbler_wires: BinaryBundle::from(Bundle::new(garbler_wires)),
-        evaluator_wires: BinaryBundle::from(Bundle::new(evaluator_wires)),
+        garbler_wires: BinaryBundle::new(garbler_wires),
+        evaluator_wires: BinaryBundle::new(evaluator_wires),
     }
-}
-
-fn full_adder_gc_const<G>(
-    g: &mut G,
-    a: &G::Item,
-    b: bool,
-    c: &G::Item,
-) -> Result<(G::Item, G::Item), G::Error>
-where
-    G: FancyBinary,
-{
-    let (s, c) = if b {
-        let z1 = g.negate(a)?;
-        let s = g.xor(&z1, c)?;
-        let z3 = g.xor(a, c)?;
-        let z4 = g.and(&z1, &z3)?;
-        let c = g.xor(&z4, a)?;
-        (s, c)
-    } else {
-        let z1 = a;
-        let s = g.xor(z1, c)?;
-        let z3 = g.xor(a, c)?;
-        let z4 = g.and(z1, &z3)?;
-        let c = g.xor(&z4, a)?;
-        (s, c)
-    };
-
-    Ok((s, c))
-}
-
-fn adder_mod_p_gc<G, F: PrimeField>(
-    g: &mut G,
-    wires_a: BinaryBundle<G::Item>,
-    wires_b: BinaryBundle<G::Item>,
-) -> Result<BinaryBundle<G::Item>, G::Error>
-where
-    G: BinaryGadgets,
-{
-    let bitlen = wires_a.size();
-    debug_assert_eq!(bitlen, wires_b.size());
-
-    // First addition
-    let (added, carry_add) = g.bin_addition(&wires_a, &wires_b)?;
-    let added_wires = added.wires();
-
-    // Prepare p for subtraction
-    let new_bitlen = bitlen + 1;
-    let p_ = (BigUint::from(1u64) << new_bitlen) - F::MODULUS.into();
-    let p_bits = biguint_to_bits(p_, new_bitlen);
-
-    // manual_rca:
-    let mut subtracted = Vec::with_capacity(bitlen);
-    // half_adder:
-    debug_assert!(p_bits[0]);
-    let s = g.negate(&added_wires[0])?;
-    subtracted.push(s);
-    let mut c = added_wires[0].to_owned();
-    // full_adders:
-    for (a, b) in added_wires.iter().zip(p_bits.iter()).skip(1) {
-        let (s, c_) = full_adder_gc_const(g, a, *b, &c)?;
-        c = c_;
-        subtracted.push(s);
-    }
-    // final_full_adder to get ov bit
-    let z = if p_bits[bitlen] {
-        g.negate(&carry_add)?
-    } else {
-        carry_add
-    };
-    let ov = g.xor(&z, &c)?;
-
-    // multiplex for result
-    let mut result = Vec::with_capacity(bitlen);
-    for (s, a) in subtracted.iter().zip(added.iter()) {
-        // CMUX
-        // let r = g.mux(&ov, s, a)?; // Has two ANDs, only need one though
-        let xor = g.xor(s, a)?;
-        let and = g.and(&ov, &xor)?;
-        let r = g.xor(&and, s)?;
-        result.push(r);
-    }
-
-    Ok(BinaryBundle::from(Bundle::new(result)))
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use ark_ff::Zero;
-    use fancy_garbling::Fancy;
-    use rand::thread_rng;
+    use circuits::adder_mod_p_gc;
+    use fancy_garbling::{Evaluator, Fancy};
+    use rand::{thread_rng, SeedableRng};
+    use rand_chacha::ChaCha12Rng;
     use scuttlebutt::Channel;
     use std::{
         io::{BufReader, BufWriter},
@@ -234,8 +135,8 @@ mod test {
             let b_ = evaluator.read_wire(2).unwrap();
             b.push(b_);
         }
-        let a = BinaryBundle::from(Bundle::new(a));
-        let b = BinaryBundle::from(Bundle::new(b));
+        let a = BinaryBundle::new(a);
+        let b = BinaryBundle::new(b);
 
         let eval_result = adder_mod_p_gc::<_, F>(&mut evaluator, a, b).unwrap();
 
