@@ -1,3 +1,5 @@
+// This file is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs
+
 use crate::{
     protocols::rep3::{
         id::PartyID,
@@ -14,8 +16,6 @@ use fancy_garbling::{
 use rand::SeedableRng;
 use scuttlebutt::Block;
 use subtle::ConditionallySelectable;
-
-// This file is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs
 
 pub(crate) struct Rep3Garbler<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
