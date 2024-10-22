@@ -172,7 +172,9 @@ pub fn a2y<F: PrimeField, N: Rep3Network>(
     let converted = match io_context.id {
         PartyID::ID0 => {
             let mut evaluator = Rep3Evaluator::new(io_context);
-            GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x01, &x2)?
+            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x01, &x2)?;
+            evaluator.receive_hash()?;
+            res
         }
         PartyID::ID1 | PartyID::ID2 => {
             let delta = match delta {
@@ -183,7 +185,9 @@ pub fn a2y<F: PrimeField, N: Rep3Network>(
                 ))?,
             };
             let mut garbler = Rep3Garbler::new_with_delta(io_context, delta);
-            GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2)?
+            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2)?;
+            garbler.send_hash()?;
+            res
         }
     };
 

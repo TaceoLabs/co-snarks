@@ -95,7 +95,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     // Receive a hash of ID2 (the second garbler) to verify the garbled circuit.
-    fn receive_hash(&mut self) -> Result<(), EvaluatorError> {
+    pub fn receive_hash(&mut self) -> Result<(), EvaluatorError> {
         let data: Vec<u8> = self.io_context.network.recv(PartyID::ID2)?;
         let mut hash = Sha3_256::default();
         std::mem::swap(&mut hash, &mut self.hash);

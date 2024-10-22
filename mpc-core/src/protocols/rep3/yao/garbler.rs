@@ -124,7 +124,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     /// As ID2, send a hash of the sended data to the evaluator.
-    fn send_hash(&mut self) -> Result<(), GarblerError> {
+    pub fn send_hash(&mut self) -> Result<(), GarblerError> {
         if self.io_context.id == PartyID::ID2 {
             let mut hash = Sha3_256::default();
             std::mem::swap(&mut hash, &mut self.hash);
