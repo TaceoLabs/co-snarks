@@ -1,4 +1,8 @@
-// This file is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs
+//! Evaluator
+//!
+//! This module contains the implementation of the evaluator for the replicated 3-party garbled circuits as described in https://eprint.iacr.org/2018/403.pdf.
+//!
+//! This file is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs
 
 use super::GCUtils;
 use crate::protocols::rep3::{

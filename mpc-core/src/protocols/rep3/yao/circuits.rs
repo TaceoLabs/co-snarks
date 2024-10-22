@@ -1,3 +1,7 @@
+//! Circuits
+//!
+//! This module contains some garbled circuit implementations.
+
 use crate::protocols::rep3::yao::GCUtils;
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, FancyBinary};

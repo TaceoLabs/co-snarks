@@ -1,4 +1,8 @@
-// This file is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs
+//! Garbler
+//!
+//! This module contains the implementation of the garbler for the replicated 3-party garbled circuits as described in https://eprint.iacr.org/2018/403.pdf.
+//!
+//! This implementation is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs
 
 use super::{GCInputs, GCUtils};
 use crate::{
