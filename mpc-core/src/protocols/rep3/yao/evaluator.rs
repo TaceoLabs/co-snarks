@@ -11,12 +11,14 @@ use fancy_garbling::{
     Fancy, WireLabel, WireMod2,
 };
 use scuttlebutt::Block;
+use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
 
 pub(crate) struct Rep3Evaluator<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
     current_output: usize,
     current_gate: usize,
+    hash: Sha3_256, // For the ID2 to match everything sent with one hash
 }
 
 impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
@@ -31,6 +33,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
             io_context,
             current_output: 0,
             current_gate: 0,
+            hash: Sha3_256::default(),
         }
     }
 
@@ -59,20 +62,27 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
         Ok(v)
     }
 
-    /// Send a block over the network to the evaluator.
-    fn receive_block(&mut self) -> Result<Block, EvaluatorError> {
-        let block1 = self.receive_block_from(PartyID::ID1)?;
-        let block2 = self.receive_block_from(PartyID::ID2)?;
-
-        // TODO maybe do this at separate points
-
-        if block1 != block2 {
+    // Receive a hash of ID2 (the second garbler) to verify the garbled circuit.
+    fn receive_hash(&mut self) -> Result<(), EvaluatorError> {
+        let data: Vec<u8> = self.io_context.network.recv(PartyID::ID2)?;
+        let mut hash = Sha3_256::default();
+        std::mem::swap(&mut hash, &mut self.hash);
+        let digest = hash.finalize();
+        if &data != digest.as_slice() {
             return Err(EvaluatorError::CommunicationError(
-                "Blocks of two garblers do not match!".to_string(),
+                "Inconsistent Garbled Circuits: Hashes do not match!".to_string(),
             ));
         }
 
-        Ok(block1)
+        Ok(())
+    }
+
+    /// Send a block over the network to the evaluator.
+    fn receive_block(&mut self) -> Result<Block, EvaluatorError> {
+        let block = self.receive_block_from(PartyID::ID1)?;
+        self.hash.update(block.as_ref());
+
+        Ok(block)
     }
 
     /// Read `n` `Block`s from the channel.

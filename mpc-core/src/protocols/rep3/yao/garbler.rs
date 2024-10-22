@@ -15,6 +15,7 @@ use fancy_garbling::{
 };
 use rand::SeedableRng;
 use scuttlebutt::Block;
+use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
 
 pub(crate) struct Rep3Garbler<'a, N: Rep3Network> {
@@ -23,6 +24,7 @@ pub(crate) struct Rep3Garbler<'a, N: Rep3Network> {
     current_output: usize,
     current_gate: usize,
     rng: RngType,
+    hash: Sha3_256, // For the ID2 to match everything sent with one hash
 }
 
 impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
@@ -44,6 +46,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
             current_output: 0,
             current_gate: 0,
             rng,
+            hash: Sha3_256::default(),
         }
     }
 
@@ -63,7 +66,24 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
 
     /// Send a block over the network to the evaluator.
     fn send_block(&mut self, block: &Block) -> Result<(), GarblerError> {
-        self.io_context.network.send(PartyID::ID0, block.as_ref())?;
+        if self.io_context.id == PartyID::ID1 {
+            self.io_context.network.send(PartyID::ID0, block.as_ref())?;
+        } else {
+            self.hash.update(block.as_ref());
+        }
+        Ok(())
+    }
+
+    /// As ID2, send a hash of the sended data to the evaluator.
+    fn send_hash(&mut self) -> Result<(), GarblerError> {
+        if self.io_context.id == PartyID::ID2 {
+            let mut hash = Sha3_256::default();
+            std::mem::swap(&mut hash, &mut self.hash);
+            let digest = hash.finalize();
+            self.io_context
+                .network
+                .send(PartyID::ID0, digest.as_slice())?;
+        }
         Ok(())
     }
 
