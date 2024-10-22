@@ -832,10 +832,7 @@ mod field_share {
         ) {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                let mut rng = thread_rng();
-                let converted =
-                    conversion::y2b::<ark_bn254::Fr, _, _>(x, Some(delta), &mut rep3, &mut rng)
-                        .unwrap();
+                let converted = conversion::y2b::<ark_bn254::Fr, _>(x, &mut rep3).unwrap();
                 tx.send(converted).unwrap();
             });
         }
