@@ -596,7 +596,8 @@ mod field_share {
         {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2y2b(x, &mut rep3).unwrap())
+                let mut rng = thread_rng();
+                tx.send(conversion::a2y2b(x, &mut rep3, &mut rng).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -656,7 +657,8 @@ mod field_share {
         {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::b2y2a(&x, &mut rep3).unwrap())
+                let mut rng = thread_rng();
+                tx.send(conversion::b2y2a(&x, &mut rep3, &mut rng).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -843,7 +845,7 @@ mod field_share {
                 let delta = rep3.rngs.generate_random_garbler_delta(id);
 
                 let mut rng = thread_rng();
-                let converted = conversion::b2y(x, delta, &mut rep3, &mut rng).unwrap();
+                let converted = conversion::b2y(&x, delta, &mut rep3, &mut rng).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {

@@ -153,10 +153,10 @@ impl GCUtils {
         let n_bits = F::MODULUS_BIT_SIZE as usize;
         let bigint: BigUint = field.into();
 
-        Self::biguint_to_bits_as_u16(bigint, n_bits)
+        Self::biguint_to_bits_as_u16(&bigint, n_bits)
     }
 
-    fn biguint_to_bits_as_u16(input: BigUint, n_bits: usize) -> Vec<u16> {
+    fn biguint_to_bits_as_u16(input: &BigUint, n_bits: usize) -> Vec<u16> {
         let mut res = Vec::with_capacity(n_bits);
         let mut bits = 0;
         for mut el in input.to_u64_digits() {
@@ -206,7 +206,7 @@ impl GCUtils {
 
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
     pub fn encode_bigint<R: Rng + CryptoRng>(
-        bigint: BigUint,
+        bigint: &BigUint,
         n_bits: usize,
         rng: &mut R,
         delta: WireMod2,
@@ -375,7 +375,7 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + Cryp
 
 /// Transforms an binary shared input [x] = (x_1, x_2, x_3) into two yao shares [x_1]^Y, [x_2 xor x_3]^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
 pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
-    x: Rep3BigUintShare<F>,
+    x: &Rep3BigUintShare<F>,
     delta: Option<WireMod2>,
     io_context: &mut IoContext<N>,
     rng: &mut R,
@@ -402,8 +402,8 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRn
             };
 
             // Input x01
-            let xor = x.a ^ x.b;
-            let x01 = GCUtils::encode_bigint(xor, bitlen, rng, delta);
+            let xor = &x.a ^ &x.b;
+            let x01 = GCUtils::encode_bigint(&xor, bitlen, rng, delta);
 
             // Send x01 to the other parties
             GCUtils::send_inputs(&x01, &mut io_context.network, PartyID::ID2)?;
@@ -423,7 +423,7 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRn
             };
 
             // Input x2
-            let x2 = GCUtils::encode_bigint(x.a, bitlen, rng, delta);
+            let x2 = GCUtils::encode_bigint(&x.a, bitlen, rng, delta);
 
             // Send x2 to the other parties
             GCUtils::send_inputs(&x2, &mut io_context.network, PartyID::ID1)?;
