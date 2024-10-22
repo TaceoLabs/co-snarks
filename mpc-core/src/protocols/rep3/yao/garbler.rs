@@ -203,14 +203,9 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     /// and the next wire label for the garbler.
     ///
     /// Used internally as a subroutine to implement 'and' gates for `FancyBinary`.
-    fn garble_and_gate(
-        &mut self,
-        a: &WireMod2,
-        b: &WireMod2,
-        delta: &WireMod2,
-    ) -> (Block, Block, WireMod2) {
+    fn garble_and_gate(&mut self, a: &WireMod2, b: &WireMod2) -> (Block, Block, WireMod2) {
         let gate_num = self.current_gate();
-        GCUtils::garble_and_gate(gate_num, a, b, delta)
+        GCUtils::garble_and_gate(gate_num, a, b, &self.delta)
     }
 }
 
@@ -238,8 +233,7 @@ impl<'a, N: Rep3Network> Fancy for Rep3Garbler<'a, N> {
 
 impl<'a, N: Rep3Network> FancyBinary for Rep3Garbler<'a, N> {
     fn and(&mut self, a: &Self::Item, b: &Self::Item) -> Result<Self::Item, Self::Error> {
-        let delta = self.delta;
-        let (gate0, gate1, c) = self.garble_and_gate(a, b, &delta);
+        let (gate0, gate1, c) = self.garble_and_gate(a, b);
         self.send_block(&gate0)?;
         self.send_block(&gate1)?;
         Ok(c)
