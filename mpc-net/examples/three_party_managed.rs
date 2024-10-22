@@ -6,11 +6,9 @@ use color_eyre::{
     Result,
 };
 use mpc_net::{
-    channel::ChannelTasks,
     config::{NetworkConfig, NetworkConfigFile},
     MpcNetworkHandler,
 };
-use tokio::runtime::Handle;
 
 #[derive(Parser)]
 struct Args {
@@ -35,10 +33,9 @@ async fn main() -> Result<()> {
     let mut network = MpcNetworkHandler::establish(config).await?;
 
     let channels = network.get_byte_channels().context("get channels")?;
-    let mut tasks = ChannelTasks::new(Handle::current());
     let mut managed_channels = channels
         .into_iter()
-        .map(|(i, c)| (i, tasks.spawn(c)))
+        .map(|(i, c)| (i, network.spawn(c)))
         .collect::<HashMap<_, _>>();
 
     // send to all channels
@@ -54,6 +51,10 @@ async fn main() -> Result<()> {
             assert!(b.iter().all(|&x| x == my_id as u8))
         }
     }
+    // drop handles so we can shutdown
+    drop(managed_channels);
+    // wait until all send and recv taks are done
+    network.shutdown().await?;
     network.print_connection_stats(&mut std::io::stdout())?;
 
     Ok(())
