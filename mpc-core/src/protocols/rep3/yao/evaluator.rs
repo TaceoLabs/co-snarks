@@ -1,8 +1,8 @@
 //! Evaluator
 //!
-//! This module contains the implementation of the evaluator for the replicated 3-party garbled circuits as described in https://eprint.iacr.org/2018/403.pdf.
+//! This module contains the implementation of the evaluator for the replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
 //!
-//! This file is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs
+//! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
 use super::GCUtils;
 use crate::protocols::rep3::{
@@ -20,7 +20,7 @@ use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
 
-/// This struct implements the evaluator for replicated 3-party garbled circuits as described in https://eprint.iacr.org/2018/403.pdf.
+/// This struct implements the evaluator for replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
 pub struct Rep3Evaluator<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
     current_output: usize,

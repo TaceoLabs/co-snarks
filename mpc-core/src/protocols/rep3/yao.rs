@@ -226,7 +226,7 @@ impl GCUtils {
     }
 }
 
-/// Transforms an arithmetically shared input [x] = (x_1, x_2, x_3) into three yao shares [x_1]^Y, [x_2]^Y, [x_3]^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
+/// Transforms an arithmetically shared input x = (x_1, x_2, x_3) into three yao shares x_1^Y, x_2^Y, x_3^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
 pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
@@ -308,7 +308,7 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>
     Ok([x0, x1, x2])
 }
 
-/// Transforms an arithmetically shared input [x] = (x_1, x_2, x_3) into two yao shares [x_1]^Y, [x_2 + x_3]^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
+/// Transforms an arithmetically shared input x = (x_1, x_2, x_3) into two yao shares x_1^Y, (x_2 + x_3)^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
 pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
@@ -373,7 +373,7 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + Cryp
     Ok([x01, x2])
 }
 
-/// Transforms an binary shared input [x] = (x_1, x_2, x_3) into two yao shares [x_1]^Y, [x_2 xor x_3]^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
+/// Transforms an binary shared input x = (x_1, x_2, x_3) into two yao shares x_1^Y, (x_2 xor x_3)^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
 pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     x: &Rep3BigUintShare<F>,
     delta: Option<WireMod2>,

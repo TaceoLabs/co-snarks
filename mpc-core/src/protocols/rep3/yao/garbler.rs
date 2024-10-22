@@ -1,8 +1,8 @@
 //! Garbler
 //!
-//! This module contains the implementation of the garbler for the replicated 3-party garbled circuits as described in https://eprint.iacr.org/2018/403.pdf.
+//! This module contains the implementation of the garbler for the replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
 //!
-//! This implementation is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs
+//! This implementation is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs)
 
 use super::{GCInputs, GCUtils};
 use crate::{
@@ -26,7 +26,7 @@ use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
 
-/// This struct implements the garbler for replicated 3-party garbled circuits as described in https://eprint.iacr.org/2018/403.pdf.
+/// This struct implements the garbler for replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
 pub struct Rep3Garbler<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
     delta: WireMod2,
