@@ -21,7 +21,7 @@ ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
 bytes = { workspace = true }
 eyre = { workspace = true }
-fancy-garbling = { version = "0.6", git = "https://github.com/GaloisInc/swanky", rev = "586a6ba1efdb531542668d6b0afe5cacc302d434" }
+fancy-garbling = { git = "https://github.com/GaloisInc/swanky", rev = "586a6ba1efdb531542668d6b0afe5cacc302d434" }
 itertools = { workspace = true }
 mpc-net = { version = "0.1.2", path = "../mpc-net" }
 num-bigint = { workspace = true }
@@ -29,12 +29,13 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rayon = { workspace = true }
-scuttlebutt = { version = "0.6", git = "https://github.com/GaloisInc/swanky", rev = "586a6ba1efdb531542668d6b0afe5cacc302d434" }
+scuttlebutt = { git = "https://github.com/GaloisInc/swanky", rev = "586a6ba1efdb531542668d6b0afe5cacc302d434" }
 subtle = "2.6"
 serde = { workspace = true }
 sha3 = { workspace = true }
 tokio = { workspace = true }
 tracing.workspace = true
+vectoreyes = { git = "https://github.com/GaloisInc/swanky", rev = "586a6ba1efdb531542668d6b0afe5cacc302d434" }
 
 [dev-dependencies]
 ark-bn254 = { workspace = true }

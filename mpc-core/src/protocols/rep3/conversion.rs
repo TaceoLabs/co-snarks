@@ -315,3 +315,37 @@ pub fn b2y<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
 
     Ok(converted)
 }
+
+pub fn y2b<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
+    x: BinaryBundle<WireMod2>,
+    delta: Option<WireMod2>,
+    io_context: &mut IoContext<N>,
+    rng: &mut R,
+) -> IoResult<Rep3BigUintShare<F>> {
+    let bitlen = x.size();
+    let collapsed = GCUtils::collabse_bundle_to_lsb_bits_as_biguint(x);
+
+    let converted = match io_context.id {
+        PartyID::ID0 => {
+            let x_xor_px = collapsed;
+            let r = io_context.rngs.rand.random_biguint_rng1(bitlen);
+            let r_xor_x_xor_px = x_xor_px ^ &r;
+            io_context
+                .network
+                .send(PartyID::ID2, r_xor_x_xor_px.to_owned())?;
+            Rep3BigUintShare::new(r_xor_x_xor_px, r)
+        }
+        PartyID::ID1 => {
+            let px = collapsed;
+            let r = io_context.rngs.rand.random_biguint_rng2(bitlen);
+            Rep3BigUintShare::new(r, px)
+        }
+        PartyID::ID2 => {
+            let px = collapsed;
+            let r_xor_x_xor_px = io_context.network.recv(PartyID::ID0)?;
+            Rep3BigUintShare::new(px, r_xor_x_xor_px)
+        }
+    };
+
+    Ok(converted)
+}

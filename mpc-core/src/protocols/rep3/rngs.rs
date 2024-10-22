@@ -6,7 +6,7 @@ use super::{id::PartyID, yao::GCUtils};
 use crate::RngType;
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
-use fancy_garbling::{WireLabel, WireMod2};
+use fancy_garbling::WireMod2;
 use num_bigint::BigUint;
 use rand::{distributions::Standard, prelude::Distribution, Rng, RngCore, SeedableRng};
 use rayon::prelude::*;
@@ -151,6 +151,22 @@ impl Rep3Rand {
         let b = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
         let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
         (a & &mask, b & mask)
+    }
+
+    /// Generate a random [`BigUint`] with given `bitlen` from rng1
+    pub fn random_biguint_rng1(&mut self, bitlen: usize) -> BigUint {
+        let limbsize = bitlen.div_ceil(8);
+        let val = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
+        let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
+        val & &mask
+    }
+
+    /// Generate a random [`BigUint`] with given `bitlen` from rng2
+    pub fn random_biguint_rng2(&mut self, bitlen: usize) -> BigUint {
+        let limbsize = bitlen.div_ceil(8);
+        let val = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
+        let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
+        val & &mask
     }
 
     /// Generate a seed from each rng
