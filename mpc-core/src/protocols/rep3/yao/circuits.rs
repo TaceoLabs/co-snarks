@@ -130,6 +130,22 @@ impl GarbledCircuits {
 
         Ok(BinaryBundle::new(result))
     }
+
+    pub fn xor_many<G: FancyBinary>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let bitlen = wires_a.size();
+        debug_assert_eq!(bitlen, wires_b.size());
+
+        let mut result = Vec::with_capacity(wires_a.size());
+        for (a, b) in wires_a.wires().iter().zip(wires_b.wires().iter()) {
+            let r = g.xor(a, b)?;
+            result.push(r);
+        }
+        Ok(BinaryBundle::new(result))
+    }
 }
 
 #[cfg(test)]
