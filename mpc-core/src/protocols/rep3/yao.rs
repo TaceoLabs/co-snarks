@@ -17,7 +17,6 @@ use itertools::Itertools;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use scuttlebutt::Block;
-use vectoreyes::SimdBase;
 
 /// A structure that contains both the garbler and the evaluators wires
 pub struct GCInputs<F> {
@@ -56,10 +55,10 @@ impl GCUtils {
 
     pub(crate) fn collabse_bundle_to_lsb_bits_as_biguint(input: BinaryBundle<WireMod2>) -> BigUint {
         let mut res = BigUint::zero();
-        let one = Block::set_lo(1);
         for wire in input.wires().iter().rev() {
             res <<= 1;
-            let lsb = (wire.as_block() & one) == one;
+            let lsb = wire.color();
+            debug_assert!(lsb < 2);
             res += lsb as u64;
         }
         res
