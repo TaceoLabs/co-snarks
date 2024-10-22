@@ -1,8 +1,10 @@
 // This file is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs
 
+use super::GCUtils;
 use crate::protocols::rep3::{
     id::PartyID,
     network::{IoContext, Rep3Network},
+    IoResult,
 };
 use fancy_garbling::{
     errors::EvaluatorError,
@@ -13,8 +15,6 @@ use fancy_garbling::{
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
-
-use super::GCUtils;
 
 pub struct Rep3Evaluator<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
@@ -54,25 +54,34 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     /// Outputs the values to the evaluator.
-    fn output_evaluator(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, EvaluatorError> {
-        let result = self.outputs(x)?;
+    fn output_evaluator(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
+        let result = self.outputs(x).or(Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Output failed",
+        )))?;
         match result {
             Some(outputs) => {
                 let mut res = Vec::with_capacity(outputs.len());
                 for val in outputs {
                     if val >= 2 {
-                        return Err(EvaluatorError::DecodingFailed);
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Value is not a bool",
+                        ));
                     }
                     res.push(val == 1);
                 }
                 Ok(res)
             }
-            None => Err(EvaluatorError::DecodingFailed),
+            None => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "No output received",
+            )),
         }
     }
 
     /// Outputs the values to the garbler.
-    fn output_garbler(&mut self, x: &[WireMod2]) -> Result<(), EvaluatorError> {
+    fn output_garbler(&mut self, x: &[WireMod2]) -> IoResult<()> {
         for val in x {
             let block = val.as_block();
             self.send_block(&block)?;
@@ -81,7 +90,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     /// Outputs the value to all parties
-    pub fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, EvaluatorError> {
+    pub fn output_all_parties(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
         // Garbler's to evaluator
         let res = self.output_evaluator(x)?;
 
@@ -95,14 +104,15 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     // Receive a hash of ID2 (the second garbler) to verify the garbled circuit.
-    pub fn receive_hash(&mut self) -> Result<(), EvaluatorError> {
+    pub fn receive_hash(&mut self) -> IoResult<()> {
         let data: Vec<u8> = self.io_context.network.recv(PartyID::ID2)?;
         let mut hash = Sha3_256::default();
         std::mem::swap(&mut hash, &mut self.hash);
         let digest = hash.finalize();
         if data != digest.as_slice() {
-            return Err(EvaluatorError::CommunicationError(
-                "Inconsistent Garbled Circuits: Hashes do not match!".to_string(),
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Inconsistent Garbled Circuits: Hashes do not match!",
             ));
         }
 
@@ -110,14 +120,14 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     /// Send a block over the network to the garblers.
-    fn send_block(&mut self, block: &Block) -> Result<(), EvaluatorError> {
+    fn send_block(&mut self, block: &Block) -> IoResult<()> {
         self.io_context.network.send(PartyID::ID1, block.as_ref())?;
         self.io_context.network.send(PartyID::ID2, block.as_ref())?;
         Ok(())
     }
 
     /// Receive a block from a specific party.
-    fn receive_block_from(&mut self, id: PartyID) -> Result<Block, EvaluatorError> {
+    fn receive_block_from(&mut self, id: PartyID) -> IoResult<Block> {
         Ok(GCUtils::receive_block_from(
             &mut self.io_context.network,
             id,
@@ -125,7 +135,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     /// Send a block over the network to the evaluator.
-    fn receive_block(&mut self) -> Result<Block, EvaluatorError> {
+    fn receive_block(&mut self) -> IoResult<Block> {
         let block = self.receive_block_from(PartyID::ID1)?;
         self.hash.update(block.as_ref()); // "Receive" from ID2
 
@@ -134,18 +144,18 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
 
     /// Read `n` `Block`s from the channel.
     #[inline(always)]
-    fn read_blocks(&mut self, n: usize) -> Result<Vec<Block>, EvaluatorError> {
+    fn read_blocks(&mut self, n: usize) -> IoResult<Vec<Block>> {
         (0..n).map(|_| self.receive_block()).collect()
     }
 
     /// Read a Wire from the reader.
-    pub fn read_wire(&mut self) -> Result<WireMod2, EvaluatorError> {
+    pub fn read_wire(&mut self) -> IoResult<WireMod2> {
         let block = self.receive_block()?;
         Ok(WireMod2::from_block(block, 2))
     }
 
     /// Receive a bundle of wires over the established channel.
-    pub fn receive_bundle(&mut self, n: usize) -> Result<BinaryBundle<WireMod2>, EvaluatorError> {
+    pub fn receive_bundle(&mut self, n: usize) -> IoResult<BinaryBundle<WireMod2>> {
         let mut wires = Vec::with_capacity(n);
         for _ in 0..n {
             let wire = WireMod2::from_block(self.receive_block()?, 2);
@@ -193,7 +203,7 @@ impl<'a, N: Rep3Network> Fancy for Rep3Evaluator<'a, N> {
     type Error = EvaluatorError;
 
     fn constant(&mut self, _: u16, _q: u16) -> Result<WireMod2, EvaluatorError> {
-        self.read_wire()
+        Ok(self.read_wire()?)
     }
 
     fn output(&mut self, x: &WireMod2) -> Result<Option<u16>, EvaluatorError> {

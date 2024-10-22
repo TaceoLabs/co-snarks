@@ -1,15 +1,16 @@
 // This file is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs
 
-use core::panic;
-
+use super::{GCInputs, GCUtils};
 use crate::{
     protocols::rep3::{
         id::PartyID,
         network::{IoContext, Rep3Network},
+        IoResult,
     },
     RngType,
 };
 use ark_ff::PrimeField;
+use core::panic;
 use fancy_garbling::{
     errors::GarblerError,
     hash_wires,
@@ -20,8 +21,6 @@ use rand::SeedableRng;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
-
-use super::{GCInputs, GCUtils};
 
 pub struct Rep3Garbler<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
@@ -87,13 +86,16 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     /// Outputs the values to the evaluator.
-    fn output_evaluator(&mut self, x: &[WireMod2]) -> Result<(), GarblerError> {
-        self.outputs(x)?;
+    fn output_evaluator(&mut self, x: &[WireMod2]) -> IoResult<()> {
+        self.outputs(x).or(Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Output failed",
+        )))?;
         Ok(())
     }
 
     /// Outputs the values to the garbler.
-    fn output_garbler(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, GarblerError> {
+    fn output_garbler(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
         let blocks = self.read_blocks(x.len())?;
 
         let mut result = Vec::with_capacity(x.len());
@@ -103,8 +105,9 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
             } else if block == zero.plus(&self.delta).as_block() {
                 result.push(true);
             } else {
-                return Err(GarblerError::CommunicationError(
-                    "Invalid block received".to_string(),
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid block received",
                 ));
             }
         }
@@ -112,7 +115,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     /// Outputs the value to all parties
-    pub fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, GarblerError> {
+    pub fn output_all_parties(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
         // Garbler's to evaluator
         self.output_evaluator(x)?;
 
@@ -124,7 +127,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     /// As ID2, send a hash of the sended data to the evaluator.
-    pub fn send_hash(&mut self) -> Result<(), GarblerError> {
+    pub fn send_hash(&mut self) -> IoResult<()> {
         if self.io_context.id == PartyID::ID2 {
             let mut hash = Sha3_256::default();
             std::mem::swap(&mut hash, &mut self.hash);
@@ -137,7 +140,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     /// Send a block over the network to the evaluator.
-    fn send_block(&mut self, block: &Block) -> Result<(), GarblerError> {
+    fn send_block(&mut self, block: &Block) -> IoResult<()> {
         match self.io_context.id {
             PartyID::ID0 => {
                 panic!("Garbler should not be PartyID::ID0");
@@ -152,7 +155,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         Ok(())
     }
 
-    fn receive_block_from(&mut self, id: PartyID) -> Result<Block, GarblerError> {
+    fn receive_block_from(&mut self, id: PartyID) -> IoResult<Block> {
         Ok(GCUtils::receive_block_from(
             &mut self.io_context.network,
             id,
@@ -161,20 +164,20 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
 
     /// Read `n` `Block`s from the channel.
     #[inline(always)]
-    fn read_blocks(&mut self, n: usize) -> Result<Vec<Block>, GarblerError> {
+    fn read_blocks(&mut self, n: usize) -> IoResult<Vec<Block>> {
         (0..n)
             .map(|_| self.receive_block_from(PartyID::ID0))
             .collect()
     }
 
     /// Send a wire over the established channel.
-    fn send_wire(&mut self, wire: &WireMod2) -> Result<(), GarblerError> {
+    fn send_wire(&mut self, wire: &WireMod2) -> IoResult<()> {
         self.send_block(&wire.as_block())?;
         Ok(())
     }
 
     /// Send a bundle of wires over the established channel.
-    pub fn send_bundle(&mut self, wires: &BinaryBundle<WireMod2>) -> Result<(), GarblerError> {
+    pub fn send_bundle(&mut self, wires: &BinaryBundle<WireMod2>) -> IoResult<()> {
         for wire in wires.wires() {
             self.send_wire(wire)?;
         }

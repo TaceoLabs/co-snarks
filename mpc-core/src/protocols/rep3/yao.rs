@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{protocols::rep3::id::PartyID, RngType};
 use ark_ff::{PrimeField, Zero};
-use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
+use fancy_garbling::{BinaryBundle, FancyBinary, WireLabel, WireMod2};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng, SeedableRng};
@@ -24,6 +24,13 @@ pub struct GCInputs<F> {
 pub struct GCUtils {}
 
 impl GCUtils {
+    pub(crate) fn garbled_circuits_error<G, T>(input: Result<T, G>) -> IoResult<T> {
+        input.or(Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Garbled Circuit failed",
+        )))
+    }
+
     fn receive_block_from<N: Rep3Network>(network: &mut N, id: PartyID) -> IoResult<Block> {
         let data: Vec<u8> = network.recv(id)?;
         if data.len() != 16 {

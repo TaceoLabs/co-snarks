@@ -1,8 +1,7 @@
+use crate::protocols::rep3::yao::GCUtils;
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, FancyBinary};
 use num_bigint::BigUint;
-
-use crate::protocols::rep3::yao::GCUtils;
 
 pub struct GarbledCircuits {}
 

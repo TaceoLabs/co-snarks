@@ -6,7 +6,9 @@ use super::{
     arithmetic, detail,
     id::PartyID,
     network::{IoContext, Rep3Network},
-    yao::{self, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler},
+    yao::{
+        self, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler, GCUtils,
+    },
     IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
 };
 use ark_ff::PrimeField;
@@ -172,7 +174,8 @@ pub fn a2y<F: PrimeField, N: Rep3Network>(
     let converted = match io_context.id {
         PartyID::ID0 => {
             let mut evaluator = Rep3Evaluator::new(io_context);
-            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x01, &x2)?;
+            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x01, &x2);
+            let res = GCUtils::garbled_circuits_error(res)?;
             evaluator.receive_hash()?;
             res
         }
@@ -185,7 +188,8 @@ pub fn a2y<F: PrimeField, N: Rep3Network>(
                 ))?,
             };
             let mut garbler = Rep3Garbler::new_with_delta(io_context, delta);
-            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2)?;
+            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2);
+            let res = GCUtils::garbled_circuits_error(res)?;
             garbler.send_hash()?;
             res
         }
