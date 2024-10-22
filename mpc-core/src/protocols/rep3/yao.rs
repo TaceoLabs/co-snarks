@@ -53,7 +53,7 @@ impl GCUtils {
         Ok(v)
     }
 
-    pub(crate) fn collabse_bundle_to_lsb_bits_as_biguint(input: BinaryBundle<WireMod2>) -> BigUint {
+    pub(crate) fn collapse_bundle_to_lsb_bits_as_biguint(input: BinaryBundle<WireMod2>) -> BigUint {
         let mut res = BigUint::zero();
         for wire in input.wires().iter().rev() {
             res <<= 1;

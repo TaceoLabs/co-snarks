@@ -332,7 +332,7 @@ pub fn y2b<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3BigUintShare<F>> {
     let bitlen = x.size();
-    let collapsed = GCUtils::collabse_bundle_to_lsb_bits_as_biguint(x);
+    let collapsed = GCUtils::collapse_bundle_to_lsb_bits_as_biguint(x);
 
     let converted = match io_context.id {
         PartyID::ID0 => {
