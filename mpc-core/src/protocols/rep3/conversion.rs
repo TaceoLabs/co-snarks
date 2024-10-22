@@ -2,14 +2,16 @@
 //!
 //! This module contains conversions between share types
 
-use ark_ff::PrimeField;
-use num_bigint::BigUint;
-
-use crate::protocols::rep3::{id::PartyID, network::Rep3Network};
-
 use super::{
-    arithmetic, detail, network::IoContext, IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
+    arithmetic, detail,
+    id::PartyID,
+    network::{IoContext, Rep3Network},
+    yao::{self, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler},
+    IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
 };
+use ark_ff::PrimeField;
+use fancy_garbling::{BinaryBundle, WireMod2};
+use num_bigint::BigUint;
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
 pub fn a2b<F: PrimeField, N: Rep3Network>(
@@ -158,4 +160,32 @@ pub fn bit_inject<F: PrimeField, N: Rep3Network>(
     let d = arithmetic::arithmetic_xor(b0, b1, io_context)?;
     let e = arithmetic::arithmetic_xor(d, b2, io_context)?;
     Ok(e)
+}
+
+pub fn a2y<F: PrimeField, N: Rep3Network>(
+    x: Rep3PrimeFieldShare<F>,
+    delta: Option<WireMod2>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryBundle<WireMod2>> {
+    let [x01, x2] = yao::joint_input_arithmetic_added(x, delta, io_context)?;
+
+    let converted = match io_context.id {
+        PartyID::ID0 => {
+            let mut evaluator = Rep3Evaluator::new(io_context);
+            GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x01, &x2)?
+        }
+        PartyID::ID1 | PartyID::ID2 => {
+            let delta = match delta {
+                Some(delta) => delta,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "No delta provided",
+                ))?,
+            };
+            let mut garbler = Rep3Garbler::new_with_delta(io_context, delta);
+            GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2)?
+        }
+    };
+
+    Ok(converted)
 }

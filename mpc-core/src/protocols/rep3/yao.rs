@@ -260,3 +260,109 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network>(
 
     Ok([x0, x1, x2])
 }
+
+/// Transforms an arithmetically shared input [x] = (x_1, x_2, x_3) into two yao shares [x_1]^Y, [x_2 + x_3]^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
+pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network>(
+    x: Rep3PrimeFieldShare<F>,
+    delta: Option<WireMod2>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<[BinaryBundle<WireMod2>; 2]> {
+    let id = io_context.id;
+    let n_bits = F::MODULUS_BIT_SIZE as usize;
+
+    let (x01, x2) = match id {
+        PartyID::ID0 => {
+            // Receive x0
+            let mut x01 = Vec::with_capacity(n_bits);
+            for _ in 0..n_bits {
+                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID1)?;
+                x01.push(WireMod2::from_block(block, 2));
+            }
+            let x01 = BinaryBundle::new(x01);
+
+            // Receive x2
+            let mut x2 = Vec::with_capacity(n_bits);
+            for _ in 0..n_bits {
+                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
+                x2.push(WireMod2::from_block(block, 2));
+            }
+            let x2 = BinaryBundle::new(x2);
+            (x01, x2)
+        }
+        PartyID::ID1 => {
+            let delta = match delta {
+                Some(delta) => delta,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "No delta provided",
+                ))?,
+            };
+
+            // Input x01
+            let mut rng = RngType::from_seed(io_context.rngs.rand.random_seed1());
+            let sum = x.a + x.b;
+            let x01 = GCUtils::encode_field(sum, &mut rng, delta);
+
+            // Send x01 to the other parties
+            for val in x01.garbler_wires.iter() {
+                io_context
+                    .network
+                    .send(PartyID::ID2, val.as_block().as_ref())?;
+            }
+            for val in x01.evaluator_wires.iter() {
+                io_context
+                    .network
+                    .send(PartyID::ID0, val.as_block().as_ref())?;
+            }
+
+            let x01 = x01.garbler_wires;
+
+            // Receive x2
+            let mut x2 = Vec::with_capacity(n_bits);
+            for _ in 0..n_bits {
+                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
+                x2.push(WireMod2::from_block(block, 2));
+            }
+            let x2 = BinaryBundle::new(x2);
+            (x01, x2)
+        }
+        PartyID::ID2 => {
+            let delta = match delta {
+                Some(delta) => delta,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "No delta provided",
+                ))?,
+            };
+
+            // Input x2
+            let mut rng = RngType::from_seed(io_context.rngs.rand.random_seed2());
+            let x2 = GCUtils::encode_field(x.a, &mut rng, delta);
+
+            // Send x2 to the other parties
+            for val in x2.garbler_wires.iter() {
+                io_context
+                    .network
+                    .send(PartyID::ID1, val.as_block().as_ref())?;
+            }
+            for val in x2.evaluator_wires.iter() {
+                io_context
+                    .network
+                    .send(PartyID::ID0, val.as_block().as_ref())?;
+            }
+
+            let x2 = x2.garbler_wires;
+
+            // Receive x01
+            let mut x01 = Vec::with_capacity(n_bits);
+            for _ in 0..n_bits {
+                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID1)?;
+                x01.push(WireMod2::from_block(block, 2));
+            }
+            let x01 = BinaryBundle::new(x01);
+            (x01, x2)
+        }
+    };
+
+    Ok([x01, x2])
+}
