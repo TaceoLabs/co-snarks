@@ -17,7 +17,7 @@ use fancy_garbling::{
     util::{output_tweak, tweak2},
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2,
 };
-use rand::SeedableRng;
+use rand::{CryptoRng, Rng, SeedableRng};
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
@@ -35,8 +35,12 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     /// Create a new garbler.
     pub fn new(io_context: &'a mut IoContext<N>) -> Self {
         let mut res = Self::new_with_delta(io_context, WireMod2::default());
-        res.delta = WireMod2::rand_delta(&mut res.rng, 2);
+        res.delta = Self::random_delta(&mut res.rng);
         res
+    }
+
+    pub fn random_delta<R: Rng + CryptoRng>(rng: &mut R) -> WireMod2 {
+        WireMod2::rand_delta(rng, 2)
     }
 
     /// Create a new garbler with existing delta.
