@@ -545,6 +545,7 @@ mod field_share {
         let is_result_f: ark_bn254::Fr = is_result.into();
         assert_eq!(is_result_f, x);
     }
+
     #[test]
     fn rep3_a2b() {
         let test_network = Rep3TestNetwork::default();
@@ -671,6 +672,54 @@ mod field_share {
         assert_eq!(result1, should_result);
         assert_eq!(result2, should_result);
         assert_eq!(result3, should_result);
+    }
+
+    #[test]
+    fn rep3_a2y() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        // Both Garblers
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                let id = rep3.network.id;
+                let delta = rep3.rngs.generate_random_garbler_delta(id);
+
+                let converted = conversion::a2y(x, delta, &mut rep3).unwrap();
+
+                let output = match id {
+                    PartyID::ID0 => {
+                        let mut evaluator = Rep3Evaluator::new(&mut rep3);
+                        evaluator.output_all_parties(converted.wires()).unwrap()
+                    }
+                    PartyID::ID1 | PartyID::ID2 => {
+                        let mut garbler = Rep3Garbler::new_with_delta(&mut rep3, delta.unwrap());
+                        garbler.output_all_parties(converted.wires()).unwrap()
+                    }
+                };
+
+                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap())
+                    .unwrap();
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        assert_eq!(result1, x);
+        assert_eq!(result2, x);
+        assert_eq!(result3, x);
     }
 }
 

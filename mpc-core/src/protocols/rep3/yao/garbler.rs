@@ -35,24 +35,14 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     /// Create a new garbler.
     pub fn new(io_context: &'a mut IoContext<N>) -> Self {
         let mut res = Self::new_with_delta(io_context, WireMod2::default());
-        res.delta = Self::random_delta(&mut res.rng);
+        res.delta = WireMod2::rand_delta(&mut res.rng, 2);
         res
     }
 
-    pub fn random_delta<R: Rng + CryptoRng>(rng: &mut R) -> WireMod2 {
-        WireMod2::rand_delta(rng, 2)
-    }
-
     /// Create a new garbler with existing delta.
-    pub(crate) fn new_with_delta(io_context: &'a mut IoContext<N>, delta: WireMod2) -> Self {
+    pub fn new_with_delta(io_context: &'a mut IoContext<N>, delta: WireMod2) -> Self {
         let id = io_context.id;
-        let seed = match id {
-            PartyID::ID0 => {
-                panic!("Garbler should not be PartyID::ID0")
-            }
-            PartyID::ID1 => io_context.rngs.rand.random_seed1(),
-            PartyID::ID2 => io_context.rngs.rand.random_seed2(),
-        };
+        let seed = io_context.rngs.generate_garbler_randomness(id);
         let rng = RngType::from_seed(seed);
 
         Self {

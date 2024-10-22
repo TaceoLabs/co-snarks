@@ -6,6 +6,7 @@ use super::id::PartyID;
 use crate::RngType;
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
+use fancy_garbling::{WireLabel, WireMod2};
 use num_bigint::BigUint;
 use rand::{distributions::Standard, prelude::Distribution, Rng, RngCore, SeedableRng};
 use rayon::prelude::*;
@@ -49,6 +50,27 @@ impl Rep3CorrelatedRng {
             PartyID::ID0 => self.bitcomp1.rng2.gen(),
             PartyID::ID1 => self.bitcomp1.rng2.gen(),
             PartyID::ID2 => self.bitcomp1.rng1.gen(),
+        }
+    }
+
+    /// Generate a value that is equal on all two garbler parties
+    pub fn generate_garbler_randomness<T>(&mut self, id: PartyID) -> T
+    where
+        Standard: Distribution<T>,
+    {
+        match id {
+            PartyID::ID0 => panic!("Garbler should not be PartyID::ID0"),
+            PartyID::ID1 => self.rand.rng1.gen(),
+            PartyID::ID2 => self.rand.rng2.gen(),
+        }
+    }
+
+    /// Generate a random delta that is equal for the two garblers
+    pub fn generate_random_garbler_delta(&mut self, id: PartyID) -> Option<WireMod2> {
+        match id {
+            PartyID::ID0 => None,
+            PartyID::ID1 => Some(WireMod2::rand_delta(&mut self.rand.rng1, 2)),
+            PartyID::ID2 => Some(WireMod2::rand_delta(&mut self.rand.rng2, 2)),
         }
     }
 }
