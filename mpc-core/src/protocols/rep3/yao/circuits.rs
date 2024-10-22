@@ -27,8 +27,8 @@ impl GarbledCircuits {
         } else {
             let z1 = a;
             let s = g.xor(z1, c)?;
-            let z3 = g.xor(a, c)?;
-            let z4 = g.and(z1, &z3)?;
+            let z3 = &s;
+            let z4 = g.and(z1, z3)?;
             let c = g.xor(&z4, a)?;
             (s, c)
         };
