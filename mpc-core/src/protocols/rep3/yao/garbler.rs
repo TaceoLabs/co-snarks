@@ -17,11 +17,12 @@ use fancy_garbling::{
     util::{output_tweak, tweak2},
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2,
 };
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::SeedableRng;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
 
+/// This struct implements the garbler for replicated 3-party garbled circuits as described in https://eprint.iacr.org/2018/403.pdf.
 pub struct Rep3Garbler<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
     delta: WireMod2,

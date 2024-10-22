@@ -15,7 +15,7 @@ use rand::{CryptoRng, Rng};
 use scuttlebutt::Block;
 use vectoreyes::SimdBase;
 
-/// A structure that contains both the garbler and the evaluators
+/// A structure that contains both the garbler and the evaluators wires
 pub struct GCInputs<F> {
     pub garbler_wires: BinaryBundle<F>,
     pub evaluator_wires: BinaryBundle<F>,

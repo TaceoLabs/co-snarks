@@ -3,6 +3,7 @@ use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, FancyBinary};
 use num_bigint::BigUint;
 
+/// This struct contains some predefined garbled circuits.
 pub struct GarbledCircuits {}
 
 impl GarbledCircuits {
@@ -56,6 +57,7 @@ impl GarbledCircuits {
     }
 
     /// Binary addition. Returns the result and the carry.
+    #[allow(clippy::type_complexity)]
     fn bin_addition<G: FancyBinary>(
         g: &mut G,
         xs: &BinaryBundle<G::Item>,
@@ -79,6 +81,7 @@ impl GarbledCircuits {
         Ok((BinaryBundle::new(result), c))
     }
 
+    /// Adds two field shared field elements mod p. The field elements are encoded as Yao shared wires
     pub fn adder_mod_p<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -88,7 +91,7 @@ impl GarbledCircuits {
         debug_assert_eq!(bitlen, wires_b.size());
 
         // First addition
-        let (added, carry_add) = Self::bin_addition(g, &wires_a, &wires_b)?;
+        let (added, carry_add) = Self::bin_addition(g, wires_a, wires_b)?;
         let added_wires = added.wires();
 
         // Prepare p for subtraction
@@ -131,7 +134,8 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(result))
     }
 
-    pub fn xor_many<G: FancyBinary>(
+    /// XORs two bundles of wires. Does not require any network interaction.
+    pub(crate) fn xor_many<G: FancyBinary>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,

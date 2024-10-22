@@ -16,6 +16,7 @@ use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
 
+/// This struct implements the evaluator for replicated 3-party garbled circuits as described in https://eprint.iacr.org/2018/403.pdf.
 pub struct Rep3Evaluator<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
     current_output: usize,
