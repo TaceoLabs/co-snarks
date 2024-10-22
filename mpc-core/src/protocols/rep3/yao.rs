@@ -33,6 +33,11 @@ pub struct GCInputs<F> {
 pub struct GCUtils {}
 
 impl GCUtils {
+    /// Evaluates an 'and' gate given two inputs wires and two half-gates from the garbler.
+    ///
+    /// Outputs C = A & B
+    ///
+    /// Used internally as a subroutine to implement 'and' gates for `FancyBinary`.
     pub(crate) fn evaluate_and_gate(
         gate_num: usize,
         a: &WireMod2,
@@ -59,6 +64,12 @@ impl GCUtils {
         l.plus_mov(&r.plus_mov(&a.cmul(b.color())))
     }
 
+    /// Garbles an 'and' gate given two input wires and the delta.
+    ///
+    /// Outputs a tuple consisting of the two gates (that should be transfered to the evaluator)
+    /// and the next wire label for the garbler.
+    ///
+    /// Used internally as a subroutine to implement 'and' gates for `FancyBinary`.
     pub(crate) fn garble_and_gate(
         gate_num: usize,
         a: &WireMod2,
