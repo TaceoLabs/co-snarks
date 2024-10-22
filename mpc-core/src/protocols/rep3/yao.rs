@@ -45,6 +45,34 @@ impl GCUtils {
         Ok(v)
     }
 
+    fn receive_bundle_from<N: Rep3Network>(
+        n_bits: usize,
+        network: &mut N,
+        id: PartyID,
+    ) -> IoResult<BinaryBundle<WireMod2>> {
+        let mut x = Vec::with_capacity(n_bits);
+        for _ in 0..n_bits {
+            let block = GCUtils::receive_block_from(network, id)?;
+            x.push(WireMod2::from_block(block, 2));
+        }
+        Ok(BinaryBundle::new(x))
+    }
+
+    fn send_inputs<N: Rep3Network>(
+        input: &GCInputs<WireMod2>,
+        network: &mut N,
+        garbler_id: PartyID,
+    ) -> IoResult<()> {
+        for val in input.garbler_wires.iter() {
+            network.send(garbler_id, val.as_block().as_ref())?;
+        }
+        for val in input.evaluator_wires.iter() {
+            network.send(PartyID::ID0, val.as_block().as_ref())?;
+        }
+
+        Ok(())
+    }
+
     /// Samples a random delta
     pub fn random_delta<R: Rng + CryptoRng>(rng: &mut R) -> WireMod2 {
         WireMod2::rand_delta(rng, 2)
@@ -195,20 +223,10 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>
     let (x0, x2) = match id {
         PartyID::ID0 => {
             // Receive x0
-            let mut x0 = Vec::with_capacity(n_bits);
-            for _ in 0..n_bits {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID1)?;
-                x0.push(WireMod2::from_block(block, 2));
-            }
-            let x0 = BinaryBundle::new(x0);
+            let x0 = GCUtils::receive_bundle_from(n_bits, &mut io_context.network, PartyID::ID1)?;
 
             // Receive x2
-            let mut x2 = Vec::with_capacity(n_bits);
-            for _ in 0..n_bits {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
-                x2.push(WireMod2::from_block(block, 2));
-            }
-            let x2 = BinaryBundle::new(x2);
+            let x2 = GCUtils::receive_bundle_from(n_bits, &mut io_context.network, PartyID::ID2)?;
             (x0, x2)
         }
         PartyID::ID1 => {
@@ -230,26 +248,11 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>
             let x0 = GCUtils::encode_field(x.b, rng, delta);
 
             // Send x0 to the other parties
-            for val in x0.garbler_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID2, val.as_block().as_ref())?;
-            }
-            for val in x0.evaluator_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID0, val.as_block().as_ref())?;
-            }
-
+            GCUtils::send_inputs(&x0, &mut io_context.network, PartyID::ID2)?;
             let x0 = x0.garbler_wires;
 
             // Receive x2
-            let mut x2 = Vec::with_capacity(n_bits);
-            for _ in 0..n_bits {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
-                x2.push(WireMod2::from_block(block, 2));
-            }
-            let x2 = BinaryBundle::new(x2);
+            let x2 = GCUtils::receive_bundle_from(n_bits, &mut io_context.network, PartyID::ID2)?;
             (x0, x2)
         }
         PartyID::ID2 => {
@@ -271,26 +274,11 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>
             let x2 = GCUtils::encode_field(x.a, rng, delta);
 
             // Send x2 to the other parties
-            for val in x2.garbler_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID1, val.as_block().as_ref())?;
-            }
-            for val in x2.evaluator_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID0, val.as_block().as_ref())?;
-            }
-
+            GCUtils::send_inputs(&x2, &mut io_context.network, PartyID::ID1)?;
             let x2 = x2.garbler_wires;
 
             // Receive x0
-            let mut x0 = Vec::with_capacity(n_bits);
-            for _ in 0..n_bits {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID1)?;
-                x0.push(WireMod2::from_block(block, 2));
-            }
-            let x0 = BinaryBundle::new(x0);
+            let x0 = GCUtils::receive_bundle_from(n_bits, &mut io_context.network, PartyID::ID1)?;
             (x0, x2)
         }
     };
@@ -312,20 +300,10 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + Cryp
     let (x01, x2) = match id {
         PartyID::ID0 => {
             // Receive x0
-            let mut x01 = Vec::with_capacity(n_bits);
-            for _ in 0..n_bits {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID1)?;
-                x01.push(WireMod2::from_block(block, 2));
-            }
-            let x01 = BinaryBundle::new(x01);
+            let x01 = GCUtils::receive_bundle_from(n_bits, &mut io_context.network, PartyID::ID1)?;
 
             // Receive x2
-            let mut x2 = Vec::with_capacity(n_bits);
-            for _ in 0..n_bits {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
-                x2.push(WireMod2::from_block(block, 2));
-            }
-            let x2 = BinaryBundle::new(x2);
+            let x2 = GCUtils::receive_bundle_from(n_bits, &mut io_context.network, PartyID::ID2)?;
             (x01, x2)
         }
         PartyID::ID1 => {
@@ -342,26 +320,11 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + Cryp
             let x01 = GCUtils::encode_field(sum, rng, delta);
 
             // Send x01 to the other parties
-            for val in x01.garbler_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID2, val.as_block().as_ref())?;
-            }
-            for val in x01.evaluator_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID0, val.as_block().as_ref())?;
-            }
-
+            GCUtils::send_inputs(&x01, &mut io_context.network, PartyID::ID2)?;
             let x01 = x01.garbler_wires;
 
             // Receive x2
-            let mut x2 = Vec::with_capacity(n_bits);
-            for _ in 0..n_bits {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
-                x2.push(WireMod2::from_block(block, 2));
-            }
-            let x2 = BinaryBundle::new(x2);
+            let x2 = GCUtils::receive_bundle_from(n_bits, &mut io_context.network, PartyID::ID2)?;
             (x01, x2)
         }
         PartyID::ID2 => {
@@ -377,26 +340,11 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + Cryp
             let x2 = GCUtils::encode_field(x.a, rng, delta);
 
             // Send x2 to the other parties
-            for val in x2.garbler_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID1, val.as_block().as_ref())?;
-            }
-            for val in x2.evaluator_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID0, val.as_block().as_ref())?;
-            }
-
+            GCUtils::send_inputs(&x2, &mut io_context.network, PartyID::ID1)?;
             let x2 = x2.garbler_wires;
 
             // Receive x01
-            let mut x01 = Vec::with_capacity(n_bits);
-            for _ in 0..n_bits {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID1)?;
-                x01.push(WireMod2::from_block(block, 2));
-            }
-            let x01 = BinaryBundle::new(x01);
+            let x01 = GCUtils::receive_bundle_from(n_bits, &mut io_context.network, PartyID::ID1)?;
             (x01, x2)
         }
     };
@@ -416,21 +364,11 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRn
 
     let (x01, x2) = match id {
         PartyID::ID0 => {
-            // Receive x0
-            let mut x01 = Vec::with_capacity(bitlen);
-            for _ in 0..bitlen {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID1)?;
-                x01.push(WireMod2::from_block(block, 2));
-            }
-            let x01 = BinaryBundle::new(x01);
+            // Receive x01
+            let x01 = GCUtils::receive_bundle_from(bitlen, &mut io_context.network, PartyID::ID1)?;
 
             // Receive x2
-            let mut x2 = Vec::with_capacity(bitlen);
-            for _ in 0..bitlen {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
-                x2.push(WireMod2::from_block(block, 2));
-            }
-            let x2 = BinaryBundle::new(x2);
+            let x2 = GCUtils::receive_bundle_from(bitlen, &mut io_context.network, PartyID::ID2)?;
             (x01, x2)
         }
         PartyID::ID1 => {
@@ -447,26 +385,11 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRn
             let x01 = GCUtils::encode_bigint(xor, bitlen, rng, delta);
 
             // Send x01 to the other parties
-            for val in x01.garbler_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID2, val.as_block().as_ref())?;
-            }
-            for val in x01.evaluator_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID0, val.as_block().as_ref())?;
-            }
-
+            GCUtils::send_inputs(&x01, &mut io_context.network, PartyID::ID2)?;
             let x01 = x01.garbler_wires;
 
             // Receive x2
-            let mut x2 = Vec::with_capacity(bitlen);
-            for _ in 0..bitlen {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
-                x2.push(WireMod2::from_block(block, 2));
-            }
-            let x2 = BinaryBundle::new(x2);
+            let x2 = GCUtils::receive_bundle_from(bitlen, &mut io_context.network, PartyID::ID2)?;
             (x01, x2)
         }
         PartyID::ID2 => {
@@ -482,26 +405,11 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRn
             let x2 = GCUtils::encode_bigint(x.a, bitlen, rng, delta);
 
             // Send x2 to the other parties
-            for val in x2.garbler_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID1, val.as_block().as_ref())?;
-            }
-            for val in x2.evaluator_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID0, val.as_block().as_ref())?;
-            }
-
+            GCUtils::send_inputs(&x2, &mut io_context.network, PartyID::ID1)?;
             let x2 = x2.garbler_wires;
 
             // Receive x01
-            let mut x01 = Vec::with_capacity(bitlen);
-            for _ in 0..bitlen {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID1)?;
-                x01.push(WireMod2::from_block(block, 2));
-            }
-            let x01 = BinaryBundle::new(x01);
+            let x01 = GCUtils::receive_bundle_from(bitlen, &mut io_context.network, PartyID::ID1)?;
             (x01, x2)
         }
     };
@@ -521,12 +429,7 @@ pub fn input_field_id2<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     let x = match id {
         PartyID::ID0 | PartyID::ID1 => {
             // Receive x
-            let mut x = Vec::with_capacity(n_bits);
-            for _ in 0..n_bits {
-                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
-                x.push(WireMod2::from_block(block, 2));
-            }
-            BinaryBundle::new(x)
+            GCUtils::receive_bundle_from(n_bits, &mut io_context.network, PartyID::ID2)?
         }
         PartyID::ID2 => {
             let delta = match delta {
@@ -548,17 +451,7 @@ pub fn input_field_id2<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
             let x = GCUtils::encode_field(x, rng, delta);
 
             // Send x to the other parties
-            for val in x.garbler_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID1, val.as_block().as_ref())?;
-            }
-            for val in x.evaluator_wires.iter() {
-                io_context
-                    .network
-                    .send(PartyID::ID0, val.as_block().as_ref())?;
-            }
-
+            GCUtils::send_inputs(&x, &mut io_context.network, PartyID::ID1)?;
             x.garbler_wires
         }
     };
