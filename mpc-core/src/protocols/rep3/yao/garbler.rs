@@ -120,6 +120,22 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         self.output_garbler(x)
     }
 
+    /// Outputs the value to parties ID0 and ID1
+    pub fn output_to_id0_and_id1(&mut self, x: &[WireMod2]) -> IoResult<Option<Vec<bool>>> {
+        // Garbler's to evaluator
+        self.output_evaluator(x)?;
+
+        // Check consistency with the second garbled circuit before receiving the result
+        self.send_hash()?;
+
+        // Evaluator to garbler
+        if self.io_context.id == PartyID::ID1 {
+            Ok(Some(self.output_garbler(x)?))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// As ID2, send a hash of the sended data to the evaluator.
     pub fn send_hash(&mut self) -> IoResult<()> {
         if self.io_context.id == PartyID::ID2 {

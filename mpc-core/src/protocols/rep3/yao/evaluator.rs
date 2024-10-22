@@ -89,6 +89,15 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
         Ok(())
     }
 
+    /// Outputs the values to the garbler with id1.
+    fn output_garbler_id1(&mut self, x: &[WireMod2]) -> IoResult<()> {
+        for val in x {
+            let block = val.as_block();
+            self.io_context.network.send(PartyID::ID1, block.as_ref())?;
+        }
+        Ok(())
+    }
+
     /// Outputs the value to all parties
     pub fn output_all_parties(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
         // Garbler's to evaluator
@@ -99,6 +108,20 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
 
         // Evaluator to garbler
         self.output_garbler(x)?;
+
+        Ok(res)
+    }
+
+    /// Outputs the value to parties ID0 and ID1
+    pub fn output_to_id0_and_id1(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
+        // Garbler's to evaluator
+        let res = self.output_evaluator(x)?;
+
+        // Check consistency with the second garbled circuit before releasing the result
+        self.receive_hash()?;
+
+        // Evaluator to garbler
+        self.output_garbler_id1(x)?;
 
         Ok(res)
     }

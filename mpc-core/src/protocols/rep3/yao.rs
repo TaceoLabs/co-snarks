@@ -6,12 +6,12 @@ use super::{
     network::{IoContext, Rep3Network},
     IoResult, Rep3PrimeFieldShare,
 };
-use crate::{protocols::rep3::id::PartyID, RngType};
+use crate::protocols::rep3::id::PartyID;
 use ark_ff::{PrimeField, Zero};
-use fancy_garbling::{BinaryBundle, FancyBinary, WireLabel, WireMod2};
+use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::Itertools;
 use num_bigint::BigUint;
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{CryptoRng, Rng};
 use scuttlebutt::Block;
 
 /// A structure that contains both the garbler and the evaluators
@@ -46,7 +46,7 @@ impl GCUtils {
     }
 
     #[cfg(test)]
-    fn u16_bits_to_field<F: PrimeField>(bits: Vec<u16>) -> eyre::Result<F> {
+    fn u16_bits_to_field<F: PrimeField>(bits: Vec<u16>) -> IoResult<F> {
         let mut res = BigUint::zero();
         for bit in bits.iter().rev() {
             assert!(*bit < 2);
@@ -55,19 +55,25 @@ impl GCUtils {
         }
 
         if res >= F::MODULUS.into() {
-            return Err(eyre::eyre!("Invalid field element"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid field element",
+            ));
         }
         Ok(F::from(res))
     }
 
-    pub fn bits_to_field<F: PrimeField>(bits: Vec<bool>) -> eyre::Result<F> {
+    pub fn bits_to_field<F: PrimeField>(bits: Vec<bool>) -> IoResult<F> {
         let mut res = BigUint::zero();
         for bit in bits.iter().rev() {
             res <<= 1;
             res += *bit as u64;
         }
         if res >= F::MODULUS.into() {
-            return Err(eyre::eyre!("Invalid field element"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid field element",
+            ));
         }
         Ok(F::from(res))
     }
@@ -373,7 +379,7 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + Cryp
     Ok([x01, x2])
 }
 
-pub fn input_field_party2<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
+pub fn input_field_id2<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     x: Option<F>,
     delta: Option<WireMod2>,
     io_context: &mut IoContext<N>,

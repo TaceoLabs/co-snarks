@@ -2,7 +2,7 @@
 //!
 //! This module contains conversions between share types
 
-use crate::protocols::rep3::yao::input_field_party2;
+use crate::protocols::rep3::yao::input_field_id2;
 
 use super::{
     arithmetic, detail,
@@ -214,11 +214,13 @@ pub fn y2a<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
         PartyID::ID0 => {
             let k3 = io_context.rngs.bitcomp2.random_fes_3keys::<F>();
             res.b = (k3.0 + k3.1 + k3.2).neg();
-            let x23 = input_field_party2::<F, _, _>(None, None, io_context, rng)?;
+            let x23 = input_field_id2::<F, _, _>(None, None, io_context, rng)?;
 
             let mut evaluator = Rep3Evaluator::new(io_context);
-            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x, &x23);
-            let res = GCUtils::garbled_circuits_error(res)?;
+            let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x, &x23);
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
+            res.a = GCUtils::bits_to_field(x1)?;
         }
         PartyID::ID1 => {
             let delta = match delta {
@@ -231,11 +233,20 @@ pub fn y2a<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
 
             let k2 = io_context.rngs.bitcomp1.random_fes_3keys::<F>();
             res.a = (k2.0 + k2.1 + k2.2).neg();
-            let x23 = input_field_party2::<F, _, _>(None, None, io_context, rng)?;
+            let x23 = input_field_id2::<F, _, _>(None, None, io_context, rng)?;
 
             let mut garbler = Rep3Garbler::new_with_delta(io_context, delta);
-            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x, &x23);
-            let res = GCUtils::garbled_circuits_error(res)?;
+            let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x, &x23);
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+            let x1 = match x1 {
+                Some(x1) => x1,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "No output received",
+                ))?,
+            };
+            res.b = GCUtils::bits_to_field(x1)?;
         }
         PartyID::ID2 => {
             let delta = match delta {
@@ -253,13 +264,20 @@ pub fn y2a<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
             let x23 = Some(k2_comp + k3_comp);
             res.a = k3_comp.neg();
             res.b = k2_comp.neg();
-            let x23 = input_field_party2(x23, Some(delta), io_context, rng)?;
+            let x23 = input_field_id2(x23, Some(delta), io_context, rng)?;
 
             let mut garbler = Rep3Garbler::new_with_delta(io_context, delta);
-            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x, &x23);
-            let res = GCUtils::garbled_circuits_error(res)?;
+            let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x, &x23);
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+            if x1.is_some() {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Unexpected output received",
+                ))?;
+            }
         }
     };
 
-    todo!()
+    Ok(res)
 }
