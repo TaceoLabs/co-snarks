@@ -2,7 +2,7 @@
 use futures::{Sink, SinkExt, Stream, StreamExt};
 use std::{io, marker::Unpin, pin::Pin};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
     runtime::Handle,
     sync::{mpsc, oneshot},
     task::{JoinError, JoinHandle},
@@ -35,8 +35,8 @@ impl<R, W, C> Channel<R, W, C> {
     pub fn new<MSend>(read_half: R, write_half: W, codec: C) -> Self
     where
         C: Clone + Decoder + Encoder<MSend>,
-        R: AsyncReadExt,
-        W: AsyncWriteExt,
+        R: AsyncRead,
+        W: AsyncWrite,
     {
         Channel {
             write_conn: FramedWrite::new(write_half, codec.clone()),
@@ -66,8 +66,8 @@ impl<R, W, C> Channel<R, W, C> {
     pub async fn close<MSend>(self) -> Result<(), io::Error>
     where
         C: Encoder<MSend, Error = std::io::Error> + Decoder<Error = std::io::Error>,
-        R: AsyncReadExt + Unpin,
-        W: AsyncWriteExt + Unpin,
+        R: AsyncRead + Unpin,
+        W: AsyncWrite + Unpin,
     {
         let Channel {
             mut read_conn,
@@ -93,7 +93,7 @@ impl<R, W, C> Channel<R, W, C> {
         Ok(())
     }
 }
-impl<R, W: AsyncWriteExt + Unpin, MSend, C: Encoder<MSend, Error = io::Error>> Sink<MSend>
+impl<R, W: AsyncWrite + Unpin, MSend, C: Encoder<MSend, Error = io::Error>> Sink<MSend>
     for Channel<R, W, C>
 where
     Self: Unpin,
@@ -125,7 +125,7 @@ where
         self.write_conn.poll_close_unpin(cx)
     }
 }
-impl<R: AsyncReadExt + Unpin, W, MRecv, C: Decoder<Item = MRecv, Error = io::Error>> Stream
+impl<R: AsyncRead + Unpin, W, MRecv, C: Decoder<Item = MRecv, Error = io::Error>> Stream
     for Channel<R, W, C>
 where
     Self: Unpin,
@@ -236,7 +236,7 @@ where
 
 /// Handles spawing and shutdown of channels. On drop, joins all [`JoinHandle`]s. The [`Handle`] musst be valid for the entire lifetime of this type.
 #[derive(Debug)]
-pub struct ChannelTasks {
+pub(crate) struct ChannelTasks {
     tasks: Vec<JoinHandle<()>>,
     handle: Handle,
 }
@@ -251,14 +251,14 @@ impl ChannelTasks {
     }
 
     /// Create a new [`ChannelHandle`] from a [`Channel`]. This spawns a new tokio task that handles the read and write jobs so they can happen concurrently.
-    pub fn spawn<MSend, MRecv, R, W, C>(
+    pub(crate) fn spawn<MSend, MRecv, R, W, C>(
         &mut self,
         chan: Channel<R, W, C>,
     ) -> ChannelHandle<MSend, MRecv>
     where
         C: 'static,
-        R: AsyncReadExt + Unpin + 'static,
-        W: AsyncWriteExt + Unpin + std::marker::Send + 'static,
+        R: AsyncRead + Unpin + 'static,
+        W: AsyncWrite + Unpin + std::marker::Send + 'static,
         FramedRead<R, C>: Stream<Item = Result<MRecv, io::Error>> + Send,
         FramedWrite<W, C>: Sink<MSend, Error = io::Error> + Send,
         MRecv: Send + std::fmt::Debug + 'static,
@@ -312,27 +312,20 @@ impl ChannelTasks {
     }
 
     /// Join all [`JoinHandle`]s and remove them.
-    pub async fn shutdown(&mut self) -> Result<(), JoinError> {
+    pub(crate) async fn shutdown(&mut self) -> Result<(), JoinError> {
         futures::future::try_join_all(std::mem::take(&mut self.tasks))
             .await
             .map(|_| ())
     }
 }
 
-impl Clone for ChannelTasks {
-    fn clone(&self) -> Self {
-        Self {
-            tasks: Vec::new(),
-            handle: self.handle.clone(),
-        }
-    }
-}
-
 impl Drop for ChannelTasks {
     fn drop(&mut self) {
-        self.handle.block_on(async {
-            futures::future::try_join_all(std::mem::take(&mut self.tasks))
-                .await
+        tokio::task::block_in_place(move || {
+            self.handle
+                .block_on(futures::future::try_join_all(std::mem::take(
+                    &mut self.tasks,
+                )))
                 .expect("can join all tasks");
         });
     }
