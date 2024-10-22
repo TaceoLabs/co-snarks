@@ -11,6 +11,7 @@ use mpc_net::{
     config::{NetworkConfig, NetworkConfigFile},
     MpcNetworkHandler,
 };
+use tokio::io::AsyncWriteExt;
 use tokio_util::codec::{Decoder, Encoder};
 
 #[derive(Parser)]
@@ -65,6 +66,11 @@ async fn main() -> Result<()> {
         } else {
             panic!("could not receive message");
         }
+    }
+    // make sure all write are done by shutting down all streams
+    for (_, channel) in channels.into_iter() {
+        let (write, _) = channel.split();
+        write.into_inner().shutdown().await?;
     }
     network.print_connection_stats(&mut std::io::stdout())?;
 

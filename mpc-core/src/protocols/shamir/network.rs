@@ -5,11 +5,7 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
-use mpc_net::{
-    channel::{ChannelHandle, ChannelTasks},
-    config::NetworkConfig,
-    MpcNetworkHandler,
-};
+use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -86,8 +82,7 @@ pub struct ShamirMpcNet {
     pub(crate) channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
     // TODO we should be able to get rid of this mutex once we dont remove streams from the pool anymore
     pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
-    pub(crate) tasks: ChannelTasks,
-    // order is important, runtime MUST be dropped after tasks
+    // order is important, runtime MUST be dropped after network handler
     pub(crate) runtime: Arc<Runtime>,
 }
 
@@ -108,8 +103,6 @@ impl ShamirMpcNet {
             .enable_all()
             .build()?;
         let mut net_handler = runtime.block_on(MpcNetworkHandler::establish(config))?;
-
-        let mut tasks = ChannelTasks::new(runtime.handle().clone());
         let mut channels = HashMap::with_capacity(num_parties - 1);
 
         for other_id in 0..num_parties {
@@ -117,7 +110,7 @@ impl ShamirMpcNet {
                 let chan = net_handler
                     .get_byte_channel(&other_id)
                     .ok_or_else(|| eyre!("no channel found for party id={}", other_id))?;
-                channels.insert(other_id, tasks.spawn(chan));
+                channels.insert(other_id, net_handler.spawn(chan));
             }
         }
 
@@ -126,7 +119,6 @@ impl ShamirMpcNet {
             num_parties,
             net_handler: Arc::new(Mutex::new(net_handler)),
             channels,
-            tasks,
             runtime: Arc::new(runtime),
         })
     }
@@ -269,28 +261,24 @@ impl ShamirNetwork for ShamirMpcNet {
     fn fork(&mut self) -> std::io::Result<Self> {
         let id = self.id;
         let num_parties = self.num_parties;
-        let net_handler = Arc::clone(&self.net_handler);
-        let runtime = Arc::clone(&self.runtime);
-        let mut tasks = self.tasks.clone();
+        let mut net_handler = self.net_handler.lock().unwrap();
+
         let mut channels = HashMap::with_capacity(num_parties - 1);
         for other_id in 0..num_parties {
             if other_id != id {
                 let chan = net_handler
-                    .lock()
-                    .expect("fork")
                     .get_byte_channel(&other_id)
                     .expect("to find channel");
-                channels.insert(other_id, tasks.spawn(chan));
+                channels.insert(other_id, net_handler.spawn(chan));
             }
         }
 
         Ok(Self {
             id,
             num_parties,
-            net_handler,
+            net_handler: self.net_handler.clone(),
             channels,
-            tasks,
-            runtime,
+            runtime: self.runtime.clone(),
         })
     }
 
