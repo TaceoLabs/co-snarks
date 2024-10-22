@@ -59,7 +59,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         }
     }
 
-    // Consumes the Garbler and returns the delta.
+    /// Consumes the Garbler and returns the delta.
     fn into_delta(self) -> WireMod2 {
         self.delta
     }
@@ -92,6 +92,21 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
             }
         }
         Ok(())
+    }
+
+    /// Outputs the values to the evaluator.
+    fn output_evaluator(&mut self, x: &[WireMod2]) -> Result<(), GarblerError> {
+        self.outputs(x)?;
+        Ok(())
+    }
+
+    /// Outputs the value to all parties
+    fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, GarblerError> {
+        // Garbler's to evaluator
+        self.output_evaluator(x)?;
+
+        // Evaluator to garbler
+        todo!()
     }
 
     /// As ID2, send a hash of the sended data to the evaluator.

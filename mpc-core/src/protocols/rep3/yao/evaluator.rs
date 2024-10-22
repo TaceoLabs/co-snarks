@@ -62,6 +62,33 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
         Ok(v)
     }
 
+    /// Outputs the values to the evaluator.
+    fn output_evaluator(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, EvaluatorError> {
+        let result = self.outputs(x)?;
+        match result {
+            Some(outputs) => {
+                let mut res = Vec::with_capacity(outputs.len());
+                for val in outputs {
+                    if val >= 2 {
+                        return Err(EvaluatorError::DecodingFailed);
+                    }
+                    res.push(val == 1);
+                }
+                Ok(res)
+            }
+            None => Err(EvaluatorError::DecodingFailed),
+        }
+    }
+
+    /// Outputs the value to all parties
+    fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, EvaluatorError> {
+        // Evaluator to garbler
+        todo!();
+
+        // Garbler's to evaluator
+        self.output_evaluator(x)
+    }
+
     // Receive a hash of ID2 (the second garbler) to verify the garbled circuit.
     fn receive_hash(&mut self) -> Result<(), EvaluatorError> {
         let data: Vec<u8> = self.io_context.network.recv(PartyID::ID2)?;
