@@ -11,14 +11,11 @@ use crate::protocols::rep3::{
     IoResult,
 };
 use fancy_garbling::{
-    errors::EvaluatorError,
-    hash_wires,
-    util::{output_tweak, tweak2},
-    BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2,
+    errors::EvaluatorError, util::output_tweak, BinaryBundle, Fancy, FancyBinary, WireLabel,
+    WireMod2,
 };
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
-use subtle::ConditionallySelectable;
 
 /// This struct implements the evaluator for replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
 pub struct Rep3Evaluator<'a, N: Rep3Network> {
@@ -203,23 +200,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
         gate1: &Block,
     ) -> WireMod2 {
         let gate_num = self.current_gate();
-        let g = tweak2(gate_num as u64, 0);
-
-        let [hash_a, hash_b] = hash_wires([a, b], g);
-
-        // garbler's half gate
-        let l = WireMod2::from_block(
-            Block::conditional_select(&hash_a, &(hash_a ^ *gate0), (a.color() as u8).into()),
-            2,
-        );
-
-        // evaluator's half gate
-        let r = WireMod2::from_block(
-            Block::conditional_select(&hash_b, &(hash_b ^ *gate1), (b.color() as u8).into()),
-            2,
-        );
-
-        l.plus_mov(&r.plus_mov(&a.cmul(b.color())))
+        GCUtils::evaluate_and_gate(gate_num, a, b, gate0, gate1)
     }
 }
 

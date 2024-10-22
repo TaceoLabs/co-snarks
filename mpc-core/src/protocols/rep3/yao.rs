@@ -12,11 +12,12 @@ use super::{
 };
 use crate::protocols::rep3::id::PartyID;
 use ark_ff::{PrimeField, Zero};
-use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
+use fancy_garbling::{hash_wires, util::tweak2, BinaryBundle, WireLabel, WireMod2};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use scuttlebutt::Block;
+use subtle::ConditionallySelectable;
 
 /// A structure that contains both the garbler and the evaluators wires
 pub struct GCInputs<F> {
@@ -32,6 +33,76 @@ pub struct GCInputs<F> {
 pub struct GCUtils {}
 
 impl GCUtils {
+    pub(crate) fn evaluate_and_gate(
+        gate_num: usize,
+        a: &WireMod2,
+        b: &WireMod2,
+        gate0: &Block,
+        gate1: &Block,
+    ) -> WireMod2 {
+        let g = tweak2(gate_num as u64, 0);
+
+        let [hash_a, hash_b] = hash_wires([a, b], g);
+
+        // garbler's half gate
+        let l = WireMod2::from_block(
+            Block::conditional_select(&hash_a, &(hash_a ^ *gate0), (a.color() as u8).into()),
+            2,
+        );
+
+        // evaluator's half gate
+        let r = WireMod2::from_block(
+            Block::conditional_select(&hash_b, &(hash_b ^ *gate1), (b.color() as u8).into()),
+            2,
+        );
+
+        l.plus_mov(&r.plus_mov(&a.cmul(b.color())))
+    }
+
+    pub(crate) fn garble_and_gate(
+        gate_num: usize,
+        a: &WireMod2,
+        b: &WireMod2,
+        delta: &WireMod2,
+    ) -> (Block, Block, WireMod2) {
+        let q = 2;
+        let d = delta;
+
+        let r = b.color(); // secret value known only to the garbler (ev knows r+b)
+
+        let g = tweak2(gate_num as u64, 0);
+
+        // X = H(A+aD) + arD such that a + A.color == 0
+        let alpha = a.color(); // alpha = -A.color
+        let x1 = a.plus(&d.cmul(alpha));
+
+        // Y = H(B + bD) + (b + r)A such that b + B.color == 0
+        let beta = (q - b.color()) % q;
+        let y1 = b.plus(&d.cmul(beta));
+
+        let ad = a.plus(d);
+        let bd = b.plus(d);
+
+        // idx is always boolean for binary gates, so it can be represented as a `u8`
+        let a_selector = (a.color() as u8).into();
+        let b_selector = (b.color() as u8).into();
+
+        let b = WireMod2::conditional_select(&bd, b, b_selector);
+        let new_a = WireMod2::conditional_select(&ad, a, a_selector);
+        let idx = u8::conditional_select(&(r as u8), &0u8, a_selector);
+
+        let [hash_a, hash_b, hash_x, hash_y] = hash_wires([&new_a, &b, &x1, &y1], g);
+
+        let x = WireMod2::hash_to_mod(hash_x, q).plus_mov(&d.cmul(alpha * r % q));
+        let y = WireMod2::hash_to_mod(hash_y, q);
+
+        let gate0 =
+            hash_a ^ Block::conditional_select(&x.as_block(), &x.plus(d).as_block(), idx.into());
+        let gate1 = hash_b ^ y.plus(a).as_block();
+
+        (gate0, gate1, x.plus_mov(&y))
+    }
+
     pub(crate) fn garbled_circuits_error<G, T>(input: Result<T, G>) -> IoResult<T> {
         input.or(Err(std::io::Error::new(
             std::io::ErrorKind::Other,

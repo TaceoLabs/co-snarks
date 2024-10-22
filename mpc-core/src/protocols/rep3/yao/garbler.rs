@@ -16,15 +16,11 @@ use crate::{
 use ark_ff::PrimeField;
 use core::panic;
 use fancy_garbling::{
-    errors::GarblerError,
-    hash_wires,
-    util::{output_tweak, tweak2},
-    BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2,
+    errors::GarblerError, util::output_tweak, BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2,
 };
 use rand::SeedableRng;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
-use subtle::ConditionallySelectable;
 
 /// This struct implements the garbler for replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
 pub struct Rep3Garbler<'a, N: Rep3Network> {
@@ -213,43 +209,8 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         b: &WireMod2,
         delta: &WireMod2,
     ) -> (Block, Block, WireMod2) {
-        let q = 2;
-        let d = delta;
         let gate_num = self.current_gate();
-
-        let r = b.color(); // secret value known only to the garbler (ev knows r+b)
-
-        let g = tweak2(gate_num as u64, 0);
-
-        // X = H(A+aD) + arD such that a + A.color == 0
-        let alpha = a.color(); // alpha = -A.color
-        let x1 = a.plus(&d.cmul(alpha));
-
-        // Y = H(B + bD) + (b + r)A such that b + B.color == 0
-        let beta = (q - b.color()) % q;
-        let y1 = b.plus(&d.cmul(beta));
-
-        let ad = a.plus(d);
-        let bd = b.plus(d);
-
-        // idx is always boolean for binary gates, so it can be represented as a `u8`
-        let a_selector = (a.color() as u8).into();
-        let b_selector = (b.color() as u8).into();
-
-        let b = WireMod2::conditional_select(&bd, b, b_selector);
-        let new_a = WireMod2::conditional_select(&ad, a, a_selector);
-        let idx = u8::conditional_select(&(r as u8), &0u8, a_selector);
-
-        let [hash_a, hash_b, hash_x, hash_y] = hash_wires([&new_a, &b, &x1, &y1], g);
-
-        let x = WireMod2::hash_to_mod(hash_x, q).plus_mov(&d.cmul(alpha * r % q));
-        let y = WireMod2::hash_to_mod(hash_y, q);
-
-        let gate0 =
-            hash_a ^ Block::conditional_select(&x.as_block(), &x.plus(d).as_block(), idx.into());
-        let gate1 = hash_b ^ y.plus(a).as_block();
-
-        (gate0, gate1, x.plus_mov(&y))
+        GCUtils::garble_and_gate(gate_num, a, b, delta)
     }
 }
 
