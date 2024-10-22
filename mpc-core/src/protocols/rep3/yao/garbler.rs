@@ -78,6 +78,56 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         current
     }
 
+    /// Outputs the values to the evaluator.
+    fn output_evaluator(&mut self, x: &[WireMod2]) -> Result<(), GarblerError> {
+        self.outputs(x)?;
+        Ok(())
+    }
+
+    /// Outputs the values to the garbler.
+    fn output_garbler(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, GarblerError> {
+        let blocks = self.read_blocks(x.len())?;
+
+        let mut result = Vec::with_capacity(x.len());
+        for (block, wire) in blocks.into_iter().zip(x.iter()) {
+            if block == wire.as_block() {
+                result.push(true);
+            } else if block == wire.plus(&self.delta).as_block() {
+                result.push(false);
+            } else {
+                return Err(GarblerError::CommunicationError(
+                    "Invalid block received".to_string(),
+                ));
+            }
+        }
+        Ok(result)
+    }
+
+    /// Outputs the value to all parties
+    fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, GarblerError> {
+        // Garbler's to evaluator
+        self.output_evaluator(x)?;
+
+        // Check consistency with the second garbled circuit before receiving the result
+        self.send_hash()?;
+
+        // Evaluator to garbler
+        self.output_garbler(x)
+    }
+
+    /// As ID2, send a hash of the sended data to the evaluator.
+    fn send_hash(&mut self) -> Result<(), GarblerError> {
+        if self.io_context.id == PartyID::ID2 {
+            let mut hash = Sha3_256::default();
+            std::mem::swap(&mut hash, &mut self.hash);
+            let digest = hash.finalize();
+            self.io_context
+                .network
+                .send(PartyID::ID0, digest.as_slice())?;
+        }
+        Ok(())
+    }
+
     /// Send a block over the network to the evaluator.
     fn send_block(&mut self, block: &Block) -> Result<(), GarblerError> {
         match self.io_context.id {
@@ -94,32 +144,25 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         Ok(())
     }
 
-    /// Outputs the values to the evaluator.
-    fn output_evaluator(&mut self, x: &[WireMod2]) -> Result<(), GarblerError> {
-        self.outputs(x)?;
-        Ok(())
-    }
-
-    /// Outputs the value to all parties
-    fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, GarblerError> {
-        // Garbler's to evaluator
-        self.output_evaluator(x)?;
-
-        // Evaluator to garbler
-        todo!()
-    }
-
-    /// As ID2, send a hash of the sended data to the evaluator.
-    fn send_hash(&mut self) -> Result<(), GarblerError> {
-        if self.io_context.id == PartyID::ID2 {
-            let mut hash = Sha3_256::default();
-            std::mem::swap(&mut hash, &mut self.hash);
-            let digest = hash.finalize();
-            self.io_context
-                .network
-                .send(PartyID::ID0, digest.as_slice())?;
+    fn receive_block_from(&mut self, id: PartyID) -> Result<Block, GarblerError> {
+        let data: Vec<u8> = self.io_context.network.recv(id)?;
+        if data.len() != 16 {
+            return Err(GarblerError::CommunicationError(
+                "Invalid data length received".to_string(),
+            ));
         }
-        Ok(())
+        let mut v = Block::default();
+        v.as_mut().copy_from_slice(&data);
+
+        Ok(v)
+    }
+
+    /// Read `n` `Block`s from the channel.
+    #[inline(always)]
+    fn read_blocks(&mut self, n: usize) -> Result<Vec<Block>, GarblerError> {
+        (0..n)
+            .map(|_| self.receive_block_from(PartyID::ID0))
+            .collect()
     }
 
     /// Send a wire over the established channel.

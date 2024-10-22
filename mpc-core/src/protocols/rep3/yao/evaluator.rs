@@ -51,17 +51,6 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
         current
     }
 
-    fn receive_block_from(&mut self, id: PartyID) -> Result<Block, EvaluatorError> {
-        let data: Vec<u8> = self.io_context.network.recv(id)?;
-        if data.len() != 16 {
-            return Err(EvaluatorError::DecodingFailed);
-        }
-        let mut v = Block::default();
-        v.as_mut().copy_from_slice(&data);
-
-        Ok(v)
-    }
-
     /// Outputs the values to the evaluator.
     fn output_evaluator(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, EvaluatorError> {
         let result = self.outputs(x)?;
@@ -80,13 +69,27 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
         }
     }
 
+    /// Outputs the values to the garbler.
+    fn output_garbler(&mut self, x: &[WireMod2]) -> Result<(), EvaluatorError> {
+        for val in x {
+            let block = val.as_block();
+            self.send_block(&block)?;
+        }
+        Ok(())
+    }
+
     /// Outputs the value to all parties
     fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, EvaluatorError> {
-        // Evaluator to garbler
-        todo!();
-
         // Garbler's to evaluator
-        self.output_evaluator(x)
+        let res = self.output_evaluator(x)?;
+
+        // Check consistency with the second garbled circuit before releasing the result
+        self.receive_hash()?;
+
+        // Evaluator to garbler
+        self.output_garbler(x)?;
+
+        Ok(res)
     }
 
     // Receive a hash of ID2 (the second garbler) to verify the garbled circuit.
@@ -102,6 +105,27 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
         }
 
         Ok(())
+    }
+
+    /// Send a block over the network to the garblers.
+    fn send_block(&mut self, block: &Block) -> Result<(), EvaluatorError> {
+        self.io_context.network.send(PartyID::ID1, block.as_ref())?;
+        self.io_context.network.send(PartyID::ID2, block.as_ref())?;
+        Ok(())
+    }
+
+    /// Receive a block from a specific party.
+    fn receive_block_from(&mut self, id: PartyID) -> Result<Block, EvaluatorError> {
+        let data: Vec<u8> = self.io_context.network.recv(id)?;
+        if data.len() != 16 {
+            return Err(EvaluatorError::CommunicationError(
+                "Invalid data length received".to_string(),
+            ));
+        }
+        let mut v = Block::default();
+        v.as_mut().copy_from_slice(&data);
+
+        Ok(v)
     }
 
     /// Send a block over the network to the evaluator.
