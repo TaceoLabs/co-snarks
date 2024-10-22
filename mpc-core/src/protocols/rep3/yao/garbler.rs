@@ -30,6 +30,13 @@ pub(crate) struct Rep3Garbler<'a, N: Rep3Network> {
 impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     /// Create a new garbler.
     pub(crate) fn new(io_context: &'a mut IoContext<N>) -> Self {
+        let mut res = Self::new_with_delta(io_context, WireMod2::default());
+        res.delta = WireMod2::rand_delta(&mut res.rng, 2);
+        res
+    }
+
+    /// Create a new garbler with existing delta.
+    pub(crate) fn new_with_delta(io_context: &'a mut IoContext<N>, delta: WireMod2) -> Self {
         let id = io_context.id;
         let seed = match id {
             PartyID::ID0 => {
@@ -38,16 +45,21 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
             PartyID::ID1 => io_context.rngs.rand.random_seed1(),
             PartyID::ID2 => io_context.rngs.rand.random_seed2(),
         };
-        let mut rng = RngType::from_seed(seed);
+        let rng = RngType::from_seed(seed);
 
         Self {
             io_context,
-            delta: WireMod2::rand_delta(&mut rng, 2),
+            delta,
             current_output: 0,
             current_gate: 0,
             rng,
             hash: Sha3_256::default(),
         }
+    }
+
+    // Consumes the Garbler and returns the delta.
+    fn into_delta(self) -> WireMod2 {
+        self.delta
     }
 
     /// The current non-free gate index of the garbling computation
