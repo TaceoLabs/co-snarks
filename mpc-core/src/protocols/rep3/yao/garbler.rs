@@ -17,7 +17,7 @@ use fancy_garbling::{
     util::{output_tweak, tweak2},
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2,
 };
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::SeedableRng;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
@@ -150,10 +150,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     fn receive_block_from(&mut self, id: PartyID) -> IoResult<Block> {
-        Ok(GCUtils::receive_block_from(
-            &mut self.io_context.network,
-            id,
-        )?)
+        GCUtils::receive_block_from(&mut self.io_context.network, id)
     }
 
     /// Read `n` `Block`s from the channel.

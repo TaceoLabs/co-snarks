@@ -103,7 +103,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
         Ok(res)
     }
 
-    // Receive a hash of ID2 (the second garbler) to verify the garbled circuit.
+    /// Receive a hash of ID2 (the second garbler) to verify the garbled circuit.
     pub fn receive_hash(&mut self) -> IoResult<()> {
         let data: Vec<u8> = self.io_context.network.recv(PartyID::ID2)?;
         let mut hash = Sha3_256::default();
@@ -128,10 +128,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
 
     /// Receive a block from a specific party.
     fn receive_block_from(&mut self, id: PartyID) -> IoResult<Block> {
-        Ok(GCUtils::receive_block_from(
-            &mut self.io_context.network,
-            id,
-        )?)
+        GCUtils::receive_block_from(&mut self.io_context.network, id)
     }
 
     /// Send a block over the network to the evaluator.

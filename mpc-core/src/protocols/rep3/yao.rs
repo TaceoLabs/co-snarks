@@ -45,6 +45,7 @@ impl GCUtils {
         Ok(v)
     }
 
+    #[cfg(test)]
     fn u16_bits_to_field<F: PrimeField>(bits: Vec<u16>) -> eyre::Result<F> {
         let mut res = BigUint::zero();
         for bit in bits.iter().rev() {
