@@ -358,3 +358,22 @@ pub fn y2b<F: PrimeField, N: Rep3Network>(
 
     Ok(converted)
 }
+
+/// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3. .
+pub fn a2y2b<F: PrimeField, N: Rep3Network>(
+    x: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3BigUintShare<F>> {
+    todo!()
+}
+
+/// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementations goes through the yao protocol abd currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
+
+// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
+// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
+pub fn b2y2a<F: PrimeField, N: Rep3Network>(
+    x: &Rep3BigUintShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3PrimeFieldShare<F>> {
+    todo!()
+}
