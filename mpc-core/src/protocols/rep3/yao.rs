@@ -45,6 +45,11 @@ impl GCUtils {
         Ok(v)
     }
 
+    /// Samples a random delta
+    pub fn random_delta<R: Rng + CryptoRng>(rng: &mut R) -> WireMod2 {
+        WireMod2::rand_delta(rng, 2)
+    }
+
     #[cfg(test)]
     fn u16_bits_to_field<F: PrimeField>(bits: Vec<u16>) -> IoResult<F> {
         let mut res = BigUint::zero();

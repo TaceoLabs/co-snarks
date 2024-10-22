@@ -685,7 +685,6 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        // Both Garblers
         for (net, tx, x) in izip!(
             test_network.get_party_networks().into_iter(),
             [tx1, tx2, tx3],
@@ -721,6 +720,45 @@ mod field_share {
         assert_eq!(result1, x);
         assert_eq!(result2, x);
         assert_eq!(result3, x);
+    }
+
+    #[test]
+    fn rep3_y2a() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let delta = GCUtils::random_delta(&mut rng);
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let x_shares = GCUtils::encode_field(x, &mut rng, delta);
+        let x_shares = [
+            x_shares.evaluator_wires,
+            x_shares.garbler_wires.to_owned(),
+            x_shares.garbler_wires,
+        ];
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                let mut rng = thread_rng();
+                let converted =
+                    conversion::y2a::<ark_bn254::Fr, _, _>(x, Some(delta), &mut rep3, &mut rng)
+                        .unwrap();
+                tx.send(converted).unwrap();
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_element(result1, result2, result3);
+        assert_eq!(is_result, x);
     }
 }
 

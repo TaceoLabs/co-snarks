@@ -2,7 +2,7 @@
 //!
 //! This module contains implementations of rep3 rngs
 
-use super::id::PartyID;
+use super::{id::PartyID, yao::GCUtils};
 use crate::RngType;
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
@@ -69,8 +69,8 @@ impl Rep3CorrelatedRng {
     pub fn generate_random_garbler_delta(&mut self, id: PartyID) -> Option<WireMod2> {
         match id {
             PartyID::ID0 => None,
-            PartyID::ID1 => Some(WireMod2::rand_delta(&mut self.rand.rng1, 2)),
-            PartyID::ID2 => Some(WireMod2::rand_delta(&mut self.rand.rng2, 2)),
+            PartyID::ID1 => Some(GCUtils::random_delta(&mut self.rand.rng1)),
+            PartyID::ID2 => Some(GCUtils::random_delta(&mut self.rand.rng2)),
         }
     }
 }
