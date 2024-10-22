@@ -68,7 +68,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
         let mut hash = Sha3_256::default();
         std::mem::swap(&mut hash, &mut self.hash);
         let digest = hash.finalize();
-        if &data != digest.as_slice() {
+        if data != digest.as_slice() {
             return Err(EvaluatorError::CommunicationError(
                 "Inconsistent Garbled Circuits: Hashes do not match!".to_string(),
             ));
@@ -80,7 +80,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     /// Send a block over the network to the evaluator.
     fn receive_block(&mut self) -> Result<Block, EvaluatorError> {
         let block = self.receive_block_from(PartyID::ID1)?;
-        self.hash.update(block.as_ref());
+        self.hash.update(block.as_ref()); // "Receive" from ID2
 
         Ok(block)
     }

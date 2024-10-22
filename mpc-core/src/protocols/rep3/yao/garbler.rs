@@ -1,5 +1,7 @@
 // This file is heavily inspired by https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs
 
+use core::panic;
+
 use crate::{
     protocols::rep3::{
         id::PartyID,
@@ -78,10 +80,16 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
 
     /// Send a block over the network to the evaluator.
     fn send_block(&mut self, block: &Block) -> Result<(), GarblerError> {
-        if self.io_context.id == PartyID::ID1 {
-            self.io_context.network.send(PartyID::ID0, block.as_ref())?;
-        } else {
-            self.hash.update(block.as_ref());
+        match self.io_context.id {
+            PartyID::ID0 => {
+                panic!("Garbler should not be PartyID::ID0");
+            }
+            PartyID::ID1 => {
+                self.io_context.network.send(PartyID::ID0, block.as_ref())?;
+            }
+            PartyID::ID2 => {
+                self.hash.update(block.as_ref());
+            }
         }
         Ok(())
     }
