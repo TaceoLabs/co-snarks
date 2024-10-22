@@ -64,19 +64,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
 
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
     pub fn encode_field<F: PrimeField>(&mut self, field: F) -> GCInputs<WireMod2> {
-        let bits = GCUtils::field_to_bits_as_u16(field);
-        let mut garbler_wires = Vec::with_capacity(bits.len());
-        let mut evaluator_wires = Vec::with_capacity(bits.len());
-        for bit in bits {
-            let (mine, theirs) = self.encode_wire(bit);
-            garbler_wires.push(mine);
-            evaluator_wires.push(theirs);
-        }
-        GCInputs {
-            garbler_wires: BinaryBundle::new(garbler_wires),
-            evaluator_wires: BinaryBundle::new(evaluator_wires),
-            delta: self.delta,
-        }
+        GCUtils::encode_field(field, &mut self.rng, self.delta)
     }
 
     /// Consumes the Garbler and returns the delta.
@@ -201,9 +189,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
 
     /// Encode a wire, producing the zero wire as well as the encoded value.
     pub fn encode_wire(&mut self, val: u16) -> (WireMod2, WireMod2) {
-        let zero = WireMod2::rand(&mut self.rng, 2);
-        let enc = zero.plus(&self.delta.cmul(val));
-        (zero, enc)
+        GCUtils::encode_wire(&mut self.rng, &self.delta, val)
     }
 
     /// Garbles an 'and' gate given two input wires and the delta.
