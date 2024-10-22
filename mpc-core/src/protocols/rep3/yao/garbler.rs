@@ -153,16 +153,10 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     fn receive_block_from(&mut self, id: PartyID) -> Result<Block, GarblerError> {
-        let data: Vec<u8> = self.io_context.network.recv(id)?;
-        if data.len() != 16 {
-            return Err(GarblerError::CommunicationError(
-                "Invalid data length received".to_string(),
-            ));
-        }
-        let mut v = Block::default();
-        v.as_mut().copy_from_slice(&data);
-
-        Ok(v)
+        Ok(GCUtils::receive_block_from(
+            &mut self.io_context.network,
+            id,
+        )?)
     }
 
     /// Read `n` `Block`s from the channel.

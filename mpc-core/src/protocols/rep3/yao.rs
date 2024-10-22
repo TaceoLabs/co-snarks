@@ -6,12 +6,12 @@ use super::{
     network::{IoContext, Rep3Network},
     IoResult, Rep3PrimeFieldShare,
 };
-use crate::protocols::rep3::id::PartyID;
+use crate::{protocols::rep3::id::PartyID, RngType};
 use ark_ff::{PrimeField, Zero};
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::Itertools;
 use num_bigint::BigUint;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, SeedableRng};
 use scuttlebutt::Block;
 
 /// A structure that contains both the garbler and the evaluators
@@ -24,6 +24,20 @@ pub struct GCInputs<F> {
 pub struct GCUtils {}
 
 impl GCUtils {
+    fn receive_block_from<N: Rep3Network>(network: &mut N, id: PartyID) -> IoResult<Block> {
+        let data: Vec<u8> = network.recv(id)?;
+        if data.len() != 16 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "To little elements received",
+            ));
+        }
+        let mut v = Block::default();
+        v.as_mut().copy_from_slice(&data);
+
+        Ok(v)
+    }
+
     fn u16_bits_to_field<F: PrimeField>(bits: Vec<u16>) -> eyre::Result<F> {
         let mut res = BigUint::zero();
         for bit in bits.iter().rev() {
@@ -134,12 +148,29 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network>(
     let n_bits = F::MODULUS_BIT_SIZE as usize;
 
     // x1 is known by both garblers, we can do a shortcut
-    let mut x1_x = (0..n_bits)
+    let mut x1 = (0..n_bits)
         .map(|_| WireMod2::from_block(io_context.rngs.generate_shared::<Block>(id), 2))
         .collect_vec();
 
-    match id {
-        PartyID::ID0 => {}
+    let (x0, x2) = match id {
+        PartyID::ID0 => {
+            // Receive x0
+            let mut x0 = Vec::with_capacity(n_bits);
+            for _ in 0..n_bits {
+                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID1)?;
+                x0.push(WireMod2::from_block(block, 2));
+            }
+            let x0 = BinaryBundle::new(x0);
+
+            // Receive x2
+            let mut x2 = Vec::with_capacity(n_bits);
+            for _ in 0..n_bits {
+                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
+                x2.push(WireMod2::from_block(block, 2));
+            }
+            let x2 = BinaryBundle::new(x2);
+            (x0, x2)
+        }
         PartyID::ID1 => {
             let delta = match delta {
                 Some(delta) => delta,
@@ -151,11 +182,36 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network>(
 
             // Modify x1
             let x1_bits = GCUtils::field_to_bits_as_u16(x.a);
-            x1_x.iter_mut().zip(x1_bits).for_each(|(x, bit)| {
+            x1.iter_mut().zip(x1_bits).for_each(|(x, bit)| {
                 x.plus_eq(&delta.cmul(bit));
             });
 
             // Input x0
+            let mut rng = RngType::from_seed(io_context.rngs.rand.random_seed1());
+            let x0 = GCUtils::encode_field(x.b, &mut rng, delta);
+
+            // Send x0 to the other parties
+            for val in x0.garbler_wires.iter() {
+                io_context
+                    .network
+                    .send(PartyID::ID2, val.as_block().as_ref())?;
+            }
+            for val in x0.evaluator_wires.iter() {
+                io_context
+                    .network
+                    .send(PartyID::ID0, val.as_block().as_ref())?;
+            }
+
+            let x0 = x0.garbler_wires;
+
+            // Receive x2
+            let mut x2 = Vec::with_capacity(n_bits);
+            for _ in 0..n_bits {
+                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
+                x2.push(WireMod2::from_block(block, 2));
+            }
+            let x2 = BinaryBundle::new(x2);
+            (x0, x2)
         }
         PartyID::ID2 => {
             let delta = match delta {
@@ -167,17 +223,40 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network>(
             };
 
             // Modify x1
-            let x1_bits = GCUtils::field_to_bits_as_u16(x.a);
-            x1_x.iter_mut().zip(x1_bits).for_each(|(x, bit)| {
+            let x1_bits = GCUtils::field_to_bits_as_u16(x.b);
+            x1.iter_mut().zip(x1_bits).for_each(|(x, bit)| {
                 x.plus_eq(&delta.cmul(bit));
             });
 
             // Input x2
-            todo!()
+            let mut rng = RngType::from_seed(io_context.rngs.rand.random_seed2());
+            let x2 = GCUtils::encode_field(x.a, &mut rng, delta);
+
+            // Send x2 to the other parties
+            for val in x2.garbler_wires.iter() {
+                io_context
+                    .network
+                    .send(PartyID::ID1, val.as_block().as_ref())?;
+            }
+            for val in x2.evaluator_wires.iter() {
+                io_context
+                    .network
+                    .send(PartyID::ID0, val.as_block().as_ref())?;
+            }
+
+            let x2 = x2.garbler_wires;
+
+            // Receive x0
+            let mut x0 = Vec::with_capacity(n_bits);
+            for _ in 0..n_bits {
+                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID1)?;
+                x0.push(WireMod2::from_block(block, 2));
+            }
+            let x0 = BinaryBundle::new(x0);
+            (x0, x2)
         }
-    }
+    };
+    let x1 = BinaryBundle::new(x1);
 
-    let x1 = BinaryBundle::new(x1_x);
-
-    todo!()
+    Ok([x0, x1, x2])
 }

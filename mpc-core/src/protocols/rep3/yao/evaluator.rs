@@ -14,6 +14,8 @@ use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
 
+use super::GCUtils;
+
 pub struct Rep3Evaluator<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
     current_output: usize,
@@ -116,16 +118,10 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
 
     /// Receive a block from a specific party.
     fn receive_block_from(&mut self, id: PartyID) -> Result<Block, EvaluatorError> {
-        let data: Vec<u8> = self.io_context.network.recv(id)?;
-        if data.len() != 16 {
-            return Err(EvaluatorError::CommunicationError(
-                "Invalid data length received".to_string(),
-            ));
-        }
-        let mut v = Block::default();
-        v.as_mut().copy_from_slice(&data);
-
-        Ok(v)
+        Ok(GCUtils::receive_block_from(
+            &mut self.io_context.network,
+            id,
+        )?)
     }
 
     /// Send a block over the network to the evaluator.
