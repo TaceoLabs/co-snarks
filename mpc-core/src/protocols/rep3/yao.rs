@@ -21,11 +21,15 @@ use vectoreyes::SimdBase;
 
 /// A structure that contains both the garbler and the evaluators wires
 pub struct GCInputs<F> {
+    /// The wires of the garbler. These represent random keys x_0
     pub garbler_wires: BinaryBundle<F>,
+    /// The wires of the evaluator. These represent the keys x_c = x_0 xor delta * val
     pub evaluator_wires: BinaryBundle<F>,
+    /// The delta used for encoding known to the garbler
     pub delta: F,
 }
 
+/// This struct contains some useful utility functions for garbled circuits.
 pub struct GCUtils {}
 
 impl GCUtils {
@@ -112,6 +116,7 @@ impl GCUtils {
         Ok(F::from(res))
     }
 
+    /// Converts bits into a field element
     pub fn bits_to_field<F: PrimeField>(bits: Vec<bool>) -> IoResult<F> {
         let mut res = BigUint::zero();
         for bit in bits.iter().rev() {
