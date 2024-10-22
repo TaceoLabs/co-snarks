@@ -235,7 +235,8 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>
     let id = io_context.id;
     let n_bits = F::MODULUS_BIT_SIZE as usize;
 
-    // x1 is known by both garblers, we can do a shortcut
+    // x1 is known by both garblers, we can do a shortcut to share it without communication.
+    // See https://eprint.iacr.org/2019/1168.pdf, p18, last paragraph of "Joint Yao Input".
     let mut x1 = (0..n_bits)
         .map(|_| WireMod2::from_block(io_context.rngs.generate_shared::<Block>(id), 2))
         .collect_vec();
