@@ -108,11 +108,11 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         let blocks = self.read_blocks(x.len())?;
 
         let mut result = Vec::with_capacity(x.len());
-        for (block, wire) in blocks.into_iter().zip(x.iter()) {
-            if block == wire.as_block() {
-                result.push(true);
-            } else if block == wire.plus(&self.delta).as_block() {
+        for (block, zero) in blocks.into_iter().zip(x.iter()) {
+            if block == zero.as_block() {
                 result.push(false);
+            } else if block == zero.plus(&self.delta).as_block() {
+                result.push(true);
             } else {
                 return Err(GarblerError::CommunicationError(
                     "Invalid block received".to_string(),
