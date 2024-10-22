@@ -30,7 +30,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 rayon = { workspace = true }
 scuttlebutt = { git = "https://github.com/GaloisInc/swanky", rev = "586a6ba1efdb531542668d6b0afe5cacc302d434" }
-subtle = "2.6"
+subtle = { workspace = true }
 serde = { workspace = true }
 sha3 = { workspace = true }
 tokio = { workspace = true }
