@@ -147,10 +147,11 @@ impl GCUtils {
 }
 
 /// Transforms an arithmetically shared input [x] = (x_1, x_2, x_3) into three yao shares [x_1]^Y, [x_2]^Y, [x_3]^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network>(
+pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
     io_context: &mut IoContext<N>,
+    rng: &mut R,
 ) -> IoResult<[BinaryBundle<WireMod2>; 3]> {
     let id = io_context.id;
     let n_bits = F::MODULUS_BIT_SIZE as usize;
@@ -195,8 +196,7 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network>(
             });
 
             // Input x0
-            let mut rng = RngType::from_seed(io_context.rngs.rand.random_seed1());
-            let x0 = GCUtils::encode_field(x.b, &mut rng, delta);
+            let x0 = GCUtils::encode_field(x.b, rng, delta);
 
             // Send x0 to the other parties
             for val in x0.garbler_wires.iter() {
@@ -237,8 +237,7 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network>(
             });
 
             // Input x2
-            let mut rng = RngType::from_seed(io_context.rngs.rand.random_seed2());
-            let x2 = GCUtils::encode_field(x.a, &mut rng, delta);
+            let x2 = GCUtils::encode_field(x.a, rng, delta);
 
             // Send x2 to the other parties
             for val in x2.garbler_wires.iter() {
@@ -270,10 +269,11 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network>(
 }
 
 /// Transforms an arithmetically shared input [x] = (x_1, x_2, x_3) into two yao shares [x_1]^Y, [x_2 + x_3]^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network>(
+pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
     io_context: &mut IoContext<N>,
+    rng: &mut R,
 ) -> IoResult<[BinaryBundle<WireMod2>; 2]> {
     let id = io_context.id;
     let n_bits = F::MODULUS_BIT_SIZE as usize;
@@ -307,9 +307,8 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network>(
             };
 
             // Input x01
-            let mut rng = RngType::from_seed(io_context.rngs.rand.random_seed1());
             let sum = x.a + x.b;
-            let x01 = GCUtils::encode_field(sum, &mut rng, delta);
+            let x01 = GCUtils::encode_field(sum, rng, delta);
 
             // Send x01 to the other parties
             for val in x01.garbler_wires.iter() {
@@ -344,8 +343,7 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network>(
             };
 
             // Input x2
-            let mut rng = RngType::from_seed(io_context.rngs.rand.random_seed2());
-            let x2 = GCUtils::encode_field(x.a, &mut rng, delta);
+            let x2 = GCUtils::encode_field(x.a, rng, delta);
 
             // Send x2 to the other parties
             for val in x2.garbler_wires.iter() {
@@ -373,4 +371,60 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network>(
     };
 
     Ok([x01, x2])
+}
+
+pub fn input_field_party2<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
+    x: Option<F>,
+    delta: Option<WireMod2>,
+    io_context: &mut IoContext<N>,
+    rng: &mut R,
+) -> IoResult<BinaryBundle<WireMod2>> {
+    let id = io_context.id;
+    let n_bits = F::MODULUS_BIT_SIZE as usize;
+
+    let x = match id {
+        PartyID::ID0 | PartyID::ID1 => {
+            // Receive x
+            let mut x = Vec::with_capacity(n_bits);
+            for _ in 0..n_bits {
+                let block = GCUtils::receive_block_from(&mut io_context.network, PartyID::ID2)?;
+                x.push(WireMod2::from_block(block, 2));
+            }
+            BinaryBundle::new(x)
+        }
+        PartyID::ID2 => {
+            let delta = match delta {
+                Some(delta) => delta,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "No delta provided",
+                ))?,
+            };
+
+            let x = match x {
+                Some(x) => x,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "No input provided",
+                ))?,
+            };
+
+            let x = GCUtils::encode_field(x, rng, delta);
+
+            // Send x to the other parties
+            for val in x.garbler_wires.iter() {
+                io_context
+                    .network
+                    .send(PartyID::ID2, val.as_block().as_ref())?;
+            }
+            for val in x.evaluator_wires.iter() {
+                io_context
+                    .network
+                    .send(PartyID::ID0, val.as_block().as_ref())?;
+            }
+
+            x.garbler_wires
+        }
+    };
+    Ok(x)
 }

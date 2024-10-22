@@ -2,6 +2,8 @@
 //!
 //! This module contains conversions between share types
 
+use crate::protocols::rep3::yao::input_field_party2;
+
 use super::{
     arithmetic, detail,
     id::PartyID,
@@ -14,6 +16,7 @@ use super::{
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use num_bigint::BigUint;
+use rand::{CryptoRng, Rng};
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
 pub fn a2b<F: PrimeField, N: Rep3Network>(
@@ -164,12 +167,13 @@ pub fn bit_inject<F: PrimeField, N: Rep3Network>(
     Ok(e)
 }
 
-pub fn a2y<F: PrimeField, N: Rep3Network>(
+pub fn a2y<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
     io_context: &mut IoContext<N>,
+    rng: &mut R,
 ) -> IoResult<BinaryBundle<WireMod2>> {
-    let [x01, x2] = yao::joint_input_arithmetic_added(x, delta, io_context)?;
+    let [x01, x2] = yao::joint_input_arithmetic_added(x, delta, io_context, rng)?;
 
     let converted = match io_context.id {
         PartyID::ID0 => {
@@ -196,4 +200,66 @@ pub fn a2y<F: PrimeField, N: Rep3Network>(
     };
 
     Ok(converted)
+}
+
+pub fn y2a<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
+    x: BinaryBundle<WireMod2>,
+    delta: Option<WireMod2>,
+    io_context: &mut IoContext<N>,
+    rng: &mut R,
+) -> IoResult<Rep3PrimeFieldShare<F>> {
+    let mut res = Rep3PrimeFieldShare::zero_share();
+
+    match io_context.id {
+        PartyID::ID0 => {
+            let k3 = io_context.rngs.bitcomp2.random_fes_3keys::<F>();
+            res.b = (k3.0 + k3.1 + k3.2).neg();
+            let x23 = input_field_party2::<F, _, _>(None, None, io_context, rng)?;
+
+            let mut evaluator = Rep3Evaluator::new(io_context);
+            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x, &x23);
+            let res = GCUtils::garbled_circuits_error(res)?;
+        }
+        PartyID::ID1 => {
+            let delta = match delta {
+                Some(delta) => delta,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "No delta provided",
+                ))?,
+            };
+
+            let k2 = io_context.rngs.bitcomp1.random_fes_3keys::<F>();
+            res.a = (k2.0 + k2.1 + k2.2).neg();
+            let x23 = input_field_party2::<F, _, _>(None, None, io_context, rng)?;
+
+            let mut garbler = Rep3Garbler::new_with_delta(io_context, delta);
+            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x, &x23);
+            let res = GCUtils::garbled_circuits_error(res)?;
+        }
+        PartyID::ID2 => {
+            let delta = match delta {
+                Some(delta) => delta,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "No delta provided",
+                ))?,
+            };
+
+            let k2 = io_context.rngs.bitcomp1.random_fes_3keys::<F>();
+            let k3 = io_context.rngs.bitcomp2.random_fes_3keys::<F>();
+            let k2_comp = k2.0 + k2.1 + k2.2;
+            let k3_comp = k3.0 + k3.1 + k3.2;
+            let x23 = Some(k2_comp + k3_comp);
+            res.a = k3_comp.neg();
+            res.b = k2_comp.neg();
+            let x23 = input_field_party2(x23, Some(delta), io_context, rng)?;
+
+            let mut garbler = Rep3Garbler::new_with_delta(io_context, delta);
+            let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x, &x23);
+            let res = GCUtils::garbled_circuits_error(res)?;
+        }
+    };
+
+    todo!()
 }

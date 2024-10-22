@@ -696,7 +696,8 @@ mod field_share {
                 let id = rep3.network.id;
                 let delta = rep3.rngs.generate_random_garbler_delta(id);
 
-                let converted = conversion::a2y(x, delta, &mut rep3).unwrap();
+                let mut rng = thread_rng();
+                let converted = conversion::a2y(x, delta, &mut rep3, &mut rng).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
