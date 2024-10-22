@@ -384,7 +384,7 @@ pub fn b2y2a<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     y2a(y, delta, io_context, rng)
 }
 
-/// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. his implementations goes through the yao protocol and currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
+/// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementations goes through the yao protocol and currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
 pub fn b2y2a_consume<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     x: Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,
