@@ -75,6 +75,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         GCInputs {
             garbler_wires: BinaryBundle::new(garbler_wires),
             evaluator_wires: BinaryBundle::new(evaluator_wires),
+            delta: self.delta,
         }
     }
 

@@ -164,6 +164,7 @@ mod test {
         GCInputs {
             garbler_wires: BinaryBundle::new(garbler_wires),
             evaluator_wires: BinaryBundle::new(evaluator_wires),
+            delta: garbler.delta(2),
         }
     }
 

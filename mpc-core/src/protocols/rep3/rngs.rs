@@ -2,11 +2,12 @@
 //!
 //! This module contains implementations of rep3 rngs
 
+use super::id::PartyID;
 use crate::RngType;
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{distributions::Standard, prelude::Distribution, Rng, RngCore, SeedableRng};
 use rayon::prelude::*;
 
 #[derive(Debug)]
@@ -36,6 +37,18 @@ impl Rep3CorrelatedRng {
             rand,
             bitcomp1,
             bitcomp2,
+        }
+    }
+
+    /// Generate a value that is equal on all three parties
+    pub fn generate_shared<T>(&mut self, id: PartyID) -> T
+    where
+        Standard: Distribution<T>,
+    {
+        match id {
+            PartyID::ID0 => self.bitcomp1.rng2.gen(),
+            PartyID::ID1 => self.bitcomp1.rng2.gen(),
+            PartyID::ID2 => self.bitcomp1.rng1.gen(),
         }
     }
 }

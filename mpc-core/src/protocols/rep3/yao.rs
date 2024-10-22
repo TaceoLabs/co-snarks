@@ -2,15 +2,19 @@ pub mod circuits;
 pub mod evaluator;
 pub mod garbler;
 
+use super::{
+    network::{IoContext, Rep3Network},
+    IoResult, Rep3PrimeFieldShare,
+};
 use ark_ff::{PrimeField, Zero};
-use fancy_garbling::BinaryBundle;
+use fancy_garbling::{BinaryBundle, WireMod2};
 use num_bigint::BigUint;
 
 /// A structure that contains both the garbler and the evaluators
-/// wires. This structure simplifies the API of the garbled circuit.
 pub struct GCInputs<F> {
     pub garbler_wires: BinaryBundle<F>,
     pub evaluator_wires: BinaryBundle<F>,
+    pub delta: F,
 }
 
 pub struct GCUtils {}
@@ -82,4 +86,19 @@ impl GCUtils {
         res.resize(n_bits, 0);
         res
     }
+}
+
+/// Transforms an arithmetically shared input [x] = (x_1, x_2, x_3) into three yao shares [x_1]^Y, [x_2]^Y, [x_3]^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
+pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network>(
+    x: Rep3PrimeFieldShare<F>,
+    delta: Option<WireMod2>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<[BinaryBundle<WireMod2>; 3]> {
+    match io_context.id {
+        crate::protocols::rep3::id::PartyID::ID0 => todo!(),
+        crate::protocols::rep3::id::PartyID::ID1 => todo!(),
+        crate::protocols::rep3::id::PartyID::ID2 => todo!(),
+    }
+
+    todo!()
 }
