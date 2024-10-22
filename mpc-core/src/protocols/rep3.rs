@@ -12,7 +12,7 @@ pub mod network;
 pub mod pointshare;
 pub mod poly;
 pub mod rngs;
-mod yao;
+pub mod yao;
 
 use std::marker::PhantomData;
 

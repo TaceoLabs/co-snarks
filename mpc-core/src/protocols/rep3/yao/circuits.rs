@@ -2,152 +2,141 @@ use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, FancyBinary};
 use num_bigint::BigUint;
 
-fn biguint_to_bits(input: BigUint, n_bits: usize) -> Vec<bool> {
-    let mut res = Vec::with_capacity(n_bits);
-    let mut bits = 0;
-    for mut el in input.to_u64_digits() {
-        for _ in 0..64 {
-            res.push(el & 1 == 1);
-            el >>= 1;
-            bits += 1;
-            if bits == n_bits {
-                break;
-            }
-        }
-    }
-    res.resize(n_bits, false);
-    res
-}
+use crate::protocols::rep3::yao::GCUtils;
 
-fn full_adder_gc_const<G: FancyBinary>(
-    g: &mut G,
-    a: &G::Item,
-    b: bool,
-    c: &G::Item,
-) -> Result<(G::Item, G::Item), G::Error> {
-    let (s, c) = if b {
-        let z1 = g.negate(a)?;
+pub struct GarbledCircuits {}
+
+impl GarbledCircuits {
+    fn full_adder_const<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: bool,
+        c: &G::Item,
+    ) -> Result<(G::Item, G::Item), G::Error> {
+        let (s, c) = if b {
+            let z1 = g.negate(a)?;
+            let s = g.xor(&z1, c)?;
+            let z3 = g.xor(a, c)?;
+            let z4 = g.and(&z1, &z3)?;
+            let c = g.xor(&z4, a)?;
+            (s, c)
+        } else {
+            let z1 = a;
+            let s = g.xor(z1, c)?;
+            let z3 = g.xor(a, c)?;
+            let z4 = g.and(z1, &z3)?;
+            let c = g.xor(&z4, a)?;
+            (s, c)
+        };
+
+        Ok((s, c))
+    }
+
+    fn half_adder<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: &G::Item,
+    ) -> Result<(G::Item, G::Item), G::Error> {
+        let s = g.xor(a, b)?;
+        let c = g.and(a, b)?;
+        Ok((s, c))
+    }
+
+    fn full_adder<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: &G::Item,
+        c: &G::Item,
+    ) -> Result<(G::Item, G::Item), G::Error> {
+        let z1 = g.xor(a, b)?;
         let s = g.xor(&z1, c)?;
         let z3 = g.xor(a, c)?;
         let z4 = g.and(&z1, &z3)?;
         let c = g.xor(&z4, a)?;
-        (s, c)
-    } else {
-        let z1 = a;
-        let s = g.xor(z1, c)?;
-        let z3 = g.xor(a, c)?;
-        let z4 = g.and(z1, &z3)?;
-        let c = g.xor(&z4, a)?;
-        (s, c)
-    };
+        Ok((s, c))
+    }
 
-    Ok((s, c))
-}
+    /// Binary addition. Returns the result and the carry.
+    fn bin_addition<G: FancyBinary>(
+        g: &mut G,
+        xs: &BinaryBundle<G::Item>,
+        ys: &BinaryBundle<G::Item>,
+    ) -> Result<(BinaryBundle<G::Item>, G::Item), G::Error> {
+        let xwires = xs.wires();
+        let ywires = ys.wires();
+        debug_assert_eq!(xwires.len(), ywires.len());
+        let mut result = Vec::with_capacity(xwires.len());
 
-fn half_adder_gc<G: FancyBinary>(
-    g: &mut G,
-    a: &G::Item,
-    b: &G::Item,
-) -> Result<(G::Item, G::Item), G::Error> {
-    let s = g.xor(a, b)?;
-    let c = g.and(a, b)?;
-    Ok((s, c))
-}
-
-fn full_adder_gc<G: FancyBinary>(
-    g: &mut G,
-    a: &G::Item,
-    b: &G::Item,
-    c: &G::Item,
-) -> Result<(G::Item, G::Item), G::Error> {
-    let z1 = g.xor(a, b)?;
-    let s = g.xor(&z1, c)?;
-    let z3 = g.xor(a, c)?;
-    let z4 = g.and(&z1, &z3)?;
-    let c = g.xor(&z4, a)?;
-    Ok((s, c))
-}
-
-/// Binary addition. Returns the result and the carry.
-fn bin_addition_gc<G: FancyBinary>(
-    g: &mut G,
-    xs: &BinaryBundle<G::Item>,
-    ys: &BinaryBundle<G::Item>,
-) -> Result<(BinaryBundle<G::Item>, G::Item), G::Error> {
-    let xwires = xs.wires();
-    let ywires = ys.wires();
-    debug_assert_eq!(xwires.len(), ywires.len());
-    let mut result = Vec::with_capacity(xwires.len());
-
-    let (mut s, mut c) = half_adder_gc(g, &xwires[0], &ywires[0])?;
-    result.push(s);
-
-    for (x, y) in xwires.iter().zip(ywires.iter()).skip(1) {
-        let res = full_adder_gc(g, x, y, &c)?;
-        s = res.0;
-        c = res.1;
+        let (mut s, mut c) = Self::half_adder(g, &xwires[0], &ywires[0])?;
         result.push(s);
+
+        for (x, y) in xwires.iter().zip(ywires.iter()).skip(1) {
+            let res = Self::full_adder(g, x, y, &c)?;
+            s = res.0;
+            c = res.1;
+            result.push(s);
+        }
+
+        Ok((BinaryBundle::new(result), c))
     }
 
-    Ok((BinaryBundle::new(result), c))
-}
+    pub fn adder_mod_p<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let bitlen = wires_a.size();
+        debug_assert_eq!(bitlen, wires_b.size());
 
-pub(crate) fn adder_mod_p_gc<G: FancyBinary, F: PrimeField>(
-    g: &mut G,
-    wires_a: BinaryBundle<G::Item>,
-    wires_b: BinaryBundle<G::Item>,
-) -> Result<BinaryBundle<G::Item>, G::Error> {
-    let bitlen = wires_a.size();
-    debug_assert_eq!(bitlen, wires_b.size());
+        // First addition
+        let (added, carry_add) = Self::bin_addition(g, &wires_a, &wires_b)?;
+        let added_wires = added.wires();
 
-    // First addition
-    let (added, carry_add) = bin_addition_gc(g, &wires_a, &wires_b)?;
-    let added_wires = added.wires();
+        // Prepare p for subtraction
+        let new_bitlen = bitlen + 1;
+        let p_ = (BigUint::from(1u64) << new_bitlen) - F::MODULUS.into();
+        let p_bits = GCUtils::biguint_to_bits(p_, new_bitlen);
 
-    // Prepare p for subtraction
-    let new_bitlen = bitlen + 1;
-    let p_ = (BigUint::from(1u64) << new_bitlen) - F::MODULUS.into();
-    let p_bits = biguint_to_bits(p_, new_bitlen);
-
-    // manual_rca:
-    let mut subtracted = Vec::with_capacity(bitlen);
-    // half_adder:
-    debug_assert!(p_bits[0]);
-    let s = g.negate(&added_wires[0])?;
-    subtracted.push(s);
-    let mut c = added_wires[0].to_owned();
-    // full_adders:
-    for (a, b) in added_wires.iter().zip(p_bits.iter()).skip(1) {
-        let (s, c_) = full_adder_gc_const(g, a, *b, &c)?;
-        c = c_;
+        // manual_rca:
+        let mut subtracted = Vec::with_capacity(bitlen);
+        // half_adder:
+        debug_assert!(p_bits[0]);
+        let s = g.negate(&added_wires[0])?;
         subtracted.push(s);
-    }
-    // final_full_adder to get ov bit
-    let z = if p_bits[bitlen] {
-        g.negate(&carry_add)?
-    } else {
-        carry_add
-    };
-    let ov = g.xor(&z, &c)?;
+        let mut c = added_wires[0].to_owned();
+        // full_adders:
+        for (a, b) in added_wires.iter().zip(p_bits.iter()).skip(1) {
+            let (s, c_) = Self::full_adder_const(g, a, *b, &c)?;
+            c = c_;
+            subtracted.push(s);
+        }
+        // final_full_adder to get ov bit
+        let z = if p_bits[bitlen] {
+            g.negate(&carry_add)?
+        } else {
+            carry_add
+        };
+        let ov = g.xor(&z, &c)?;
 
-    // multiplex for result
-    let mut result = Vec::with_capacity(bitlen);
-    for (s, a) in subtracted.iter().zip(added.iter()) {
-        // CMUX
-        // let r = g.mux(&ov, s, a)?; // Has two ANDs, only need one though
-        let xor = g.xor(s, a)?;
-        let and = g.and(&ov, &xor)?;
-        let r = g.xor(&and, s)?;
-        result.push(r);
-    }
+        // multiplex for result
+        let mut result = Vec::with_capacity(bitlen);
+        for (s, a) in subtracted.iter().zip(added.iter()) {
+            // CMUX
+            // let r = g.mux(&ov, s, a)?; // Has two ANDs, only need one though
+            let xor = g.xor(s, a)?;
+            let and = g.and(&ov, &xor)?;
+            let r = g.xor(&and, s)?;
+            result.push(r);
+        }
 
-    Ok(BinaryBundle::new(result))
+        Ok(BinaryBundle::new(result))
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use ark_ff::Zero;
+    use crate::protocols::rep3::yao::GCInputs;
     use fancy_garbling::{Evaluator, Fancy, Garbler, WireMod2};
     use rand::{thread_rng, CryptoRng, Rng, SeedableRng};
     use rand_chacha::ChaCha12Rng;
@@ -159,43 +148,12 @@ mod test {
 
     const TESTRUNS: usize = 5;
 
-    /// A structure that contains both the garbler and the evaluators
-    /// wires. This structure simplifies the API of the garbled circuit.
-    struct GCInputs<F> {
-        pub garbler_wires: BinaryBundle<F>,
-        pub evaluator_wires: BinaryBundle<F>,
-    }
-
-    fn biguint_to_bits_as_u16(input: BigUint, n_bits: usize) -> Vec<u16> {
-        let mut res = Vec::with_capacity(n_bits);
-        let mut bits = 0;
-        for mut el in input.to_u64_digits() {
-            for _ in 0..64 {
-                res.push((el & 1) as u16);
-                el >>= 1;
-                bits += 1;
-                if bits == n_bits {
-                    break;
-                }
-            }
-        }
-        res.resize(n_bits, 0);
-        res
-    }
-
-    fn field_to_bits_as_u16<F: PrimeField>(field: F) -> Vec<u16> {
-        let n_bits = F::MODULUS_BIT_SIZE as usize;
-        let bigint: BigUint = field.into();
-
-        biguint_to_bits_as_u16(bigint, n_bits)
-    }
-
     // This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
     fn encode_field<F: PrimeField, C: AbstractChannel, R: Rng + CryptoRng>(
         field: F,
         garbler: &mut Garbler<C, R, WireMod2>,
     ) -> GCInputs<WireMod2> {
-        let bits = field_to_bits_as_u16(field);
+        let bits = GCUtils::field_to_bits_as_u16(field);
         let mut garbler_wires = Vec::with_capacity(bits.len());
         let mut evaluator_wires = Vec::with_capacity(bits.len());
         for bit in bits {
@@ -207,17 +165,6 @@ mod test {
             garbler_wires: BinaryBundle::new(garbler_wires),
             evaluator_wires: BinaryBundle::new(evaluator_wires),
         }
-    }
-
-    fn bits_to_field<F: PrimeField>(bits: Vec<u16>) -> F {
-        let mut res = BigUint::zero();
-        for bit in bits.iter().rev() {
-            assert!(*bit < 2);
-            res <<= 1;
-            res += *bit as u64;
-        }
-        assert!(res < F::MODULUS.into());
-        F::from(res)
     }
 
     fn gc_test<F: PrimeField>() {
@@ -247,8 +194,12 @@ mod test {
                 garbler.send_wire(b).unwrap();
             }
 
-            let garble_result =
-                adder_mod_p_gc::<_, F>(&mut garbler, a.garbler_wires, b.garbler_wires).unwrap();
+            let garble_result = GarbledCircuits::adder_mod_p::<_, F>(
+                &mut garbler,
+                &a.garbler_wires,
+                &b.garbler_wires,
+            )
+            .unwrap();
 
             // Output
             garbler.outputs(garble_result.wires()).unwrap();
@@ -275,10 +226,10 @@ mod test {
         let a = BinaryBundle::new(a);
         let b = BinaryBundle::new(b);
 
-        let eval_result = adder_mod_p_gc::<_, F>(&mut evaluator, a, b).unwrap();
+        let eval_result = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &a, &b).unwrap();
 
         let result = evaluator.outputs(eval_result.wires()).unwrap().unwrap();
-        let result = bits_to_field::<F>(result);
+        let result = GCUtils::u16_bits_to_field::<F>(result).unwrap();
         assert_eq!(result, is_result);
     }
 

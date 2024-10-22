@@ -9,18 +9,21 @@ use crate::{
     },
     RngType,
 };
+use ark_ff::PrimeField;
 use fancy_garbling::{
     errors::GarblerError,
     hash_wires,
     util::{output_tweak, tweak2},
-    Fancy, FancyBinary, WireLabel, WireMod2,
+    BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2,
 };
 use rand::SeedableRng;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
 
-pub(crate) struct Rep3Garbler<'a, N: Rep3Network> {
+use super::{GCInputs, GCUtils};
+
+pub struct Rep3Garbler<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
     delta: WireMod2,
     current_output: usize,
@@ -31,7 +34,7 @@ pub(crate) struct Rep3Garbler<'a, N: Rep3Network> {
 
 impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     /// Create a new garbler.
-    pub(crate) fn new(io_context: &'a mut IoContext<N>) -> Self {
+    pub fn new(io_context: &'a mut IoContext<N>) -> Self {
         let mut res = Self::new_with_delta(io_context, WireMod2::default());
         res.delta = WireMod2::rand_delta(&mut res.rng, 2);
         res
@@ -59,8 +62,24 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         }
     }
 
+    /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
+    pub fn encode_field<F: PrimeField>(&mut self, field: F) -> GCInputs<WireMod2> {
+        let bits = GCUtils::field_to_bits_as_u16(field);
+        let mut garbler_wires = Vec::with_capacity(bits.len());
+        let mut evaluator_wires = Vec::with_capacity(bits.len());
+        for bit in bits {
+            let (mine, theirs) = self.encode_wire(bit);
+            garbler_wires.push(mine);
+            evaluator_wires.push(theirs);
+        }
+        GCInputs {
+            garbler_wires: BinaryBundle::new(garbler_wires),
+            evaluator_wires: BinaryBundle::new(evaluator_wires),
+        }
+    }
+
     /// Consumes the Garbler and returns the delta.
-    fn into_delta(self) -> WireMod2 {
+    pub fn into_delta(self) -> WireMod2 {
         self.delta
     }
 
@@ -104,7 +123,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     /// Outputs the value to all parties
-    fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, GarblerError> {
+    pub fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, GarblerError> {
         // Garbler's to evaluator
         self.output_evaluator(x)?;
 
@@ -168,6 +187,14 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     /// Send a wire over the established channel.
     fn send_wire(&mut self, wire: &WireMod2) -> Result<(), GarblerError> {
         self.send_block(&wire.as_block())?;
+        Ok(())
+    }
+
+    /// Send a bundle of wires over the established channel.
+    pub fn send_bundle(&mut self, wires: &BinaryBundle<WireMod2>) -> Result<(), GarblerError> {
+        for wire in wires.wires() {
+            self.send_wire(wire)?;
+        }
         Ok(())
     }
 

@@ -8,13 +8,13 @@ use fancy_garbling::{
     errors::EvaluatorError,
     hash_wires,
     util::{output_tweak, tweak2},
-    Fancy, WireLabel, WireMod2,
+    BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2,
 };
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 use subtle::ConditionallySelectable;
 
-pub(crate) struct Rep3Evaluator<'a, N: Rep3Network> {
+pub struct Rep3Evaluator<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
     current_output: usize,
     current_gate: usize,
@@ -23,7 +23,7 @@ pub(crate) struct Rep3Evaluator<'a, N: Rep3Network> {
 
 impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     /// Create a new garbler.
-    pub(crate) fn new(io_context: &'a mut IoContext<N>) -> Self {
+    pub fn new(io_context: &'a mut IoContext<N>) -> Self {
         let id = io_context.id;
         if id != PartyID::ID0 {
             panic!("Garbler should be PartyID::ID0")
@@ -79,7 +79,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     /// Outputs the value to all parties
-    fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, EvaluatorError> {
+    pub fn output_all_parties(&mut self, x: &[WireMod2]) -> Result<Vec<bool>, EvaluatorError> {
         // Garbler's to evaluator
         let res = self.output_evaluator(x)?;
 
@@ -148,6 +148,17 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
         Ok(WireMod2::from_block(block, 2))
     }
 
+    /// Receive a bundle of wires over the established channel.
+    pub fn receive_bundle(&mut self, n: usize) -> Result<BinaryBundle<WireMod2>, EvaluatorError> {
+        let mut wires = Vec::with_capacity(n);
+        for _ in 0..n {
+            let wire = WireMod2::from_block(self.receive_block()?, 2);
+            wires.push(wire);
+        }
+
+        Ok(BinaryBundle::new(wires))
+    }
+
     /// Evaluates an 'and' gate given two inputs wires and two half-gates from the garbler.
     ///
     /// Outputs C = A & B
@@ -211,5 +222,22 @@ impl<'a, N: Rep3Network> Fancy for Rep3Evaluator<'a, N> {
         } else {
             Err(EvaluatorError::DecodingFailed)
         }
+    }
+}
+
+impl<'a, N: Rep3Network> FancyBinary for Rep3Evaluator<'a, N> {
+    /// Negate is a noop for the evaluator
+    fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, Self::Error> {
+        Ok(*x)
+    }
+
+    fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
+        Ok(x.plus(y))
+    }
+
+    fn and(&mut self, a: &Self::Item, b: &Self::Item) -> Result<Self::Item, Self::Error> {
+        let gate0 = self.receive_block()?;
+        let gate1 = self.receive_block()?;
+        Ok(self.evaluate_and_gate(a, b, &gate0, &gate1))
     }
 }
