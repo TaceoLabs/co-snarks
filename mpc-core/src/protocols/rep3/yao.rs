@@ -426,7 +426,7 @@ pub fn input_field_id2<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
             for val in x.garbler_wires.iter() {
                 io_context
                     .network
-                    .send(PartyID::ID2, val.as_block().as_ref())?;
+                    .send(PartyID::ID1, val.as_block().as_ref())?;
             }
             for val in x.evaluator_wires.iter() {
                 io_context
