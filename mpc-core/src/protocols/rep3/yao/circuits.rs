@@ -85,6 +85,19 @@ impl GarbledCircuits {
         Ok((BinaryBundle::new(result), c))
     }
 
+    /// If `b = 0` returns `x` else `y`.
+    fn mux<G: FancyBinary>(
+        g: &mut G,
+        b: &G::Item,
+        x: &G::Item,
+        y: &G::Item,
+    ) -> Result<G::Item, G::Error> {
+        // let r = g.mux(&ov, s, a)?; // Has two ANDs, only need one though
+        let xor = g.xor(x, y)?;
+        let and = g.and(b, &xor)?;
+        g.xor(&and, x)
+    }
+
     /// Adds two field shared field elements mod p. The field elements are encoded as Yao shared wires
     pub fn adder_mod_p<G: FancyBinary, F: PrimeField>(
         g: &mut G,
@@ -128,10 +141,7 @@ impl GarbledCircuits {
         let mut result = Vec::with_capacity(bitlen);
         for (s, a) in subtracted.iter().zip(added.iter()) {
             // CMUX
-            // let r = g.mux(&ov, s, a)?; // Has two ANDs, only need one though
-            let xor = g.xor(s, a)?;
-            let and = g.and(&ov, &xor)?;
-            let r = g.xor(&and, s)?;
+            let r = Self::mux(g, &ov, s, a)?;
             result.push(r);
         }
 
