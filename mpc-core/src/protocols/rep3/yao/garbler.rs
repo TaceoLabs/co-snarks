@@ -189,7 +189,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         }
     }
 
-    // Read `n` `Block`s from the channel.
+    // Read `Block`s from the channel.
     #[inline(always)]
     fn read_blocks(&mut self) -> IoResult<Vec<Block>> {
         let rcv: Vec<[u8; 16]> = self.io_context.network.recv_many(PartyID::ID0)?;

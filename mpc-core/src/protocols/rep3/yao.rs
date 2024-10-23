@@ -121,20 +121,6 @@ impl GCUtils {
         )))
     }
 
-    fn receive_block_from<N: Rep3Network>(network: &mut N, id: PartyID) -> IoResult<Block> {
-        let data: Vec<u8> = network.recv(id)?;
-        if data.len() != 16 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "To little elements received",
-            ));
-        }
-        let mut v = Block::default();
-        v.as_mut().copy_from_slice(&data);
-
-        Ok(v)
-    }
-
     pub(crate) fn collapse_bundle_to_lsb_bits_as_biguint(input: BinaryBundle<WireMod2>) -> BigUint {
         let mut res = BigUint::zero();
         for wire in input.wires().iter().rev() {
@@ -151,12 +137,35 @@ impl GCUtils {
         network: &mut N,
         id: PartyID,
     ) -> IoResult<BinaryBundle<WireMod2>> {
-        let mut x = Vec::with_capacity(n_bits);
-        for _ in 0..n_bits {
-            let block = GCUtils::receive_block_from(network, id)?;
-            x.push(WireMod2::from_block(block, 2));
+        let rcv: Vec<[u8; 16]> = network.recv_many(id)?;
+        if rcv.len() != n_bits {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid number of elements received",
+            ));
         }
-        Ok(BinaryBundle::new(x))
+        let mut result = Vec::with_capacity(rcv.len());
+        for block in rcv {
+            let mut v = Block::default();
+            v.as_mut().copy_from_slice(&block);
+            result.push(WireMod2::from_block(v, 2));
+        }
+        Ok(BinaryBundle::new(result))
+    }
+
+    fn send_bundle_to<N: Rep3Network>(
+        input: &BinaryBundle<WireMod2>,
+        network: &mut N,
+        id: PartyID,
+    ) -> IoResult<()> {
+        let mut blocks = Vec::with_capacity(input.size());
+        for val in input.iter() {
+            let block = val.as_block();
+            let mut gate = [0; 16];
+            gate.copy_from_slice(block.as_ref());
+            blocks.push(gate);
+        }
+        network.send_many(id, &blocks)
     }
 
     fn send_inputs<N: Rep3Network>(
@@ -164,12 +173,8 @@ impl GCUtils {
         network: &mut N,
         garbler_id: PartyID,
     ) -> IoResult<()> {
-        for val in input.garbler_wires.iter() {
-            network.send(garbler_id, val.as_block().as_ref())?;
-        }
-        for val in input.evaluator_wires.iter() {
-            network.send(PartyID::ID0, val.as_block().as_ref())?;
-        }
+        Self::send_bundle_to(&input.garbler_wires, network, garbler_id)?;
+        Self::send_bundle_to(&input.evaluator_wires, network, PartyID::ID0)?;
 
         Ok(())
     }
