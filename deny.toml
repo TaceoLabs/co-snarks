@@ -285,6 +285,7 @@ allow-git = [
     "https://github.com/noir-lang/noir",
     "https://github.com/jfecher/chumsky",
     "https://github.com/GaloisInc/swanky",
+    "https://github.com/GaloisInc/ff",
 ]
 
 [sources.allow-org]
