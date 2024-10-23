@@ -439,7 +439,7 @@ pub fn b2y<F: PrimeField, N: Rep3Network>(
     Ok(converted)
 }
 
-/// Transforms the shared value x from a yao sharing to an arithmetic sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 xor x_2 xor x_3.
+/// Transforms the shared value x from a yao sharing to a binary sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 xor x_2 xor x_3.
 pub fn y2b<F: PrimeField, N: Rep3Network>(
     x: BinaryBundle<WireMod2>,
     io_context: &mut IoContext<N>,
@@ -455,17 +455,17 @@ pub fn y2b<F: PrimeField, N: Rep3Network>(
             io_context
                 .network
                 .send(PartyID::ID2, r_xor_x_xor_px.to_owned())?;
-            Rep3BigUintShare::new(r_xor_x_xor_px, r)
+            Rep3BigUintShare::new(r, r_xor_x_xor_px)
         }
         PartyID::ID1 => {
             let px = collapsed;
             let r = io_context.rngs.rand.random_biguint_rng2(bitlen);
-            Rep3BigUintShare::new(r, px)
+            Rep3BigUintShare::new(px, r)
         }
         PartyID::ID2 => {
             let px = collapsed;
             let r_xor_x_xor_px = io_context.network.recv(PartyID::ID0)?;
-            Rep3BigUintShare::new(px, r_xor_x_xor_px)
+            Rep3BigUintShare::new(r_xor_x_xor_px, px)
         }
     };
 
