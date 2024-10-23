@@ -70,8 +70,9 @@ pub struct CircomRep3VmWitnessExtension<F: PrimeField, N: Rep3Network> {
 }
 
 impl<F: PrimeField, N: Rep3Network> CircomRep3VmWitnessExtension<F, N> {
-    pub fn from_network(network: N) -> io::Result<Self> {
+    pub fn from_network(network: N, a2b_type: conversion::A2BType) -> io::Result<Self> {
         let mut io_context = IoContext::init(network)?;
+        io_context.set_a2b_type(a2b_type);
         let io_context_fork = io_context.fork()?;
         Ok(Self {
             io_context0: io_context,

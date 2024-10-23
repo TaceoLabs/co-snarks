@@ -28,7 +28,7 @@ pub struct VMConfig {
     pub allow_leaky_logs: bool,
     /// Define the implementation of the arithmetic/binary conversions.
     #[serde(default)]
-    pub a2b: A2BType,
+    pub a2b_type: A2BType,
 }
 
 /// The MPC-VM that performs the witness extension.
@@ -1025,7 +1025,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
         mpc_accelerator: MpcAccelerator<F, CircomRep3VmWitnessExtension<F, N>>,
         config: VMConfig,
     ) -> Result<Self> {
-        let driver = CircomRep3VmWitnessExtension::from_network(network)?;
+        let driver = CircomRep3VmWitnessExtension::from_network(network, config.a2b_type)?;
         let mut signals = vec![Rep3VmType::default(); parser.amount_signals];
         signals[0] = Rep3VmType::Public(F::one());
         let constant_table = parser

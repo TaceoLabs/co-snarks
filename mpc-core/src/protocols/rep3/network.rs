@@ -90,8 +90,13 @@ impl<N: Rep3Network> IoContext<N> {
             network,
             rngs,
             rng,
-            a2b_type: A2BType::default(), // TODO use the real one here
+            a2b_type: A2BType::default(),
         })
+    }
+
+    /// Allows to change the used arithmetic/binary conversion protocol
+    pub fn set_a2b_type(&mut self, a2b_type: A2BType) {
+        self.a2b_type = a2b_type;
     }
 
     /// Generate two random field elements
