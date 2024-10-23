@@ -74,19 +74,14 @@ fn low_depth_sub_p_cmux<F: PrimeField, N: Rep3Network>(
 ) -> IoResult<Rep3BigUintShare<F>> {
     let original_bitlen = bitlen - 1; // before the potential overflow after an addition
     let mask = (BigUint::from(1u64) << original_bitlen) - BigUint::one();
-    let x_msb = x >> original_bitlen;
+    let mut y = low_depth_binary_sub_p::<F, N>(x, io_context, bitlen)?;
     let x = x & &mask;
-    let mut y = low_depth_binary_sub_p::<F, N>(&x, io_context, bitlen)?;
     let y_msb = &y >> (bitlen);
     y &= &mask;
 
     // Spread the ov share to the whole biguint
-    let ov_a = (x_msb.a.iter_u64_digits().next().unwrap_or_default()
-        ^ y_msb.a.iter_u64_digits().next().unwrap_or_default())
-        & 1;
-    let ov_b = (x_msb.b.iter_u64_digits().next().unwrap_or_default()
-        ^ y_msb.b.iter_u64_digits().next().unwrap_or_default())
-        & 1;
+    let ov_a = y_msb.a.iter_u64_digits().next().unwrap_or_default() & 1;
+    let ov_b = y_msb.b.iter_u64_digits().next().unwrap_or_default() & 1;
 
     let ov_a = if ov_a == 1 {
         mask.to_owned()
