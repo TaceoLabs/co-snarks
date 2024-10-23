@@ -11,6 +11,7 @@ use ark_ff::PrimeField;
 use co_circom_snarks::{SharedInput, SharedWitness};
 use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
+use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
 use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,9 @@ pub struct VMConfig {
     /// Allow leaking of secret values in logs
     #[serde(default)]
     pub allow_leaky_logs: bool,
+    /// Define the implementation of the arithmetic/binary conversions.
+    #[serde(default)]
+    pub a2b: A2BType,
 }
 
 /// The MPC-VM that performs the witness extension.
