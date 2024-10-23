@@ -518,7 +518,7 @@ pub fn eq<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let diff = sub(a, b);
-    let bits = conversion::a2b(diff, io_context)?;
+    let bits = conversion::a2b_selector(diff, io_context)?;
     let is_zero = binary::is_zero(&bits, io_context)?;
     let res = conversion::bit_inject(&is_zero, io_context)?;
     Ok(res)
@@ -541,7 +541,7 @@ pub fn eq_bit<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<BinaryShare<F>> {
     let diff = sub(a, b);
-    let bits = conversion::a2b(diff, io_context)?;
+    let bits = conversion::a2b_selector(diff, io_context)?;
     let is_zero = binary::is_zero(&bits, io_context)?;
     Ok(is_zero)
 }
