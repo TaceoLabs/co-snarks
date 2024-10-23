@@ -8,6 +8,7 @@ use num_traits::cast::ToPrimitive;
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
 use num_bigint::BigUint;
+use num_traits::One;
 use num_traits::Zero;
 use types::Rep3PrimeFieldShare;
 
@@ -258,6 +259,15 @@ pub fn open<F: PrimeField, N: Rep3Network>(
 ) -> IoResult<F> {
     let c = io_context.network.reshare(a.b)?;
     Ok(a.a + a.b + c)
+}
+
+/// Performs the opening of a shared value and returns the equivalent public value.
+pub fn open_bit<F: PrimeField, N: Rep3Network>(
+    a: Rep3BigUintShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BigUint> {
+    let c = io_context.network.reshare(a.b.to_owned())?;
+    Ok(a.a ^ a.b ^ c)
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
@@ -517,9 +527,7 @@ pub fn eq<F: PrimeField, N: Rep3Network>(
     b: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let diff = sub(a, b);
-    let bits = conversion::a2b_selector(diff, io_context)?;
-    let is_zero = binary::is_zero(&bits, io_context)?;
+    let is_zero = eq_bit(a, b, io_context)?;
     let res = conversion::bit_inject(&is_zero, io_context)?;
     Ok(res)
 }
@@ -572,8 +580,8 @@ pub fn is_zero<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<bool> {
     let zero_share = FieldShare::default();
-    let res = eq(zero_share, a, io_context)?;
-    let x = open(res, io_context)?;
+    let res = eq_bit(zero_share, a, io_context)?;
+    let x = open_bit(res, io_context)?;
     Ok(x.is_one())
 }
 
