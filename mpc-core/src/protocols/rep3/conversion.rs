@@ -171,10 +171,9 @@ pub fn a2y<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     let converted = match io_context.id {
         PartyID::ID0 => {
             let mut evaluator = Rep3Evaluator::new(io_context);
+            evaluator.receive_circuit()?;
             let res = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x01, &x2);
-            let res = GCUtils::garbled_circuits_error(res)?;
-            evaluator.receive_hash()?;
-            res
+            GCUtils::garbled_circuits_error(res)?
         }
         PartyID::ID1 | PartyID::ID2 => {
             let delta = match delta {
@@ -187,7 +186,7 @@ pub fn a2y<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
             let mut garbler = Rep3Garbler::new_with_delta(io_context, delta);
             let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2);
             let res = GCUtils::garbled_circuits_error(res)?;
-            garbler.send_hash()?;
+            garbler.send_circuit()?;
             res
         }
     };
@@ -215,6 +214,7 @@ pub fn y2a<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
             let x23 = input_field_id2::<F, _, _>(None, None, io_context, rng)?;
 
             let mut evaluator = Rep3Evaluator::new(io_context);
+            evaluator.receive_circuit()?;
             let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x, &x23);
             let x1 = GCUtils::garbled_circuits_error(x1)?;
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
@@ -296,9 +296,9 @@ pub fn b2y<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     let converted = match io_context.id {
         PartyID::ID0 => {
             let mut evaluator = Rep3Evaluator::new(io_context);
+            // evaluator.receive_circuit()?; // No network used here
             let res = GarbledCircuits::xor_many(&mut evaluator, &x01, &x2);
             GCUtils::garbled_circuits_error(res)?
-            // evaluator.receive_hash()?; // No network used here
         }
         PartyID::ID1 | PartyID::ID2 => {
             let delta = match delta {
@@ -311,7 +311,7 @@ pub fn b2y<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
             let mut garbler = Rep3Garbler::new_with_delta(io_context, delta);
             let res = GarbledCircuits::xor_many(&mut garbler, &x01, &x2);
             GCUtils::garbled_circuits_error(res)?
-            // garbler.send_hash()?; // No network used here
+            // garbler.send_circuit()?; // No network used here
         }
     };
 

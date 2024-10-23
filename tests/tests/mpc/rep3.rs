@@ -691,8 +691,8 @@ mod field_share {
                 let y_ = garbler.encode_field(y);
 
                 // This is without OT, just a simulation
-                garbler.send_bundle(&x_.evaluator_wires).unwrap();
-                garbler.send_bundle(&y_.evaluator_wires).unwrap();
+                garbler.add_bundle_to_circuit(&x_.evaluator_wires);
+                garbler.add_bundle_to_circuit(&y_.evaluator_wires);
 
                 let circuit_output = GarbledCircuits::adder_mod_p::<_, ark_bn254::Fr>(
                     &mut garbler,
@@ -715,8 +715,9 @@ mod field_share {
             let n_bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
 
             // This is without OT, just a simulation
-            let x_ = evaluator.receive_bundle(n_bits).unwrap();
-            let y_ = evaluator.receive_bundle(n_bits).unwrap();
+            evaluator.receive_circuit().unwrap();
+            let x_ = evaluator.receive_bundle_from_circuit(n_bits).unwrap();
+            let y_ = evaluator.receive_bundle_from_circuit(n_bits).unwrap();
 
             let circuit_output =
                 GarbledCircuits::adder_mod_p::<_, ark_bn254::Fr>(&mut evaluator, &x_, &y_).unwrap();
@@ -763,6 +764,7 @@ mod field_share {
                 let output = match id {
                     PartyID::ID0 => {
                         let mut evaluator = Rep3Evaluator::new(&mut rep3);
+                        evaluator.receive_circuit().unwrap();
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
                     PartyID::ID1 | PartyID::ID2 => {
@@ -850,6 +852,7 @@ mod field_share {
                 let output = match id {
                     PartyID::ID0 => {
                         let mut evaluator = Rep3Evaluator::new(&mut rep3);
+                        evaluator.receive_circuit().unwrap();
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
                     PartyID::ID1 | PartyID::ID2 => {
