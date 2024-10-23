@@ -1,6 +1,6 @@
-//! Garbler
+//! Streaming Garbler
 //!
-//! This module contains the implementation of the garbler for the replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf). Thereby, the whole garbled circuit is buffered before given to the network.
+//! This module contains the implementation of the garbler for the replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf). Thereby, the garbled gates are sent out as soon as they are prepared.
 //!
 //! This implementation is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs)
 
@@ -23,17 +23,16 @@ use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 
 /// This struct implements the garbler for replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
-pub struct Rep3Garbler<'a, N: Rep3Network> {
+pub struct StreamingRep3Garbler<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
     delta: WireMod2,
     current_output: usize,
     current_gate: usize,
     rng: RngType,
     hash: Sha3_256, // For the ID2 to match everything sent with one hash
-    circuit: Vec<[u8; 16]>,
 }
 
-impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
+impl<'a, N: Rep3Network> StreamingRep3Garbler<'a, N> {
     /// Create a new garbler.
     pub fn new(io_context: &'a mut IoContext<N>) -> Self {
         let mut res = Self::new_with_delta(io_context, WireMod2::default());
@@ -54,52 +53,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
             current_gate: 0,
             rng,
             hash: Sha3_256::default(),
-            circuit: Vec::new(),
         }
-    }
-
-    /// Add the gate to the circuit
-    fn add_block_to_circuit(&mut self, block: &Block) {
-        match self.io_context.id {
-            PartyID::ID0 => {
-                panic!("Garbler should not be PartyID::ID0");
-            }
-            PartyID::ID1 => {
-                let mut gate = [0; 16];
-                gate.copy_from_slice(block.as_ref());
-                self.circuit.push(gate);
-            }
-            PartyID::ID2 => {
-                self.hash.update(block.as_ref());
-            }
-        }
-    }
-
-    /// Sends the circuit to the evaluator
-    pub fn send_circuit(&mut self) -> IoResult<()> {
-        match self.io_context.id {
-            PartyID::ID0 => {
-                panic!("Garbler should not be PartyID::ID0");
-            }
-            PartyID::ID1 => {
-                // Send the prepared circuit over the network to the evaluator
-                let mut empty_circuit = Vec::new();
-                std::mem::swap(&mut empty_circuit, &mut self.circuit);
-                self.io_context
-                    .network
-                    .send_many(PartyID::ID0, &empty_circuit)?;
-            }
-            PartyID::ID2 => {
-                // Send the hash of the circuit to the evaluator
-                let mut hash = Sha3_256::default();
-                std::mem::swap(&mut hash, &mut self.hash);
-                let digest = hash.finalize();
-                self.io_context
-                    .network
-                    .send(PartyID::ID0, digest.as_slice())?;
-            }
-        }
-        Ok(())
     }
 
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
@@ -137,13 +91,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
 
     /// Outputs the values to the garbler.
     fn output_garbler(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
-        let blocks = self.read_blocks()?;
-        if blocks.len() != x.len() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Invalid number of blocks received",
-            ));
-        }
+        let blocks = self.read_blocks(x.len())?;
 
         let mut result = Vec::with_capacity(x.len());
         for (block, zero) in blocks.into_iter().zip(x.iter()) {
@@ -167,7 +115,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         self.output_evaluator(x)?;
 
         // Check consistency with the second garbled circuit before receiving the result
-        self.send_circuit()?;
+        self.send_hash()?;
 
         // Evaluator to garbler
         self.output_garbler(x)
@@ -179,7 +127,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         self.output_evaluator(x)?;
 
         // Check consistency with the second garbled circuit before receiving the result
-        self.send_circuit()?;
+        self.send_hash()?;
 
         // Evaluator to garbler
         if self.io_context.id == PartyID::ID1 {
@@ -189,29 +137,59 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         }
     }
 
-    // Read `Block`s from the channel.
-    #[inline(always)]
-    fn read_blocks(&mut self) -> IoResult<Vec<Block>> {
-        let rcv: Vec<[u8; 16]> = self.io_context.network.recv_many(PartyID::ID0)?;
-        let mut result = Vec::with_capacity(rcv.len());
-        for block in rcv {
-            let mut v = Block::default();
-            v.as_mut().copy_from_slice(&block);
-            result.push(v);
+    /// As ID2, send a hash of the sended data to the evaluator.
+    pub fn send_hash(&mut self) -> IoResult<()> {
+        if self.io_context.id == PartyID::ID2 {
+            let mut hash = Sha3_256::default();
+            std::mem::swap(&mut hash, &mut self.hash);
+            let digest = hash.finalize();
+            self.io_context
+                .network
+                .send(PartyID::ID0, digest.as_slice())?;
         }
-        Ok(result)
+        Ok(())
+    }
+
+    /// Send a block over the network to the evaluator.
+    fn send_block(&mut self, block: &Block) -> IoResult<()> {
+        match self.io_context.id {
+            PartyID::ID0 => {
+                panic!("Garbler should not be PartyID::ID0");
+            }
+            PartyID::ID1 => {
+                self.io_context.network.send(PartyID::ID0, block.as_ref())?;
+            }
+            PartyID::ID2 => {
+                self.hash.update(block.as_ref());
+            }
+        }
+        Ok(())
+    }
+
+    fn receive_block_from(&mut self, id: PartyID) -> IoResult<Block> {
+        GCUtils::receive_block_from(&mut self.io_context.network, id)
+    }
+
+    /// Read `n` `Block`s from the channel.
+    #[inline(always)]
+    fn read_blocks(&mut self, n: usize) -> IoResult<Vec<Block>> {
+        (0..n)
+            .map(|_| self.receive_block_from(PartyID::ID0))
+            .collect()
     }
 
     /// Send a wire over the established channel.
-    fn add_wire_to_circuit(&mut self, wire: &WireMod2) {
-        self.add_block_to_circuit(&wire.as_block());
+    fn send_wire(&mut self, wire: &WireMod2) -> IoResult<()> {
+        self.send_block(&wire.as_block())?;
+        Ok(())
     }
 
     /// Send a bundle of wires over the established channel.
-    pub fn add_bundle_to_circuit(&mut self, wires: &BinaryBundle<WireMod2>) {
+    pub fn send_bundle(&mut self, wires: &BinaryBundle<WireMod2>) -> IoResult<()> {
         for wire in wires.wires() {
-            self.add_wire_to_circuit(wire);
+            self.send_wire(wire)?;
         }
+        Ok(())
     }
 
     /// Encode a wire, producing the zero wire as well as the encoded value.
@@ -231,14 +209,14 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 }
 
-impl<'a, N: Rep3Network> Fancy for Rep3Garbler<'a, N> {
+impl<'a, N: Rep3Network> Fancy for StreamingRep3Garbler<'a, N> {
     type Item = WireMod2;
     type Error = GarblerError;
 
     fn constant(&mut self, x: u16, q: u16) -> Result<WireMod2, GarblerError> {
         let zero = WireMod2::rand(&mut self.rng, q);
         let wire = zero.plus(self.delta.cmul_eq(x));
-        self.add_wire_to_circuit(&wire);
+        self.send_wire(&wire)?;
         Ok(zero)
     }
 
@@ -247,17 +225,17 @@ impl<'a, N: Rep3Network> Fancy for Rep3Garbler<'a, N> {
         let d = self.delta;
         for k in 0..2 {
             let block = x.plus(&d.cmul(k)).hash(output_tweak(i, k));
-            self.add_block_to_circuit(&block);
+            self.send_block(&block)?;
         }
         Ok(None)
     }
 }
 
-impl<'a, N: Rep3Network> FancyBinary for Rep3Garbler<'a, N> {
+impl<'a, N: Rep3Network> FancyBinary for StreamingRep3Garbler<'a, N> {
     fn and(&mut self, a: &Self::Item, b: &Self::Item) -> Result<Self::Item, Self::Error> {
         let (gate0, gate1, c) = self.garble_and_gate(a, b);
-        self.add_block_to_circuit(&gate0);
-        self.add_block_to_circuit(&gate1);
+        self.send_block(&gate0)?;
+        self.send_block(&gate1)?;
         Ok(c)
     }
 

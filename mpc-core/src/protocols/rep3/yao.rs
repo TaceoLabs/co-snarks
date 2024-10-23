@@ -5,6 +5,8 @@
 pub mod circuits;
 pub mod evaluator;
 pub mod garbler;
+pub mod streaming_evaluator;
+pub mod streaming_garbler;
 
 use super::{
     network::{IoContext, Rep3Network},
@@ -130,6 +132,20 @@ impl GCUtils {
             res += lsb as u64;
         }
         res
+    }
+
+    fn receive_block_from<N: Rep3Network>(network: &mut N, id: PartyID) -> IoResult<Block> {
+        let data: Vec<u8> = network.recv(id)?;
+        if data.len() != 16 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "To little elements received",
+            ));
+        }
+        let mut v = Block::default();
+        v.as_mut().copy_from_slice(&data);
+
+        Ok(v)
     }
 
     fn receive_bundle_from<N: Rep3Network>(

@@ -8,6 +8,8 @@ mod field_share {
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
     use mpc_core::protocols::rep3::yao::evaluator::Rep3Evaluator;
     use mpc_core::protocols::rep3::yao::garbler::Rep3Garbler;
+    use mpc_core::protocols::rep3::yao::streaming_evaluator::StreamingRep3Evaluator;
+    use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
     use mpc_core::protocols::rep3::{self, arithmetic, network::IoContext};
     use rand::thread_rng;
@@ -718,6 +720,74 @@ mod field_share {
             evaluator.receive_circuit().unwrap();
             let x_ = evaluator.receive_bundle_from_circuit(n_bits).unwrap();
             let y_ = evaluator.receive_bundle_from_circuit(n_bits).unwrap();
+
+            let circuit_output =
+                GarbledCircuits::adder_mod_p::<_, ark_bn254::Fr>(&mut evaluator, &x_, &y_).unwrap();
+
+            let output = evaluator
+                .output_all_parties(circuit_output.wires())
+                .unwrap();
+            let add = GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap();
+            tx1.send(add)
+        });
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        assert_eq!(result1, should_result);
+        assert_eq!(result2, should_result);
+        assert_eq!(result3, should_result);
+    }
+
+    #[test]
+    fn rep3_streaming_gc() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let y = ark_bn254::Fr::rand(&mut rng);
+        let should_result = x + y;
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        let [net1, net2, net3] = test_network.get_party_networks();
+
+        // Both Garblers
+        for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
+            thread::spawn(move || {
+                let mut ctx = IoContext::init(net).unwrap();
+
+                let mut garbler = StreamingRep3Garbler::new(&mut ctx);
+                let x_ = garbler.encode_field(x);
+                let y_ = garbler.encode_field(y);
+
+                // This is without OT, just a simulation
+                garbler.send_bundle(&x_.evaluator_wires).unwrap();
+                garbler.send_bundle(&y_.evaluator_wires).unwrap();
+
+                let circuit_output = GarbledCircuits::adder_mod_p::<_, ark_bn254::Fr>(
+                    &mut garbler,
+                    &x_.garbler_wires,
+                    &y_.garbler_wires,
+                )
+                .unwrap();
+
+                let output = garbler.output_all_parties(circuit_output.wires()).unwrap();
+                let add = GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap();
+                tx.send(add)
+            });
+        }
+
+        // The evaluator (ID0)
+        thread::spawn(move || {
+            let mut ctx = IoContext::init(net1).unwrap();
+
+            let mut evaluator = StreamingRep3Evaluator::new(&mut ctx);
+            let n_bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
+
+            // This is without OT, just a simulation
+            let x_ = evaluator.receive_bundle(n_bits).unwrap();
+            let y_ = evaluator.receive_bundle(n_bits).unwrap();
 
             let circuit_output =
                 GarbledCircuits::adder_mod_p::<_, ark_bn254::Fr>(&mut evaluator, &x_, &y_).unwrap();
