@@ -26,9 +26,9 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum A2BType {
     /// The arithmetic-to-binary conversion is directly done using "Bit Decomposition", while the binary-to-arithmetic conversion is done using "Bit Composition". This process has a larger number of communication rounds with less communicated bytes.
-    #[default]
     Direct,
     /// The arithmetic-to-binary conversion is done by "Arithmetic to Yao" followed by "Yao to Binary", while the binary-to-arithmetic conversion is done using "Binary to Yao" followed by "Yao to Arithmetic". This process has a low number of communication rounds with more communicated bytes.
+    #[default]
     Yao,
     /// This process is similar to `Yao`, but the garbled circuits are implemented by sending/receiving network packages as soon as they are computed/required, while Yao sends the whole circuit in one go.
     StreamingYao,
