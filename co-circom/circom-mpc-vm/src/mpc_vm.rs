@@ -7,6 +7,7 @@ use super::{
     op_codes::{self, CodeBlock},
     stack::Stack,
 };
+use crate::mpc::VmCircomWitnessExtension;
 use ark_ff::PrimeField;
 use co_circom_snarks::{SharedInput, SharedWitness};
 use eyre::{bail, eyre, Result};
@@ -17,8 +18,6 @@ use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-
-use crate::mpc::VmCircomWitnessExtension;
 
 /// The mpc-vm configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -901,6 +900,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
         &mut self,
         input_signals: SharedInput<F, C::ArithmeticShare>,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
+        self.driver.compare_vm_config(&self.config)?;
         let amount_public_inputs = self.set_input_signals(input_signals)?;
         self.call_main_component()?;
         self.post_processing(amount_public_inputs)

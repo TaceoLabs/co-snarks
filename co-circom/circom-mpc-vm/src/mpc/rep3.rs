@@ -1,5 +1,8 @@
-use std::io;
-
+use super::{
+    plain::{to_usize, CircomPlainVmWitnessExtension},
+    VmCircomWitnessExtension,
+};
+use crate::mpc_vm::VMConfig;
 use ark_ff::{One, PrimeField};
 use eyre::{bail, eyre};
 use mpc_core::protocols::rep3::{
@@ -9,11 +12,7 @@ use mpc_core::protocols::rep3::{
 };
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
-
-use super::{
-    plain::{to_usize, CircomPlainVmWitnessExtension},
-    VmCircomWitnessExtension,
-};
+use std::io;
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 type BinaryShare<F> = Rep3BigUintShare<F>;
@@ -838,6 +837,18 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
 
     fn public_zero(&self) -> Self::VmType {
         F::zero().into()
+    }
+
+    fn compare_vm_config(&mut self, config: &VMConfig) -> eyre::Result<()> {
+        let ser = bincode::serialize(&config)?;
+        self.io_context0.network.send_next(ser)?;
+        let rcv: Vec<u8> = self.io_context0.network.recv_prev()?;
+        let deser = bincode::deserialize(&rcv)?;
+        if config != &deser {
+            bail!("VM Config does not match: {:?} != {:?}", config, deser);
+        }
+
+        Ok(())
     }
 }
 

@@ -1,8 +1,8 @@
-use eyre::Result;
-use std::fmt;
-
+use crate::mpc_vm::VMConfig;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use eyre::Result;
+use std::fmt;
 
 pub(crate) mod plain;
 pub(crate) mod rep3;
@@ -119,4 +119,7 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
 
     /// Returns F::zero() as a VM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
     fn public_zero(&self) -> Self::VmType;
+
+    /// Compares the VM Config with other parties
+    fn compare_vm_config(&mut self, config: &VMConfig) -> Result<()>;
 }

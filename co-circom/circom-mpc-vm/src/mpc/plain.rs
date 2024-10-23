@@ -1,10 +1,10 @@
+use super::VmCircomWitnessExtension;
+use crate::mpc_vm::VMConfig;
 use ark_ff::{One, PrimeField};
 use eyre::eyre;
+use eyre::Result;
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
-
-use super::VmCircomWitnessExtension;
-use eyre::Result;
 
 /// Transforms a field element into an usize if possible.
 macro_rules! to_usize {
@@ -266,5 +266,9 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
 
     fn public_zero(&self) -> Self::VmType {
         F::zero()
+    }
+
+    fn compare_vm_config(&mut self, _config: &VMConfig) -> Result<()> {
+        Ok(())
     }
 }
