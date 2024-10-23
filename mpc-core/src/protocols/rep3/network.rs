@@ -19,7 +19,7 @@ use super::{
     rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp},
     IoResult,
 };
-use rand::{Rng, SeedableRng};
+use rand::{CryptoRng, Rng, SeedableRng};
 
 // this will be moved later
 /// This struct handles networking and rng
@@ -37,8 +37,8 @@ pub struct IoContext<N: Rep3Network> {
 }
 
 impl<N: Rep3Network> IoContext<N> {
-    fn setup_prf(network: &mut N) -> IoResult<Rep3Rand> {
-        let seed1: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
+    fn setup_prf<R: Rng + CryptoRng>(network: &mut N, rng: &mut R) -> IoResult<Rep3Rand> {
+        let seed1: [u8; crate::SEED_SIZE] = rng.gen();
         network.send_next(seed1)?;
         let seed2: [u8; crate::SEED_SIZE] = network.recv_prev()?;
 
@@ -80,7 +80,8 @@ impl<N: Rep3Network> IoContext<N> {
 
     /// Construct  a new [`IoContext`] with the given network
     pub fn init(mut network: N) -> IoResult<Self> {
-        let mut rand = Self::setup_prf(&mut network)?;
+        let mut rng = RngType::from_entropy();
+        let mut rand = Self::setup_prf(&mut network, &mut rng)?;
         let bitcomps = Self::setup_bitcomp(&mut network, &mut rand)?;
         let rngs = Rep3CorrelatedRng::new(rand, bitcomps.0, bitcomps.1);
 
@@ -88,7 +89,7 @@ impl<N: Rep3Network> IoContext<N> {
             id: network.get_id(), //shorthand access
             network,
             rngs,
-            rng: RngType::from_entropy(),
+            rng,
             a2b_type: A2BType::default(), // TODO use the real one here
         })
     }
