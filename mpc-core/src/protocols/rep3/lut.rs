@@ -72,7 +72,7 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for NaiveRep3LookupTa
         //or tree to get result
         let binary_result = binary::or_tree(equals_vec, &mut self.io_context)?;
         tracing::debug!("one last conversion from binary to arithmetic...");
-        conversion::b2a(&binary_result, &mut self.io_context)
+        conversion::b2a_selector(&binary_result, &mut self.io_context)
     }
 
     fn init_map(

@@ -186,8 +186,8 @@ pub(crate) fn unsigned_ge<F: PrimeField, N: Rep3Network>(
     y: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3BigUintShare<F>> {
-    let a_bits = conversion::a2b(x, io_context)?;
-    let b_bits = conversion::a2b(y, io_context)?;
+    let a_bits = conversion::a2b_selector(x, io_context)?;
+    let b_bits = conversion::a2b_selector(y, io_context)?;
     let diff = low_depth_binary_sub(&a_bits, &b_bits, io_context, F::MODULUS_BIT_SIZE as usize)?;
 
     Ok(&(&diff >> F::MODULUS_BIT_SIZE as usize) & &BigUint::one())
@@ -199,7 +199,7 @@ pub(crate) fn unsigned_ge_const_lhs<F: PrimeField, N: Rep3Network>(
     y: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3BigUintShare<F>> {
-    let b_bits = conversion::a2b(y, io_context)?;
+    let b_bits = conversion::a2b_selector(y, io_context)?;
     let diff = low_depth_binary_sub_from_const(&x.into(), &b_bits, io_context)?;
 
     Ok(&(&diff >> F::MODULUS_BIT_SIZE as usize) & &BigUint::one())
@@ -211,7 +211,7 @@ pub(crate) fn unsigned_ge_const_rhs<F: PrimeField, N: Rep3Network>(
     y: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3BigUintShare<F>> {
-    let a_bits = conversion::a2b(x, io_context)?;
+    let a_bits = conversion::a2b_selector(x, io_context)?;
     let diff = low_depth_binary_sub_by_const(&a_bits, &y.into(), io_context)?;
 
     Ok(&(&diff >> F::MODULUS_BIT_SIZE as usize) & &BigUint::one())

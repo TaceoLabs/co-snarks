@@ -329,11 +329,10 @@ impl GCUtils {
 }
 
 /// Transforms an arithmetically shared input x = (x_1, x_2, x_3) into three yao shares x_1^Y, x_2^Y, x_3^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
+pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
     io_context: &mut IoContext<N>,
-    rng: &mut R,
 ) -> IoResult<[BinaryBundle<WireMod2>; 3]> {
     let id = io_context.id;
     let n_bits = F::MODULUS_BIT_SIZE as usize;
@@ -369,7 +368,7 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>
             });
 
             // Input x0
-            let x0 = GCUtils::encode_field(x.b, rng, delta);
+            let x0 = GCUtils::encode_field(x.b, &mut io_context.rng, delta);
 
             // Send x0 to the other parties
             GCUtils::send_inputs(&x0, &mut io_context.network, PartyID::ID2)?;
@@ -395,7 +394,7 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>
             });
 
             // Input x2
-            let x2 = GCUtils::encode_field(x.a, rng, delta);
+            let x2 = GCUtils::encode_field(x.a, &mut io_context.rng, delta);
 
             // Send x2 to the other parties
             GCUtils::send_inputs(&x2, &mut io_context.network, PartyID::ID1)?;
@@ -412,11 +411,10 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>
 }
 
 /// Transforms an arithmetically shared input x = (x_1, x_2, x_3) into two yao shares x_1^Y, (x_2 + x_3)^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
+pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
     io_context: &mut IoContext<N>,
-    rng: &mut R,
 ) -> IoResult<[BinaryBundle<WireMod2>; 2]> {
     let id = io_context.id;
     let n_bits = F::MODULUS_BIT_SIZE as usize;
@@ -441,7 +439,7 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + Cryp
 
             // Input x01
             let sum = x.a + x.b;
-            let x01 = GCUtils::encode_field(sum, rng, delta);
+            let x01 = GCUtils::encode_field(sum, &mut io_context.rng, delta);
 
             // Send x01 to the other parties
             GCUtils::send_inputs(&x01, &mut io_context.network, PartyID::ID2)?;
@@ -461,7 +459,7 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + Cryp
             };
 
             // Input x2
-            let x2 = GCUtils::encode_field(x.a, rng, delta);
+            let x2 = GCUtils::encode_field(x.a, &mut io_context.rng, delta);
 
             // Send x2 to the other parties
             GCUtils::send_inputs(&x2, &mut io_context.network, PartyID::ID1)?;
@@ -477,11 +475,10 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network, R: Rng + Cryp
 }
 
 /// Transforms an binary shared input x = (x_1, x_2, x_3) into two yao shares x_1^Y, (x_2 xor x_3)^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
+pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network>(
     x: &Rep3BigUintShare<F>,
     delta: Option<WireMod2>,
     io_context: &mut IoContext<N>,
-    rng: &mut R,
     bitlen: usize,
 ) -> IoResult<[BinaryBundle<WireMod2>; 2]> {
     let id = io_context.id;
@@ -506,7 +503,7 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRn
 
             // Input x01
             let xor = &x.a ^ &x.b;
-            let x01 = GCUtils::encode_bigint(&xor, bitlen, rng, delta);
+            let x01 = GCUtils::encode_bigint(&xor, bitlen, &mut io_context.rng, delta);
 
             // Send x01 to the other parties
             GCUtils::send_inputs(&x01, &mut io_context.network, PartyID::ID2)?;
@@ -526,7 +523,7 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRn
             };
 
             // Input x2
-            let x2 = GCUtils::encode_bigint(&x.a, bitlen, rng, delta);
+            let x2 = GCUtils::encode_bigint(&x.a, bitlen, &mut io_context.rng, delta);
 
             // Send x2 to the other parties
             GCUtils::send_inputs(&x2, &mut io_context.network, PartyID::ID1)?;
@@ -542,11 +539,10 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network, R: Rng + CryptoRn
 }
 
 /// Lets the party with id2 input a field element, which gets shared as Yao wires to the other parties.
-pub fn input_field_id2<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
+pub fn input_field_id2<F: PrimeField, N: Rep3Network>(
     x: Option<F>,
     delta: Option<WireMod2>,
     io_context: &mut IoContext<N>,
-    rng: &mut R,
 ) -> IoResult<BinaryBundle<WireMod2>> {
     let id = io_context.id;
     let n_bits = F::MODULUS_BIT_SIZE as usize;
@@ -573,7 +569,7 @@ pub fn input_field_id2<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
                 ))?,
             };
 
-            let x = GCUtils::encode_field(x, rng, delta);
+            let x = GCUtils::encode_field(x, &mut io_context.rng, delta);
 
             // Send x to the other parties
             GCUtils::send_inputs(&x, &mut io_context.network, PartyID::ID1)?;

@@ -549,6 +549,68 @@ mod field_share {
     }
 
     #[test]
+    fn rep3_a2y2b_zero() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::zero();
+        let x_shares = rep3::share_field_element(x, &mut rng);
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(conversion::a2y2b(x, &mut rep3).unwrap())
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_binary_element(result1, result2, result3);
+        let should_result = x.into();
+        assert_eq!(is_result, should_result);
+        let is_result_f: ark_bn254::Fr = is_result.into();
+        assert_eq!(is_result_f, x);
+    }
+
+    #[test]
+    fn rep3_a2y2b_streaming_zero() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::zero();
+        let x_shares = rep3::share_field_element(x, &mut rng);
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(conversion::a2y2b_streaming(x, &mut rep3).unwrap())
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_binary_element(result1, result2, result3);
+        let should_result = x.into();
+        assert_eq!(is_result, should_result);
+        let is_result_f: ark_bn254::Fr = is_result.into();
+        assert_eq!(is_result_f, x);
+    }
+
+    #[test]
     fn rep3_a2b() {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
@@ -598,8 +660,7 @@ mod field_share {
         {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                let mut rng = thread_rng();
-                tx.send(conversion::a2y2b(x, &mut rep3, &mut rng).unwrap())
+                tx.send(conversion::a2y2b(x, &mut rep3).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -631,8 +692,7 @@ mod field_share {
         {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                let mut rng = thread_rng();
-                tx.send(conversion::a2y2b_streaming(x, &mut rep3, &mut rng).unwrap())
+                tx.send(conversion::a2y2b_streaming(x, &mut rep3).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -692,8 +752,7 @@ mod field_share {
         {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                let mut rng = thread_rng();
-                tx.send(conversion::b2y2a(&x, &mut rep3, &mut rng).unwrap())
+                tx.send(conversion::b2y2a(&x, &mut rep3).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -721,8 +780,7 @@ mod field_share {
         {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                let mut rng = thread_rng();
-                tx.send(conversion::b2y2a_streaming(&x, &mut rep3, &mut rng).unwrap())
+                tx.send(conversion::b2y2a_streaming(&x, &mut rep3).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -890,8 +948,7 @@ mod field_share {
                 let id = rep3.network.id;
                 let delta = rep3.rngs.generate_random_garbler_delta(id);
 
-                let mut rng = thread_rng();
-                let converted = conversion::a2y(x, delta, &mut rep3, &mut rng).unwrap();
+                let converted = conversion::a2y(x, delta, &mut rep3).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
@@ -939,8 +996,7 @@ mod field_share {
                 let id = rep3.network.id;
                 let delta = rep3.rngs.generate_random_garbler_delta(id);
 
-                let mut rng = thread_rng();
-                let converted = conversion::a2y_streaming(x, delta, &mut rep3, &mut rng).unwrap();
+                let converted = conversion::a2y_streaming(x, delta, &mut rep3).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
@@ -991,10 +1047,8 @@ mod field_share {
         ) {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                let mut rng = thread_rng();
                 let converted =
-                    conversion::y2a::<ark_bn254::Fr, _, _>(x, Some(delta), &mut rep3, &mut rng)
-                        .unwrap();
+                    conversion::y2a::<ark_bn254::Fr, _>(x, Some(delta), &mut rep3).unwrap();
                 tx.send(converted).unwrap();
             });
         }
@@ -1030,14 +1084,9 @@ mod field_share {
         ) {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                let mut rng = thread_rng();
-                let converted = conversion::y2a_streaming::<ark_bn254::Fr, _, _>(
-                    x,
-                    Some(delta),
-                    &mut rep3,
-                    &mut rng,
-                )
-                .unwrap();
+                let converted =
+                    conversion::y2a_streaming::<ark_bn254::Fr, _>(x, Some(delta), &mut rep3)
+                        .unwrap();
                 tx.send(converted).unwrap();
             });
         }
@@ -1070,8 +1119,7 @@ mod field_share {
                 let id = rep3.network.id;
                 let delta = rep3.rngs.generate_random_garbler_delta(id);
 
-                let mut rng = thread_rng();
-                let converted = conversion::b2y(&x, delta, &mut rep3, &mut rng).unwrap();
+                let converted = conversion::b2y(&x, delta, &mut rep3).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
@@ -1118,8 +1166,7 @@ mod field_share {
                 let id = rep3.network.id;
                 let delta = rep3.rngs.generate_random_garbler_delta(id);
 
-                let mut rng = thread_rng();
-                let converted = conversion::b2y(&x, delta, &mut rep3, &mut rng).unwrap();
+                let converted = conversion::b2y(&x, delta, &mut rep3).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
