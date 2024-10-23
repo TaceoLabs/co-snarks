@@ -72,7 +72,7 @@ impl<N: Rep3Network> IoContext<N> {
                 let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) =
                     network.recv_prev()?;
                 let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
-                let bitcomp2: Rep3RandBitComp = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
+                let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
         }
