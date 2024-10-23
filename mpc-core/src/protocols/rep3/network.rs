@@ -18,6 +18,7 @@ use super::{
     rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp},
     IoResult,
 };
+use crate::param::SERDE_COMPRESS_MODE;
 use rand::{Rng, SeedableRng};
 
 // this will be moved later
@@ -336,7 +337,7 @@ impl Rep3Network for Rep3MpcNet {
         target: PartyID,
         data: &[F],
     ) -> std::io::Result<()> {
-        let size = data.serialized_size(ark_serialize::Compress::No);
+        let size = data.serialized_size(SERDE_COMPRESS_MODE);
         let mut ser_data = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut ser_data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;

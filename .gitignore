@@ -14,6 +14,9 @@ Cargo.lock
 *.pdb
 
 .vscode
+.idea
+.DS_Store
+
 co-noir/co-acvm/src/bin/
 co-circom/co-plonk/src/bin/
 groth16_tester.rs

@@ -36,3 +36,9 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 sha3.workspace = true
 paste.workspace = true
 
+
+[features]
+default = []
+# serde with compressed mode
+compressed = ["mpc-core/compressed"]
+
