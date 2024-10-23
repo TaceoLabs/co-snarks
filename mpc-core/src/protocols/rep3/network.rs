@@ -14,6 +14,7 @@ use mpc_net::{
 };
 
 use super::{
+    conversion::A2BType,
     id::PartyID,
     rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp},
     IoResult,
@@ -25,10 +26,14 @@ use rand::{Rng, SeedableRng};
 pub struct IoContext<N: Rep3Network> {
     /// The party id
     pub id: PartyID,
-    /// The rng
+    /// The correlated rng
     pub rngs: Rep3CorrelatedRng,
+    /// The underlying unique rng used for, e.g., Yao
+    pub rng: RngType,
     /// The underlying network
     pub network: N,
+    /// The used arithmetic/binary conversion protocol
+    pub a2b_type: A2BType,
 }
 
 impl<N: Rep3Network> IoContext<N> {
@@ -67,7 +72,7 @@ impl<N: Rep3Network> IoContext<N> {
                 let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) =
                     network.recv_prev()?;
                 let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
-                let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
+                let bitcomp2: Rep3RandBitComp = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
         }
@@ -83,6 +88,8 @@ impl<N: Rep3Network> IoContext<N> {
             id: network.get_id(), //shorthand access
             network,
             rngs,
+            rng: RngType::from_entropy(),
+            a2b_type: A2BType::default(), // TODO use the real one here
         })
     }
 
@@ -95,9 +102,17 @@ impl<N: Rep3Network> IoContext<N> {
     pub fn fork(&mut self) -> IoResult<Self> {
         let network = self.network.fork()?;
         let rngs = self.rngs.fork();
+        let rng = RngType::from_seed(self.rng.gen());
         let id = self.id;
+        let a2b_type = self.a2b_type;
 
-        Ok(Self { id, rngs, network })
+        Ok(Self {
+            id,
+            rngs,
+            network,
+            rng,
+            a2b_type,
+        })
     }
 }
 

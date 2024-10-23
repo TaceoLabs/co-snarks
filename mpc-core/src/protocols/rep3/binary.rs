@@ -146,7 +146,7 @@ pub fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
             (shared.a.clone() >> i) & BigUint::one(),
             (shared.b.clone() >> i) & BigUint::one(),
         );
-        individual_bit_shares.push(conversion::b2a(&bit, context)?);
+        individual_bit_shares.push(conversion::b2a_selector(&bit, context)?);
     }
     // v_i = 2^2^i * <b_i> + 1 - <b_i>
     let mut vs: Vec<_> = individual_bit_shares
