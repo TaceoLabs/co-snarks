@@ -56,14 +56,6 @@ pub fn a2b<F: PrimeField, N: Rep3Network>(
 }
 
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
-pub fn b2a_consume<F: PrimeField, N: Rep3Network>(
-    x: Rep3BigUintShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<Rep3PrimeFieldShare<F>> {
-    b2a(&x, io_context)
-}
-
-/// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
@@ -382,13 +374,4 @@ pub fn b2y2a<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     let delta = io_context.rngs.generate_random_garbler_delta(io_context.id);
     let y = b2y(x, delta, io_context, rng)?;
     y2a(y, delta, io_context, rng)
-}
-
-/// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementations goes through the yao protocol and currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
-pub fn b2y2a_consume<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
-    x: Rep3BigUintShare<F>,
-    io_context: &mut IoContext<N>,
-    rng: &mut R,
-) -> IoResult<Rep3PrimeFieldShare<F>> {
-    b2y2a(&x, io_context, rng)
 }
