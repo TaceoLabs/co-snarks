@@ -167,7 +167,7 @@ pub fn bit_inject<F: PrimeField, N: Rep3Network>(
     Ok(e)
 }
 
-/// Transforms the replicated shared value x from an arithmetic sharing to a yao sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into wires, such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_x xor delta * x.
+/// Transforms the replicated shared value x from an arithmetic sharing to a yao sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into wires, such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x.
 pub fn a2y<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
@@ -203,7 +203,7 @@ pub fn a2y<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     Ok(converted)
 }
 
-/// Transforms the shared value x from a yao sharing to an arithmetic sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_x xor delta * x gets transformed into x = x_1 + x_2 + x_3.
+/// Transforms the shared value x from a yao sharing to an arithmetic sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 + x_2 + x_3.
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end. These adaptions need to be encoded into a garbled circuit.
@@ -288,7 +288,7 @@ pub fn y2a<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     Ok(res)
 }
 
-/// Transforms the replicated shared value x from a binary sharing to a yao sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into wires, such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_x xor delta * x.
+/// Transforms the replicated shared value x from a binary sharing to a yao sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into wires, such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x.
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end. These adaptions need to be encoded into a garbled circuit.
@@ -326,7 +326,7 @@ pub fn b2y<F: PrimeField, N: Rep3Network, R: Rng + CryptoRng>(
     Ok(converted)
 }
 
-/// Transforms the shared value x from a yao sharing to an arithmetic sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_x xor delta * x gets transformed into x = x_1 xor x_2 xor x_3.
+/// Transforms the shared value x from a yao sharing to an arithmetic sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 xor x_2 xor x_3.
 pub fn y2b<F: PrimeField, N: Rep3Network>(
     x: BinaryBundle<WireMod2>,
     io_context: &mut IoContext<N>,
