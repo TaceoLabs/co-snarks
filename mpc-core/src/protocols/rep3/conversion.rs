@@ -293,7 +293,7 @@ macro_rules! y2a_impl_p1 {
                 "No output received",
             ))?,
         };
-        $res.b = GCUtils::bits_to_field(x1)?;
+        $res.b = GCUtils::bits_to_field(&x1)?;
     }};
 }
 
@@ -352,7 +352,7 @@ pub fn y2a<F: PrimeField, N: Rep3Network>(
             let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x, &x23);
             let x1 = GCUtils::garbled_circuits_error(x1)?;
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
-            res.a = GCUtils::bits_to_field(x1)?;
+            res.a = GCUtils::bits_to_field(&x1)?;
         }
         PartyID::ID1 => {
             y2a_impl_p1!(Rep3Garbler<N>, x, delta, io_context, res)
@@ -387,7 +387,7 @@ pub fn y2a_streaming<F: PrimeField, N: Rep3Network>(
             let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x, &x23);
             let x1 = GCUtils::garbled_circuits_error(x1)?;
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
-            res.a = GCUtils::bits_to_field(x1)?;
+            res.a = GCUtils::bits_to_field(&x1)?;
         }
         PartyID::ID1 => {
             y2a_impl_p1!(StreamingRep3Garbler<N>, x, delta, io_context, res)
