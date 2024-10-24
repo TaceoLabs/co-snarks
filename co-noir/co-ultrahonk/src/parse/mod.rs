@@ -6,10 +6,8 @@ use ark_ec::pairing::Pairing;
 use builder_variable::SharedBuilderVariable;
 use circuit_builder::prelude::GenericUltraCircuitBuilder;
 
-use crate::{
-    mpc::{plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver},
-    prelude::ShamirUltraHonkDriver,
-};
+use crate::prelude::ShamirUltraHonkDriver;
+use circuit_builder::mpc::{plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver};
 
 pub type CoUltraCircuitBuilder<T, P> = GenericUltraCircuitBuilder<P, SharedBuilderVariable<T, P>>;
 

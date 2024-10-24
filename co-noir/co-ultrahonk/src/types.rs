@@ -1,5 +1,5 @@
-use crate::mpc::NoirUltraHonkProver;
 use ark_ec::pairing::Pairing;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::prelude::{Polynomial, PrecomputedEntities, ProverCrs};
 use std::marker::PhantomData;
 use ultrahonk::prelude::{ShiftedTableEntities, ShiftedWitnessEntities};

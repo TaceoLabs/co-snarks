@@ -1,6 +1,7 @@
 use super::CoUltraCircuitBuilder;
-use crate::{mpc::NoirUltraHonkProver, types::ProvingKey};
+use crate::types::ProvingKey;
 use ark_ec::pairing::Pairing;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::prelude::{
     CycleNode, CyclicPermutation, Polynomial, NUM_SELECTORS, NUM_WIRES,
 };

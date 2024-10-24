@@ -2,6 +2,7 @@ mod acir_format;
 mod builder;
 mod crs;
 mod honk_curve;
+pub mod mpc;
 #[allow(unused)] // TODO remove later
 mod plookup;
 mod polynomial;

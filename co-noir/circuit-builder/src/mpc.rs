@@ -1,9 +1,9 @@
 use ark_ec::pairing::Pairing;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-pub(crate) mod plain;
-pub(crate) mod rep3;
-pub(crate) mod shamir;
+pub mod plain;
+pub mod rep3;
+pub mod shamir;
 
 /// This trait represents the operations used during UltraHonk proof generation
 pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {

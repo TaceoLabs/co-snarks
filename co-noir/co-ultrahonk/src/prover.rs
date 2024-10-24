@@ -1,11 +1,11 @@
 use crate::{
     co_decider::{prover::CoDecider, types::ProverMemory},
     co_oink::prover::CoOink,
-    mpc::NoirUltraHonkProver,
     types::ProvingKey,
     CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::pairing::Pairing;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::{prelude::HonkCurve, HonkProofResult};
 use std::marker::PhantomData;
 use ultrahonk::prelude::{HonkProof, Transcript, TranscriptFieldType, TranscriptHasher};

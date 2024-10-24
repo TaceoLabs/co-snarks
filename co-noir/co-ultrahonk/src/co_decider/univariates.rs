@@ -1,9 +1,8 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use std::array;
 use ultrahonk::prelude::{Barycentric, Univariate};
-
-use crate::mpc::NoirUltraHonkProver;
 
 pub(crate) struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> {
     pub(crate) evaluations: [T::ArithmeticShare; SIZE],

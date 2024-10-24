@@ -1,11 +1,11 @@
 use super::CoUltraCircuitBuilder;
-use crate::mpc::NoirUltraHonkProver;
 use crate::parse::types::TraceData;
 use crate::types::Polynomials;
 use crate::types::ProverWitnessEntities;
 use crate::types::ProvingKey;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::prelude::Crs;
 use circuit_builder::prelude::PrecomputedEntities;
 use circuit_builder::prelude::ProverCrs;

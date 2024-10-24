@@ -12,11 +12,11 @@ use crate::{
         types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
-    mpc::NoirUltraHonkProver,
     types::AllEntities,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::{prelude::HonkCurve, HonkProofResult};
 use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
 

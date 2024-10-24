@@ -1,12 +1,11 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::prelude::Polynomial;
 use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
 };
-
-use crate::mpc::NoirUltraHonkProver;
 
 pub(crate) struct SharedPolynomial<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) coefficients: Vec<T::ArithmeticShare>,

@@ -18,8 +18,9 @@
 // clang-format on
 
 use super::types::ProverMemory;
-use crate::{mpc::NoirUltraHonkProver, types::ProvingKey, CoUtils};
+use crate::{types::ProvingKey, CoUtils};
 use ark_ff::One;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::prelude::{HonkCurve, Polynomial};
 use circuit_builder::{HonkProofError, HonkProofResult};
 use itertools::izip;

@@ -7,14 +7,13 @@ pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
-use crate::mpc::NoirUltraHonkProver;
-
 use super::{
     types::{ProverUnivariates, RelationParameters},
     univariates::SharedUnivariate,
 };
 use ark_ec::pairing::Pairing;
 use auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc};
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::prelude::HonkCurve;
 use circuit_builder::HonkProofResult;
 use delta_range_constraint_relation::{

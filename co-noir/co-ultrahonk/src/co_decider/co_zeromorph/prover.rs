@@ -7,12 +7,12 @@ use crate::{
         prover::CoDecider,
         types::ClaimedEvaluations,
     },
-    mpc::NoirUltraHonkProver,
     types::AllEntities,
     CoUtils, CONST_PROOF_SIZE_LOG_N, N_MAX,
 };
 use ark_ec::Group;
 use ark_ff::{Field, One, Zero};
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use circuit_builder::HonkProofResult;
 use itertools::izip;

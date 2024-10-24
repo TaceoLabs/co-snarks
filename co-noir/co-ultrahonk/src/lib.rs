@@ -1,14 +1,13 @@
 pub(crate) mod co_decider;
 pub(crate) mod co_oink;
-pub(crate) mod mpc;
 pub(crate) mod parse;
 pub mod prelude;
 pub(crate) mod prover;
 pub(crate) mod types;
 
 use ark_ec::pairing::Pairing;
+use circuit_builder::mpc::{plain::PlainUltraHonkDriver, NoirUltraHonkProver};
 use circuit_builder::prelude::ProverCrs;
-use mpc::{plain::PlainUltraHonkDriver, NoirUltraHonkProver};
 use parse::builder_variable::SharedBuilderVariable;
 
 impl<P: Pairing> SharedBuilderVariable<PlainUltraHonkDriver, P> {

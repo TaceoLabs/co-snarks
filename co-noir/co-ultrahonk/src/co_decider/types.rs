@@ -1,11 +1,11 @@
 use super::univariates::SharedUnivariate;
 use crate::{
-    mpc::NoirUltraHonkProver,
     types::{AllEntities, Polynomials},
     NUM_ALPHAS,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use std::iter;
 use ultrahonk::prelude::Univariate;

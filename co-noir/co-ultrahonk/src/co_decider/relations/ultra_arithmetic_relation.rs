@@ -1,13 +1,11 @@
 use super::Relation;
-use crate::{
-    co_decider::{
-        types::{ProverUnivariates, RelationParameters},
-        univariates::SharedUnivariate,
-    },
-    mpc::NoirUltraHonkProver,
+use crate::co_decider::{
+    types::{ProverUnivariates, RelationParameters},
+    univariates::SharedUnivariate,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::prelude::HonkCurve;
 use circuit_builder::HonkProofResult;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};

@@ -1,11 +1,10 @@
 pub(crate) mod prover;
 pub(crate) mod types;
 
-use crate::mpc::NoirUltraHonkProver;
-
 use super::polynomial::SharedPolynomial;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use circuit_builder::mpc::NoirUltraHonkProver;
 
 pub(crate) struct ZeroMorphOpeningClaim<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) polynomial: SharedPolynomial<T, P>,

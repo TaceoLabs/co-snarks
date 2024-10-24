@@ -1,9 +1,8 @@
 use ark_ec::pairing::Pairing;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::{prelude::UltraCircuitVariable, HonkProofError, HonkProofResult};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-
-use crate::mpc::NoirUltraHonkProver;
 
 #[derive(Serialize, Deserialize)]
 pub enum SharedBuilderVariable<T: NoirUltraHonkProver<P>, P: Pairing> {

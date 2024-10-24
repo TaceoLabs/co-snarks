@@ -5,10 +5,10 @@ use crate::{
         prover::CoDecider,
         types::{ClaimedEvaluations, PartiallyEvaluatePolys, MAX_PARTIAL_RELATION_LENGTH},
     },
-    mpc::NoirUltraHonkProver,
     types::AllEntities,
     CONST_PROOF_SIZE_LOG_N,
 };
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::{prelude::HonkCurve, HonkProofResult};
 use ultrahonk::{
     prelude::{

@@ -1,8 +1,8 @@
+use crate::NUM_ALPHAS;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::prelude::Polynomial;
-
-use crate::{mpc::NoirUltraHonkProver, NUM_ALPHAS};
 
 pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) w_4: Polynomial<T::ArithmeticShare>, // column 3

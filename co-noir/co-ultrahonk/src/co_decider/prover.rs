@@ -1,7 +1,8 @@
 use super::{
     co_sumcheck::SumcheckOutput, co_zeromorph::ZeroMorphOpeningClaim, types::ProverMemory,
 };
-use crate::{mpc::NoirUltraHonkProver, CoUtils};
+use crate::CoUtils;
+use circuit_builder::mpc::NoirUltraHonkProver;
 use circuit_builder::prelude::{HonkCurve, ProverCrs};
 use circuit_builder::HonkProofResult;
 use std::marker::PhantomData;
