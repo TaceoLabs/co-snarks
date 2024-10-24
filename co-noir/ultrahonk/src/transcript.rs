@@ -1,16 +1,14 @@
 use crate::{
-    honk_curve::HonkCurve,
     poseidon2::poseidon2_permutation::Poseidon2,
-    prover::{HonkProofError, HonkProofResult},
     sponge_hasher::{FieldHash, FieldSponge},
     types::HonkProof,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{One, PrimeField, Zero};
+use circuit_builder::{prelude::HonkCurve, HonkProofError, HonkProofResult, TranscriptFieldType};
 use num_bigint::BigUint;
 use std::{collections::BTreeMap, ops::Index};
 
-pub type TranscriptFieldType = ark_bn254::Fr;
 pub type Poseidon2Sponge =
     FieldSponge<TranscriptFieldType, 4, 3, Poseidon2<TranscriptFieldType, 4, 5>>;
 

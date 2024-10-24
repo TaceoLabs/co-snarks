@@ -2,9 +2,9 @@ pub(crate) mod prover;
 pub(crate) mod types;
 pub(crate) mod verifier;
 
-use super::polynomial::Polynomial;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use circuit_builder::prelude::Polynomial;
 
 pub(crate) struct ZeroMorphOpeningClaim<F: PrimeField> {
     pub(crate) polynomial: Polynomial<F>,

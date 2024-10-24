@@ -9,14 +9,14 @@ pub use crate::parse::{
 pub use crate::prover::CoUltraHonk;
 pub use crate::types::ProvingKey;
 // Re-exporting the following traits from `ultrahonk`:
+pub use circuit_builder::prelude::UltraCircuitVariable;
+pub use circuit_builder::prelude::VerifyingKey;
+pub use circuit_builder::prelude::{Crs, ProverCrs};
 pub use ultrahonk::prelude::HonkProof;
 pub use ultrahonk::prelude::Poseidon2Sponge;
 pub use ultrahonk::prelude::TranscriptFieldType;
 pub use ultrahonk::prelude::TranscriptHasher;
 pub use ultrahonk::prelude::UltraCircuitBuilder;
-pub use ultrahonk::prelude::UltraCircuitVariable;
 pub use ultrahonk::prelude::UltraHonk;
-pub use ultrahonk::prelude::VerifyingKey;
 pub use ultrahonk::prelude::VerifyingKeyBarretenberg;
-pub use ultrahonk::prelude::{Crs, ProverCrs};
 pub use ultrahonk::Utils;

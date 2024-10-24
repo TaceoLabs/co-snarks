@@ -1,8 +1,8 @@
 use crate::decider::types::{ClaimedEvaluations, RelationParameters};
 use crate::decider::{types::ProverUnivariates, univariate::Univariate};
-use crate::honk_curve::HonkCurve;
-use crate::transcript::TranscriptFieldType;
 use ark_ff::{Field, PrimeField, Zero};
+use circuit_builder::prelude::HonkCurve;
+use circuit_builder::TranscriptFieldType;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EllipticRelationAcc<F: PrimeField> {

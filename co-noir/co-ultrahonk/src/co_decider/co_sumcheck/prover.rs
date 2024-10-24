@@ -9,10 +9,10 @@ use crate::{
     types::AllEntities,
     CONST_PROOF_SIZE_LOG_N,
 };
+use circuit_builder::{prelude::HonkCurve, HonkProofResult};
 use ultrahonk::{
     prelude::{
-        GateSeparatorPolynomial, HonkCurve, HonkProofResult, Transcript, TranscriptFieldType,
-        TranscriptHasher, Univariate,
+        GateSeparatorPolynomial, Transcript, TranscriptFieldType, TranscriptHasher, Univariate,
     },
     Utils,
 };

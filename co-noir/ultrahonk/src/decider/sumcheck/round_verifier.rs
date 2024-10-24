@@ -14,9 +14,11 @@ use crate::{
         },
         types::{ClaimedEvaluations, RelationParameters},
     },
-    prelude::{GateSeparatorPolynomial, HonkCurve, TranscriptFieldType},
+    prelude::GateSeparatorPolynomial,
 };
 use ark_ff::{One, Zero};
+use circuit_builder::prelude::HonkCurve;
+use circuit_builder::TranscriptFieldType;
 
 pub(crate) struct SumcheckVerifierRound<P: HonkCurve<TranscriptFieldType>> {
     pub(crate) target_total_sum: P::ScalarField,

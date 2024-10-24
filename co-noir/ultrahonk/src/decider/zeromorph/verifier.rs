@@ -5,13 +5,14 @@ use crate::{
         verifier::DeciderVerifier,
         zeromorph::ZeroMorphVerifierOpeningClaim,
     },
-    prelude::{HonkCurve, TranscriptFieldType},
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
     Utils, CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
+use circuit_builder::prelude::HonkCurve;
+use circuit_builder::TranscriptFieldType;
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
     DeciderVerifier<P, H>

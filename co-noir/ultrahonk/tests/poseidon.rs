@@ -3,7 +3,7 @@ use sha3::Keccak256;
 use ultrahonk::{
     prelude::{
         HonkProof, Poseidon2Sponge, ProvingKey, TranscriptFieldType, TranscriptHasher,
-        UltraCircuitBuilder, UltraHonk,
+        UltraCircuitBuilder, UltraHonk, VerifyingKeyBarretenberg,
     },
     Utils,
 };
@@ -78,12 +78,10 @@ fn print_vkey() {
     //     "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3/bb_vkey";
 
     let vk_u8us = std::fs::read(VKUS).unwrap();
-    let vkus =
-        ultrahonk::prelude::VerifyingKeyBarretenberg::<Bn254>::from_buffer(&vk_u8us).unwrap();
+    let vkus = VerifyingKeyBarretenberg::<Bn254>::from_buffer(&vk_u8us).unwrap();
 
     let vk_u8them = std::fs::read(VKTHEM).unwrap();
-    let vkthem =
-        ultrahonk::prelude::VerifyingKeyBarretenberg::<Bn254>::from_buffer(&vk_u8them).unwrap();
+    let vkthem = VerifyingKeyBarretenberg::<Bn254>::from_buffer(&vk_u8them).unwrap();
 
     // println!("this is our vk: \n");
     // vkus.print();

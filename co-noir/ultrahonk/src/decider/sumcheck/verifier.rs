@@ -5,12 +5,14 @@ use crate::{
         types::MAX_PARTIAL_RELATION_LENGTH,
         verifier::DeciderVerifier,
     },
-    prelude::{GateSeparatorPolynomial, HonkCurve, TranscriptFieldType},
+    prelude::GateSeparatorPolynomial,
     transcript::{Transcript, TranscriptHasher},
     types::NUM_ALL_ENTITIES,
     verifier::HonkVerifyResult,
     Utils, CONST_PROOF_SIZE_LOG_N,
 };
+use circuit_builder::prelude::HonkCurve;
+use circuit_builder::TranscriptFieldType;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>

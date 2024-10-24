@@ -1,6 +1,5 @@
-use crate::parse::types::{ColumnIdx, LookupEntry};
-
 use super::types::{PlookupMultiTable, ReadData};
+use crate::types::{ColumnIdx, LookupEntry};
 use ark_ff::PrimeField;
 use num_bigint::BigUint;
 use std::array::from_fn;

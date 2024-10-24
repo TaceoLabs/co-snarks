@@ -7,7 +7,9 @@ use crate::{
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
+use circuit_builder::prelude::HonkCurve;
+use circuit_builder::HonkProofResult;
+use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
 pub(crate) struct UltraPermutationRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {

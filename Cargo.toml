@@ -9,6 +9,7 @@ members = [
     "co-circom/co-plonk",
     "co-noir/co-acvm",
     "co-noir/ultrahonk",
+    "co-noir/circuit-builder",
     "co-noir/co-ultrahonk",
     "co-noir/co-noir",
     "mpc-core",

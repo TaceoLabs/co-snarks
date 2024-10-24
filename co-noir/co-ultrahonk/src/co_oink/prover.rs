@@ -20,13 +20,12 @@
 use super::types::ProverMemory;
 use crate::{mpc::NoirUltraHonkProver, types::ProvingKey, CoUtils};
 use ark_ff::One;
+use circuit_builder::prelude::{HonkCurve, Polynomial};
+use circuit_builder::{HonkProofError, HonkProofResult};
 use itertools::izip;
 use std::{array, marker::PhantomData};
 use ultrahonk::{
-    prelude::{
-        HonkCurve, HonkProofError, HonkProofResult, Polynomial, Transcript, TranscriptFieldType,
-        TranscriptHasher,
-    },
+    prelude::{Transcript, TranscriptFieldType, TranscriptHasher},
     Utils, NUM_ALPHAS,
 };
 

@@ -8,9 +8,10 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
+use circuit_builder::prelude::HonkCurve;
+use circuit_builder::HonkProofResult;
 use num_bigint::BigUint;
-use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
-
+use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 /**
  * AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): Investigate optimizations.
  * It seems that we could have:

@@ -1,6 +1,5 @@
-use crate::types::{
-    PrecomputedEntities, ShiftedTableEntities, ShiftedWitnessEntities, WitnessEntities,
-};
+use crate::types::{ShiftedTableEntities, ShiftedWitnessEntities, WitnessEntities};
+use circuit_builder::prelude::PrecomputedEntities;
 
 pub(crate) struct PolyF<'a, T: Default> {
     pub(crate) precomputed: &'a PrecomputedEntities<T>,

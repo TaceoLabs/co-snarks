@@ -1,7 +1,9 @@
 use super::CoUltraCircuitBuilder;
 use crate::{mpc::NoirUltraHonkProver, types::ProvingKey};
 use ark_ec::pairing::Pairing;
-use ultrahonk::prelude::{CycleNode, CyclicPermutation, Polynomial, NUM_SELECTORS, NUM_WIRES};
+use circuit_builder::prelude::{
+    CycleNode, CyclicPermutation, Polynomial, NUM_SELECTORS, NUM_WIRES,
+};
 
 pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) wires: [&'a mut Polynomial<T::ArithmeticShare>; NUM_WIRES],

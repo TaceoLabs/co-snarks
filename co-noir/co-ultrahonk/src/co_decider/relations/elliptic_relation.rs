@@ -8,8 +8,9 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
-use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
-
+use circuit_builder::prelude::HonkCurve;
+use circuit_builder::HonkProofResult;
+use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 #[derive(Clone, Debug)]
 pub(crate) struct EllipticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,

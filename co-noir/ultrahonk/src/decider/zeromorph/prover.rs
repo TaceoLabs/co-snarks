@@ -3,16 +3,20 @@ use super::{
     types::{PolyF, PolyG, PolyGShift},
     ZeroMorphOpeningClaim,
 };
+
 use crate::{
-    decider::{polynomial::Polynomial, types::ClaimedEvaluations, zeromorph::OpeningPair},
-    honk_curve::HonkCurve,
-    prover::HonkProofResult,
-    transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    types::{AllEntities, ProverCrs},
+    decider::{types::ClaimedEvaluations, zeromorph::OpeningPair},
+    transcript::{Transcript, TranscriptHasher},
+    types::AllEntities,
     Utils, CONST_PROOF_SIZE_LOG_N, N_MAX,
 };
 use ark_ec::Group;
 use ark_ff::{Field, One, Zero};
+use circuit_builder::{prelude::ProverCrs, TranscriptFieldType};
+use circuit_builder::{
+    prelude::{HonkCurve, Polynomial},
+    HonkProofResult,
+};
 use itertools::izip;
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {

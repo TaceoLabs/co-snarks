@@ -1,10 +1,12 @@
 use super::types::VerifierMemory;
 use crate::{
     oink::prover::Oink,
-    prelude::{HonkCurve, TranscriptFieldType},
     transcript::{Transcript, TranscriptHasher},
-    types::VerifyingKey,
     verifier::HonkVerifyResult,
+};
+use circuit_builder::{
+    prelude::{HonkCurve, VerifyingKey},
+    TranscriptFieldType,
 };
 use eyre::Context;
 

@@ -3,17 +3,25 @@ use super::{
     types::{AggregationObjectPubInputIndices, AGGREGATION_OBJECT_SIZE},
 };
 use crate::{
-    prelude::{CrsParser, HonkCurve, TranscriptFieldType},
-    prover::{HonkProofError, HonkProofResult},
-    types::{
-        Crs, HonkProof, PrecomputedEntities, ProverCrs, ProvingKey, VerifyingKey,
-        PRECOMPUTED_ENTITIES_SIZE,
-    },
-    Serialize, Utils,
+    crs::{Crs, CrsParser, ProverCrs},
+    honk_curve::HonkCurve,
+    polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE},
+    proving_key::ProvingKey,
+    serialize::Serialize,
+    utils::Utils,
+    HonkProofError, HonkProofResult, TranscriptFieldType,
 };
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::PrimeField;
 use eyre::Result;
+
+pub struct VerifyingKey<P: Pairing> {
+    pub crs: P::G2Affine,
+    pub circuit_size: u32,
+    pub num_public_inputs: u32,
+    pub pub_inputs_offset: u32,
+    pub commitments: PrecomputedEntities<P::G1Affine>,
+}
 
 impl<P: Pairing> VerifyingKey<P> {
     pub fn create(circuit: UltraCircuitBuilder<P>, crs: Crs<P>) -> HonkProofResult<Self> {

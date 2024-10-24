@@ -9,15 +9,17 @@ use super::{
     },
     verification_key::VerifyingKeyBarretenberg,
 };
+use super::{
+    plookup::{MultiTableId, Plookup},
+    types::{FieldCT, GateCounter, RomRecord, RomTable, NUM_WIRES},
+};
 use crate::{
-    decider::sumcheck::verifier,
-    parse::{
-        plookup::{MultiTableId, Plookup},
-        types::{FieldCT, GateCounter, RomRecord, RomTable, NUM_WIRES},
-    },
-    prover::HonkProofResult,
-    types::{Crs, PrecomputedEntities, ProverCrs, ProvingKey, VerifyingKey},
-    Utils,
+    crs::{Crs, ProverCrs},
+    polynomial_types::PrecomputedEntities,
+    proving_key::ProvingKey,
+    utils::Utils,
+    verification_key::VerifyingKey,
+    HonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};
@@ -312,20 +314,20 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         if (num_bits == 1) {
             self.create_bool_gate(variable_index);
         } else if (num_bits <= Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32) {
-            /**
-             * N.B. if `variable_index` is not used in any arithmetic constraints, this will create an unsatisfiable
-             *      circuit!
-             *      this range constraint will increase the size of the 'sorted set' of range-constrained integers by 1.
-             *      The 'non-sorted set' of range-constrained integers is a subset of the wire indices of all arithmetic
-             *      gates. No arithmetic gate => size imbalance between sorted and non-sorted sets. Checking for this
-             *      and throwing an error would require a refactor of the Composer to catelog all 'orphan' variables not
-             *      assigned to gates.
-             *
-             * TODO(Suyash):
-             *    The following is a temporary fix to make sure the range constraints on numbers with
-             *    num_bits <= DEFAULT_PLOOKUP_RANGE_BITNUM is correctly enforced in the circuit.
-             *    Longer term, as Zac says, we would need to refactor the composer to fix this.
-             **/
+            // /**
+            //  * N.B. if `variable_index` is not used in any arithmetic constraints, this will create an unsatisfiable
+            //  *      circuit!
+            //  *      this range constraint will increase the size of the 'sorted set' of range-constrained integers by 1.
+            //  *      The 'non-sorted set' of range-constrained integers is a subset of the wire indices of all arithmetic
+            //  *      gates. No arithmetic gate => size imbalance between sorted and non-sorted sets. Checking for this
+            //  *      and throwing an error would require a refactor of the Composer to catelog all 'orphan' variables not
+            //  *      assigned to gates.
+            //  *
+            //  * TODO(Suyash):
+            //  *    The following is a temporary fix to make sure the range constraints on numbers with
+            //  *    num_bits <= DEFAULT_PLOOKUP_RANGE_BITNUM is correctly enforced in the circuit.
+            //  *    Longer term, as Zac says, we would need to refactor the composer to fix this.
+            //  **/
             self.create_poly_gate(&PolyTriple::<P::ScalarField> {
                 a: variable_index,
                 b: variable_index,
@@ -425,19 +427,19 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         // }
 
         let sublimb_mask: u64 = (1 << target_range_bitnum) - 1;
-        /**
-         * TODO: Support this commented-out code!
-         * At the moment, `decompose_into_default_range` generates a minimum of 1 arithmetic gate.
-         * This is not strictly required iff num_bits <= target_range_bitnum.
-         * However, this produces an edge-case where a variable is range-constrained but NOT present in an arithmetic gate.
-         * This in turn produces an unsatisfiable circuit (see `create_new_range_constraint`). We would need to check for
-         * and accommodate/reject this edge case to support not adding addition gates here if not reqiured
-         * if (num_bits <= target_range_bitnum) {
-         *     const uint64_t expected_range = (1ULL << num_bits) - 1ULL;
-         *     create_new_range_constraint(variable_index, expected_range);
-         *     return { variable_index };
-         * }
-         **/
+        // /**
+        //  * TODO: Support this commented-out code!
+        //  * At the moment, `decompose_into_default_range` generates a minimum of 1 arithmetic gate.
+        //  * This is not strictly required iff num_bits <= target_range_bitnum.
+        //  * However, this produces an edge-case where a variable is range-constrained but NOT present in an arithmetic gate.
+        //  * This in turn produces an unsatisfiable circuit (see `create_new_range_constraint`). We would need to check for
+        //  * and accommodate/reject this edge case to support not adding addition gates here if not reqiured
+        //  * if (num_bits <= target_range_bitnum) {
+        //  *     const uint64_t expected_range = (1ULL << num_bits) - 1ULL;
+        //  *     create_new_range_constraint(variable_index, expected_range);
+        //  *     return { variable_index };
+        //  * }
+        //  **/
         let mut sublimbs: Vec<u64> = Vec::new();
         let mut sublimb_indices: Vec<u32> = Vec::new();
 

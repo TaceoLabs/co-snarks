@@ -17,11 +17,11 @@ use crate::{
         },
         types::ProverUnivariates,
     },
-    honk_curve::HonkCurve,
-    transcript::TranscriptFieldType,
     types::AllEntities,
 };
 use ark_ff::PrimeField;
+use circuit_builder::prelude::HonkCurve;
+use circuit_builder::TranscriptFieldType;
 
 pub(crate) type SumcheckRoundOutput<F> = Univariate<F, { MAX_PARTIAL_RELATION_LENGTH + 1 }>;
 

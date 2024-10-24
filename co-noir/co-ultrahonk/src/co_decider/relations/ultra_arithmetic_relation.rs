@@ -8,7 +8,9 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
-use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
+use circuit_builder::prelude::HonkCurve;
+use circuit_builder::HonkProofResult;
+use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
 pub(crate) struct UltraArithmeticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {

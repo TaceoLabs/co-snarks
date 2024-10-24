@@ -1,11 +1,11 @@
 use super::{sumcheck::SumcheckOutput, types::ProverMemory, zeromorph::ZeroMorphOpeningClaim};
 use crate::{
-    honk_curve::HonkCurve,
-    prover::HonkProofResult,
-    transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    types::{HonkProof, ProverCrs},
+    transcript::{Transcript, TranscriptHasher},
+    types::HonkProof,
     Utils,
 };
+use circuit_builder::{prelude::HonkCurve, HonkProofResult};
+use circuit_builder::{prelude::ProverCrs, TranscriptFieldType};
 use std::marker::PhantomData;
 
 pub(crate) struct Decider<

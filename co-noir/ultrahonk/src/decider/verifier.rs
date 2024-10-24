@@ -1,11 +1,12 @@
 use super::{types::VerifierMemory, zeromorph::ZeroMorphVerifierOpeningClaim};
 use crate::{
-    prelude::{HonkCurve, TranscriptFieldType},
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
 };
 use ark_ec::AffineRepr;
 use ark_ff::One;
+use circuit_builder::prelude::HonkCurve;
+use circuit_builder::TranscriptFieldType;
 use std::marker::PhantomData;
 
 pub(crate) struct DeciderVerifier<
