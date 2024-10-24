@@ -354,7 +354,12 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     let input_share = translate_witness_share_rep3(input_share, &compiled_program.abi)?;
 
     // connect to network
-    let net = Rep3MpcNet::new(config.network).context("while connecting to network")?;
+    let network_config = config
+        .network
+        .to_owned()
+        .try_into()
+        .context("while converting network config")?;
+    let net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
     let id = usize::from(net.get_id());
 
     // init MPC protocol
@@ -407,7 +412,12 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     }
 
     // connect to network
-    let net = Rep3MpcNet::new(config.network)?;
+    let network_config = config
+        .network
+        .to_owned()
+        .try_into()
+        .context("while converting network config")?;
+    let net = Rep3MpcNet::new(network_config)?;
     let id = usize::from(net.get_id());
 
     // init MPC protocol
@@ -468,6 +478,12 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
         .context("while parsing program artifact")?;
 
+    let network_config = config
+        .network
+        .to_owned()
+        .try_into()
+        .context("while converting network config")?;
+
     let (proof, public_input) = match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
@@ -476,7 +492,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let witness_share = bincode::deserialize_from(witness_file)
                 .context("while deserializing witness share")?;
             // connect to network
-            let net = Rep3MpcNet::new(config.network)?;
+            let net = Rep3MpcNet::new(network_config)?;
             let id = net.get_id();
 
             let mut io_context0 = IoContext::init(net)?;
@@ -526,7 +542,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let witness_share = bincode::deserialize_from(witness_file)
                 .context("while deserializing witness share")?;
             // connect to network
-            let net = ShamirMpcNet::new(config.network)?;
+            let net = ShamirMpcNet::new(network_config)?;
             let id = net.get_id();
 
             // Create the circuit

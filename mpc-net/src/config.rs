@@ -1,10 +1,13 @@
 //! Data structures and helpers for the network configuration.
 use color_eyre::eyre;
+use quinn::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Formatter,
     net::{SocketAddr, ToSocketAddrs},
+    num::ParseIntError,
     path::PathBuf,
+    str::FromStr,
 };
 
 /// A network address wrapper.
@@ -19,6 +22,39 @@ pub struct Address {
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}", self.hostname, self.port)
+    }
+}
+
+/// An error for parsing [`Address`]es.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParseAddressError {
+    /// Must be hostname:port
+    InvalidFormat,
+    /// Invalid port
+    InvalidPort(ParseIntError),
+}
+
+impl std::fmt::Display for ParseAddressError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseAddressError::InvalidFormat => {
+                write!(f, "invalid format, expected hostname:port")
+            }
+            ParseAddressError::InvalidPort(e) => write!(f, "cannot parse port: {e}"),
+        }
+    }
+}
+
+impl FromStr for Address {
+    type Err = ParseAddressError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            return Err(ParseAddressError::InvalidFormat);
+        }
+        let hostname = parts[0].to_string();
+        let port = parts[1].parse().map_err(ParseAddressError::InvalidPort)?;
+        Ok(Address { hostname, port })
     }
 }
 
@@ -38,19 +74,13 @@ impl Serialize for Address {
 impl<'de> Deserialize<'de> for Address {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
-        let parts: Vec<&str> = s.split(':').collect();
-        if parts.len() != 2 {
-            return Err(serde::de::Error::custom("invalid address format"));
-        }
-        let hostname = parts[0].to_string();
-        let port = parts[1].parse().map_err(serde::de::Error::custom)?;
-        Ok(Address { hostname, port })
+        Address::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
-/// A party in the network.
+/// A party in the network config file.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct NetworkParty {
+pub struct NetworkPartyConfig {
     /// The id of the party, 0-based indexing.
     pub id: usize,
     /// The DNS name of the party.
@@ -59,8 +89,44 @@ pub struct NetworkParty {
     pub cert_path: PathBuf,
 }
 
-/// The network configuration.
+/// A party in the network.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct NetworkParty {
+    /// The id of the party, 0-based indexing.
+    pub id: usize,
+    /// The DNS name of the party.
+    pub dns_name: Address,
+    /// The public certificate of the party.
+    pub cert: CertificateDer<'static>,
+}
+
+impl TryFrom<NetworkPartyConfig> for NetworkParty {
+    type Error = std::io::Error;
+    fn try_from(value: NetworkPartyConfig) -> Result<Self, Self::Error> {
+        let cert = CertificateDer::from(std::fs::read(value.cert_path)?).into_owned();
+        Ok(NetworkParty {
+            id: value.id,
+            dns_name: value.dns_name,
+            cert,
+        })
+    }
+}
+
+/// The network configuration file.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct NetworkConfigFile {
+    /// The list of parties in the network.
+    pub parties: Vec<NetworkPartyConfig>,
+    /// Our own id in the network.
+    pub my_id: usize,
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: SocketAddr,
+    /// The path to our private key file.
+    pub key_path: PathBuf,
+}
+
+/// The network configuration.
+#[derive(Debug, Eq, PartialEq)]
 pub struct NetworkConfig {
     /// The list of parties in the network.
     pub parties: Vec<NetworkParty>,
@@ -68,8 +134,38 @@ pub struct NetworkConfig {
     pub my_id: usize,
     /// The [SocketAddr] we bind to.
     pub bind_addr: SocketAddr,
-    /// The path to our private key file.
-    pub key_path: PathBuf,
+    /// The private key.
+    pub key: PrivateKeyDer<'static>,
+}
+
+impl TryFrom<NetworkConfigFile> for NetworkConfig {
+    type Error = std::io::Error;
+    fn try_from(value: NetworkConfigFile) -> Result<Self, Self::Error> {
+        let parties = value
+            .parties
+            .into_iter()
+            .map(NetworkParty::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(value.key_path)?))
+            .clone_key();
+        Ok(NetworkConfig {
+            parties,
+            my_id: value.my_id,
+            bind_addr: value.bind_addr,
+            key,
+        })
+    }
+}
+
+impl Clone for NetworkConfig {
+    fn clone(&self) -> Self {
+        Self {
+            parties: self.parties.clone(),
+            my_id: self.my_id,
+            bind_addr: self.bind_addr,
+            key: self.key.clone_key(),
+        }
+    }
 }
 
 impl NetworkConfig {
