@@ -729,9 +729,15 @@ where
         (false, s)
     };
     let positive_value = if let Some(stripped) = stripped.strip_prefix("0x") {
-        let big_int = BigUint::from_str_radix(stripped, 16)
+        let mut big_int = BigUint::from_str_radix(stripped, 16)
             .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
             .context("while parsing field element")?;
+        let modulus = BigUint::try_from(F::MODULUS).expect("can convert mod to biguint");
+        if big_int >= modulus {
+            tracing::warn!("val {} >= mod", big_int);
+            // snarkjs also does this
+            big_int %= modulus;
+        }
         let big_int: F::BigInt = big_int
             .try_into()
             .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
