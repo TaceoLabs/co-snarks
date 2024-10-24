@@ -102,6 +102,9 @@ enum Commands {
 
 fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .map_err(|_| eyre!("Could not install default rustls crypto provider"))?;
     let args = Cli::parse();
 
     match args.command {

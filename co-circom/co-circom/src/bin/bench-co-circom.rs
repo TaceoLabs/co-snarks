@@ -1340,6 +1340,9 @@ fn cleanup(conf: &Config) -> color_eyre::Result<()> {
 
 fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .map_err(|_| eyre!("Could not install default rustls crypto provider"))?;
     let args = Cli::parse();
     let conf = Config::from(args);
     check_args(&conf).context("during checking arguments")?;
