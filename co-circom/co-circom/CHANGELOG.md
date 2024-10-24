@@ -9,6 +9,51 @@
     * co-plonk bumped from 0.3.0 to 0.3.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-v0.5.1...co-circom-v0.6.0) (2024-10-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* MpcNetworkHandler::establish now takes the config with already read certs and key.
+* Removes the zkey in the said function signature. We needed it earlier because we had to know domain size, which we now no longer need.
+* the prover for Groth16/Plonk now expects an Arc<ZKey>. Cleaner than having multiple Arcs in ZKey
+* The serialized format of shares is now different.
+* Refactor calls to other crates because of API changes
+
+### Features
+
+* Add the possibility to share co-circom inputs and witness in compressed form ([c3443e1](https://github.com/TaceoLabs/co-snarks/commit/c3443e1d6118f18c98c260b426307a16a2de9f76))
+* can now parse bool inputs ([#236](https://github.com/TaceoLabs/co-snarks/issues/236)) ([d0147b6](https://github.com/TaceoLabs/co-snarks/commit/d0147b60810545d1a8796370b82c50eac1d7739d))
+
+
+### Bug Fixes
+
+* fixed path in zkey benches ([#231](https://github.com/TaceoLabs/co-snarks/issues/231)) ([99ab2de](https://github.com/TaceoLabs/co-snarks/commit/99ab2de32db9b27ca219fd93d7f8f17ab9692984))
+* handle inputs that are &gt;= mod in the same way as snarkjs ([76f701b](https://github.com/TaceoLabs/co-snarks/commit/76f701b63fc94e9643aefb3ded9670843a0e716f))
+* install rustls default crypto provider in our main binaries & examples ([#238](https://github.com/TaceoLabs/co-snarks/issues/238)) ([78757e4](https://github.com/TaceoLabs/co-snarks/commit/78757e46d8622360377d27c5d475d417bed95c5a))
+
+
+### Code Refactoring
+
+* prove for circom now expect Arc&lt;ZKey&gt; ([c2ac465](https://github.com/TaceoLabs/co-snarks/commit/c2ac465ebf6f3a28b902d9f0489e3f57c0843d7f))
+* Refactor calls to other crates because of API changes ([6ed7c1a](https://github.com/TaceoLabs/co-snarks/commit/6ed7c1ad34e5dabd3ba1464cc805d5427d543f68))
+* split network config into two types ([dca1756](https://github.com/TaceoLabs/co-snarks/commit/dca175603a5d6a2f75ccd987cb0b19cc3d965b00))
+* with_network_config for ShamirGroth16 doesn't need zkey anymore ([2052d89](https://github.com/TaceoLabs/co-snarks/commit/2052d89cc4abb531702886daf70c47ee3b1ecf1a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-compiler bumped from 0.6.1 to 0.7.0
+    * circom-mpc-vm bumped from 0.4.2 to 0.5.0
+    * circom-types bumped from 0.5.0 to 0.6.0
+    * co-circom-snarks bumped from 0.1.2 to 0.2.0
+    * co-groth16 bumped from 0.5.1 to 0.6.0
+    * co-plonk bumped from 0.3.1 to 0.4.0
+    * mpc-core bumped from 0.5.0 to 0.6.0
+    * mpc-net bumped from 0.1.2 to 0.2.0
+
 ## [0.5.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-circom-v0.4.0...co-circom-v0.5.0) (2024-08-21)
 
 
