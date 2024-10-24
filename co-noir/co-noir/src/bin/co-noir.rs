@@ -12,9 +12,9 @@ use co_noir::{
 };
 use co_ultrahonk::{
     prelude::{
-        CoUltraHonk, HonkProof, Poseidon2Sponge, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver,
-        ShamirCoBuilder, ShamirUltraHonkDriver, SharedBuilderVariable, UltraCircuitBuilder,
-        UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg,
+        CoUltraHonk, HonkProof, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey, Rep3CoBuilder,
+        Rep3UltraHonkDriver, ShamirCoBuilder, ShamirUltraHonkDriver, SharedBuilderVariable,
+        UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg,
     },
     MAX_PARTIAL_RELATION_LENGTH, OINK_CRAND_PAIRS_CONST, OINK_CRAND_PAIRS_FACTOR_N,
     OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE, SUMCHECK_ROUND_CRAND_PAIRS_FACTOR,
@@ -482,12 +482,13 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let mut io_context0 = IoContext::init(net)?;
             let io_context1 = io_context0.fork()?;
             // init MPC protocol
-            let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
+            let mut driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
 
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
             let builder = Rep3CoBuilder::<Bn254, _>::create_circuit(
+                &mut driver,
                 constraint_system,
                 0,
                 witness_share,
@@ -532,55 +533,57 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
-            let builder = ShamirCoBuilder::<Bn254, _>::create_circuit(
-                constraint_system,
-                0,
-                witness_share,
-                true,
-                false,
-            );
+            todo!("driver is needed before");
+            // let builder = ShamirCoBuilder::<Bn254, _>::create_circuit(
+            //     &mut driver,
+            //     constraint_system,
+            //     0,
+            //     witness_share,
+            //     true,
+            //     false,
+            // );
 
-            // parse the crs
-            let prover_crs = ProvingKey::get_prover_crs(
-                &builder,
-                crs_path.to_str().context("while opening crs file")?,
-            )
-            .expect("failed to get prover crs");
+            // // parse the crs
+            // let prover_crs = ProvingKey::get_prover_crs(
+            //     &builder,
+            //     crs_path.to_str().context("while opening crs file")?,
+            // )
+            // .expect("failed to get prover crs");
 
-            // Get the proving key and prover
-            let proving_key = ProvingKey::create(id, builder, prover_crs)?;
-            let public_input = proving_key.get_public_inputs();
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!(
-                "Party {}: Proving key generation took {} ms",
-                id,
-                duration_ms
-            );
+            // // Get the proving key and prover
+            // let proving_key = ProvingKey::create(id, builder, prover_crs)?;
+            // let public_input = proving_key.get_public_inputs();
+            // let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            // tracing::info!(
+            //     "Party {}: Proving key generation took {} ms",
+            //     id,
+            //     duration_ms
+            // );
 
-            // init MPC protocol
-            // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
-            let n = proving_key.circuit_size as usize;
-            let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
-                + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
-                + OINK_CRAND_PAIRS_CONST;
-            // log2(n) * ((n >>= 1) / 2) == n - 1
-            let num_pairs_sumcheck_prove =
-                SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
-            let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
-            let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
-            let mut protocol0 = ShamirProtocol::from(preprocessing);
-            let protocol1 = protocol0.fork_with_pairs(0)?;
-            let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
+            // // init MPC protocol
+            // // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+            // let n = proving_key.circuit_size as usize;
+            // let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
+            //     + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
+            //     + OINK_CRAND_PAIRS_CONST;
+            // // log2(n) * ((n >>= 1) / 2) == n - 1
+            // let num_pairs_sumcheck_prove =
+            //     SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+            // let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
+            // let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
+            // let mut protocol0 = ShamirProtocol::from(preprocessing);
+            // let protocol1 = protocol0.fork_with_pairs(0)?;
+            // let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
 
-            // execute prover in MPC
-            tracing::info!("Party {}: starting proof generation..", id);
-            let start = Instant::now();
-            let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
-            let proof = prover.prove(proving_key)?;
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+            // // execute prover in MPC
+            // tracing::info!("Party {}: starting proof generation..", id);
+            // let start = Instant::now();
+            // let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
+            // let proof = prover.prove(proving_key)?;
+            // let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            // tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
 
-            (proof, public_input)
+            // (proof, public_input)
         }
     };
 
@@ -639,9 +642,16 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
 
     // get builder
     tracing::info!("Starting to generate verification key..");
+    let mut driver = PlainUltraHonkDriver;
     let start = Instant::now();
-    let builder =
-        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, vec![], true, false);
+    let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
+        &mut driver,
+        constraint_system,
+        0,
+        vec![],
+        true,
+        false,
+    );
 
     // parse the crs
     let prover_crs = VerifyingKey::get_prover_crs(

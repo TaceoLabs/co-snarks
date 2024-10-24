@@ -5,6 +5,7 @@ use super::{
 use crate::{
     crs::{Crs, CrsParser, ProverCrs},
     honk_curve::HonkCurve,
+    mpc::NoirUltraHonkProver,
     polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE},
     proving_key::ProvingKey,
     serialize::Serialize,
@@ -42,8 +43,8 @@ impl<P: Pairing> VerifyingKey<P> {
         }
     }
 
-    pub fn get_crs<S: UltraCircuitVariable<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+    pub fn get_crs<T: NoirUltraHonkProver<P>, S: UltraCircuitVariable<P, T>>(
+        circuit: &GenericUltraCircuitBuilder<P, T, S>,
         path_g1: &str,
         path_g2: &str,
     ) -> Result<Crs<P>> {
@@ -51,8 +52,8 @@ impl<P: Pairing> VerifyingKey<P> {
         ProvingKey::get_crs(circuit, path_g1, path_g2)
     }
 
-    pub fn get_prover_crs<S: UltraCircuitVariable<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+    pub fn get_prover_crs<T: NoirUltraHonkProver<P>, S: UltraCircuitVariable<P, T>>(
+        circuit: &GenericUltraCircuitBuilder<P, T, S>,
         path_g1: &str,
     ) -> Result<ProverCrs<P>> {
         tracing::trace!("Getting crs");

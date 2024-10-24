@@ -1,6 +1,7 @@
 use ark_ec::pairing::Pairing;
 use circuit_builder::mpc::NoirUltraHonkProver;
-use circuit_builder::{prelude::UltraCircuitVariable, HonkProofError, HonkProofResult};
+use circuit_builder::prelude::UltraCircuitVariable;
+use circuit_builder::{HonkProofError, HonkProofResult};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -59,11 +60,9 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Debug for SharedBuilderVariable<T, P
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraCircuitVariable<P::ScalarField>
+impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraCircuitVariable<P, T>
     for SharedBuilderVariable<T, P>
 {
-    type Shared = T::ArithmeticShare;
-
     fn from_public(value: P::ScalarField) -> Self {
         Self::Public(value)
     }

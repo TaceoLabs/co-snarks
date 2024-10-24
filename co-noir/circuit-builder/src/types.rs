@@ -1,5 +1,6 @@
 use super::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable};
 use super::plookup::{BasicTableId, MultiTableId};
+use crate::mpc::NoirUltraHonkProver;
 use crate::{polynomial::Polynomial, proving_key::ProvingKey, utils::Utils};
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};
@@ -436,9 +437,13 @@ impl GateCounter {
         }
     }
 
-    pub(crate) fn compute_diff<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn compute_diff<
+        P: Pairing,
+        T: NoirUltraHonkProver<P>,
+        S: UltraCircuitVariable<P, T>,
+    >(
         &mut self,
-        builder: &GenericUltraCircuitBuilder<P, S>,
+        builder: &GenericUltraCircuitBuilder<P, T, S>,
     ) -> usize {
         if !self.collect_gates_per_opcode {
             return 0;
@@ -449,9 +454,13 @@ impl GateCounter {
         diff
     }
 
-    pub(crate) fn track_diff<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn track_diff<
+        P: Pairing,
+        T: NoirUltraHonkProver<P>,
+        S: UltraCircuitVariable<P, T>,
+    >(
         &mut self,
-        builder: &GenericUltraCircuitBuilder<P, S>,
+        builder: &GenericUltraCircuitBuilder<P, T, S>,
         gates_per_opcode: &mut [usize],
         opcode_index: usize,
     ) {
@@ -511,10 +520,14 @@ impl<F: PrimeField> RomTable<F> {
         }
     }
 
-    pub(crate) fn index_field_ct<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn index_field_ct<
+        P: Pairing,
+        T: NoirUltraHonkProver<P>,
+        S: UltraCircuitVariable<P, T>,
+    >(
         &mut self,
         index: &FieldCT<F>,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
+        builder: &mut GenericUltraCircuitBuilder<P, T, S>,
     ) -> FieldCT<F>
     where
         F: From<P::ScalarField>,
@@ -537,9 +550,9 @@ impl<F: PrimeField> RomTable<F> {
         FieldCT::from_witness_index(output_idx)
     }
 
-    fn initialize_table<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    fn initialize_table<P: Pairing, T: NoirUltraHonkProver<P>, S: UltraCircuitVariable<P, T>>(
         &mut self,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
+        builder: &mut GenericUltraCircuitBuilder<P, T, S>,
     ) where
         F: From<P::ScalarField>,
         P::ScalarField: From<F>,
@@ -634,9 +647,13 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     // TACEO TODO this is just implemented for the plain backend
-    pub(crate) fn from_witness<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn from_witness<
+        P: Pairing,
+        T: NoirUltraHonkProver<P>,
+        S: UltraCircuitVariable<P, T>,
+    >(
         input: P::ScalarField,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
+        builder: &mut GenericUltraCircuitBuilder<P, T, S>,
     ) -> Self
     where
         F: From<P::ScalarField>,
@@ -653,9 +670,9 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub(crate) fn get_value<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn get_value<P: Pairing, T: NoirUltraHonkProver<P>, S: UltraCircuitVariable<P, T>>(
         &self,
-        builder: &GenericUltraCircuitBuilder<P, S>,
+        builder: &GenericUltraCircuitBuilder<P, T, S>,
     ) -> F
     where
         F: From<P::ScalarField>,
@@ -682,10 +699,14 @@ impl<F: PrimeField> FieldCT<F> {
      * succeeds or fails. This can lead to confusion when debugging. If you want to log the inputs, do so before
      * calling this method.
      */
-    pub(crate) fn assert_equal<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn assert_equal<
+        P: Pairing,
+        T: NoirUltraHonkProver<P>,
+        S: UltraCircuitVariable<P, T>,
+    >(
         &self,
         other: &Self,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
+        builder: &mut GenericUltraCircuitBuilder<P, T, S>,
     ) where
         F: From<P::ScalarField>,
         P::ScalarField: From<F>,
@@ -711,9 +732,9 @@ impl<F: PrimeField> FieldCT<F> {
         self.witness_index == Self::IS_CONSTANT
     }
 
-    fn normalize<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    fn normalize<P: Pairing, T: NoirUltraHonkProver<P>, S: UltraCircuitVariable<P, T>>(
         &self,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
+        builder: &mut GenericUltraCircuitBuilder<P, T, S>,
     ) -> Self
     where
         F: From<P::ScalarField>,
@@ -785,9 +806,9 @@ pub(crate) struct WitnessCT<F: PrimeField> {
 impl<F: PrimeField> WitnessCT<F> {
     const IS_CONSTANT: u32 = FieldCT::<F>::IS_CONSTANT;
 
-    pub(crate) fn from_field<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn from_field<P: Pairing, T: NoirUltraHonkProver<P>, S: UltraCircuitVariable<P, T>>(
         value: P::ScalarField,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
+        builder: &mut GenericUltraCircuitBuilder<P, T, S>,
     ) -> Self
     where
         F: From<P::ScalarField>,

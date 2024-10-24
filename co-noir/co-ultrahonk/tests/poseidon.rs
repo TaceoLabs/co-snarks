@@ -19,10 +19,15 @@ fn poseidon_plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(proof_fil
 
     let witness = SharedBuilderVariable::promote_public_witness_vector(witness);
 
-    let builder =
-        PlainCoBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
-
-    let driver = PlainUltraHonkDriver;
+    let mut driver = PlainUltraHonkDriver;
+    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+        &mut driver,
+        constraint_system,
+        0,
+        witness,
+        true,
+        false,
+    );
 
     let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
     let (proving_key, verifying_key) = ProvingKey::create_keys(0, builder, crs).unwrap();

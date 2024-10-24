@@ -15,6 +15,7 @@ use super::{
 };
 use crate::{
     crs::{Crs, ProverCrs},
+    mpc::{plain::PlainUltraHonkDriver, NoirUltraHonkProver},
     polynomial_types::PrecomputedEntities,
     proving_key::ProvingKey,
     utils::Utils,
@@ -30,24 +31,24 @@ use std::{
 };
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
-pub trait UltraCircuitVariable<F>: Clone + PartialEq + Debug {
-    type Shared;
-
-    fn from_public(value: F) -> Self;
-    fn from_shared(value: Self::Shared) -> Self;
+pub trait UltraCircuitVariable<P: Pairing, T: NoirUltraHonkProver<P>>:
+    Clone + PartialEq + Debug
+{
+    fn from_public(value: P::ScalarField) -> Self;
+    fn from_shared(value: T::ArithmeticShare) -> Self;
     fn is_public(&self) -> bool;
     // Returns Error if the variable is not public
-    fn public_into_field(self) -> HonkProofResult<F>;
+    fn public_into_field(self) -> HonkProofResult<P::ScalarField>;
 }
 
-impl<F: PrimeField> UltraCircuitVariable<F> for F {
-    type Shared = F;
-
+impl<F: PrimeField, P: Pairing<ScalarField = F>> UltraCircuitVariable<P, PlainUltraHonkDriver>
+    for F
+{
     fn from_public(value: F) -> Self {
         value
     }
 
-    fn from_shared(value: Self::Shared) -> Self {
+    fn from_shared(value: F) -> Self {
         value
     }
 
@@ -60,7 +61,8 @@ impl<F: PrimeField> UltraCircuitVariable<F> for F {
     }
 }
 
-pub type UltraCircuitBuilder<P> = GenericUltraCircuitBuilder<P, <P as Pairing>::ScalarField>;
+pub type UltraCircuitBuilder<P> =
+    GenericUltraCircuitBuilder<P, PlainUltraHonkDriver, <P as Pairing>::ScalarField>;
 
 impl<P: Pairing> UltraCircuitBuilder<P> {
     pub fn create_vk_barretenberg(
@@ -126,7 +128,11 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
     }
 }
 
-pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> {
+pub struct GenericUltraCircuitBuilder<
+    P: Pairing,
+    T: NoirUltraHonkProver<P>,
+    S: UltraCircuitVariable<P, T>,
+> {
     pub variables: Vec<S>,
     variable_names: HashMap<u32, String>,
     next_var_index: Vec<u32>,
@@ -156,9 +162,12 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::Sca
     pub(crate) memory_read_records: Vec<u32>,
     // Stores gate index of RAM writes (required by proving key)
     pub(crate) memory_write_records: Vec<u32>,
+    phantom: std::marker::PhantomData<T>,
 }
 
-impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBuilder<P, S> {
+impl<P: Pairing, T: NoirUltraHonkProver<P>, S: UltraCircuitVariable<P, T>>
+    GenericUltraCircuitBuilder<P, T, S>
+{
     pub(crate) const DUMMY_TAG: u32 = 0;
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
     pub(crate) const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
@@ -172,6 +181,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
 
     pub fn create_circuit(
+        driver: &mut T,
         constraint_system: AcirFormat<P::ScalarField>,
         size_hint: usize,
         witness: Vec<S>,
@@ -237,6 +247,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
             current_tag: 0,
+            phantom: std::marker::PhantomData,
         }
     }
 

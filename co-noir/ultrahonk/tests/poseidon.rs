@@ -1,4 +1,5 @@
 use ark_bn254::Bn254;
+use circuit_builder::mpc::plain::PlainUltraHonkDriver;
 use sha3::Keccak256;
 use ultrahonk::{
     prelude::{
@@ -17,8 +18,15 @@ fn poseidon_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
     let constraint_system = Utils::get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
     let witness = Utils::get_witness_from_file(WITNESS_FILE).unwrap();
 
-    let builder =
-        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
+    let mut driver = PlainUltraHonkDriver;
+    let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
+        &mut driver,
+        constraint_system,
+        0,
+        witness,
+        true,
+        false,
+    );
 
     let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
 
@@ -62,8 +70,15 @@ fn print_vkey() {
     let constraint_system = Utils::get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
     let witness = Utils::get_witness_from_file(WITNESS_FILE).unwrap();
 
-    let builder =
-        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
+    let mut driver = PlainUltraHonkDriver;
+    let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
+        &mut driver,
+        constraint_system,
+        0,
+        witness,
+        true,
+        false,
+    );
 
     let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
 
