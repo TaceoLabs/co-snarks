@@ -305,6 +305,8 @@ where
     for (name, val) in input_json {
         let parsed_vals = if val.is_array() {
             parse_array(&val)?
+        } else if val.is_boolean() {
+            vec![parse_boolean(&val)?]
         } else {
             vec![parse_field(&val)?]
         };
@@ -754,11 +756,24 @@ fn parse_array<F: PrimeField>(val: &serde_json::Value) -> color_eyre::Result<Vec
     for ele in json_arr {
         if ele.is_array() {
             field_elements.extend(parse_array::<F>(ele)?);
+        } else if ele.is_boolean() {
+            field_elements.push(parse_boolean(ele)?);
         } else {
             field_elements.push(parse_field(ele)?);
         }
     }
     Ok(field_elements)
+}
+
+fn parse_boolean<F: PrimeField>(val: &serde_json::Value) -> color_eyre::Result<F> {
+    let bool = val
+        .as_bool()
+        .with_context(|| format!("expected input to be a bool, got {val}"))?;
+    if bool {
+        Ok(F::ONE)
+    } else {
+        Ok(F::ZERO)
+    }
 }
 
 fn merge_input_shares<F: PrimeField>(inputs: Vec<PathBuf>, out: PathBuf) -> color_eyre::Result<()> {
