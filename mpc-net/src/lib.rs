@@ -14,10 +14,7 @@ use color_eyre::eyre::{self, Context, Report};
 use config::NetworkConfig;
 use quinn::{
     crypto::rustls::QuicClientConfig,
-    rustls::{
-        pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
-        RootCertStore,
-    },
+    rustls::{pki_types::CertificateDer, RootCertStore},
 };
 use quinn::{
     ClientConfig, Connection, Endpoint, IdleTimeout, RecvStream, SendStream, TransportConfig,
@@ -74,12 +71,8 @@ impl MpcNetworkHandler {
         let certs: HashMap<usize, CertificateDer> = config
             .parties
             .iter()
-            .map(|p| {
-                let cert = std::fs::read(&p.cert_path)
-                    .with_context(|| format!("reading certificate of party {}", p.id))?;
-                Ok((p.id, CertificateDer::from(cert)))
-            })
-            .collect::<Result<_, Report>>()?;
+            .map(|p| (p.id, p.cert.clone()))
+            .collect();
 
         let mut root_store = RootCertStore::empty();
         for (id, cert) in &certs {
@@ -104,11 +97,8 @@ impl MpcNetworkHandler {
             client_config
         };
 
-        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-            std::fs::read(config.key_path).context("reading own key file")?,
-        ));
         let server_config =
-            quinn::ServerConfig::with_single_cert(vec![certs[&config.my_id].clone()], key)
+            quinn::ServerConfig::with_single_cert(vec![certs[&config.my_id].clone()], config.key)
                 .context("creating our server config")?;
         let our_socket_addr = config.bind_addr;
 

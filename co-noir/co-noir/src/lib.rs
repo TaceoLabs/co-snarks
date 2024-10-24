@@ -24,7 +24,7 @@ use mpc_core::protocols::{
     },
     shamir::{self, network::ShamirNetwork},
 };
-use mpc_net::config::NetworkConfig;
+use mpc_net::config::NetworkConfigFile;
 use noirc_abi::Abi;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
@@ -223,7 +223,7 @@ pub struct GenerateWitnessConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `translate_witness`
@@ -263,7 +263,7 @@ pub struct TranslateWitnessConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `generate_proof`
@@ -320,7 +320,7 @@ pub struct GenerateProofConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `creating_vk`

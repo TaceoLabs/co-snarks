@@ -7,7 +7,10 @@ use color_eyre::{
     Result,
 };
 use futures::{SinkExt, StreamExt};
-use mpc_net::{config::NetworkConfig, MpcNetworkHandler};
+use mpc_net::{
+    config::{NetworkConfig, NetworkConfigFile},
+    MpcNetworkHandler,
+};
 use tokio_util::codec::{Decoder, Encoder};
 
 #[derive(Parser)]
@@ -24,11 +27,13 @@ async fn main() -> Result<()> {
         .install_default()
         .map_err(|_| eyre!("Could not install default rustls crypto provider"))?;
 
-    let config: NetworkConfig =
+    let config: NetworkConfigFile =
         toml::from_str(&std::fs::read_to_string(args.config_file).context("opening config file")?)
             .context("parsing config file")?;
+    let config = NetworkConfig::try_from(config).context("converting network config")?;
+    let my_id = config.my_id;
 
-    let network = MpcNetworkHandler::establish(config.clone()).await?;
+    let network = MpcNetworkHandler::establish(config).await?;
 
     let codec = MessageCodec;
     let mut channels = network.get_custom_channels(codec).await?;
@@ -42,7 +47,7 @@ async fn main() -> Result<()> {
     for (&_, channel) in channels.iter_mut() {
         let buf = channel.next().await;
         if let Some(Ok(Message::Ping(b))) = buf {
-            assert!(b.iter().all(|&x| x == config.my_id as u8))
+            assert!(b.iter().all(|&x| x == my_id as u8))
         } else {
             panic!("could not receive message");
         }
@@ -56,7 +61,7 @@ async fn main() -> Result<()> {
     for (&_, channel) in channels.iter_mut() {
         let buf = channel.next().await;
         if let Some(Ok(Message::Pong(b))) = buf {
-            assert!(b.iter().all(|&x| x == config.my_id as u8))
+            assert!(b.iter().all(|&x| x == my_id as u8))
         } else {
             panic!("could not receive message");
         }

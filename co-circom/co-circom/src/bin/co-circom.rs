@@ -402,8 +402,12 @@ where
     file_utils::check_file_exists(&circuit_path)?;
 
     // connect to network
-    let mut mpc_net =
-        Rep3MpcNet::new(config.network.to_owned()).context("while connecting to network")?;
+    let network_config = config
+        .network
+        .to_owned()
+        .try_into()
+        .context("while converting network config")?;
+    let mut mpc_net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
 
     // parse input shares
     let input_share_file =
@@ -447,7 +451,12 @@ where
         co_circom::parse_witness_share_rep3_as_additive(witness_file)?;
 
     // connect to network
-    let net = Rep3MpcNet::new(config.network).context("while connecting to network")?;
+    let network_config = config
+        .network
+        .to_owned()
+        .try_into()
+        .context("while converting network config")?;
+    let net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
     let id = usize::from(net.get_id());
 
     // init MPC protocol
@@ -502,6 +511,12 @@ where
     // parse Circom zkey file
     let zkey_file = File::open(zkey)?;
 
+    let network_config = config
+        .network
+        .to_owned()
+        .try_into()
+        .context("while converting network config")?;
+
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
             let zkey = Arc::new(Groth16ZKey::<P>::from_reader(zkey_file).context("reading zkey")?);
@@ -512,7 +527,7 @@ where
                         return Err(eyre!("REP3 only allows the threshold to be 1"));
                     }
 
-                    let mut mpc_net = Rep3MpcNet::new(config.network)?;
+                    let mut mpc_net = Rep3MpcNet::new(network_config)?;
                     let witness_share =
                         co_circom::parse_witness_share_rep3(witness_file, &mut mpc_net)?;
                     let public_input = witness_share.public_inputs.clone();
@@ -529,7 +544,7 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     // connect to network
-                    let prover = ShamirCoGroth16::with_network_config(t, config.network)
+                    let prover = ShamirCoGroth16::with_network_config(t, network_config)
                         .context("while building prover")?;
 
                     // execute prover in MPC
@@ -560,7 +575,7 @@ where
                         return Err(eyre!("REP3 only allows the threshold to be 1"));
                     }
 
-                    let mut mpc_net = Rep3MpcNet::new(config.network)?;
+                    let mut mpc_net = Rep3MpcNet::new(network_config)?;
                     let witness_share =
                         co_circom::parse_witness_share_rep3(witness_file, &mut mpc_net)?;
 
@@ -579,7 +594,7 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     //init prover
-                    let prover = ShamirCoPlonk::with_network_config(t, config.network, &zkey)
+                    let prover = ShamirCoPlonk::with_network_config(t, network_config, &zkey)
                         .context("while building prover")?;
 
                     // execute prover in MPC
