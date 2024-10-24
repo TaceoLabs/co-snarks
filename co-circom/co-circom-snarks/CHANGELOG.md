@@ -9,6 +9,30 @@
   * dependencies
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.2.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-snarks-v0.1.2...co-circom-snarks-v0.2.0) (2024-10-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* refactor API because of changes in other crates
+
+### Features
+
+* prepare functions for compressed rep3 sharing ([55bef10](https://github.com/TaceoLabs/co-snarks/commit/55bef10313378e8ca14f2f22f312c84462a92a7e))
+
+
+### Code Refactoring
+
+* refactor API because of changes in other crates ([a58d8f1](https://github.com/TaceoLabs/co-snarks/commit/a58d8f1d1852ece862ed9d9164ee96e66fba1da8))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.5.0 to 0.6.0
+    * mpc-core bumped from 0.5.0 to 0.6.0
+
 ## 0.1.0 (2024-08-14)
 
 
