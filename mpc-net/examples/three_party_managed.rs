@@ -1,7 +1,10 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
-use color_eyre::{eyre::Context, Result};
+use color_eyre::{
+    eyre::{eyre, Context},
+    Result,
+};
 use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
 
 #[derive(Parser)]
@@ -14,6 +17,9 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .map_err(|_| eyre!("Could not install default rustls crypto provider"))?;
 
     let config: NetworkConfig =
         toml::from_str(&std::fs::read_to_string(args.config_file).context("opening config file")?)
