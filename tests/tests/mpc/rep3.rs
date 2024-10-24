@@ -1,10 +1,13 @@
 mod field_share {
     use ark_ff::Field;
+    use ark_ff::One;
     use ark_ff::PrimeField;
     use ark_std::{UniformRand, Zero};
     use itertools::izip;
+    use itertools::Itertools;
     use mpc_core::protocols::rep3::conversion;
     use mpc_core::protocols::rep3::id::PartyID;
+    use mpc_core::protocols::rep3::yao;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
     use mpc_core::protocols::rep3::yao::evaluator::Rep3Evaluator;
     use mpc_core::protocols::rep3::yao::garbler::Rep3Garbler;
@@ -12,6 +15,7 @@ mod field_share {
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
     use mpc_core::protocols::rep3::{self, arithmetic, network::IoContext};
+    use num_bigint::BigUint;
     use rand::thread_rng;
     use std::sync::mpsc;
     use std::thread;
@@ -301,22 +305,9 @@ mod field_share {
             )
             .unwrap(),
         ];
-        let mut x_shares1 = vec![];
-        let mut x_shares2 = vec![];
-        let mut x_shares3 = vec![];
-        let mut y_shares1 = vec![];
-        let mut y_shares2 = vec![];
-        let mut y_shares3 = vec![];
-        for (x, y) in x.iter().zip(y.iter()) {
-            let [x1, x2, x3] = rep3::share_field_element(*x, &mut rng);
-            let [y1, y2, y3] = rep3::share_field_element(*y, &mut rng);
-            x_shares1.push(x1);
-            x_shares2.push(x2);
-            x_shares3.push(x3);
-            y_shares1.push(y1);
-            y_shares2.push(y2);
-            y_shares3.push(y3);
-        }
+
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+        let y_shares = rep3::share_field_elements(&y, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -324,8 +315,8 @@ mod field_share {
         for (net, tx, x, y) in izip!(
             test_network.get_party_networks(),
             [tx1, tx2, tx3],
-            [x_shares1, x_shares2, x_shares3,],
-            [y_shares1, y_shares2, y_shares3,],
+            x_shares.into_iter(),
+            y_shares.into_iter()
         ) {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
@@ -350,22 +341,11 @@ mod field_share {
         let y = (0..1)
             .map(|_| ark_bn254::Fr::from_str("3").unwrap())
             .collect::<Vec<_>>();
-        let mut x_shares1 = vec![];
-        let mut x_shares2 = vec![];
-        let mut x_shares3 = vec![];
-        let mut y_shares1 = vec![];
-        let mut y_shares2 = vec![];
-        let mut y_shares3 = vec![];
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+        let y_shares = rep3::share_field_elements(&y, &mut rng);
+
         let mut should_result = vec![];
         for (x, y) in x.iter().zip(y.iter()) {
-            let [x1, x2, x3] = rep3::share_field_element(*x, &mut rng);
-            let [y1, y2, y3] = rep3::share_field_element(*y, &mut rng);
-            x_shares1.push(x1);
-            x_shares2.push(x2);
-            x_shares3.push(x3);
-            y_shares1.push(y1);
-            y_shares2.push(y2);
-            y_shares3.push(y3);
             should_result.push((x * y) * y);
         }
         let (tx1, rx1) = mpsc::channel();
@@ -375,8 +355,8 @@ mod field_share {
         for (net, tx, x, y) in izip!(
             test_network.get_party_networks(),
             [tx1, tx2, tx3],
-            [x_shares1, x_shares2, x_shares3,],
-            [y_shares1, y_shares2, y_shares3,],
+            x_shares.into_iter(),
+            y_shares.into_iter()
         ) {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
@@ -824,7 +804,7 @@ mod field_share {
                 .unwrap();
 
                 let output = garbler.output_all_parties(circuit_output.wires()).unwrap();
-                let add = GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap();
+                let add = GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap();
                 tx.send(add)
             });
         }
@@ -847,7 +827,7 @@ mod field_share {
             let output = evaluator
                 .output_all_parties(circuit_output.wires())
                 .unwrap();
-            let add = GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap();
+            let add = GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap();
             tx1.send(add)
         });
 
@@ -893,7 +873,7 @@ mod field_share {
                 .unwrap();
 
                 let output = garbler.output_all_parties(circuit_output.wires()).unwrap();
-                let add = GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap();
+                let add = GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap();
                 tx.send(add)
             });
         }
@@ -915,7 +895,7 @@ mod field_share {
             let output = evaluator
                 .output_all_parties(circuit_output.wires())
                 .unwrap();
-            let add = GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap();
+            let add = GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap();
             tx1.send(add)
         });
 
@@ -962,7 +942,7 @@ mod field_share {
                     }
                 };
 
-                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap())
+                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
                     .unwrap();
             });
         }
@@ -1010,7 +990,7 @@ mod field_share {
                     }
                 };
 
-                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap())
+                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
                     .unwrap();
             });
         }
@@ -1133,7 +1113,7 @@ mod field_share {
                     }
                 };
 
-                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap())
+                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
                     .unwrap();
             });
         }
@@ -1180,7 +1160,7 @@ mod field_share {
                     }
                 };
 
-                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(output).unwrap())
+                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
                     .unwrap();
             });
         }
@@ -1230,6 +1210,59 @@ mod field_share {
         assert_eq!(is_result, should_result);
         let is_result_f: ark_bn254::Fr = is_result.into();
         assert_eq!(is_result_f, x);
+    }
+
+    #[test]
+    fn rep3_decompose_shared_field_many_via_yao() {
+        const VEC_SIZE: usize = 10;
+        const TOTAL_BIT_SIZE: usize = 64;
+        const CHUNK_SIZE: usize = 14;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect_vec();
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+
+        let mut should_result =
+            Vec::with_capacity(VEC_SIZE * (TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE)));
+        let big_mask = (BigUint::from(1u64) << TOTAL_BIT_SIZE) - BigUint::one();
+        let small_mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
+        for x in x.into_iter() {
+            let mut x: BigUint = x.into();
+            x &= &big_mask;
+            for _ in 0..TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE) {
+                let chunk = &x & &small_mask;
+                x >>= CHUNK_SIZE;
+                should_result.push(ark_bn254::Fr::from(chunk));
+            }
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let decomposed =
+                    yao::decompose_arithmetic_many(&x, &mut rep3, TOTAL_BIT_SIZE, CHUNK_SIZE)
+                        .unwrap();
+                tx.send(decomposed)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        assert_eq!(is_result, should_result);
     }
 }
 
