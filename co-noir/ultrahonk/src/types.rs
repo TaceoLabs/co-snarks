@@ -144,7 +144,7 @@ pub struct ShiftedTableEntities<T: Default> {
 }
 
 pub(crate) const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PrecomputedEntities<T: Default> {
     pub(crate) elements: [T; PRECOMPUTED_ENTITIES_SIZE],
 }

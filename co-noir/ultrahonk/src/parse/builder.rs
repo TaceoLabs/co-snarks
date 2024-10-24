@@ -22,8 +22,10 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};
 use num_bigint::BigUint;
-use std::{collections::HashMap, fmt::Debug};
-
+use std::{
+    collections::{btree_map::Range, HashMap},
+    fmt::Debug,
+};
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
 pub trait UltraCircuitVariable<F>: Clone + PartialEq + Debug {
@@ -129,6 +131,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::Sca
     prev_var_index: Vec<u32>,
     pub real_variable_index: Vec<u32>,
     pub(crate) real_variable_tags: Vec<u32>,
+    pub(crate) current_tag: u32,
     pub public_inputs: Vec<u32>,
     is_recursive_circuit: bool,
     pub(crate) tau: HashMap<u32, u32>,
@@ -161,6 +164,8 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
     pub(crate) const NUMBER_OF_GATES_PER_RAM_ACCESS: usize = 2;
     pub(crate) const NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY: usize = 1;
     pub(crate) const NUM_RESERVED_GATES: usize = 4;
+    pub(crate) const DEFAULT_PLOOKUP_RANGE_BITNUM: usize = 14;
+    pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
     // number of gates created per non-native field operation in process_non_native_field_multiplications
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
 
@@ -183,6 +188,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
             constraint_system.recursive,
         );
 
+        //in the below it happens
         builder.build_constraints(
             constraint_system,
             has_valid_witness_assignments,
@@ -228,6 +234,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
             cached_partial_non_native_field_multiplications: Vec::new(),
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
+            current_tag: 0,
         }
     }
 
@@ -298,6 +305,404 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
             self.constant_variable_indices
                 .insert(variable, variable_index);
             variable_index
+        }
+    }
+
+    fn create_range_constraint(&mut self, variable_index: u32, num_bits: u32) {
+        if (num_bits == 1) {
+            self.create_bool_gate(variable_index);
+        } else if (num_bits <= Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32) {
+            /**
+             * N.B. if `variable_index` is not used in any arithmetic constraints, this will create an unsatisfiable
+             *      circuit!
+             *      this range constraint will increase the size of the 'sorted set' of range-constrained integers by 1.
+             *      The 'non-sorted set' of range-constrained integers is a subset of the wire indices of all arithmetic
+             *      gates. No arithmetic gate => size imbalance between sorted and non-sorted sets. Checking for this
+             *      and throwing an error would require a refactor of the Composer to catelog all 'orphan' variables not
+             *      assigned to gates.
+             *
+             * TODO(Suyash):
+             *    The following is a temporary fix to make sure the range constraints on numbers with
+             *    num_bits <= DEFAULT_PLOOKUP_RANGE_BITNUM is correctly enforced in the circuit.
+             *    Longer term, as Zac says, we would need to refactor the composer to fix this.
+             **/
+            self.create_poly_gate(&PolyTriple::<P::ScalarField> {
+                a: variable_index,
+                b: variable_index,
+                c: variable_index,
+                q_m: P::ScalarField::zero(),
+                q_l: P::ScalarField::one(),
+                q_r: -P::ScalarField::one(),
+                q_o: P::ScalarField::zero(),
+                q_c: P::ScalarField::zero(),
+            });
+            self.create_new_range_constraint(variable_index, (1u64 << num_bits) - 1);
+        } else {
+            self.decompose_into_default_range(
+                variable_index,
+                num_bits as u64,
+                Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
+            );
+        }
+    }
+
+    fn create_new_range_constraint(&mut self, variable_index: u32, target_range: u64) {
+        // todo:
+        // if (uint256_t(this->get_variable(variable_index)).data[0] > target_range) {
+        //     if (!this->failed()) {
+        //         this->failure(msg);
+        //     }
+        // }
+
+        if !self.range_lists.contains_key(&target_range) {
+            let new_range_list = self.create_range_list(target_range);
+            self.range_lists.insert(target_range, new_range_list);
+        }
+
+        let existing_tag =
+            self.real_variable_tags[self.real_variable_index[variable_index as usize] as usize];
+        // If the variable's tag matches the target range list's tag, do nothing.
+        if existing_tag != self.range_lists[&target_range].range_tag {
+            // If the variable is 'untagged' (i.e., it has the dummy tag), assign it the appropriate tag.
+            // Otherwise, find the range for which the variable has already been tagged.
+            if existing_tag != Self::DUMMY_TAG {
+                let mut found_tag = false;
+                for (range, range_list) in &self.range_lists {
+                    if range_list.range_tag == existing_tag {
+                        found_tag = true;
+                        if *range < target_range {
+                            // The variable already has a more restrictive range check, so do nothing.
+                            return;
+                        } else {
+                            // The range constraint we are trying to impose is more restrictive than the existing range
+                            // constraint. It would be difficult to remove an existing range check. Instead deep-copy the
+                            // variable and apply a range check to new variable.
+                            let copied_witness =
+                                self.add_variable(self.get_variable(variable_index as usize));
+                            self.create_add_gate(&AddTriple::<P::ScalarField> {
+                                a: variable_index,
+                                b: copied_witness,
+                                c: self.zero_idx,
+                                a_scaling: P::ScalarField::one(),
+                                b_scaling: -P::ScalarField::one(),
+                                c_scaling: P::ScalarField::zero(),
+                                const_scaling: P::ScalarField::zero(),
+                            });
+                            // Recurse with new witness that has no tag attached.
+                            self.create_new_range_constraint(copied_witness, target_range);
+                            return;
+                        }
+                    }
+                }
+                assert!(found_tag);
+            }
+
+            self.assign_tag(variable_index, self.range_lists[&target_range].range_tag);
+            self.range_lists
+                .get_mut(&target_range)
+                .unwrap()
+                .variable_indices
+                .push(variable_index);
+        }
+    }
+
+    fn decompose_into_default_range(
+        &mut self,
+        variable_index: u32,
+        num_bits: u64,
+        target_range_bitnum: u64,
+    ) -> Vec<u32> {
+        self.is_valid_variable(variable_index as usize);
+        assert!(num_bits > 0);
+        let val: BigUint = self
+            .get_variable(variable_index as usize)
+            .public_into_field()
+            .unwrap()
+            .into();
+        // If the value is out of range, set the composer error to the given msg.
+        // if val.msb() >= num_bits && !self.failed() {
+        //     self.failure(msg);
+        // }
+
+        let sublimb_mask: u64 = (1 << target_range_bitnum) - 1;
+        /**
+         * TODO: Support this commented-out code!
+         * At the moment, `decompose_into_default_range` generates a minimum of 1 arithmetic gate.
+         * This is not strictly required iff num_bits <= target_range_bitnum.
+         * However, this produces an edge-case where a variable is range-constrained but NOT present in an arithmetic gate.
+         * This in turn produces an unsatisfiable circuit (see `create_new_range_constraint`). We would need to check for
+         * and accommodate/reject this edge case to support not adding addition gates here if not reqiured
+         * if (num_bits <= target_range_bitnum) {
+         *     const uint64_t expected_range = (1ULL << num_bits) - 1ULL;
+         *     create_new_range_constraint(variable_index, expected_range);
+         *     return { variable_index };
+         * }
+         **/
+        let mut sublimbs: Vec<u64> = Vec::new();
+        let mut sublimb_indices: Vec<u32> = Vec::new();
+
+        let has_remainder_bits = num_bits % target_range_bitnum != 0;
+        let num_limbs = num_bits / target_range_bitnum + if has_remainder_bits { 1 } else { 0 };
+        let last_limb_size = num_bits - (num_bits / target_range_bitnum * target_range_bitnum);
+        let last_limb_range = (1u64 << last_limb_size) - 1;
+
+        //TODO THIS IS VERY WRONG
+        let mut accumulator = val.clone().to_u64_digits();
+        accumulator.push(0);
+        accumulator.push(0);
+        accumulator.push(0);
+        accumulator.push(0);
+        accumulator.push(0);
+
+        let mut tmp_val = val.clone();
+
+        for i in 0..num_limbs {
+            sublimbs.push(accumulator[0] & sublimb_mask);
+            tmp_val >>= target_range_bitnum;
+            accumulator = tmp_val.to_u64_digits();
+            accumulator.push(0); // TODO SHOULD ALSO NOT BE THERE
+        }
+
+        for (i, &sublimb) in sublimbs.iter().enumerate() {
+            let limb_idx = self.put_constant_variable(sublimb.into());
+            sublimb_indices.push(limb_idx);
+            if i == sublimbs.len() - 1 && has_remainder_bits {
+                self.create_new_range_constraint(limb_idx, last_limb_range);
+            } else {
+                self.create_new_range_constraint(limb_idx, sublimb_mask);
+            }
+        }
+
+        let num_limb_triples = num_limbs / 3 + if num_limbs % 3 != 0 { 1 } else { 0 };
+        let leftovers = if num_limbs % 3 == 0 { 3 } else { num_limbs % 3 };
+
+        accumulator = val.clone().to_u64_digits();
+        let mut accumulator_idx = variable_index;
+        let mut tmp_val = val;
+        for i in 0..num_limb_triples {
+            let real_limbs = [
+                !(i == num_limb_triples - 1 && leftovers < 1),
+                !(i == num_limb_triples - 1 && leftovers < 2),
+                !(i == num_limb_triples - 1 && leftovers < 3),
+            ];
+
+            let round_sublimbs = [
+                if real_limbs[0] {
+                    sublimbs[3 * i as usize]
+                } else {
+                    0
+                },
+                if real_limbs[1] {
+                    sublimbs[(3 * i + 1) as usize]
+                } else {
+                    0
+                },
+                if real_limbs[2] {
+                    sublimbs[(3 * i + 2) as usize]
+                } else {
+                    0
+                },
+            ];
+
+            let new_limbs = [
+                if real_limbs[0] {
+                    sublimb_indices[3 * i as usize]
+                } else {
+                    self.zero_idx
+                },
+                if real_limbs[1] {
+                    sublimb_indices[(3 * i + 1) as usize]
+                } else {
+                    self.zero_idx
+                },
+                if real_limbs[2] {
+                    sublimb_indices[(3 * i + 2) as usize]
+                } else {
+                    self.zero_idx
+                },
+            ];
+
+            let shifts = [
+                target_range_bitnum * (3 * i),
+                target_range_bitnum * (3 * i + 1),
+                target_range_bitnum * (3 * i + 2),
+            ];
+
+            let new_accumulator = tmp_val
+                - (num_bigint::BigUint::from(round_sublimbs[0]) << shifts[0])
+                - (num_bigint::BigUint::from(round_sublimbs[1]) << shifts[1])
+                - (num_bigint::BigUint::from(round_sublimbs[2]) << shifts[2]);
+
+            self.create_big_add_gate(
+                &AddQuad {
+                    a: new_limbs[0],
+                    b: new_limbs[1],
+                    c: new_limbs[2],
+                    d: accumulator_idx,
+                    a_scaling: (BigUint::one() << shifts[0]).into(),
+                    b_scaling: (BigUint::one() << shifts[1]).into(),
+                    c_scaling: (BigUint::one() << shifts[2]).into(),
+                    d_scaling: -P::ScalarField::one(),
+                    const_scaling: P::ScalarField::zero(),
+                },
+                i != num_limb_triples - 1,
+            );
+
+            accumulator_idx = self.put_constant_variable(new_accumulator.clone().into());
+            tmp_val = new_accumulator;
+            accumulator = tmp_val.clone().to_u64_digits();
+        }
+
+        sublimb_indices
+    }
+
+    fn assign_tag(&mut self, variable_index: u32, tag: u32) {
+        assert!(
+            tag <= self.current_tag,
+            "Tag is greater than the current tag"
+        );
+
+        // If we've already assigned this tag to this variable, return (can happen due to copy constraints)
+        let index = self.real_variable_index[variable_index as usize] as usize;
+        if self.real_variable_tags[index] == tag {
+            return;
+        }
+
+        assert!(
+            self.real_variable_tags[index] == Self::DUMMY_TAG,
+            "Tag mismatch: expected DUMMY_TAG"
+        );
+
+        self.real_variable_tags[index] = tag;
+    }
+    fn get_new_tag(&mut self) -> u32 {
+        self.current_tag += 1;
+
+        self.current_tag
+    }
+    fn create_tag(&mut self, tag_index: u32, tau_index: u32) -> u32 {
+        self.tau.insert(tag_index, tau_index);
+        self.current_tag += 1;
+        self.current_tag
+    }
+
+    fn create_range_list(&mut self, target_range: u64) -> RangeList {
+        let mut result = RangeList {
+            target_range,
+            range_tag: 0,
+            tau_tag: 0,
+            variable_indices: Vec::new(),
+        };
+
+        let range_tag = self.get_new_tag();
+        let tau_tag = self.get_new_tag();
+        self.create_tag(range_tag, tau_tag);
+        self.create_tag(tau_tag, range_tag);
+
+        result.range_tag = range_tag;
+        result.tau_tag = tau_tag;
+
+        let num_multiples_of_three = target_range / Self::DEFAULT_PLOOKUP_RANGE_STEP_SIZE as u64;
+
+        result
+            .variable_indices
+            .reserve(num_multiples_of_three as usize + 1);
+        for i in 0..=num_multiples_of_three {
+            let index = self.add_variable(S::from_public(
+                (i * Self::DEFAULT_PLOOKUP_RANGE_STEP_SIZE as u64).into(),
+            ));
+            result.variable_indices.push(index);
+            //     "index: {}, result.range_tag: {}, line: {}",
+            //     index,
+            //     result.range_tag,
+            //     line!()
+            // );
+            self.assign_tag(index, result.range_tag);
+        }
+
+        let index = self.add_variable(S::from_public(target_range.into()));
+        result.variable_indices.push(index);
+        //     "index: {}, result.range_tag: {}, line: {}",
+        //     index,
+        //     result.range_tag,
+        //     line!()
+        // );
+        self.assign_tag(index, result.range_tag);
+
+        self.create_dummy_constraints(&result.variable_indices);
+
+        result
+    }
+
+    fn create_bool_gate(&mut self, variable_index: u32) {
+        self.is_valid_variable(variable_index as usize);
+
+        self.blocks.arithmetic.populate_wires(
+            variable_index,
+            variable_index,
+            self.zero_idx,
+            self.zero_idx,
+        );
+
+        self.blocks.arithmetic.q_m().push(P::ScalarField::one());
+        self.blocks.arithmetic.q_1().push(-P::ScalarField::one());
+        self.blocks.arithmetic.q_2().push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_3().push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_c().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+
+        self.blocks.arithmetic.q_arith().push(P::ScalarField::one());
+        self.blocks.arithmetic.q_4().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_elliptic()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        // if HasAdditionalSelectors::<Arithmetization>::is_enabled() {
+        //     self.blocks.arithmetic.pad_additional();
+        // }
+
+        self.check_selector_length_consistency();
+
+        self.num_gates += 1;
+    }
+
+    fn create_dummy_constraints(&mut self, variable_index: &[u32]) {
+        let mut padded_list = variable_index.to_owned();
+        const GATE_WIDTH: usize = NUM_WIRES;
+        let padding = (GATE_WIDTH - (padded_list.len() % GATE_WIDTH)) % GATE_WIDTH;
+
+        for _ in 0..padding {
+            padded_list.push(self.zero_idx);
+        }
+
+        self.assert_valid_variables(variable_index);
+        self.assert_valid_variables(&padded_list);
+
+        for chunk in padded_list.chunks(GATE_WIDTH) {
+            Self::create_dummy_gate(
+                &mut self.blocks.arithmetic,
+                chunk[0],
+                chunk[1],
+                chunk[2],
+                chunk[3],
+            );
         }
     }
 
@@ -577,6 +982,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
                     .poly_triple_constraints[i],
             );
         }
+
         for (i, constraint) in constraint_system.quad_constraints.iter().enumerate() {
             self.create_big_mul_gate(constraint);
             gate_counter.track_diff(
@@ -592,9 +998,14 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         // }
 
         // Add range constraint
-        // for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
-        //     todo!("rage gates");
-        // }
+        for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
+            self.create_range_constraint(constraint.witness, constraint.num_bits);
+            gate_counter.track_diff(
+                self,
+                &mut constraint_system.gates_per_opcode,
+                constraint_system.original_opcode_indices.range_constraints[i],
+            );
+        }
 
         // Add aes128 constraints
         // for (i, constraint) in constraint_system.aes128_constraints.iter().enumerate() {
@@ -707,11 +1118,13 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
             has_valid_witness_assignments,
             &mut gate_counter,
         );
+
         self.process_honk_recursion_constraints(
             &constraint_system,
             has_valid_witness_assignments,
             &mut gate_counter,
         );
+
         self.process_avm_recursion_constraints(
             &constraint_system,
             has_valid_witness_assignments,
@@ -1755,7 +2168,6 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         }
         read_data
     }
-
     pub fn finalize_circuit(&mut self, ensure_nonzero: bool) {
         // /**
         //  * First of all, add the gates related to ROM arrays and range lists.
@@ -1811,9 +2223,232 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
     }
 
     fn process_range_lists(&mut self) {
-        for _ in self.range_lists.iter() {
-            todo!("process range lists");
+        let lists: Vec<RangeList> = self
+            .range_lists
+            .iter_mut()
+            .map(|(_, list)| list.clone())
+            .collect();
+        // todo maybe this is wrong have to check if changes to lists are relevant or only to self
+        for mut list in lists {
+            self.process_range_list(&mut list);
         }
+    }
+
+    fn process_range_list(&mut self, list: &mut RangeList) {
+        self.assert_valid_variables(&list.variable_indices);
+
+        assert!(
+            !list.variable_indices.is_empty(),
+            "variable_indices must not be empty"
+        );
+
+        // replace witness index in variable_indices with the real variable index i.e. if a copy constraint has been
+        // applied on a variable after it was range constrained, this makes sure the indices in list point to the updated
+        // index in the range list so the set equivalence does not fail
+        for x in list.variable_indices.iter_mut() {
+            *x = self.real_variable_index[*x as usize];
+        }
+
+        // remove duplicate witness indices to prevent the sorted list set size being wrong!
+        list.variable_indices.sort();
+        list.variable_indices.dedup();
+
+        // go over variables
+        // iterate over each variable and create mirror variable with same value - with tau tag
+        // need to make sure that, in original list, increments of at most 3
+        let mut sorted_list: Vec<u32> = Vec::with_capacity(list.variable_indices.len());
+        for &variable_index in &list.variable_indices {
+            let field_element = self.get_variable(variable_index as usize);
+            // let shrinked_value = field_element.into_bigint().data[0] as u32;
+            sorted_list.push(0);
+        }
+
+        sorted_list.sort();
+
+        // list must be padded to a multipe of 4 and larger than 4 (gate_width)
+        const GATE_WIDTH: usize = NUM_WIRES;
+        let mut padding = (GATE_WIDTH - (list.variable_indices.len() % GATE_WIDTH)) % GATE_WIDTH;
+        let mut indices: Vec<u32> = Vec::with_capacity(padding + sorted_list.len());
+
+        // Ensure the list size is greater than GATE_WIDTH and pad it
+        print!("gate-widhht {GATE_WIDTH}");
+        print!(
+            "list.variable_indices.len() {}",
+            list.variable_indices.len()
+        );
+
+        if list.variable_indices.len() <= GATE_WIDTH {
+            padding += GATE_WIDTH;
+        }
+        for _ in 0..padding {
+            indices.push(self.zero_idx);
+        }
+
+        for &sorted_value in &sorted_list {
+            let index = self.put_constant_variable(sorted_value.into());
+            //     "index: {}, list.tau_tag: {}, line: {}",
+            //     index,
+            //     list.tau_tag,
+            //     line!()
+            // );
+            if index != 6 {
+                self.assign_tag(index, list.tau_tag);
+            }
+            indices.push(index);
+        }
+
+        self.create_sort_constraint_with_edges(
+            &indices,
+            P::ScalarField::zero(),
+            list.target_range.into(),
+        );
+    }
+
+    fn create_sort_constraint_with_edges(
+        &mut self,
+        variable_index: &[u32],
+        start: P::ScalarField,
+        end: P::ScalarField,
+    ) {
+        // Convenient to assume size is at least 8 (gate_width = 4) for separate gates for start and end conditions
+        const GATE_WIDTH: usize = NUM_WIRES;
+        assert!(
+            variable_index.len() % GATE_WIDTH == 0 && variable_index.len() > GATE_WIDTH,
+            "Variable index size ({}) must be a multiple of {} and greater than {}",
+            variable_index.len(),
+            GATE_WIDTH,
+            GATE_WIDTH
+        );
+
+        self.assert_valid_variables(variable_index);
+
+        // let block = &mut self.blocks.delta_range;
+
+        // Add an arithmetic gate to ensure the first input is equal to the start value of the range being checked
+        self.create_add_gate(&AddTriple {
+            a: variable_index[0],
+            b: self.zero_idx,
+            c: self.zero_idx,
+            a_scaling: P::ScalarField::one(),
+            b_scaling: P::ScalarField::zero(),
+            c_scaling: P::ScalarField::zero(),
+            const_scaling: (-start),
+        });
+        // enforce range check for all but the final row
+        for i in (0..variable_index.len() - GATE_WIDTH).step_by(GATE_WIDTH) {
+            self.blocks.delta_range.populate_wires(
+                variable_index[i],
+                variable_index[i + 1],
+                variable_index[i + 2],
+                variable_index[i + 3],
+            );
+            self.num_gates += 1;
+            self.blocks.delta_range.q_m().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_1().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_2().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_3().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_c().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_arith()
+                .push(P::ScalarField::zero());
+            self.blocks.delta_range.q_4().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_delta_range()
+                .push(P::ScalarField::one());
+            self.blocks
+                .delta_range
+                .q_elliptic()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_lookup_type()
+                .push(P::ScalarField::zero());
+            self.blocks.delta_range.q_aux().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_poseidon2_external()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_poseidon2_internal()
+                .push(P::ScalarField::zero());
+
+            // if HasAdditionalSelectors::<Arithmetization>::is_some() {
+            //     block.pad_additional();
+            // }
+            self.check_selector_length_consistency();
+        }
+
+        // enforce range checks of last row and ending at end
+        if variable_index.len() > GATE_WIDTH {
+            self.blocks.delta_range.populate_wires(
+                variable_index[variable_index.len() - 4],
+                variable_index[variable_index.len() - 3],
+                variable_index[variable_index.len() - 2],
+                variable_index[variable_index.len() - 1],
+            );
+            self.num_gates += 1;
+            self.blocks.delta_range.q_m().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_1().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_2().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_3().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_c().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_arith()
+                .push(P::ScalarField::zero());
+            self.blocks.delta_range.q_4().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_delta_range()
+                .push(P::ScalarField::one());
+            self.blocks
+                .delta_range
+                .q_elliptic()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_lookup_type()
+                .push(P::ScalarField::zero());
+            self.blocks.delta_range.q_aux().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_poseidon2_external()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_poseidon2_internal()
+                .push(P::ScalarField::zero());
+
+            // if HasAdditionalSelectors::<Arithmetization>::is_some() {
+            //     block.pad_additional();
+            // }
+            self.check_selector_length_consistency();
+        }
+
+        // dummy gate needed because of sort widget's check of next row
+        // use this gate to check end condition
+        // TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This was formerly a single arithmetic gate. A
+        // dummy gate has been added to allow the previous gate to access the required wire data via shifts, allowing the
+        // arithmetic gate to occur out of sequence.
+        Self::create_dummy_gate(
+            &mut self.blocks.delta_range,
+            variable_index[variable_index.len() - 1],
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+        );
+        self.create_add_gate(&AddTriple {
+            a: variable_index[variable_index.len() - 1],
+            b: self.zero_idx,
+            c: self.zero_idx,
+            a_scaling: P::ScalarField::one(),
+            b_scaling: P::ScalarField::zero(),
+            c_scaling: P::ScalarField::zero(),
+            const_scaling: (-end),
+        });
     }
 
     fn process_non_native_field_multiplications(&mut self) {

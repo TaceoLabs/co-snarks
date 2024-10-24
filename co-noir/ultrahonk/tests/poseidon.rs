@@ -52,3 +52,42 @@ fn poseidon_test_keccak256() {
     // const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon_keccaktranscript.proof";
     poseidon_test::<Keccak256>("");
 }
+
+#[test]
+fn print_vkey() {
+    const CRS_PATH_G1: &str = "crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "crs/bn254_g2.dat";
+    const WITNESS_FILE: &str = "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3u64/target/Prover.gz";
+    const CIRCUIT_FILE: &str = "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3u64/add3u64.json";
+    let constraint_system = Utils::get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
+    let witness = Utils::get_witness_from_file(WITNESS_FILE).unwrap();
+
+    let builder =
+        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
+
+    let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
+
+    let (proving_key, verifying_key) = builder.create_keys(crs).unwrap();
+
+    const VKTHEM: &str =
+        "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3u64/bb_vkey";
+    const VKUS: &str = "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3u64/verification_key";
+    // const VKTHEM: &str =
+    //     "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3field/bb_vkey";
+    // const VKUS: &str =
+    //     "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3/bb_vkey";
+
+    let vk_u8us = std::fs::read(VKUS).unwrap();
+    let vkus =
+        ultrahonk::prelude::VerifyingKeyBarretenberg::<Bn254>::from_buffer(&vk_u8us).unwrap();
+
+    let vk_u8them = std::fs::read(VKTHEM).unwrap();
+    let vkthem =
+        ultrahonk::prelude::VerifyingKeyBarretenberg::<Bn254>::from_buffer(&vk_u8them).unwrap();
+
+    // println!("this is our vk: \n");
+    // vkus.print();
+
+    // println!("\n this is their vk: \n");
+    // vkthem.print();
+}

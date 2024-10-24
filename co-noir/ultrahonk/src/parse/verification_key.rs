@@ -66,7 +66,30 @@ pub struct VerifyingKeyBarretenberg<P: Pairing> {
     pub(crate) recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
     pub(crate) commitments: PrecomputedEntities<P::G1Affine>,
 }
+impl<P: Pairing> VerifyingKeyBarretenberg<P> {
+    pub fn print(&self) {
+        println!("circuit_size: {}", self.circuit_size);
+        println!("log_circuit_size: {}", self.log_circuit_size);
+        println!("num_public_inputs: {}", self.num_public_inputs);
+        println!("pub_inputs_offset: {}", self.pub_inputs_offset);
+        println!(
+            "contains_recursive_proof: {}",
+            self.contains_recursive_proof
+        );
 
+        // Assuming AggregationObjectPubInputIndices has a Debug or Display implementation
+        println!(
+            "recursive_proof_public_input_indices: {:?}",
+            self.recursive_proof_public_input_indices
+        );
+
+        // Assuming PrecomputedEntities has a Debug or Display implementation
+        println!(
+            "commitments: {:?}",
+            self.commitments.clone().into_iter().collect::<Vec<_>>()
+        );
+    }
+}
 impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
     const NUM_64_LIMBS: u32 = P::BaseField::MODULUS_BIT_SIZE.div_ceil(64);
     const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;

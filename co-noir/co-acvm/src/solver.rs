@@ -1,3 +1,5 @@
+use crate::mpc::{plain::PlainAcvmSolver, rep3::Rep3AcvmSolver, NoirWitnessExtensionProtocol};
+use acir::circuit::opcodes::BlackBoxFuncCall;
 use acir::{
     acir_field::GenericFieldElement,
     circuit::{Circuit, ExpressionWidth, Opcode, Program},
@@ -11,8 +13,6 @@ use noirc_abi::{input_parser::Format, Abi, MAIN_RETURN_NAME};
 use noirc_artifacts::program::ProgramArtifact;
 use partial_abi::PublicMarker;
 use std::{collections::BTreeMap, io, path::PathBuf};
-
-use crate::mpc::{plain::PlainAcvmSolver, rep3::Rep3AcvmSolver, NoirWitnessExtensionProtocol};
 /// The default expression width defined used by the ACVM.
 pub(crate) const CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounded { width: 4 };
 
@@ -316,6 +316,7 @@ where
                     op,
                     predicate,
                 } => self.solve_memory_op(*block_id, op, predicate.to_owned())?,
+                Opcode::BlackBoxFuncCall(BlackBoxFuncCall::RANGE { input: _ }) => (), // todo: Do we really want to do nothing here?
                 _ => todo!("non assert zero opcode detected, not supported yet"),
             }
         }

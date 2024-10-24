@@ -96,7 +96,7 @@ pub(crate) struct BlockConstraint<F: PrimeField> {
 #[derive(Default)]
 pub(crate) struct AcirFormatOriginalOpcodeIndices {
     // pub(crate)logic_constraints: Vec<usize>,
-    // pub(crate)range_constraints: Vec<usize>,
+    pub(crate) range_constraints: Vec<usize>,
     // pub(crate)aes128_constraints: Vec<usize>,
     // pub(crate)sha256_constraints: Vec<usize>,
     // pub(crate)sha256_compression: Vec<usize>,
@@ -362,6 +362,11 @@ impl GateCounter {
             gates_per_opcode[opcode_index] = self.compute_diff(builder);
         }
     }
+}
+
+pub(crate) struct RangeConstraint {
+    pub(crate) witness: u32,
+    pub(crate) num_bits: u32,
 }
 
 pub(crate) struct RecursionConstraint {
@@ -1037,6 +1042,7 @@ pub(crate) enum ColumnIdx {
     C3,
 }
 
+#[derive(Clone)]
 pub(crate) struct RangeList {
     pub(crate) target_range: u64,
     pub(crate) range_tag: u32,

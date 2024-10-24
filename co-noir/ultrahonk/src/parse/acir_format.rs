@@ -1,5 +1,6 @@
 use super::types::{
-    AcirFormatOriginalOpcodeIndices, BlockType, MulQuad, PolyTriple, RecursionConstraint,
+    AcirFormatOriginalOpcodeIndices, BlockType, MulQuad, PolyTriple, RangeConstraint,
+    RecursionConstraint,
 };
 use crate::parse::types::BlockConstraint;
 use acir::{
@@ -27,6 +28,7 @@ pub struct AcirFormat<F: PrimeField> {
     pub(crate) num_acir_opcodes: u32,
     //  using PolyTripleConstraint = bb::poly_triple_<bb::curve::BN254::ScalarField>;
     pub public_inputs: Vec<u32>,
+    pub(crate) range_constraints: Vec<RangeConstraint>,
     //  std::vector<LogicConstraint> logic_constraints;
     //  std::vector<RangeConstraint> range_constraints;
     //  std::vector<AES128Constraint> aes128_constraints;
@@ -432,7 +434,19 @@ impl<F: PrimeField> AcirFormat<F> {
             } => todo!("BlackBoxFuncCall::AES128Encrypt "),
             BlackBoxFuncCall::AND { lhs, rhs, output } => todo!("BlackBoxFuncCall::AND"),
             BlackBoxFuncCall::XOR { lhs, rhs, output } => todo!("BlackBoxFuncCall::XOR"),
-            BlackBoxFuncCall::RANGE { input } => todo!("BlackBoxFuncCall::RANGE"),
+            BlackBoxFuncCall::RANGE { input } => {
+                af.range_constraints.push(RangeConstraint {
+                    witness: input.to_witness().witness_index(),
+                    num_bits: input.num_bits,
+                });
+                println!(
+                    "this is witne3ss index {:?}",
+                    input.to_witness().witness_index()
+                );
+                af.original_opcode_indices
+                    .range_constraints
+                    .push(opcode_index);
+            }
             BlackBoxFuncCall::SHA256 { inputs, outputs } => todo!("BlackBoxFuncCall::SHA256"),
             BlackBoxFuncCall::Blake2s { inputs, outputs } => todo!("BlackBoxFuncCall::Blake2s"),
             BlackBoxFuncCall::Blake3 { inputs, outputs } => todo!("BlackBoxFuncCall::Blake3"),
