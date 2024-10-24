@@ -2,16 +2,15 @@
 //!
 //! This module contains implementation of the rep3 mpc network
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::RngType;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
-use mpc_net::{
-    channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler, MpcNetworkHandlerWrapper,
-};
+use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
+use tokio::runtime::Runtime;
 
 use super::{
     conversion::A2BType,
@@ -239,7 +238,10 @@ pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
     pub(crate) chan_next: ChannelHandle<Bytes, BytesMut>,
     pub(crate) chan_prev: ChannelHandle<Bytes, BytesMut>,
-    pub(crate) net_handler: Arc<MpcNetworkHandlerWrapper>,
+    // TODO we should be able to get rid of this mutex once we dont remove streams from the pool anymore
+    pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
+    // order is important, runtime MUST be dropped after network handler
+    pub(crate) runtime: Arc<Runtime>,
 }
 
 impl Rep3MpcNet {
@@ -252,46 +254,26 @@ impl Rep3MpcNet {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        let (net_handler, chan_next, chan_prev) = runtime.block_on(async {
-            let net_handler = MpcNetworkHandler::establish(config).await?;
-            let mut channels = net_handler.get_byte_channels().await?;
-            let chan_next = channels
-                .remove(&id.next_id().into())
-                .ok_or(eyre!("no next channel found"))?;
-            let chan_prev = channels
-                .remove(&id.prev_id().into())
-                .ok_or(eyre!("no prev channel found"))?;
-            if !channels.is_empty() {
-                bail!("unexpected channels found")
-            }
+        let mut net_handler = runtime.block_on(MpcNetworkHandler::establish(config))?;
 
-            let chan_next = ChannelHandle::manage(chan_next);
-            let chan_prev = ChannelHandle::manage(chan_prev);
-            Ok((net_handler, chan_next, chan_prev))
-        })?;
+        let chan_next = net_handler
+            .get_byte_channel(&id.next_id().into())
+            .ok_or(eyre!("no next channel found"))?;
+        let chan_prev = net_handler
+            .get_byte_channel(&id.prev_id().into())
+            .ok_or(eyre!("no prev channel found"))?;
+
+        let chan_next = net_handler.spawn(chan_next);
+        let chan_prev = net_handler.spawn(chan_prev);
+
         Ok(Self {
             id,
-            net_handler: Arc::new(MpcNetworkHandlerWrapper::new(runtime, net_handler)),
+            net_handler: Arc::new(Mutex::new(net_handler)),
             chan_next,
             chan_prev,
+            runtime: Arc::new(runtime),
         })
     }
-
-    /// Shuts down the network interface.
-    // pub fn shutdown(self) {
-    //     let Self {
-    //         id: _,
-    //         runtime,
-    //         net_handler,
-    //         chan_next,
-    //         chan_prev,
-    //     } = self;
-    //     drop(chan_next);
-    //     drop(chan_prev);
-    //     if let Some(net_handler) = Arc::into_inner(net_handler) {
-    //         runtime.block_on(net_handler.shutdown());
-    //     }
-    // }
 
     /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: PartyID, data: Bytes) -> std::io::Result<()> {
@@ -375,30 +357,22 @@ impl Rep3Network for Rep3MpcNet {
 
     fn fork(&mut self) -> std::io::Result<Self> {
         let id = self.id;
-        let net_handler = Arc::clone(&self.net_handler);
-        let (chan_next, chan_prev) = net_handler.runtime.block_on(async {
-            let mut channels = net_handler.inner.get_byte_channels().await?;
-
-            let chan_next = channels
-                .remove(&id.next_id().into())
-                .expect("to find next channel");
-            let chan_prev = channels
-                .remove(&id.prev_id().into())
-                .expect("to find prev channel");
-            if !channels.is_empty() {
-                panic!("unexpected channels found")
-            }
-
-            let chan_next = ChannelHandle::manage(chan_next);
-            let chan_prev = ChannelHandle::manage(chan_prev);
-            Ok::<_, std::io::Error>((chan_next, chan_prev))
-        })?;
+        let mut net_handler = self.net_handler.lock().unwrap();
+        let chan_next = net_handler
+            .get_byte_channel(&id.next_id().into())
+            .expect("no next channel found");
+        let chan_prev = net_handler
+            .get_byte_channel(&id.prev_id().into())
+            .expect("no prev channel found");
+        let chan_next = net_handler.spawn(chan_next);
+        let chan_prev = net_handler.spawn(chan_prev);
 
         Ok(Self {
             id,
-            net_handler,
+            net_handler: self.net_handler.clone(),
             chan_next,
             chan_prev,
+            runtime: self.runtime.clone(),
         })
     }
 }

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use color_eyre::{
-    eyre::{eyre, Context},
+    eyre::{eyre, Context, ContextCompat},
     Result,
 };
 use futures::{SinkExt, StreamExt};
@@ -10,6 +10,7 @@ use mpc_net::{
     config::{NetworkConfig, NetworkConfigFile},
     MpcNetworkHandler,
 };
+use tokio::io::AsyncWriteExt;
 
 #[derive(Parser)]
 struct Args {
@@ -31,9 +32,9 @@ async fn main() -> Result<()> {
     let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
 
-    let network = MpcNetworkHandler::establish(config).await?;
+    let mut network = MpcNetworkHandler::establish(config).await?;
 
-    let mut channels = network.get_byte_channels().await?;
+    let mut channels = network.get_byte_channels().context("get channels")?;
 
     // send to all channels
     for (&i, channel) in channels.iter_mut() {
@@ -48,6 +49,13 @@ async fn main() -> Result<()> {
             assert!(b.iter().all(|&x| x == my_id as u8))
         }
     }
+
+    // make sure all write are done by shutting down all streams
+    for (_, channel) in channels.into_iter() {
+        let (write, _) = channel.split();
+        write.into_inner().shutdown().await?;
+    }
+
     network.print_connection_stats(&mut std::io::stdout())?;
 
     Ok(())

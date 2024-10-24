@@ -5,10 +5,12 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
-use mpc_net::{
-    channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler, MpcNetworkHandlerWrapper,
+use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
-use std::{collections::HashMap, sync::Arc};
+use tokio::runtime::Runtime;
 
 /// This trait defines the network interface for the Shamir protocol.
 pub trait ShamirNetwork: Send {
@@ -78,7 +80,10 @@ pub struct ShamirMpcNet {
     pub(crate) id: usize, // 0 <= id < num_parties
     pub(crate) num_parties: usize,
     pub(crate) channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
-    pub(crate) net_handler: Arc<MpcNetworkHandlerWrapper>,
+    // TODO we should be able to get rid of this mutex once we dont remove streams from the pool anymore
+    pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
+    // order is important, runtime MUST be dropped after network handler
+    pub(crate) runtime: Arc<Runtime>,
 }
 
 impl ShamirMpcNet {
@@ -97,52 +102,26 @@ impl ShamirMpcNet {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        let (net_handler, channels) = runtime.block_on(async {
-            let net_handler = MpcNetworkHandler::establish(config).await?;
-            let mut channels = net_handler.get_byte_channels().await?;
+        let mut net_handler = runtime.block_on(MpcNetworkHandler::establish(config))?;
+        let mut channels = HashMap::with_capacity(num_parties - 1);
 
-            let mut channels_ = HashMap::with_capacity(num_parties - 1);
-
-            for other_id in 0..num_parties {
-                if other_id != id {
-                    let chan = channels
-                        .remove(&other_id)
-                        .ok_or_else(|| eyre!("no channel found for party id={}", other_id))?;
-                    channels_.insert(other_id, ChannelHandle::manage(chan));
-                }
+        for other_id in 0..num_parties {
+            if other_id != id {
+                let chan = net_handler
+                    .get_byte_channel(&other_id)
+                    .ok_or_else(|| eyre!("no channel found for party id={}", other_id))?;
+                channels.insert(other_id, net_handler.spawn(chan));
             }
+        }
 
-            if !channels.is_empty() {
-                bail!("unexpected channels found")
-            }
-
-            Ok((net_handler, channels_))
-        })?;
         Ok(Self {
             id,
             num_parties,
-            net_handler: Arc::new(MpcNetworkHandlerWrapper::new(runtime, net_handler)),
+            net_handler: Arc::new(Mutex::new(net_handler)),
             channels,
+            runtime: Arc::new(runtime),
         })
     }
-
-    /// Shuts down the network interface.
-    // pub fn shutdown(self) {
-    //     let Self {
-    //         id: _,
-    //         num_parties: _,
-    //         net_handler,
-    //         channels,
-    //     } = self;
-    //     for chan in channels.into_iter() {
-    //         drop(chan);
-    //     }
-    //     if let Some(net_handler) = Arc::into_inner(net_handler) {
-    //         runtime.block_on(async {
-    //             net_handler.shutdown().await;
-    //         });
-    //     }
-    // }
 
     /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: usize, data: Bytes) -> std::io::Result<()> {
@@ -282,31 +261,24 @@ impl ShamirNetwork for ShamirMpcNet {
     fn fork(&mut self) -> std::io::Result<Self> {
         let id = self.id;
         let num_parties = self.num_parties;
-        let net_handler = Arc::clone(&self.net_handler);
-        let channels = net_handler.runtime.block_on(async {
-            let mut channels = net_handler.inner.get_byte_channels().await?;
+        let mut net_handler = self.net_handler.lock().unwrap();
 
-            let mut channels_ = HashMap::with_capacity(num_parties - 1);
-
-            for other_id in 0..num_parties {
-                if other_id != id {
-                    let chan = channels.remove(&other_id).expect("to find channel");
-                    channels_.insert(other_id, ChannelHandle::manage(chan));
-                }
+        let mut channels = HashMap::with_capacity(num_parties - 1);
+        for other_id in 0..num_parties {
+            if other_id != id {
+                let chan = net_handler
+                    .get_byte_channel(&other_id)
+                    .expect("to find channel");
+                channels.insert(other_id, net_handler.spawn(chan));
             }
-
-            if !channels.is_empty() {
-                panic!("unexpected channels found")
-            }
-
-            Ok::<_, std::io::Error>(channels_)
-        })?;
+        }
 
         Ok(Self {
             id,
             num_parties,
-            net_handler,
+            net_handler: self.net_handler.clone(),
             channels,
+            runtime: self.runtime.clone(),
         })
     }
 

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use bytes::{Buf, BufMut};
 use clap::Parser;
 use color_eyre::{
-    eyre::{eyre, Context},
+    eyre::{eyre, Context, ContextCompat},
     Result,
 };
 use futures::{SinkExt, StreamExt};
@@ -11,6 +11,7 @@ use mpc_net::{
     config::{NetworkConfig, NetworkConfigFile},
     MpcNetworkHandler,
 };
+use tokio::io::AsyncWriteExt;
 use tokio_util::codec::{Decoder, Encoder};
 
 #[derive(Parser)]
@@ -33,10 +34,10 @@ async fn main() -> Result<()> {
     let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
 
-    let network = MpcNetworkHandler::establish(config).await?;
+    let mut network = MpcNetworkHandler::establish(config).await?;
 
     let codec = MessageCodec;
-    let mut channels = network.get_custom_channels(codec).await?;
+    let mut channels = network.get_custom_channels(codec).context("get channels")?;
 
     // send to all channels
     for (&i, channel) in channels.iter_mut() {
@@ -65,6 +66,11 @@ async fn main() -> Result<()> {
         } else {
             panic!("could not receive message");
         }
+    }
+    // make sure all write are done by shutting down all streams
+    for (_, channel) in channels.into_iter() {
+        let (write, _) = channel.split();
+        write.into_inner().shutdown().await?;
     }
     network.print_connection_stats(&mut std::io::stdout())?;
 

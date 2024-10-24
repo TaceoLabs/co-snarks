@@ -2,11 +2,10 @@ use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
 use color_eyre::{
-    eyre::{eyre, Context},
+    eyre::{eyre, Context, ContextCompat},
     Result,
 };
 use mpc_net::{
-    channel::ChannelHandle,
     config::{NetworkConfig, NetworkConfigFile},
     MpcNetworkHandler,
 };
@@ -31,12 +30,12 @@ async fn main() -> Result<()> {
     let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
 
-    let network = MpcNetworkHandler::establish(config).await?;
+    let mut network = MpcNetworkHandler::establish(config).await?;
 
-    let channels = network.get_byte_channels().await?;
+    let channels = network.get_byte_channels().context("get channels")?;
     let mut managed_channels = channels
         .into_iter()
-        .map(|(i, c)| (i, ChannelHandle::manage(c)))
+        .map(|(i, c)| (i, network.spawn(c)))
         .collect::<HashMap<_, _>>();
 
     // send to all channels
@@ -52,6 +51,10 @@ async fn main() -> Result<()> {
             assert!(b.iter().all(|&x| x == my_id as u8))
         }
     }
+    // drop handles so we can shutdown
+    drop(managed_channels);
+    // wait until all send and recv taks are done
+    network.shutdown().await?;
     network.print_connection_stats(&mut std::io::stdout())?;
 
     Ok(())
