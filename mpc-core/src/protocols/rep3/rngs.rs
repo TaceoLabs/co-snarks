@@ -109,6 +109,7 @@ impl Rep3Rand {
         (a, b)
     }
 
+    // TODO do not collect the values
     /// Generate a vector of masking field elements
     pub fn masking_field_elements_vec<F: PrimeField>(&mut self, len: usize) -> Vec<F> {
         let field_size = usize::try_from(F::MODULUS_BIT_SIZE)

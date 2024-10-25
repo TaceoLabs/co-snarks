@@ -34,6 +34,8 @@ pub enum ParseAddressError {
     InvalidPort(ParseIntError),
 }
 
+impl std::error::Error for ParseAddressError {}
+
 impl std::fmt::Display for ParseAddressError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
