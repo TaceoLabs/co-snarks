@@ -17,46 +17,19 @@ use crate::{
         },
     },
     utils::Utils,
-    HonkProofResult,
+    HonkProofError, HonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};
+use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
+use eyre::OptionExt;
 use num_bigint::BigUint;
 use std::{collections::HashMap, fmt::Debug};
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
-pub trait UltraCircuitVariable<F>: Clone + PartialEq + Debug {
-    type Shared;
-
-    fn from_public(value: F) -> Self;
-    fn from_shared(value: Self::Shared) -> Self;
-    fn is_public(&self) -> bool;
-    // Returns Error if the variable is not public
-    fn public_into_field(self) -> HonkProofResult<F>;
-}
-
-impl<F: PrimeField> UltraCircuitVariable<F> for F {
-    type Shared = F;
-
-    fn from_public(value: F) -> Self {
-        value
-    }
-
-    fn from_shared(value: Self::Shared) -> Self {
-        value
-    }
-
-    fn is_public(&self) -> bool {
-        true
-    }
-
-    fn public_into_field(self) -> HonkProofResult<F> {
-        Ok(self)
-    }
-}
-
-pub type UltraCircuitBuilder<P> = GenericUltraCircuitBuilder<P, <P as Pairing>::ScalarField>;
+pub type UltraCircuitBuilder<P> =
+    GenericUltraCircuitBuilder<P, PlainAcvmSolver<<P as Pairing>::ScalarField>>;
 
 impl<P: Pairing> UltraCircuitBuilder<P> {
     pub fn create_vk_barretenberg(
@@ -122,8 +95,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
     }
 }
 
-pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> {
-    pub variables: Vec<S>,
+pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+    pub variables: Vec<T::AcvmType>,
     variable_names: HashMap<u32, String>,
     next_var_index: Vec<u32>,
     prev_var_index: Vec<u32>,
@@ -153,7 +126,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, S: UltraCircuitVariable<P::Sca
     pub(crate) memory_write_records: Vec<u32>,
 }
 
-impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBuilder<P, S> {
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCircuitBuilder<P, T> {
     pub(crate) const DUMMY_TAG: u32 = 0;
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
     pub(crate) const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
@@ -167,7 +140,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
     pub fn create_circuit(
         constraint_system: AcirFormat<P::ScalarField>,
         size_hint: usize,
-        witness: Vec<S>,
+        witness: Vec<T::AcvmType>,
         honk_recursion: bool,           // true for ultrahonk
         collect_gates_per_opcode: bool, // false for ultrahonk
     ) -> Self {
@@ -247,7 +220,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
      */
     fn init(
         size_hint: usize,
-        witness_values: Vec<S>,
+        witness_values: Vec<T::AcvmType>,
         public_inputs: Vec<u32>,
         varnum: usize,
         recursive: bool,
@@ -264,7 +237,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
         // be "set" later on via the assert_equal mechanism.
         for _ in len..varnum {
-            builder.add_variable(S::from_public(P::ScalarField::zero()));
+            builder.add_variable(T::AcvmType::from(P::ScalarField::zero()));
         }
 
         // Add the public_inputs from acir
@@ -279,7 +252,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         builder
     }
 
-    pub(crate) fn add_variable(&mut self, value: S) -> u32 {
+    pub(crate) fn add_variable(&mut self, value: T::AcvmType) -> u32 {
         let idx = self.variables.len() as u32;
         self.variables.push(value);
         self.real_variable_index.push(idx);
@@ -293,7 +266,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         if let Some(val) = self.constant_variable_indices.get(&variable) {
             *val
         } else {
-            let variable_index = self.add_variable(S::from_public(variable));
+            let variable_index = self.add_variable(T::AcvmType::from(variable));
             self.fix_witness(variable_index, variable);
             self.constant_variable_indices
                 .insert(variable, variable_index);
@@ -975,7 +948,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
             ];
 
             for val in val_limbs {
-                let idx = self.add_variable(S::from_public(val));
+                let idx = self.add_variable(T::AcvmType::from(val));
                 agg_obj_indices[agg_obj_indices_idx] = idx;
                 agg_obj_indices_idx += 1;
             }
@@ -1027,13 +1000,13 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         }
     }
 
-    pub fn get_variable(&self, index: usize) -> S {
+    pub fn get_variable(&self, index: usize) -> T::AcvmType {
         assert!(self.variables.len() > index);
         self.variables[self.real_variable_index[index] as usize].to_owned()
     }
 
     pub(crate) fn assert_equal_constant(&mut self, a_idx: usize, b: P::ScalarField) {
-        assert_eq!(self.variables[a_idx], S::from_public(b));
+        assert_eq!(self.variables[a_idx], T::AcvmType::from(b));
         let b_idx = self.put_constant_variable(b);
         self.assert_equal(a_idx, b_idx as usize);
     }
@@ -1142,7 +1115,7 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
 
     fn create_rom_gate(&mut self, record: &mut RomRecord) {
         // Record wire value can't yet be computed
-        record.record_witness = self.add_variable(S::from_public(P::ScalarField::zero()));
+        record.record_witness = self.add_variable(T::AcvmType::from(P::ScalarField::zero()));
         self.apply_aux_selectors(AuxSelectors::RomRead);
         self.blocks.aux.populate_wires(
             record.index_witness,
@@ -1162,9 +1135,8 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         index_witness: u32,
     ) -> HonkProofResult<u32> {
         assert!(self.rom_arrays.len() > rom_id);
-        let val: BigUint = self
-            .get_variable(index_witness as usize)
-            .public_into_field()?
+        let val: BigUint = T::get_public(&self.get_variable(index_witness as usize))
+            .ok_or(HonkProofError::ExpectedPublicWitness)?
             .into();
         let index: usize = val.try_into().unwrap();
 
@@ -1457,8 +1429,8 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
         let left_witness_value = P::ScalarField::from(left_value as u64);
         let right_witness_value = P::ScalarField::from(right_value as u64);
 
-        let left_witness_index = self.add_variable(S::from_public(left_witness_value));
-        let right_witness_index = self.add_variable(S::from_public(right_witness_value));
+        let left_witness_index = self.add_variable(T::AcvmType::from(left_witness_value));
+        let right_witness_index = self.add_variable(T::AcvmType::from(right_witness_value));
         let dummy_accumulators = self.plookup.get_lookup_accumulators(
             MultiTableId::HonkDummyMulti,
             left_witness_value,
@@ -1690,16 +1662,16 @@ impl<P: Pairing, S: UltraCircuitVariable<P::ScalarField>> GenericUltraCircuitBui
             let first_idx = if i == 0 {
                 key_a_index
             } else {
-                self.add_variable(S::from_public(read_values[ColumnIdx::C1][i]))
+                self.add_variable(T::AcvmType::from(read_values[ColumnIdx::C1][i]))
             };
 
             #[allow(clippy::unnecessary_unwrap)]
             let second_idx = if i == 0 && (key_b_index.is_some()) {
                 key_b_index.unwrap()
             } else {
-                self.add_variable(S::from_public(read_values[ColumnIdx::C2][i]))
+                self.add_variable(T::AcvmType::from(read_values[ColumnIdx::C2][i]))
             };
-            let third_idx = self.add_variable(S::from_public(read_values[ColumnIdx::C3][i]));
+            let third_idx = self.add_variable(T::AcvmType::from(read_values[ColumnIdx::C3][i]));
 
             read_data[ColumnIdx::C1].push(first_idx);
             read_data[ColumnIdx::C2].push(second_idx);

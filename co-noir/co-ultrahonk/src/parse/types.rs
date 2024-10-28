@@ -1,7 +1,9 @@
-use super::CoUltraCircuitBuilder;
 use crate::{mpc::NoirUltraHonkProver, types::ProvingKey};
 use ark_ec::pairing::Pairing;
-use co_builder::prelude::{CycleNode, CyclicPermutation, Polynomial, NUM_SELECTORS, NUM_WIRES};
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::prelude::{
+    CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, Polynomial, NUM_SELECTORS, NUM_WIRES,
+};
 
 pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) wires: [&'a mut Polynomial<T::ArithmeticShare>; NUM_WIRES],
@@ -12,8 +14,10 @@ pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: Pairing> {
 }
 
 impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
-    pub(crate) fn new(
-        builder: &CoUltraCircuitBuilder<T, P>,
+    pub(crate) fn new<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        builder: &GenericUltraCircuitBuilder<P, U>,
         proving_key: &'a mut ProvingKey<T, P>,
     ) -> Self {
         let mut iter = proving_key.polynomials.witness.get_wires_mut().iter_mut();
@@ -55,10 +59,12 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
         }
     }
 
-    pub(crate) fn construct_trace_data(
+    pub(crate) fn construct_trace_data<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
         &mut self,
         id: T::PartyID,
-        builder: &mut CoUltraCircuitBuilder<T, P>,
+        builder: &mut GenericUltraCircuitBuilder<P, U>,
         is_structured: bool,
     ) {
         tracing::trace!("Construct trace data");
@@ -80,8 +86,12 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
                     let real_var_idx = builder.real_variable_index[var_idx] as usize;
                     let trace_row_idx = block_row_idx + offset;
                     // Insert the real witness values from this block into the wire polys at the correct offset
-                    self.wires[wire_idx][trace_row_idx] =
-                        builder.get_variable(var_idx).get_as_shared(id);
+                    let var = builder.get_variable(var_idx);
+                    self.wires[wire_idx][trace_row_idx] = if U::is_shared(&var) {
+                        U::get_shared(&var).unwrap()
+                    } else {
+                        T::promote_to_trivial_share(id, U::get_public(&var).unwrap())
+                    };
                     // Add the address of the witness value to its corresponding copy cycle
                     self.copy_cycles[real_var_idx].push(CycleNode {
                         wire_index: wire_idx as u32,

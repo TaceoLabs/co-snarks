@@ -1,5 +1,5 @@
 use crate::{
-    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable},
+    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::{parse::CrsParser, Crs, ProverCrs},
     polynomials::{
         polynomial::Polynomial,
@@ -10,6 +10,7 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use eyre::Result;
 
 pub struct ProvingKey<P: Pairing> {
@@ -74,8 +75,8 @@ impl<P: Pairing> ProvingKey<P> {
         proving_key
     }
 
-    fn get_crs_size<S: UltraCircuitVariable<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+    fn get_crs_size<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, T>,
     ) -> usize {
         const EXTRA_SRS_POINTS_FOR_ECCVM_IPA: usize = 1;
 
@@ -89,8 +90,8 @@ impl<P: Pairing> ProvingKey<P> {
         Utils::round_up_power_2(srs_size) + EXTRA_SRS_POINTS_FOR_ECCVM_IPA
     }
 
-    pub fn get_prover_crs<S: UltraCircuitVariable<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+    pub fn get_prover_crs<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, T>,
         path_g1: &str,
     ) -> Result<ProverCrs<P>> {
         tracing::trace!("Getting prover crs");
@@ -99,8 +100,8 @@ impl<P: Pairing> ProvingKey<P> {
         CrsParser::<P>::get_crs_g1(path_g1, srs_size)
     }
 
-    pub fn get_crs<S: UltraCircuitVariable<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+    pub fn get_crs<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, T>,
         path_g1: &str,
         path_g2: &str,
     ) -> Result<Crs<P>> {
@@ -153,9 +154,9 @@ impl<P: Pairing> ProvingKey<P> {
         );
     }
 
-    pub fn add_memory_records_to_proving_key<S: UltraCircuitVariable<P::ScalarField>>(
+    pub fn add_memory_records_to_proving_key<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         ram_rom_offset: u32,
-        builder: &GenericUltraCircuitBuilder<P, S>,
+        builder: &GenericUltraCircuitBuilder<P, T>,
         memory_read_records: &mut Vec<u32>,
         memory_write_records: &mut Vec<u32>,
     ) {
@@ -173,9 +174,11 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    pub fn compute_permutation_argument_polynomials<S: UltraCircuitVariable<P::ScalarField>>(
+    pub fn compute_permutation_argument_polynomials<
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         polys: &mut PrecomputedEntities<Polynomial<P::ScalarField>>,
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+        circuit: &GenericUltraCircuitBuilder<P, T>,
         copy_cycles: Vec<CyclicPermutation>,
         circuit_size: usize,
         pub_inputs_offset: usize,
@@ -201,10 +204,10 @@ impl<P: Pairing> ProvingKey<P> {
         );
     }
 
-    fn compute_permutation_mapping<S: UltraCircuitVariable<P::ScalarField>>(
+    fn compute_permutation_mapping<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         circuit_size: usize,
         pub_inputs_offset: usize,
-        circuit_constructor: &GenericUltraCircuitBuilder<P, S>,
+        circuit_constructor: &GenericUltraCircuitBuilder<P, T>,
         wire_copy_cycles: Vec<CyclicPermutation>,
     ) -> PermutationMapping {
         // Initialize the table of permutations so that every element points to itself
@@ -319,9 +322,9 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    pub fn construct_lookup_table_polynomials<S: UltraCircuitVariable<P::ScalarField>>(
+    pub fn construct_lookup_table_polynomials<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         table_polynomials: &mut [Polynomial<P::ScalarField>],
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+        circuit: &GenericUltraCircuitBuilder<P, T>,
         dyadic_circuit_size: usize,
         additional_offset: usize,
     ) {
@@ -349,9 +352,9 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    pub fn construct_lookup_read_counts<S: UltraCircuitVariable<P::ScalarField>>(
+    pub fn construct_lookup_read_counts<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         witness: &mut [Polynomial<P::ScalarField>; 2],
-        circuit: &mut GenericUltraCircuitBuilder<P, S>,
+        circuit: &mut GenericUltraCircuitBuilder<P, T>,
         dyadic_circuit_size: usize,
     ) {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace

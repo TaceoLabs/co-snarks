@@ -1,10 +1,11 @@
-use crate::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable};
+use crate::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder};
 use crate::keys::proving_key::ProvingKey;
 use crate::polynomials::polynomial::Polynomial;
 use crate::types::plookup::BasicTableId;
 use crate::utils::Utils;
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;
 use std::array;
@@ -340,9 +341,9 @@ impl GateCounter {
         }
     }
 
-    pub(crate) fn compute_diff<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn compute_diff<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
-        builder: &GenericUltraCircuitBuilder<P, S>,
+        builder: &GenericUltraCircuitBuilder<P, T>,
     ) -> usize {
         if !self.collect_gates_per_opcode {
             return 0;
@@ -353,9 +354,9 @@ impl GateCounter {
         diff
     }
 
-    pub(crate) fn track_diff<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn track_diff<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
-        builder: &GenericUltraCircuitBuilder<P, S>,
+        builder: &GenericUltraCircuitBuilder<P, T>,
         gates_per_opcode: &mut [usize],
         opcode_index: usize,
     ) {
@@ -410,15 +411,14 @@ impl<F: PrimeField> RomTable<F> {
         }
     }
 
-    pub(crate) fn index_field_ct<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn index_field_ct<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         &mut self,
         index: &FieldCT<F>,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
-    ) -> FieldCT<F>
-    where
-        F: From<P::ScalarField>,
-        P::ScalarField: From<F>,
-    {
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) -> FieldCT<F> {
         if index.is_constant() {
             let val: BigUint = index.get_value(builder).into();
             let val: usize = val.try_into().expect("Invalid index");
@@ -436,13 +436,13 @@ impl<F: PrimeField> RomTable<F> {
         FieldCT::from_witness_index(output_idx)
     }
 
-    fn initialize_table<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    fn initialize_table<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         &mut self,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
-    ) where
-        F: From<P::ScalarField>,
-        P::ScalarField: From<F>,
-    {
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) {
         if self.initialized {
             return;
         }
@@ -451,7 +451,7 @@ impl<F: PrimeField> RomTable<F> {
             if entry.is_constant() {
                 let val = entry.get_value(builder);
                 self.entries.push(FieldCT::from_witness_index(
-                    builder.put_constant_variable(P::ScalarField::from(val)),
+                    builder.put_constant_variable(val),
                 ));
             } else {
                 self.entries.push(entry.normalize(builder));
@@ -533,13 +533,13 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     // TACEO TODO this is just implemented for the plain backend
-    pub(crate) fn from_witness<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn from_witness<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         input: P::ScalarField,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
-    ) -> Self
-    where
-        F: From<P::ScalarField>,
-    {
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) -> Self {
         let witness = WitnessCT::from_field(input, builder);
         Self::from_witness_ct(witness)
     }
@@ -552,19 +552,17 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub(crate) fn get_value<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn get_value<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         &self,
-        builder: &GenericUltraCircuitBuilder<P, S>,
-    ) -> F
-    where
-        F: From<P::ScalarField>,
-    {
+        builder: &GenericUltraCircuitBuilder<P, T>,
+    ) -> F {
         if self.witness_index != Self::IS_CONSTANT {
-            let variable = builder
-                .get_variable(self.witness_index as usize)
-                .public_into_field()
+            let variable = T::get_public(&builder.get_variable(self.witness_index as usize))
                 .expect("Not implemented for other cases"); // TACEO TODO this is just implemented for the Plain backend
-            self.multiplicative_constant * F::from(variable) + self.additive_constant
+            self.multiplicative_constant * variable + self.additive_constant
         } else {
             self.additive_constant.to_owned()
         }
@@ -581,23 +579,23 @@ impl<F: PrimeField> FieldCT<F> {
      * succeeds or fails. This can lead to confusion when debugging. If you want to log the inputs, do so before
      * calling this method.
      */
-    pub(crate) fn assert_equal<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn assert_equal<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         &self,
         other: &Self,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
-    ) where
-        F: From<P::ScalarField>,
-        P::ScalarField: From<F>,
-    {
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) {
         if self.is_constant() && other.is_constant() {
             assert_eq!(self.get_value(builder), other.get_value(builder));
         } else if self.is_constant() {
             let right = other.normalize(builder);
-            let left = P::ScalarField::from(self.get_value(builder));
+            let left = self.get_value(builder);
             builder.assert_equal_constant(right.witness_index as usize, left);
         } else if other.is_constant() {
             let left = self.normalize(builder);
-            let right = P::ScalarField::from(other.get_value(builder));
+            let right = other.get_value(builder);
             builder.assert_equal_constant(left.witness_index as usize, right);
         } else {
             let left = self.normalize(builder);
@@ -610,14 +608,10 @@ impl<F: PrimeField> FieldCT<F> {
         self.witness_index == Self::IS_CONSTANT
     }
 
-    fn normalize<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    fn normalize<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
-    ) -> Self
-    where
-        F: From<P::ScalarField>,
-        P::ScalarField: From<F>,
-    {
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) -> Self {
         if self.is_constant()
             || ((self.multiplicative_constant == F::one()) && (self.additive_constant == F::zero()))
         {
@@ -629,15 +623,11 @@ impl<F: PrimeField> FieldCT<F> {
         // We need a new gate to enforce that the `result` was correctly calculated from `this`.
 
         let mut result = FieldCT::default();
-        let value = F::from(
-            builder
-                .get_variable(self.witness_index as usize)
-                .public_into_field()
-                .expect("Not implemented for other cases"), // TACEO TODO this is just implemented for the Plain backend
-        );
+        let value = T::get_public(&builder.get_variable(self.witness_index as usize))
+            .expect("Not implemented for other cases"); // TACEO TODO this is just implemented for the Plain backend
         let out = self.multiplicative_constant * value + self.additive_constant;
 
-        result.witness_index = builder.add_variable(S::from_public(P::ScalarField::from(out)));
+        result.witness_index = builder.add_variable(T::AcvmType::from(out));
         result.additive_constant = F::zero();
         result.multiplicative_constant = F::one();
 
@@ -650,10 +640,10 @@ impl<F: PrimeField> FieldCT<F> {
             a: self.witness_index,
             b: self.witness_index,
             c: result.witness_index,
-            a_scaling: P::ScalarField::from(self.multiplicative_constant),
+            a_scaling: self.multiplicative_constant,
             b_scaling: P::ScalarField::zero(),
             c_scaling: -P::ScalarField::one(),
-            const_scaling: P::ScalarField::from(self.additive_constant),
+            const_scaling: self.additive_constant,
         });
         result
     }
@@ -684,16 +674,16 @@ pub(crate) struct WitnessCT<F: PrimeField> {
 impl<F: PrimeField> WitnessCT<F> {
     const IS_CONSTANT: u32 = FieldCT::<F>::IS_CONSTANT;
 
-    pub(crate) fn from_field<P: Pairing, S: UltraCircuitVariable<P::ScalarField>>(
+    pub(crate) fn from_field<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         value: P::ScalarField,
-        builder: &mut GenericUltraCircuitBuilder<P, S>,
-    ) -> Self
-    where
-        F: From<P::ScalarField>,
-    {
-        builder.add_variable(S::from_public(value));
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) -> Self {
+        builder.add_variable(T::AcvmType::from(value));
         Self {
-            witness: F::from(value),
+            witness: value,
             witness_index: Self::IS_CONSTANT,
         }
     }

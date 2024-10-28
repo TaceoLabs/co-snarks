@@ -90,6 +90,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         None
     }
 
+    fn get_public(a: &Self::AcvmType) -> Option<F> {
+        Some(*a)
+    }
+
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>> {
         Ok(a.to_vec())
     }

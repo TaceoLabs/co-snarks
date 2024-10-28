@@ -8,19 +8,7 @@ pub(crate) mod types;
 
 use ark_ec::pairing::Pairing;
 use co_builder::prelude::ProverCrs;
-use mpc::{plain::PlainUltraHonkDriver, NoirUltraHonkProver};
-use parse::builder_variable::SharedBuilderVariable;
-
-impl<P: Pairing> SharedBuilderVariable<PlainUltraHonkDriver, P> {
-    pub fn promote_public_witness_vector(
-        witness: Vec<P::ScalarField>,
-    ) -> Vec<SharedBuilderVariable<PlainUltraHonkDriver, P>> {
-        witness
-            .into_iter()
-            .map(SharedBuilderVariable::Public)
-            .collect()
-    }
-}
+use mpc::NoirUltraHonkProver;
 
 pub(crate) const NUM_ALPHAS: usize = ultrahonk::NUM_ALPHAS;
 // The log of the max circuit size assumed in order to achieve constant sized Honk proofs
