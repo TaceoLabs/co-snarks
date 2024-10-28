@@ -49,10 +49,10 @@ pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFiel
 
 pub(crate) const NUM_SUBRELATIONS: usize = UltraArithmeticRelation::NUM_RELATIONS
     + UltraPermutationRelation::NUM_RELATIONS
+    + LogDerivLookupRelation::NUM_RELATIONS
     + DeltaRangeConstraintRelation::NUM_RELATIONS
     + EllipticRelation::NUM_RELATIONS
     + AuxiliaryRelation::NUM_RELATIONS
-    + LogDerivLookupRelation::NUM_RELATIONS
     + Poseidon2ExternalRelation::NUM_RELATIONS
     + Poseidon2InternalRelation::NUM_RELATIONS;
 
@@ -68,10 +68,10 @@ pub const CRAND_PAIRS_FACTOR: usize = AuxiliaryRelation::CRAND_PAIRS_FACTOR
 pub(crate) struct AllRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<T, P>,
     pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
+    pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
     pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
-    pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
@@ -81,10 +81,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for AllRelationAcc<T, P> {
         Self {
             r_arith: Default::default(),
             r_perm: Default::default(),
+            r_lookup: Default::default(),
             r_delta: Default::default(),
             r_elliptic: Default::default(),
             r_aux: Default::default(),
-            r_lookup: Default::default(),
             r_pos_ext: Default::default(),
             r_pos_int: Default::default(),
         }
@@ -101,10 +101,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAcc<T, P> {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
         self.r_arith.scale(driver, &[first_scalar, elements[0]]);
         self.r_perm.scale(driver, &elements[1..3]);
-        self.r_delta.scale(driver, &elements[3..7]);
-        self.r_elliptic.scale(driver, &elements[7..9]);
-        self.r_aux.scale(driver, &elements[9..15]);
-        self.r_lookup.scale(driver, &elements[15..17]);
+        self.r_lookup.scale(driver, &elements[3..5]);
+        self.r_delta.scale(driver, &elements[5..9]);
+        self.r_elliptic.scale(driver, &elements[9..11]);
+        self.r_aux.scale(driver, &elements[11..17]);
         self.r_pos_ext.scale(driver, &elements[17..21]);
         self.r_pos_int.scale(driver, &elements[21..]);
     }
@@ -128,6 +128,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAcc<T, P> {
             extended_random_poly,
             partial_evaluation_result,
         );
+        self.r_lookup.extend_and_batch_univariates(
+            driver,
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
         self.r_delta.extend_and_batch_univariates(
             driver,
             result,
@@ -141,12 +147,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAcc<T, P> {
             partial_evaluation_result,
         );
         self.r_aux.extend_and_batch_univariates(
-            driver,
-            result,
-            extended_random_poly,
-            partial_evaluation_result,
-        );
-        self.r_lookup.extend_and_batch_univariates(
             driver,
             result,
             extended_random_poly,

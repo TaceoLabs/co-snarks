@@ -73,10 +73,10 @@ pub(crate) const NUM_SUBRELATIONS: usize = UltraArithmeticRelation::NUM_RELATION
 pub(crate) struct AllRelationAcc<F: PrimeField> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<F>,
     pub(crate) r_perm: UltraPermutationRelationAcc<F>,
+    pub(crate) r_lookup: LogDerivLookupRelationAcc<F>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<F>,
     pub(crate) r_elliptic: EllipticRelationAcc<F>,
     pub(crate) r_aux: AuxiliaryRelationAcc<F>,
-    pub(crate) r_lookup: LogDerivLookupRelationAcc<F>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<F>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<F>,
 }
@@ -85,10 +85,10 @@ pub(crate) struct AllRelationAcc<F: PrimeField> {
 pub(crate) struct AllRelationEvaluations<F: PrimeField> {
     pub(crate) r_arith: UltraArithmeticRelationEvals<F>,
     pub(crate) r_perm: UltraPermutationRelationEvals<F>,
+    pub(crate) r_lookup: LogDerivLookupRelationEvals<F>,
     pub(crate) r_delta: DeltaRangeConstraintRelationEvals<F>,
     pub(crate) r_elliptic: EllipticRelationEvals<F>,
     pub(crate) r_aux: AuxiliaryRelationEvals<F>,
-    pub(crate) r_lookup: LogDerivLookupRelationEvals<F>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationEvals<F>,
     pub(crate) r_pos_int: Poseidon2InternalRelationEvals<F>,
 }
@@ -101,14 +101,15 @@ impl<F: PrimeField> AllRelationEvaluations<F> {
             .scale_and_batch_elements(&[first_scalar, elements[0]], &mut output);
         self.r_perm
             .scale_and_batch_elements(&elements[1..3], &mut output);
-        self.r_delta
-            .scale_and_batch_elements(&elements[3..7], &mut output);
-        self.r_elliptic
-            .scale_and_batch_elements(&elements[7..9], &mut output);
-        self.r_aux
-            .scale_and_batch_elements(&elements[9..15], &mut output);
         self.r_lookup
-            .scale_and_batch_elements(&elements[15..17], &mut output);
+            .scale_and_batch_elements(&elements[3..5], &mut output);
+        self.r_delta
+            .scale_and_batch_elements(&elements[5..9], &mut output);
+        self.r_elliptic
+            .scale_and_batch_elements(&elements[9..11], &mut output);
+        self.r_aux
+            .scale_and_batch_elements(&elements[11..17], &mut output);
+
         self.r_pos_ext
             .scale_and_batch_elements(&elements[17..21], &mut output);
         self.r_pos_int
@@ -123,10 +124,10 @@ impl<F: PrimeField> AllRelationAcc<F> {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
         self.r_arith.scale(&[first_scalar, elements[0]]);
         self.r_perm.scale(&elements[1..3]);
-        self.r_delta.scale(&elements[3..7]);
-        self.r_elliptic.scale(&elements[7..9]);
-        self.r_aux.scale(&elements[9..15]);
-        self.r_lookup.scale(&elements[15..17]);
+        self.r_lookup.scale(&elements[3..5]);
+        self.r_delta.scale(&elements[5..9]);
+        self.r_elliptic.scale(&elements[9..11]);
+        self.r_aux.scale(&elements[11..17]);
         self.r_pos_ext.scale(&elements[17..21]);
         self.r_pos_int.scale(&elements[21..]);
     }
@@ -147,6 +148,11 @@ impl<F: PrimeField> AllRelationAcc<F> {
             extended_random_poly,
             partial_evaluation_result,
         );
+        self.r_lookup.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
         self.r_delta.extend_and_batch_univariates(
             result,
             extended_random_poly,
@@ -158,11 +164,6 @@ impl<F: PrimeField> AllRelationAcc<F> {
             partial_evaluation_result,
         );
         self.r_aux.extend_and_batch_univariates(
-            result,
-            extended_random_poly,
-            partial_evaluation_result,
-        );
-        self.r_lookup.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
