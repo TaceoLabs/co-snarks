@@ -1,43 +1,16 @@
 use crate::{
     decider::{prover::Decider, types::ProverMemory},
-    honk_curve::HonkCurve,
     oink::prover::Oink,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    types::{HonkProof, ProvingKey},
+    types::HonkProof,
     CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::pairing::Pairing;
-use std::{io, marker::PhantomData};
-
-pub type HonkProofResult<T> = std::result::Result<T, HonkProofError>;
-
-/// The errors that may arise during the computation of a HONK proof.
-#[derive(Debug, thiserror::Error)]
-pub enum HonkProofError {
-    /// Indicates that the witness is too small for the provided circuit.
-    #[error("Cannot index into witness {0}")]
-    CorruptedWitness(usize),
-    /// Indicates that the crs is too small
-    #[error("CRS too small")]
-    CrsTooSmall,
-    /// The proof has too few elements
-    #[error("Proof too small")]
-    ProofTooSmall,
-    /// Invalid proof length
-    #[error("Invalid proof length")]
-    InvalidProofLength,
-    /// Invalid key length
-    #[error("Invalid key length")]
-    InvalidKeyLength,
-    /// Corrupted Key
-    #[error("Corrupted Key")]
-    CorruptedKey,
-    /// Expected Public Witness, Shared received
-    #[error("Expected Public Witness, Shared received")]
-    ExpectedPublicWitness,
-    #[error(transparent)]
-    IOError(#[from] io::Error),
-}
+use co_builder::{
+    prelude::{HonkCurve, ProvingKey},
+    HonkProofResult,
+};
+use std::marker::PhantomData;
 
 pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
     phantom_data: PhantomData<P>,

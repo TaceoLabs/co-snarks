@@ -8,6 +8,7 @@ members = [
     "co-circom/co-groth16",
     "co-circom/co-plonk",
     "co-noir/co-acvm",
+    "co-noir/co-builder",
     "co-noir/ultrahonk",
     "co-noir/co-ultrahonk",
     "co-noir/co-noir",

@@ -6,10 +6,9 @@ use crate::{
     CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::pairing::Pairing;
+use co_builder::{prelude::HonkCurve, HonkProofResult};
 use std::marker::PhantomData;
-use ultrahonk::prelude::{
-    HonkCurve, HonkProof, HonkProofResult, Transcript, TranscriptFieldType, TranscriptHasher,
-};
+use ultrahonk::prelude::{HonkProof, Transcript, TranscriptFieldType, TranscriptHasher};
 
 pub struct CoUltraHonk<
     T: NoirUltraHonkProver<P>,

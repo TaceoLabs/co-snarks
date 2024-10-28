@@ -19,13 +19,12 @@
 
 use super::types::ProverMemory;
 use crate::{
-    honk_curve::HonkCurve,
-    prover::{HonkProofError, HonkProofResult},
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    types::ProvingKey,
     Utils, NUM_ALPHAS,
 };
 use ark_ff::{One, Zero};
+use co_builder::prelude::{HonkCurve, ProvingKey};
+use co_builder::{HonkProofError, HonkProofResult};
 use itertools::izip;
 use std::{array, marker::PhantomData};
 

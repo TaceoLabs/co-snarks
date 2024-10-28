@@ -1,10 +1,8 @@
-use ark_ec::pairing::Pairing;
-use std::marker::PhantomData;
-use ultrahonk::prelude::{
-    Polynomial, PrecomputedEntities, ProverCrs, ShiftedTableEntities, ShiftedWitnessEntities,
-};
-
 use crate::mpc::NoirUltraHonkProver;
+use ark_ec::pairing::Pairing;
+use co_builder::prelude::{Polynomial, PrecomputedEntities, ProverCrs};
+use std::marker::PhantomData;
+use ultrahonk::prelude::{ShiftedTableEntities, ShiftedWitnessEntities};
 
 pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) crs: ProverCrs<P>,

@@ -6,15 +6,15 @@ use crate::types::ProverWitnessEntities;
 use crate::types::ProvingKey;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
+use co_builder::prelude::Crs;
+use co_builder::prelude::PrecomputedEntities;
+use co_builder::prelude::ProverCrs;
+use co_builder::prelude::ProvingKey as PlainProvingKey;
+use co_builder::prelude::UltraCircuitVariable;
+use co_builder::prelude::VerifyingKey;
+use co_builder::HonkProofResult;
 use eyre::Result;
 use std::marker::PhantomData;
-use ultrahonk::prelude::Crs;
-use ultrahonk::prelude::HonkProofResult;
-use ultrahonk::prelude::PrecomputedEntities;
-use ultrahonk::prelude::ProverCrs;
-use ultrahonk::prelude::ProvingKey as PlainProvingKey;
-use ultrahonk::prelude::UltraCircuitVariable;
-use ultrahonk::prelude::VerifyingKey;
 use ultrahonk::Utils;
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {

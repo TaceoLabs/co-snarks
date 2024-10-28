@@ -3,13 +3,14 @@ use super::{
     types::VerifierMemory,
 };
 use crate::{
-    prelude::{HonkCurve, TranscriptFieldType},
+    prelude::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
     Utils,
 };
 use ark_ec::AffineRepr;
 use ark_ff::One;
+use co_builder::prelude::HonkCurve;
 use std::marker::PhantomData;
 
 pub(crate) struct DeciderVerifier<

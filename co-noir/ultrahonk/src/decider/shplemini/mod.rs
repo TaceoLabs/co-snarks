@@ -1,10 +1,11 @@
 pub(crate) mod prover;
 pub(crate) mod types;
 pub(crate) mod verifier;
+
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use co_builder::prelude::Polynomial;
 
-use crate::prelude::Polynomial;
 pub(crate) struct ShpleminiVerifierOpeningClaim<P: Pairing> {
     pub(crate) challenge: P::ScalarField,
     pub(crate) scalars: Vec<P::ScalarField>,

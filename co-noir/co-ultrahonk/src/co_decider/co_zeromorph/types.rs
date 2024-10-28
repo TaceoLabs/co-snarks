@@ -1,6 +1,7 @@
 use crate::types::WitnessEntities;
+use co_builder::prelude::PrecomputedEntities;
 use std::iter;
-use ultrahonk::prelude::{PrecomputedEntities, ShiftedTableEntities, ShiftedWitnessEntities};
+use ultrahonk::prelude::{ShiftedTableEntities, ShiftedWitnessEntities};
 
 pub(crate) struct PolyF<'a, Shared: Default, Public: Default> {
     pub(crate) precomputed: &'a PrecomputedEntities<Public>,

@@ -1,7 +1,7 @@
 use ark_ec::pairing::Pairing;
+use co_builder::{prelude::UltraCircuitVariable, HonkProofError, HonkProofResult};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use ultrahonk::prelude::{HonkProofError, HonkProofResult, UltraCircuitVariable};
 
 use crate::mpc::NoirUltraHonkProver;
 

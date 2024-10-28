@@ -9,8 +9,8 @@ use ultrahonk::{
 };
 
 fn poseidon_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
-    const CRS_PATH_G1: &str = "crs/bn254_g1.dat";
-    const CRS_PATH_G2: &str = "crs/bn254_g2.dat";
+    const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
     const CIRCUIT_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.json";
     const WITNESS_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.gz";
 

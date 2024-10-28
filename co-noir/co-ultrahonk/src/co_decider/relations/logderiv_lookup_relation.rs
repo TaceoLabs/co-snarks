@@ -8,7 +8,9 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
-use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
+use co_builder::prelude::HonkCurve;
+use co_builder::HonkProofResult;
+use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
 pub(crate) struct LogDerivLookupRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {

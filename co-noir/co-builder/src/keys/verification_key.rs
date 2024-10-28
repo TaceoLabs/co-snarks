@@ -1,19 +1,25 @@
-use super::{
-    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable},
-    types::{AggregationObjectPubInputIndices, AGGREGATION_OBJECT_SIZE},
-};
 use crate::{
-    prelude::{CrsParser, HonkCurve, TranscriptFieldType},
-    prover::{HonkProofError, HonkProofResult},
-    types::{
-        Crs, HonkProof, PrecomputedEntities, ProverCrs, ProvingKey, VerifyingKey,
-        PRECOMPUTED_ENTITIES_SIZE,
-    },
-    Serialize, Utils,
+    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable},
+    crs::{parse::CrsParser, Crs, ProverCrs},
+    honk_curve::HonkCurve,
+    keys::proving_key::ProvingKey,
+    polynomials::polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE},
+    serialize::Serialize,
+    types::types::{AggregationObjectPubInputIndices, AGGREGATION_OBJECT_SIZE},
+    utils::Utils,
+    HonkProofError, HonkProofResult, TranscriptFieldType,
 };
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::PrimeField;
 use eyre::Result;
+
+pub struct VerifyingKey<P: Pairing> {
+    pub crs: P::G2Affine,
+    pub circuit_size: u32,
+    pub num_public_inputs: u32,
+    pub pub_inputs_offset: u32,
+    pub commitments: PrecomputedEntities<P::G1Affine>,
+}
 
 impl<P: Pairing> VerifyingKey<P> {
     pub fn create(circuit: UltraCircuitBuilder<P>, crs: Crs<P>) -> HonkProofResult<Self> {

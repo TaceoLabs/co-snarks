@@ -1,9 +1,8 @@
-use super::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable};
-use super::plookup::{BasicTableId, MultiTableId};
-use crate::decider::polynomial::Polynomial;
-use crate::prover::HonkProofResult;
-use crate::types::ProvingKey;
-use crate::Utils;
+use crate::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable};
+use crate::keys::proving_key::ProvingKey;
+use crate::polynomials::polynomial::Polynomial;
+use crate::types::plookup::BasicTableId;
+use crate::utils::Utils;
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};
 use itertools::izip;
@@ -13,6 +12,8 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::ops::{Index, IndexMut};
+
+use super::plookup::MultiTableId;
 
 #[derive(Default, PartialEq, Eq)]
 pub(crate) struct PolyTriple<F: PrimeField> {

@@ -7,14 +7,15 @@ pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
-use crate::mpc::NoirUltraHonkProver;
-
 use super::{
     types::{ProverUnivariates, RelationParameters},
     univariates::SharedUnivariate,
 };
+use crate::mpc::NoirUltraHonkProver;
 use ark_ec::pairing::Pairing;
 use auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc};
+use co_builder::prelude::HonkCurve;
+use co_builder::HonkProofResult;
 use delta_range_constraint_relation::{
     DeltaRangeConstraintRelation, DeltaRangeConstraintRelationAcc,
 };
@@ -24,7 +25,7 @@ use permutation_relation::{UltraPermutationRelation, UltraPermutationRelationAcc
 use poseidon2_external_relation::{Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc};
 use poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRelationAcc};
 use ultra_arithmetic_relation::{UltraArithmeticRelation, UltraArithmeticRelationAcc};
-use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
+use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> {
     type Acc: Default;

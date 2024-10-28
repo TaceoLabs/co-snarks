@@ -1,11 +1,13 @@
 use super::{shplemini::ShpleminiOpeningClaim, sumcheck::SumcheckOutput, types::ProverMemory};
 
 use crate::{
-    honk_curve::HonkCurve,
-    prover::HonkProofResult,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    types::{HonkProof, ProverCrs},
+    types::HonkProof,
     Utils,
+};
+use co_builder::{
+    prelude::{HonkCurve, ProverCrs},
+    HonkProofResult,
 };
 use std::marker::PhantomData;
 

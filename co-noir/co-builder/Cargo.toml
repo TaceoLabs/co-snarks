@@ -1,5 +1,5 @@
 [package]
-name = "co-ultrahonk"
+name = "co-builder"
 version = "0.1.0"
 publish.workspace = true
 authors.workspace = true
@@ -10,22 +10,21 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+acir.workspace = true
+ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
-ark-bn254.workspace = true
-ark-serialize.workspace = true
 ark-poly.workspace = true
-co-builder = { version = "0.1.0", path = "../co-builder" }
+ark-serialize.workspace = true
 eyre.workspace = true
 itertools.workspace = true
-mpc-core = { version = "0.5.0", path = "../../mpc-core" }
 num-bigint.workspace = true
 num-traits.workspace = true
-tracing.workspace = true
-ultrahonk = { version = "0.1.0", path = "../ultrahonk" }
 rand.workspace = true
 rayon.workspace = true
 serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
-sha3.workspace = true
+rand.workspace = true
