@@ -147,6 +147,8 @@ impl MpcNetworkHandler {
                             }
                             std::thread::sleep(Duration::from_millis(100));
                         };
+                        // this removes buffering of tcp packets, very important for latency of small packets
+                        stream.set_nodelay(true)?;
                         let mut stream = connector.connect(domain.clone(), stream).await?;
                         stream.write_u64(config.my_id as u64).await?;
                         stream.write_u64(stream_id as u64).await?;
@@ -182,6 +184,8 @@ impl MpcNetworkHandler {
                 // accept all 2 splits for n streams and store them with (party_id, stream_id, split) so we know were they belong
                 for _ in 0..STREAMS_PER_CONN * 2 {
                     let (stream, _peer_addr) = listener.accept().await?;
+                    // this removes buffering of tcp packets, very important for latency of small packets
+                    stream.set_nodelay(true)?;
                     let mut stream = acceptor.accept(stream).await?;
                     let party_id = stream.read_u64().await? as usize;
                     let stream_id = stream.read_u64().await? as usize;
