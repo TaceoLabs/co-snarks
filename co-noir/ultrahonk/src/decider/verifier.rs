@@ -83,6 +83,16 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             circuit_size,
             sumcheck_output.multivariate_challenge,
         )?;
+
+        //    let opening_claim = Shplemini::compute_batch_opening_claim(accumulator->verification_key->circuit_size,
+        //         commitments.get_unshifted(),
+        //         commitments.get_to_be_shifted(),
+        //         claimed_evaluations.get_unshifted(),
+        //         claimed_evaluations.get_shifted(),
+        //         multivariate_challenge,
+        //         Commitment::one(),
+        //         transcript);
+
         let pairing_points = Self::reduce_verify(opening_claim, transcript)?;
         let pcs_verified = Self::pairing_check(
             pairing_points.0,
