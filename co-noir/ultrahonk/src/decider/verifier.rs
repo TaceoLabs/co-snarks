@@ -1,8 +1,12 @@
-use super::{types::VerifierMemory, zeromorph::ZeroMorphVerifierOpeningClaim};
+use super::{
+    shplemini::ShpleminiVerifierOpeningClaim, types::VerifierMemory,
+    zeromorph::ZeroMorphVerifierOpeningClaim,
+};
 use crate::{
     prelude::{HonkCurve, TranscriptFieldType},
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
+    Utils,
 };
 use ark_ec::AffineRepr;
 use ark_ff::One;
@@ -51,6 +55,21 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let p_0 = p_0 - second;
         Ok((p_0.into(), p_1.into()))
     }
+    // TODO do the obvious for below and above
+    pub(crate) fn reduce_verify_shplemini(
+        opening_pair: &mut ShpleminiVerifierOpeningClaim<P>,
+        mut transcript: Transcript<TranscriptFieldType, H>,
+    ) -> HonkVerifyResult<(P::G1Affine, P::G1Affine)> {
+        tracing::trace!("Reduce and verify opening pair");
+
+        let quotient_commitment = transcript.receive_point_from_prover::<P>("KZG:W".to_string())?;
+
+        opening_pair.commitments.push(quotient_commitment);
+
+        let p_1 = -P::G1::from(quotient_commitment);
+        let p_0: P::G1 = Utils::msm::<P>(&opening_pair.scalars, &opening_pair.commitments)?;
+        Ok((p_0.into(), p_1.into()))
+    }
 
     pub fn pairing_check(
         p0: P::G1Affine,
@@ -78,22 +97,19 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             return Ok(false);
         }
 
-        let opening_claim = self.zeromorph_verify(
-            &mut transcript,
+        // let opening_claim = self.zeromorph_verify(
+        //     &mut transcript,
+        //     circuit_size,
+        //     sumcheck_output.multivariate_challenge,
+        // )?;
+
+        let mut opening_claim = self.compute_batch_opening_claim(
             circuit_size,
             sumcheck_output.multivariate_challenge,
+            &mut transcript,
         )?;
 
-        //    let opening_claim = Shplemini::compute_batch_opening_claim(accumulator->verification_key->circuit_size,
-        //         commitments.get_unshifted(),
-        //         commitments.get_to_be_shifted(),
-        //         claimed_evaluations.get_unshifted(),
-        //         claimed_evaluations.get_shifted(),
-        //         multivariate_challenge,
-        //         Commitment::one(),
-        //         transcript);
-
-        let pairing_points = Self::reduce_verify(opening_claim, transcript)?;
+        let pairing_points = Self::reduce_verify_shplemini(&mut opening_claim, transcript)?;
         let pcs_verified = Self::pairing_check(
             pairing_points.0,
             pairing_points.1,

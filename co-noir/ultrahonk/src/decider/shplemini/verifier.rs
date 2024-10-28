@@ -6,7 +6,6 @@ use crate::{
     decider::{
         types::{ClaimedEvaluations, VerifierCommitments},
         verifier::DeciderVerifier,
-        zeromorph::ZeroMorphVerifierOpeningClaim,
     },
     prelude::{HonkCurve, TranscriptFieldType},
     transcript::{Transcript, TranscriptHasher},
