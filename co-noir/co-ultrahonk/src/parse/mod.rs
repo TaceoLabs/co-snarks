@@ -4,7 +4,7 @@ pub(crate) mod types;
 
 use ark_ec::pairing::Pairing;
 use builder_variable::SharedBuilderVariable;
-use ultrahonk::prelude::GenericUltraCircuitBuilder;
+use co_builder::prelude::GenericUltraCircuitBuilder;
 
 use crate::{
     mpc::{plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver},

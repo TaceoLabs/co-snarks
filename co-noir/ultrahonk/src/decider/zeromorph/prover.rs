@@ -4,15 +4,17 @@ use super::{
     ShpleminiOpeningClaim,
 };
 use crate::{
-    decider::{polynomial::Polynomial, types::ClaimedEvaluations, zeromorph::OpeningPair},
-    honk_curve::HonkCurve,
-    prover::HonkProofResult,
+    decider::{types::ClaimedEvaluations, zeromorph::OpeningPair},
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    types::{AllEntities, ProverCrs},
+    types::AllEntities,
     Utils, CONST_PROOF_SIZE_LOG_N, N_MAX,
 };
 use ark_ec::Group;
 use ark_ff::{Field, One, Zero};
+use co_builder::{
+    prelude::{HonkCurve, Polynomial, ProverCrs},
+    HonkProofResult,
+};
 use itertools::izip;
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {

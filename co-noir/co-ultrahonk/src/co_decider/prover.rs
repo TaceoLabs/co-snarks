@@ -2,11 +2,12 @@ use super::{
     co_sumcheck::SumcheckOutput, co_zeromorph::ZeroMorphOpeningClaim, types::ProverMemory,
 };
 use crate::{mpc::NoirUltraHonkProver, CoUtils};
-use std::marker::PhantomData;
-use ultrahonk::prelude::{
-    HonkCurve, HonkProof, HonkProofResult, ProverCrs, Transcript, TranscriptFieldType,
-    TranscriptHasher,
+use co_builder::{
+    prelude::{HonkCurve, ProverCrs},
+    HonkProofResult,
 };
+use std::marker::PhantomData;
+use ultrahonk::prelude::{HonkProof, Transcript, TranscriptFieldType, TranscriptHasher};
 
 pub(crate) struct CoDecider<
     T: NoirUltraHonkProver<P>,

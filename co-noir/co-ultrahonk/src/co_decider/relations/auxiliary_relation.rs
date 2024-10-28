@@ -8,8 +8,10 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
+use co_builder::prelude::HonkCurve;
+use co_builder::HonkProofResult;
 use num_bigint::BigUint;
-use ultrahonk::prelude::{HonkCurve, HonkProofResult, TranscriptFieldType, Univariate};
+use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 /**
  * AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): Investigate optimizations.

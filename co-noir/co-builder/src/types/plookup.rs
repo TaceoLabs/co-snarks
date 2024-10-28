@@ -1,9 +1,8 @@
-use crate::parse::types::{ColumnIdx, LookupEntry};
-
-use super::types::{PlookupMultiTable, ReadData};
 use ark_ff::PrimeField;
 use num_bigint::BigUint;
 use std::array::from_fn;
+
+use super::types::{ColumnIdx, LookupEntry, PlookupMultiTable, ReadData};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum BasicTableId {

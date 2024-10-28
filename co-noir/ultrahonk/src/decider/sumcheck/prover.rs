@@ -2,10 +2,10 @@ use crate::decider::prover::Decider;
 use crate::decider::sumcheck::round_prover::{SumcheckProverRound, SumcheckRoundOutput};
 use crate::decider::sumcheck::SumcheckOutput;
 use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys};
-use crate::honk_curve::HonkCurve;
 use crate::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use crate::types::AllEntities;
 use crate::{Utils, CONST_PROOF_SIZE_LOG_N};
+use co_builder::prelude::HonkCurve;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {

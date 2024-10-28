@@ -1,17 +1,27 @@
-use super::{
-    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable},
-    crs::CrsParser,
-    types::{CyclicPermutation, Mapping, PermutationMapping},
-};
 use crate::{
-    decider::polynomial::Polynomial,
-    parse::types::{TraceData, NUM_WIRES},
-    types::{Crs, Polynomials, PrecomputedEntities, ProverCrs, ProvingKey},
-    Utils,
+    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable},
+    crs::{parse::CrsParser, Crs, ProverCrs},
+    polynomials::{
+        polynomial::Polynomial,
+        polynomial_types::{Polynomials, PrecomputedEntities},
+    },
+    types::types::{CyclicPermutation, Mapping, PermutationMapping, TraceData, NUM_WIRES},
+    utils::Utils,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use eyre::Result;
+
+pub struct ProvingKey<P: Pairing> {
+    pub crs: ProverCrs<P>,
+    pub circuit_size: u32,
+    pub public_inputs: Vec<P::ScalarField>,
+    pub num_public_inputs: u32,
+    pub pub_inputs_offset: u32,
+    pub polynomials: Polynomials<P::ScalarField>,
+    pub memory_read_records: Vec<u32>,
+    pub memory_write_records: Vec<u32>,
+}
 
 impl<P: Pairing> ProvingKey<P> {
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)

@@ -1,11 +1,12 @@
 use crate::{
     decider::{types::VerifierMemory, verifier::DeciderVerifier},
     oink::verifier::OinkVerifier,
-    prelude::{HonkCurve, TranscriptFieldType},
+    prelude::TranscriptFieldType,
     prover::UltraHonk,
     transcript::{Transcript, TranscriptHasher},
-    types::{HonkProof, VerifyingKey},
+    types::HonkProof,
 };
+use co_builder::prelude::{HonkCurve, VerifyingKey};
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 

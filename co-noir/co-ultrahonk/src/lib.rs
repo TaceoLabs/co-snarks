@@ -7,9 +7,9 @@ pub(crate) mod prover;
 pub(crate) mod types;
 
 use ark_ec::pairing::Pairing;
+use co_builder::prelude::ProverCrs;
 use mpc::{plain::PlainUltraHonkDriver, NoirUltraHonkProver};
 use parse::builder_variable::SharedBuilderVariable;
-use ultrahonk::prelude::ProverCrs;
 
 impl<P: Pairing> SharedBuilderVariable<PlainUltraHonkDriver, P> {
     pub fn promote_public_witness_vector(

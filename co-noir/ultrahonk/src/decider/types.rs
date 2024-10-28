@@ -1,10 +1,8 @@
 use super::univariate::Univariate;
-use crate::{
-    types::{AllEntities, Polynomials, VerifyingKey},
-    NUM_ALPHAS,
-};
+use crate::{types::AllEntities, NUM_ALPHAS};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use co_builder::prelude::{Polynomials, VerifyingKey};
 use itertools::izip;
 use std::{iter, vec};
 

@@ -1,23 +1,23 @@
-use super::{
-    acir_format::AcirFormat,
-    plookup::BasicTableId,
-    types::{
-        AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
-        AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
-        ColumnIdx, MulQuad, PlookupBasicTable, PolyTriple, RamTranscript, RangeList, ReadData,
-        RomTranscript, UltraTraceBlock, UltraTraceBlocks,
-    },
-    verification_key::VerifyingKeyBarretenberg,
-};
 use crate::{
-    decider::sumcheck::verifier,
-    parse::{
-        plookup::{MultiTableId, Plookup},
-        types::{FieldCT, GateCounter, RomRecord, RomTable, NUM_WIRES},
+    acir_format::AcirFormat,
+    crs::{Crs, ProverCrs},
+    keys::{
+        proving_key::ProvingKey,
+        verification_key::{VerifyingKey, VerifyingKeyBarretenberg},
     },
-    prover::HonkProofResult,
-    types::{Crs, PrecomputedEntities, ProverCrs, ProvingKey, VerifyingKey},
-    Utils,
+    polynomials::polynomial_types::PrecomputedEntities,
+    types::{
+        plookup::{BasicTableId, MultiTableId, Plookup},
+        types::{
+            AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
+            AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
+            ColumnIdx, FieldCT, GateCounter, MulQuad, PlookupBasicTable, PolyTriple, RamTranscript,
+            RangeList, ReadData, RomRecord, RomTable, RomTranscript, UltraTraceBlock,
+            UltraTraceBlocks, NUM_WIRES,
+        },
+    },
+    utils::Utils,
+    HonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};

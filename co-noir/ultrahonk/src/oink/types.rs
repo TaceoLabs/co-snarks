@@ -1,6 +1,7 @@
-use crate::{decider::polynomial::Polynomial, types::WitnessEntities, NUM_ALPHAS};
+use crate::{types::WitnessEntities, NUM_ALPHAS};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use co_builder::prelude::Polynomial;
 
 pub(crate) struct ProverMemory<P: Pairing> {
     /// column 3

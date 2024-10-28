@@ -1,6 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use ultrahonk::prelude::Polynomial;
+use co_builder::prelude::Polynomial;
 
 use crate::{mpc::NoirUltraHonkProver, NUM_ALPHAS};
 
