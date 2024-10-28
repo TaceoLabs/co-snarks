@@ -1,5 +1,5 @@
 use crate::{
-    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable},
+    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::{parse::CrsParser, Crs, ProverCrs},
     honk_curve::HonkCurve,
     keys::proving_key::ProvingKey,
@@ -11,6 +11,7 @@ use crate::{
 };
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::PrimeField;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use eyre::Result;
 
 pub struct VerifyingKey<P: Pairing> {
@@ -40,8 +41,8 @@ impl<P: Pairing> VerifyingKey<P> {
         }
     }
 
-    pub fn get_crs<S: UltraCircuitVariable<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+    pub fn get_crs<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, T>,
         path_g1: &str,
         path_g2: &str,
     ) -> Result<Crs<P>> {
@@ -49,8 +50,8 @@ impl<P: Pairing> VerifyingKey<P> {
         ProvingKey::get_crs(circuit, path_g1, path_g2)
     }
 
-    pub fn get_prover_crs<S: UltraCircuitVariable<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+    pub fn get_prover_crs<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, T>,
         path_g1: &str,
     ) -> Result<ProverCrs<P>> {
         tracing::trace!("Getting crs");

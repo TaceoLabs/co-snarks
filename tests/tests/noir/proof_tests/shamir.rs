@@ -1,10 +1,10 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
+use co_acvm::ShamirAcvmType;
 use co_ultrahonk::{
     prelude::{
         CoUltraHonk, Poseidon2Sponge, ProvingKey, ShamirCoBuilder, ShamirUltraHonkDriver,
-        SharedBuilderVariable, TranscriptFieldType, TranscriptHasher, UltraCircuitBuilder,
-        UltraCircuitVariable, UltraHonk, Utils, VerifyingKey,
+        TranscriptFieldType, TranscriptHasher, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
     },
     MAX_PARTIAL_RELATION_LENGTH, OINK_CRAND_PAIRS_CONST, OINK_CRAND_PAIRS_FACTOR_N,
     OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE, SUMCHECK_ROUND_CRAND_PAIRS_FACTOR,
@@ -12,7 +12,7 @@ use co_ultrahonk::{
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
 use sha3::Keccak256;
 use std::thread;
-use tests::shamir_network::ShamirTestNetwork;
+use tests::shamir_network::{PartyTestNetwork, ShamirTestNetwork};
 
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
@@ -29,7 +29,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     // Will be trivially shared anyways
     let witness = witness
         .into_iter()
-        .map(SharedBuilderVariable::from_public)
+        .map(ShamirAcvmType::from)
         .collect::<Vec<_>>();
 
     let test_network = ShamirTestNetwork::new(num_parties);
@@ -40,7 +40,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         threads.push(thread::spawn(move || {
             let constraint_system = Utils::get_constraint_system_from_artifact(&artifact, true);
 
-            let builder = ShamirCoBuilder::<Bn254, _>::create_circuit(
+            let builder = ShamirCoBuilder::<Bn254, PartyTestNetwork>::create_circuit(
                 constraint_system,
                 0,
                 witness,
@@ -48,7 +48,11 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 false,
             );
 
-            let prover_crs = ProvingKey::get_prover_crs(&builder, CRS_PATH_G1)
+            let prover_crs =
+                ProvingKey::<ShamirUltraHonkDriver<_, PartyTestNetwork>, _>::get_prover_crs(
+                    &builder,
+                    CRS_PATH_G1,
+                )
                 .expect("failed to get prover crs");
 
             let id = net.id;

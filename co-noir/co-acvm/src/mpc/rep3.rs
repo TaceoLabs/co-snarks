@@ -41,7 +41,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
 
 // TODO maybe we want to merge that with the Rep3VmType?? Atm we do not need
 // binary shares so maybe it is ok..
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub enum Rep3AcvmType<F: PrimeField> {
     Public(
         #[serde(
@@ -278,6 +278,13 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare> {
         match a {
             Rep3AcvmType::Shared(shared) => Some(*shared),
+            _ => None,
+        }
+    }
+
+    fn get_public(a: &Self::AcvmType) -> Option<F> {
+        match a {
+            Rep3AcvmType::Public(public) => Some(*public),
             _ => None,
         }
     }

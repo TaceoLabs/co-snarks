@@ -10,9 +10,7 @@ use co_acvm::{
     solver::{partial_abi::PublicMarker, Rep3CoSolver},
     Rep3AcvmType,
 };
-use co_ultrahonk::prelude::{
-    Rep3UltraHonkDriver, ShamirUltraHonkDriver, SharedBuilderVariable, UltraCircuitVariable,
-};
+use co_ultrahonk::prelude::{Rep3UltraHonkDriver, ShamirUltraHonkDriver};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,

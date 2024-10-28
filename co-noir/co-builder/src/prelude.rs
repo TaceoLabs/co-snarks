@@ -1,5 +1,5 @@
 pub use crate::acir_format::AcirFormat;
-pub use crate::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable};
+pub use crate::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder};
 pub use crate::crs::parse::CrsParser;
 pub use crate::crs::Crs;
 pub use crate::crs::ProverCrs;

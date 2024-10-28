@@ -1,4 +1,3 @@
-use super::CoUltraCircuitBuilder;
 use crate::mpc::NoirUltraHonkProver;
 use crate::parse::types::TraceData;
 use crate::types::Polynomials;
@@ -6,12 +5,14 @@ use crate::types::ProverWitnessEntities;
 use crate::types::ProvingKey;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::prelude::Crs;
+use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::ProverCrs;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
-use co_builder::prelude::UltraCircuitVariable;
 use co_builder::prelude::VerifyingKey;
+use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use eyre::Result;
 use std::marker::PhantomData;
@@ -22,9 +23,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         ProverWitnessEntities::<T::ArithmeticShare, P::ScalarField>::W_R;
 
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
-    pub fn create(
+    pub fn create<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
         id: T::PartyID,
-        mut circuit: CoUltraCircuitBuilder<T, P>,
+        mut circuit: GenericUltraCircuitBuilder<P, U>,
         crs: ProverCrs<P>,
     ) -> HonkProofResult<Self> {
         tracing::trace!("ProvingKey create");
@@ -68,16 +71,19 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             .take(proving_key.num_public_inputs as usize)
             .cloned()
         {
-            let var = circuit.get_variable(var_idx as usize);
-            proving_key.public_inputs.push(var.public_into_field()?);
+            let var = U::get_public(&circuit.get_variable(var_idx as usize))
+                .ok_or(HonkProofError::ExpectedPublicWitness)?;
+            proving_key.public_inputs.push(var);
         }
 
         Ok(proving_key)
     }
 
-    pub fn create_keys(
+    pub fn create_keys<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
         id: T::PartyID,
-        circuit: CoUltraCircuitBuilder<T, P>,
+        circuit: GenericUltraCircuitBuilder<P, U>,
         crs: Crs<P>,
     ) -> HonkProofResult<(Self, VerifyingKey<P>)> {
         let prover_crs = ProverCrs {
@@ -113,15 +119,19 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         self.public_inputs.clone()
     }
 
-    pub fn get_prover_crs(
-        circuit: &CoUltraCircuitBuilder<T, P>,
+    pub fn get_prover_crs<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        circuit: &GenericUltraCircuitBuilder<P, U>,
         path_g1: &str,
     ) -> Result<ProverCrs<P>> {
         PlainProvingKey::get_prover_crs(circuit, path_g1)
     }
 
-    pub fn get_crs(
-        circuit: &CoUltraCircuitBuilder<T, P>,
+    pub fn get_crs<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        circuit: &GenericUltraCircuitBuilder<P, U>,
         path_g1: &str,
         path_g2: &str,
     ) -> Result<Crs<P>> {
@@ -145,10 +155,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         }
     }
 
-    fn populate_trace(
+    fn populate_trace<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
         &mut self,
         id: T::PartyID,
-        builder: &mut CoUltraCircuitBuilder<T, P>,
+        builder: &mut GenericUltraCircuitBuilder<P, U>,
         is_strucutred: bool,
     ) {
         tracing::trace!("Populating trace");
