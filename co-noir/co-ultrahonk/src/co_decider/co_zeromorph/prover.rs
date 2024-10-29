@@ -286,7 +286,7 @@ impl<
         batched_polynomial
     }
 
-    fn get_f_polyomials(
+    fn get_f_polynomials(
         polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
     ) -> PolyF<Vec<T::ArithmeticShare>, Vec<P::ScalarField>> {
         PolyF {
@@ -304,7 +304,7 @@ impl<
         }
     }
 
-    fn get_g_polyomials(
+    fn get_g_polynomials(
         polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
     ) -> PolyG<Vec<T::ArithmeticShare>, Vec<P::ScalarField>> {
         let tables = [
@@ -347,8 +347,8 @@ impl<
         SharedPolynomial<T, P>,
         P::ScalarField,
     ) {
-        let f_polynomials = Self::get_f_polyomials(&self.memory.polys);
-        let g_polynomials = Self::get_g_polyomials(&self.memory.polys);
+        let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
+        let g_polynomials = Self::get_g_polynomials(&self.memory.polys);
         let f_evaluations = Self::get_f_evaluations(&claimed_evaluations);
         let g_shift_evaluations = Self::get_g_shift_evaluations(&claimed_evaluations);
 

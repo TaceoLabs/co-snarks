@@ -266,7 +266,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         batched_polynomial
     }
 
-    fn get_f_polyomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {
+    fn get_f_polynomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
@@ -282,7 +282,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
-    fn get_g_polyomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyG<Vec<P::ScalarField>> {
+    fn get_g_polynomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyG<Vec<P::ScalarField>> {
         PolyG {
             tables: polys
                 .precomputed
@@ -312,8 +312,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         Polynomial<P::ScalarField>,
         P::ScalarField,
     ) {
-        let f_polynomials = Self::get_f_polyomials(&self.memory.polys);
-        let g_polynomials = Self::get_g_polyomials(&self.memory.polys);
+        let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
+        let g_polynomials = Self::get_g_polynomials(&self.memory.polys);
         let f_evaluations = Self::get_f_evaluations(&claimed_evaluations);
         let g_shift_evaluations = Self::get_g_shift_evaluations(&claimed_evaluations);
 

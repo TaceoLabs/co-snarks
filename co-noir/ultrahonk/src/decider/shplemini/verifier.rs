@@ -118,13 +118,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // const std::vector<RefVector<Commitment>>& concatenation_group_commitments = {},
         // RefSpan<P::ScalarField> concatenated_evaluations = {}
     ) -> HonkVerifyResult<ShpleminiVerifierOpeningClaim<P>> {
-        // let unshifted_evaluations: PolyF<P::ScalarField> =
-        //     Self::get_f_evaluations(&self.memory.claimed_evaluations);
-        //     let shifted_evaluations: PolyGShift<P::ScalarField> =
-        //     Self::get_g_shift_evaluations(&self.memory.claimed_evaluations);
-        //     let unshifted_commitments = Self::get_f_comms(&self.memory.verifier_commitments);
-        //     let to_be_shifted_commitments = Self::get_g_shift_comms(&self.memory.verifier_commitments);
-
         // Extract log_circuit_size
         let log_circuit_size = Utils::get_msb32(circuit_size);
 

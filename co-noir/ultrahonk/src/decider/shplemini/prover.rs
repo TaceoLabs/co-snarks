@@ -1,279 +1,34 @@
 use super::{
     super::{prover::Decider, sumcheck::SumcheckOutput},
     types::{PolyF, PolyG, PolyGShift},
-    ZeroMorphOpeningClaim,
 };
 use crate::{
-    decider::{polynomial::Polynomial, types::ClaimedEvaluations, zeromorph::OpeningPair},
+    decider::{
+        polynomial::Polynomial,
+        types::ClaimedEvaluations,
+        verifier::DeciderVerifier,
+        zeromorph::{OpeningPair, ZeroMorphOpeningClaim},
+    },
     honk_curve::HonkCurve,
     prover::HonkProofResult,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::{AllEntities, ProverCrs},
-    Utils, CONST_PROOF_SIZE_LOG_N, N_MAX,
+    Utils, CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::Group;
 use ark_ff::{Field, One, Zero};
-use itertools::izip;
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
-    // /**
-    //  * @brief Compute multivariate quotients q_k(X_0, ..., X_{k-1}) for f(X_0, ..., X_{n-1})
-    //  * @details Starting from the coefficients of f, compute q_k inductively from k = n - 1, to k = 0.
-    //  *          f needs to be updated at each step.
-    //  *
-    //  *          First, compute q_{n-1} of size N/2 by
-    //  *          q_{n-1}[l] = f[N/2 + l ] - f[l].
-    //  *
-    //  *          Update f by f[l] <- f[l] + u_{n-1} * q_{n-1}[l]; f now has size N/2.
-    //  *          Compute q_{n-2} of size N/(2^2) by
-    //  *          q_{n-2}[l] = f[N/2^2 + l] - f[l].
-    //  *
-    //  *          Update f by f[l] <- f[l] + u_{n-2} * q_{n-2}[l]; f now has size N/(2^2).
-    //  *          Compute q_{n-3} of size N/(2^3) by
-    //  *          q_{n-3}[l] = f[N/2^3 + l] - f[l]. Repeat similarly until you reach q_0.
-    //  *
-    //  * @param polynomial Multilinear polynomial f(X_0, ..., X_{d-1})
-    //  * @param u_challenge Multivariate challenge u = (u_0, ..., u_{d-1})
-    //  * @return std::vector<Polynomial> The quotients q_k
-    //  */
-    fn compute_multilinear_quotients(
-        polynomial: &Polynomial<P::ScalarField>,
-        u_challenge: &[P::ScalarField],
-    ) -> Vec<Polynomial<P::ScalarField>> {
-        let log_n = Utils::get_msb64(polynomial.len() as u64);
-        // Define the vector of quotients q_k, k = 0, ..., log_N-1
-        // let mut quotients = Vec::with_capacity(log_n as usize);
-        let mut quotients = vec![Polynomial::default(); log_n as usize];
-
-        // Compute the coefficients of q_{n-1}
-        let mut size_q = 1 << (log_n - 1);
-        let mut q = Vec::with_capacity(size_q);
-        let (half_a, half_b) = polynomial.coefficients.split_at(size_q);
-        for (a, b) in half_a.iter().zip(half_b.iter()) {
-            q.push(*b - a);
-        }
-
-        quotients[log_n as usize - 1].coefficients = q;
-
-        let mut g = half_a.to_owned();
-
-        // Compute q_k in reverse order from k= n-2, i.e. q_{n-2}, ..., q_0
-        for k in 1..log_n {
-            // Compute f_k
-            let mut f_k = Vec::with_capacity(size_q);
-            let index = log_n as usize - k as usize;
-            for (g, q) in izip!(g, quotients[index].iter()) {
-                f_k.push(g + u_challenge[index] * q);
-            }
-            size_q >>= 1;
-            let mut q = Vec::with_capacity(size_q);
-            let (half_a, half_b) = f_k.split_at(size_q);
-            for (a, b) in half_a.iter().zip(half_b.iter()) {
-                q.push(*b - a);
-            }
-
-            quotients[index - 1].coefficients = q;
-            g = f_k;
-        }
-
-        quotients
-    }
-
-    /**
-     * @brief Construct batched, lifted-degree univariate quotient \hat{q} = \sum_k y^k * X^{N - d_k - 1} * q_k
-     * @details The purpose of the batched lifted-degree quotient is to reduce the individual degree checks
-     * deg(q_k) <= 2^k - 1 to a single degree check on \hat{q}. This is done by first shifting each of the q_k to the
-     * right (i.e. multiplying by an appropriate power of X) so that each is degree N-1, then batching them all together
-     * using powers of the provided challenge. Note: In practice, we do not actually compute the shifted q_k, we simply
-     * accumulate them into \hat{q} at the appropriate offset.
-     *
-     * @param quotients Polynomials q_k, interpreted as univariates; deg(q_k) = 2^k - 1
-     * @param N circuit size
-     * @return Polynomial
-     */
-    fn compute_batched_lifted_degree_quotient(
-        quotients: &[Polynomial<P::ScalarField>],
-        y_challenge: &P::ScalarField,
-        n: usize,
-    ) -> Polynomial<P::ScalarField> {
-        // Batched lifted degree quotient polynomial
-        let mut result = vec![P::ScalarField::zero(); n];
-
-        // Compute \hat{q} = \sum_k y^k * X^{N - d_k - 1} * q_k
-        let mut scalar = P::ScalarField::one();
-        for (k, quotient) in quotients.iter().enumerate() {
-            // Rather than explicitly computing the shifts of q_k by N - d_k - 1 (i.e. multiplying q_k by X^{N - d_k -
-            // 1}) then accumulating them, we simply accumulate y^k*q_k into \hat{q} at the index offset N - d_k - 1
-            let deg_k = (1 << k) - 1;
-            let offset = n - deg_k - 1;
-
-            for (r, q) in result
-                .iter_mut()
-                .skip(offset)
-                .take(deg_k + 1)
-                .zip(quotient.iter())
-            {
-                *r += scalar * q;
-            }
-
-            scalar *= y_challenge; // update batching scalar y^k
-        }
-
-        Polynomial::new(result)
-    }
-
-    // /**
-    //  * @brief Compute partially evaluated degree check polynomial \zeta_x = q - \sum_k y^k * x^{N - d_k - 1} * q_k
-    //  * @details Compute \zeta_x, where
-    //  *
-    //  *                          \zeta_x = q - \sum_k y^k * x^{N - d_k - 1} * q_k
-    //  *
-    //  * @param batched_quotient
-    //  * @param quotients
-    //  * @param y_challenge
-    //  * @param x_challenge
-    //  * @return Polynomial Degree check polynomial \zeta_x such that \zeta_x(x) = 0
-    //  */
-    fn compute_partially_evaluated_degree_check_polynomial(
-        batched_quotient: &Polynomial<P::ScalarField>,
-        quotients: &[Polynomial<P::ScalarField>],
-        y_challenge: &P::ScalarField,
-        x_challenge: &P::ScalarField,
-    ) -> Polynomial<P::ScalarField> {
-        let n = batched_quotient.len();
-
-        // Initialize partially evaluated degree check polynomial \zeta_x to \hat{q}
-        let mut result = batched_quotient.clone();
-
-        let mut y_power = P::ScalarField::ONE; // y^k
-        for (k, q) in quotients.iter().enumerate() {
-            // Accumulate y^k * x^{N - d_k - 1} * q_k into \hat{q}
-            let deg_k = (1 << k) - 1;
-            let exponent = (n - deg_k - 1) as u64;
-            let x_power = x_challenge.pow([exponent]); // x^{N - d_k - 1}
-
-            result.add_scaled(q, &(-y_power * x_power));
-
-            y_power *= y_challenge; // update batching scalar y^k
-        }
-
-        result
-    }
-
-    /**
-     * @brief Compute partially evaluated zeromorph identity polynomial Z_x
-     * @details Compute Z_x, where
-     *
-     *  Z_x = x * f_batched + g_batched - v * x * \Phi_n(x)
-     *           - x * \sum_k (x^{2^k}\Phi_{n-k-1}(x^{2^{k-1}}) - u_k\Phi_{n-k}(x^{2^k})) * q_k
-     *           + concatentation_term
-     *
-     * where f_batched = \sum_{i=0}^{m-1}\rho^i*f_i, g_batched = \sum_{i=0}^{l-1}\rho^{m+i}*g_i
-     *
-     * and concatenation_term = \sum_{i=0}^{num_chunks_per_group}(x^{i * min_N + 1}concatenation_groups_batched_{i})
-     *
-     * @note The concatenation term arises from an implementation detail in the Translator and is not part of the
-     * conventional ZM protocol
-     * @param input_polynomial
-     * @param quotients
-     * @param v_evaluation
-     * @param x_challenge
-     * @return Polynomial
-     */
-    fn compute_partially_evaluated_zeromorph_identity_polynomial(
-        f_batched: Polynomial<P::ScalarField>,
-        g_batched: Polynomial<P::ScalarField>,
-        quotients: Vec<Polynomial<P::ScalarField>>,
-        v_evaluation: P::ScalarField,
-        u_challenge: &[P::ScalarField],
-        x_challenge: P::ScalarField,
-    ) -> Polynomial<P::ScalarField> {
-        let n = f_batched.len();
-
-        // Initialize Z_x with x * \sum_{i=0}^{m-1} f_i + \sum_{i=0}^{l-1} g_i
-        let mut result = g_batched;
-        result.add_scaled(&f_batched, &x_challenge);
-
-        // Compute Z_x -= v * x * \Phi_n(x)
-        let phi_numerator = x_challenge.pow([n as u64]) - P::ScalarField::ONE; // x^N - 1
-        let phi_n_x = phi_numerator / (x_challenge - P::ScalarField::ONE);
-        result[0] -= v_evaluation * x_challenge * phi_n_x;
-
-        // Add contribution from q_k polynomials
-        for (k, (q, u)) in izip!(quotients.iter(), u_challenge.iter()).enumerate() {
-            let exp_1 = 1 << k;
-            let x_power = x_challenge.pow([exp_1]); // x^{2^k}
-
-            // \Phi_{n-k-1}(x^{2^{k + 1}})
-            let exp_2 = 1 << (k + 1);
-            let phi_term_1 = phi_numerator / (x_challenge.pow([exp_2]) - P::ScalarField::ONE);
-
-            // \Phi_{n-k}(x^{2^k})
-            let phi_term_2 = phi_numerator / (x_challenge.pow([exp_1]) - P::ScalarField::ONE);
-
-            // x^{2^k} * \Phi_{n-k-1}(x^{2^{k+1}}) - u_k *  \Phi_{n-k}(x^{2^k})
-            let mut scalar = x_power * phi_term_1 - phi_term_2 * u;
-
-            scalar *= x_challenge;
-            scalar *= -P::ScalarField::ONE;
-
-            result.add_scaled(q, &scalar);
-        }
-
-        // We don't have groups, so we are done already
-
-        result
-    }
-
-    /**
-     * @brief Compute combined evaluation and degree-check polynomial pi
-     * @details Compute univariate polynomial pi, where
-     *
-     *  pi = (\zeta_c + z*Z_x) X^{N_{max}-(N-1)}
-     *
-     * The proof that pi(x) = 0 for some verifier challenge x will then be computed as part of the univariate PCS
-     * opening. If this is instantiated with KZG, the PCS is going to compute the quotient
-     * q_pi = (q_\zeta + z*q_Z)X^{N_{max}-(N-1)}, with q_\zeta = \zeta_x/(X-x), q_Z = Z_x/(X-x),
-     *
-     * @param Z_x
-     * @param zeta_x
-     * @param x_challenge
-     * @param z_challenge
-     * @param N_max
-     * @return Polynomial
-     */
-    fn compute_batched_evaluation_and_degree_check_polynomial(
-        zeta_x: Polynomial<P::ScalarField>,
-        z_x: Polynomial<P::ScalarField>,
-        z_challenge: P::ScalarField,
-    ) -> Polynomial<P::ScalarField> {
-        // We cannot commit to polynomials with size > N_max
-        let n = zeta_x.len();
-        assert!(n <= N_MAX);
-        let mut batched_polynomial = zeta_x;
-        batched_polynomial.add_scaled(&z_x, &z_challenge);
-
-        // TODO(#742): To complete the degree check, we need to do an opening proof for x_challenge with a univariate
-        // PCS for the degree-lifted polynomial (\zeta_c + z*Z_x)*X^{N_max - N - 1}. If this PCS is KZG, verification
-        // then requires a pairing check similar to the standard KZG check but with [1]_2 replaced by [X^{N_max - N
-        // -1}]_2. Two issues: A) we do not have an SRS with these G2 elements (so need to generate a fake setup until
-        // we can do the real thing), and B) its not clear to me how to update our pairing algorithms to do this type of
-        // pairing. For now, simply construct pi without the shift and do a standard KZG pairing check if the PCS is
-        // KZG. When we're ready, all we have to do to make this fully legit is commit to the shift here and update the
-        // pairing check accordingly. Note: When this is implemented properly, it doesnt make sense to store the
-        // (massive) shifted polynomial of size N_max. Ideally would only store the unshifted version and just compute
-        // the shifted commitment directly via a new method.
-        batched_polynomial
-    }
-
-    fn get_f_polyomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {
+    fn get_f_polynomials_shplemini(
+        polys: &AllEntities<Vec<P::ScalarField>>,
+    ) -> PolyF<Vec<P::ScalarField>> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
         }
     }
 
-    fn get_g_shift_evaluations(
+    fn get_g_shift_evaluations_shplemini(
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) -> PolyGShift<P::ScalarField> {
         PolyGShift {
@@ -282,7 +37,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
-    fn get_g_polyomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyG<Vec<P::ScalarField>> {
+    fn get_g_polynomials_shplemini(
+        polys: &AllEntities<Vec<P::ScalarField>>,
+    ) -> PolyG<Vec<P::ScalarField>> {
         PolyG {
             tables: polys
                 .precomputed
@@ -293,7 +50,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
-    fn get_f_evaluations(
+    fn get_f_evaluations_shplemini(
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) -> PolyF<P::ScalarField> {
         PolyF {
@@ -302,7 +59,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
-    fn compute_batched_polys(
+    // TODO to adjust it for our needs
+    fn compute_batched_polysss(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         claimed_evaluations: AllEntities<P::ScalarField>,
@@ -312,10 +70,10 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         Polynomial<P::ScalarField>,
         P::ScalarField,
     ) {
-        let f_polynomials = Self::get_f_polyomials(&self.memory.polys);
-        let g_polynomials = Self::get_g_polyomials(&self.memory.polys);
-        let f_evaluations = Self::get_f_evaluations(&claimed_evaluations);
-        let g_shift_evaluations = Self::get_g_shift_evaluations(&claimed_evaluations);
+        let f_polynomials = Self::get_f_polynomials_shplemini(&self.memory.polys);
+        let g_polynomials = Self::get_g_polynomials_shplemini(&self.memory.polys);
+        let f_evaluations = Self::get_f_evaluations_shplemini(&claimed_evaluations);
+        let g_shift_evaluations = Self::get_g_shift_evaluations_shplemini(&claimed_evaluations);
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
         let rho = transcript.get_challenge::<P>("rho".to_string());
@@ -361,95 +119,325 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
      *
      * @AZTEC todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
      */
-    pub(crate) fn zeromorph_prove(
+    pub(crate) fn gemini_prove(
+        &self,
+        multilinear_challenge: Vec<P::ScalarField>,
+        log_n: u32,
+        claimed_evaluations: ClaimedEvaluations<P::ScalarField>,
+        commitment_key: &ProverCrs<P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+    ) -> HonkProofResult<Vec<ZeroMorphOpeningClaim<P::ScalarField>>> {
+        let n = 1 << log_n;
+
+        // Compute batched polynomials
+        let (batched_unshifted, batched_to_be_shifted, _) =
+            self.compute_batched_polysss(transcript, claimed_evaluations, n);
+
+        let fold_polynomials = Self::compute_fold_polynomials(
+            log_n as usize,
+            multilinear_challenge,
+            batched_unshifted,
+            batched_to_be_shifted,
+        );
+
+        for l in 0..CONST_PROOF_SIZE_LOG_N - 1 {
+            if l < log_n as usize - 1 {
+                let res = Utils::commit(&fold_polynomials[l + 2].coefficients, commitment_key)?;
+                transcript
+                    .send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res.into());
+            } else {
+                let res = P::G1::generator();
+                let label = format!("Gemini:FOLD_{}", l + 1);
+                transcript.send_point_to_verifier::<P>(label, res.into());
+            }
+        }
+
+        let r_challenge: P::ScalarField = transcript.get_challenge::<P>("Gemini:r".to_string());
+
+        let claims = Self::compute_fold_polynomial_evaluations(
+            log_n as usize,
+            fold_polynomials,
+            r_challenge,
+        )?;
+
+        for (l, claim) in claims
+            .iter()
+            .enumerate()
+            .skip(1)
+            .take(CONST_PROOF_SIZE_LOG_N)
+        {
+            if l <= log_n as usize {
+                transcript.send_fr_to_verifier::<P>(
+                    format!("Gemini:a_{}", l),
+                    claim.opening_pair.evaluation,
+                );
+            } else {
+                transcript
+                    .send_fr_to_verifier::<P>(format!("Gemini:a_{}", l), P::ScalarField::zero());
+            }
+        }
+
+        Ok(claims)
+    }
+
+    pub(crate) fn compute_fold_polynomials(
+        num_variables: usize,
+        mle_opening_point: Vec<P::ScalarField>,
+        batched_unshifted: Polynomial<P::ScalarField>,
+        batched_to_be_shifted: Polynomial<P::ScalarField>,
+    ) -> Vec<Polynomial<P::ScalarField>> {
+        // Note: bb uses multithreading here
+        let mut fold_polynomials: Vec<Polynomial<P::ScalarField>> =
+            Vec::with_capacity(num_variables + 1);
+
+        // F(X) = ∑ⱼ ρʲ fⱼ(X) and G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
+        fold_polynomials.push(batched_unshifted.clone());
+        fold_polynomials.push(batched_to_be_shifted.clone());
+        const OFFSET_TO_FOLDED: usize = 2; // Offset because of F and G
+
+        // A₀(X) = F(X) + G↺(X) = F(X) + G(X)/X
+        let mut a_0 = batched_unshifted.clone();
+
+        // If proving the opening for translator, add a non-zero contribution of the batched concatenation polynomials
+        a_0 += batched_to_be_shifted.shifted().as_ref(); //todo is this correct?
+
+        // Allocate everything before parallel computation
+        for l in 0..num_variables - 1 {
+            // size of the previous polynomial/2
+            let n_l = 1 << (num_variables - l - 1);
+
+            // A_l_fold = Aₗ₊₁(X) = (1-uₗ)⋅even(Aₗ)(X) + uₗ⋅odd(Aₗ)(X)
+            fold_polynomials.push(Polynomial::new_zero(n_l));
+        }
+
+        // A_l = Aₗ(X) is the polynomial being folded
+        // in the first iteration, we take the batched polynomial
+        // in the next iteration, it is the previously folded one
+        let mut a_l = a_0.coefficients;
+        for l in 0..num_variables - 1 {
+            // size of the previous polynomial/2
+            let n_l = 1 << (num_variables - l - 1);
+
+            // Opening point is the same for all
+            let u_l = mle_opening_point[l];
+
+            // A_l_fold = Aₗ₊₁(X) = (1-uₗ)⋅even(Aₗ)(X) + uₗ⋅odd(Aₗ)(X)
+            let a_l_fold = &mut fold_polynomials[l + OFFSET_TO_FOLDED].coefficients;
+
+            // Process each element in a single-threaded manner
+            for j in 0..n_l {
+                // fold(Aₗ)[j] = (1-uₗ)⋅even(Aₗ)[j] + uₗ⋅odd(Aₗ)[j]
+                //            = (1-uₗ)⋅Aₗ[2j]      + uₗ⋅Aₗ[2j+1]
+                //            = Aₗ₊₁[j]
+                a_l_fold[j] = a_l[j << 1] + u_l * (a_l[(j << 1) + 1] - a_l[j << 1]);
+            }
+
+            // Set Aₗ₊₁ = Aₗ for the next iteration
+            a_l = a_l_fold.to_vec();
+        }
+
+        fold_polynomials
+    }
+
+    pub(crate) fn compute_fold_polynomial_evaluations(
+        num_variables: usize,
+        mut fold_polynomials: Vec<Polynomial<P::ScalarField>>,
+        r_challenge: P::ScalarField,
+    ) -> HonkProofResult<Vec<ZeroMorphOpeningClaim<P::ScalarField>>> {
+        // // // Assuming `Polynomial` and `Fr` types are defined elsewhere in your code.
+
+        // let batched_f = fold_polynomials[0].clone(); // F(X) = ∑ⱼ ρʲ fⱼ(X)
+        // let mut batched_g = fold_polynomials[0].clone(); // G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
+
+        // // Compute univariate opening queries rₗ = r^{2ˡ} for l = 0, 1, ..., m-1
+        // let r_squares: Vec<P::ScalarField> =
+        //     DeciderVerifier::<P, H>::powers_of_evaluation_challenge(r_challenge, &num_variables);
+
+        // // Compute G/r
+        // let r_inv = r_challenge.inverse().unwrap();
+        // batched_g.iter_mut().for_each(|x| {
+        //     *x *= r_inv;
+        // });
+
+        // // Construct A₀₊ = F + G/r and A₀₋ = F - G/r in place in fold_polynomials
+        // let mut tmp = batched_f.clone();
+        // let mut a_0_pos = batched_f.clone(); // A₀₊(X) = F(X) + G(X)/r
+
+        // // A₀₊(X) = F(X) + G(X)/r
+        // a_0_pos.add_assign(batched_g.as_ref());
+
+        // // Perform a swap so that tmp = G(X)/r and A_0_neg = F(X)
+        // std::mem::swap(&mut tmp, &mut batched_g);
+        // let a_0_neg = &mut fold_polynomials[1]; // A₀₋(X) = F(X) - G(X)/r
+
+        // // A₀₋(X) = F(X) - G(X)/r
+        // a_0_neg.sub_assign(tmp.as_ref());
+        // start
+        // References to the first two polynomials in fold_polynomials
+        let batched_f = &mut fold_polynomials.remove(0); // F(X) = ∑ⱼ ρʲ fⱼ(X)
+        let batched_g = &mut fold_polynomials.remove(0); // G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
+
+        // Compute univariate opening queries rₗ = r^{2ˡ} for l = 0, 1, ..., m-1
+        let r_squares: Vec<P::ScalarField> =
+            DeciderVerifier::<P, H>::powers_of_evaluation_challenge(r_challenge, &num_variables);
+
+        // Compute G / r and update batched_G
+        let r_inv = r_challenge.inverse().unwrap();
+        let mut batched_g_div_r = batched_g.clone();
+        batched_g_div_r.iter_mut().for_each(|x| {
+            *x *= r_inv;
+        });
+
+        // Construct A₀₊ = F + G/r and A₀₋ = F - G/r in place in fold_polynomials
+
+        // A₀₊(X) = F(X) + G(X)/r, s.t. A₀₊(r) = A₀(r)
+        let mut a_0_pos = batched_f.clone();
+        a_0_pos += batched_g_div_r.as_ref();
+
+        // A₀₋(X) = F(X) - G(X)/r, s.t. A₀₋(-r) = A₀(-r)
+        let mut a_0_neg = batched_f.clone();
+        a_0_neg -= batched_g_div_r.as_ref();
+
+        fold_polynomials.insert(0, a_0_pos);
+        fold_polynomials.insert(1, a_0_neg);
+        // end
+        let mut opening_claims: Vec<ZeroMorphOpeningClaim<P::ScalarField>> =
+            Vec::with_capacity(num_variables + 1);
+
+        // Compute first opening pair {r, A₀(r)}
+        let evaluation = fold_polynomials[0].eval_poly(r_challenge);
+        opening_claims.push(ZeroMorphOpeningClaim {
+            polynomial: fold_polynomials[0].clone(),
+            opening_pair: OpeningPair {
+                challenge: r_challenge,
+                evaluation,
+            },
+        });
+
+        // Compute the remaining m opening pairs {−r^{2ˡ}, Aₗ(−r^{2ˡ})}, l = 0, ..., m-1
+        for l in 0..num_variables {
+            let evaluation = fold_polynomials[l + 1].eval_poly(-r_squares[l]);
+            opening_claims.push(ZeroMorphOpeningClaim {
+                polynomial: fold_polynomials[l + 1].clone(),
+                opening_pair: OpeningPair {
+                    challenge: -r_squares[l],
+                    evaluation,
+                },
+            });
+        }
+
+        Ok(opening_claims)
+    }
+
+    pub(crate) fn shplonk_prove(
+        &self,
+        opening_claims: Vec<ZeroMorphOpeningClaim<P::ScalarField>>,
+        commitment_key: &ProverCrs<P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+    ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
+        let nu = transcript.get_challenge::<P>("Shplonk:nu".to_string());
+        let batched_quotient = Self::compute_batched_quotient(&opening_claims, nu);
+        let batched_quotient_commitment =
+            Utils::commit(&batched_quotient.coefficients, commitment_key)?;
+        transcript.send_point_to_verifier::<P>(
+            "Shplonk:Q".to_string(),
+            batched_quotient_commitment.into(),
+        );
+
+        let z = transcript.get_challenge::<P>("Shplonk:z".to_string());
+
+        Ok(Self::compute_partially_evaluated_batched_quotient(
+            opening_claims,
+            &batched_quotient,
+            nu,
+            z,
+        ))
+    }
+
+    pub(crate) fn shplemini_prove(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
     ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
-        tracing::trace!("Zeromorph prove");
+        tracing::trace!("Shplemini prove");
+        let log_circuit_size = Utils::get_msb32(circuit_size);
+        let opening_claims = self.gemini_prove(
+            sumcheck_output.challenges,
+            log_circuit_size,
+            sumcheck_output.claimed_evaluations,
+            crs,
+            transcript,
+        )?;
+        let batched_claim = self.shplonk_prove(opening_claims, crs, transcript)?;
+        Ok(batched_claim)
+    }
 
-        let multilinear_challenge = &sumcheck_output.challenges;
-        let commitment_key = crs;
+    pub(crate) fn compute_partially_evaluated_batched_quotient(
+        opening_claims: Vec<ZeroMorphOpeningClaim<P::ScalarField>>,
+        batched_quotient_q: &Polynomial<P::ScalarField>,
+        nu_challenge: P::ScalarField,
+        z_challenge: P::ScalarField,
+    ) -> ZeroMorphOpeningClaim<P::ScalarField> {
+        let num_opening_claims = opening_claims.len();
 
-        // Extract multilinear challenge u and claimed multilinear evaluations from Sumcheck output
-        let u_challenge = multilinear_challenge;
-        let log_n = Utils::get_msb32(circuit_size);
-        let n = 1 << log_n;
-
-        let (f_batched, g_batched, batched_evaluation) =
-            self.compute_batched_polys(transcript, sumcheck_output.claimed_evaluations, n);
-
-        // We don't have groups, so we skip a lot now
-
-        // Compute the full batched polynomial f = f_batched + g_batched.shifted() = f_batched + h_batched. This is the
-        // polynomial for which we compute the quotients q_k and prove f(u) = v_batched.
-        let mut f_polynomial = f_batched.to_owned();
-        f_polynomial += g_batched.shifted().as_ref();
-        // f_polynomial += concatenated_batched; // No groups
-
-        // Compute the multilinear quotients q_k = q_k(X_0, ..., X_{k-1})
-        let quotients = Self::compute_multilinear_quotients(&f_polynomial, u_challenge);
-        debug_assert_eq!(quotients.len(), log_n as usize);
-        // Compute and send commitments C_{q_k} = [q_k], k = 0,...,d-1
-        for (idx, val) in quotients.iter().enumerate() {
-            let res = Utils::commit(&val.coefficients, commitment_key)?;
-            let label = format!("ZM:C_q_{}", idx);
-            transcript.send_point_to_verifier::<P>(label, res.into());
+        let mut inverse_vanishing_evals: Vec<P::ScalarField> =
+            Vec::with_capacity(num_opening_claims);
+        for claim in &opening_claims {
+            inverse_vanishing_evals.push(z_challenge - claim.opening_pair.challenge);
         }
-        // Add buffer elements to remove log_N dependence in proof
-        for idx in log_n as usize..CONST_PROOF_SIZE_LOG_N {
-            let res = P::G1::generator();
-            let label = format!("ZM:C_q_{}", idx);
-            transcript.send_point_to_verifier::<P>(label, res.into());
+        inverse_vanishing_evals.iter_mut().for_each(|x| {
+            x.inverse_in_place();
+        });
+
+        let mut g = batched_quotient_q.clone();
+
+        let mut current_nu = P::ScalarField::one();
+        for (idx, claim) in opening_claims.iter().enumerate() {
+            let mut tmp = claim.polynomial.clone();
+            tmp[0] -= claim.opening_pair.evaluation;
+            let scaling_factor = current_nu * inverse_vanishing_evals[idx];
+
+            g.add_scaled(&tmp, &-scaling_factor);
+
+            current_nu *= nu_challenge;
         }
 
-        // Get challenge y
-        let y_challenge = transcript.get_challenge::<P>("ZM:y".to_string());
-
-        // Compute the batched, lifted-degree quotient \hat{q}
-        let batched_quotient =
-            Self::compute_batched_lifted_degree_quotient(&quotients, &y_challenge, n);
-
-        // Compute and send the commitment C_q = [\hat{q}]
-        let q_commitment = Utils::commit(&batched_quotient.coefficients, commitment_key)?;
-        transcript.send_point_to_verifier::<P>("ZM:C_q".to_string(), q_commitment.into());
-
-        // Get challenges x and z
-        let challs = transcript.get_challenges::<P>(&["ZM:x".to_string(), "ZM:z".to_string()]);
-        let x_challenge = challs[0];
-        let z_challenge = challs[1];
-
-        // Compute degree check polynomial \zeta partially evaluated at x
-        let zeta_x = Self::compute_partially_evaluated_degree_check_polynomial(
-            &batched_quotient,
-            &quotients,
-            &y_challenge,
-            &x_challenge,
-        );
-
-        // Compute ZeroMorph identity polynomial Z partially evaluated at x
-        let z_x = Self::compute_partially_evaluated_zeromorph_identity_polynomial(
-            f_batched,
-            g_batched,
-            quotients,
-            batched_evaluation,
-            u_challenge,
-            x_challenge,
-        );
-
-        // Compute batched degree-check and ZM-identity quotient polynomial pi
-        let pi_polynomial =
-            Self::compute_batched_evaluation_and_degree_check_polynomial(zeta_x, z_x, z_challenge);
-
-        let res = ZeroMorphOpeningClaim {
-            polynomial: pi_polynomial,
+        ZeroMorphOpeningClaim {
+            polynomial: g,
             opening_pair: OpeningPair {
-                challenge: x_challenge,
+                challenge: z_challenge,
                 evaluation: P::ScalarField::zero(),
             },
-        };
-        Ok(res)
+        }
+    }
+
+    pub(crate) fn compute_batched_quotient(
+        opening_claims: &Vec<ZeroMorphOpeningClaim<P::ScalarField>>,
+        nu_challenge: P::ScalarField,
+    ) -> Polynomial<P::ScalarField> {
+        // Find n, the maximum size of all polynomials fⱼ(X)
+        let mut max_poly_size: usize = 0;
+        for claim in opening_claims {
+            max_poly_size = max_poly_size.max(claim.polynomial.len());
+        }
+
+        // Q(X) = ∑ⱼ νʲ ⋅ ( fⱼ(X) − vⱼ) / ( X − xⱼ )
+        let mut q = Polynomial::new_zero(max_poly_size);
+        let mut current_nu = P::ScalarField::one();
+        for claim in opening_claims {
+            // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
+            let mut tmp = claim.polynomial.clone();
+            tmp[0] -= claim.opening_pair.evaluation;
+            tmp.factor_roots(&claim.opening_pair.challenge);
+
+            // Add the claim quotient to the batched quotient polynomial
+            q.add_scaled(&tmp, &current_nu);
+            current_nu *= nu_challenge;
+        }
+
+        // Return batched quotient polynomial Q(X)
+        q
     }
 }
