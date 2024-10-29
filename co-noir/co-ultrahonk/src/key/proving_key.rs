@@ -1,13 +1,13 @@
+use crate::key::types::TraceData;
 use crate::mpc::NoirUltraHonkProver;
-use crate::parse::types::TraceData;
 use crate::types::Polynomials;
 use crate::types::ProverWitnessEntities;
-use crate::types::ProvingKey;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::prelude::Crs;
 use co_builder::prelude::GenericUltraCircuitBuilder;
+use co_builder::prelude::Polynomial;
 use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::ProverCrs;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
@@ -15,8 +15,28 @@ use co_builder::prelude::VerifyingKey;
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use eyre::Result;
+use serde::Deserialize;
+use serde::Serialize;
 use std::marker::PhantomData;
 use ultrahonk::Utils;
+
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
+    pub crs: ProverCrs<P>,
+    pub circuit_size: u32,
+    #[serde(
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
+    )]
+    pub public_inputs: Vec<P::ScalarField>,
+    pub num_public_inputs: u32,
+    pub pub_inputs_offset: u32,
+    pub polynomials: Polynomials<T::ArithmeticShare, P::ScalarField>,
+    pub memory_read_records: Vec<u32>,
+    pub memory_write_records: Vec<u32>,
+    pub phantom: PhantomData<T>,
+}
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     const PUBLIC_INPUT_WIRE_INDEX: usize =
@@ -187,5 +207,65 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             self.circuit_size as usize,
             self.pub_inputs_offset as usize,
         );
+    }
+
+    pub fn from_plain_key_and_shares(
+        plain_key: &PlainProvingKey<P>,
+        shares: Vec<T::ArithmeticShare>,
+    ) -> Result<Self> {
+        let crs = plain_key.crs.to_owned();
+        let circuit_size = plain_key.circuit_size;
+        let public_inputs = plain_key.public_inputs.to_owned();
+        let num_public_inputs = plain_key.num_public_inputs;
+        let pub_inputs_offset = plain_key.pub_inputs_offset;
+        let memory_read_records = plain_key.memory_read_records.to_owned();
+        let memory_write_records = plain_key.memory_write_records.to_owned();
+
+        if shares.len() != circuit_size as usize * 4 {
+            return Err(eyre::eyre!("Share length is not 4 times circuit size"));
+        }
+
+        let mut polynomials = Polynomials::default();
+        for (src, des) in plain_key
+            .polynomials
+            .precomputed
+            .iter()
+            .zip(polynomials.precomputed.iter_mut())
+        {
+            *des = src.to_owned();
+        }
+        for (src, des) in plain_key
+            .polynomials
+            .witness
+            .lookup_read_counts_and_tags()
+            .iter()
+            .zip(
+                polynomials
+                    .witness
+                    .lookup_read_counts_and_tags_mut()
+                    .iter_mut(),
+            )
+        {
+            *des = src.to_owned();
+        }
+
+        for (src, des) in shares
+            .chunks_exact(circuit_size as usize)
+            .zip(polynomials.witness.get_wires_mut().iter_mut())
+        {
+            *des = Polynomial::new(src.to_owned());
+        }
+
+        Ok(Self {
+            crs,
+            circuit_size,
+            public_inputs,
+            num_public_inputs,
+            pub_inputs_offset,
+            polynomials,
+            memory_read_records,
+            memory_write_records,
+            phantom: PhantomData,
+        })
     }
 }

@@ -1,8 +1,9 @@
 use super::polynomial::Polynomial;
 use ark_ff::PrimeField;
+use serde::{Deserialize, Serialize};
 
 // This is what we get from the proving key, we shift at a later point
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct Polynomials<F: PrimeField> {
     pub witness: ProverWitnessEntities<Polynomial<F>>,
     pub precomputed: PrecomputedEntities<Polynomial<F>>,
@@ -25,13 +26,13 @@ impl<F: PrimeField> Polynomials<F> {
 }
 
 const PROVER_WITNESS_ENTITIES_SIZE: usize = 6;
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct ProverWitnessEntities<T: Default> {
     pub elements: [T; PROVER_WITNESS_ENTITIES_SIZE],
 }
 
 pub const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
-#[derive(Default, Clone)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct PrecomputedEntities<T: Default> {
     pub elements: [T; PRECOMPUTED_ENTITIES_SIZE],
 }
@@ -82,6 +83,10 @@ impl<T: Default> ProverWitnessEntities<T> {
             .take(Self::W_4 + 1 - Self::W_L)
     }
 
+    pub fn get_wires(&self) -> &[T] {
+        &self.elements[Self::W_L..=Self::W_4]
+    }
+
     pub fn get_wires_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::W_L..=Self::W_4]
     }
@@ -110,6 +115,9 @@ impl<T: Default> ProverWitnessEntities<T> {
         &self.elements[Self::LOOKUP_READ_TAGS]
     }
 
+    pub fn lookup_read_counts_and_tags(&self) -> &[T] {
+        &self.elements[Self::LOOKUP_READ_COUNTS..Self::LOOKUP_READ_TAGS + 1]
+    }
     pub fn lookup_read_counts_and_tags_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::LOOKUP_READ_COUNTS..Self::LOOKUP_READ_TAGS + 1]
     }

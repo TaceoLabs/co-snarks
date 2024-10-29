@@ -18,7 +18,7 @@
 // clang-format on
 
 use super::types::ProverMemory;
-use crate::{mpc::NoirUltraHonkProver, types::ProvingKey, CoUtils};
+use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver, CoUtils};
 use ark_ff::One;
 use co_builder::{
     prelude::{HonkCurve, Polynomial},

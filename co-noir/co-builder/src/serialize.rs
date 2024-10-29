@@ -1,9 +1,14 @@
-use crate::{HonkProofError, HonkProofResult};
+use crate::{prelude::HonkCurve, HonkProofError, HonkProofResult, TranscriptFieldType};
+use ark_ec::AffineRepr;
 use ark_ff::PrimeField;
 use num_bigint::BigUint;
 
 pub struct Serialize<F: PrimeField> {
     phantom: std::marker::PhantomData<F>,
+}
+
+pub struct SerializeP<P: HonkCurve<TranscriptFieldType>> {
+    phantom: std::marker::PhantomData<P>,
 }
 
 impl<F: PrimeField> Serialize<F> {
@@ -86,7 +91,7 @@ impl<F: PrimeField> Serialize<F> {
         buf.push(val);
     }
 
-    pub(crate) fn write_u32(buf: &mut Vec<u8>, val: u32) {
+    pub fn write_u32(buf: &mut Vec<u8>, val: u32) {
         buf.extend(val.to_be_bytes());
     }
 
@@ -94,7 +99,7 @@ impl<F: PrimeField> Serialize<F> {
         buf.extend(val.to_be_bytes());
     }
 
-    pub(crate) fn write_field_element(buf: &mut Vec<u8>, el: F) {
+    pub fn write_field_element(buf: &mut Vec<u8>, el: F) {
         let prev_len = buf.len();
         let el = el.into_bigint(); // Gets rid of montgomery form
 
@@ -115,5 +120,47 @@ impl<F: PrimeField> Serialize<F> {
         }
 
         F::from(bigint)
+    }
+}
+
+impl<P: HonkCurve<TranscriptFieldType>> SerializeP<P> {
+    const NUM_64_LIMBS: u32 = P::BaseField::MODULUS_BIT_SIZE.div_ceil(64);
+    pub const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
+
+    pub fn write_g1_element(buf: &mut Vec<u8>, el: &P::G1Affine, write_x_first: bool) {
+        let prev_len = buf.len();
+
+        if el.is_zero() {
+            for _ in 0..Self::FIELDSIZE_BYTES * 2 {
+                buf.push(255);
+            }
+        } else {
+            let (x, y) = P::g1_affine_to_xy(el);
+            if write_x_first {
+                Serialize::<P::BaseField>::write_field_element(buf, x);
+                Serialize::<P::BaseField>::write_field_element(buf, y);
+            } else {
+                Serialize::<P::BaseField>::write_field_element(buf, y);
+                Serialize::<P::BaseField>::write_field_element(buf, x);
+            }
+        }
+
+        debug_assert_eq!(buf.len() - prev_len, Self::FIELDSIZE_BYTES as usize * 2);
+    }
+
+    pub fn read_g1_element(buf: &[u8], offset: &mut usize, read_x_first: bool) -> P::G1Affine {
+        if buf.iter().all(|&x| x == 255) {
+            *offset += Self::FIELDSIZE_BYTES as usize * 2;
+            return P::G1Affine::zero();
+        }
+
+        let first = Serialize::<P::BaseField>::read_field_element(buf, offset);
+        let second = Serialize::<P::BaseField>::read_field_element(buf, offset);
+
+        if read_x_first {
+            P::g1_affine_from_xy(first, second)
+        } else {
+            P::g1_affine_from_xy(second, first)
+        }
     }
 }
