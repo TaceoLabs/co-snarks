@@ -1,4 +1,4 @@
-use crate::{mpc::NoirUltraHonkProver, types::ProvingKey};
+use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver};
 use ark_ec::pairing::Pairing;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::prelude::{

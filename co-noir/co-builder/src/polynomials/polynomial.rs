@@ -1,11 +1,26 @@
 use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial as _};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use num_traits::Zero;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::{AddAssign, Index, IndexMut, SubAssign};
 
 #[derive(Clone, Debug, Default)]
 pub struct Polynomial<F> {
     pub coefficients: Vec<F>,
+}
+
+impl<F: CanonicalSerialize> Serialize for Polynomial<F> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        mpc_core::ark_se(&self.coefficients, serializer)
+    }
+}
+
+impl<'a, F: CanonicalDeserialize> Deserialize<'a> for Polynomial<F> {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        let coefficients: Vec<F> = mpc_core::ark_de(deserializer)?;
+        Ok(Self { coefficients })
+    }
 }
 
 pub struct ShiftedPoly<'a, F> {

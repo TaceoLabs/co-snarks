@@ -1,29 +1,24 @@
-use crate::mpc::NoirUltraHonkProver;
-use ark_ec::pairing::Pairing;
-use co_builder::prelude::{Polynomial, PrecomputedEntities, ProverCrs};
-use std::marker::PhantomData;
+use co_builder::prelude::{Polynomial, PrecomputedEntities};
+use serde::{Deserialize, Serialize};
 use ultrahonk::prelude::{ShiftedTableEntities, ShiftedWitnessEntities};
 
-pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
-    pub(crate) crs: ProverCrs<P>,
-    pub circuit_size: u32,
-    pub(crate) public_inputs: Vec<P::ScalarField>,
-    pub(crate) num_public_inputs: u32,
-    pub(crate) pub_inputs_offset: u32,
-    pub(crate) polynomials: Polynomials<T::ArithmeticShare, P::ScalarField>,
-    pub(crate) memory_read_records: Vec<u32>,
-    pub(crate) memory_write_records: Vec<u32>,
-    pub(crate) phantom: PhantomData<T>,
-}
-
 // This is what we get from the proving key, we shift at a later point
-#[derive(Default)]
-pub(crate) struct Polynomials<Shared: Default, Public: Default> {
-    pub(crate) witness: ProverWitnessEntities<Polynomial<Shared>, Polynomial<Public>>,
-    pub(crate) precomputed: PrecomputedEntities<Polynomial<Public>>,
+#[derive(Default, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct Polynomials<Shared: Default, Public: Default>
+where
+    Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
+    Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
+{
+    pub witness: ProverWitnessEntities<Polynomial<Shared>, Polynomial<Public>>,
+    pub precomputed: PrecomputedEntities<Polynomial<Public>>,
 }
 
-impl<Shared: Clone + Default, Public: Clone + Default> Polynomials<Shared, Public> {
+impl<Shared: Clone + Default, Public: Clone + Default> Polynomials<Shared, Public>
+where
+    Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
+    Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
+{
     pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
         // Shifting is done at a later point
@@ -113,10 +108,10 @@ impl<T: Default> AllEntities<T, T> {
 
 const PROVER_PRIVATE_WITNESS_ENTITIES_SIZE: usize = 4;
 const PROVER_PUBLIC_WITNESS_ENTITIES_SIZE: usize = 2;
-#[derive(Default)]
-pub(crate) struct ProverWitnessEntities<Shared, Public> {
-    pub(crate) private_elements: [Shared; PROVER_PRIVATE_WITNESS_ENTITIES_SIZE],
-    pub(crate) public_elements: [Public; PROVER_PUBLIC_WITNESS_ENTITIES_SIZE],
+#[derive(Default, Serialize, Deserialize)]
+pub struct ProverWitnessEntities<Shared, Public> {
+    pub private_elements: [Shared; PROVER_PRIVATE_WITNESS_ENTITIES_SIZE],
+    pub public_elements: [Public; PROVER_PUBLIC_WITNESS_ENTITIES_SIZE],
 }
 
 impl<Shared, Public> ProverWitnessEntities<Shared, Public> {
