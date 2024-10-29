@@ -667,7 +667,7 @@ where
     let id = usize::from(net.get_id());
 
     // init MPC protocol
-    let mut rep3_vm = parsed_circom_circuit
+    let rep3_vm = parsed_circom_circuit
         .to_rep3_vm_with_network(net, config.vm)
         .context("while constructing MPC VM")?;
 

@@ -14,6 +14,7 @@ use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
 use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
+use mpc_core::protocols::rep3::Rep3PrimeFieldShare;
 use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -897,7 +898,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     ///
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     pub fn run(
-        &mut self,
+        mut self,
         input_signals: SharedInput<F, C::ArithmeticShare>,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         self.driver.compare_vm_config(&self.config)?;
@@ -928,7 +929,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     ///
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     pub fn run_with_flat(
-        &mut self,
+        mut self,
         input_signals: Vec<C::VmType>,
         amount_public_inputs: usize,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
@@ -1063,5 +1064,37 @@ impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
     ) -> Result<Self> {
         let network = Rep3MpcNet::new(network_config)?;
         Self::from_network(parser, network, mpc_accelerator, config)
+    }
+
+    /// Starts the execution of the MPC-VM with the provided [SharedInput], consumes `self` and returns the [`Rep3MpcNet`].
+    ///
+    /// Use this method over [`run_with_flat()`](WitnessExtension::run) when ever possible.
+    /// # Arguments
+    ///
+    /// * `input_signals` - The [SharedInput] distributed over the parties.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(([SharedWitness], Rep3MpcNet))` - The secret-shared witness, distributed over the parties.
+    /// * `Err([eyre::Result])` - An error result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
+    #[allow(clippy::type_complexity)]
+    pub fn run_and_get_network(
+        mut self,
+        input_signals: SharedInput<F, Rep3PrimeFieldShare<F>>,
+    ) -> Result<(
+        FinalizedWitnessExtension<F, CircomRep3VmWitnessExtension<F, Rep3MpcNet>>,
+        Rep3MpcNet,
+    )> {
+        self.driver.compare_vm_config(&self.config)?;
+        let amount_public_inputs = self.set_input_signals(input_signals)?;
+        self.call_main_component()?;
+        Ok((
+            self.post_processing(amount_public_inputs)?,
+            self.driver.get_network(),
+        ))
     }
 }
