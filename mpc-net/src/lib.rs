@@ -12,8 +12,7 @@ use std::{
 };
 
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
-use bytes::{Bytes, BytesMut};
-use channel::{Channel, ChannelHandle, ChannelTasks};
+use channel::Channel;
 use color_eyre::eyre::{bail, Context as Ctx, ContextCompat, Report};
 use config::NetworkConfig;
 use rustls::{
@@ -104,7 +103,6 @@ struct Connection {
 pub struct MpcNetworkHandler {
     // this is a btreemap because we rely on iteration order
     connections: BTreeMap<usize, Connection>,
-    tasks: ChannelTasks,
     my_id: usize,
 }
 
@@ -270,25 +268,9 @@ impl MpcNetworkHandler {
 
         Ok(MpcNetworkHandler {
             connections,
-            tasks: ChannelTasks::new(),
             my_id: config.my_id,
         })
     }
-
-    /// Create a new [`ChannelHandle`] from a [`Channel`]. This spawns a new tokio task that handles the read and write jobs so they can happen concurrently.
-    pub fn spawn<R, W>(&mut self, chan: Channel<R, W>) -> ChannelHandle<Bytes, BytesMut>
-    where
-        R: Read + std::marker::Send + 'static,
-        W: Write + std::marker::Send + 'static,
-    {
-        self.tasks.spawn(chan)
-    }
-
-    // TODO?
-    // /// Shutdown the network, waiting until all read and write tasks are completed. This happens automatically, when the network handler is dropped.
-    // pub async fn shutdown(&mut self) -> Result<(), JoinError> {
-    //     self.tasks.shutdown().await
-    // }
 
     /// Returns the number of sent and received bytes.
     pub fn get_send_receive(&self, i: usize) -> std::io::Result<(usize, usize)> {

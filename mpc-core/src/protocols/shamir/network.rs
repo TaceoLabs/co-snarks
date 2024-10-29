@@ -4,8 +4,8 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
-use eyre::{bail, eyre, Report};
-use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
+use eyre::{bail, ContextCompat, Report};
+use mpc_net::{channel::Channel, config::NetworkConfig, MpcNetworkHandler, TlsStream};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -78,7 +78,7 @@ pub trait ShamirNetwork: Send {
 pub struct ShamirMpcNet {
     pub(crate) id: usize, // 0 <= id < num_parties
     pub(crate) num_parties: usize,
-    pub(crate) channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
+    pub(crate) channels: HashMap<usize, Channel<TlsStream, TlsStream>>,
     // TODO we should be able to get rid of this mutex once we dont remove streams from the pool anymore
     pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
 }
@@ -97,15 +97,9 @@ impl ShamirMpcNet {
         }
 
         let mut net_handler = MpcNetworkHandler::establish(config)?;
-        let mut channels = HashMap::with_capacity(num_parties - 1);
-
-        for other_id in 0..num_parties {
-            if other_id != id {
-                let chan = net_handler
-                    .get_channel(&other_id)
-                    .ok_or_else(|| eyre!("no channel found for party id={}", other_id))?;
-                channels.insert(other_id, net_handler.spawn(chan));
-            }
+        let channels = net_handler.get_channels().context("all channels found")?;
+        if channels.len() != num_parties - 1 {
+            bail!("Unexpected channels found")
         }
 
         Ok(Self {
@@ -119,8 +113,7 @@ impl ShamirMpcNet {
     /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: usize, data: Bytes) -> std::io::Result<()> {
         if let Some(chan) = self.channels.get_mut(&target) {
-            std::mem::drop(chan.send(data));
-            Ok(())
+            chan.send(data)
         } else {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -131,19 +124,14 @@ impl ShamirMpcNet {
 
     /// Receives bytes over the network from the party with the given id.
     pub fn recv_bytes(&mut self, from: usize) -> std::io::Result<BytesMut> {
-        let data = if let Some(chan) = self.channels.get_mut(&from) {
-            chan.recv().recv()
+        if let Some(chan) = self.channels.get_mut(&from) {
+            chan.recv()
         } else {
-            return Err(std::io::Error::new(
+            Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("No channel found for party id={}", from),
-            ));
-        };
-
-        let data = data.map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::BrokenPipe, "receive channel end died")
-        })??;
-        Ok(data)
+            ))
+        }
     }
 
     pub(crate) fn _id(&self) -> usize {
@@ -255,14 +243,9 @@ impl ShamirNetwork for ShamirMpcNet {
         let id = self.id;
         let num_parties = self.num_parties;
         let mut net_handler = self.net_handler.lock().unwrap();
-
-        let mut channels = HashMap::with_capacity(num_parties - 1);
-        for other_id in 0..num_parties {
-            if other_id != id {
-                let chan = net_handler.get_channel(&other_id).expect("to find channel");
-                channels.insert(other_id, net_handler.spawn(chan));
-            }
-        }
+        // TODO return error
+        let channels = net_handler.get_channels().expect("all channels found");
+        assert_eq!(channels.len(), self.num_parties - 1);
 
         Ok(Self {
             id,

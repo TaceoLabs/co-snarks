@@ -9,7 +9,7 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
-use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
+use mpc_net::{channel::Channel, config::NetworkConfig, MpcNetworkHandler, TlsStream};
 
 use super::{
     conversion::A2BType,
@@ -235,8 +235,8 @@ pub trait Rep3Network: Send {
 #[derive(Debug)]
 pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
-    pub(crate) chan_next: ChannelHandle<Bytes, BytesMut>,
-    pub(crate) chan_prev: ChannelHandle<Bytes, BytesMut>,
+    pub(crate) chan_next: Channel<TlsStream, TlsStream>,
+    pub(crate) chan_prev: Channel<TlsStream, TlsStream>,
     // TODO we should be able to get rid of this mutex once we dont remove streams from the pool anymore
     pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
 }
@@ -257,9 +257,6 @@ impl Rep3MpcNet {
             .get_channel(&id.prev_id().into())
             .ok_or(eyre!("no prev channel found"))?;
 
-        let chan_next = net_handler.spawn(chan_next);
-        let chan_prev = net_handler.spawn(chan_prev);
-
         Ok(Self {
             id,
             net_handler: Arc::new(Mutex::new(net_handler)),
@@ -271,35 +268,29 @@ impl Rep3MpcNet {
     /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: PartyID, data: Bytes) -> std::io::Result<()> {
         if target == self.id.next_id() {
-            std::mem::drop(self.chan_next.send(data));
-            Ok(())
+            self.chan_next.send(data)
         } else if target == self.id.prev_id() {
-            std::mem::drop(self.chan_prev.send(data));
-            Ok(())
+            self.chan_prev.send(data)
         } else {
-            return Err(std::io::Error::new(
+            Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "Cannot send to self",
-            ));
+            ))
         }
     }
 
     /// Receives bytes over the network from the party with the given id.
     pub fn recv_bytes(&mut self, from: PartyID) -> std::io::Result<BytesMut> {
-        let data = if from == self.id.prev_id() {
-            self.chan_prev.recv().recv()
+        if from == self.id.prev_id() {
+            self.chan_prev.recv()
         } else if from == self.id.next_id() {
-            self.chan_next.recv().recv()
+            self.chan_next.recv()
         } else {
-            return Err(std::io::Error::new(
+            Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "Cannot recv from self",
-            ));
-        };
-        let data = data.map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::BrokenPipe, "receive channel end died")
-        })??;
-        Ok(data)
+            ))
+        }
     }
 }
 
@@ -357,8 +348,6 @@ impl Rep3Network for Rep3MpcNet {
         let chan_prev = net_handler
             .get_channel(&id.prev_id().into())
             .expect("no prev channel found");
-        let chan_next = net_handler.spawn(chan_next);
-        let chan_prev = net_handler.spawn(chan_prev);
 
         Ok(Self {
             id,
