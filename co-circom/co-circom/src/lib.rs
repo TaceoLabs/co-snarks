@@ -627,7 +627,7 @@ pub fn parse_witness_share_shamir<R: Read, F: PrimeField>(
 /// Splits the input according to the provided parameters.
 pub fn split_input<P>(
     input: PathBuf,
-    circuit_path: String,
+    circuit_path: PathBuf,
     config: CompilerConfig,
     seeded: bool,
     additive: bool,

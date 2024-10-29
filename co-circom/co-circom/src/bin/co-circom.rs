@@ -283,7 +283,7 @@ where
     let start = Instant::now();
     let shares = co_circom::split_input::<P>(
         input.clone(),
-        circuit,
+        circuit_path,
         config.compiler,
         config.seeded,
         config.additive,

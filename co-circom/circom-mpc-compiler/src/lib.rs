@@ -104,7 +104,7 @@ impl Default for CompilerConfig {
 ///     * [`CoCircomCompiler::parse`]
 ///     * [`CoCircomCompiler::get_public_inputs`]
 pub struct CoCircomCompiler<P: Pairing> {
-    file: String,
+    file: PathBuf,
     phantom_data: PhantomData<P>,
     config: CompilerConfig,
     pub(crate) fun_decls: HashMap<String, FunDecl>,
@@ -119,10 +119,14 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     // only internally to hold the state
-    fn new(file: String, config: CompilerConfig) -> Self {
-        tracing::debug!("creating compiler for circuit {file} with config: {config:?}");
+    fn new<Pth>(file: Pth, config: CompilerConfig) -> Self
+    where
+        PathBuf: From<Pth>,
+        Pth: std::fmt::Debug,
+    {
+        tracing::debug!("creating compiler for circuit {file:?} with config: {config:?}");
         Self {
-            file,
+            file: PathBuf::from(file),
             config,
             current_code_block: vec![],
             fun_decls: HashMap::new(),
@@ -138,7 +142,7 @@ where
             field.to_bytes_be().as_slice(),
         );
         match circom_parser::run_parser(
-            self.file.clone(),
+            self.file.display().to_string(),
             &self.config.version,
             self.config.link_library.clone(),
             &field_dig,
@@ -607,7 +611,11 @@ where
     ///
     /// - `Ok(inputs)` contains a vector of public inputs as strings.
     /// - `Err(err)` indicates an error occurred during parsing or compilation.
-    pub fn get_public_inputs(file: String, config: CompilerConfig) -> Result<Vec<String>> {
+    pub fn get_public_inputs<Pth>(file: Pth, config: CompilerConfig) -> Result<Vec<String>>
+    where
+        PathBuf: From<Pth>,
+        Pth: std::fmt::Debug,
+    {
         Self::new(file, config).get_public_inputs_inner()
     }
 
@@ -624,10 +632,14 @@ where
     /// - `Ok(parsed)` contains the parsed compiler, which can be used to construct the MPC-VM.
     ///   Refer to its [documentation](CoCircomCompilerParsed) for usage details.
     /// - `Err(err)` indicates an error occurred during parsing or compilation.
-    pub fn parse(
-        file: String,
+    pub fn parse<Pth>(
+        file: Pth,
         config: CompilerConfig,
-    ) -> Result<CoCircomCompilerParsed<P::ScalarField>> {
+    ) -> Result<CoCircomCompilerParsed<P::ScalarField>>
+    where
+        PathBuf: From<Pth>,
+        Pth: std::fmt::Debug,
+    {
         Self::new(file, config).parse_inner()
     }
 
