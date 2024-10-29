@@ -266,7 +266,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
     pub fn compute_gemini_batched_univariate_evaluation(
         num_variables: &u32,
-        batched_eval_accumulator: P::ScalarField,
+        mut batched_eval_accumulator: P::ScalarField,
         evaluation_point: Vec<P::ScalarField>,
         challenge_powers: Vec<P::ScalarField>,
         fold_polynomial_evals: Vec<P::ScalarField>,
@@ -290,7 +290,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 .unwrap();
 
             if l <= *num_variables as usize {
-                let batched_eval_accumulator = batched_eval_round_acc;
+                batched_eval_accumulator = batched_eval_round_acc;
             }
         }
 

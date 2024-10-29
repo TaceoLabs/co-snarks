@@ -8,7 +8,7 @@ use crate::{
     verifier::HonkVerifyResult,
     Utils,
 };
-use ark_ec::AffineRepr;
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::One;
 use std::marker::PhantomData;
 
@@ -63,11 +63,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         tracing::trace!("Reduce and verify opening pair");
 
         let quotient_commitment = transcript.receive_point_from_prover::<P>("KZG:W".to_string())?;
-
         opening_pair.commitments.push(quotient_commitment);
-
+        opening_pair.scalars.push(opening_pair.challenge);
         let p_1 = -P::G1::from(quotient_commitment);
         let p_0: P::G1 = Utils::msm::<P>(&opening_pair.scalars, &opening_pair.commitments)?;
+
         Ok((p_0.into(), p_1.into()))
     }
 
@@ -110,6 +110,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         )?;
 
         let pairing_points = Self::reduce_verify_shplemini(&mut opening_claim, transcript)?;
+
         let pcs_verified = Self::pairing_check(
             pairing_points.0,
             pairing_points.1,
