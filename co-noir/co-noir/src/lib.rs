@@ -4,13 +4,12 @@ use acir::{
     native_types::{WitnessMap, WitnessStack},
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::Zero;
+use ark_ff::PrimeField;
 use clap::{Args, ValueEnum};
 use co_acvm::{
     solver::{partial_abi::PublicMarker, Rep3CoSolver},
-    Rep3AcvmType,
+    Rep3AcvmType, ShamirAcvmType,
 };
-use co_ultrahonk::prelude::{Rep3UltraHonkDriver, ShamirUltraHonkDriver};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
@@ -20,7 +19,7 @@ use mpc_core::protocols::{
         self,
         network::{Rep3MpcNet, Rep3Network},
     },
-    shamir::{self, network::ShamirNetwork},
+    shamir,
 };
 use mpc_net::config::NetworkConfigFile;
 use noirc_abi::Abi;
@@ -460,24 +459,23 @@ impl_config!(CreateVKCli, CreateVKConfig);
 impl_config!(VerifyCli, VerifyConfig);
 
 #[allow(clippy::type_complexity)]
-pub fn share_rep3<P: Pairing, N: Rep3Network, R: Rng + CryptoRng>(
-    witness: Vec<PubShared<P::ScalarField>>,
+pub fn share_rep3<F: PrimeField, R: Rng + CryptoRng>(
+    witness: Vec<PubShared<F>>,
     rng: &mut R,
-) -> [Vec<SharedBuilderVariable<Rep3UltraHonkDriver<N>, P>>; 3] {
+) -> [Vec<Rep3AcvmType<F>>; 3] {
     let mut res = array::from_fn(|_| Vec::with_capacity(witness.len()));
 
     for witness in witness {
         match witness {
             PubShared::Public(f) => {
                 for r in res.iter_mut() {
-                    r.push(SharedBuilderVariable::from_public(f));
+                    r.push(Rep3AcvmType::from(f));
                 }
             }
             PubShared::Shared(f) => {
-                // res.push(SharedBuilderVariable::from_shared(f));
                 let shares = rep3::share_field_element(f, rng);
                 for (r, share) in res.iter_mut().zip(shares) {
-                    r.push(SharedBuilderVariable::from_shared(share));
+                    r.push(Rep3AcvmType::from(share));
                 }
             }
         }
@@ -486,12 +484,12 @@ pub fn share_rep3<P: Pairing, N: Rep3Network, R: Rng + CryptoRng>(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn share_shamir<P: Pairing, N: ShamirNetwork, R: Rng + CryptoRng>(
-    witness: Vec<PubShared<P::ScalarField>>,
+pub fn share_shamir<F: PrimeField, R: Rng + CryptoRng>(
+    witness: Vec<PubShared<F>>,
     degree: usize,
     num_parties: usize,
     rng: &mut R,
-) -> Vec<Vec<SharedBuilderVariable<ShamirUltraHonkDriver<P::ScalarField, N>, P>>> {
+) -> Vec<Vec<ShamirAcvmType<F>>> {
     let mut res = (0..num_parties)
         .map(|_| Vec::with_capacity(witness.len()))
         .collect::<Vec<_>>();
@@ -500,14 +498,13 @@ pub fn share_shamir<P: Pairing, N: ShamirNetwork, R: Rng + CryptoRng>(
         match witness {
             PubShared::Public(f) => {
                 for r in res.iter_mut() {
-                    r.push(SharedBuilderVariable::from_public(f));
+                    r.push(ShamirAcvmType::from(f));
                 }
             }
             PubShared::Shared(f) => {
-                // res.push(SharedBuilderVariable::from_shared(f));
                 let shares = shamir::share_field_element(f, degree, num_parties, rng);
                 for (r, share) in res.iter_mut().zip(shares) {
-                    r.push(SharedBuilderVariable::from_shared(share));
+                    r.push(ShamirAcvmType::from(share));
                 }
             }
         }
@@ -546,9 +543,9 @@ pub fn translate_witness_share_rep3(
     Rep3CoSolver::<ark_bn254::Fr, Rep3MpcNet>::witness_map_from_string_map(witness, abi)
 }
 
-pub fn convert_witness_to_vec_rep3<P: Pairing, N: Rep3Network>(
-    mut witness_stack: WitnessStack<Rep3AcvmType<P::ScalarField>>,
-) -> Vec<SharedBuilderVariable<Rep3UltraHonkDriver<N>, P>> {
+pub fn convert_witness_to_vec_rep3<F: PrimeField>(
+    mut witness_stack: WitnessStack<Rep3AcvmType<F>>,
+) -> Vec<Rep3AcvmType<F>> {
     let witness_map = witness_stack
         .pop()
         .expect("Witness should be present")
@@ -561,17 +558,10 @@ pub fn convert_witness_to_vec_rep3<P: Pairing, N: Rep3Network>(
         // To ensure that witnesses sit at the correct indices in the `WitnessVector`, we fill any indices
         // which do not exist within the `WitnessMap` with the dummy value of zero.
         while index < w.0 {
-            wv.push(SharedBuilderVariable::from_public(P::ScalarField::zero()));
+            wv.push(Rep3AcvmType::from(F::zero()));
             index += 1;
         }
-        match f {
-            Rep3AcvmType::Public(f) => {
-                wv.push(SharedBuilderVariable::from_public(f));
-            }
-            Rep3AcvmType::Shared(f) => {
-                wv.push(SharedBuilderVariable::from_shared(f));
-            }
-        }
+        wv.push(f);
         index += 1;
     }
     wv
