@@ -19,7 +19,6 @@ use rayon::prelude::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::oneshot;
 use tracing::instrument;
 
 use crate::mpc::plain::PlainGroth16Driver;
@@ -277,15 +276,15 @@ where
             c_tx.send(ab).expect("channel not dropped");
         });
 
-        let a = a_rx.blocking_recv()?;
-        let b = b_rx.blocking_recv()?;
+        let a = a_rx.recv()?;
+        let b = b_rx.recv()?;
 
         let compute_ab_span = tracing::debug_span!("compute ab").entered();
         let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
         // same as above. No IO task is run at the moment.
         let mut ab = self.driver.local_mul_vec(a, b);
         local_ab_span.exit();
-        let c = c_rx.blocking_recv()?;
+        let c = c_rx.recv()?;
         ab.par_iter_mut()
             .zip_eq(c.par_iter())
             .with_min_len(512)
@@ -431,8 +430,8 @@ where
         let r_s_delta_g1 = T::scalar_mul_public_point(&delta_g1, rs);
         rs_span.exit();
 
-        let g_a = r_g1_rx.blocking_recv()?;
-        let g1_b = s_g1_rx.blocking_recv()?;
+        let g_a = r_g1_rx.recv()?;
+        let g1_b = s_g1_rx.recv()?;
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
         let (g_a_opened, r_g1_b) = self.driver.open_point_and_scalar_mul(&g_a, &g1_b, r)?;
@@ -444,13 +443,13 @@ where
         let mut g_c = s_g_a;
         T::add_assign_points(&mut g_c, &r_g1_b);
         T::sub_assign_points(&mut g_c, &r_s_delta_g1);
-        let l_aux_acc = l_acc_rx.blocking_recv().expect("channel not dropped");
+        let l_aux_acc = l_acc_rx.recv().expect("channel not dropped");
         T::add_assign_points(&mut g_c, &l_aux_acc);
 
-        let h_acc = h_acc_rx.blocking_recv()?;
+        let h_acc = h_acc_rx.recv()?;
         let g_c = T::add_points_half_share(g_c, &h_acc);
 
-        let g2_b = s_g2_rx.blocking_recv()?;
+        let g2_b = s_g2_rx.recv()?;
         let (g_c_opened, g2_b_opened) = self.driver.open_two_points(g_c, g2_b)?;
         last_round.exit();
 

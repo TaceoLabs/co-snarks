@@ -2,47 +2,76 @@
 #![warn(missing_docs)]
 use std::{
     collections::{BTreeMap, HashMap},
-    io,
-    net::ToSocketAddrs,
-    pin::Pin,
+    io::{self, Read, Write},
+    net::{TcpListener, TcpStream, ToSocketAddrs},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    task::{Context, Poll},
     time::Duration,
 };
 
-use channel::{BincodeChannel, BytesChannel, Channel, ChannelHandle, ChannelTasks};
-use codecs::BincodeCodec;
-use color_eyre::eyre::{self, bail, Context as Ctx, ContextCompat, Report};
+use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
+use bytes::{Bytes, BytesMut};
+use channel::{Channel, ChannelHandle, ChannelTasks};
+use color_eyre::eyre::{bail, Context as Ctx, ContextCompat, Report};
 use config::NetworkConfig;
-use futures::{Sink, Stream};
-use serde::{de::DeserializeOwned, Serialize};
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
-    net::{TcpListener, TcpStream},
-    runtime::Handle,
-    task::JoinError,
+use rustls::{
+    pki_types::{CertificateDer, ServerName},
+    ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
 };
-use tokio_rustls::{
-    rustls::{
-        pki_types::{CertificateDer, ServerName},
-        ClientConfig, RootCertStore, ServerConfig,
-    },
-    TlsAcceptor, TlsConnector,
-};
-use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
 pub mod channel;
-pub mod codecs;
 pub mod config;
 
 // TODO get this from network config
 const STREAMS_PER_CONN: usize = 8;
 
-/// Type alias for a [rustls::TcpStream] over a [TcpStream].
-type TlsStream = tokio_rustls::TlsStream<TcpStream>;
+/// A wrapper type for client and server TLS streams
+#[derive(Debug)]
+pub enum TlsStream {
+    /// A Stream with a client connection
+    Client(StreamOwned<ClientConnection, TcpStream>),
+    /// A Stream with a sever connection
+    Server(StreamOwned<ServerConnection, TcpStream>),
+}
+
+impl From<StreamOwned<ClientConnection, TcpStream>> for TlsStream {
+    fn from(value: StreamOwned<ClientConnection, TcpStream>) -> Self {
+        Self::Client(value)
+    }
+}
+
+impl From<StreamOwned<ServerConnection, TcpStream>> for TlsStream {
+    fn from(value: StreamOwned<ServerConnection, TcpStream>) -> Self {
+        Self::Server(value)
+    }
+}
+
+impl Read for TlsStream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            TlsStream::Client(stream) => stream.read(buf),
+            TlsStream::Server(stream) => stream.read(buf),
+        }
+    }
+}
+
+impl Write for TlsStream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            TlsStream::Client(stream) => stream.write(buf),
+            TlsStream::Server(stream) => stream.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            TlsStream::Client(stream) => stream.flush(),
+            TlsStream::Server(stream) => stream.flush(),
+        }
+    }
+}
 
 /// A duplex TLS stream that uses one stream for sending and one for receiving.
 /// Splitting a single stream would add unwanted syncronization primitives.
@@ -81,7 +110,7 @@ pub struct MpcNetworkHandler {
 
 impl MpcNetworkHandler {
     /// Tries to establish a connection to other parties in the network based on the provided [NetworkConfig].
-    pub async fn establish(config: NetworkConfig) -> Result<Self, Report> {
+    pub fn establish(config: NetworkConfig) -> Result<Self, Report> {
         config.check_config()?;
         let certs: HashMap<usize, CertificateDer> = config
             .parties
@@ -105,9 +134,9 @@ impl MpcNetworkHandler {
             .context("creating our server config")?;
         let our_socket_addr = config.bind_addr;
 
-        let listener = TcpListener::bind(our_socket_addr).await?;
-        let acceptor = TlsAcceptor::from(Arc::new(server_config));
-        let connector = TlsConnector::from(Arc::new(client_config));
+        let listener = TcpListener::bind(our_socket_addr)?;
+        let client_config = Arc::new(client_config);
+        let server_config = Arc::new(server_config);
 
         tracing::trace!("Party {}: listening on {our_socket_addr}", config.my_id);
 
@@ -142,15 +171,21 @@ impl MpcNetworkHandler {
                     // create 2 streams per stream to get full duplex with tls streams
                     for split in [DuplexTlsStream::SPLIT0, DuplexTlsStream::SPLIT1] {
                         let stream = loop {
-                            if let Ok(stream) = TcpStream::connect(party_addr).await {
+                            if let Ok(stream) = TcpStream::connect(party_addr) {
                                 break stream;
                             }
                             std::thread::sleep(Duration::from_millis(100));
                         };
-                        let mut stream = connector.connect(domain.clone(), stream).await?;
-                        stream.write_u64(config.my_id as u64).await?;
-                        stream.write_u64(stream_id as u64).await?;
-                        stream.write_u8(split).await?;
+                        stream.set_nodelay(true)?;
+
+                        let conn =
+                            rustls::ClientConnection::new(client_config.clone(), domain.clone())
+                                .unwrap();
+                        let mut stream = rustls::StreamOwned::new(conn, stream);
+
+                        stream.write_u64::<NetworkEndian>(config.my_id as u64)?;
+                        stream.write_u64::<NetworkEndian>(stream_id as u64)?;
+                        stream.write_u8(split)?;
                         if split == DuplexTlsStream::SPLIT0 {
                             send = Some(stream);
                         } else {
@@ -181,33 +216,25 @@ impl MpcNetworkHandler {
                 // we are the server, accept connections
                 // accept all 2 splits for n streams and store them with (party_id, stream_id, split) so we know were they belong
                 for _ in 0..STREAMS_PER_CONN * 2 {
-                    match tokio::time::timeout(Duration::from_secs(60), listener.accept()).await {
-                        Ok(Ok((stream, _peer_addr))) => {
-                            let mut stream = acceptor.accept(stream).await?;
-                            let party_id = stream.read_u64().await? as usize;
-                            let stream_id = stream.read_u64().await? as usize;
-                            let split = stream.read_u8().await?;
-                            tracing::trace!(
-                                "Party {}: accpeted stream {stream_id} from party {party_id}",
-                                config.my_id
-                            );
-                            assert!(accpected_streams
-                                .insert((party_id, stream_id, split), stream)
-                                .is_none());
-                        }
-                        Ok(Err(_)) => {
-                            return Err(eyre::eyre!(
-                                "server endpoint did not accept a connection from party {}",
-                                party.id
-                            ))
-                        }
-                        Err(_) => {
-                            return Err(eyre::eyre!(
-                                "party {} did not connect within 60 seconds - timeout",
-                                party.id
-                            ))
-                        }
-                    }
+                    // timeout if no connections is accepted after 60 seconds
+                    let (sender, receiver) = std::sync::mpsc::channel();
+                    let listener = listener.try_clone()?;
+                    std::thread::spawn(move || sender.send(listener.accept()));
+                    let (stream, _peer_addr) = receiver.recv_timeout(Duration::from_secs(60))??;
+
+                    stream.set_nodelay(true)?;
+                    let conn = rustls::ServerConnection::new(server_config.clone())?;
+                    let mut stream = rustls::StreamOwned::new(conn, stream);
+                    let party_id = stream.read_u64::<NetworkEndian>()? as usize;
+                    let stream_id = stream.read_u64::<NetworkEndian>()? as usize;
+                    let split = stream.read_u8()?;
+                    tracing::trace!(
+                        "Party {}: accpeted stream {stream_id} from party {party_id}",
+                        config.my_id
+                    );
+                    assert!(accpected_streams
+                        .insert((party_id, stream_id, split), stream)
+                        .is_none());
                 }
             }
         }
@@ -243,32 +270,25 @@ impl MpcNetworkHandler {
 
         Ok(MpcNetworkHandler {
             connections,
-            tasks: ChannelTasks::new(Handle::current()),
+            tasks: ChannelTasks::new(),
             my_id: config.my_id,
         })
     }
 
     /// Create a new [`ChannelHandle`] from a [`Channel`]. This spawns a new tokio task that handles the read and write jobs so they can happen concurrently.
-    pub fn spawn<MSend, MRecv, R, W, C>(
-        &mut self,
-        chan: Channel<R, W, C>,
-    ) -> ChannelHandle<MSend, MRecv>
+    pub fn spawn<R, W>(&mut self, chan: Channel<R, W>) -> ChannelHandle<Bytes, BytesMut>
     where
-        C: 'static,
-        R: AsyncRead + Unpin + 'static,
-        W: AsyncWrite + Unpin + std::marker::Send + 'static,
-        FramedRead<R, C>: Stream<Item = Result<MRecv, io::Error>> + Send,
-        FramedWrite<W, C>: Sink<MSend, Error = io::Error> + Send,
-        MRecv: Send + std::fmt::Debug + 'static,
-        MSend: Send + std::fmt::Debug + 'static,
+        R: Read + std::marker::Send + 'static,
+        W: Write + std::marker::Send + 'static,
     {
         self.tasks.spawn(chan)
     }
 
-    /// Shutdown the network, waiting until all read and write tasks are completed. This happens automatically, when the network handler is dropped.
-    pub async fn shutdown(&mut self) -> Result<(), JoinError> {
-        self.tasks.shutdown().await
-    }
+    // TODO?
+    // /// Shutdown the network, waiting until all read and write tasks are completed. This happens automatically, when the network handler is dropped.
+    // pub async fn shutdown(&mut self) -> Result<(), JoinError> {
+    //     self.tasks.shutdown().await
+    // }
 
     /// Returns the number of sent and received bytes.
     pub fn get_send_receive(&self, i: usize) -> std::io::Result<(usize, usize)> {
@@ -296,179 +316,30 @@ impl MpcNetworkHandler {
         Ok(())
     }
 
-    /// Get a [Channel] to party with `id`. This pops a stream from the pool.
-    pub fn get_byte_channel(
-        &mut self,
-        id: &usize,
-    ) -> Option<BytesChannel<impl AsyncRead, impl AsyncWrite>> {
-        let mut codec = LengthDelimitedCodec::new();
-        codec.set_max_frame_length(1_000_000_000);
-        self.get_custom_channel(id, codec)
-    }
-
-    /// Get a [Channel] to party with `id`. This pops a stream from the pool.
-    pub fn get_serde_bincode_channel<M: Serialize + DeserializeOwned + 'static>(
-        &mut self,
-        id: &usize,
-    ) -> Option<Channel<impl AsyncRead, impl AsyncWrite, BincodeCodec<M>>> {
-        let bincodec = BincodeCodec::<M>::new();
-        self.get_custom_channel(id, bincodec)
-    }
-
     /// Get a [Channel] to party with `id` using the provided codec. This pops a stream from the pool.
-    pub fn get_custom_channel<
-        MSend,
-        MRecv,
-        C: Encoder<MSend, Error = io::Error>
-            + Decoder<Item = MRecv, Error = io::Error>
-            + 'static
-            + Clone,
-    >(
-        &mut self,
-        id: &usize,
-        codec: C,
-    ) -> Option<Channel<impl AsyncRead, impl AsyncWrite, C>> {
+    pub fn get_channel(&mut self, id: &usize) -> Option<Channel<TlsStream, TlsStream>> {
         debug_assert!(*id != self.my_id);
         if let Some(conn) = self.connections.get_mut(id) {
             if let Some(stream) = conn.streams.pop() {
-                let recv = TrackingAsyncReader::new(stream.recv, conn.recv.clone());
-                let send = TrackingAsyncWriter::new(stream.send, conn.sent.clone());
-                return Some(Channel::new(recv, send, codec));
+                return Some(Channel::new(
+                    stream.recv,
+                    stream.send,
+                    conn.recv.clone(),
+                    conn.sent.clone(),
+                ));
             }
         }
         None
     }
 
     /// Get a [Channel] to each party using the provided codec. This pops a stream from each pool.
-    pub fn get_custom_channels<
-        MSend,
-        MRecv,
-        C: Encoder<MSend, Error = io::Error>
-            + Decoder<Item = MRecv, Error = io::Error>
-            + 'static
-            + Clone,
-    >(
-        &mut self,
-        codec: C,
-    ) -> Option<HashMap<usize, Channel<impl AsyncRead, impl AsyncWrite, C>>> {
+    pub fn get_channels(&mut self) -> Option<HashMap<usize, Channel<TlsStream, TlsStream>>> {
         let mut channels = HashMap::new();
         let party_ids: Vec<_> = self.connections.keys().cloned().collect();
         for id in party_ids {
-            let chan = self.get_custom_channel(&id, codec.clone())?;
+            let chan = self.get_channel(&id)?;
             channels.insert(id, chan);
         }
         Some(channels)
-    }
-
-    /// Get a [Channel] to each party. This pops a stream from each pool.
-    pub fn get_byte_channels(
-        &mut self,
-    ) -> Option<HashMap<usize, BytesChannel<impl AsyncRead, impl AsyncWrite>>> {
-        let mut codec = LengthDelimitedCodec::new();
-        codec.set_max_frame_length(1_000_000_000);
-        self.get_custom_channels(codec)
-    }
-
-    /// Get a [Channel] to each party. This pops a stream from each pool.
-    pub fn get_serde_bincode_channels<M: Serialize + DeserializeOwned + 'static>(
-        &mut self,
-    ) -> Option<HashMap<usize, BincodeChannel<impl AsyncRead, impl AsyncWrite, M>>> {
-        let bincodec = BincodeCodec::<M>::new();
-        self.get_custom_channels(bincodec)
-    }
-}
-
-/// A wrapper around [`AsyncRead`] types that keeps track of the number of read bytes
-struct TrackingAsyncReader<R> {
-    inner: R,
-    bytes_read: Arc<AtomicUsize>,
-}
-
-impl<R> TrackingAsyncReader<R> {
-    fn new(inner: R, bytes_read: Arc<AtomicUsize>) -> Self {
-        Self { inner, bytes_read }
-    }
-}
-
-impl<R: AsyncRead + Unpin> AsyncRead for TrackingAsyncReader<R> {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        let inner = Pin::new(&mut self.inner);
-        let initial_len = buf.filled().len();
-        let res = inner.poll_read(cx, buf);
-
-        // if the read was ok, update bytes_read
-        if let Poll::Ready(Ok(())) = &res {
-            self.bytes_read
-                .fetch_add(buf.filled().len() - initial_len, Ordering::SeqCst);
-        }
-
-        res
-    }
-}
-
-/// A wrapper around [`AsyncWrite`] types that keeps track of the number of written bytes
-struct TrackingAsyncWriter<W> {
-    inner: W,
-    bytes_written: Arc<AtomicUsize>,
-}
-
-impl<R> TrackingAsyncWriter<R> {
-    fn new(inner: R, bytes_written: Arc<AtomicUsize>) -> Self {
-        Self {
-            inner,
-            bytes_written,
-        }
-    }
-}
-
-impl<W: AsyncWrite + Unpin> AsyncWrite for TrackingAsyncWriter<W> {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        let inner = Pin::new(&mut self.inner);
-        let res = inner.poll_write(cx, buf);
-
-        // if the write was ok, update bytes_written
-        if let Poll::Ready(Ok(bytes_written)) = &res {
-            self.bytes_written
-                .fetch_add(*bytes_written, Ordering::SeqCst);
-        }
-
-        res
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
-
-    fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &[io::IoSlice<'_>],
-    ) -> Poll<Result<usize, io::Error>> {
-        let inner = Pin::new(&mut self.inner);
-        let res = inner.poll_write_vectored(cx, bufs);
-
-        // if the write was ok, update bytes_written
-        if let Poll::Ready(Ok(bytes_written)) = &res {
-            self.bytes_written
-                .fetch_add(*bytes_written, Ordering::SeqCst);
-        }
-
-        res
-    }
-
-    fn is_write_vectored(&self) -> bool {
-        self.inner.is_write_vectored()
     }
 }

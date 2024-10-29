@@ -22,7 +22,6 @@ impl RepToShamirNetwork<ShamirMpcNet> for Rep3MpcNet {
             net_handler,
             chan_next,
             chan_prev,
-            runtime,
         } = self;
 
         let mut channels = HashMap::with_capacity(2);
@@ -34,7 +33,6 @@ impl RepToShamirNetwork<ShamirMpcNet> for Rep3MpcNet {
             num_parties: 3,
             net_handler,
             channels,
-            runtime,
         }
     }
 }

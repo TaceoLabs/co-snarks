@@ -33,7 +33,6 @@ scuttlebutt = { git = "https://github.com/GaloisInc/swanky", rev = "5ff648457218
 subtle = { workspace = true }
 serde = { workspace = true }
 sha3 = { workspace = true }
-tokio = { workspace = true }
 tracing.workspace = true
 
 [dev-dependencies]

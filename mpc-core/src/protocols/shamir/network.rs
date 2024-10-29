@@ -10,7 +10,6 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
-use tokio::runtime::Runtime;
 
 /// This trait defines the network interface for the Shamir protocol.
 pub trait ShamirNetwork: Send {
@@ -82,8 +81,6 @@ pub struct ShamirMpcNet {
     pub(crate) channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
     // TODO we should be able to get rid of this mutex once we dont remove streams from the pool anymore
     pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
-    // order is important, runtime MUST be dropped after network handler
-    pub(crate) runtime: Arc<Runtime>,
 }
 
 impl ShamirMpcNet {
@@ -99,16 +96,13 @@ impl ShamirMpcNet {
             bail!("Invalid party id={} for {} parties", id, num_parties)
         }
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()?;
-        let mut net_handler = runtime.block_on(MpcNetworkHandler::establish(config))?;
+        let mut net_handler = MpcNetworkHandler::establish(config)?;
         let mut channels = HashMap::with_capacity(num_parties - 1);
 
         for other_id in 0..num_parties {
             if other_id != id {
                 let chan = net_handler
-                    .get_byte_channel(&other_id)
+                    .get_channel(&other_id)
                     .ok_or_else(|| eyre!("no channel found for party id={}", other_id))?;
                 channels.insert(other_id, net_handler.spawn(chan));
             }
@@ -119,14 +113,13 @@ impl ShamirMpcNet {
             num_parties,
             net_handler: Arc::new(Mutex::new(net_handler)),
             channels,
-            runtime: Arc::new(runtime),
         })
     }
 
     /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: usize, data: Bytes) -> std::io::Result<()> {
         if let Some(chan) = self.channels.get_mut(&target) {
-            std::mem::drop(chan.blocking_send(data));
+            std::mem::drop(chan.send(data));
             Ok(())
         } else {
             Err(std::io::Error::new(
@@ -139,7 +132,7 @@ impl ShamirMpcNet {
     /// Receives bytes over the network from the party with the given id.
     pub fn recv_bytes(&mut self, from: usize) -> std::io::Result<BytesMut> {
         let data = if let Some(chan) = self.channels.get_mut(&from) {
-            chan.blocking_recv().blocking_recv()
+            chan.recv().recv()
         } else {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -266,9 +259,7 @@ impl ShamirNetwork for ShamirMpcNet {
         let mut channels = HashMap::with_capacity(num_parties - 1);
         for other_id in 0..num_parties {
             if other_id != id {
-                let chan = net_handler
-                    .get_byte_channel(&other_id)
-                    .expect("to find channel");
+                let chan = net_handler.get_channel(&other_id).expect("to find channel");
                 channels.insert(other_id, net_handler.spawn(chan));
             }
         }
@@ -278,7 +269,6 @@ impl ShamirNetwork for ShamirMpcNet {
             num_parties,
             net_handler: self.net_handler.clone(),
             channels,
-            runtime: self.runtime.clone(),
         })
     }
 

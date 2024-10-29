@@ -10,7 +10,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
 use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
-use tokio::runtime::Runtime;
 
 use super::{
     conversion::A2BType,
@@ -240,8 +239,6 @@ pub struct Rep3MpcNet {
     pub(crate) chan_prev: ChannelHandle<Bytes, BytesMut>,
     // TODO we should be able to get rid of this mutex once we dont remove streams from the pool anymore
     pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
-    // order is important, runtime MUST be dropped after network handler
-    pub(crate) runtime: Arc<Runtime>,
 }
 
 impl Rep3MpcNet {
@@ -251,16 +248,13 @@ impl Rep3MpcNet {
             bail!("REP3 protocol requires exactly 3 parties")
         }
         let id = PartyID::try_from(config.my_id)?;
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()?;
-        let mut net_handler = runtime.block_on(MpcNetworkHandler::establish(config))?;
+        let mut net_handler = MpcNetworkHandler::establish(config)?;
 
         let chan_next = net_handler
-            .get_byte_channel(&id.next_id().into())
+            .get_channel(&id.next_id().into())
             .ok_or(eyre!("no next channel found"))?;
         let chan_prev = net_handler
-            .get_byte_channel(&id.prev_id().into())
+            .get_channel(&id.prev_id().into())
             .ok_or(eyre!("no prev channel found"))?;
 
         let chan_next = net_handler.spawn(chan_next);
@@ -271,17 +265,16 @@ impl Rep3MpcNet {
             net_handler: Arc::new(Mutex::new(net_handler)),
             chan_next,
             chan_prev,
-            runtime: Arc::new(runtime),
         })
     }
 
     /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: PartyID, data: Bytes) -> std::io::Result<()> {
         if target == self.id.next_id() {
-            std::mem::drop(self.chan_next.blocking_send(data));
+            std::mem::drop(self.chan_next.send(data));
             Ok(())
         } else if target == self.id.prev_id() {
-            std::mem::drop(self.chan_prev.blocking_send(data));
+            std::mem::drop(self.chan_prev.send(data));
             Ok(())
         } else {
             return Err(std::io::Error::new(
@@ -294,9 +287,9 @@ impl Rep3MpcNet {
     /// Receives bytes over the network from the party with the given id.
     pub fn recv_bytes(&mut self, from: PartyID) -> std::io::Result<BytesMut> {
         let data = if from == self.id.prev_id() {
-            self.chan_prev.blocking_recv().blocking_recv()
+            self.chan_prev.recv().recv()
         } else if from == self.id.next_id() {
-            self.chan_next.blocking_recv().blocking_recv()
+            self.chan_next.recv().recv()
         } else {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -359,10 +352,10 @@ impl Rep3Network for Rep3MpcNet {
         let id = self.id;
         let mut net_handler = self.net_handler.lock().unwrap();
         let chan_next = net_handler
-            .get_byte_channel(&id.next_id().into())
+            .get_channel(&id.next_id().into())
             .expect("no next channel found");
         let chan_prev = net_handler
-            .get_byte_channel(&id.prev_id().into())
+            .get_channel(&id.prev_id().into())
             .expect("no prev channel found");
         let chan_next = net_handler.spawn(chan_next);
         let chan_prev = net_handler.spawn(chan_prev);
@@ -372,7 +365,6 @@ impl Rep3Network for Rep3MpcNet {
             net_handler: self.net_handler.clone(),
             chan_next,
             chan_prev,
-            runtime: self.runtime.clone(),
         })
     }
 }

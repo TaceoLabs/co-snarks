@@ -32,10 +32,10 @@ eyre = { workspace = true }
 mpc-core = { version = "0.5.0", path = "../../mpc-core" }
 mpc-net = { version = "0.1.2", path = "../../mpc-net" }
 num-traits = { workspace = true }
+oneshot.workspace = true
 rand = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }
-tokio = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]

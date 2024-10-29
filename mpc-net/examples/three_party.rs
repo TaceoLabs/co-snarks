@@ -5,12 +5,10 @@ use color_eyre::{
     eyre::{eyre, Context, ContextCompat},
     Result,
 };
-use futures::{SinkExt, StreamExt};
 use mpc_net::{
     config::{NetworkConfig, NetworkConfigFile},
     MpcNetworkHandler,
 };
-use tokio::io::AsyncWriteExt;
 
 #[derive(Parser)]
 struct Args {
@@ -19,8 +17,7 @@ struct Args {
     config_file: PathBuf,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
@@ -32,28 +29,20 @@ async fn main() -> Result<()> {
     let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
 
-    let mut network = MpcNetworkHandler::establish(config).await?;
+    let mut network = MpcNetworkHandler::establish(config)?;
 
-    let mut channels = network.get_byte_channels().context("get channels")?;
+    let mut channels = network.get_channels().context("get channels")?;
 
     // send to all channels
     for (&i, channel) in channels.iter_mut() {
         let buf = vec![i as u8; 1024];
-        channel.send(buf.into()).await?;
+        channel.send(buf.into())?;
     }
     // recv from all channels
     for (&_, channel) in channels.iter_mut() {
-        let buf = channel.next().await;
-        if let Some(Ok(b)) = buf {
-            println!("received {}, should be {}", b[0], my_id as u8);
-            assert!(b.iter().all(|&x| x == my_id as u8))
-        }
-    }
-
-    // make sure all write are done by shutting down all streams
-    for (_, channel) in channels.into_iter() {
-        let (write, _) = channel.split();
-        write.into_inner().shutdown().await?;
+        let buf = channel.recv()?;
+        println!("received {}, should be {}", buf[0], my_id as u8);
+        assert!(buf.iter().all(|&x| x == my_id as u8))
     }
 
     network.print_connection_stats(&mut std::io::stdout())?;

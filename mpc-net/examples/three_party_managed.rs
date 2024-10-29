@@ -17,8 +17,7 @@ struct Args {
     config_file: PathBuf,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
@@ -30,9 +29,9 @@ async fn main() -> Result<()> {
     let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
 
-    let mut network = MpcNetworkHandler::establish(config).await?;
+    let mut network = MpcNetworkHandler::establish(config)?;
 
-    let channels = network.get_byte_channels().context("get channels")?;
+    let channels = network.get_channels().context("get channels")?;
     let mut managed_channels = channels
         .into_iter()
         .map(|(i, c)| (i, network.spawn(c)))
@@ -41,20 +40,17 @@ async fn main() -> Result<()> {
     // send to all channels
     for (&i, channel) in managed_channels.iter_mut() {
         let buf = vec![i as u8; 1024];
-        let _ = channel.send(buf.into()).await.await?;
+        let _ = channel.send(buf.into()).recv()?;
     }
     // recv from all channels
     for (&_, channel) in managed_channels.iter_mut() {
-        let buf = channel.recv().await.await;
+        let buf = channel.recv().recv();
         if let Ok(Ok(b)) = buf {
             println!("received {}, should be {}", b[0], my_id as u8);
             assert!(b.iter().all(|&x| x == my_id as u8))
         }
     }
-    // drop handles so we can shutdown
-    drop(managed_channels);
-    // wait until all send and recv taks are done
-    network.shutdown().await?;
+
     network.print_connection_stats(&mut std::io::stdout())?;
 
     Ok(())
