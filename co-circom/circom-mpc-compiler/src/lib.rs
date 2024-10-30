@@ -17,12 +17,13 @@ use ark_ec::pairing::Pairing;
 use ark_ff::{BigInteger, PrimeField};
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags, VCP},
+    hir::very_concrete_program::Wire,
     intermediate_representation::{
         ir_interface::{
-            AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket, CreateCmpBucket,
-            Instruction, LoadBucket, LocationRule, LogBucket, LogBucketArg, LoopBucket,
-            OperatorType, ReturnBucket, ReturnType, SizeOption, StoreBucket, ValueBucket,
-            ValueType,
+            AccessType, AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket,
+            CreateCmpBucket, Instruction, LoadBucket, LocationRule, LogBucket, LogBucketArg,
+            LoopBucket, OperatorType, ReturnBucket, ReturnType, SizeOption, StoreBucket,
+            ValueBucket, ValueType,
         },
         InstructionList,
     },
@@ -168,10 +169,13 @@ where
         let mut output_mappings = HashMap::new();
         let initial_node = vcp.get_main_id();
         let main = &vcp.templates[initial_node];
-        for s in &main.signals {
-            if s.xtype == SignalType::Output {
-                output_mappings.insert(s.name.clone(), (s.dag_local_id, s.size()));
+        for s in &main.wires {
+            if let Wire::TSignal(s) = s {
+                if s.xtype == SignalType::Output {
+                    output_mappings.insert(s.name.clone(), (s.dag_local_id, s.size));
+                }
             }
+            // TODO: Can buses be outputs?
         }
         output_mappings
     }
@@ -229,9 +233,8 @@ where
                 indexes,
             } => {
                 debug_assert!(*signal_code > 0);
-                indexes
-                    .iter()
-                    .for_each(|inst| self.handle_instruction(inst));
+                indexes.iter().for_each(|at| self.handle_access_type(at));
+
                 (true, *signal_code)
             }
         };
@@ -251,6 +254,20 @@ where
                 debug_assert!(!is_output);
                 self.handle_instruction(cmp_address);
                 self.emit_opcode(MpcOpCode::InputSubComp(mapped, signal_code, context_size));
+            }
+        }
+    }
+
+    fn handle_access_type(&mut self, access_type: &AccessType) {
+        match access_type {
+            AccessType::Qualified(idx) => {
+                self.emit_opcode(MpcOpCode::PushIndex(*idx));
+            }
+            AccessType::Indexed(indexed_info) => {
+                indexed_info
+                    .indexes
+                    .iter()
+                    .for_each(|inst| self.handle_instruction(inst));
             }
         }
     }
@@ -358,9 +375,7 @@ where
                     // this further
                     self.emit_opcode(MpcOpCode::PushIndex(0));
                 } else {
-                    indexes
-                        .iter()
-                        .for_each(|inst| self.handle_instruction(inst));
+                    indexes.iter().for_each(|at| self.handle_access_type(at));
                 }
                 (true, *signal_code)
             }
