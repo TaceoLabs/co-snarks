@@ -159,17 +159,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             fold_polynomials,
             r_challenge,
         )?;
-
-        for (l, claim) in claims
-            .iter()
-            .enumerate()
-            .skip(1)
-            .take(CONST_PROOF_SIZE_LOG_N)
-        {
-            if l <= log_n as usize {
+        println!("log_n: {log_n}, claims.len: {}, ", claims.len());
+        for l in 1..=CONST_PROOF_SIZE_LOG_N {
+            if l < claims.len() && l <= log_n as usize {
                 transcript.send_fr_to_verifier::<P>(
                     format!("Gemini:a_{}", l),
-                    claim.opening_pair.evaluation,
+                    claims[l].opening_pair.evaluation,
                 );
             } else {
                 transcript

@@ -227,8 +227,8 @@ impl<F: PrimeField> Polynomial<F> {
             .par_chunks(num_elem_per_thread)
             .enumerate()
             .map(|(i, chunk)| {
-                let mut thread_result = Self::horner_evaluate(&chunk, point);
-                thread_result *= point.pow(&[(i * num_elem_per_thread) as u64]);
+                let mut thread_result = Self::horner_evaluate(chunk, point);
+                thread_result *= point.pow([(i * num_elem_per_thread) as u64]);
                 thread_result
             })
             .sum();

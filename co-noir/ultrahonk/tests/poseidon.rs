@@ -43,12 +43,13 @@ fn poseidon_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
 
 #[test]
 fn poseidon_test_poseidon2sponge() {
-    const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.proof";
+    const PROOF_FILE: &str =
+        "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/poseidon/60proof";
     poseidon_test::<Poseidon2Sponge>(PROOF_FILE);
 }
 
 #[test]
 fn poseidon_test_keccak256() {
-    // const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon_keccaktranscript.proof";
+    const PROOF_FILE: &str = "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/poseidon/gen_proof_keccak";
     poseidon_test::<Keccak256>("");
 }
