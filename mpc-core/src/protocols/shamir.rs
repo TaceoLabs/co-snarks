@@ -202,7 +202,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirPreprocessing<F, N> {
         tracing::info!(
             "Party {}: generating took {} ms",
             network.get_id(),
-            start.elapsed().as_millis()
+            start.elapsed().as_micros() as f64 / 1000.0
         );
 
         Ok(Self {
