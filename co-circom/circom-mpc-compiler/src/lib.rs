@@ -21,7 +21,8 @@ use circom_compiler::{
         ir_interface::{
             AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket, CreateCmpBucket,
             Instruction, LoadBucket, LocationRule, LogBucket, LogBucketArg, LoopBucket,
-            OperatorType, ReturnBucket, ReturnType, StoreBucket, ValueBucket, ValueType,
+            OperatorType, ReturnBucket, ReturnType, SizeOption, StoreBucket, ValueBucket,
+            ValueType,
         },
         InstructionList,
     },
@@ -259,7 +260,7 @@ where
         self.emit_store_opcodes(
             &store_bucket.dest,
             &store_bucket.dest_address_type,
-            store_bucket.context.size,
+            get_size_from_size_option(&store_bucket.context.size),
         );
     }
 
@@ -337,7 +338,7 @@ where
     }
 
     fn handle_load_bucket(&mut self, load_bucket: &LoadBucket) {
-        let context_size = load_bucket.context.size;
+        let context_size = get_size_from_size_option(&load_bucket.context.size);
         //first eject for src
         let (mapped, signal_code) = match &load_bucket.src {
             LocationRule::Indexed {
@@ -461,7 +462,7 @@ where
             .iter()
             .enumerate()
             .for_each(|(idx, inst)| {
-                let arg_size = call_bucket.argument_types[idx].size;
+                let arg_size = get_size_from_size_option(&call_bucket.argument_types[idx].size);
                 self.handle_instruction(inst);
                 if arg_size > 1 {
                     //replace Load{Var/Signal} with with respective MultiOpCode
@@ -489,7 +490,7 @@ where
         match &call_bucket.return_info {
             ReturnType::Intermediate { op_aux_no: _ } => todo!(),
             ReturnType::Final(final_data) => {
-                if final_data.context.size == 1 {
+                if get_size_from_size_option(&final_data.context.size) == 1 {
                     self.emit_opcode(MpcOpCode::Call(call_bucket.symbol.clone(), 1));
                     self.emit_store_opcodes(&final_data.dest, &final_data.dest_address_type, 1);
                 } else {
@@ -502,7 +503,7 @@ where
                             if let Instruction::Value(value_bucket) = inner {
                                 self.emit_opcode(MpcOpCode::Call(
                                     call_bucket.symbol.clone(),
-                                    final_data.context.size,
+                                    get_size_from_size_option(&final_data.context.size),
                                 ));
                                 debug_assert!(matches!(value_bucket.parse_as, ValueType::U32));
                                 self.emit_opcode(MpcOpCode::PushIndex(value_bucket.value));
@@ -518,12 +519,12 @@ where
                         }
                     };
                     match &final_data.dest_address_type {
-                        AddressType::Variable => {
-                            self.emit_opcode(MpcOpCode::StoreVars(final_data.context.size))
-                        }
-                        AddressType::Signal => {
-                            self.emit_opcode(MpcOpCode::StoreSignals(final_data.context.size))
-                        }
+                        AddressType::Variable => self.emit_opcode(MpcOpCode::StoreVars(
+                            get_size_from_size_option(&final_data.context.size),
+                        )),
+                        AddressType::Signal => self.emit_opcode(MpcOpCode::StoreSignals(
+                            get_size_from_size_option(&final_data.context.size),
+                        )),
                         AddressType::SubcmpSignal {
                             cmp_address: _,
                             uniform_parallel_value: _,
@@ -706,6 +707,19 @@ where
                 .collect(),
             output_mapping,
         ))
+    }
+}
+
+fn get_size_from_size_option(size_option: &SizeOption) -> usize {
+    match size_option {
+        SizeOption::Single(v) => *v,
+        SizeOption::Multiple(v) => v
+            .iter()
+            .map(|x| {
+                // second value is the size
+                x.1
+            })
+            .sum(),
     }
 }
 
