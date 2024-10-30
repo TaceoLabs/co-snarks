@@ -14,6 +14,7 @@
 //! The [`parse()`](CoCircomCompiler::parse) method consumes the compiler and returns an instance of [`CoCircomCompilerParsed`].
 //! Refer to its documentation to learn how to create an MPC-VM for the witness extension.
 use ark_ec::pairing::Pairing;
+use ark_ff::{BigInteger, PrimeField};
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags, VCP},
     intermediate_representation::{
@@ -131,10 +132,16 @@ where
     }
 
     fn get_program_archive(&self) -> Result<ProgramArchive> {
+        let field = P::ScalarField::MODULUS;
+        let field_dig = circom_compiler::num_bigint::BigInt::from_bytes_be(
+            circom_compiler::num_bigint::Sign::Plus,
+            field.to_bytes_be().as_slice(),
+        );
         match circom_parser::run_parser(
             self.file.clone(),
             &self.config.version,
             self.config.link_library.clone(),
+            &field_dig,
         ) {
             Ok((mut program_archive, warnings)) => {
                 Report::print_reports(&warnings, &program_archive.file_library);
