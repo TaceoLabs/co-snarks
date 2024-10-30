@@ -80,6 +80,10 @@ impl<F: PrimeField, N: Rep3Network> CircomRep3VmWitnessExtension<F, N> {
         })
     }
 
+    pub fn get_network(self) -> N {
+        self.io_context0.network
+    }
+
     /// Normally F is split into positive and negative numbers in the range [0, p/2] and [p/2 + 1, p)
     /// However, for comparisons, we want the negative numbers to be "lower" than the positive ones.
     /// Therefore we shift the input by p/2 + 1 to the left, which results in a mapping of [negative, 0, positive] into F.
