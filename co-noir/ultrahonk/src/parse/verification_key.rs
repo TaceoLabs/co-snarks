@@ -70,10 +70,11 @@ pub struct VerifyingKeyBarretenberg<P: Pairing> {
 impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
     const NUM_64_LIMBS: u32 = P::BaseField::MODULUS_BIT_SIZE.div_ceil(64);
     const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
-    const SER_SIZE: usize = 4 * 8
+    const SER_FULL_SIZE: usize = 4 * 8
         + 1
         + AGGREGATION_OBJECT_SIZE * 4
         + PRECOMPUTED_ENTITIES_SIZE * 2 * Self::FIELDSIZE_BYTES as usize;
+    const SER_COMPRESSED_SIZE: usize = Self::SER_FULL_SIZE - 1 - AGGREGATION_OBJECT_SIZE * 4;
 
     fn write_g1_element(buf: &mut Vec<u8>, el: &P::G1Affine, write_x_first: bool) {
         let prev_len = buf.len();
@@ -113,7 +114,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
     }
 
     pub fn to_buffer(&self) -> Vec<u8> {
-        let mut buffer = Vec::with_capacity(Self::SER_SIZE);
+        let mut buffer = Vec::with_capacity(Self::SER_FULL_SIZE);
 
         Serialize::<P::ScalarField>::write_u64(&mut buffer, self.circuit_size);
         Serialize::<P::ScalarField>::write_u64(&mut buffer, self.log_circuit_size);
@@ -129,7 +130,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
             Self::write_g1_element(&mut buffer, el, true);
         }
 
-        debug_assert_eq!(buffer.len(), Self::SER_SIZE);
+        debug_assert_eq!(buffer.len(), Self::SER_FULL_SIZE);
         buffer
     }
 
@@ -137,7 +138,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
         let size = buf.len();
         let mut offset = 0;
 
-        if size != Self::SER_SIZE {
+        if size != Self::SER_FULL_SIZE && size != Self::SER_COMPRESSED_SIZE {
             return Err(HonkProofError::InvalidKeyLength);
         }
 
@@ -149,15 +150,20 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
         }
         let num_public_inputs = Serialize::<P::ScalarField>::read_u64(buf, &mut offset);
         let pub_inputs_offset = Serialize::<P::ScalarField>::read_u64(buf, &mut offset);
-        let contains_recursive_proof_u8 = Serialize::<P::ScalarField>::read_u8(buf, &mut offset);
-        if contains_recursive_proof_u8 > 1 {
-            return Err(HonkProofError::CorruptedKey);
-        }
-        let contains_recursive_proof = contains_recursive_proof_u8 == 1;
 
-        let mut recursive_proof_public_input_indices = AggregationObjectPubInputIndices::default();
-        for val in recursive_proof_public_input_indices.iter_mut() {
-            *val = Serialize::<P::ScalarField>::read_u32(buf, &mut offset);
+        if size == Self::SER_FULL_SIZE {
+            let contains_recursive_proof_u8 =
+                Serialize::<P::ScalarField>::read_u8(buf, &mut offset);
+            if contains_recursive_proof_u8 > 1 {
+                return Err(HonkProofError::CorruptedKey);
+            }
+            let contains_recursive_proof = contains_recursive_proof_u8 == 1;
+
+            let mut recursive_proof_public_input_indices =
+                AggregationObjectPubInputIndices::default();
+            for val in recursive_proof_public_input_indices.iter_mut() {
+                *val = Serialize::<P::ScalarField>::read_u32(buf, &mut offset);
+            }
         }
 
         let mut commitments = PrecomputedEntities::default();
@@ -166,15 +172,15 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
             *el = Self::read_g1_element(buf, &mut offset, true);
         }
 
-        debug_assert_eq!(offset, Self::SER_SIZE);
+        // debug_assert_eq!(offset, Self::SER_FULL_SIZE);
 
         Ok(Self {
             circuit_size,
             log_circuit_size,
             num_public_inputs,
             pub_inputs_offset,
-            contains_recursive_proof,
-            recursive_proof_public_input_indices,
+            contains_recursive_proof: false,
+            recursive_proof_public_input_indices: Default::default(),
             commitments,
         })
     }

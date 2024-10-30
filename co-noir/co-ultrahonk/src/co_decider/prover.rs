@@ -1,5 +1,5 @@
 use super::{
-    co_sumcheck::SumcheckOutput, co_zeromorph::ZeroMorphOpeningClaim, types::ProverMemory,
+    co_sumcheck::SumcheckOutput, co_zeromorph::ShpleminiOpeningClaim, types::ProverMemory,
 };
 use crate::{mpc::NoirUltraHonkProver, CoUtils};
 use std::marker::PhantomData;
@@ -36,7 +36,7 @@ impl<
 
     fn compute_opening_proof(
         driver: &mut T,
-        opening_claim: ZeroMorphOpeningClaim<T, P>,
+        opening_claim: ShpleminiOpeningClaim<T, P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {

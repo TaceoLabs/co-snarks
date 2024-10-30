@@ -18,7 +18,7 @@ use ark_ff::{Field, One, Zero};
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
     DeciderVerifier<P, H>
 {
-    pub fn get_g_shift_evaluations_shplemini(
+    pub fn get_g_shift_evaluations(
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) -> PolyGShift<P::ScalarField> {
         PolyGShift {
@@ -27,9 +27,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
-    pub fn get_g_shift_comms_shplemini(
-        evaluations: &VerifierCommitments<P::G1Affine>,
-    ) -> PolyG<P::G1Affine> {
+    pub fn get_g_shift_comms(evaluations: &VerifierCommitments<P::G1Affine>) -> PolyG<P::G1Affine> {
         PolyG {
             tables: evaluations
                 .precomputed
@@ -40,7 +38,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
-    pub fn get_f_evaluations_shplemini(
+    pub fn get_f_evaluations(
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) -> PolyF<P::ScalarField> {
         PolyF {
@@ -48,9 +46,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             witness: &evaluations.witness,
         }
     }
-    pub fn get_f_comms_shplemini(
-        evaluations: &ClaimedEvaluations<P::G1Affine>,
-    ) -> PolyF<P::G1Affine> {
+    pub fn get_f_comms(evaluations: &ClaimedEvaluations<P::G1Affine>) -> PolyF<P::G1Affine> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
@@ -66,6 +62,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             .collect::<Result<_, _>>()?;
         Ok(fold_commitments)
     }
+
     pub fn get_gemini_evaluations(
         _log_circuit_size: &u32,
         transcript: &mut Transcript<TranscriptFieldType, H>,
@@ -75,6 +72,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             .collect::<Result<_, _>>()?;
         Ok(gemini_evaluations)
     }
+
     pub fn powers_of_evaluation_challenge(
         gemini_evaluation_challenge: P::ScalarField,
         proof_size: &usize,
@@ -92,6 +90,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         shplonk_eval_challenge: &P::ScalarField,
         gemini_eval_challenge_powers: &[P::ScalarField],
     ) -> Vec<P::ScalarField> {
+        tracing::trace!("Compute inverted gemini denominators");
         let mut inverted_denominators = Vec::with_capacity(num_gemini_claims);
         inverted_denominators.push(
             (*shplonk_eval_challenge - gemini_eval_challenge_powers[0])
@@ -118,6 +117,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // const std::vector<RefVector<Commitment>>& concatenation_group_commitments = {},
         // RefSpan<P::ScalarField> concatenated_evaluations = {}
     ) -> HonkVerifyResult<ShpleminiVerifierOpeningClaim<P>> {
+        tracing::trace!("Compute batch opening claim");
         // Extract log_circuit_size
         let log_circuit_size = Utils::get_msb32(circuit_size);
 
@@ -151,7 +151,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Start populating the vector (Q, f₀, ... , fₖ₋₁, g₀, ... , gₘ₋₁, com(A₁), ... , com(Aₙ₋₁), [1]₁) where fᵢ are
         // the k commitments to unshifted polynomials and gⱼ are the m commitments to shifted polynomials
-        let mut commitments: Vec<P::G1Affine> = vec![q_commitment];
 
         // Get Shplonk opening point z
         let shplonk_evaluation_challenge = transcript.get_challenge::<P>("Shplonk:z".to_string());
@@ -159,17 +158,18 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Start computing the scalar to be multiplied by [1]₁
         let mut constant_term_accumulator = P::ScalarField::zero();
 
-        // Initialize the vector of scalars placing the scalar 1 corresponding to Q_commitment
-        let mut scalars: Vec<P::ScalarField> = Vec::new();
-
-        scalars.push(P::ScalarField::one());
-
+        let mut opening_claim: ShpleminiVerifierOpeningClaim<P> = ShpleminiVerifierOpeningClaim {
+            challenge: shplonk_evaluation_challenge,
+            scalars: Vec::new(),
+            commitments: vec![q_commitment],
+        };
+        opening_claim.scalars.push(P::ScalarField::one());
         // Compute 1/(z − r), 1/(z + r), 1/(z + r²), … , 1/(z + r²⁽ⁿ⁻¹⁾)
         // These represent the denominators of the summand terms in Shplonk partially evaluated polynomial Q_z
         let inverse_vanishing_evals: Vec<P::ScalarField> =
             Self::compute_inverted_gemini_denominators(
                 (log_circuit_size + 1).try_into().unwrap(),
-                &shplonk_evaluation_challenge,
+                &opening_claim.challenge,
                 &gemini_eval_challenge_powers,
             );
 
@@ -214,8 +214,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             &multivariate_batching_challenge,
             &unshifted_scalar,
             &shifted_scalar,
-            &mut commitments,
-            &mut scalars,
+            &mut opening_claim,
             &mut batched_evaluation,
         );
 
@@ -227,8 +226,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             &gemini_evaluations,
             &inverse_vanishing_evals,
             &shplonk_batching_challenge,
-            &mut commitments,
-            &mut scalars,
+            &mut opening_claim,
             &mut constant_term_accumulator,
         );
 
@@ -248,15 +246,33 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             gemini_evaluations[0] * shplonk_batching_challenge * inverse_vanishing_evals[1];
 
         // Finalize the batch opening claim
-        commitments.push(P::G1Affine::generator());
-        scalars.push(constant_term_accumulator);
+        opening_claim.commitments.push(P::G1Affine::generator());
+        opening_claim.scalars.push(constant_term_accumulator);
 
-        Ok(ShpleminiVerifierOpeningClaim {
-            challenge: shplonk_evaluation_challenge,
-            scalars,
-            commitments,
-        })
+        Ok(opening_claim)
     }
+    /**
+     * @brief Compute the expected evaluation of the univariate commitment to the batched polynomial.
+     *
+     * Compute the evaluation \f$ A_0(r) = \sum \rho^i \cdot f_i + \frac{1}{r} \cdot \sum \rho^{i+k} g_i \f$, where \f$
+     * k \f$ is the number of "unshifted" commitments.
+     *
+     * @details Initialize \f$ A_{d}(r) \f$ with the batched evaluation \f$ \sum \rho^i f_i(\vec{u}) + \sum \rho^{i+k}
+     * g_i(\vec{u}) \f$. The folding property ensures that
+     * \f{align}{
+     * A_\ell\left(r^{2^\ell}\right) = (1 - u_{\ell-1}) \cdot \frac{A_{\ell-1}\left(r^{2^{\ell-1}}\right) +
+     * A_{\ell-1}\left(-r^{2^{\ell-1}}\right)}{2}
+     * + u_{\ell-1} \cdot \frac{A_{\ell-1}\left(r^{2^{\ell-1}}\right) -
+     *   A_{\ell-1}\left(-r^{2^{\ell-1}}\right)}{2r^{2^{\ell-1}}}
+     *   \f}
+     *   Therefore, the verifier can recover \f$ A_0(r) \f$ by solving several linear equations.
+     *
+     * @param batched_mle_eval The evaluation of the batched polynomial at \f$ (u_0, \ldots, u_{d-1})\f$.
+     * @param evaluation_point Evaluation point \f$ (u_0, \ldots, u_{d-1}) \f$.
+     * @param challenge_powers Powers of \f$ r \f$, \f$ r^2 \), ..., \( r^{2^{m-1}} \f$.
+     * @param fold_polynomial_evals  Evaluations \f$ A_{i-1}(-r^{2^{i-1}}) \f$.
+     * @return Evaluation \f$ A_0(r) \f$.
+     */
     pub fn compute_gemini_batched_univariate_evaluation(
         num_variables: &u32,
         mut batched_eval_accumulator: P::ScalarField,
@@ -264,6 +280,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         challenge_powers: Vec<P::ScalarField>,
         fold_polynomial_evals: Vec<P::ScalarField>,
     ) -> P::ScalarField {
+        tracing::trace!("Compute gemini batched univariate evaluation");
         let evals = fold_polynomial_evals;
 
         // Solve the sequence of linear equations
@@ -289,35 +306,86 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         batched_eval_accumulator
     }
-
+    /**
+     * @brief Populates the vectors of commitments and scalars, and computes the evaluation of the batched
+     * multilinear polynomial at the sumcheck challenge.
+     *
+     * @details This function iterates over all commitments and the claimed evaluations of the corresponding
+     * polynomials. The following notations are used:
+     * - \f$ \rho \f$: Batching challenge for multivariate claims.
+     * - \f$ z \f$: SHPLONK evaluation challenge.
+     * - \f$ r \f$: Gemini evaluation challenge.
+     * - \f$ \nu \f$: SHPLONK batching challenge.
+     *
+     * The vector of scalars is populated as follows:
+     * \f[
+     * \left(
+     * - \left(\frac{1}{z-r} + \nu \times \frac{1}{z+r}\right),
+     *   \ldots,
+     * - \rho^{i+k-1} \times \left(\frac{1}{z-r} + \nu \times \frac{1}{z+r}\right),
+     * - \rho^{i+k} \times \frac{1}{r} \times \left(\frac{1}{z-r} - \nu \times \frac{1}{z+r}\right),
+     *   \ldots,
+     * - \rho^{k+m-1} \times \frac{1}{r} \times \left(\frac{1}{z-r} - \nu \times \frac{1}{z+r}\right)
+     *   \right)
+     *   \f]
+     *
+     * The following vector is concatenated to the vector of commitments:
+     * \f[
+     * f_0, \ldots, f_{m-1}, f_{\text{shift}, 0}, \ldots, f_{\text{shift}, k-1}
+     * \f]
+     *
+     * Simultaneously, the evaluation of the multilinear polynomial
+     * \f[
+     * \sum \rho^i \cdot f_i + \sum \rho^{i+k} \cdot f_{\text{shift}, i}
+     * \f]
+     * at the challenge point \f$ (u_0,\ldots, u_{n-1}) \f$ is computed.
+     *
+     * This approach minimizes the number of iterations over the commitments to multilinear polynomials
+     * and eliminates the need to store the powers of \f$ \rho \f$.
+     *
+     * @param unshifted_commitments Commitments to unshifted polynomials.
+     * @param shifted_commitments Commitments to shifted polynomials.
+     * @param claimed_evaluations Claimed evaluations of the corresponding polynomials.
+     * @param multivariate_batching_challenge Random challenge used for batching of multivariate evaluation claims.
+     * @param unshifted_scalar Scaling factor for commitments to unshifted polynomials.
+     * @param shifted_scalar Scaling factor for commitments to shifted polynomials.
+     * @param commitments The vector of commitments to be populated.
+     * @param scalars The vector of scalars to be populated.
+     * @param batched_evaluation The evaluation of the batched multilinear polynomial.
+     * @param concatenated_scalars Scaling factors for the commitments to polynomials in concatenation groups, one for
+     * each group.
+     * @param concatenation_group_commitments Commitments to polynomials to be concatenated.
+     * @param concatenated_evaluations Evaluations of the full concatenated polynomials.
+     */
     fn batch_multivariate_opening_claims(
         &self,
         multivariate_batching_challenge: &P::ScalarField,
         unshifted_scalar: &P::ScalarField,
         shifted_scalar: &P::ScalarField,
-        commitments: &mut Vec<P::G1Affine>,
-        scalars: &mut Vec<P::ScalarField>,
+        opening_claim: &mut ShpleminiVerifierOpeningClaim<P>,
         batched_evaluation: &mut P::ScalarField,
         // concatenated_scalars: Vec<P::ScalarField>,
         // concatenation_group_commitments: &[Vec<P::G1Affine>],
         // concatenated_evaluations: &[P::ScalarField],
     ) {
+        tracing::trace!("Batch multivariate opening claims");
         let mut current_batching_challenge = P::ScalarField::one();
         let unshifted_evaluations: PolyF<P::ScalarField> =
-            Self::get_f_evaluations_shplemini(&self.memory.claimed_evaluations);
+            Self::get_f_evaluations(&self.memory.claimed_evaluations);
         let shifted_evaluations: PolyGShift<P::ScalarField> =
-            Self::get_g_shift_evaluations_shplemini(&self.memory.claimed_evaluations);
-        let unshifted_commitments = Self::get_f_comms_shplemini(&self.memory.verifier_commitments);
-        let to_be_shifted_commitments =
-            Self::get_g_shift_comms_shplemini(&self.memory.verifier_commitments);
+            Self::get_g_shift_evaluations(&self.memory.claimed_evaluations);
+        let unshifted_commitments = Self::get_f_comms(&self.memory.verifier_commitments);
+        let to_be_shifted_commitments = Self::get_g_shift_comms(&self.memory.verifier_commitments);
         for (unshifted_commitment, unshifted_evaluation) in unshifted_commitments
             .iter()
             .zip(unshifted_evaluations.iter())
         {
             // Move unshifted commitments to the 'commitments' vector
-            commitments.push(*unshifted_commitment);
+            opening_claim.commitments.push(*unshifted_commitment);
             // Compute −ρⁱ ⋅ (1/(z−r) + ν/(z+r)) and place into 'scalars'
-            scalars.push(-(*unshifted_scalar) * current_batching_challenge);
+            opening_claim
+                .scalars
+                .push(-(*unshifted_scalar) * current_batching_challenge);
             // Accumulate the evaluation of ∑ ρⁱ ⋅ fᵢ at the sumcheck challenge
             *batched_evaluation += *unshifted_evaluation * current_batching_challenge;
             // Update the batching challenge
@@ -328,9 +396,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             .zip(shifted_evaluations.iter())
         {
             // Move shifted commitments to the 'commitments' vector
-            commitments.push(*shifted_commitment);
+            opening_claim.commitments.push(*shifted_commitment);
             // Compute −ρ⁽ᵏ⁺ʲ⁾ ⋅ r⁻¹ ⋅ (1/(z−r) − ν/(z+r)) and place into 'scalars'
-            scalars.push(-(*shifted_scalar) * current_batching_challenge);
+            opening_claim
+                .scalars
+                .push(-(*shifted_scalar) * current_batching_challenge);
             // Accumulate the evaluation of ∑ ρ⁽ᵏ⁺ʲ⁾ ⋅ f_shift at the sumcheck challenge
             *batched_evaluation += *shifted_evaluation * current_batching_challenge;
             // Update the batching challenge ρ
@@ -360,16 +430,51 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         //     }
         // }
     }
+    /**
+     * @brief Populates the 'commitments' and 'scalars' vectors with the commitments to Gemini fold polynomials \f$
+     * A_i \f$.
+     *
+     * @details Once the commitments to Gemini "fold" polynomials \f$ A_i \f$ and their evaluations at \f$ -r^{2^i}
+     * \f$, where \f$ i = 1, \ldots, n-1 \f$, are received by the verifier, it performs the following operations:
+     *
+     * 1. Moves the vector
+     *    \f[
+     *    \left( \text{com}(A_1), \text{com}(A_2), \ldots, \text{com}(A_{n-1}) \right)
+     *    \f]
+     *    to the 'commitments' vector.
+     *
+     * 2. Computes the scalars:
+     *    \f[
+     *    \frac{\nu^{2}}{z + r^2}, \frac{\nu^3}{z + r^4}, \ldots, \frac{\nu^{n-1}}{z + r^{2^{n-1}}}
+     *    \f]
+     *    and places them into the 'scalars' vector.
+     *
+     * 3. Accumulates the summands of the constant term:
+     *    \f[
+     *    \sum_{i=2}^{n-1} \frac{\nu^{i} \cdot A_i(-r^{2^i})}{z + r^{2^i}}
+     *    \f]
+     *    and adds them to the 'constant_term_accumulator'.
+     *
+     * @param log_circuit_size The logarithm of the circuit size, determining the depth of the Gemini protocol.
+     * @param fold_commitments A vector containing the commitments to the Gemini fold polynomials \f$ A_i \f$.
+     * @param gemini_evaluations A vector containing the evaluations of the Gemini fold polynomials \f$ A_i \f$ at
+     * points \f$ -r^{2^i} \f$.
+     * @param inverse_vanishing_evals A vector containing the inverse evaluations of the vanishing polynomial.
+     * @param shplonk_batching_challenge The batching challenge \f$ \nu \f$ used in the SHPLONK protocol.
+     * @param commitments Output vector where the commitments to the Gemini fold polynomials will be stored.
+     * @param scalars Output vector where the computed scalars will be stored.
+     * @param constant_term_accumulator The accumulator for the summands of the constant term.
+     */
     fn batch_gemini_claims_received_from_prover(
         log_circuit_size: &u32,
         fold_commitments: &[P::G1Affine],
         gemini_evaluations: &[P::ScalarField],
         inverse_vanishing_evals: &[P::ScalarField],
         shplonk_batching_challenge: &P::ScalarField,
-        commitments: &mut Vec<P::G1Affine>,
-        scalars: &mut Vec<P::ScalarField>,
+        opening_claim: &mut ShpleminiVerifierOpeningClaim<P>,
         constant_term_accumulator: &mut P::ScalarField,
     ) {
+        tracing::trace!("Receive batch gemini claims");
         // Initialize batching challenge as ν²
         let mut current_batching_challenge = shplonk_batching_challenge.square();
         for j in 0..CONST_PROOF_SIZE_LOG_N - 1 {
@@ -387,9 +492,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             }
 
             // Place the scaling factor to the 'scalars' vector
-            scalars.push(-scaling_factor);
+            opening_claim.scalars.push(-scaling_factor);
             // Move com(Aᵢ) to the 'commitments' vector
-            commitments.push(fold_commitments[j]);
+            opening_claim.commitments.push(fold_commitments[j]);
         }
     }
 }

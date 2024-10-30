@@ -8,7 +8,7 @@ use crate::{
 };
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
-
+// Remark: proofs generated with bb 0.60.0 and Keccak can not be verified with our verifier, since they cut off the proof at a certain point in order to be working with smart contract, this will be removed in bb in the future according to their code
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> UltraHonk<P, H> {
     pub fn verify(
         honk_proof: HonkProof<TranscriptFieldType>,

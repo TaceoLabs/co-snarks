@@ -1,4 +1,5 @@
-use super::{sumcheck::SumcheckOutput, types::ProverMemory, zeromorph::ZeroMorphOpeningClaim};
+use super::{shplemini::ShpleminiOpeningClaim, sumcheck::SumcheckOutput, types::ProverMemory};
+
 use crate::{
     honk_curve::HonkCurve,
     prover::HonkProofResult,
@@ -27,7 +28,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     fn compute_opening_proof(
-        opening_claim: ZeroMorphOpeningClaim<P::ScalarField>,
+        opening_claim: ShpleminiOpeningClaim<P::ScalarField>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
@@ -73,11 +74,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> HonkProofResult<()> {
         let prover_opening_claim =
             self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output)?;
-        println!(
-            "this is opening pair: {:?},\n {:?}",
-            prover_opening_claim.opening_pair.challenge.to_string(),
-            prover_opening_claim.opening_pair.evaluation.to_string()
-        );
         Self::compute_opening_proof(prover_opening_claim, transcript, crs)
     }
 
@@ -95,7 +91,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Fiat-Shamir: rho, y, x, z
         // Execute Zeromorph multilinear PCS
         self.execute_pcs_rounds(&mut transcript, circuit_size, crs, sumcheck_output)?;
-        transcript.print();
         Ok(transcript.get_proof())
     }
 }

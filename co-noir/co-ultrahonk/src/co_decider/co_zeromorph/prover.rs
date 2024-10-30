@@ -2,7 +2,7 @@ use super::types::{PolyF, PolyG, PolyGShift};
 use crate::{
     co_decider::{
         co_sumcheck::SumcheckOutput,
-        co_zeromorph::{OpeningPair, ZeroMorphOpeningClaim},
+        co_zeromorph::{OpeningPair, ShpleminiOpeningClaim},
         polynomial::SharedPolynomial,
         prover::CoDecider,
         types::ClaimedEvaluations,
@@ -445,7 +445,7 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
-    ) -> HonkProofResult<ZeroMorphOpeningClaim<T, P>> {
+    ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         tracing::trace!("Zeromorph prove");
 
         let multilinear_challenge = &sumcheck_output.challenges;
@@ -539,7 +539,7 @@ impl<
             z_challenge,
         );
 
-        let res = ZeroMorphOpeningClaim {
+        let res = ShpleminiOpeningClaim {
             polynomial: pi_polynomial,
             opening_pair: OpeningPair {
                 challenge: x_challenge,

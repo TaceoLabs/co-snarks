@@ -26,7 +26,6 @@ fn poseidon_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
 
     let proof = UltraHonk::<_, H>::prove(proving_key).unwrap();
 
-    // TODO Keccak flavour is currently not compatible with Barretenberg since it has a different order for the relations
     if !proof_file.is_empty() {
         let proof_u8 = proof.to_buffer();
 
@@ -43,13 +42,12 @@ fn poseidon_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
 
 #[test]
 fn poseidon_test_poseidon2sponge() {
-    const PROOF_FILE: &str =
-        "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/poseidon/60proof";
+    const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/pos_proof";
     poseidon_test::<Poseidon2Sponge>(PROOF_FILE);
 }
 
 #[test]
 fn poseidon_test_keccak256() {
-    const PROOF_FILE: &str = "/home/fabsits/collaborative-circom/co-noir/co-noir/examples/test_vectors/poseidon/gen_proof_keccak";
-    poseidon_test::<Keccak256>("");
+    const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/keccak_proof";
+    poseidon_test::<Keccak256>(PROOF_FILE);
 }
