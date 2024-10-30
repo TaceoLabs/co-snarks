@@ -5,11 +5,11 @@ use mpc_core::protocols::rep3::{
     arithmetic,
     id::PartyID,
     network::{IoContext, Rep3Network},
-    pointshare, Rep3PointShare, Rep3PrimeFieldShare,
+    pointshare, poly, Rep3PointShare, Rep3PrimeFieldShare,
 };
 use num_traits::Zero;
 use rayon::prelude::*;
-
+const MIN_ELEMENTS_PER_THREAD: usize = 16;
 use super::NoirUltraHonkProver;
 
 // TODO use io_context1
@@ -175,5 +175,13 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
         pointshare::msm_public_points(points, scalars)
+    }
+
+    fn eval_poly(
+        &mut self,
+        coeffs: &[Self::ArithmeticShare],
+        point: <P as Pairing>::ScalarField,
+    ) -> Self::ArithmeticShare {
+        poly::eval_poly(coeffs, point)
     }
 }

@@ -1,3 +1,4 @@
+pub(crate) mod co_shplemini;
 pub(crate) mod co_sumcheck;
 pub(crate) mod co_zeromorph;
 pub(crate) mod polynomial;

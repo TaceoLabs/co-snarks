@@ -7,7 +7,7 @@ use super::polynomial::SharedPolynomial;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 
-pub(crate) struct ShpleminiOpeningClaim<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct ZeroMorphOpeningClaim<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) polynomial: SharedPolynomial<T, P>,
     pub(crate) opening_pair: OpeningPair<P::ScalarField>,
 }

@@ -3,12 +3,12 @@ use ark_ff::Field;
 use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_core::protocols::shamir::{
-    arithmetic, network::ShamirNetwork, pointshare, ShamirPointShare, ShamirPrimeFieldShare,
+    arithmetic, network::ShamirNetwork, pointshare, poly, ShamirPointShare, ShamirPrimeFieldShare,
     ShamirProtocol,
 };
 use num_traits::Zero;
 use rayon::prelude::*;
-
+const MIN_ELEMENTS_PER_THREAD: usize = 16;
 use super::NoirUltraHonkProver;
 
 /// A UltraHonk dirver unsing shamir secret sharing
@@ -180,5 +180,13 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
         pointshare::msm_public_points(points, scalars)
+    }
+
+    fn eval_poly(
+        &mut self,
+        coeffs: &[Self::ArithmeticShare],
+        point: <P as Pairing>::ScalarField,
+    ) -> Self::ArithmeticShare {
+        poly::eval_poly(coeffs, point)
     }
 }
