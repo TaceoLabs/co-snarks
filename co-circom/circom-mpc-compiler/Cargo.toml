@@ -12,13 +12,14 @@ readme.workspace = true
 
 [dependencies]
 ark-ec.workspace = true
-circom-compiler = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "compiler", branch = "dev" }
-circom-constraint_generation = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "constraint_generation", branch = "dev" }
+ark-ff.workspace = true
+circom-type_analysis = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "type_analysis", rev = "d199164" }
+circom-constraint_generation = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "constraint_generation", rev = "d199164" }
+circom-parser = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "parser", rev = "d199164" }
+circom-compiler = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "compiler", rev = "d199164" }
 circom-types = { version = "0.5.0", path = "../circom-types" }
 circom-mpc-vm = { version = "0.4.2", path = "../circom-mpc-vm" }
-circom-parser = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "parser", branch = "dev" }
-circom-program_structure = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "program_structure", branch = "dev" }
-circom-type_analysis = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "type_analysis", branch = "dev" }
+circom-program_structure = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "program_structure", rev = "d199164" }
 eyre.workspace = true
 itertools.workspace = true
 serde.workspace = true
