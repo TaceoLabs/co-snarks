@@ -698,7 +698,12 @@ where
             circuit.c_producer.witness_to_signal_list,
             circuit.c_producer.number_of_main_inputs,
             circuit.c_producer.number_of_main_outputs,
-            circuit.c_producer.main_input_list.clone(),
+            circuit
+                .c_producer
+                .main_input_list
+                .into_iter()
+                .map(|x| (x.name, x.start, x.size))
+                .collect(),
             output_mapping,
         ))
     }
