@@ -7,8 +7,8 @@ use co_noir::{
     translate_witness_share_rep3, CreateVKCli, CreateVKConfig, GenerateProofCli,
     GenerateProofConfig, GenerateWitnessCli, GenerateWitnessConfig, MPCProtocol,
     MergeInputSharesCli, MergeInputSharesConfig, PubShared, SplitInputCli, SplitInputConfig,
-    SplitWitnessCli, SplitWitnessConfig, TranslateWitnessCli, TranslateWitnessConfig, VerifyCli,
-    VerifyConfig,
+    SplitWitnessCli, SplitWitnessConfig, TranscriptHash, TranslateWitnessCli,
+    TranslateWitnessConfig, VerifyCli, VerifyConfig,
 };
 use co_ultrahonk::{
     prelude::{
@@ -28,6 +28,7 @@ use mpc_core::protocols::{
         ShamirPreprocessing, ShamirProtocol,
     },
 };
+use sha3::Keccak256;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -462,6 +463,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let circuit_path = config.circuit;
     let crs_path = config.crs;
     let protocol = config.protocol;
+    let hasher = config.hasher;
     let out = config.out;
     let public_input_filename = config.public_input;
     let t = config.threshold;
@@ -521,20 +523,59 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             // Get the proving key and prover
             let proving_key = ProvingKey::create(id, builder, prover_crs)?;
             let public_input = proving_key.get_public_inputs();
-            let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!(
-                "Party {}: Proving key generation took {} ms",
-                id,
-                duration_ms
-            );
+            let (proof, public_input) = match hasher {
+                Some(TranscriptHash::POSEIDON) => {
+                    let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!(
+                        "Party {}: Proving key generation took {} ms",
+                        id,
+                        duration_ms
+                    );
 
-            // execute prover in MPC
-            tracing::info!("Party {}: starting proof generation..", id);
-            let start = Instant::now();
-            let proof = prover.prove(proving_key)?;
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+                Some(TranscriptHash::KECCAK) => {
+                    let prover = CoUltraHonk::<_, _, Keccak256>::new(driver);
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!(
+                        "Party {}: Proving key generation took {} ms",
+                        id,
+                        duration_ms
+                    );
+
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+                None => {
+                    let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!(
+                        "Party {}: Proving key generation took {} ms",
+                        id,
+                        duration_ms
+                    );
+
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+            };
 
             (proof, public_input)
         }
@@ -588,14 +629,38 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let protocol1 = protocol0.fork_with_pairs(0)?;
             let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
 
-            // execute prover in MPC
-            tracing::info!("Party {}: starting proof generation..", id);
-            let start = Instant::now();
-            let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
-            let proof = prover.prove(proving_key)?;
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-
+            let (proof, public_input) = match hasher {
+                Some(TranscriptHash::POSEIDON) => {
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+                Some(TranscriptHash::KECCAK) => {
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let prover = CoUltraHonk::<_, _, Keccak256>::new(driver);
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+                None => {
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+            };
             (proof, public_input)
         }
     };
@@ -645,6 +710,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let circuit_path = config.circuit;
     let crs_path = config.crs;
     let vk_path = config.vk;
+    let hasher = config.hasher;
 
     file_utils::check_file_exists(&circuit_path)?;
     file_utils::check_file_exists(&crs_path)?;
@@ -677,7 +743,11 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let mut out_file =
         BufWriter::new(std::fs::File::create(&vk_path).context("while creating output file")?);
 
-    let vk_u8 = vk.to_buffer();
+    let vk_u8 = match hasher {
+        Some(TranscriptHash::POSEIDON) => vk.to_buffer(),
+        Some(TranscriptHash::KECCAK) => vk.to_buffer_keccak(),
+        None => vk.to_buffer(),
+    };
     out_file
         .write(vk_u8.as_slice())
         .context("while writing vk to file")?;
@@ -692,6 +762,7 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let proof = config.proof;
     let vk_path: PathBuf = config.vk;
     let crs_path = config.crs;
+    let hasher = config.hasher;
 
     file_utils::check_file_exists(&proof)?;
     file_utils::check_file_exists(&vk_path)?;
@@ -715,9 +786,17 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
 
     // The actual verifier
     let start = Instant::now();
-    let res =
-        UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk).context("while verifying proof")?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    let res =
+        match hasher {
+            Some(TranscriptHash::POSEIDON) => UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk)
+                .context("while verifying proof")?,
+            Some(TranscriptHash::KECCAK) => {
+                UltraHonk::<_, Keccak256>::verify(proof, vk).context("while verifying proof")?
+            }
+            None => UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk)
+                .context("while verifying proof")?,
+        };
     tracing::info!("Proof verification took {} ms", duration_ms);
 
     if res {
