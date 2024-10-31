@@ -1,7 +1,6 @@
 pub(crate) mod prover;
 pub(crate) mod types;
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
 
 use crate::mpc::NoirUltraHonkProver;
 

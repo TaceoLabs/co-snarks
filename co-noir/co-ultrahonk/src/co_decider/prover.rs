@@ -83,7 +83,7 @@ impl<
         sumcheck_output: SumcheckOutput<P::ScalarField>,
     ) -> HonkProofResult<()> {
         let prover_opening_claim =
-            self.zeromorph_prove(transcript, circuit_size, crs, sumcheck_output)?;
+            self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output)?;
         Self::compute_opening_proof(&mut self.driver, prover_opening_claim, transcript, crs)
     }
 

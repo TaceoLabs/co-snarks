@@ -1,3 +1,4 @@
+use super::NoirUltraHonkProver;
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use ark_ff::PrimeField;
@@ -8,8 +9,6 @@ use mpc_core::protocols::shamir::{
 };
 use num_traits::Zero;
 use rayon::prelude::*;
-const MIN_ELEMENTS_PER_THREAD: usize = 16;
-use super::NoirUltraHonkProver;
 
 /// A UltraHonk dirver unsing shamir secret sharing
 ///

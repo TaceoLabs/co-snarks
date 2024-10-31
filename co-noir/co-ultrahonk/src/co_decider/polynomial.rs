@@ -16,6 +16,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
     pub fn new(coefficients: Vec<T::ArithmeticShare>) -> Self {
         Self { coefficients }
     }
+    pub fn new_zero(size: usize) -> Self {
+        Self {
+            coefficients: vec![Default::default(); size],
+        }
+    }
 
     pub(crate) fn promote_poly(driver: &T, poly: Polynomial<P::ScalarField>) -> Self {
         let coefficients = T::promote_to_trivial_shares(driver.get_party_id(), poly.as_ref());

@@ -28,7 +28,6 @@ use mpc_core::protocols::{
         ShamirPreprocessing, ShamirProtocol,
     },
 };
-use sha3::Keccak256;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -716,7 +715,8 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
 
     // The actual verifier
     let start = Instant::now();
-    let res = UltraHonk::<_, Keccak256>::verify(proof, vk).context("while verifying proof")?;
+    let res =
+        UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk).context("while verifying proof")?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Proof verification took {} ms", duration_ms);
 
