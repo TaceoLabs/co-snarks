@@ -28,7 +28,7 @@ use itertools::izip;
 use std::{array, marker::PhantomData};
 use ultrahonk::{
     prelude::{Transcript, TranscriptFieldType, TranscriptHasher},
-    Utils, NUM_ALPHAS,
+    NUM_ALPHAS,
 };
 
 pub(crate) struct CoOink<
@@ -211,6 +211,7 @@ impl<
         self.memory
             .lookup_inverses
             .resize(proving_key.circuit_size as usize, Default::default());
+        let mut skip = Vec::with_capacity(proving_key.circuit_size as usize);
 
         // const READ_TERMS: usize = 1;
         // const WRITE_TERMS: usize = 1;
@@ -223,15 +224,18 @@ impl<
         )
         .enumerate()
         {
-            if !(q_lookup.is_one() || lookup_read_tag.is_one()) {
-                continue;
-            }
-
-            // READ_TERMS and WRITE_TERMS are 1, so we skip the loop
             let read_term = self.compute_read_term(proving_key, i);
             let write_term = self.compute_write_term(proving_key, i);
             self.memory.lookup_inverses[i] = self.driver.mul_with_public(write_term, read_term);
+
+            // We cannot directly skip since lookup_read_tag is shared, but we can multiply the result with a skip factor
+            let mul = self.driver.mul_with_public(*q_lookup, *lookup_read_tag);
+            let add = self.driver.add_with_public(*q_lookup, *lookup_read_tag);
+            skip.push(self.driver.add(mul, add));
         }
+        self.memory.lookup_inverses.coefficients = self
+            .driver
+            .mul_many(self.memory.lookup_inverses.as_ref(), &skip)?;
 
         // Compute inverse polynomial I in place by inverting the product at each row
         // Note: zeroes are ignored as they are not used anyway
@@ -508,28 +512,26 @@ impl<
         self.compute_w4(proving_key);
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
-        let lookup_read_counts = Utils::commit(
+        let lookup_read_counts = CoUtils::commit::<T, P>(
             proving_key
                 .polynomials
                 .witness
                 .lookup_read_counts()
                 .as_ref(),
             &proving_key.crs,
-        )?;
-        let lookup_read_tags = Utils::commit(
+        );
+        let lookup_read_tags = CoUtils::commit::<T, P>(
             proving_key.polynomials.witness.lookup_read_tags().as_ref(),
             &proving_key.crs,
-        )?;
-        let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), &proving_key.crs);
-        let w_4 = self.driver.open_point(w_4)?;
-
-        transcript.send_point_to_verifier::<P>(
-            "LOOKUP_READ_COUNTS".to_string(),
-            lookup_read_counts.into(),
         );
-        transcript
-            .send_point_to_verifier::<P>("LOOKUP_READ_TAGS".to_string(), lookup_read_tags.into());
-        transcript.send_point_to_verifier::<P>("W_4".to_string(), w_4.into());
+        let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), &proving_key.crs);
+        let opened = self
+            .driver
+            .open_point_many(&[lookup_read_counts, lookup_read_tags, w_4])?;
+
+        transcript.send_point_to_verifier::<P>("LOOKUP_READ_COUNTS".to_string(), opened[0].into());
+        transcript.send_point_to_verifier::<P>("LOOKUP_READ_TAGS".to_string(), opened[1].into());
+        transcript.send_point_to_verifier::<P>("W_4".to_string(), opened[2].into());
 
         Ok(())
     }

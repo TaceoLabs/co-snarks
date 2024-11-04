@@ -56,24 +56,25 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 .expect("failed to get prover crs");
 
             let id = net.id;
+            todo!("rewrite, such that the driver will be present...");
 
-            let proving_key = ProvingKey::create(id, builder, prover_crs).unwrap();
+            // let proving_key = ProvingKey::create(&driver, builder, prover_crs).unwrap();
 
-            let n = proving_key.circuit_size as usize;
-            let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
-                + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
-                + OINK_CRAND_PAIRS_CONST;
-            // log2(n) * ((n >>= 1) / 2) == n - 1
-            let num_pairs_sumcheck_prove =
-                SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
-            let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
-            let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs).unwrap();
-            let mut io_context0 = ShamirProtocol::from(preprocessing);
-            let io_context1 = io_context0.fork_with_pairs(0).unwrap();
-            let driver = ShamirUltraHonkDriver::new(io_context0, io_context1);
+            // let n = proving_key.circuit_size as usize;
+            // let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
+            //     + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
+            //     + OINK_CRAND_PAIRS_CONST;
+            // // log2(n) * ((n >>= 1) / 2) == n - 1
+            // let num_pairs_sumcheck_prove =
+            //     SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+            // let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
+            // let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs).unwrap();
+            // let mut io_context0 = ShamirProtocol::from(preprocessing);
+            // let io_context1 = io_context0.fork_with_pairs(0).unwrap();
+            // let driver = ShamirUltraHonkDriver::new(io_context0, io_context1);
 
-            let prover = CoUltraHonk::<_, _, H>::new(driver);
-            prover.prove(proving_key).unwrap()
+            // let prover = CoUltraHonk::<_, _, H>::new(driver);
+            // prover.prove(proving_key).unwrap()
         }));
     }
 

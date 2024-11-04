@@ -78,12 +78,10 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
             )
             .expect("failed to get prover crs");
 
-            let id = net.id;
-
             let mut io_context0 = IoContext::init(net).unwrap();
             let io_context1 = io_context0.fork().unwrap();
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
-            let proving_key = ProvingKey::create(id, builder, crs).unwrap();
+            let proving_key = ProvingKey::create(&driver, builder, crs).unwrap();
 
             let prover = CoUltraHonk::<_, _, H>::new(driver);
             prover.prove(proving_key).unwrap()
@@ -148,12 +146,10 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
                 )
                 .expect("failed to get prover crs");
 
-            let id = net2.id;
-
             let mut io_context0 = IoContext::init(net2).unwrap();
             let io_context1 = io_context0.fork().unwrap();
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
-            let proving_key = ProvingKey::create(id, builder, prover_crs).unwrap();
+            let proving_key = ProvingKey::create(&driver, builder, prover_crs).unwrap();
 
             let prover = CoUltraHonk::<_, _, H>::new(driver);
             prover.prove(proving_key).unwrap()

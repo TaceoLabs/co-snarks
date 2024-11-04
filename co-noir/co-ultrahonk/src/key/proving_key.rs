@@ -1,7 +1,6 @@
 use crate::key::types::TraceData;
 use crate::mpc::NoirUltraHonkProver;
 use crate::types::Polynomials;
-use crate::types::ProverWitnessEntities;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
@@ -10,6 +9,7 @@ use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::ProverCrs;
+use co_builder::prelude::ProverWitnessEntities;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
 use co_builder::HonkProofError;
@@ -39,14 +39,13 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
-    const PUBLIC_INPUT_WIRE_INDEX: usize =
-        ProverWitnessEntities::<T::ArithmeticShare, P::ScalarField>::W_R;
+    const PUBLIC_INPUT_WIRE_INDEX: usize = ProverWitnessEntities::<T::ArithmeticShare>::W_R;
 
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
     pub fn create<
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
-        id: T::PartyID,
+        driver: &T,
         mut circuit: GenericUltraCircuitBuilder<P, U>,
         crs: ProverCrs<P>,
     ) -> HonkProofResult<Self> {
@@ -56,7 +55,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         let dyadic_circuit_size = circuit.compute_dyadic_size();
         let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);
         // Construct and add to proving key the wire, selector and copy constraint polynomials
-        proving_key.populate_trace(id, &mut circuit, false);
+        proving_key.populate_trace(driver.get_party_id(), &mut circuit, false);
 
         // First and last lagrange polynomials (in the full circuit size)
         proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
@@ -72,7 +71,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             dyadic_circuit_size,
             0,
         );
-        PlainProvingKey::construct_lookup_read_counts(
+        Self::construct_lookup_read_counts(
             proving_key
                 .polynomials
                 .witness
@@ -81,6 +80,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
                 .unwrap(),
             &mut circuit,
             dyadic_circuit_size,
+            driver,
         );
 
         // Construct the public inputs array
@@ -102,7 +102,8 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     pub fn create_keys<
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
-        id: T::PartyID,
+        driver: &T,
+
         circuit: GenericUltraCircuitBuilder<P, U>,
         crs: Crs<P>,
     ) -> HonkProofResult<(Self, VerifyingKey<P>)> {
@@ -111,7 +112,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         };
         let verifier_crs = crs.g2_x;
 
-        let pk = ProvingKey::create(id, circuit, prover_crs)?;
+        let pk = ProvingKey::create(driver, circuit, prover_crs)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -221,8 +222,8 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         let memory_read_records = plain_key.memory_read_records.to_owned();
         let memory_write_records = plain_key.memory_write_records.to_owned();
 
-        if shares.len() != circuit_size as usize * 4 {
-            return Err(eyre::eyre!("Share length is not 4 times circuit size"));
+        if shares.len() != circuit_size as usize * 6 {
+            return Err(eyre::eyre!("Share length is not 6 times circuit size"));
         }
 
         let mut polynomials = Polynomials::default();
@@ -234,24 +235,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         {
             *des = src.to_owned();
         }
-        for (src, des) in plain_key
-            .polynomials
-            .witness
-            .lookup_read_counts_and_tags()
-            .iter()
-            .zip(
-                polynomials
-                    .witness
-                    .lookup_read_counts_and_tags_mut()
-                    .iter_mut(),
-            )
-        {
-            *des = src.to_owned();
-        }
 
         for (src, des) in shares
             .chunks_exact(circuit_size as usize)
-            .zip(polynomials.witness.get_wires_mut().iter_mut())
+            .zip(polynomials.witness.iter_mut())
         {
             *des = Polynomial::new(src.to_owned());
         }
@@ -267,5 +254,44 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             memory_write_records,
             phantom: PhantomData,
         })
+    }
+
+    // TODO this function needs to be adapted for the shared lookup tables
+    fn construct_lookup_read_counts<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        witness: &mut [Polynomial<U::ArithmeticShare>; 2],
+        circuit: &mut GenericUltraCircuitBuilder<P, U>,
+        dyadic_circuit_size: usize,
+        driver: &T,
+    ) {
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
+        let offset = dyadic_circuit_size - circuit.get_tables_size();
+
+        let mut table_offset = offset; // offset of the present table in the table polynomials
+                                       // loop over all tables used in the circuit; each table contains data about the lookups made on it
+        for table in circuit.lookup_tables.iter_mut() {
+            table.initialize_index_map();
+
+            for gate_data in table.lookup_gates.iter() {
+                // convert lookup gate data to an array of three field elements, one for each of the 3 columns
+                let table_entry = gate_data.to_table_components(table.use_twin_keys);
+
+                // find the index of the entry in the table
+                let index_in_table = table.index_map[table_entry];
+
+                // increment the read count at the corresponding index in the full polynomial
+                let index_in_poly = table_offset + index_in_table;
+
+                // TACEO TODO THIS HAS TO BE ADAPTED FOR LOOKUPS
+                witness[0][index_in_poly] =
+                    driver.add_with_public(P::ScalarField::one(), witness[0][index_in_poly]); // Read count
+                witness[1][index_in_poly] =
+                    T::promote_to_trivial_share(driver.get_party_id(), P::ScalarField::one());
+                // Read Tag
+                // tag is 1 if entry has been read 1 or more times
+            }
+            table_offset += table.len(); // set the offset of the next table within the polynomials
+        }
     }
 }
