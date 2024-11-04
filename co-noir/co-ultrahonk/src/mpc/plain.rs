@@ -1,17 +1,11 @@
-use std::cmp::max;
-
 use super::NoirUltraHonkProver;
 use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::Field;
 use ark_ff::UniformRand;
+use ark_poly::{univariate::DensePolynomial, Polynomial};
 use num_traits::Zero;
 use rand::thread_rng;
-use rayon::{
-    iter::{IndexedParallelIterator, ParallelIterator},
-    slice::ParallelSlice,
-};
-const MIN_ELEMENTS_PER_THREAD: usize = 16;
 
 pub struct PlainUltraHonkDriver;
 
@@ -159,30 +153,12 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     fn eval_poly(
         &mut self,
         coeffs: &[Self::ArithmeticShare],
-        point: <P as Pairing>::ScalarField,
+        point: P::ScalarField,
     ) -> Self::ArithmeticShare {
-        if point.is_zero() {
-            return coeffs[0];
-        }
-
-        let num_cpus_available = rayon::current_num_threads();
-        let num_coeffs = coeffs.len();
-        let num_elem_per_thread = max(num_coeffs / num_cpus_available, MIN_ELEMENTS_PER_THREAD);
-
-        let result = coeffs
-            .par_chunks(num_elem_per_thread)
-            .enumerate()
-            .map(|(i, chunk)| {
-                let mut thread_result = chunk
-                    .iter()
-                    .rfold(<P as Pairing>::ScalarField::zero(), move |result, coeff| {
-                        result * point + *coeff
-                    });
-
-                thread_result *= point.pow([(i * num_elem_per_thread) as u64]);
-                thread_result
-            })
-            .sum();
-        result
+        // TODO: here we clone...
+        let poly = DensePolynomial {
+            coeffs: coeffs.to_vec(),
+        };
+        poly.evaluate(&point)
     }
 }

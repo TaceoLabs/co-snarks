@@ -116,11 +116,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         let r_challenge: P::ScalarField = transcript.get_challenge::<P>("Gemini:r".to_string());
 
-        let claims = Self::compute_fold_polynomial_evaluations(
-            log_n as usize,
-            fold_polynomials,
-            r_challenge,
-        )?;
+        let claims = Self::compute_fold_polynomial_evaluations(fold_polynomials, r_challenge)?;
         for l in 1..=CONST_PROOF_SIZE_LOG_N {
             if l < claims.len() && l <= log_n as usize {
                 transcript.send_fr_to_verifier::<P>(
@@ -210,12 +206,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
      * @param r_challenge univariate opening challenge
      */
     pub(crate) fn compute_fold_polynomial_evaluations(
-        num_variables: usize,
         mut fold_polynomials: Vec<Polynomial<P::ScalarField>>,
         r_challenge: P::ScalarField,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<P::ScalarField>>> {
         tracing::trace!("Compute fold polynomial evaluations");
 
+        let num_variables = fold_polynomials.len() - 1;
         let batched_f = &mut fold_polynomials.remove(0); // F(X) = ∑ⱼ ρʲ fⱼ(X)
         let batched_g = &mut fold_polynomials.remove(0); // G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
 
@@ -246,10 +242,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let mut opening_claims: Vec<ShpleminiOpeningClaim<P::ScalarField>> =
             Vec::with_capacity(num_variables + 1);
 
+        let mut fold_polynomials_iter = fold_polynomials.into_iter();
+
         // Compute first opening pair {r, A₀(r)}
-        let evaluation = fold_polynomials[0].eval_poly(r_challenge);
+        let fold_poly = fold_polynomials_iter.next().expect("Is Present");
+        let evaluation = fold_poly.eval_poly(r_challenge);
         opening_claims.push(ShpleminiOpeningClaim {
-            polynomial: fold_polynomials[0].clone(),
+            polynomial: fold_poly,
             opening_pair: OpeningPair {
                 challenge: r_challenge,
                 evaluation,
@@ -257,12 +256,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         });
 
         // Compute the remaining m opening pairs {−r^{2ˡ}, Aₗ(−r^{2ˡ})}, l = 0, ..., m-1
-        for l in 0..num_variables {
-            let evaluation = fold_polynomials[l + 1].eval_poly(-r_squares[l]);
+        for (r_square, fold_poly) in r_squares.into_iter().zip(fold_polynomials_iter) {
+            let evaluation = fold_poly.eval_poly(-r_square);
             opening_claims.push(ShpleminiOpeningClaim {
-                polynomial: fold_polynomials[l + 1].clone(),
+                polynomial: fold_poly,
                 opening_pair: OpeningPair {
-                    challenge: -r_squares[l],
+                    challenge: -r_square,
                     evaluation,
                 },
             });

@@ -204,7 +204,7 @@ impl<F: PrimeField> Polynomial<F> {
     // This is copied from mpc-core/src/protocols/rep3/poly.rs
     // This is copied from
     // https://docs.rs/ark-poly/latest/src/ark_poly/polynomial/univariate/dense.rs.html#56
-    pub fn eval_poly(&mut self, point: F) -> F {
+    pub fn eval_poly(&self, point: F) -> F {
         if point.is_zero() {
             return self.coefficients[0];
         }

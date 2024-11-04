@@ -188,11 +188,7 @@ impl<
 
         let r_challenge: P::ScalarField = transcript.get_challenge::<P>("Gemini:r".to_string());
 
-        let claims = self.compute_fold_polynomial_evaluations(
-            log_n as usize,
-            fold_polynomials,
-            r_challenge,
-        )?;
+        let claims = self.compute_fold_polynomial_evaluations(fold_polynomials, r_challenge)?;
         let mut commitments_claims = Vec::with_capacity(log_n as usize);
         commitments_claims.extend(
             claims
@@ -296,18 +292,17 @@ impl<
      */
     pub(crate) fn compute_fold_polynomial_evaluations(
         &mut self,
-        num_variables: usize,
         mut fold_polynomials: Vec<SharedPolynomial<T, P>>,
         r_challenge: P::ScalarField,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<T, P>>> {
         tracing::trace!("Compute fold polynomial evaluations");
 
+        let num_variables = fold_polynomials.len() - 1;
         let batched_f = &mut fold_polynomials.remove(0); // F(X) = ∑ⱼ ρʲ fⱼ(X)
         let batched_g = &mut fold_polynomials.remove(0); // G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
 
         // Compute univariate opening queries rₗ = r^{2ˡ} for l = 0, 1, ..., m-1
-        let r_squares: Vec<P::ScalarField> =
-            Self::powers_of_evaluation_challenge(r_challenge, &num_variables);
+        let r_squares = Self::powers_of_evaluation_challenge(r_challenge, &num_variables);
 
         // Compute G / r and update batched_G
         let r_inv = r_challenge.inverse().unwrap();
@@ -336,12 +331,14 @@ impl<
         let mut opening_claims: Vec<ShpleminiOpeningClaim<T, P>> =
             Vec::with_capacity(num_variables + 1);
 
+        let mut fold_polynomials_iter = fold_polynomials.into_iter();
+
         // Compute first opening pair {r, A₀(r)}
-        let evaluation = self
-            .driver
-            .eval_poly(fold_polynomials[0].as_ref(), r_challenge);
+        let fold_poly = fold_polynomials_iter.next().expect("Is Present");
+        let evaluation: <T as NoirUltraHonkProver<P>>::ArithmeticShare =
+            self.driver.eval_poly(fold_poly.as_ref(), r_challenge);
         opening_claims.push(ShpleminiOpeningClaim {
-            polynomial: fold_polynomials[0].clone(),
+            polynomial: fold_poly,
             opening_pair: ShpleminiOpeningPair {
                 challenge: r_challenge,
                 evaluation,
@@ -349,14 +346,12 @@ impl<
         });
 
         // Compute the remaining m opening pairs {−r^{2ˡ}, Aₗ(−r^{2ˡ})}, l = 0, ..., m-1
-        for l in 0..num_variables {
-            let evaluation = self
-                .driver
-                .eval_poly(fold_polynomials[l + 1].as_ref(), -r_squares[l]);
+        for (r_square, fold_poly) in r_squares.into_iter().zip(fold_polynomials_iter) {
+            let evaluation = self.driver.eval_poly(fold_poly.as_ref(), -r_square);
             opening_claims.push(ShpleminiOpeningClaim {
-                polynomial: fold_polynomials[l + 1].clone(),
+                polynomial: fold_poly,
                 opening_pair: ShpleminiOpeningPair {
-                    challenge: -r_squares[l],
+                    challenge: -r_square,
                     evaluation,
                 },
             });
