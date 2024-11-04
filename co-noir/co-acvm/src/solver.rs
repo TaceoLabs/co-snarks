@@ -26,6 +26,7 @@ use crate::mpc::{
 pub(crate) const CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounded { width: 4 };
 
 mod assert_zero_solver;
+mod blackbox_solver;
 mod memory_solver;
 pub mod partial_abi;
 
@@ -363,7 +364,8 @@ where
                     op,
                     predicate,
                 } => self.solve_memory_op(*block_id, op, predicate.to_owned())?,
-                _ => todo!("non assert zero opcode detected, not supported yet"),
+                Opcode::BlackBoxFuncCall(bb_func) => self.solve_blackbox(bb_func)?,
+                _ => todo!("opcode {} detected, not supported yet", opcode),
             }
         }
         tracing::trace!("we are done! Opening results...");

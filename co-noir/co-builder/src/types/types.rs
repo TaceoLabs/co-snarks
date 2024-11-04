@@ -97,30 +97,30 @@ pub(crate) struct BlockConstraint<F: PrimeField> {
 
 #[derive(Default)]
 pub(crate) struct AcirFormatOriginalOpcodeIndices {
-    // pub(crate)logic_constraints: Vec<usize>,
-    // pub(crate)range_constraints: Vec<usize>,
-    // pub(crate)aes128_constraints: Vec<usize>,
-    // pub(crate)sha256_constraints: Vec<usize>,
-    // pub(crate)sha256_compression: Vec<usize>,
-    // pub(crate)schnorr_constraints: Vec<usize>,
-    // pub(crate)ecdsa_k1_constraints: Vec<usize>,
-    // pub(crate)ecdsa_r1_constraints: Vec<usize>,
-    // pub(crate)blake2s_constraints: Vec<usize>,
-    // pub(crate)blake3_constraints: Vec<usize>,
-    // pub(crate)keccak_constraints: Vec<usize>,
-    // pub(crate)keccak_permutations: Vec<usize>,
-    // pub(crate)pedersen_constraints: Vec<usize>,
-    // pub(crate)pedersen_hash_constraints: Vec<usize>,
-    // pub(crate)poseidon2_constraints: Vec<usize>,
-    // pub(crate)multi_scalar_mul_constraints: Vec<usize>,
-    // pub(crate)ec_add_constraints: Vec<usize>,
-    // pub(crate)recursion_constraints: Vec<usize>,
-    // pub(crate)honk_recursion_constraints: Vec<usize>,
-    // pub(crate)avm_recursion_constraints: Vec<usize>,
-    // pub(crate)ivc_recursion_constraints: Vec<usize>,
-    // pub(crate)bigint_from_le_bytes_constraints: Vec<usize>,
-    // pub(crate)bigint_to_le_bytes_constraints: Vec<usize>,
-    // pub(crate)bigint_operations: Vec<usize>,
+    // pub(crate) logic_constraints: Vec<usize>,
+    pub(crate) range_constraints: Vec<usize>,
+    // pub(crate) aes128_constraints: Vec<usize>,
+    // pub(crate) sha256_constraints: Vec<usize>,
+    // pub(crate) sha256_compression: Vec<usize>,
+    // pub(crate) schnorr_constraints: Vec<usize>,
+    // pub(crate) ecdsa_k1_constraints: Vec<usize>,
+    // pub(crate) ecdsa_r1_constraints: Vec<usize>,
+    // pub(crate) blake2s_constraints: Vec<usize>,
+    // pub(crate) blake3_constraints: Vec<usize>,
+    // pub(crate) keccak_constraints: Vec<usize>,
+    // pub(crate) keccak_permutations: Vec<usize>,
+    // pub(crate) pedersen_constraints: Vec<usize>,
+    // pub(crate) pedersen_hash_constraints: Vec<usize>,
+    // pub(crate) poseidon2_constraints: Vec<usize>,
+    // pub(crate) multi_scalar_mul_constraints: Vec<usize>,
+    // pub(crate) ec_add_constraints: Vec<usize>,
+    // pub(crate) recursion_constraints: Vec<usize>,
+    // pub(crate) honk_recursion_constraints: Vec<usize>,
+    // pub(crate) avm_recursion_constraints: Vec<usize>,
+    // pub(crate) ivc_recursion_constraints: Vec<usize>,
+    // pub(crate) bigint_from_le_bytes_constraints: Vec<usize>,
+    // pub(crate) bigint_to_le_bytes_constraints: Vec<usize>,
+    // pub(crate) bigint_operations: Vec<usize>,
     pub(crate) assert_equalities: Vec<usize>,
     pub(crate) poly_triple_constraints: Vec<usize>,
     pub(crate) quad_constraints: Vec<usize>,
@@ -364,6 +364,11 @@ impl GateCounter {
             gates_per_opcode[opcode_index] = self.compute_diff(builder);
         }
     }
+}
+
+pub(crate) struct RangeConstraint {
+    pub(crate) witness: u32,
+    pub(crate) num_bits: u32,
 }
 
 pub(crate) struct RecursionConstraint {
