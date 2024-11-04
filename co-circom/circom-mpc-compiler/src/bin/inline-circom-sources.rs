@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::File,
     io::{self, BufRead, BufReader, BufWriter},
     path::{Path, PathBuf},
@@ -6,6 +7,7 @@ use std::{
 
 use clap::Parser;
 use eyre::{bail, Context};
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -25,7 +27,7 @@ fn main() -> eyre::Result<()> {
 
     let mut output_file = BufWriter::new(File::create(&args.output)?);
 
-    let mut inlined_files = vec![];
+    let mut inlined_files = HashMap::new();
 
     map_file_to_output(
         args.input,
@@ -35,19 +37,21 @@ fn main() -> eyre::Result<()> {
         &mut inlined_files,
     )?;
 
-    for inlined_file in &inlined_files {
+    for inlined_file in inlined_files.values() {
         println!("Inlined file: {}", inlined_file.display());
     }
 
     Ok(())
 }
 
+type Hash = [u8; 32];
+
 fn map_file_to_output(
     input_file: impl AsRef<Path>,
     output: &mut impl io::Write,
     link_library: Vec<PathBuf>,
     supress_pragma: bool,
-    already_inlined: &mut Vec<PathBuf>,
+    already_inlined: &mut HashMap<Hash, PathBuf>,
 ) -> eyre::Result<()> {
     let input_file = BufReader::new(
         File::open(input_file.as_ref())
@@ -72,10 +76,11 @@ fn map_file_to_output(
             if !found {
                 bail!("Could not find imported file: {}", file);
             }
-            if already_inlined.contains(&rel_path) {
+            let file_hash = hash_file(&rel_path)?;
+            if already_inlined.contains_key(&file_hash) {
                 continue;
             }
-            already_inlined.push(rel_path.clone());
+            already_inlined.insert(file_hash, rel_path.clone());
             writeln!(output, "// Start of inlined file: {}", path)?;
             map_file_to_output(
                 rel_path,
@@ -90,4 +95,18 @@ fn map_file_to_output(
         }
     }
     Ok(())
+}
+
+fn hash_file(file_name: impl AsRef<Path>) -> eyre::Result<Hash> {
+    let mut hasher = Sha256::new();
+    let mut file = BufReader::new(File::open(file_name.as_ref()).with_context(|| {
+        format!(
+            "while trying to open file {} for hashing",
+            file_name.as_ref().display()
+        )
+    })?);
+
+    std::io::copy(&mut file, &mut hasher)
+        .with_context(|| format!("while hashing file {}", file_name.as_ref().display()))?;
+    Ok(hasher.finalize().into())
 }
