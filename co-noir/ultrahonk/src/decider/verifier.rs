@@ -36,7 +36,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     // Note: The pairing check can be expressed naturally as
     // e(C - v * [1]_1, [1]_2) = e([W]_1, [X - r]_2) where C =[p(X)]_1. This can be rearranged (e.g. see the plonk
     // paper) as e(C + r*[W]_1 - v*[1]_1, [1]_2) * e(-[W]_1, [X]_2) = 1, or e(P_0, [1]_2) * e(P_1, [X]_2) = 1
-    #[allow(dead_code)]
+    #[allow(unused)]
     pub(crate) fn reduce_verify_zm(
         opening_pair: ZeroMorphVerifierOpeningClaim<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
@@ -67,7 +67,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         opening_pair.commitments.push(quotient_commitment);
         opening_pair.scalars.push(opening_pair.challenge);
         let p_1 = -P::G1::from(quotient_commitment);
-        let p_0: P::G1 = Utils::msm::<P>(&opening_pair.scalars, &opening_pair.commitments)?;
+        let p_0 = Utils::msm::<P>(&opening_pair.scalars, &opening_pair.commitments)?;
 
         Ok((p_0.into(), p_1.into()))
     }
@@ -97,12 +97,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             tracing::trace!("Sumcheck failed");
             return Ok(false);
         }
-
-        // let opening_claim = self.zeromorph_verify(
-        //     &mut transcript,
-        //     circuit_size,
-        //     sumcheck_output.multivariate_challenge,
-        // )?;
 
         let mut opening_claim = self.compute_batch_opening_claim(
             circuit_size,

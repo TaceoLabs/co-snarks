@@ -8,4 +8,5 @@ pub(crate) mod types;
 pub(crate) mod univariate;
 pub(crate) mod verifier;
 #[allow(unused)]
+// Zeromorph was replaced by Shplemini
 pub(crate) mod zeromorph;
