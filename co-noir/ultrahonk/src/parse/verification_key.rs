@@ -135,7 +135,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
     }
     // BB for Keccak doesn't use the recursive stuff in the vk
     pub fn to_buffer_keccak(&self) -> Vec<u8> {
-        let mut buffer = Vec::with_capacity(Self::SER_FULL_SIZE);
+        let mut buffer = Vec::with_capacity(Self::SER_COMPRESSED_SIZE);
 
         Serialize::<P::ScalarField>::write_u64(&mut buffer, self.circuit_size);
         Serialize::<P::ScalarField>::write_u64(&mut buffer, self.log_circuit_size);
@@ -146,7 +146,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
             Self::write_g1_element(&mut buffer, el, true);
         }
 
-        debug_assert_eq!(buffer.len(), Self::SER_FULL_SIZE);
+        debug_assert_eq!(buffer.len(), Self::SER_COMPRESSED_SIZE);
         buffer
     }
 
@@ -188,7 +188,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
             *el = Self::read_g1_element(buf, &mut offset, true);
         }
 
-        // debug_assert_eq!(offset, Self::SER_FULL_SIZE);
+        debug_assert!(offset == Self::SER_FULL_SIZE || offset == Self::SER_COMPRESSED_SIZE);
 
         Ok(Self {
             circuit_size,
