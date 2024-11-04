@@ -66,7 +66,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let quotient_commitment = transcript.receive_point_from_prover::<P>("KZG:W".to_string())?;
         opening_pair.commitments.push(quotient_commitment);
         opening_pair.scalars.push(opening_pair.challenge);
-        let p_1 = -P::G1::from(quotient_commitment);
+        let p_1 = -quotient_commitment.into_group();
         let p_0 = Utils::msm::<P>(&opening_pair.scalars, &opening_pair.commitments)?;
 
         Ok((p_0.into(), p_1.into()))
