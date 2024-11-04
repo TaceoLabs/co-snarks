@@ -30,7 +30,6 @@ pub struct AcirFormat<F: PrimeField> {
     pub public_inputs: Vec<u32>,
     pub(crate) range_constraints: Vec<RangeConstraint>,
     //  std::vector<LogicConstraint> logic_constraints;
-    pub(crate) range_constraints: Vec<RangeConstraint>,
     //  std::vector<AES128Constraint> aes128_constraints;
     //  std::vector<Sha256Constraint> sha256_constraints;
     //  std::vector<Sha256Compression> sha256_compression;

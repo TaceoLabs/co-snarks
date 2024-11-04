@@ -35,6 +35,25 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
 
+    /// Adds a public value to an ACVM-type: secret + public
+    fn acvm_add_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType;
+
+    /// Subtracts a public value from an ACVM-type: secret - public
+    fn acvm_sub_by_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType;
+
+    /// Subtracts two shared ACVM-type values: secret - secret
+    fn acvm_sub_by_shared(
+        &mut self,
+        share_1: Self::AcvmType,
+        share_2: Self::AcvmType,
+    ) -> Self::AcvmType;
+    /// Adds two shared ACVM-type values: secret - secret
+    fn acvm_add_by_shared(
+        &mut self,
+        share_1: Self::AcvmType,
+        share_2: Self::AcvmType,
+    ) -> Self::AcvmType;
+
     /// Multiply an ACVM-types with a public value: \[c\] = public * \[secret\].
     fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType;
 

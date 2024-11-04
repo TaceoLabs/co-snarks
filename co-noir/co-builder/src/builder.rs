@@ -1989,7 +1989,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 q_o: P::ScalarField::zero(),
                 q_c: P::ScalarField::zero(),
             });
-            self.create_new_range_constraint(variable_index, ((1u64 << num_bits) - 1).into());
+            self.create_new_range_constraint(variable_index, ((1u64 << num_bits) - 1));
         } else {
             self.decompose_into_default_range(
                 driver,
@@ -2105,7 +2105,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 num_bits as usize,
                 target_range_bitnum as usize,
             )?;
-            decomp.into_iter().map(|x| T::AcvmType::from(x)).collect()
+            decomp.into_iter().map(T::AcvmType::from).collect()
         } else {
             let mut sublimbs = Vec::with_capacity(num_limbs as usize);
             let mut accumulator: BigUint = T::get_public(&val)
@@ -2120,13 +2120,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             sublimbs
         };
 
-        for (i, &sublimb) in sublimbs.iter().enumerate() {
-            let limb_idx = self.add_variable(sublimb);
+        for (i, sublimb) in sublimbs.iter().enumerate() {
+            let limb_idx = self.add_variable(sublimb.clone());
             sublimb_indices.push(limb_idx);
             if i == sublimbs.len() - 1 && has_remainder_bits {
                 self.create_new_range_constraint(limb_idx, last_limb_range);
             } else {
-                self.create_new_range_constraint(limb_idx, sublimb_mask.into());
+                self.create_new_range_constraint(limb_idx, sublimb_mask);
             }
         }
 
@@ -2144,17 +2144,17 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
             let round_sublimbs = [
                 if real_limbs[0] {
-                    sublimbs[3 * i as usize]
+                    sublimbs[3 * i as usize].clone()
                 } else {
                     T::public_zero()
                 },
                 if real_limbs[1] {
-                    sublimbs[(3 * i + 1) as usize]
+                    sublimbs[(3 * i + 1) as usize].clone()
                 } else {
                     T::public_zero()
                 },
                 if real_limbs[2] {
-                    sublimbs[(3 * i + 2) as usize]
+                    sublimbs[(3 * i + 2) as usize].clone()
                 } else {
                     T::public_zero()
                 },
@@ -2183,11 +2183,29 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 target_range_bitnum * (3 * i + 1),
                 target_range_bitnum * (3 * i + 2),
             ];
+            let term0 = T::acvm_mul_with_public(
+                driver,
+                P::ScalarField::from(1u64 << shifts[0]),
+                round_sublimbs[0].clone(),
+            );
 
-            let new_accumulator = accumulator
-                - (num_bigint::BigUint::from(round_sublimbs[0]) << shifts[0])
-                - (num_bigint::BigUint::from(round_sublimbs[1]) << shifts[1])
-                - (num_bigint::BigUint::from(round_sublimbs[2]) << shifts[2]);
+            let term1 = T::acvm_mul_with_public(
+                driver,
+                P::ScalarField::from(1u64 << shifts[1]),
+                round_sublimbs[1].clone(),
+            );
+
+            let sub1 = T::acvm_sub_by_shared(driver, term0, term1);
+
+            let term2 = T::acvm_mul_with_public(
+                driver,
+                P::ScalarField::from(1u64 << shifts[2]),
+                round_sublimbs[2].clone(),
+            );
+
+            let subtrahend = T::acvm_sub_by_shared(driver, sub1, term2);
+
+            let new_accumulator = T::acvm_sub_by_shared(driver, accumulator.clone(), subtrahend);
 
             self.create_big_add_gate(
                 &AddQuad {
@@ -2204,8 +2222,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 i != num_limb_triples - 1,
             );
 
-            accumulator_idx = self.put_constant_variable(new_accumulator.clone().into());
-            accumulator = new_accumulator;
+            accumulator_idx = self.add_variable(new_accumulator.clone());
+            let accumulator = new_accumulator;
         }
 
         Ok(sublimb_indices)

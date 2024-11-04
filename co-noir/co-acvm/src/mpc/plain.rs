@@ -107,4 +107,28 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
         todo!()
     }
+
+    fn acvm_add_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
+        public + secret
+    }
+
+    fn acvm_sub_by_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
+        secret - public
+    }
+
+    fn acvm_sub_by_shared(
+        &mut self,
+        share_1: Self::AcvmType,
+        share_2: Self::AcvmType,
+    ) -> Self::AcvmType {
+        share_1 - share_2
+    }
+
+    fn acvm_add_by_shared(
+        &mut self,
+        share_1: Self::AcvmType,
+        share_2: Self::AcvmType,
+    ) -> Self::AcvmType {
+        share_1 + share_2
+    }
 }

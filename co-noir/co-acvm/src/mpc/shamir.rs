@@ -248,4 +248,66 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
         panic!("functionality decompose_arithmetic not feasible for Shamir")
     }
+
+    fn acvm_add_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
+        match secret {
+            ShamirAcvmType::Public(secret) => ShamirAcvmType::Public(public + secret),
+            ShamirAcvmType::Shared(secret) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(secret, public))
+            }
+        }
+    }
+
+    fn acvm_sub_by_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
+        match secret {
+            ShamirAcvmType::Public(secret) => ShamirAcvmType::Public(secret - public),
+            ShamirAcvmType::Shared(secret) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(secret, -public))
+            }
+        }
+    }
+
+    fn acvm_sub_by_shared(
+        &mut self,
+        share_1: Self::AcvmType,
+        share_2: Self::AcvmType,
+    ) -> Self::AcvmType {
+        match (share_1, share_2) {
+            (ShamirAcvmType::Public(share_1), ShamirAcvmType::Public(share_2)) => {
+                ShamirAcvmType::Public(share_1 - share_2)
+            }
+            (ShamirAcvmType::Public(share_1), ShamirAcvmType::Shared(share_2)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(-share_2, share_1))
+            }
+            (ShamirAcvmType::Shared(share_1), ShamirAcvmType::Public(share_2)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(share_1, -share_2))
+            }
+            (ShamirAcvmType::Shared(share_1), ShamirAcvmType::Shared(share_2)) => {
+                let result = arithmetic::sub(share_1, share_2);
+                ShamirAcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn acvm_add_by_shared(
+        &mut self,
+        share_1: Self::AcvmType,
+        share_2: Self::AcvmType,
+    ) -> Self::AcvmType {
+        match (share_1, share_2) {
+            (ShamirAcvmType::Public(share_1), ShamirAcvmType::Public(share_2)) => {
+                ShamirAcvmType::Public(share_1 + share_2)
+            }
+            (ShamirAcvmType::Public(share_1), ShamirAcvmType::Shared(share_2)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(share_2, share_1))
+            }
+            (ShamirAcvmType::Shared(share_1), ShamirAcvmType::Public(share_2)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(share_1, share_2))
+            }
+            (ShamirAcvmType::Shared(share_1), ShamirAcvmType::Shared(share_2)) => {
+                let result = arithmetic::add(share_1, share_2);
+                ShamirAcvmType::Shared(result)
+            }
+        }
+    }
 }
