@@ -97,4 +97,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>> {
         Ok(a.to_vec())
     }
+
+    fn decompose_arithmetic(
+        &mut self,
+        input: Self::ArithmeticShare,
+        // io_context: &mut IoContext<N>,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        todo!()
+    }
 }

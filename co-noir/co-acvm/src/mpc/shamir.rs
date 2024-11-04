@@ -238,4 +238,14 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<F>> {
         arithmetic::open_vec(a, &mut self.protocol)
     }
+
+    fn decompose_arithmetic(
+        &mut self,
+        _input: Self::ArithmeticShare,
+        // io_context: &mut IoContext<N>,
+        _total_bit_size_per_field: usize,
+        _decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        panic!("functionality decompose_arithmetic not feasible for Shamir")
+    }
 }

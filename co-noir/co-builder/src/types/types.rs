@@ -365,7 +365,6 @@ impl GateCounter {
         }
     }
 }
-
 pub(crate) struct RangeConstraint {
     pub(crate) witness: u32,
     pub(crate) num_bits: u32,
@@ -1032,7 +1031,7 @@ pub(crate) enum ColumnIdx {
     C2,
     C3,
 }
-
+#[derive(Clone)]
 pub(crate) struct RangeList {
     pub(crate) target_range: u64,
     pub(crate) range_tag: u32,

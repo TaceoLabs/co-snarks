@@ -11,7 +11,8 @@ use ark_ff::{PrimeField, Zero};
 use std::collections::{HashMap, HashSet};
 
 use crate::types::types::{
-    AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, MulQuad, PolyTriple, RangeConstraint, RecursionConstraint
+    AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, MulQuad, PolyTriple,
+    RangeConstraint, RecursionConstraint,
 };
 
 #[derive(Default)]
@@ -27,6 +28,7 @@ pub struct AcirFormat<F: PrimeField> {
     pub(crate) num_acir_opcodes: u32,
     //  using PolyTripleConstraint = bb::poly_triple_<bb::curve::BN254::ScalarField>;
     pub public_inputs: Vec<u32>,
+    pub(crate) range_constraints: Vec<RangeConstraint>,
     //  std::vector<LogicConstraint> logic_constraints;
     pub(crate) range_constraints: Vec<RangeConstraint>,
     //  std::vector<AES128Constraint> aes128_constraints;

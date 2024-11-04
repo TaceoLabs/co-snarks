@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
-use mpc_core::protocols::rep3::arithmetic;
+use mpc_core::protocols::rep3::{arithmetic, yao};
 use mpc_core::{
     lut::LookupTableProvider,
     protocols::rep3::{
@@ -297,5 +297,19 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 
         Ok(cs)
+    }
+    fn decompose_arithmetic(
+        &mut self,
+        input: Self::ArithmeticShare,
+        // io_context: &mut IoContext<N>,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        yao::decompose_arithmetic(
+            input,
+            &mut self.io_context,
+            total_bit_size_per_field,
+            decompose_bit_size,
+        )
     }
 }

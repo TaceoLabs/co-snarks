@@ -92,4 +92,12 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     // TODO do we want this here?
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>>;
+
+    fn decompose_arithmetic(
+        &mut self,
+        input: Self::ArithmeticShare,
+        // io_context: &mut IoContext<N>,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
 }
