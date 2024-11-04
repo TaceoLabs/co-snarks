@@ -54,7 +54,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     pub fn get_fold_commitments(
-        _log_circuit_size: &u32,
+        _log_circuit_size: u32,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<Vec<P::G1Affine>> {
         let fold_commitments: Vec<_> = (0..CONST_PROOF_SIZE_LOG_N - 1)
@@ -64,7 +64,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     pub fn get_gemini_evaluations(
-        _log_circuit_size: &u32,
+        _log_circuit_size: u32,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<Vec<P::ScalarField>> {
         let gemini_evaluations: Vec<_> = (0..CONST_PROOF_SIZE_LOG_N)
@@ -75,11 +75,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     pub fn powers_of_evaluation_challenge(
         gemini_evaluation_challenge: P::ScalarField,
-        proof_size: &usize,
+        proof_size: usize,
     ) -> Vec<P::ScalarField> {
-        let mut squares = Vec::with_capacity(*proof_size);
+        let mut squares = Vec::with_capacity(proof_size);
         squares.push(gemini_evaluation_challenge);
-        for j in 1..*proof_size {
+        for j in 1..proof_size {
             squares.push(squares[j - 1] * squares[j - 1]);
         }
         squares
@@ -127,20 +127,20 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Process Gemini transcript data:
         // - Get Gemini commitments (com(A₁), com(A₂), … , com(Aₙ₋₁))
         let fold_commitments: Vec<P::G1Affine> =
-            Self::get_fold_commitments(&log_circuit_size, transcript)?;
+            Self::get_fold_commitments(log_circuit_size, transcript)?;
 
         // - Get Gemini evaluation challenge for Aᵢ, i = 0, … , d−1
         let gemini_evaluation_challenge = transcript.get_challenge::<P>("Gemini:r".to_string());
 
         // - Get evaluations (A₀(−r), A₁(−r²), ... , Aₙ₋₁(−r²⁽ⁿ⁻¹⁾))
         let gemini_evaluations: Vec<P::ScalarField> =
-            Self::get_gemini_evaluations(&log_circuit_size, transcript)?;
+            Self::get_gemini_evaluations(log_circuit_size, transcript)?;
 
         // - Compute vector (r, r², ... , r²⁽ⁿ⁻¹⁾), where n = log_circuit_size
         let gemini_eval_challenge_powers: Vec<P::ScalarField> =
             Self::powers_of_evaluation_challenge(
                 gemini_evaluation_challenge,
-                &CONST_PROOF_SIZE_LOG_N,
+                CONST_PROOF_SIZE_LOG_N,
             );
 
         // Process Shplonk transcript data:

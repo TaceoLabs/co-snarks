@@ -11,7 +11,7 @@ use crate::{
     types::{AllEntities, ProverCrs},
     Utils, CONST_PROOF_SIZE_LOG_N,
 };
-use ark_ec::Group;
+use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
@@ -102,15 +102,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             batched_to_be_shifted,
         );
 
-        for l in 0..CONST_PROOF_SIZE_LOG_N - 1 {
-            if l < log_n as usize - 1 {
-                let res = Utils::commit(&fold_polynomials[l + 2].coefficients, commitment_key)?;
-                transcript
-                    .send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res.into());
+        for l in 1..CONST_PROOF_SIZE_LOG_N {
+            if l < log_n as usize {
+                let res = Utils::commit(&fold_polynomials[l + 1].coefficients, commitment_key)?;
+                transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l), res.into());
             } else {
-                let res = P::G1::generator();
-                let label = format!("Gemini:FOLD_{}", l + 1);
-                transcript.send_point_to_verifier::<P>(label, res.into());
+                let res = P::G1Affine::generator();
+                let label = format!("Gemini:FOLD_{}", l);
+                transcript.send_point_to_verifier::<P>(label, res);
             }
         }
 
@@ -143,39 +142,31 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let mut fold_polynomials: Vec<Polynomial<P::ScalarField>> =
             Vec::with_capacity(num_variables + 1);
 
-        // F(X) = ∑ⱼ ρʲ fⱼ(X) and G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
-        fold_polynomials.push(batched_unshifted.clone());
-        fold_polynomials.push(batched_to_be_shifted.clone());
-        const OFFSET_TO_FOLDED: usize = 2; // Offset because of F and G
-
         // A₀(X) = F(X) + G↺(X) = F(X) + G(X)/X
         let mut a_0 = batched_unshifted.clone();
 
         // If proving the opening for translator, add a non-zero contribution of the batched concatenation polynomials
         a_0 += batched_to_be_shifted.shifted().as_ref(); //TACEO TODO is this always correct?
 
-        // Allocate everything before parallel computation
-        for l in 0..num_variables - 1 {
-            // size of the previous polynomial/2
-            let n_l = 1 << (num_variables - l - 1);
-
-            // A_l_fold = Aₗ₊₁(X) = (1-uₗ)⋅even(Aₗ)(X) + uₗ⋅odd(Aₗ)(X)
-            fold_polynomials.push(Polynomial::new_zero(n_l));
-        }
+        // F(X) = ∑ⱼ ρʲ fⱼ(X) and G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
+        fold_polynomials.push(batched_unshifted);
+        fold_polynomials.push(batched_to_be_shifted);
 
         // A_l = Aₗ(X) is the polynomial being folded
         // in the first iteration, we take the batched polynomial
         // in the next iteration, it is the previously folded one
         let mut a_l = a_0.coefficients;
-        for l in 0..num_variables - 1 {
+        debug_assert!(mle_opening_point.len() >= num_variables - 1);
+        for (l, u_l) in mle_opening_point
+            .into_iter()
+            .take(num_variables - 1)
+            .enumerate()
+        {
             // size of the previous polynomial/2
             let n_l = 1 << (num_variables - l - 1);
 
-            // Opening point is the same for all
-            let u_l = mle_opening_point[l];
-
             // A_l_fold = Aₗ₊₁(X) = (1-uₗ)⋅even(Aₗ)(X) + uₗ⋅odd(Aₗ)(X)
-            let a_l_fold = &mut fold_polynomials[l + OFFSET_TO_FOLDED].coefficients;
+            let mut a_l_fold = Polynomial::new_zero(n_l);
 
             // Process each element in a single-threaded manner
             for j in 0..n_l {
@@ -186,7 +177,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             }
 
             // Set Aₗ₊₁ = Aₗ for the next iteration
-            a_l = a_l_fold.to_vec();
+            fold_polynomials.push(a_l_fold.clone());
+            a_l = a_l_fold.coefficients;
         }
 
         fold_polynomials
@@ -217,7 +209,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Compute univariate opening queries rₗ = r^{2ˡ} for l = 0, 1, ..., m-1
         let r_squares: Vec<P::ScalarField> =
-            DeciderVerifier::<P, H>::powers_of_evaluation_challenge(r_challenge, &num_variables);
+            DeciderVerifier::<P, H>::powers_of_evaluation_challenge(r_challenge, num_variables);
 
         // Compute G / r and update batched_G
         let r_inv = r_challenge.inverse().unwrap();
@@ -298,7 +290,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         Ok(Self::compute_partially_evaluated_batched_quotient(
             opening_claims,
-            &batched_quotient,
+            batched_quotient,
             nu,
             z,
         ))
@@ -334,7 +326,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
      */
     pub(crate) fn compute_partially_evaluated_batched_quotient(
         opening_claims: Vec<ShpleminiOpeningClaim<P::ScalarField>>,
-        batched_quotient_q: &Polynomial<P::ScalarField>,
+        batched_quotient_q: Polynomial<P::ScalarField>,
         nu_challenge: P::ScalarField,
         z_challenge: P::ScalarField,
     ) -> ShpleminiOpeningClaim<P::ScalarField> {
@@ -350,11 +342,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             x.inverse_in_place();
         });
 
-        let mut g = batched_quotient_q.clone();
+        let mut g = batched_quotient_q;
 
         let mut current_nu = P::ScalarField::one();
-        for (idx, claim) in opening_claims.iter().enumerate() {
-            let mut tmp = claim.polynomial.clone();
+        for (idx, claim) in opening_claims.into_iter().enumerate() {
+            let mut tmp = claim.polynomial;
             tmp[0] -= claim.opening_pair.evaluation;
             let scaling_factor = current_nu * inverse_vanishing_evals[idx];
 
