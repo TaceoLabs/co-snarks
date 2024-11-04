@@ -1,14 +1,8 @@
 use ark_ff::PrimeField;
+use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial as _};
 use num_traits::Zero;
-use rayon::{
-    iter::{IndexedParallelIterator, ParallelIterator},
-    slice::ParallelSlice,
-};
-use std::{
-    cmp::max,
-    ops::{AddAssign, Index, IndexMut, SubAssign},
-};
-const MIN_ELEMENTS_PER_THREAD: usize = 16;
+use std::ops::{AddAssign, Index, IndexMut, SubAssign};
+
 #[derive(Clone, Debug, Default)]
 pub struct Polynomial<F> {
     pub coefficients: Vec<F>,
@@ -188,51 +182,11 @@ impl<F: PrimeField> Polynomial<F> {
     pub(crate) fn add_scaled(&mut self, src: &Polynomial<F>, scalar: &F) {
         self.add_scaled_slice(&src.coefficients, scalar);
     }
-    // This is copied from mpc-core/src/protocols/rep3/poly.rs
-    // This is copied from
-    // https://docs.rs/ark-poly/latest/src/ark_poly/polynomial/univariate/dense.rs.html#56
-    //
-    // The DensePolynomial implementation expects a Field, therefore we cannot use it.
-    // Therefore we copy it and call the respective rep3 operations
 
-    // Horner's method for polynomial evaluation
-    fn horner_evaluate(poly_coeffs: &[F], point: F) -> F {
-        poly_coeffs
-            .iter()
-            .rfold(F::zero(), move |result, coeff| result * point + *coeff)
-    }
-    // This is copied from mpc-core/src/protocols/rep3/poly.rs
-    // This is copied from
-    // https://docs.rs/ark-poly/latest/src/ark_poly/polynomial/univariate/dense.rs.html#56
     pub fn eval_poly(&self, point: F) -> F {
-        if point.is_zero() {
-            return self.coefficients[0];
-        }
-
-        // Horners method - parallel method
-        // compute the number of threads we will be using.
-        // TODO investigate how this behaves if we are in a rayon scope. Does this return all
-        // free threads or also the busy ones? Because then the chunks size is wrong...
-        let num_cpus_available = rayon::current_num_threads();
-        let num_coeffs = self.coefficients.len();
-        let num_elem_per_thread = max(num_coeffs / num_cpus_available, MIN_ELEMENTS_PER_THREAD);
-
-        // run Horners method on each thread as follows:
-        // 1) Split up the coefficients across each thread evenly.
-        // 2) Do polynomial evaluation via horner's method for the thread's coefficeints
-        // 3) Scale the result point^{thread coefficient start index}
-        // Then obtain the final polynomial evaluation by summing each threads result.
-        let result = self
-            .coefficients
-            .par_chunks(num_elem_per_thread)
-            .enumerate()
-            .map(|(i, chunk)| {
-                let mut thread_result = Self::horner_evaluate(chunk, point);
-                thread_result *= point.pow([(i * num_elem_per_thread) as u64]);
-                thread_result
-            })
-            .sum();
-        result
+        // TACEO TODO: here we clone...
+        let poly = DensePolynomial::from_coefficients_slice(&self.coefficients);
+        poly.evaluate(&point)
     }
 }
 

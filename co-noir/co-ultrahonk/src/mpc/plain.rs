@@ -3,6 +3,7 @@ use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::Field;
 use ark_ff::UniformRand;
+use ark_poly::DenseUVPolynomial;
 use ark_poly::{univariate::DensePolynomial, Polynomial};
 use num_traits::Zero;
 use rand::thread_rng;
@@ -156,9 +157,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         point: P::ScalarField,
     ) -> Self::ArithmeticShare {
         // TACEO TODO: here we clone...
-        let poly = DensePolynomial {
-            coeffs: coeffs.to_vec(),
-        };
+        let poly = DensePolynomial::from_coefficients_slice(coeffs);
         poly.evaluate(&point)
     }
 }
