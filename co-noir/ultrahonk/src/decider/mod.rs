@@ -7,4 +7,5 @@ pub(crate) mod sumcheck;
 pub(crate) mod types;
 pub(crate) mod univariate;
 pub(crate) mod verifier;
+#[allow(unused)]
 pub(crate) mod zeromorph;

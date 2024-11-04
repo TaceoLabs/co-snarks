@@ -155,7 +155,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         coeffs: &[Self::ArithmeticShare],
         point: P::ScalarField,
     ) -> Self::ArithmeticShare {
-        // TODO: here we clone...
+        // TACEO TODO: here we clone...
         let poly = DensePolynomial {
             coeffs: coeffs.to_vec(),
         };

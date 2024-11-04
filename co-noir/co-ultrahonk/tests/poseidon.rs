@@ -30,15 +30,13 @@ fn poseidon_plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(proof_fil
     let prover = CoUltraHonk::<_, _, H>::new(driver);
     let proof = prover.prove(proving_key).unwrap();
 
-    if !proof_file.is_empty() {
-        let proof_u8 = proof.to_buffer();
+    let proof_u8 = proof.to_buffer();
 
-        let read_proof_u8 = std::fs::read(proof_file).unwrap();
-        assert_eq!(proof_u8, read_proof_u8);
+    let read_proof_u8 = std::fs::read(proof_file).unwrap();
+    assert_eq!(proof_u8, read_proof_u8);
 
-        let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
-        assert_eq!(proof, read_proof);
-    }
+    let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
+    assert_eq!(proof, read_proof);
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);
