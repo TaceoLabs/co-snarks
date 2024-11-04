@@ -80,7 +80,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let mut squares = Vec::with_capacity(proof_size);
         squares.push(gemini_evaluation_challenge);
         for j in 1..proof_size {
-            squares.push(squares[j - 1] * squares[j - 1]);
+            squares.push(squares[j - 1].square());
         }
         squares
     }
@@ -126,22 +126,19 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Process Gemini transcript data:
         // - Get Gemini commitments (com(A₁), com(A₂), … , com(Aₙ₋₁))
-        let fold_commitments: Vec<P::G1Affine> =
-            Self::get_fold_commitments(log_circuit_size, transcript)?;
+        let fold_commitments = Self::get_fold_commitments(log_circuit_size, transcript)?;
 
         // - Get Gemini evaluation challenge for Aᵢ, i = 0, … , d−1
         let gemini_evaluation_challenge = transcript.get_challenge::<P>("Gemini:r".to_string());
 
         // - Get evaluations (A₀(−r), A₁(−r²), ... , Aₙ₋₁(−r²⁽ⁿ⁻¹⁾))
-        let gemini_evaluations: Vec<P::ScalarField> =
-            Self::get_gemini_evaluations(log_circuit_size, transcript)?;
+        let gemini_evaluations = Self::get_gemini_evaluations(log_circuit_size, transcript)?;
 
         // - Compute vector (r, r², ... , r²⁽ⁿ⁻¹⁾), where n = log_circuit_size
-        let gemini_eval_challenge_powers: Vec<P::ScalarField> =
-            Self::powers_of_evaluation_challenge(
-                gemini_evaluation_challenge,
-                CONST_PROOF_SIZE_LOG_N,
-            );
+        let gemini_eval_challenge_powers = Self::powers_of_evaluation_challenge(
+            gemini_evaluation_challenge,
+            CONST_PROOF_SIZE_LOG_N,
+        );
 
         // Process Shplonk transcript data:
         // - Get Shplonk batching challenge
@@ -221,7 +218,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Place the commitments to Gemini Aᵢ to the vector of commitments, compute the contributions from
         // Aᵢ(−r²ⁱ) for i=1, … , n−1 to the constant term accumulator, add corresponding scalars
         Self::batch_gemini_claims_received_from_prover(
-            &log_circuit_size,
+            log_circuit_size,
             &fold_commitments,
             &gemini_evaluations,
             &inverse_vanishing_evals,
@@ -233,11 +230,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Add contributions from A₀(r) and A₀(-r) to constant_term_accumulator:
         // - Compute A₀(r)
         let a_0_pos = Self::compute_gemini_batched_univariate_evaluation(
-            &log_circuit_size,
+            log_circuit_size,
             batched_evaluation,
             multivariate_challenge,
             gemini_eval_challenge_powers,
-            gemini_evaluations.clone(),
+            &gemini_evaluations,
         );
         // - Add A₀(r)/(z−r) to the constant term accumulator
         constant_term_accumulator += a_0_pos * inverse_vanishing_evals[0];
@@ -274,11 +271,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
      * @return Evaluation \f$ A_0(r) \f$.
      */
     pub fn compute_gemini_batched_univariate_evaluation(
-        num_variables: &u32,
+        num_variables: u32,
         mut batched_eval_accumulator: P::ScalarField,
         evaluation_point: Vec<P::ScalarField>,
         challenge_powers: Vec<P::ScalarField>,
-        fold_polynomial_evals: Vec<P::ScalarField>,
+        fold_polynomial_evals: &[P::ScalarField],
     ) -> P::ScalarField {
         tracing::trace!("Compute gemini batched univariate evaluation");
         let evals = fold_polynomial_evals;
@@ -291,15 +288,15 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             let u = &evaluation_point[l - 1];
             let eval_neg = &evals[l - 1];
             // Compute the numerator
-            let mut batched_eval_round_acc = (*challenge_power * batched_eval_accumulator
+            let mut batched_eval_round_acc = (batched_eval_accumulator * challenge_power
                 + *challenge_power * batched_eval_accumulator)
-                - (*eval_neg * (*challenge_power * (P::ScalarField::one() - *u) - *u));
+                - (*eval_neg * ((P::ScalarField::one() - *u) * challenge_power - *u));
             // Divide by the denominator
-            batched_eval_round_acc *= (*challenge_power * (P::ScalarField::one() - *u) + *u)
+            batched_eval_round_acc *= ((P::ScalarField::one() - *u) * challenge_power + *u)
                 .inverse()
                 .unwrap();
 
-            if l <= *num_variables as usize {
+            if l <= num_variables as usize {
                 batched_eval_accumulator = batched_eval_round_acc;
             }
         }
@@ -370,10 +367,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) {
         tracing::trace!("Batch multivariate opening claims");
         let mut current_batching_challenge = P::ScalarField::one();
-        let unshifted_evaluations: PolyF<P::ScalarField> =
-            Self::get_f_evaluations(&self.memory.claimed_evaluations);
-        let shifted_evaluations: PolyGShift<P::ScalarField> =
-            Self::get_g_shift_evaluations(&self.memory.claimed_evaluations);
+        let unshifted_evaluations = Self::get_f_evaluations(&self.memory.claimed_evaluations);
+        let shifted_evaluations = Self::get_g_shift_evaluations(&self.memory.claimed_evaluations);
         let unshifted_commitments = Self::get_f_comms(&self.memory.verifier_commitments);
         let to_be_shifted_commitments = Self::get_g_shift_comms(&self.memory.verifier_commitments);
         for (unshifted_commitment, unshifted_evaluation) in unshifted_commitments
@@ -466,7 +461,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
      * @param constant_term_accumulator The accumulator for the summands of the constant term.
      */
     fn batch_gemini_claims_received_from_prover(
-        log_circuit_size: &u32,
+        log_circuit_size: u32,
         fold_commitments: &[P::G1Affine],
         gemini_evaluations: &[P::ScalarField],
         inverse_vanishing_evals: &[P::ScalarField],
@@ -487,7 +482,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             // Update the batching challenge
             current_batching_challenge *= *shplonk_batching_challenge;
 
-            if j >= (*log_circuit_size as usize - 1) {
+            if j >= log_circuit_size as usize - 1 {
                 scaling_factor = P::ScalarField::zero();
             }
 
