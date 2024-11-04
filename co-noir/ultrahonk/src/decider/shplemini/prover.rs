@@ -146,7 +146,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let mut a_0 = batched_unshifted.clone();
 
         // If proving the opening for translator, add a non-zero contribution of the batched concatenation polynomials
-        a_0 += batched_to_be_shifted.shifted().as_ref(); //TACEO TODO is this always correct?
+        a_0 += batched_to_be_shifted.shifted().as_ref();
 
         // F(X) = ∑ⱼ ρʲ fⱼ(X) and G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
         fold_polynomials.push(batched_unshifted);

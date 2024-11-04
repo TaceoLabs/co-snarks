@@ -224,39 +224,31 @@ impl<
         let mut fold_polynomials: Vec<SharedPolynomial<T, P>> =
             Vec::with_capacity(num_variables + 1);
 
-        // F(X) = ∑ⱼ ρʲ fⱼ(X) and G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
-        fold_polynomials.push(batched_unshifted.clone());
-        fold_polynomials.push(batched_to_be_shifted.clone());
-        const OFFSET_TO_FOLDED: usize = 2; // Offset because of F and G
-
         // A₀(X) = F(X) + G↺(X) = F(X) + G(X)/X
         let mut a_0 = batched_unshifted.clone();
 
         // If proving the opening for translator, add a non-zero contribution of the batched concatenation polynomials
         a_0.add_assign_slice(&mut self.driver, batched_to_be_shifted.shifted());
 
-        // Allocate everything before parallel computation
-        for l in 0..num_variables - 1 {
-            // size of the previous polynomial/2
-            let n_l = 1 << (num_variables - l - 1);
-
-            // A_l_fold = Aₗ₊₁(X) = (1-uₗ)⋅even(Aₗ)(X) + uₗ⋅odd(Aₗ)(X)
-            fold_polynomials.push(SharedPolynomial::<T, P>::new_zero(n_l));
-        }
+        // F(X) = ∑ⱼ ρʲ fⱼ(X) and G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
+        fold_polynomials.push(batched_unshifted);
+        fold_polynomials.push(batched_to_be_shifted);
 
         // A_l = Aₗ(X) is the polynomial being folded
         // in the first iteration, we take the batched polynomial
         // in the next iteration, it is the previously folded one
         let mut a_l = a_0.coefficients;
-        for l in 0..num_variables - 1 {
+        debug_assert!(mle_opening_point.len() >= num_variables - 1);
+        for (l, u_l) in mle_opening_point
+            .into_iter()
+            .take(num_variables - 1)
+            .enumerate()
+        {
             // size of the previous polynomial/2
             let n_l = 1 << (num_variables - l - 1);
 
-            // Opening point is the same for all
-            let u_l = mle_opening_point[l];
-
             // A_l_fold = Aₗ₊₁(X) = (1-uₗ)⋅even(Aₗ)(X) + uₗ⋅odd(Aₗ)(X)
-            let a_l_fold = &mut fold_polynomials[l + OFFSET_TO_FOLDED].coefficients;
+            let mut a_l_fold = SharedPolynomial::<T, P>::new_zero(n_l);
 
             for j in 0..n_l {
                 // fold(Aₗ)[j] = (1-uₗ)⋅even(Aₗ)[j] + uₗ⋅odd(Aₗ)[j]
@@ -271,7 +263,8 @@ impl<
             }
 
             // Set Aₗ₊₁ = Aₗ for the next iteration
-            a_l = a_l_fold.to_vec();
+            fold_polynomials.push(a_l_fold.clone());
+            a_l = a_l_fold.coefficients;
         }
 
         fold_polynomials
@@ -319,7 +312,7 @@ impl<
 
         // A₀₋(X) = F(X) - G(X)/r, s.t. A₀₋(-r) = A₀(-r)
         let mut a_0_neg = batched_f.clone();
-        let mut batched_g_div_r_neg = batched_g_div_r.clone();
+        let mut batched_g_div_r_neg = batched_g_div_r;
         batched_g_div_r_neg.coefficients.iter_mut().for_each(|x| {
             *x = self.driver.neg(*x);
         });
@@ -390,7 +383,7 @@ impl<
 
         Ok(self.compute_partially_evaluated_batched_quotient(
             opening_claims,
-            &batched_quotient,
+            batched_quotient,
             nu,
             z,
         ))
@@ -427,7 +420,7 @@ impl<
     pub(crate) fn compute_partially_evaluated_batched_quotient(
         &mut self,
         opening_claims: Vec<ShpleminiOpeningClaim<T, P>>,
-        batched_quotient_q: &SharedPolynomial<T, P>,
+        batched_quotient_q: SharedPolynomial<T, P>,
         nu_challenge: P::ScalarField,
         z_challenge: P::ScalarField,
     ) -> ZeroMorphOpeningClaim<T, P> {
@@ -443,11 +436,11 @@ impl<
             x.inverse_in_place();
         });
 
-        let mut g = batched_quotient_q.clone();
+        let mut g = batched_quotient_q;
 
         let mut current_nu = P::ScalarField::one();
-        for (idx, claim) in opening_claims.iter().enumerate() {
-            let mut tmp = claim.polynomial.clone();
+        for (idx, claim) in opening_claims.into_iter().enumerate() {
+            let mut tmp = claim.polynomial;
             let claim_neg = self.driver.neg(claim.opening_pair.evaluation);
             tmp[0] = self.driver.add(tmp[0], claim_neg);
             let scaling_factor = current_nu * inverse_vanishing_evals[idx];
