@@ -23,7 +23,14 @@ struct Args {
 }
 
 fn main() -> eyre::Result<()> {
-    let args = Args::parse();
+    let mut args = Args::parse();
+
+    let input_file_path = args
+        .input
+        .parent()
+        .expect("input file to have a parent directory");
+
+    args.link_library.push(input_file_path.to_path_buf());
 
     let mut output_file = BufWriter::new(File::create(&args.output)?);
 
