@@ -167,20 +167,22 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
         let num_public_inputs = Serialize::<P::ScalarField>::read_u64(buf, &mut offset);
         let pub_inputs_offset = Serialize::<P::ScalarField>::read_u64(buf, &mut offset);
 
-        if size == Self::SER_FULL_SIZE {
+        let contains_recursive_proof = if size == Self::SER_FULL_SIZE {
             let contains_recursive_proof_u8 =
                 Serialize::<P::ScalarField>::read_u8(buf, &mut offset);
             if contains_recursive_proof_u8 > 1 {
                 return Err(HonkProofError::CorruptedKey);
             }
-            let contains_recursive_proof = contains_recursive_proof_u8 == 1;
 
             let mut recursive_proof_public_input_indices =
                 AggregationObjectPubInputIndices::default();
             for val in recursive_proof_public_input_indices.iter_mut() {
                 *val = Serialize::<P::ScalarField>::read_u32(buf, &mut offset);
             }
-        }
+            contains_recursive_proof_u8 == 1
+        } else {
+            false
+        };
 
         let mut commitments = PrecomputedEntities::default();
 
@@ -195,7 +197,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
             log_circuit_size,
             num_public_inputs,
             pub_inputs_offset,
-            contains_recursive_proof: false,
+            contains_recursive_proof,
             recursive_proof_public_input_indices: Default::default(),
             commitments,
         })
