@@ -58,7 +58,7 @@ pub enum SimplificationLevel {
 
 impl Default for SimplificationLevel {
     fn default() -> Self {
-        SimplificationLevel::O2(usize::MAX)
+        SimplificationLevel::O1
     }
 }
 
@@ -86,7 +86,7 @@ pub struct CompilerConfig {
 }
 
 fn default_version() -> String {
-    "2.0.0".to_owned()
+    "2.2.0".to_owned()
 }
 
 impl Default for CompilerConfig {
