@@ -286,7 +286,7 @@ impl<
         batched_polynomial
     }
 
-    fn get_f_polyomials(
+    fn get_f_polynomials_zm(
         polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
     ) -> PolyF<Vec<T::ArithmeticShare>, Vec<P::ScalarField>> {
         PolyF {
@@ -304,7 +304,7 @@ impl<
         }
     }
 
-    fn get_g_polyomials(
+    fn get_g_polynomials_zm(
         polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
     ) -> PolyG<Vec<T::ArithmeticShare>, Vec<P::ScalarField>> {
         let tables = [
@@ -337,7 +337,7 @@ impl<
         }
     }
 
-    fn compute_batched_polys(
+    fn compute_batched_polys_and_evals(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         claimed_evaluations: AllEntities<P::ScalarField, P::ScalarField>,
@@ -347,8 +347,8 @@ impl<
         SharedPolynomial<T, P>,
         P::ScalarField,
     ) {
-        let f_polynomials = Self::get_f_polyomials(&self.memory.polys);
-        let g_polynomials = Self::get_g_polyomials(&self.memory.polys);
+        let f_polynomials = Self::get_f_polynomials_zm(&self.memory.polys);
+        let g_polynomials = Self::get_g_polynomials_zm(&self.memory.polys);
         let f_evaluations = Self::get_f_evaluations(&claimed_evaluations);
         let g_shift_evaluations = Self::get_g_shift_evaluations(&claimed_evaluations);
 
@@ -456,8 +456,11 @@ impl<
         let log_n = Utils::get_msb32(circuit_size);
         let n = 1 << log_n;
 
-        let (f_batched, g_batched, batched_evaluation) =
-            self.compute_batched_polys(transcript, sumcheck_output.claimed_evaluations, n);
+        let (f_batched, g_batched, batched_evaluation) = self.compute_batched_polys_and_evals(
+            transcript,
+            sumcheck_output.claimed_evaluations,
+            n,
+        );
 
         // We don't have groups, so we skip a lot now
 

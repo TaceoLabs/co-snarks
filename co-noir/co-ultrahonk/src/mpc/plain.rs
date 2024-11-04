@@ -1,11 +1,12 @@
+use super::NoirUltraHonkProver;
 use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::Field;
 use ark_ff::UniformRand;
+use ark_poly::DenseUVPolynomial;
+use ark_poly::{univariate::DensePolynomial, Polynomial};
 use num_traits::Zero;
 use rand::thread_rng;
-
-use super::NoirUltraHonkProver;
 
 pub struct PlainUltraHonkDriver;
 
@@ -148,5 +149,15 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
         P::G1::msm_unchecked(points, scalars)
+    }
+
+    fn eval_poly(
+        &mut self,
+        coeffs: &[Self::ArithmeticShare],
+        point: P::ScalarField,
+    ) -> Self::ArithmeticShare {
+        // TACEO TODO: here we clone...
+        let poly = DensePolynomial::from_coefficients_slice(coeffs);
+        poly.evaluate(&point)
     }
 }

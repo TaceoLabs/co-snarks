@@ -1,6 +1,7 @@
 use ark_ff::PrimeField;
+use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial as _};
 use num_traits::Zero;
-use std::ops::{AddAssign, Index, IndexMut};
+use std::ops::{AddAssign, Index, IndexMut, SubAssign};
 
 #[derive(Clone, Debug, Default)]
 pub struct Polynomial<F> {
@@ -181,6 +182,12 @@ impl<F: PrimeField> Polynomial<F> {
     pub(crate) fn add_scaled(&mut self, src: &Polynomial<F>, scalar: &F) {
         self.add_scaled_slice(&src.coefficients, scalar);
     }
+
+    pub fn eval_poly(&self, point: F) -> F {
+        // TACEO TODO: here we clone...
+        let poly = DensePolynomial::from_coefficients_slice(&self.coefficients);
+        poly.evaluate(&point)
+    }
 }
 
 impl<F> Index<usize> for Polynomial<F> {
@@ -205,6 +212,18 @@ impl<F: PrimeField> AddAssign<&[F]> for Polynomial<F> {
         }
         for (l, r) in self.coefficients.iter_mut().zip(rhs.iter()) {
             *l += *r;
+        }
+    }
+}
+
+impl<F: PrimeField> SubAssign<&[F]> for Polynomial<F> {
+    fn sub_assign(&mut self, rhs: &[F]) {
+        if rhs.len() > self.coefficients.len() {
+            panic!("Polynomial too large, this should not have happened");
+            // self.coefficients.resize(rhs.len(), F::zero());
+        }
+        for (l, r) in self.coefficients.iter_mut().zip(rhs.iter()) {
+            *l -= *r;
         }
     }
 }

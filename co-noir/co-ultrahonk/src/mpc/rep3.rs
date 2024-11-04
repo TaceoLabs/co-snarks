@@ -1,3 +1,4 @@
+use super::NoirUltraHonkProver;
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use itertools::izip;
@@ -5,12 +6,10 @@ use mpc_core::protocols::rep3::{
     arithmetic,
     id::PartyID,
     network::{IoContext, Rep3Network},
-    pointshare, Rep3PointShare, Rep3PrimeFieldShare,
+    pointshare, poly, Rep3PointShare, Rep3PrimeFieldShare,
 };
 use num_traits::Zero;
 use rayon::prelude::*;
-
-use super::NoirUltraHonkProver;
 
 // TODO use io_context1
 pub struct Rep3UltraHonkDriver<N: Rep3Network> {
@@ -175,5 +174,13 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
         pointshare::msm_public_points(points, scalars)
+    }
+
+    fn eval_poly(
+        &mut self,
+        coeffs: &[Self::ArithmeticShare],
+        point: <P as Pairing>::ScalarField,
+    ) -> Self::ArithmeticShare {
+        poly::eval_poly(coeffs, point)
     }
 }

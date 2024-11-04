@@ -108,4 +108,11 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare;
+
+    /// Evaluates shared polynomials at one point
+    fn eval_poly(
+        &mut self,
+        coeffs: &[Self::ArithmeticShare],
+        point: P::ScalarField,
+    ) -> Self::ArithmeticShare;
 }

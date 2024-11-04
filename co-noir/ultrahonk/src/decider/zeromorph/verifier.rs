@@ -1,10 +1,6 @@
-use super::types::{PolyF, PolyG, PolyGShift};
+use super::types::{PolyF, PolyGShift};
 use crate::{
-    decider::{
-        types::{ClaimedEvaluations, VerifierCommitments},
-        verifier::DeciderVerifier,
-        zeromorph::ZeroMorphVerifierOpeningClaim,
-    },
+    decider::{shplemini::ZeroMorphVerifierOpeningClaim, verifier::DeciderVerifier},
     prelude::{HonkCurve, TranscriptFieldType},
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
@@ -16,41 +12,6 @@ use ark_ff::{Field, One, Zero};
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
     DeciderVerifier<P, H>
 {
-    pub fn get_g_shift_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField>,
-    ) -> PolyGShift<P::ScalarField> {
-        PolyGShift {
-            tables: &evaluations.shifted_tables,
-            wires: &evaluations.shifted_witness,
-        }
-    }
-
-    pub fn get_g_shift_comms(evaluations: &VerifierCommitments<P::G1Affine>) -> PolyG<P::G1Affine> {
-        PolyG {
-            tables: evaluations
-                .precomputed
-                .get_table_polynomials()
-                .try_into()
-                .unwrap(),
-            wires: evaluations.witness.to_be_shifted().try_into().unwrap(),
-        }
-    }
-
-    pub fn get_f_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField>,
-    ) -> PolyF<P::ScalarField> {
-        PolyF {
-            precomputed: &evaluations.precomputed,
-            witness: &evaluations.witness,
-        }
-    }
-    pub fn get_f_comms(evaluations: &ClaimedEvaluations<P::G1Affine>) -> PolyF<P::G1Affine> {
-        PolyF {
-            precomputed: &evaluations.precomputed,
-            witness: &evaluations.witness,
-        }
-    }
-
     pub(crate) fn zeromorph_verify(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,

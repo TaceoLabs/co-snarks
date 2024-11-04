@@ -26,16 +26,13 @@ fn poseidon_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
 
     let proof = UltraHonk::<_, H>::prove(proving_key).unwrap();
 
-    // TODO Keccak flavour is currently not compatible with Barretenberg since it has a different order for the relations
-    if !proof_file.is_empty() {
-        let proof_u8 = proof.to_buffer();
+    let proof_u8 = proof.to_buffer();
 
-        let read_proof_u8 = std::fs::read(proof_file).unwrap();
-        assert_eq!(proof_u8, read_proof_u8);
+    let read_proof_u8 = std::fs::read(proof_file).unwrap();
+    assert_eq!(proof_u8, read_proof_u8);
 
-        let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
-        assert_eq!(proof, read_proof);
-    }
+    let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
+    assert_eq!(proof, read_proof);
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);
@@ -43,12 +40,12 @@ fn poseidon_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
 
 #[test]
 fn poseidon_test_poseidon2sponge() {
-    const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.proof";
+    const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/pos_proof";
     poseidon_test::<Poseidon2Sponge>(PROOF_FILE);
 }
 
 #[test]
 fn poseidon_test_keccak256() {
-    // const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon_keccaktranscript.proof";
-    poseidon_test::<Keccak256>("");
+    const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/keccak_proof";
+    poseidon_test::<Keccak256>(PROOF_FILE);
 }

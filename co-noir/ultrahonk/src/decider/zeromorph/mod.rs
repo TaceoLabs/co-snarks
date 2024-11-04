@@ -1,23 +1,7 @@
+// Zeromorph is based on the one in aztec-package-v0.53.0, but is not used anymore at this point and replaced by Shplemini. We still keep it around for now.
+
 pub(crate) mod prover;
-pub(crate) mod types;
 pub(crate) mod verifier;
 
-use super::polynomial::Polynomial;
-use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
-
-pub(crate) struct ZeroMorphOpeningClaim<F: PrimeField> {
-    pub(crate) polynomial: Polynomial<F>,
-    pub(crate) opening_pair: OpeningPair<F>,
-}
-
-pub(crate) struct OpeningPair<F: PrimeField> {
-    pub(crate) challenge: F,
-    pub(crate) evaluation: F,
-}
-
-pub(crate) struct ZeroMorphVerifierOpeningClaim<P: Pairing> {
-    pub(crate) challenge: P::ScalarField,
-    pub(crate) evaluation: P::ScalarField,
-    pub(crate) commitment: P::G1,
-}
+use super::shplemini::types;
+use super::shplemini::{OpeningPair, ShpleminiOpeningClaim};

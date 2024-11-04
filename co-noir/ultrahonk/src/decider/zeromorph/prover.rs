@@ -1,7 +1,7 @@
 use super::{
     super::{prover::Decider, sumcheck::SumcheckOutput},
     types::{PolyF, PolyG, PolyGShift},
-    ZeroMorphOpeningClaim,
+    ShpleminiOpeningClaim,
 };
 use crate::{
     decider::{polynomial::Polynomial, types::ClaimedEvaluations, zeromorph::OpeningPair},
@@ -266,14 +266,16 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         batched_polynomial
     }
 
-    fn get_f_polyomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {
+    fn get_f_polynomials_zm(
+        polys: &AllEntities<Vec<P::ScalarField>>,
+    ) -> PolyF<Vec<P::ScalarField>> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
         }
     }
 
-    fn get_g_shift_evaluations(
+    fn get_g_shift_evaluations_zm(
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) -> PolyGShift<P::ScalarField> {
         PolyGShift {
@@ -282,7 +284,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
-    fn get_g_polyomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyG<Vec<P::ScalarField>> {
+    fn get_g_polynomials_zm(
+        polys: &AllEntities<Vec<P::ScalarField>>,
+    ) -> PolyG<Vec<P::ScalarField>> {
         PolyG {
             tables: polys
                 .precomputed
@@ -293,7 +297,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
-    fn get_f_evaluations(
+    fn get_f_evaluations_zm(
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) -> PolyF<P::ScalarField> {
         PolyF {
@@ -302,7 +306,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
-    fn compute_batched_polys(
+    fn compute_batched_polys_and_evals(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         claimed_evaluations: AllEntities<P::ScalarField>,
@@ -312,10 +316,10 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         Polynomial<P::ScalarField>,
         P::ScalarField,
     ) {
-        let f_polynomials = Self::get_f_polyomials(&self.memory.polys);
-        let g_polynomials = Self::get_g_polyomials(&self.memory.polys);
-        let f_evaluations = Self::get_f_evaluations(&claimed_evaluations);
-        let g_shift_evaluations = Self::get_g_shift_evaluations(&claimed_evaluations);
+        let f_polynomials = Self::get_f_polynomials_zm(&self.memory.polys);
+        let g_polynomials = Self::get_g_polynomials_zm(&self.memory.polys);
+        let f_evaluations = Self::get_f_evaluations_zm(&claimed_evaluations);
+        let g_shift_evaluations = Self::get_g_shift_evaluations_zm(&claimed_evaluations);
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
         let rho = transcript.get_challenge::<P>("rho".to_string());
@@ -367,7 +371,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
-    ) -> HonkProofResult<ZeroMorphOpeningClaim<P::ScalarField>> {
+    ) -> HonkProofResult<ShpleminiOpeningClaim<P::ScalarField>> {
         tracing::trace!("Zeromorph prove");
 
         let multilinear_challenge = &sumcheck_output.challenges;
@@ -378,8 +382,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let log_n = Utils::get_msb32(circuit_size);
         let n = 1 << log_n;
 
-        let (f_batched, g_batched, batched_evaluation) =
-            self.compute_batched_polys(transcript, sumcheck_output.claimed_evaluations, n);
+        let (f_batched, g_batched, batched_evaluation) = self.compute_batched_polys_and_evals(
+            transcript,
+            sumcheck_output.claimed_evaluations,
+            n,
+        );
 
         // We don't have groups, so we skip a lot now
 
@@ -443,7 +450,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let pi_polynomial =
             Self::compute_batched_evaluation_and_degree_check_polynomial(zeta_x, z_x, z_challenge);
 
-        let res = ZeroMorphOpeningClaim {
+        let res = ShpleminiOpeningClaim {
             polynomial: pi_polynomial,
             opening_pair: OpeningPair {
                 challenge: x_challenge,

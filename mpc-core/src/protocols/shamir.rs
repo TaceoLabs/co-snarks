@@ -17,6 +17,7 @@ pub mod arithmetic;
 pub mod core;
 pub mod network;
 pub mod pointshare;
+pub mod poly;
 mod rngs;
 
 pub use arithmetic::types::ShamirPrimeFieldShare;

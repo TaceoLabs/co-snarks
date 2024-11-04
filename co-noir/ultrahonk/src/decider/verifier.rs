@@ -1,8 +1,12 @@
-use super::{types::VerifierMemory, zeromorph::ZeroMorphVerifierOpeningClaim};
+use super::{
+    shplemini::{ShpleminiVerifierOpeningClaim, ZeroMorphVerifierOpeningClaim},
+    types::VerifierMemory,
+};
 use crate::{
     prelude::{HonkCurve, TranscriptFieldType},
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
+    Utils,
 };
 use ark_ec::AffineRepr;
 use ark_ff::One;
@@ -32,7 +36,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     // Note: The pairing check can be expressed naturally as
     // e(C - v * [1]_1, [1]_2) = e([W]_1, [X - r]_2) where C =[p(X)]_1. This can be rearranged (e.g. see the plonk
     // paper) as e(C + r*[W]_1 - v*[1]_1, [1]_2) * e(-[W]_1, [X]_2) = 1, or e(P_0, [1]_2) * e(P_1, [X]_2) = 1
-    pub(crate) fn reduce_verify(
+    #[allow(unused)]
+    pub(crate) fn reduce_verify_zm(
         opening_pair: ZeroMorphVerifierOpeningClaim<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<(P::G1Affine, P::G1Affine)> {
@@ -49,6 +54,21 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let second = g1_projective * opening_pair.evaluation;
         let p_0 = p_0 + first;
         let p_0 = p_0 - second;
+        Ok((p_0.into(), p_1.into()))
+    }
+
+    pub(crate) fn reduce_verify_shplemini(
+        opening_pair: &mut ShpleminiVerifierOpeningClaim<P>,
+        mut transcript: Transcript<TranscriptFieldType, H>,
+    ) -> HonkVerifyResult<(P::G1Affine, P::G1Affine)> {
+        tracing::trace!("Reduce and verify opening pair");
+
+        let quotient_commitment = transcript.receive_point_from_prover::<P>("KZG:W".to_string())?;
+        opening_pair.commitments.push(quotient_commitment);
+        opening_pair.scalars.push(opening_pair.challenge);
+        let p_1 = -quotient_commitment.into_group();
+        let p_0 = Utils::msm::<P>(&opening_pair.scalars, &opening_pair.commitments)?;
+
         Ok((p_0.into(), p_1.into()))
     }
 
@@ -78,12 +98,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             return Ok(false);
         }
 
-        let opening_claim = self.zeromorph_verify(
-            &mut transcript,
+        let mut opening_claim = self.compute_batch_opening_claim(
             circuit_size,
             sumcheck_output.multivariate_challenge,
+            &mut transcript,
         )?;
-        let pairing_points = Self::reduce_verify(opening_claim, transcript)?;
+
+        let pairing_points = Self::reduce_verify_shplemini(&mut opening_claim, transcript)?;
+
         let pcs_verified = Self::pairing_check(
             pairing_points.0,
             pairing_points.1,
