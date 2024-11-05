@@ -90,5 +90,6 @@ opt-level = 1
 inherits = "dev"
 incremental = false
 debug = true
+overflow-checks = false
 # [profile.ci-dev.build-override]
 # opt-level = 3
