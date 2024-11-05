@@ -47,6 +47,7 @@ impl GarbledCircuits {
         Ok((s, c))
     }
 
+    /// Full adder, just outputs carry
     fn full_adder_carry<G: FancyBinary>(
         g: &mut G,
         a: &G::Item,
@@ -60,7 +61,6 @@ impl GarbledCircuits {
         Ok(c)
     }
 
-    /// Full adder, just outputs carry
     fn full_adder<G: FancyBinary>(
         g: &mut G,
         a: &G::Item,
