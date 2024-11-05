@@ -72,7 +72,7 @@ impl<T: Default + Clone> AllEntities<Vec<T>> {
 
 const WITNESS_ENTITIES_SIZE: usize = 8;
 #[derive(Default)]
-pub struct WitnessEntities<T: Default> {
+pub(crate) struct WitnessEntities<T: Default> {
     pub(crate) elements: [T; WITNESS_ENTITIES_SIZE],
 }
 
@@ -155,11 +155,11 @@ impl<T: Default> WitnessEntities<T> {
     /// column 7
     pub(crate) const LOOKUP_READ_TAGS: usize = 7;
 
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }
 
@@ -167,39 +167,39 @@ impl<T: Default> WitnessEntities<T> {
         &self.elements[Self::W_L..=Self::Z_PERM]
     }
 
-    pub fn to_be_shifted_mut(&mut self) -> &mut [T] {
+    pub(crate) fn to_be_shifted_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::W_L..=Self::Z_PERM]
     }
 
-    pub fn w_l(&self) -> &T {
+    pub(crate) fn w_l(&self) -> &T {
         &self.elements[Self::W_L]
     }
 
-    pub fn w_r(&self) -> &T {
+    pub(crate) fn w_r(&self) -> &T {
         &self.elements[Self::W_R]
     }
 
-    pub fn w_o(&self) -> &T {
+    pub(crate) fn w_o(&self) -> &T {
         &self.elements[Self::W_O]
     }
 
-    pub fn w_4(&self) -> &T {
+    pub(crate) fn w_4(&self) -> &T {
         &self.elements[Self::W_4]
     }
 
-    pub fn z_perm(&self) -> &T {
+    pub(crate) fn z_perm(&self) -> &T {
         &self.elements[Self::Z_PERM]
     }
 
-    pub fn lookup_inverses(&self) -> &T {
+    pub(crate) fn lookup_inverses(&self) -> &T {
         &self.elements[Self::LOOKUP_INVERSES]
     }
 
-    pub fn lookup_read_counts(&self) -> &T {
+    pub(crate) fn lookup_read_counts(&self) -> &T {
         &self.elements[Self::LOOKUP_READ_COUNTS]
     }
 
-    pub fn lookup_read_tags(&self) -> &T {
+    pub(crate) fn lookup_read_tags(&self) -> &T {
         &self.elements[Self::LOOKUP_READ_TAGS]
     }
 
@@ -223,15 +223,15 @@ impl<T: Default> WitnessEntities<T> {
         &mut self.elements[Self::Z_PERM]
     }
 
-    pub fn lookup_inverses_mut(&mut self) -> &mut T {
+    pub(crate) fn lookup_inverses_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LOOKUP_INVERSES]
     }
 
-    pub fn lookup_read_counts_mut(&mut self) -> &mut T {
+    pub(crate) fn lookup_read_counts_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LOOKUP_READ_COUNTS]
     }
 
-    pub fn lookup_read_tags_mut(&mut self) -> &mut T {
+    pub(crate) fn lookup_read_tags_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LOOKUP_READ_TAGS]
     }
 }

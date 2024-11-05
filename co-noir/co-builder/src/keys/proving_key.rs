@@ -352,7 +352,7 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    fn construct_lookup_read_counts<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    pub fn construct_lookup_read_counts<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         witness: &mut [Polynomial<P::ScalarField>; 2],
         circuit: &mut GenericUltraCircuitBuilder<P, T>,
         dyadic_circuit_size: usize,

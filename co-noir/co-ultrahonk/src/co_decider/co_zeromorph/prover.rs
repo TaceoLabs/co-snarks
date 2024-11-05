@@ -379,10 +379,21 @@ impl<
         let mut f_batched = SharedPolynomial::<T, P>::promote_poly(&self.driver, f_batched);
         for (f_poly, f_eval) in f_polynomials
             .witness
-            .iter()
-            .zip(f_evaluations.witness.iter())
+            .shared_iter()
+            .zip(f_evaluations.witness.shared_iter())
         {
             f_batched.add_scaled_slice(&mut self.driver, f_poly, &batching_scalar);
+            batched_evaluation += batching_scalar * f_eval;
+            batching_scalar *= rho;
+        }
+
+        // Final public part of f_batched
+        for (f_poly, f_eval) in f_polynomials
+            .witness
+            .public_iter()
+            .zip(f_evaluations.witness.public_iter())
+        {
+            f_batched.add_scaled_slice_public(&mut self.driver, f_poly, &batching_scalar);
             batched_evaluation += batching_scalar * f_eval;
             batching_scalar *= rho;
         }

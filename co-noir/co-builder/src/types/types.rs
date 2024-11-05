@@ -776,13 +776,13 @@ pub(crate) enum AuxSelectors {
 }
 
 #[derive(Clone)]
-pub struct LookupEntry<F: Clone> {
+pub(crate) struct LookupEntry<F: Clone> {
     pub(crate) key: [BigUint; 2],
     pub(crate) value: [F; 2],
 }
 
 impl<F: PrimeField> LookupEntry<F> {
-    pub fn to_table_components(&self, use_two_key: bool) -> [F; 3] {
+    pub(crate) fn to_table_components(&self, use_two_key: bool) -> [F; 3] {
         [
             F::from(self.key[0].to_owned()),
             if use_two_key {
@@ -799,18 +799,18 @@ impl<F: PrimeField> LookupEntry<F> {
     }
 }
 
-pub struct PlookupBasicTable<F: PrimeField> {
+pub(crate) struct PlookupBasicTable<F: PrimeField> {
     pub(crate) id: BasicTableId,
     pub(crate) table_index: usize,
-    pub use_twin_keys: bool,
+    pub(crate) use_twin_keys: bool,
     pub(crate) column_1_step_size: F,
     pub(crate) column_2_step_size: F,
     pub(crate) column_3_step_size: F,
     pub(crate) column_1: Vec<F>,
     pub(crate) column_2: Vec<F>,
     pub(crate) column_3: Vec<F>,
-    pub lookup_gates: Vec<LookupEntry<F>>,
-    pub index_map: LookupHashMap<F>,
+    pub(crate) lookup_gates: Vec<LookupEntry<F>>,
+    pub(crate) index_map: LookupHashMap<F>,
     pub(crate) get_values_from_key: fn([u64; 2]) -> [F; 2],
 }
 
@@ -843,7 +843,7 @@ impl<F: PrimeField> PlookupBasicTable<F> {
 }
 
 impl<F: PrimeField> PlookupBasicTable<F> {
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         assert_eq!(self.column_1.len(), self.column_2.len());
         assert_eq!(self.column_1.len(), self.column_3.len());
         self.column_1.len()
@@ -895,7 +895,7 @@ impl<F: PrimeField> PlookupBasicTable<F> {
         }
     }
 
-    pub fn initialize_index_map(&mut self) {
+    pub(crate) fn initialize_index_map(&mut self) {
         for (i, (c1, c2, c3)) in izip!(
             self.column_1.iter().cloned(),
             self.column_2.iter().cloned(),
@@ -909,7 +909,7 @@ impl<F: PrimeField> PlookupBasicTable<F> {
 }
 
 #[derive(Default)]
-pub struct LookupHashMap<F: PrimeField> {
+pub(crate) struct LookupHashMap<F: PrimeField> {
     pub(crate) index_map: HashMap<[F; 3], usize>,
 }
 

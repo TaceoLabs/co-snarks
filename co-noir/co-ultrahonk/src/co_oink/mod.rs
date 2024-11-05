@@ -1,8 +1,8 @@
 pub(crate) mod prover;
 pub(crate) mod types;
 
-// execute_log_derivative_inverse_round: 2 * n; (n for inverses, n for the skip multiplier)
-pub const CRAND_PAIRS_FACTOR_N: usize = 2;
+// execute_log_derivative_inverse_round: n
+pub const CRAND_PAIRS_FACTOR_N: usize = 1;
 // execute_grand_product_computation_round:
 // 	compute_grand_product:
 // 		4 * batched_grand_product_num_denom: (n - 1)

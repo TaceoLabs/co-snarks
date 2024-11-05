@@ -116,7 +116,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
     rom_arrays: Vec<RomTranscript>,
     ram_arrays: Vec<RamTranscript>,
-    pub lookup_tables: Vec<PlookupBasicTable<P::ScalarField>>,
+    pub(crate) lookup_tables: Vec<PlookupBasicTable<P::ScalarField>>,
     plookup: Plookup<P::ScalarField>,
     range_lists: HashMap<u64, RangeList>,
     cached_partial_non_native_field_multiplications:
@@ -782,7 +782,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         count + romcount + ramcount + rangecount + nnfcount
     }
 
-    pub fn get_tables_size(&self) -> usize {
+    pub(crate) fn get_tables_size(&self) -> usize {
         let mut tables_size = 0;
         for table in self.lookup_tables.iter() {
             tables_size += table.len();
