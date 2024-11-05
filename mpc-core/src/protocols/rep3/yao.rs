@@ -675,7 +675,6 @@ pub fn decompose_arithmetic<F: PrimeField, N: Rep3Network>(
     )
 }
 
-#[macro_export]
 macro_rules! decompose_circuit_compose_blueprint {
     ($inputs:expr, $io_context:expr, $output_size:expr, $circuit:expr, ($( $args:expr ),*)) => {{
         use $crate::protocols::rep3::id::PartyID;
@@ -774,7 +773,7 @@ macro_rules! decompose_circuit_compose_blueprint {
         Ok(res)
     }};
 }
-pub use decompose_circuit_compose_blueprint;
+pub(crate) use decompose_circuit_compose_blueprint;
 
 // TODO implement with streaming Garbler/Evaluator as well
 // TODO implement with a2b/b2a as well
