@@ -47,6 +47,19 @@ impl GarbledCircuits {
         Ok((s, c))
     }
 
+    fn full_adder_carry<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: &G::Item,
+        c: &G::Item,
+    ) -> Result<G::Item, G::Error> {
+        let z1 = g.xor(a, b)?;
+        let z3 = g.xor(a, c)?;
+        let z4 = g.and(&z1, &z3)?;
+        let c = g.xor(&z4, a)?;
+        Ok(c)
+    }
+
     fn full_adder<G: FancyBinary>(
         g: &mut G,
         a: &G::Item,
@@ -59,6 +72,33 @@ impl GarbledCircuits {
         let z4 = g.and(&z1, &z3)?;
         let c = g.xor(&z4, a)?;
         Ok((s, c))
+    }
+
+    /// Full adder with carry in set
+    fn full_adder_cin_set<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: &G::Item,
+    ) -> Result<(G::Item, G::Item), G::Error> {
+        let z1 = g.xor(a, b)?;
+        let s = g.negate(&z1)?;
+        let z3 = g.negate(a)?;
+        let z4 = g.and(&z1, &z3)?;
+        let c = g.xor(&z4, a)?;
+        Ok((s, c))
+    }
+
+    /// Full adder with carry in set
+    fn full_adder_carry_cin_set<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: &G::Item,
+    ) -> Result<G::Item, G::Error> {
+        let z1 = g.xor(a, b)?;
+        let z3 = g.negate(a)?;
+        let z4 = g.and(&z1, &z3)?;
+        let c = g.xor(&z4, a)?;
+        Ok(c)
     }
 
     /// Binary addition. Returns the result and the carry.
@@ -82,6 +122,53 @@ impl GarbledCircuits {
         }
 
         Ok((result, c))
+    }
+
+    /// Binary subtraction. Returns the result and whether it underflowed.
+    /// I.e., calculates 2^k + x1 - x2
+    fn bin_subtraction<G: FancyBinary>(
+        g: &mut G,
+        xs: &[G::Item],
+        ys: &[G::Item],
+    ) -> Result<(Vec<G::Item>, G::Item), G::Error> {
+        debug_assert_eq!(xs.len(), ys.len());
+        let mut result = Vec::with_capacity(xs.len());
+        // Twos complement is negation + 1, we implement by having cin in adder = 1, so only negation is required
+
+        let y0 = g.negate(&ys[0])?;
+        let (mut s, mut c) = Self::full_adder_cin_set(g, &xs[0], &y0)?;
+        result.push(s);
+
+        for (x, y) in xs.iter().zip(ys.iter()).skip(1) {
+            let y = g.negate(y)?;
+            let res = Self::full_adder(g, x, &y, &c)?;
+            s = res.0;
+            c = res.1;
+            result.push(s);
+        }
+
+        Ok((result, c))
+    }
+
+    /// Binary subtraction. Returns whether it underflowed.
+    /// I.e., calculates the msb of 2^k + x1 - x2
+    fn bin_subtraction_get_carry_only<G: FancyBinary>(
+        g: &mut G,
+        xs: &[G::Item],
+        ys: &[G::Item],
+    ) -> Result<G::Item, G::Error> {
+        debug_assert_eq!(xs.len(), ys.len());
+        // Twos complement is negation + 1, we implement by having cin in adder = 1, so only negation is required
+
+        let y0 = g.negate(&ys[0])?;
+        let mut c = Self::full_adder_carry_cin_set(g, &xs[0], &y0)?;
+
+        for (x, y) in xs.iter().zip(ys.iter()).skip(1) {
+            let y = g.negate(y)?;
+            c = Self::full_adder_carry(g, x, &y, &c)?;
+        }
+
+        Ok(c)
     }
 
     /// If `b = 0` returns `x` else `y`.
@@ -305,6 +392,47 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
+    fn unsigned_ge<G: FancyBinary>(
+        g: &mut G,
+        a: &[G::Item],
+        b: &[G::Item],
+    ) -> Result<G::Item, G::Error> {
+        debug_assert_eq!(a.len(), b.len());
+        Self::bin_subtraction_get_carry_only(g, a, b)
+    }
+
+    fn unsigned_lt<G: FancyBinary>(
+        g: &mut G,
+        a: &[G::Item],
+        b: &[G::Item],
+    ) -> Result<G::Item, G::Error> {
+        let ge = Self::unsigned_ge(g, a, b)?;
+        g.negate(&ge)
+    }
+
+    fn unsigned_le<G: FancyBinary>(
+        g: &mut G,
+        a: &[G::Item],
+        b: &[G::Item],
+    ) -> Result<G::Item, G::Error> {
+        Self::unsigned_ge(g, b, a)
+    }
+
+    fn unsigned_gt<G: FancyBinary>(
+        g: &mut G,
+        a: &[G::Item],
+        b: &[G::Item],
+    ) -> Result<G::Item, G::Error> {
+        Self::unsigned_lt(g, b, a)
+    }
+
+    fn batcher_odd_even_merge_sort_inner<G: FancyBinary>(
+        g: &mut G,
+        wires_a: &mut [Vec<G::Item>],
+    ) -> Result<(), G::Error> {
+        Ok(())
+    }
+
     /// Sorts a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first). Thereby, only bitsize bits are used in sorting. Finally, the sorted vector is composed to shared field elements using wires_c.
     pub(crate) fn batcher_odd_even_merge_sort<G: FancyBinary, F: PrimeField>(
         g: &mut G,
@@ -334,6 +462,7 @@ impl GarbledCircuits {
         }
 
         // Perform the actual sorting
+        Self::batcher_odd_even_merge_sort_inner(g, &mut inputs)?;
 
         // Add each field element to wires_c for the composition
         let mut results = Vec::with_capacity(input_size);
