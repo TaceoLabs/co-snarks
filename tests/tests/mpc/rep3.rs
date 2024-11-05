@@ -6,6 +6,7 @@ mod field_share {
     use itertools::izip;
     use itertools::Itertools;
     use mpc_core::protocols::rep3::conversion;
+    use mpc_core::protocols::rep3::gadgets;
     use mpc_core::protocols::rep3::id::PartyID;
     use mpc_core::protocols::rep3::yao;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
@@ -1253,6 +1254,53 @@ mod field_share {
 
                 let decomposed =
                     yao::decompose_arithmetic_many(&x, &mut rep3, TOTAL_BIT_SIZE, CHUNK_SIZE)
+                        .unwrap();
+                tx.send(decomposed)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_batcher_odd_even_merge_sort_via_yao() {
+        const VEC_SIZE: usize = 10;
+        const CHUNK_SIZE: usize = 14;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect_vec();
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+
+        let mut should_result = Vec::with_capacity(VEC_SIZE);
+        let mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
+        for x in x.into_iter() {
+            let mut x: BigUint = x.into();
+            x &= &mask;
+            should_result.push(ark_bn254::Fr::from(x));
+        }
+        // should_result.sort();
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let decomposed =
+                    gadgets::sort::batcher_odd_even_merge_sort_yao(&x, &mut rep3, CHUNK_SIZE)
                         .unwrap();
                 tx.send(decomposed)
             });

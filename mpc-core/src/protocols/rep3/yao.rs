@@ -442,7 +442,7 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Rep3Network>(
 }
 
 /// Transforms a vector of arithmetically shared inputs x = (x_1, x_2, x_3) into two yao shares x_1^Y, (x_2 + x_3)^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-fn joint_input_arithmetic_added_many<F: PrimeField, N: Rep3Network>(
+pub fn joint_input_arithmetic_added_many<F: PrimeField, N: Rep3Network>(
     x: &[Rep3PrimeFieldShare<F>],
     delta: Option<WireMod2>,
     io_context: &mut IoContext<N>,
@@ -592,7 +592,7 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Rep3Network>(
 }
 
 /// Lets the party with id2 input a vector field elements, which gets shared as Yao wires to the other parties.
-fn input_field_id2_many<F: PrimeField, N: Rep3Network>(
+pub fn input_field_id2_many<F: PrimeField, N: Rep3Network>(
     x: Option<Vec<F>>,
     delta: Option<WireMod2>,
     n_inputs: usize,
