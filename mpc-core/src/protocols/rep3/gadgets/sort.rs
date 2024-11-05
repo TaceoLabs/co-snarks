@@ -10,7 +10,7 @@ use crate::protocols::rep3::{
 };
 use ark_ff::PrimeField;
 
-/// Sorts the inputs using the Batcher's odd-even merge sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results also only hav bitsize bits each.
+/// Sorts the inputs using the Batcher's odd-even merge sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results also only have bitsize bits each.
 pub fn batcher_odd_even_merge_sort_yao<F: PrimeField, N: Rep3Network>(
     inputs: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
