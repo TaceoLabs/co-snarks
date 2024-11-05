@@ -2010,10 +2010,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //     }
         // }
 
-        if !self.range_lists.contains_key(&target_range) {
-            let new_range_list = self.create_range_list(target_range);
-            self.range_lists.insert(target_range, new_range_list);
-        }
+        let new_range_list = self.create_range_list(target_range);
+        self.range_lists
+            .entry(target_range)
+            .or_insert(new_range_list);
 
         let existing_tag =
             self.real_variable_tags[self.real_variable_index[variable_index as usize] as usize];

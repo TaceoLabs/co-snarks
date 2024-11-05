@@ -24,9 +24,15 @@ fn poseidon_plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(proof_fil
     let witness = Utils::get_witness_from_file(WITNESS_FILE).unwrap();
 
     let witness = promote_public_witness_vector::<_, PlainAcvmSolver<ark_bn254::Fr>>(witness);
-
-    let builder =
-        PlainCoBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
+    let mut driver = PlainAcvmSolver::new();
+    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+        constraint_system,
+        0,
+        witness,
+        true,
+        false,
+        &mut driver,
+    );
 
     let driver = PlainUltraHonkDriver;
 

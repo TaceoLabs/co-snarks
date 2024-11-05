@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::io;
 use std::marker::PhantomData;
 
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use mpc_core::lut::{LookupTableProvider, PlainLookupTableProvider};
+use num_bigint::BigUint;
 
 use super::NoirWitnessExtensionProtocol;
 
@@ -12,7 +13,14 @@ pub struct PlainAcvmSolver<F: PrimeField> {
     plain_lut: PlainLookupTableProvider<F>,
     phantom_data: PhantomData<F>,
 }
-
+impl<F: PrimeField> PlainAcvmSolver<F> {
+    pub fn new() -> Self {
+        Self {
+            plain_lut: Default::default(),
+            phantom_data: Default::default(),
+        }
+    }
+}
 impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     type Lookup = PlainLookupTableProvider<F>;
     type ArithmeticShare = F;
@@ -104,8 +112,19 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         // io_context: &mut IoContext<N>,
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        todo!()
+    ) -> std::result::Result<std::vec::Vec<F>, std::io::Error> {
+        let mut should_result =
+            Vec::with_capacity(total_bit_size_per_field.div_ceil(decompose_bit_size));
+        let big_mask = (BigUint::from(1u64) << total_bit_size_per_field) - BigUint::one();
+        let small_mask = (BigUint::from(1u64) << decompose_bit_size) - BigUint::one();
+        let mut x: BigUint = input.into();
+        x &= &big_mask;
+        for _ in 0..total_bit_size_per_field.div_ceil(decompose_bit_size) {
+            let chunk = &x & &small_mask;
+            x >>= decompose_bit_size;
+            should_result.push(F::from(chunk));
+        }
+        Ok(should_result)
     }
 
     fn acvm_add_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
