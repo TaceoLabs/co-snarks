@@ -15,7 +15,7 @@ members = [
     "mpc-net",
     "tests",
 ]
-resolver = "2" # need resolver 1 because of circom upstream
+resolver = "2"
 
 [workspace.package]
 edition = "2021"
