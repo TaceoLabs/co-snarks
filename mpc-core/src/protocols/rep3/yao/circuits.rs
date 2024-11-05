@@ -60,6 +60,7 @@ impl GarbledCircuits {
         Ok(c)
     }
 
+    /// Full adder, just outputs carry
     fn full_adder<G: FancyBinary>(
         g: &mut G,
         a: &G::Item,
@@ -88,7 +89,7 @@ impl GarbledCircuits {
         Ok((s, c))
     }
 
-    /// Full adder with carry in set
+    /// Full adder with carry in set, just outputs carry
     fn full_adder_carry_cin_set<G: FancyBinary>(
         g: &mut G,
         a: &G::Item,
@@ -428,8 +429,56 @@ impl GarbledCircuits {
 
     fn batcher_odd_even_merge_sort_inner<G: FancyBinary>(
         g: &mut G,
-        wires_a: &mut [Vec<G::Item>],
-    ) -> Result<(), G::Error> {
+        inputs: &mut [Vec<G::Item>],
+    ) -> Result<(), G::Error>
+    where
+        G::Item: Default,
+    {
+        debug_assert!(!inputs.is_empty());
+        let len = inputs.len();
+        let inner_len = inputs[0].len();
+        let mut lhs_result = vec![G::Item::default(); inner_len];
+        let mut rhs_result = vec![G::Item::default(); inner_len];
+
+        let mut p = 1;
+        while p < len {
+            let mut k = p;
+            while k >= 1 {
+                for j in (k % p..len - k).step_by(2 * k) {
+                    for i in 0..std::cmp::min(k, len - j - k) {
+                        if (i + j) / (2 * p) == (i + j + k) / (2 * p) {
+                            {
+                                let lhs = &inputs[i + j];
+                                let rhs = &inputs[i + j + k];
+                                debug_assert_eq!(lhs.len(), rhs.len());
+                                debug_assert_eq!(lhs.len(), inner_len);
+
+                                let cmp = Self::unsigned_gt(g, lhs, rhs)?;
+
+                                for (l, r, l_res, r_res) in izip!(
+                                    lhs.iter(),
+                                    rhs.iter(),
+                                    lhs_result.iter_mut(),
+                                    rhs_result.iter_mut()
+                                ) {
+                                    // This is a cmux, setting lres to l if cmp is 0, else r
+                                    let xor = g.xor(l, r)?;
+                                    let and = g.and(&cmp, &xor)?;
+                                    *l_res = g.xor(&and, l)?;
+                                    // sets r_res to the opposite of l_res
+                                    *r_res = g.xor(&xor, l_res)?;
+                                }
+                            }
+                            inputs[i + j].clone_from_slice(&lhs_result);
+                            inputs[i + j + k].clone_from_slice(&rhs_result);
+                        }
+                    }
+                }
+                k >>= 1;
+            }
+            p <<= 1;
+        }
+
         Ok(())
     }
 
@@ -440,7 +489,10 @@ impl GarbledCircuits {
         wires_b: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         bitlen: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    where
+        G::Item: Default,
+    {
         debug_assert_eq!(wires_a.size(), wires_b.size());
         debug_assert_eq!(wires_a.size(), wires_c.size());
         let input_size = wires_a.size();

@@ -1285,7 +1285,7 @@ mod field_share {
             x &= &mask;
             should_result.push(ark_bn254::Fr::from(x));
         }
-        // should_result.sort();
+        should_result.sort();
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
