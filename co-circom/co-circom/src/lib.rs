@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, io::Read, path::PathBuf, sync::Arc, time::Insta
 
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig};
+use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig, SimplificationLevel};
 use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::{
     groth16::{Groth16Proof, ZKey},
@@ -294,6 +294,9 @@ pub struct GenerateWitnessCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out: Option<PathBuf>,
+    /// The simplification level passed to the circom compiler (0-2)
+    #[arg(short = 'O', default_value_t = 1, value_parser = clap::value_parser!(u8).range(0..3))]
+    pub simplification_level: u8,
 }
 
 /// Config for `generate_witness`
@@ -503,10 +506,36 @@ macro_rules! impl_config {
 impl_config!(SplitInputCli, SplitInputConfig);
 impl_config!(SplitWitnessCli, SplitWitnessConfig);
 impl_config!(MergeInputSharesCli, MergeInputSharesConfig);
-impl_config!(GenerateWitnessCli, GenerateWitnessConfig);
 impl_config!(TranslateWitnessCli, TranslateWitnessConfig);
 impl_config!(GenerateProofCli, GenerateProofConfig);
 impl_config!(VerifyCli, VerifyConfig);
+
+// manual one since this is a bit more complex
+impl GenerateWitnessConfig {
+    /// Parse config from file, env, cli
+    pub fn parse(cli: GenerateWitnessCli) -> Result<Self, ConfigError> {
+        let simplification_level = cli.simplification_level;
+        let mut config: GenerateWitnessConfig = if let Some(path) = &cli.config {
+            Figment::new()
+                .merge(Toml::file(path))
+                .merge(Env::prefixed(CONFIG_ENV_PREFIX))
+                .merge(Serialized::defaults(cli))
+                .extract()?
+        } else {
+            Figment::new()
+                .merge(Env::prefixed(CONFIG_ENV_PREFIX))
+                .merge(Serialized::defaults(cli))
+                .extract()?
+        };
+        match simplification_level {
+            0 => config.compiler.simplification = SimplificationLevel::O0,
+            1 => config.compiler.simplification = SimplificationLevel::O1,
+            2 => config.compiler.simplification = SimplificationLevel::O2(usize::MAX),
+            _ => {}
+        }
+        Ok(config)
+    }
+}
 
 fn reshare_vec<F: PrimeField>(
     vec: Vec<F>,

@@ -110,6 +110,8 @@ macro_rules! run_test {
         for (net, input) in izip!(test_network.get_party_networks(), inputs) {
             threads.push(thread::spawn(move || {
                 let mut compiler_config = CompilerConfig::default();
+                compiler_config.simplification =
+                    circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
                 compiler_config
                     .link_library
                     .push("../test_vectors/WitnessExtension/tests/libs/".into());

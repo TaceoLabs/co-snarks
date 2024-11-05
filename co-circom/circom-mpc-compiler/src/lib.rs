@@ -46,20 +46,18 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 /// The simplification level applied during constraint generation
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Default, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash,
+)]
 pub enum SimplificationLevel {
     /// No simplification
     O0,
     /// Only applies signal to signal and signal to constant simplification
+    /// The default value since circom 2.2.0
+    #[default]
     O1,
     /// Full constraint simplification (applied for n rounds)
     O2(usize),
-}
-
-impl Default for SimplificationLevel {
-    fn default() -> Self {
-        SimplificationLevel::O1
-    }
 }
 
 /// The mpc-compiler configuration
