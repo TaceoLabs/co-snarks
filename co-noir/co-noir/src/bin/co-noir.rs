@@ -609,6 +609,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     let shares = proving_key
         .polynomials
         .witness
+        .private_elements
         .into_iter()
         .flat_map(|el| el.into_vec().into_iter())
         .collect::<Vec<_>>();
@@ -635,7 +636,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Translating shares took {} ms", id, duration_ms);
 
-    if translated_shares.len() != 6 * proving_key.circuit_size as usize {
+    if translated_shares.len() != 4 * proving_key.circuit_size as usize {
         return Err(eyre!("Invalid number of shares translated"));
     };
 
@@ -646,7 +647,8 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
 
     let polynomials = Polynomials {
         witness: ProverWitnessEntities {
-            elements: translated_shares,
+            private_elements: translated_shares,
+            public_elements: proving_key.polynomials.witness.public_elements,
         },
         precomputed: proving_key.polynomials.precomputed,
     };
@@ -707,11 +709,6 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             let net = Rep3MpcNet::new(network_config)?;
             let id = net.get_id();
 
-            let mut io_context0 = IoContext::init(net)?;
-            let io_context1 = io_context0.fork()?;
-            // init MPC protocol
-            let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
-
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
@@ -732,7 +729,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
 
             // Get the proving key and prover
             let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, _> =
-                ProvingKey::create(&driver, builder, prover_crs)?;
+                ProvingKey::create(id, builder, prover_crs)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!(
                 "Party {}: Proving key generation took {} ms",
@@ -762,28 +759,27 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 false,
             );
 
-            todo!("SHAMIR Driver")
-            // // parse the crs
-            // let prover_crs =
-            //     ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _>::get_prover_crs(
-            //         &builder,
-            //         crs_path.to_str().context("while opening crs file")?,
-            //     )
-            //     .context("failed to get prover crs")?;
+            // parse the crs
+            let prover_crs =
+                ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _>::get_prover_crs(
+                    &builder,
+                    crs_path.to_str().context("while opening crs file")?,
+                )
+                .context("failed to get prover crs")?;
 
-            // // Get the proving key and prover
-            // let proving_key: ProvingKey<ShamirUltraHonkDriver<_, ShamirMpcNet>, _> =
-            //     ProvingKey::create(id, builder, prover_crs)?;
-            // let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            // tracing::info!(
-            //     "Party {}: Proving key generation took {} ms",
-            //     id,
-            //     duration_ms
-            // );
-            // // write result to output file
-            // let out_file = BufWriter::new(std::fs::File::create(&out)?);
-            // bincode::serialize_into(out_file, &proving_key)?;
-            // tracing::info!("Proving Key successfully written to {}", out.display());
+            // Get the proving key and prover
+            let proving_key: ProvingKey<ShamirUltraHonkDriver<_, ShamirMpcNet>, _> =
+                ProvingKey::create(id, builder, prover_crs)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!(
+                "Party {}: Proving key generation took {} ms",
+                id,
+                duration_ms
+            );
+            // write result to output file
+            let out_file = BufWriter::new(std::fs::File::create(&out)?);
+            bincode::serialize_into(out_file, &proving_key)?;
+            tracing::info!("Proving Key successfully written to {}", out.display());
         }
     };
 
@@ -1012,7 +1008,7 @@ fn run_build_and_generate_proof(
             .context("failed to get prover crs")?;
 
             // Get the proving key and prover
-            let proving_key = ProvingKey::create(&driver, builder, prover_crs)?;
+            let proving_key = ProvingKey::create(id, builder, prover_crs)?;
             let public_input = proving_key.get_public_inputs();
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON => {
@@ -1079,55 +1075,54 @@ fn run_build_and_generate_proof(
                 )
                 .context("failed to get prover crs")?;
 
-            todo!("SHAMIR Driver")
-            // // Get the proving key and prover
-            // let proving_key = ProvingKey::create(id, builder, prover_crs)?;
-            // let public_input = proving_key.get_public_inputs();
-            // let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            // tracing::info!(
-            //     "Party {}: Proving key generation took {} ms",
-            //     id,
-            //     duration_ms
-            // );
+            // Get the proving key and prover
+            let proving_key = ProvingKey::create(id, builder, prover_crs)?;
+            let public_input = proving_key.get_public_inputs();
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!(
+                "Party {}: Proving key generation took {} ms",
+                id,
+                duration_ms
+            );
 
-            // // init MPC protocol
-            // // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
-            // let n = proving_key.circuit_size as usize;
-            // let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
-            //     + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
-            //     + OINK_CRAND_PAIRS_CONST;
-            // // log2(n) * ((n >>= 1) / 2) == n - 1
-            // let num_pairs_sumcheck_prove =
-            //     SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
-            // let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
-            // let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
-            // let mut protocol0 = ShamirProtocol::from(preprocessing);
-            // let protocol1 = protocol0.fork_with_pairs(0)?;
-            // let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
+            // init MPC protocol
+            // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+            let n = proving_key.circuit_size as usize;
+            let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
+                + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
+                + OINK_CRAND_PAIRS_CONST;
+            // log2(n) * ((n >>= 1) / 2) == n - 1
+            let num_pairs_sumcheck_prove =
+                SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+            let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
+            let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
+            let mut protocol0 = ShamirProtocol::from(preprocessing);
+            let protocol1 = protocol0.fork_with_pairs(0)?;
+            let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
 
-            // let (proof, public_input) = match hasher {
-            //     TranscriptHash::POSEIDON => {
-            //         // execute prover in MPC
-            //         tracing::info!("Party {}: starting proof generation..", id);
-            //         let start = Instant::now();
-            //         let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
-            //         let proof = prover.prove(proving_key)?;
-            //         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            //         tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-            //         (proof, public_input)
-            //     }
-            //     TranscriptHash::KECCAK => {
-            //         // execute prover in MPC
-            //         tracing::info!("Party {}: starting proof generation..", id);
-            //         let start = Instant::now();
-            //         let prover = CoUltraHonk::<_, _, Keccak256>::new(driver);
-            //         let proof = prover.prove(proving_key)?;
-            //         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            //         tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-            //         (proof, public_input)
-            //     }
-            // };
-            // (proof, public_input)
+            let (proof, public_input) = match hasher {
+                TranscriptHash::POSEIDON => {
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+                TranscriptHash::KECCAK => {
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let prover = CoUltraHonk::<_, _, Keccak256>::new(driver);
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+            };
+            (proof, public_input)
         }
     };
 
