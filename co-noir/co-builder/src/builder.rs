@@ -1834,6 +1834,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             sorted_list.push(0);
         }
 
+        todo!("TODO This needs to be done in MPC, will write a sort...");
         sorted_list.sort();
 
         // list must be padded to a multipe of 4 and larger than 4 (gate_width)
