@@ -19,7 +19,7 @@ cmake --preset clang16 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 cmake --build .
 ```
 
-The prover in this repository, i.e., ``UltraHonk::prove`` in `src/prover.rs`, is compatible with `UltraProver_<UltraFlavor>` in Barretenberg. For our Rust version of this prover see `collaborative-circom/co-noir/ultrahonk`.
+The prover in this repository, i.e., ``UltraHonk::prove`` in `src/prover.rs`, is compatible with `UltraProver_<UltraFlavor>` in Barretenberg. For our Rust version of this prover see `co-snarks/co-noir/ultrahonk`.
 
 Currently, the circuit builder related code in `ollaborative-circom/co-noir/ultrahonk/src/parse/` is only compatible with basic field arithmetic gates from Noir, stay tuned for more features.
 

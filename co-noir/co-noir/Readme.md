@@ -1,6 +1,6 @@
 # UltraHonk
 
-This crate uses our rewrite of Atec's UltraHonk prover and verifier in Rust (see `collaborative-circom/co-noir/ultrahonk`). It is compatible with Barretenberg v0.62.0. To get Barretenberg with this version, use the following commands:
+This crate uses our rewrite of Atec's UltraHonk prover and verifier in Rust (see `co-snarks/co-noir/ultrahonk`). It is compatible with Barretenberg v0.62.0. To get Barretenberg with this version, use the following commands:
 
 ```bash
 git clone https://github.com/AztecProtocol/aztec-packages.git
@@ -19,9 +19,9 @@ cmake --preset clang16 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 cmake --build .
 ```
 
-The prover in this repository, i.e., ``UltraHonk::prove`` in `src/prover.rs`, is compatible with `UltraProver_<UltraFlavor>` in Barretenberg. Similar, the ``Ultrahnok::verify`` verifier in `src/verifier.rs` is compatible with `UltraVerifier_<UltraFlavor>` in Barretenberg.
+The prover in this repository, ``UltraHonk::prove`` in `src/prover.rs`, is compatible with `UltraProver_<UltraFlavor>/UltraProver_<UltraKeccakFlavor>` (depending on the used transcript hasher) in Barretenberg. Similar, the ``Ultrahnok::verify`` verifier in `src/verifier.rs` is compatible with `UltraVerifier_<UltraFlavor>/UltraVerifier_<UltraKeccakFlavor>` in Barretenberg.
 
-Currently, the circuit builder related code in `src/parse/` is only compatible with basic field arithmetic gates from Noir, stay tuned for more features.
+Currently, the circuit builder related code in `co-builder` is only compatible with basic field arithmetic gates from Noir, stay tuned for more features.
 
 ## Usage
 
@@ -100,10 +100,10 @@ Here, `poseidon.gz.shared` is the REP3 input share, `shamir_poseidon.gz.shared` 
 To create a proof in MPC, one needs the extended witness (from GenerateWitness, SplitWitness, or TranslateWitness):
 
 ```bash
-cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/poseidon/poseidon.gz.shared --circuit test_vectors/poseidon/poseidon.json --crs test_vectors/bn254_g1.dat --protocol REP3 --config configs/party.toml --out proof.proof --public-input public_input.json
+cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/poseidon/poseidon.gz.shared --circuit test_vectors/poseidon/poseidon.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher KECCAK --config configs/party.toml --out proof.proof --public-input public_input.json
 ```
 
-Here, `poseidon.gz.shared` is the share of the witness, `poseidon.json` is the circuit file from Noir, `bn254_g1.dat` is the file storing the prover CRS and `party.toml` is the network configuration. As output, one creates the UltraHonk proof `proof.proof` and the output of the circuit `public_input.json`.
+Here, `poseidon.gz.shared` is the share of the witness, `poseidon.json` is the circuit file from Noir, `bn254_g1.dat` is the file storing the prover CRS and `party.toml` is the network configuration. As output, one creates the UltraHonk proof `proof.proof` and the output of the circuit `public_input.json`. The parameter `--hasher POSEIDON` defines that Poseidon2 is used as the transcript hasher, the other implemented option would be Keccak256.
 
 The corresponding Barretenberg command (from `barretenberg/cpp/build/bin`) is:
 
@@ -119,10 +119,10 @@ Note: Barretenberg does not require the file for storing the CRS, since Barreten
 To verify the created proof, we first need to create a verification key. This can be done with:
 
 ```bash
-cargo run --release --bin co-noir -- create-vk --circuit test_vectors/poseidon/poseidon.json --crs test_vectors/bn254_g1.dat --vk test_vectors/poseidon/verification_key
+cargo run --release --bin co-noir -- create-vk --circuit test_vectors/poseidon/poseidon.json --crs test_vectors/bn254_g1.dat --hasher POSEIDON --vk test_vectors/poseidon/verification_key
 ```
 
-Here, `poseidon.json` is the circuit file from Noir, `bn254_g1.dat` is the file storing the prover CRS, and the output is written to `verification_key`.
+Here, `poseidon.json` is the circuit file from Noir, `bn254_g1.dat` is the file storing the prover CRS, and the output is written to `verification_key`. Again, `--hasher POSEIDON` defines that Poseidon2 is used as the transcript hasher.
 
 The corresponding Barretenberg command (from `barretenberg/cpp/build/bin`) is:
 
@@ -138,10 +138,10 @@ Note: Barretenberg does not require the file for storing the CRS, since Barreten
 To verify the proof, just use:
 
 ```bash
-cargo run --release --bin co-noir -- verify --proof proof.proof --vk test_vectors/poseidon/verification_key --crs test_vectors/bn254_g2.dat
+cargo run --release --bin co-noir -- verify --proof proof.proof --vk test_vectors/poseidon/verification_key --hasher POSEIDON --crs test_vectors/bn254_g2.dat
 ```
 
-Here, `proof.proof` is the proof we want to verify, `verification_key` is the output of CreateVK, and `bn254_g2.dat` is the verifier CRS.
+Here, `proof.proof` is the proof we want to verify, `verification_key` is the output of CreateVK, and `bn254_g2.dat` is the verifier CRS. Again, `--hasher POSEIDON` defines that Poseidon2 is used as the transcript hasher.
 
 The corresponding Barretenberg command (from `barretenberg/cpp/build/bin`) is:
 
