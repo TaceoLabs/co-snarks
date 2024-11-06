@@ -429,17 +429,17 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.bit_xor(a, b)?.into()),
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                let a = conversion::a2b(a, &mut self.io_context0)?;
+                let a = conversion::a2b_selector(a, &mut self.io_context0)?;
                 let binary = binary::xor_public(&a, &b.into_bigint().into(), self.io_context0.id);
-                Ok(conversion::b2a(&binary, &mut self.io_context0)?.into())
+                Ok(conversion::b2a_selector(&binary, &mut self.io_context0)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let (a, b) = join!(
-                    conversion::a2b(a, &mut self.io_context0),
-                    conversion::a2b(b, &mut self.io_context1)
+                    conversion::a2b_selector(a, &mut self.io_context0),
+                    conversion::a2b_selector(b, &mut self.io_context1)
                 );
                 let binary = binary::xor(&a?, &b?);
-                Ok(conversion::b2a(&binary, &mut self.io_context0)?.into())
+                Ok(conversion::b2a_selector(&binary, &mut self.io_context0)?.into())
             }
         }
     }
@@ -451,7 +451,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = conversion::a2b_selector(a, &mut self.io_context0)?;
                 let binary = binary::or_public(&a, &b.into_bigint().into(), self.io_context0.id);
-                let result = conversion::b2a(&binary, &mut self.io_context0)?;
+                let result = conversion::b2a_selector(&binary, &mut self.io_context0)?;
                 Ok(result.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
@@ -460,7 +460,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                     conversion::a2b_selector(b, &mut self.io_context1)
                 );
                 let binary = binary::or(&a?, &b?, &mut self.io_context0)?;
-                let result = conversion::b2a(&binary, &mut self.io_context0)?;
+                let result = conversion::b2a_selector(&binary, &mut self.io_context0)?;
                 Ok(result.into())
             }
         }
@@ -473,7 +473,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = conversion::a2b_selector(a, &mut self.io_context0)?;
                 let binary = binary::and_with_public(&a, &b.into_bigint().into());
-                let result = conversion::b2a(&binary, &mut self.io_context0)?;
+                let result = conversion::b2a_selector(&binary, &mut self.io_context0)?;
                 Ok(result.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
@@ -482,7 +482,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                     conversion::a2b_selector(b, &mut self.io_context1)
                 );
                 let binary = binary::and(&a?, &b?, &mut self.io_context0)?;
-                let result = conversion::b2a(&binary, &mut self.io_context0)?;
+                let result = conversion::b2a_selector(&binary, &mut self.io_context0)?;
                 Ok(result.into())
             }
         }
