@@ -19,16 +19,13 @@ circom-parser = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom"
 circom-compiler = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "compiler", rev = "8ef896c" }
 circom-types = { version = "0.5.0", path = "../circom-types" }
 circom-mpc-vm = { version = "0.4.2", path = "../circom-mpc-vm" }
-circom-parser = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "parser", branch = "dev" }
 circom-program_structure = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "program_structure", rev = "8ef896c" }
-circom-type_analysis = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "type_analysis", branch = "dev" }
 clap.workspace = true
 eyre.workspace = true
 itertools.workspace = true
 serde.workspace = true
 sha2.workspace = true
 tracing.workspace = true
-
 
 [dev-dependencies]
 ark-bn254.workspace = true
