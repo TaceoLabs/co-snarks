@@ -81,6 +81,7 @@ impl FunDecl {
 /// String -> (offset, size)
 pub type OutputMapping = HashMap<String, (usize, usize)>;
 
+/// A list of inputs (Name, offset, size).
 pub(crate) type InputList = Vec<(String, usize, usize)>;
 
 /// The state of the compiler after it parsed the circom file.

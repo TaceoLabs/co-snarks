@@ -1,30 +1,53 @@
-use super::CoUltraCircuitBuilder;
+use crate::key::types::TraceData;
 use crate::mpc::NoirUltraHonkProver;
-use crate::parse::types::TraceData;
 use crate::types::Polynomials;
 use crate::types::ProverWitnessEntities;
-use crate::types::ProvingKey;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::prelude::Crs;
+use co_builder::prelude::GenericUltraCircuitBuilder;
+use co_builder::prelude::Polynomial;
+use co_builder::prelude::PrecomputedEntities;
+use co_builder::prelude::ProverCrs;
+use co_builder::prelude::ProvingKey as PlainProvingKey;
+use co_builder::prelude::VerifyingKey;
+use co_builder::HonkProofError;
+use co_builder::HonkProofResult;
 use eyre::Result;
+use serde::Deserialize;
+use serde::Serialize;
 use std::marker::PhantomData;
-use ultrahonk::prelude::Crs;
-use ultrahonk::prelude::HonkProofResult;
-use ultrahonk::prelude::PrecomputedEntities;
-use ultrahonk::prelude::ProverCrs;
-use ultrahonk::prelude::ProvingKey as PlainProvingKey;
-use ultrahonk::prelude::UltraCircuitVariable;
-use ultrahonk::prelude::VerifyingKey;
 use ultrahonk::Utils;
+
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
+    pub crs: ProverCrs<P>,
+    pub circuit_size: u32,
+    #[serde(
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
+    )]
+    pub public_inputs: Vec<P::ScalarField>,
+    pub num_public_inputs: u32,
+    pub pub_inputs_offset: u32,
+    pub polynomials: Polynomials<T::ArithmeticShare, P::ScalarField>,
+    pub memory_read_records: Vec<u32>,
+    pub memory_write_records: Vec<u32>,
+    pub phantom: PhantomData<T>,
+}
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     const PUBLIC_INPUT_WIRE_INDEX: usize =
         ProverWitnessEntities::<T::ArithmeticShare, P::ScalarField>::W_R;
 
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
-    pub fn create(
+    pub fn create<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
         id: T::PartyID,
-        mut circuit: CoUltraCircuitBuilder<T, P>,
+        mut circuit: GenericUltraCircuitBuilder<P, U>,
         crs: ProverCrs<P>,
     ) -> HonkProofResult<Self> {
         tracing::trace!("ProvingKey create");
@@ -68,16 +91,19 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             .take(proving_key.num_public_inputs as usize)
             .cloned()
         {
-            let var = circuit.get_variable(var_idx as usize);
-            proving_key.public_inputs.push(var.public_into_field()?);
+            let var = U::get_public(&circuit.get_variable(var_idx as usize))
+                .ok_or(HonkProofError::ExpectedPublicWitness)?;
+            proving_key.public_inputs.push(var);
         }
 
         Ok(proving_key)
     }
 
-    pub fn create_keys(
+    pub fn create_keys<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
         id: T::PartyID,
-        circuit: CoUltraCircuitBuilder<T, P>,
+        circuit: GenericUltraCircuitBuilder<P, U>,
         crs: Crs<P>,
     ) -> HonkProofResult<(Self, VerifyingKey<P>)> {
         let prover_crs = ProverCrs {
@@ -113,15 +139,19 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         self.public_inputs.clone()
     }
 
-    pub fn get_prover_crs(
-        circuit: &CoUltraCircuitBuilder<T, P>,
+    pub fn get_prover_crs<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        circuit: &GenericUltraCircuitBuilder<P, U>,
         path_g1: &str,
     ) -> Result<ProverCrs<P>> {
         PlainProvingKey::get_prover_crs(circuit, path_g1)
     }
 
-    pub fn get_crs(
-        circuit: &CoUltraCircuitBuilder<T, P>,
+    pub fn get_crs<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        circuit: &GenericUltraCircuitBuilder<P, U>,
         path_g1: &str,
         path_g2: &str,
     ) -> Result<Crs<P>> {
@@ -145,10 +175,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         }
     }
 
-    fn populate_trace(
+    fn populate_trace<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
         &mut self,
         id: T::PartyID,
-        builder: &mut CoUltraCircuitBuilder<T, P>,
+        builder: &mut GenericUltraCircuitBuilder<P, U>,
         is_strucutred: bool,
     ) {
         tracing::trace!("Populating trace");
@@ -175,5 +207,65 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             self.circuit_size as usize,
             self.pub_inputs_offset as usize,
         );
+    }
+
+    pub fn from_plain_key_and_shares(
+        plain_key: &PlainProvingKey<P>,
+        shares: Vec<T::ArithmeticShare>,
+    ) -> Result<Self> {
+        let crs = plain_key.crs.to_owned();
+        let circuit_size = plain_key.circuit_size;
+        let public_inputs = plain_key.public_inputs.to_owned();
+        let num_public_inputs = plain_key.num_public_inputs;
+        let pub_inputs_offset = plain_key.pub_inputs_offset;
+        let memory_read_records = plain_key.memory_read_records.to_owned();
+        let memory_write_records = plain_key.memory_write_records.to_owned();
+
+        if shares.len() != circuit_size as usize * 4 {
+            return Err(eyre::eyre!("Share length is not 4 times circuit size"));
+        }
+
+        let mut polynomials = Polynomials::default();
+        for (src, des) in plain_key
+            .polynomials
+            .precomputed
+            .iter()
+            .zip(polynomials.precomputed.iter_mut())
+        {
+            *des = src.to_owned();
+        }
+        for (src, des) in plain_key
+            .polynomials
+            .witness
+            .lookup_read_counts_and_tags()
+            .iter()
+            .zip(
+                polynomials
+                    .witness
+                    .lookup_read_counts_and_tags_mut()
+                    .iter_mut(),
+            )
+        {
+            *des = src.to_owned();
+        }
+
+        for (src, des) in shares
+            .chunks_exact(circuit_size as usize)
+            .zip(polynomials.witness.get_wires_mut().iter_mut())
+        {
+            *des = Polynomial::new(src.to_owned());
+        }
+
+        Ok(Self {
+            crs,
+            circuit_size,
+            public_inputs,
+            num_public_inputs,
+            pub_inputs_offset,
+            polynomials,
+            memory_read_records,
+            memory_write_records,
+            phantom: PhantomData,
+        })
     }
 }

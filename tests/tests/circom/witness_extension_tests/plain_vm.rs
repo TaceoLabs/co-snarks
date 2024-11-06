@@ -33,6 +33,8 @@ macro_rules! witness_extension_test_plain {
             let inp: TestInputs = from_test_name(stringify!($name));
             for i in 0..inp.inputs.len() {
                 let mut compiler_config = CompilerConfig::default();
+                compiler_config.simplification =
+                    circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
                 compiler_config
                     .link_library
                     .push("../test_vectors/WitnessExtension/tests/libs/".into());

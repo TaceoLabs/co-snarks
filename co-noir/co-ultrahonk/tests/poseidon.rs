@@ -1,30 +1,37 @@
 use ark_bn254::Bn254;
-use co_ultrahonk::prelude::{
-    CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, ProvingKey, SharedBuilderVariable,
-};
+use ark_ff::PrimeField;
+use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
+use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, ProvingKey};
 use sha3::Keccak256;
 use ultrahonk::{
     prelude::{HonkProof, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher, UltraHonk},
     Utils,
 };
 
+fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<F>>(
+    witness: Vec<F>,
+) -> Vec<T::AcvmType> {
+    witness.into_iter().map(|w| T::AcvmType::from(w)).collect()
+}
+
 fn poseidon_plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
-    const CRS_PATH_G1: &str = "../ultrahonk/crs/bn254_g1.dat";
-    const CRS_PATH_G2: &str = "../ultrahonk/crs/bn254_g2.dat";
+    const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
     const CIRCUIT_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.json";
     const WITNESS_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.gz";
 
     let constraint_system = Utils::get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
     let witness = Utils::get_witness_from_file(WITNESS_FILE).unwrap();
 
-    let witness = SharedBuilderVariable::promote_public_witness_vector(witness);
+    let witness = promote_public_witness_vector::<_, PlainAcvmSolver<ark_bn254::Fr>>(witness);
 
     let builder =
         PlainCoBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
 
     let driver = PlainUltraHonkDriver;
 
-    let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
+    let crs =
+        ProvingKey::<PlainUltraHonkDriver, _>::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
     let (proving_key, verifying_key) = ProvingKey::create_keys(0, builder, crs).unwrap();
 
     let prover = CoUltraHonk::<_, _, H>::new(driver);

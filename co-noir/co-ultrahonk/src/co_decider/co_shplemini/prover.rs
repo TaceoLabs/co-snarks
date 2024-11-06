@@ -13,11 +13,10 @@ use crate::{
 };
 use ark_ec::Group;
 use ark_ff::{Field, One, Zero};
+use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
+use co_builder::HonkProofResult;
 use ultrahonk::{
-    prelude::{
-        HonkCurve, HonkProofResult, Polynomial, ProverCrs, Transcript, TranscriptFieldType,
-        TranscriptHasher,
-    },
+    prelude::{Transcript, TranscriptFieldType, TranscriptHasher},
     Utils,
 };
 

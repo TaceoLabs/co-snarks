@@ -5,6 +5,7 @@ use mpc_core::lut::LookupTableProvider;
 
 pub(super) mod plain;
 pub(super) mod rep3;
+pub(super) mod shamir; // Does not support everything, but basic circuits can be build using Shamir (co-builder)
 
 /// A trait representing the MPC operations required for extending the secret-shared Noir witness in MPC.
 /// The operations are generic over public and private (i.e., secret-shared) inputs.
@@ -17,7 +18,8 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + fmt::Debug
         + fmt::Display
         + From<Self::ArithmeticShare>
-        + From<F>;
+        + From<F>
+        + PartialEq;
 
     /// Returns F::zero() as a ACVM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
     fn public_zero() -> Self::AcvmType {
@@ -84,6 +86,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     /// Returns the share if the value is shared
     fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare>;
+
+    /// Returns the value if the value is public
+    fn get_public(a: &Self::AcvmType) -> Option<F>;
 
     // TODO do we want this here?
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>>;

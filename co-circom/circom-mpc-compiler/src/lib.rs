@@ -14,13 +14,16 @@
 //! The [`parse()`](CoCircomCompiler::parse) method consumes the compiler and returns an instance of [`CoCircomCompilerParsed`].
 //! Refer to its documentation to learn how to create an MPC-VM for the witness extension.
 use ark_ec::pairing::Pairing;
+use ark_ff::{BigInteger, PrimeField};
 use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags, VCP},
+    hir::very_concrete_program::Wire,
     intermediate_representation::{
         ir_interface::{
-            AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket, CreateCmpBucket,
-            Instruction, LoadBucket, LocationRule, LogBucket, LogBucketArg, LoopBucket,
-            OperatorType, ReturnBucket, ReturnType, StoreBucket, ValueBucket, ValueType,
+            AccessType, AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket,
+            CreateCmpBucket, Instruction, LoadBucket, LocationRule, LogBucket, LogBucketArg,
+            LoopBucket, OperatorType, ReturnBucket, ReturnType, SizeOption, StoreBucket,
+            ValueBucket, ValueType,
         },
         InstructionList,
     },
@@ -43,20 +46,18 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
 
 /// The simplification level applied during constraint generation
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Default, Copy, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash,
+)]
 pub enum SimplificationLevel {
     /// No simplification
     O0,
     /// Only applies signal to signal and signal to constant simplification
+    /// The default value since circom 2.2.0
+    #[default]
     O1,
     /// Full constraint simplification (applied for n rounds)
     O2(usize),
-}
-
-impl Default for SimplificationLevel {
-    fn default() -> Self {
-        SimplificationLevel::O2(usize::MAX)
-    }
 }
 
 /// The mpc-compiler configuration
@@ -83,7 +84,7 @@ pub struct CompilerConfig {
 }
 
 fn default_version() -> String {
-    "2.0.0".to_owned()
+    "2.2.0".to_owned()
 }
 
 impl Default for CompilerConfig {
@@ -103,7 +104,7 @@ impl Default for CompilerConfig {
 ///     * [`CoCircomCompiler::parse`]
 ///     * [`CoCircomCompiler::get_public_inputs`]
 pub struct CoCircomCompiler<P: Pairing> {
-    file: String,
+    file: PathBuf,
     phantom_data: PhantomData<P>,
     config: CompilerConfig,
     pub(crate) fun_decls: HashMap<String, FunDecl>,
@@ -118,10 +119,14 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     // only internally to hold the state
-    fn new(file: String, config: CompilerConfig) -> Self {
-        tracing::debug!("creating compiler for circuit {file} with config: {config:?}");
+    fn new<Pth>(file: Pth, config: CompilerConfig) -> Self
+    where
+        PathBuf: From<Pth>,
+        Pth: std::fmt::Debug,
+    {
+        tracing::debug!("creating compiler for circuit {file:?} with config: {config:?}");
         Self {
-            file,
+            file: PathBuf::from(file),
             config,
             current_code_block: vec![],
             fun_decls: HashMap::new(),
@@ -131,10 +136,16 @@ where
     }
 
     fn get_program_archive(&self) -> Result<ProgramArchive> {
+        let field = P::ScalarField::MODULUS;
+        let field_dig = circom_compiler::num_bigint::BigInt::from_bytes_be(
+            circom_compiler::num_bigint::Sign::Plus,
+            field.to_bytes_be().as_slice(),
+        );
         match circom_parser::run_parser(
-            self.file.clone(),
+            self.file.display().to_string(),
             &self.config.version,
             self.config.link_library.clone(),
+            &field_dig,
         ) {
             Ok((mut program_archive, warnings)) => {
                 Report::print_reports(&warnings, &program_archive.file_library);
@@ -160,10 +171,13 @@ where
         let mut output_mappings = HashMap::new();
         let initial_node = vcp.get_main_id();
         let main = &vcp.templates[initial_node];
-        for s in &main.signals {
-            if s.xtype == SignalType::Output {
-                output_mappings.insert(s.name.clone(), (s.dag_local_id, s.size()));
+        for s in &main.wires {
+            if let Wire::TSignal(s) = s {
+                if s.xtype == SignalType::Output {
+                    output_mappings.insert(s.name.clone(), (s.dag_local_id, s.size));
+                }
             }
+            // TODO: Can buses be outputs?
         }
         output_mappings
     }
@@ -221,9 +235,8 @@ where
                 indexes,
             } => {
                 debug_assert!(*signal_code > 0);
-                indexes
-                    .iter()
-                    .for_each(|inst| self.handle_instruction(inst));
+                indexes.iter().for_each(|at| self.handle_access_type(at));
+
                 (true, *signal_code)
             }
         };
@@ -247,12 +260,26 @@ where
         }
     }
 
+    fn handle_access_type(&mut self, access_type: &AccessType) {
+        match access_type {
+            AccessType::Qualified(idx) => {
+                self.emit_opcode(MpcOpCode::PushIndex(*idx));
+            }
+            AccessType::Indexed(indexed_info) => {
+                indexed_info
+                    .indexes
+                    .iter()
+                    .for_each(|inst| self.handle_instruction(inst));
+            }
+        }
+    }
+
     fn handle_store_bucket(&mut self, store_bucket: &StoreBucket) {
         self.handle_instruction(&store_bucket.src);
         self.emit_store_opcodes(
             &store_bucket.dest,
             &store_bucket.dest_address_type,
-            store_bucket.context.size,
+            get_size_from_size_option(&store_bucket.context.size),
         );
     }
 
@@ -330,7 +357,7 @@ where
     }
 
     fn handle_load_bucket(&mut self, load_bucket: &LoadBucket) {
-        let context_size = load_bucket.context.size;
+        let context_size = get_size_from_size_option(&load_bucket.context.size);
         //first eject for src
         let (mapped, signal_code) = match &load_bucket.src {
             LocationRule::Indexed {
@@ -350,9 +377,7 @@ where
                     // this further
                     self.emit_opcode(MpcOpCode::PushIndex(0));
                 } else {
-                    indexes
-                        .iter()
-                        .for_each(|inst| self.handle_instruction(inst));
+                    indexes.iter().for_each(|at| self.handle_access_type(at));
                 }
                 (true, *signal_code)
             }
@@ -454,7 +479,7 @@ where
             .iter()
             .enumerate()
             .for_each(|(idx, inst)| {
-                let arg_size = call_bucket.argument_types[idx].size;
+                let arg_size = get_size_from_size_option(&call_bucket.argument_types[idx].size);
                 self.handle_instruction(inst);
                 if arg_size > 1 {
                     //replace Load{Var/Signal} with with respective MultiOpCode
@@ -482,7 +507,7 @@ where
         match &call_bucket.return_info {
             ReturnType::Intermediate { op_aux_no: _ } => todo!(),
             ReturnType::Final(final_data) => {
-                if final_data.context.size == 1 {
+                if get_size_from_size_option(&final_data.context.size) == 1 {
                     self.emit_opcode(MpcOpCode::Call(call_bucket.symbol.clone(), 1));
                     self.emit_store_opcodes(&final_data.dest, &final_data.dest_address_type, 1);
                 } else {
@@ -495,7 +520,7 @@ where
                             if let Instruction::Value(value_bucket) = inner {
                                 self.emit_opcode(MpcOpCode::Call(
                                     call_bucket.symbol.clone(),
-                                    final_data.context.size,
+                                    get_size_from_size_option(&final_data.context.size),
                                 ));
                                 debug_assert!(matches!(value_bucket.parse_as, ValueType::U32));
                                 self.emit_opcode(MpcOpCode::PushIndex(value_bucket.value));
@@ -511,12 +536,12 @@ where
                         }
                     };
                     match &final_data.dest_address_type {
-                        AddressType::Variable => {
-                            self.emit_opcode(MpcOpCode::StoreVars(final_data.context.size))
-                        }
-                        AddressType::Signal => {
-                            self.emit_opcode(MpcOpCode::StoreSignals(final_data.context.size))
-                        }
+                        AddressType::Variable => self.emit_opcode(MpcOpCode::StoreVars(
+                            get_size_from_size_option(&final_data.context.size),
+                        )),
+                        AddressType::Signal => self.emit_opcode(MpcOpCode::StoreSignals(
+                            get_size_from_size_option(&final_data.context.size),
+                        )),
                         AddressType::SubcmpSignal {
                             cmp_address: _,
                             uniform_parallel_value: _,
@@ -586,7 +611,11 @@ where
     ///
     /// - `Ok(inputs)` contains a vector of public inputs as strings.
     /// - `Err(err)` indicates an error occurred during parsing or compilation.
-    pub fn get_public_inputs(file: String, config: CompilerConfig) -> Result<Vec<String>> {
+    pub fn get_public_inputs<Pth>(file: Pth, config: CompilerConfig) -> Result<Vec<String>>
+    where
+        PathBuf: From<Pth>,
+        Pth: std::fmt::Debug,
+    {
         Self::new(file, config).get_public_inputs_inner()
     }
 
@@ -603,10 +632,14 @@ where
     /// - `Ok(parsed)` contains the parsed compiler, which can be used to construct the MPC-VM.
     ///   Refer to its [documentation](CoCircomCompilerParsed) for usage details.
     /// - `Err(err)` indicates an error occurred during parsing or compilation.
-    pub fn parse(
-        file: String,
+    pub fn parse<Pth>(
+        file: Pth,
         config: CompilerConfig,
-    ) -> Result<CoCircomCompilerParsed<P::ScalarField>> {
+    ) -> Result<CoCircomCompilerParsed<P::ScalarField>>
+    where
+        PathBuf: From<Pth>,
+        Pth: std::fmt::Debug,
+    {
         Self::new(file, config).parse_inner()
     }
 
@@ -691,9 +724,27 @@ where
             circuit.c_producer.witness_to_signal_list,
             circuit.c_producer.number_of_main_inputs,
             circuit.c_producer.number_of_main_outputs,
-            circuit.c_producer.main_input_list.clone(),
+            circuit
+                .c_producer
+                .main_input_list
+                .into_iter()
+                .map(|x| (x.name, x.start, x.size))
+                .collect(),
             output_mapping,
         ))
+    }
+}
+
+fn get_size_from_size_option(size_option: &SizeOption) -> usize {
+    match size_option {
+        SizeOption::Single(v) => *v,
+        SizeOption::Multiple(v) => v
+            .iter()
+            .map(|x| {
+                // second value is the size
+                x.1
+            })
+            .sum(),
     }
 }
 

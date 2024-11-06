@@ -1,7 +1,3 @@
-use super::types::{
-    AcirFormatOriginalOpcodeIndices, BlockType, MulQuad, PolyTriple, RecursionConstraint,
-};
-use crate::parse::types::BlockConstraint;
 use acir::{
     acir_field::GenericFieldElement,
     circuit::{
@@ -13,6 +9,11 @@ use acir::{
 };
 use ark_ff::{PrimeField, Zero};
 use std::collections::{HashMap, HashSet};
+
+use crate::types::types::{
+    AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, MulQuad, PolyTriple,
+    RecursionConstraint,
+};
 
 #[derive(Default)]
 pub struct AcirFormat<F: PrimeField> {
@@ -72,7 +73,7 @@ pub struct AcirFormat<F: PrimeField> {
 }
 
 impl<F: PrimeField> AcirFormat<F> {
-    pub(crate) fn witness_map_to_witness_vector(
+    pub fn witness_map_to_witness_vector(
         witness_map: WitnessMap<GenericFieldElement<F>>,
     ) -> Vec<F> {
         let mut wv = Vec::new();
@@ -92,7 +93,7 @@ impl<F: PrimeField> AcirFormat<F> {
     }
 
     #[allow(clippy::field_reassign_with_default)]
-    pub(crate) fn circuit_serde_to_acir_format(
+    pub fn circuit_serde_to_acir_format(
         circuit: Circuit<GenericFieldElement<F>>,
         honk_recursion: bool,
     ) -> Self {
@@ -407,7 +408,7 @@ impl<F: PrimeField> AcirFormat<F> {
             block.type_ = BlockType::RAM;
         }
 
-        let acir_mem_op = super::types::MemOp {
+        let acir_mem_op = super::types::types::MemOp {
             access_type,
             index: Self::serialize_arithmetic_gate(&mem_op.index),
             value: Self::serialize_arithmetic_gate(&mem_op.value),

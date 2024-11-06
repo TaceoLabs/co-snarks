@@ -17,9 +17,9 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
-use ultrahonk::prelude::{
-    GateSeparatorPolynomial, HonkCurve, HonkProofResult, TranscriptFieldType, Univariate,
-};
+use co_builder::prelude::HonkCurve;
+use co_builder::HonkProofResult;
+use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
 
 pub(crate) type SumcheckRoundOutput<T, P> =
     SharedUnivariate<T, P, { MAX_PARTIAL_RELATION_LENGTH + 1 }>;

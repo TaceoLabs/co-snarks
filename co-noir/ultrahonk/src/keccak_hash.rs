@@ -1,5 +1,6 @@
-use crate::{prelude::TranscriptHasher, Serialize};
+use crate::prelude::TranscriptHasher;
 use ark_ff::PrimeField;
+use co_builder::prelude::Serialize;
 use sha3::{Digest, Keccak256};
 
 impl<F: PrimeField> TranscriptHasher<F> for Keccak256 {

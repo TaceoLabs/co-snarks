@@ -1,36 +1,17 @@
 //  modified from barustenberg:
 
-use crate::types::Crs;
-use crate::types::ProverCrs;
+use super::{Crs, ProverCrs};
 use ark_ec::pairing::Pairing;
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_serialize::CanonicalDeserialize;
-use byteorder::ByteOrder;
-use byteorder::ReadBytesExt;
-use byteorder::WriteBytesExt;
-use byteorder::{BigEndian, LittleEndian};
 use eyre::{anyhow, Result};
 use std::fs::File;
 use std::io::Read;
-use std::io::Seek;
-use std::io::SeekFrom;
 use std::marker::PhantomData;
 use std::path::Path;
 
 pub type CrsParser<P> = NewFileStructure<P>;
-
-const BLAKE2B_CHECKSUM_LENGTH: usize = 64;
-#[derive(Debug, Default)]
-struct Manifest {
-    transcript_number: u32,
-    total_transcripts: u32,
-    total_g1_points: u32,
-    total_g2_points: u32,
-    num_g1_points: u32,
-    num_g2_points: u32,
-    start_from: u32,
-}
 
 // Barretenberg changed the structure for the .dat files, therefore there are two slightly different implementations
 // the new one (when installing) barretenberg can be found under ~/.bb-crs (or downloaded from https://aztec-ignition.s3.amazonaws.com/MAIN%20IGNITION/flat/g1.dat or g2.dat, but the first one is 6 gb large)
@@ -92,45 +73,6 @@ trait FileProcessor<P: Pairing> {
             }
         }
     }
-    fn get_transcript_size(manifest: &Manifest) -> usize {
-        let manifest_size = std::mem::size_of::<Manifest>();
-        let g1_buffer_size = std::mem::size_of::<<P::G1 as CurveGroup>::BaseField>()
-            * 2
-            * manifest.num_g1_points as usize;
-        let g2_buffer_size = std::mem::size_of::<<P::G2 as CurveGroup>::BaseField>()
-            * 2
-            * manifest.num_g2_points as usize;
-        manifest_size + g1_buffer_size + g2_buffer_size + BLAKE2B_CHECKSUM_LENGTH
-    }
-
-    fn read_manifest(filename: &str) -> Result<Manifest> {
-        let mut file = File::open(filename)?;
-
-        Ok(Manifest {
-            transcript_number: file.read_u32::<BigEndian>()?,
-            total_transcripts: file.read_u32::<BigEndian>()?,
-            total_g1_points: file.read_u32::<BigEndian>()?,
-            total_g2_points: file.read_u32::<BigEndian>()?,
-            num_g1_points: file.read_u32::<BigEndian>()?,
-            num_g2_points: file.read_u32::<BigEndian>()?,
-            start_from: file.read_u32::<BigEndian>()?,
-        })
-    }
-
-    fn write_manifest(filename: &str, manifest: &Manifest) -> Result<()> {
-        let mut file = File::create(filename)?;
-
-        // Here you need to call file.write_u32::<BigEndian>(value)? for each field in Manifest
-        file.write_u32::<BigEndian>(manifest.transcript_number)?;
-        file.write_u32::<BigEndian>(manifest.total_transcripts)?;
-        file.write_u32::<BigEndian>(manifest.total_g1_points)?;
-        file.write_u32::<BigEndian>(manifest.total_g2_points)?;
-        file.write_u32::<BigEndian>(manifest.num_g1_points)?;
-        file.write_u32::<BigEndian>(manifest.num_g2_points)?;
-        file.write_u32::<BigEndian>(manifest.start_from)?;
-
-        Ok(())
-    }
     fn convert_endianness_inplace(buffer: &mut [u8]);
 }
 
@@ -182,11 +124,11 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use ark_bn254::{Bn254, Fq12, G1Affine, G2Affine};
     use ark_ec::{pairing::Pairing, AffineRepr};
     use ark_ff::Field;
 
-    use crate::parse::crs::{FileProcessor, NewFileStructure};
     #[test]
     fn read_transcript_loads_well_formed_srs_new() {
         let degree = 1000;
@@ -196,8 +138,8 @@ mod tests {
             &mut monomials,
             &mut g2_x,
             degree,
-            "crs/bn254_g1.dat",
-            "crs/bn254_g2.dat",
+            "src/crs/bn254_g1.dat",
+            "src/crs/bn254_g2.dat",
         )
         .unwrap();
         assert_eq!(G1Affine::generator(), monomials[0]);

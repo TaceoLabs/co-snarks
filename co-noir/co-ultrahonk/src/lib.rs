@@ -1,26 +1,23 @@
 pub(crate) mod co_decider;
 pub(crate) mod co_oink;
+pub(crate) mod key;
 pub(crate) mod mpc;
-pub(crate) mod parse;
 pub mod prelude;
 pub(crate) mod prover;
 pub(crate) mod types;
 
 use ark_ec::pairing::Pairing;
-use mpc::{plain::PlainUltraHonkDriver, NoirUltraHonkProver};
-use parse::builder_variable::SharedBuilderVariable;
-use ultrahonk::prelude::ProverCrs;
+use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver};
+use co_builder::prelude::GenericUltraCircuitBuilder;
+use co_builder::prelude::ProverCrs;
+use mpc::NoirUltraHonkProver;
 
-impl<P: Pairing> SharedBuilderVariable<PlainUltraHonkDriver, P> {
-    pub fn promote_public_witness_vector(
-        witness: Vec<P::ScalarField>,
-    ) -> Vec<SharedBuilderVariable<PlainUltraHonkDriver, P>> {
-        witness
-            .into_iter()
-            .map(SharedBuilderVariable::Public)
-            .collect()
-    }
-}
+pub type PlainCoBuilder<P> =
+    GenericUltraCircuitBuilder<P, PlainAcvmSolver<<P as Pairing>::ScalarField>>;
+pub type Rep3CoBuilder<P, N> =
+    GenericUltraCircuitBuilder<P, Rep3AcvmSolver<<P as Pairing>::ScalarField, N>>;
+pub type ShamirCoBuilder<P, N> =
+    GenericUltraCircuitBuilder<P, ShamirAcvmSolver<<P as Pairing>::ScalarField, N>>;
 
 pub(crate) const NUM_ALPHAS: usize = ultrahonk::NUM_ALPHAS;
 // The log of the max circuit size assumed in order to achieve constant sized Honk proofs

@@ -2,7 +2,6 @@ use ark_bls12_381::Bls12_381;
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use circom_mpc_compiler::CoCircomCompiler;
 use circom_types::R1CS;
 use num_traits::Zero;
 use std::sync::Arc;
@@ -45,8 +44,6 @@ use mpc_core::protocols::{
     shamir::{ShamirPreprocessing, ShamirProtocol},
 };
 use mpc_core::protocols::{rep3::network::Rep3Network, shamir::ShamirPrimeFieldShare};
-use num_bigint::BigUint;
-use num_traits::Num;
 use std::time::Instant;
 use std::{
     fs::File,
@@ -283,53 +280,14 @@ where
     file_utils::check_file_exists(&circuit_path)?;
     file_utils::check_dir_exists(&out_dir)?;
 
-    //get the public inputs if any from parser
-    let public_inputs = CoCircomCompiler::<P>::get_public_inputs(circuit, config.compiler)
-        .context("while reading public inputs from circuit")?;
-
-    // read the input file
-    let input_file = BufReader::new(File::open(&input).context("while opening input file")?);
-
-    let input_json: serde_json::Map<String, serde_json::Value> =
-        serde_json::from_reader(input_file).context("while parsing input file")?;
-
-    // create input shares
-    let mut shares = [
-        SerializeableSharedRep3Input::<P::ScalarField, SeedRng>::default(),
-        SerializeableSharedRep3Input::<P::ScalarField, SeedRng>::default(),
-        SerializeableSharedRep3Input::<P::ScalarField, SeedRng>::default(),
-    ];
-
-    let mut rng = rand::thread_rng();
     let start = Instant::now();
-    for (name, val) in input_json {
-        let parsed_vals = if val.is_array() {
-            parse_array(&val)?
-        } else if val.is_boolean() {
-            vec![parse_boolean(&val)?]
-        } else {
-            vec![parse_field(&val)?]
-        };
-        if public_inputs.contains(&name) {
-            shares[0]
-                .public_inputs
-                .insert(name.clone(), parsed_vals.clone());
-            shares[1]
-                .public_inputs
-                .insert(name.clone(), parsed_vals.clone());
-            shares[2].public_inputs.insert(name.clone(), parsed_vals);
-        } else {
-            let [share0, share1, share2] = SerializeableSharedRep3Input::share_rep3(
-                &parsed_vals,
-                &mut rng,
-                config.seeded,
-                config.additive,
-            );
-            shares[0].shared_inputs.insert(name.clone(), share0);
-            shares[1].shared_inputs.insert(name.clone(), share1);
-            shares[2].shared_inputs.insert(name.clone(), share2);
-        }
-    }
+    let shares = co_circom::split_input::<P>(
+        input.clone(),
+        circuit_path,
+        config.compiler,
+        config.seeded,
+        config.additive,
+    )?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Sharing took {} ms", duration_ms);
 
@@ -725,75 +683,6 @@ where
     } else {
         tracing::error!("Proof verification failed");
         Ok(ExitCode::FAILURE)
-    }
-}
-
-fn parse_field<F>(val: &serde_json::Value) -> color_eyre::Result<F>
-where
-    F: std::str::FromStr + PrimeField,
-{
-    let s = val.as_str().ok_or_else(|| {
-        eyre!(
-            "expected input to be a field element string, got \"{}\"",
-            val
-        )
-    })?;
-    let (is_negative, stripped) = if let Some(stripped) = s.strip_prefix('-') {
-        (true, stripped)
-    } else {
-        (false, s)
-    };
-    let positive_value = if let Some(stripped) = stripped.strip_prefix("0x") {
-        let mut big_int = BigUint::from_str_radix(stripped, 16)
-            .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
-            .context("while parsing field element")?;
-        let modulus = BigUint::try_from(F::MODULUS).expect("can convert mod to biguint");
-        if big_int >= modulus {
-            tracing::warn!("val {} >= mod", big_int);
-            // snarkjs also does this
-            big_int %= modulus;
-        }
-        let big_int: F::BigInt = big_int
-            .try_into()
-            .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
-            .context("while parsing field element")?;
-        F::from(big_int)
-    } else {
-        stripped
-            .parse::<F>()
-            .map_err(|_| eyre!("could not parse field element: \"{}\"", val))
-            .context("while parsing field element")?
-    };
-    if is_negative {
-        Ok(-positive_value)
-    } else {
-        Ok(positive_value)
-    }
-}
-
-fn parse_array<F: PrimeField>(val: &serde_json::Value) -> color_eyre::Result<Vec<F>> {
-    let json_arr = val.as_array().expect("is an array");
-    let mut field_elements = vec![];
-    for ele in json_arr {
-        if ele.is_array() {
-            field_elements.extend(parse_array::<F>(ele)?);
-        } else if ele.is_boolean() {
-            field_elements.push(parse_boolean(ele)?);
-        } else {
-            field_elements.push(parse_field(ele)?);
-        }
-    }
-    Ok(field_elements)
-}
-
-fn parse_boolean<F: PrimeField>(val: &serde_json::Value) -> color_eyre::Result<F> {
-    let bool = val
-        .as_bool()
-        .with_context(|| format!("expected input to be a bool, got {val}"))?;
-    if bool {
-        Ok(F::ONE)
-    } else {
-        Ok(F::ZERO)
     }
 }
 

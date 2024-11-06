@@ -1,11 +1,26 @@
 use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial as _};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use num_traits::Zero;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::{AddAssign, Index, IndexMut, SubAssign};
 
 #[derive(Clone, Debug, Default)]
 pub struct Polynomial<F> {
     pub coefficients: Vec<F>,
+}
+
+impl<F: CanonicalSerialize> Serialize for Polynomial<F> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        mpc_core::ark_se(&self.coefficients, serializer)
+    }
+}
+
+impl<'a, F: CanonicalDeserialize> Deserialize<'a> for Polynomial<F> {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        let coefficients: Vec<F> = mpc_core::ark_de(deserializer)?;
+        Ok(Self { coefficients })
+    }
 }
 
 pub struct ShiftedPoly<'a, F> {
@@ -23,7 +38,7 @@ impl<'a, F: Clone> ShiftedPoly<'a, F> {
         res
     }
 
-    pub(crate) fn as_ref(&self) -> &[F] {
+    pub fn as_ref(&self) -> &[F] {
         self.coefficients
     }
 }
@@ -123,7 +138,7 @@ impl<F: PrimeField> Polynomial<F> {
     /**
      * @brief Divides p(X) by (X-r) in-place.
      */
-    pub(crate) fn factor_roots(&mut self, root: &F) {
+    pub fn factor_roots(&mut self, root: &F) {
         if root.is_zero() {
             // if one of the roots is 0 after having divided by all other roots,
             // then p(X) = a₁⋅X + ⋯ + aₙ₋₁⋅Xⁿ⁻¹
@@ -179,7 +194,7 @@ impl<F: PrimeField> Polynomial<F> {
         }
     }
 
-    pub(crate) fn add_scaled(&mut self, src: &Polynomial<F>, scalar: &F) {
+    pub fn add_scaled(&mut self, src: &Polynomial<F>, scalar: &F) {
         self.add_scaled_slice(&src.coefficients, scalar);
     }
 

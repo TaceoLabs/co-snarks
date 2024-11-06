@@ -96,6 +96,36 @@ pub fn mul_assign_public<F: PrimeField>(shared: &mut ShamirShare<F>, public: F) 
     *shared *= public;
 }
 
+/// Performs division of two shared values, returning a / b.
+pub fn div<F: PrimeField, N: ShamirNetwork>(
+    a: ShamirShare<F>,
+    b: ShamirShare<F>,
+    shamir: &mut ShamirProtocol<F, N>,
+) -> IoResult<ShamirShare<F>> {
+    mul(a, inv(b, shamir)?, shamir)
+}
+
+/// Performs division of a shared value by a public value, returning shared / public.
+pub fn div_shared_by_public<F: PrimeField>(
+    shared: ShamirShare<F>,
+    public: F,
+) -> eyre::Result<ShamirShare<F>> {
+    if public.is_zero() {
+        eyre::bail!("Cannot invert zero");
+    }
+    let b_inv = public.inverse().unwrap();
+    Ok(mul_public(shared, b_inv))
+}
+
+/// Performs division of a public value by a shared value, returning public / shared.
+pub fn div_public_by_shared<F: PrimeField, N: ShamirNetwork>(
+    public: F,
+    shared: ShamirShare<F>,
+    shamir: &mut ShamirProtocol<F, N>,
+) -> IoResult<ShamirShare<F>> {
+    Ok(mul_public(inv(shared, shamir)?, public))
+}
+
 /// Computes the inverse of a shared field element
 pub fn inv<F: PrimeField, N: ShamirNetwork>(
     a: ShamirShare<F>,

@@ -1,10 +1,10 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
+use co_builder::prelude::Polynomial;
 use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
 };
-use ultrahonk::prelude::Polynomial;
 
 use crate::mpc::NoirUltraHonkProver;
 

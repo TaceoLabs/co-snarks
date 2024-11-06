@@ -1,10 +1,17 @@
 #![warn(missing_docs)]
 //! This crate provides a binary and associated helper library for running collaborative SNARK proofs.
-use std::{collections::BTreeMap, io::Read, path::PathBuf, sync::Arc, time::Instant};
+use std::{
+    collections::BTreeMap,
+    fs::File,
+    io::{BufReader, Read},
+    path::PathBuf,
+    sync::Arc,
+    time::Instant,
+};
 
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig};
+use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig, SimplificationLevel};
 use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::{
     groth16::{Groth16Proof, ZKey},
@@ -294,6 +301,9 @@ pub struct GenerateWitnessCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out: Option<PathBuf>,
+    /// The simplification level passed to the circom compiler (0-2)
+    #[arg(short = 'O', default_value_t = 1, value_parser = clap::value_parser!(u8).range(0..3))]
+    pub simplification_level: u8,
 }
 
 /// Config for `generate_witness`
@@ -503,10 +513,36 @@ macro_rules! impl_config {
 impl_config!(SplitInputCli, SplitInputConfig);
 impl_config!(SplitWitnessCli, SplitWitnessConfig);
 impl_config!(MergeInputSharesCli, MergeInputSharesConfig);
-impl_config!(GenerateWitnessCli, GenerateWitnessConfig);
 impl_config!(TranslateWitnessCli, TranslateWitnessConfig);
 impl_config!(GenerateProofCli, GenerateProofConfig);
 impl_config!(VerifyCli, VerifyConfig);
+
+// manual one since this is a bit more complex
+impl GenerateWitnessConfig {
+    /// Parse config from file, env, cli
+    pub fn parse(cli: GenerateWitnessCli) -> Result<Self, ConfigError> {
+        let simplification_level = cli.simplification_level;
+        let mut config: GenerateWitnessConfig = if let Some(path) = &cli.config {
+            Figment::new()
+                .merge(Toml::file(path))
+                .merge(Env::prefixed(CONFIG_ENV_PREFIX))
+                .merge(Serialized::defaults(cli))
+                .extract()?
+        } else {
+            Figment::new()
+                .merge(Env::prefixed(CONFIG_ENV_PREFIX))
+                .merge(Serialized::defaults(cli))
+                .extract()?
+        };
+        match simplification_level {
+            0 => config.compiler.simplification = SimplificationLevel::O0,
+            1 => config.compiler.simplification = SimplificationLevel::O1,
+            2 => config.compiler.simplification = SimplificationLevel::O2(usize::MAX),
+            _ => {}
+        }
+        Ok(config)
+    }
+}
 
 fn reshare_vec<F: PrimeField>(
     vec: Vec<F>,
@@ -586,6 +622,64 @@ pub fn parse_witness_share_shamir<R: Read, F: PrimeField>(
     reader: R,
 ) -> color_eyre::Result<SharedWitness<F, ShamirPrimeFieldShare<F>>> {
     bincode::deserialize_from(reader).context("trying to parse witness share file")
+}
+
+/// Splits the input according to the provided parameters.
+pub fn split_input<P>(
+    input: PathBuf,
+    circuit_path: PathBuf,
+    config: CompilerConfig,
+    seeded: bool,
+    additive: bool,
+) -> color_eyre::Result<[SerializeableSharedRep3Input<P::ScalarField, SeedRng>; 3]>
+where
+    P: Pairing + CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    //get the public inputs if any from parser
+    let public_inputs = CoCircomCompiler::<P>::get_public_inputs(circuit_path, config)
+        .context("while reading public inputs from circuit")?;
+
+    // read the input file
+    let input_file = BufReader::new(File::open(&input).context("while opening input file")?);
+
+    let input_json: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_reader(input_file).context("while parsing input file")?;
+
+    // create input shares
+    let mut shares = [
+        SerializeableSharedRep3Input::<P::ScalarField, SeedRng>::default(),
+        SerializeableSharedRep3Input::<P::ScalarField, SeedRng>::default(),
+        SerializeableSharedRep3Input::<P::ScalarField, SeedRng>::default(),
+    ];
+
+    let mut rng = rand::thread_rng();
+    for (name, val) in input_json {
+        let parsed_vals = if val.is_array() {
+            file_utils::parse_array(&val)?
+        } else if val.is_boolean() {
+            vec![file_utils::parse_boolean(&val)?]
+        } else {
+            vec![file_utils::parse_field(&val)?]
+        };
+        if public_inputs.contains(&name) {
+            shares[0]
+                .public_inputs
+                .insert(name.clone(), parsed_vals.clone());
+            shares[1]
+                .public_inputs
+                .insert(name.clone(), parsed_vals.clone());
+            shares[2].public_inputs.insert(name.clone(), parsed_vals);
+        } else {
+            let [share0, share1, share2] =
+                SerializeableSharedRep3Input::share_rep3(&parsed_vals, &mut rng, seeded, additive);
+            shares[0].shared_inputs.insert(name.clone(), share0);
+            shares[1].shared_inputs.insert(name.clone(), share1);
+            shares[2].shared_inputs.insert(name.clone(), share2);
+        }
+    }
+    Ok(shares)
 }
 
 /// Try to parse a [SharedInput] from a [Read]er.

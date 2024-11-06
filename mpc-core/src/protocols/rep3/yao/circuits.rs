@@ -47,6 +47,20 @@ impl GarbledCircuits {
         Ok((s, c))
     }
 
+    /// Full adder, just outputs carry
+    fn full_adder_carry<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: &G::Item,
+        c: &G::Item,
+    ) -> Result<G::Item, G::Error> {
+        let z1 = g.xor(a, b)?;
+        let z3 = g.xor(a, c)?;
+        let z4 = g.and(&z1, &z3)?;
+        let c = g.xor(&z4, a)?;
+        Ok(c)
+    }
+
     fn full_adder<G: FancyBinary>(
         g: &mut G,
         a: &G::Item,
@@ -59,6 +73,33 @@ impl GarbledCircuits {
         let z4 = g.and(&z1, &z3)?;
         let c = g.xor(&z4, a)?;
         Ok((s, c))
+    }
+
+    /// Full adder with carry in set
+    fn full_adder_cin_set<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: &G::Item,
+    ) -> Result<(G::Item, G::Item), G::Error> {
+        let z1 = g.xor(a, b)?;
+        let s = g.negate(&z1)?;
+        let z3 = g.negate(a)?;
+        let z4 = g.and(&z1, &z3)?;
+        let c = g.xor(&z4, a)?;
+        Ok((s, c))
+    }
+
+    /// Full adder with carry in set, just outputs carry
+    fn full_adder_carry_cin_set<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: &G::Item,
+    ) -> Result<G::Item, G::Error> {
+        let z1 = g.xor(a, b)?;
+        let z3 = g.negate(a)?;
+        let z4 = g.and(&z1, &z3)?;
+        let c = g.xor(&z4, a)?;
+        Ok(c)
     }
 
     /// Binary addition. Returns the result and the carry.
@@ -82,6 +123,54 @@ impl GarbledCircuits {
         }
 
         Ok((result, c))
+    }
+
+    /// Binary subtraction. Returns the result and whether it underflowed.
+    /// I.e., calculates 2^k + x1 - x2
+    #[allow(unused, clippy::type_complexity)]
+    fn bin_subtraction<G: FancyBinary>(
+        g: &mut G,
+        xs: &[G::Item],
+        ys: &[G::Item],
+    ) -> Result<(Vec<G::Item>, G::Item), G::Error> {
+        debug_assert_eq!(xs.len(), ys.len());
+        let mut result = Vec::with_capacity(xs.len());
+        // Twos complement is negation + 1, we implement by having cin in adder = 1, so only negation is required
+
+        let y0 = g.negate(&ys[0])?;
+        let (mut s, mut c) = Self::full_adder_cin_set(g, &xs[0], &y0)?;
+        result.push(s);
+
+        for (x, y) in xs.iter().zip(ys.iter()).skip(1) {
+            let y = g.negate(y)?;
+            let res = Self::full_adder(g, x, &y, &c)?;
+            s = res.0;
+            c = res.1;
+            result.push(s);
+        }
+
+        Ok((result, c))
+    }
+
+    /// Binary subtraction. Returns whether it underflowed.
+    /// I.e., calculates the msb of 2^k + x1 - x2
+    fn bin_subtraction_get_carry_only<G: FancyBinary>(
+        g: &mut G,
+        xs: &[G::Item],
+        ys: &[G::Item],
+    ) -> Result<G::Item, G::Error> {
+        debug_assert_eq!(xs.len(), ys.len());
+        // Twos complement is negation + 1, we implement by having cin in adder = 1, so only negation is required
+
+        let y0 = g.negate(&ys[0])?;
+        let mut c = Self::full_adder_carry_cin_set(g, &xs[0], &y0)?;
+
+        for (x, y) in xs.iter().zip(ys.iter()).skip(1) {
+            let y = g.negate(y)?;
+            c = Self::full_adder_carry(g, x, &y, &c)?;
+        }
+
+        Ok(c)
     }
 
     /// If `b = 0` returns `x` else `y`.
@@ -195,6 +284,40 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(result))
     }
 
+    fn compose_field_element<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        field_wires: &[G::Item],
+        rand_wires: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bitlen = field_wires.len();
+        debug_assert!(input_bitlen <= F::MODULUS_BIT_SIZE as usize);
+        debug_assert_eq!(rand_wires.len(), F::MODULUS_BIT_SIZE as usize);
+        // compose chunk_bits again
+        // For the bin addition, our input is not of size F::ModulusBitSize, thus we can optimize a little bit
+
+        let mut added = Vec::with_capacity(input_bitlen);
+
+        let xs = field_wires;
+        let ys = rand_wires;
+        let (mut s, mut c) = Self::half_adder(g, &xs[0], &ys[0])?;
+        added.push(s);
+
+        for (x, y) in xs.iter().zip(ys.iter()).skip(1) {
+            let res = Self::full_adder(g, x, y, &c)?;
+            s = res.0;
+            c = res.1;
+            added.push(s);
+        }
+        for y in ys.iter().skip(xs.len()) {
+            let res = Self::full_adder_const(g, y, false, &c)?;
+            s = res.0;
+            c = res.1;
+            added.push(s);
+        }
+
+        Self::sub_p_and_mux_with_output_size::<_, F>(g, &added, c, F::MODULUS_BIT_SIZE as usize)
+    }
+
     /// Decomposes a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
     fn decompose_field_element<G: FancyBinary, F: PrimeField>(
         g: &mut G,
@@ -221,33 +344,7 @@ impl GarbledCircuits {
             input_bits.chunks(decompose_bitlen),
             wires_c.chunks(input_bitlen),
         ) {
-            // compose chunk_bits again
-            // For the bin addition, our input is not of size F::ModulusBitSize, thus we can optimize a little bit
-
-            let mut added = Vec::with_capacity(input_bitlen);
-
-            let (mut s, mut c) = Self::half_adder(g, &xs[0], &ys[0])?;
-            added.push(s);
-
-            for (x, y) in xs.iter().zip(ys.iter()).skip(1) {
-                let res = Self::full_adder(g, x, y, &c)?;
-                s = res.0;
-                c = res.1;
-                added.push(s);
-            }
-            for y in ys.iter().skip(xs.len()) {
-                let res = Self::full_adder_const(g, y, false, &c)?;
-                s = res.0;
-                c = res.1;
-                added.push(s);
-            }
-
-            let result = Self::sub_p_and_mux_with_output_size::<_, F>(
-                g,
-                &added,
-                c,
-                F::MODULUS_BIT_SIZE as usize,
-            )?;
+            let result = Self::compose_field_element::<_, F>(g, xs, ys)?;
             results.extend(result);
         }
 
@@ -292,6 +389,140 @@ impl GarbledCircuits {
                 total_output_bitlen_per_field,
             )?;
             results.extend(decomposed);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    fn unsigned_ge<G: FancyBinary>(
+        g: &mut G,
+        a: &[G::Item],
+        b: &[G::Item],
+    ) -> Result<G::Item, G::Error> {
+        debug_assert_eq!(a.len(), b.len());
+        Self::bin_subtraction_get_carry_only(g, a, b)
+    }
+
+    fn unsigned_lt<G: FancyBinary>(
+        g: &mut G,
+        a: &[G::Item],
+        b: &[G::Item],
+    ) -> Result<G::Item, G::Error> {
+        let ge = Self::unsigned_ge(g, a, b)?;
+        g.negate(&ge)
+    }
+
+    #[allow(unused)]
+    fn unsigned_le<G: FancyBinary>(
+        g: &mut G,
+        a: &[G::Item],
+        b: &[G::Item],
+    ) -> Result<G::Item, G::Error> {
+        Self::unsigned_ge(g, b, a)
+    }
+
+    fn unsigned_gt<G: FancyBinary>(
+        g: &mut G,
+        a: &[G::Item],
+        b: &[G::Item],
+    ) -> Result<G::Item, G::Error> {
+        Self::unsigned_lt(g, b, a)
+    }
+
+    fn batcher_odd_even_merge_sort_inner<G: FancyBinary>(
+        g: &mut G,
+        inputs: &mut [Vec<G::Item>],
+    ) -> Result<(), G::Error>
+    where
+        G::Item: Default,
+    {
+        debug_assert!(!inputs.is_empty());
+        let len = inputs.len();
+        let inner_len = inputs[0].len();
+        let mut lhs_result = vec![G::Item::default(); inner_len];
+        let mut rhs_result = vec![G::Item::default(); inner_len];
+
+        let mut p = 1;
+        while p < len {
+            let mut k = p;
+            while k >= 1 {
+                for j in (k % p..len - k).step_by(2 * k) {
+                    for i in 0..std::cmp::min(k, len - j - k) {
+                        if (i + j) / (2 * p) == (i + j + k) / (2 * p) {
+                            {
+                                let lhs = &inputs[i + j];
+                                let rhs = &inputs[i + j + k];
+                                debug_assert_eq!(lhs.len(), rhs.len());
+                                debug_assert_eq!(lhs.len(), inner_len);
+
+                                let cmp = Self::unsigned_gt(g, lhs, rhs)?;
+
+                                for (l, r, l_res, r_res) in izip!(
+                                    lhs.iter(),
+                                    rhs.iter(),
+                                    lhs_result.iter_mut(),
+                                    rhs_result.iter_mut()
+                                ) {
+                                    // This is a cmux, setting lres to l if cmp is 0, else r
+                                    let xor = g.xor(l, r)?;
+                                    let and = g.and(&cmp, &xor)?;
+                                    *l_res = g.xor(&and, l)?;
+                                    // sets r_res to the opposite of l_res
+                                    *r_res = g.xor(&xor, l_res)?;
+                                }
+                            }
+                            inputs[i + j].clone_from_slice(&lhs_result);
+                            inputs[i + j + k].clone_from_slice(&rhs_result);
+                        }
+                    }
+                }
+                k >>= 1;
+            }
+            p <<= 1;
+        }
+
+        Ok(())
+    }
+
+    /// Sorts a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first). Thereby, only bitsize bits are used in sorting. Finally, the sorted vector is composed to shared field elements using wires_c.
+    pub(crate) fn batcher_odd_even_merge_sort<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        bitlen: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    where
+        G::Item: Default,
+    {
+        debug_assert_eq!(wires_a.size(), wires_b.size());
+        debug_assert_eq!(wires_a.size(), wires_c.size());
+        let input_size = wires_a.size();
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let num_inputs = input_size / input_bitlen;
+
+        debug_assert_eq!(input_size % input_bitlen, 0);
+        debug_assert!(input_bitlen >= bitlen);
+
+        // Add wires_a and wires_b to get the input bits as Yao wires
+        let mut inputs = Vec::with_capacity(num_inputs);
+        for (chunk_a, chunk_b) in izip!(
+            wires_a.wires().chunks(input_bitlen),
+            wires_b.wires().chunks(input_bitlen),
+        ) {
+            let input_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_a, chunk_b, bitlen)?;
+            inputs.push(input_bits);
+        }
+
+        // Perform the actual sorting
+        Self::batcher_odd_even_merge_sort_inner(g, &mut inputs)?;
+
+        // Add each field element to wires_c for the composition
+        let mut results = Vec::with_capacity(input_size);
+        for (xs, ys) in izip!(inputs, wires_c.wires().chunks(input_bitlen),) {
+            let result = Self::compose_field_element::<_, F>(g, &xs, ys)?;
+            results.extend(result);
         }
 
         Ok(BinaryBundle::new(results))

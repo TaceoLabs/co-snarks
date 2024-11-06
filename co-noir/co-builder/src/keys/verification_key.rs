@@ -1,19 +1,25 @@
-use super::{
-    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder, UltraCircuitVariable},
-    types::{AggregationObjectPubInputIndices, AGGREGATION_OBJECT_SIZE},
-};
 use crate::{
-    prelude::{CrsParser, HonkCurve, TranscriptFieldType},
-    prover::{HonkProofError, HonkProofResult},
-    types::{
-        Crs, HonkProof, PrecomputedEntities, ProverCrs, ProvingKey, VerifyingKey,
-        PRECOMPUTED_ENTITIES_SIZE,
-    },
-    Serialize, Utils,
+    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
+    crs::{parse::CrsParser, Crs, ProverCrs},
+    honk_curve::HonkCurve,
+    keys::proving_key::ProvingKey,
+    polynomials::polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE},
+    serialize::{Serialize, SerializeP},
+    types::types::{AggregationObjectPubInputIndices, AGGREGATION_OBJECT_SIZE},
+    utils::Utils,
+    HonkProofError, HonkProofResult, TranscriptFieldType,
 };
-use ark_ec::{pairing::Pairing, AffineRepr};
-use ark_ff::PrimeField;
+use ark_ec::pairing::Pairing;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use eyre::Result;
+
+pub struct VerifyingKey<P: Pairing> {
+    pub crs: P::G2Affine,
+    pub circuit_size: u32,
+    pub num_public_inputs: u32,
+    pub pub_inputs_offset: u32,
+    pub commitments: PrecomputedEntities<P::G1Affine>,
+}
 
 impl<P: Pairing> VerifyingKey<P> {
     pub fn create(circuit: UltraCircuitBuilder<P>, crs: Crs<P>) -> HonkProofResult<Self> {
@@ -34,8 +40,8 @@ impl<P: Pairing> VerifyingKey<P> {
         }
     }
 
-    pub fn get_crs<S: UltraCircuitVariable<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+    pub fn get_crs<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, T>,
         path_g1: &str,
         path_g2: &str,
     ) -> Result<Crs<P>> {
@@ -43,8 +49,8 @@ impl<P: Pairing> VerifyingKey<P> {
         ProvingKey::get_crs(circuit, path_g1, path_g2)
     }
 
-    pub fn get_prover_crs<S: UltraCircuitVariable<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, S>,
+    pub fn get_prover_crs<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        circuit: &GenericUltraCircuitBuilder<P, T>,
         path_g1: &str,
     ) -> Result<ProverCrs<P>> {
         tracing::trace!("Getting crs");
@@ -68,50 +74,12 @@ pub struct VerifyingKeyBarretenberg<P: Pairing> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
-    const NUM_64_LIMBS: u32 = P::BaseField::MODULUS_BIT_SIZE.div_ceil(64);
-    const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
+    const FIELDSIZE_BYTES: u32 = SerializeP::<P>::FIELDSIZE_BYTES;
     const SER_FULL_SIZE: usize = 4 * 8
         + 1
         + AGGREGATION_OBJECT_SIZE * 4
         + PRECOMPUTED_ENTITIES_SIZE * 2 * Self::FIELDSIZE_BYTES as usize;
     const SER_COMPRESSED_SIZE: usize = Self::SER_FULL_SIZE - 1 - AGGREGATION_OBJECT_SIZE * 4;
-
-    fn write_g1_element(buf: &mut Vec<u8>, el: &P::G1Affine, write_x_first: bool) {
-        let prev_len = buf.len();
-
-        if el.is_zero() {
-            for _ in 0..Self::FIELDSIZE_BYTES * 2 {
-                buf.push(255);
-            }
-        } else {
-            let (x, y) = P::g1_affine_to_xy(el);
-            if write_x_first {
-                Serialize::<P::BaseField>::write_field_element(buf, x);
-                Serialize::<P::BaseField>::write_field_element(buf, y);
-            } else {
-                Serialize::<P::BaseField>::write_field_element(buf, y);
-                Serialize::<P::BaseField>::write_field_element(buf, x);
-            }
-        }
-
-        debug_assert_eq!(buf.len() - prev_len, Self::FIELDSIZE_BYTES as usize * 2);
-    }
-
-    fn read_g1_element(buf: &[u8], offset: &mut usize, read_x_first: bool) -> P::G1Affine {
-        if buf.iter().all(|&x| x == 255) {
-            *offset += Self::FIELDSIZE_BYTES as usize * 2;
-            return P::G1Affine::zero();
-        }
-
-        let first = Serialize::<P::BaseField>::read_field_element(buf, offset);
-        let second = Serialize::<P::BaseField>::read_field_element(buf, offset);
-
-        if read_x_first {
-            P::g1_affine_from_xy(first, second)
-        } else {
-            P::g1_affine_from_xy(second, first)
-        }
-    }
 
     pub fn to_buffer(&self) -> Vec<u8> {
         let mut buffer = Vec::with_capacity(Self::SER_FULL_SIZE);
@@ -127,7 +95,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
         }
 
         for el in self.commitments.iter() {
-            Self::write_g1_element(&mut buffer, el, true);
+            SerializeP::<P>::write_g1_element(&mut buffer, el, true);
         }
 
         debug_assert_eq!(buffer.len(), Self::SER_FULL_SIZE);
@@ -143,7 +111,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
         Serialize::<P::ScalarField>::write_u64(&mut buffer, self.pub_inputs_offset);
 
         for el in self.commitments.iter() {
-            Self::write_g1_element(&mut buffer, el, true);
+            SerializeP::<P>::write_g1_element(&mut buffer, el, true);
         }
 
         debug_assert_eq!(buffer.len(), Self::SER_COMPRESSED_SIZE);
@@ -191,7 +159,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
         let mut commitments = PrecomputedEntities::default();
 
         for el in commitments.iter_mut() {
-            *el = Self::read_g1_element(buf, &mut offset, true);
+            *el = SerializeP::<P>::read_g1_element(buf, &mut offset, true);
         }
 
         debug_assert!(offset == Self::SER_FULL_SIZE || offset == Self::SER_COMPRESSED_SIZE);

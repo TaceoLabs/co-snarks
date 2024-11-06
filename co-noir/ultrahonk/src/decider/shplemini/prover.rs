@@ -4,15 +4,17 @@ use super::{
     ShpleminiOpeningClaim,
 };
 use crate::{
-    decider::{polynomial::Polynomial, shplemini::OpeningPair, verifier::DeciderVerifier},
-    honk_curve::HonkCurve,
-    prover::HonkProofResult,
+    decider::{shplemini::OpeningPair, verifier::DeciderVerifier},
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    types::{AllEntities, ProverCrs},
+    types::AllEntities,
     Utils, CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
+use co_builder::{
+    prelude::{HonkCurve, Polynomial, ProverCrs},
+    HonkProofResult,
+};
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
     fn get_f_polynomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {

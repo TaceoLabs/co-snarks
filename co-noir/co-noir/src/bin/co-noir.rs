@@ -1,20 +1,23 @@
 use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Parser, Subcommand};
-use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
+use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType, ShamirAcvmType};
 use co_noir::{
     convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
-    translate_witness_share_rep3, CreateVKCli, CreateVKConfig, GenerateProofCli,
+    translate_witness_share_rep3, BuildAndGenerateProofCli, BuildAndGenerateProofConfig,
+    BuildProvingKeyCLi, BuildProvingKeyConfig, CreateVKCli, CreateVKConfig, GenerateProofCli,
     GenerateProofConfig, GenerateWitnessCli, GenerateWitnessConfig, MPCProtocol,
     MergeInputSharesCli, MergeInputSharesConfig, PubShared, SplitInputCli, SplitInputConfig,
-    SplitWitnessCli, SplitWitnessConfig, TranscriptHash, TranslateWitnessCli,
-    TranslateWitnessConfig, VerifyCli, VerifyConfig,
+    SplitProvingKeyCli, SplitProvingKeyConfig, SplitWitnessCli, SplitWitnessConfig, TranscriptHash,
+    TranslateProvingKeyCli, TranslateProvingKeyConfig, TranslateWitnessCli, TranslateWitnessConfig,
+    VerifyCli, VerifyConfig,
 };
 use co_ultrahonk::{
     prelude::{
-        CoUltraHonk, HonkProof, Poseidon2Sponge, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver,
-        ShamirCoBuilder, ShamirUltraHonkDriver, SharedBuilderVariable, UltraCircuitBuilder,
-        UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg,
+        CoUltraHonk, HonkProof, PlainProvingKey, Polynomial, Polynomials, Poseidon2Sponge,
+        ProverWitnessEntities, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver, ShamirCoBuilder,
+        ShamirUltraHonkDriver, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
+        VerifyingKeyBarretenberg,
     },
     MAX_PARTIAL_RELATION_LENGTH, OINK_CRAND_PAIRS_CONST, OINK_CRAND_PAIRS_FACTOR_N,
     OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE, SUMCHECK_ROUND_CRAND_PAIRS_FACTOR,
@@ -22,14 +25,19 @@ use co_ultrahonk::{
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
-    rep3::network::{IoContext, Rep3MpcNet, Rep3Network},
+    rep3::{
+        self,
+        network::{IoContext, Rep3MpcNet, Rep3Network},
+    },
     shamir::{
+        self,
         network::{ShamirMpcNet, ShamirNetwork},
         ShamirPreprocessing, ShamirProtocol,
     },
 };
 use sha3::Keccak256;
 use std::{
+    array,
     collections::BTreeMap,
     fs::File,
     io::{BufReader, BufWriter, Write},
@@ -67,14 +75,22 @@ enum Commands {
     SplitWitness(SplitWitnessCli),
     /// Splits a input toml file into secret shares for use in MPC
     SplitInput(SplitInputCli),
+    /// Generate the proving key in plain and split it into secret shares used for MPC
+    SplitProvingKey(SplitProvingKeyCli),
     /// Merge multiple shared inputs received from multiple parties into a single one
     MergeInputShares(MergeInputSharesCli),
     /// Evaluates the extended witness generation for the specified circuit and input share in MPC
     GenerateWitness(GenerateWitnessCli),
     /// Translates the witness generated with one MPC protocol to a witness for a different one
     TranslateWitness(TranslateWitnessCli),
-    /// Evaluates the prover algorithm for the specified circuit and witness share in MPC
+    /// Translates the proving key generated with one MPC protocol to a proving key for a different one
+    TranslateProvingKey(TranslateProvingKeyCli),
+    /// Build the proving key for the specified circuit and witness share in MPC
+    BuildProvingKey(BuildProvingKeyCLi),
+    // evaluates the prover algorithm for the specified circuit and shared proving key in MPC
     GenerateProof(GenerateProofCli),
+    /// Builds the proving key and evaluates the prover algorithm for the specified circuit and witness share in MPC
+    BuildAndGenerateProof(BuildAndGenerateProofCli),
     /// Create a verification key for the specified circuit
     CreateVK(CreateVKCli),
     /// Verification of a Noir proof.
@@ -97,6 +113,10 @@ fn main() -> color_eyre::Result<ExitCode> {
             let config = SplitInputConfig::parse(cli).context("while parsing config")?;
             run_split_input(config)
         }
+        Commands::SplitProvingKey(cli) => {
+            let config = SplitProvingKeyConfig::parse(cli).context("while parsing config")?;
+            run_split_proving_key(config)
+        }
         Commands::MergeInputShares(cli) => {
             let config = MergeInputSharesConfig::parse(cli).context("while parsing config")?;
             run_merge_input_shares(config)
@@ -109,9 +129,21 @@ fn main() -> color_eyre::Result<ExitCode> {
             let config = TranslateWitnessConfig::parse(cli).context("while parsing config")?;
             run_translate_witness(config)
         }
+        Commands::TranslateProvingKey(cli) => {
+            let config = TranslateProvingKeyConfig::parse(cli).context("while parsing config")?;
+            run_translate_proving_key(config)
+        }
+        Commands::BuildProvingKey(cli) => {
+            let config = BuildProvingKeyConfig::parse(cli).context("while parsing config")?;
+            run_build_proving_key(config)
+        }
         Commands::GenerateProof(cli) => {
             let config = GenerateProofConfig::parse(cli).context("while parsing config")?;
             run_generate_proof(config)
+        }
+        Commands::BuildAndGenerateProof(cli) => {
+            let config = BuildAndGenerateProofConfig::parse(cli).context("while parsing config")?;
+            run_build_and_generate_proof(config)
         }
         Commands::CreateVK(cli) => {
             let config = CreateVKConfig::parse(cli).context("while parsing config")?;
@@ -175,7 +207,7 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
             }
             // create witness shares
             let start = Instant::now();
-            let shares = share_rep3::<Bn254, Rep3MpcNet, _>(witness, &mut rng);
+            let shares = share_rep3(witness, &mut rng);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Sharing took {} ms", duration_ms);
 
@@ -197,7 +229,7 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
         MPCProtocol::SHAMIR => {
             // create witness shares
             let start = Instant::now();
-            let shares = share_shamir::<Bn254, ShamirMpcNet, _>(witness, t, n, &mut rng);
+            let shares = share_shamir(witness, t, n, &mut rng);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Sharing took {} ms", duration_ms);
 
@@ -218,6 +250,109 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
         }
     }
     tracing::info!("Split witness into shares successfully");
+    Ok(ExitCode::SUCCESS)
+}
+
+#[instrument(skip(config))]
+fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<ExitCode> {
+    let witness_path = config.witness;
+    let circuit_path = config.circuit;
+    let crs_path = config.crs;
+    let protocol = config.protocol;
+    let out_dir = config.out_dir;
+    let t = config.threshold;
+    let n = config.num_parties;
+
+    file_utils::check_file_exists(&witness_path)?;
+    file_utils::check_file_exists(&circuit_path)?;
+    file_utils::check_file_exists(&crs_path)?;
+    file_utils::check_dir_exists(&out_dir)?;
+
+    // parse constraint system
+    let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
+        .context("while parsing program artifact")?;
+
+    // parse witness
+    let witness = Utils::get_witness_from_file(&witness_path).context("while parsing witness")?;
+
+    let builder =
+        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
+    // parse the crs
+    let prover_crs = PlainProvingKey::get_prover_crs(
+        &builder,
+        crs_path.to_str().context("while opening crs file")?,
+    )
+    .context("failed to get prover crs")?;
+    let proving_key = PlainProvingKey::create(builder, prover_crs);
+
+    let witness_entities = proving_key
+        .polynomials
+        .witness
+        .get_wires()
+        .iter()
+        .flat_map(|el| el.iter().cloned())
+        .collect::<Vec<_>>();
+
+    let mut rng = rand::thread_rng();
+
+    match protocol {
+        MPCProtocol::REP3 => {
+            if t != 1 {
+                return Err(eyre!("REP3 only allows the threshold to be 1"));
+            }
+            if n != 3 {
+                return Err(eyre!("REP3 only allows the number of parties to be 3"));
+            }
+
+            // create shares
+            let start = Instant::now();
+            let shares = rep3::share_field_elements(&witness_entities, &mut rng);
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Sharing took {} ms", duration_ms);
+
+            // write out the shares to the output directory
+            let base_name = "proving_key";
+            for (i, share) in shares.into_iter().enumerate() {
+                let key =
+                    ProvingKey::<Rep3UltraHonkDriver<Rep3MpcNet>, _>::from_plain_key_and_shares(
+                        &proving_key,
+                        share,
+                    )?;
+
+                let path = out_dir.join(format!("{}.{}.shared", base_name, i));
+                let out_file =
+                    BufWriter::new(File::create(&path).context("while creating output file")?);
+                bincode::serialize_into(out_file, &key)
+                    .context("while serializing proving_key share")?;
+                tracing::info!("Wrote proving_key share {} to file {}", i, path.display());
+            }
+        }
+        MPCProtocol::SHAMIR => {
+            // create shares
+            let start = Instant::now();
+            let shares = shamir::share_field_elements(&witness_entities, t, n, &mut rng);
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Sharing took {} ms", duration_ms);
+
+            // write out the shares to the output directory
+            let base_name = "proving_key";
+            for (i, share) in shares.into_iter().enumerate() {
+                let key =
+                    ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _>::from_plain_key_and_shares(
+                        &proving_key,
+                        share,
+                    )?;
+
+                let path = out_dir.join(format!("{}.{}.shared", base_name, i));
+                let out_file =
+                    BufWriter::new(File::create(&path).context("while creating output file")?);
+                bincode::serialize_into(out_file, &key)
+                    .context("while serializing proving_key share")?;
+                tracing::info!("Wrote proving_key share {} to file {}", i, path.display());
+            }
+        }
+    }
+    tracing::info!("Split proving keys into shares successfully");
     Ok(ExitCode::SUCCESS)
 }
 
@@ -375,8 +510,7 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Witness extension took {} ms", id, duration_ms);
 
-    let result_witness_share =
-        convert_witness_to_vec_rep3::<Bn254, Rep3MpcNet>(result_witness_share);
+    let result_witness_share = convert_witness_to_vec_rep3(result_witness_share);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -401,13 +535,13 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     // parse witness shares
     let witness_file =
         BufReader::new(File::open(witness).context("trying to open witness share file")?);
-    let witness_share: Vec<SharedBuilderVariable<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254>> =
+    let witness_share: Vec<Rep3AcvmType<ark_bn254::Fr>> =
         bincode::deserialize_from(witness_file).context("while deserializing witness share")?;
 
     // extract shares only
     let mut shares = vec![];
     for share in witness_share.iter() {
-        if let SharedBuilderVariable::Shared(value) = share {
+        if let Rep3AcvmType::Shared(value) = share {
             shares.push(value.to_owned());
         }
     }
@@ -430,22 +564,18 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
 
     // Translate witness to shamir shares
     let start = Instant::now();
-    let transalted_shares = protocol.translate_primefield_repshare_vec(shares)?;
+    let translated_shares = protocol.translate_primefield_repshare_vec(shares)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Translating witness took {} ms", id, duration_ms);
 
-    let mut result: Vec<
-        SharedBuilderVariable<ShamirUltraHonkDriver<ark_bn254::Fr, ShamirMpcNet>, Bn254>,
-    > = Vec::with_capacity(witness_share.len());
-    let mut iter = transalted_shares.into_iter();
+    let mut result = Vec::with_capacity(witness_share.len());
+    let mut iter = translated_shares.into_iter();
     for val in witness_share.into_iter() {
         match val {
-            SharedBuilderVariable::Public(value) => {
-                result.push(SharedBuilderVariable::Public(value))
-            }
-            SharedBuilderVariable::Shared(_) => {
+            Rep3AcvmType::Public(value) => result.push(ShamirAcvmType::Public(value)),
+            Rep3AcvmType::Shared(_) => {
                 let share = iter.next().expect("enough shares");
-                result.push(SharedBuilderVariable::Shared(share))
+                result.push(ShamirAcvmType::Shared(share))
             }
         }
     }
@@ -458,7 +588,364 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
 }
 
 #[instrument(skip(config))]
+fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::Result<ExitCode> {
+    let proving_key = config.proving_key;
+    let src_protocol = config.src_protocol;
+    let target_protocol = config.target_protocol;
+    let out = config.out;
+
+    if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
+        return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
+    }
+    file_utils::check_file_exists(&proving_key)?;
+
+    // parse proving_key shares
+    let proving_key_file =
+        BufReader::new(File::open(proving_key).context("trying to open witness share file")?);
+    let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254> =
+        bincode::deserialize_from(proving_key_file).context("while deserializing witness share")?;
+
+    // extract shares
+    let shares = proving_key
+        .polynomials
+        .witness
+        .private_elements
+        .into_iter()
+        .flat_map(|el| el.into_vec().into_iter())
+        .collect::<Vec<_>>();
+
+    // connect to network
+    let network_config = config
+        .network
+        .to_owned()
+        .try_into()
+        .context("while converting network config")?;
+    let net = Rep3MpcNet::new(network_config)?;
+    let id = usize::from(net.get_id());
+
+    // init MPC protocol
+    let threshold = 1;
+    let num_pairs = shares.len();
+    let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
+        .context("while shamir preprocessing")?;
+    let mut protocol = ShamirProtocol::from(preprocessing);
+
+    // Translate witness to shamir shares
+    let start = Instant::now();
+    let translated_shares = protocol.translate_primefield_repshare_vec(shares)?;
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Party {}: Translating shares took {} ms", id, duration_ms);
+
+    if translated_shares.len() != 4 * proving_key.circuit_size as usize {
+        return Err(eyre!("Invalid number of shares translated"));
+    };
+
+    let mut chunks = translated_shares.chunks_exact(proving_key.circuit_size as usize);
+    let translated_shares = array::from_fn(|_| {
+        Polynomial::new(chunks.next().expect("Length already checked").to_vec())
+    });
+
+    let polynomials = Polynomials {
+        witness: ProverWitnessEntities {
+            private_elements: translated_shares,
+            public_elements: proving_key.polynomials.witness.public_elements,
+        },
+        precomputed: proving_key.polynomials.precomputed,
+    };
+    let result = ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _> {
+        polynomials,
+        crs: proving_key.crs,
+        circuit_size: proving_key.circuit_size,
+        public_inputs: proving_key.public_inputs,
+        num_public_inputs: proving_key.num_public_inputs,
+        pub_inputs_offset: proving_key.pub_inputs_offset,
+        memory_read_records: proving_key.memory_read_records,
+        memory_write_records: proving_key.memory_write_records,
+        phantom: std::marker::PhantomData,
+    };
+
+    // write result to output file
+    let out_file = BufWriter::new(std::fs::File::create(&out)?);
+    bincode::serialize_into(out_file, &result)?;
+    tracing::info!("Proving_key successfully written to {}", out.display());
+    Ok(ExitCode::SUCCESS)
+}
+
+#[instrument(skip(config))]
+fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<ExitCode> {
+    let witness = config.witness;
+    let circuit_path = config.circuit;
+    let crs_path = config.crs;
+    let protocol = config.protocol;
+    let out = config.out;
+    let t = config.threshold;
+
+    file_utils::check_file_exists(&witness)?;
+    file_utils::check_file_exists(&circuit_path)?;
+    file_utils::check_file_exists(&crs_path)?;
+
+    // parse witness shares
+    let witness_file =
+        BufReader::new(File::open(witness).context("trying to open witness share file")?);
+
+    // parse constraint system
+    let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
+        .context("while parsing program artifact")?;
+
+    let network_config = config
+        .network
+        .to_owned()
+        .try_into()
+        .context("while converting network config")?;
+
+    match protocol {
+        MPCProtocol::REP3 => {
+            if t != 1 {
+                return Err(eyre!("REP3 only allows the threshold to be 1"));
+            }
+            let witness_share = bincode::deserialize_from(witness_file)
+                .context("while deserializing witness share")?;
+            // connect to network
+            let net = Rep3MpcNet::new(network_config)?;
+            let id = net.get_id();
+
+            // Create the circuit
+            tracing::info!("Party {}: starting to generate proving key..", id);
+            let start = Instant::now();
+            let builder = Rep3CoBuilder::<Bn254, Rep3MpcNet>::create_circuit(
+                constraint_system,
+                0,
+                witness_share,
+                true,
+                false,
+            );
+
+            // parse the crs
+            let prover_crs = ProvingKey::<Rep3UltraHonkDriver<Rep3MpcNet>, _>::get_prover_crs(
+                &builder,
+                crs_path.to_str().context("while opening crs file")?,
+            )
+            .context("failed to get prover crs")?;
+
+            // Get the proving key and prover
+            let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, _> =
+                ProvingKey::create(id, builder, prover_crs)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!(
+                "Party {}: Proving key generation took {} ms",
+                id,
+                duration_ms
+            );
+            // write result to output file
+            let out_file = BufWriter::new(std::fs::File::create(&out)?);
+            bincode::serialize_into(out_file, &proving_key)?;
+            tracing::info!("Proving Key successfully written to {}", out.display());
+        }
+        MPCProtocol::SHAMIR => {
+            let witness_share = bincode::deserialize_from(witness_file)
+                .context("while deserializing witness share")?;
+            // connect to network
+            let net = ShamirMpcNet::new(network_config)?;
+            let id = net.get_id();
+
+            // Create the circuit
+            tracing::info!("Party {}: starting to generate proving key..", id);
+            let start = Instant::now();
+            let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
+                constraint_system,
+                0,
+                witness_share,
+                true,
+                false,
+            );
+
+            // parse the crs
+            let prover_crs =
+                ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _>::get_prover_crs(
+                    &builder,
+                    crs_path.to_str().context("while opening crs file")?,
+                )
+                .context("failed to get prover crs")?;
+
+            // Get the proving key and prover
+            let proving_key: ProvingKey<ShamirUltraHonkDriver<_, ShamirMpcNet>, _> =
+                ProvingKey::create(id, builder, prover_crs)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!(
+                "Party {}: Proving key generation took {} ms",
+                id,
+                duration_ms
+            );
+            // write result to output file
+            let out_file = BufWriter::new(std::fs::File::create(&out)?);
+            bincode::serialize_into(out_file, &proving_key)?;
+            tracing::info!("Proving Key successfully written to {}", out.display());
+        }
+    };
+
+    tracing::info!("Proving Key generation finished successfully");
+    Ok(ExitCode::SUCCESS)
+}
+
+#[instrument(skip(config))]
 fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCode> {
+    let proving_key = config.proving_key;
+    let protocol = config.protocol;
+    let hasher = config.hasher;
+    let out = config.out;
+    let public_input_filename = config.public_input;
+    let t = config.threshold;
+
+    file_utils::check_file_exists(&proving_key)?;
+
+    let network_config = config
+        .network
+        .to_owned()
+        .try_into()
+        .context("while converting network config")?;
+
+    // parse proving_key file
+    let proving_key_file =
+        BufReader::new(File::open(proving_key).context("trying to open proving_key file")?);
+
+    let (proof, public_input) = match protocol {
+        MPCProtocol::REP3 => {
+            if t != 1 {
+                return Err(eyre!("REP3 only allows the threshold to be 1"));
+            }
+            let net = Rep3MpcNet::new(network_config)?;
+            let id = net.get_id();
+
+            let mut io_context0 = IoContext::init(net)?;
+            let io_context1 = io_context0.fork()?;
+            // init MPC protocol
+            let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
+
+            // Get the proving key and prover
+            let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254> =
+                bincode::deserialize_from(proving_key_file)
+                    .context("while deserializing input share")?;
+            let public_input = proving_key.get_public_inputs();
+            match hasher {
+                TranscriptHash::POSEIDON => {
+                    let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
+
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+                TranscriptHash::KECCAK => {
+                    let prover = CoUltraHonk::<_, _, Keccak256>::new(driver);
+
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+            }
+        }
+        MPCProtocol::SHAMIR => {
+            // connect to network
+            let net = ShamirMpcNet::new(network_config)?;
+            let id = net.get_id();
+
+            // Get the proving key and prover
+            let proving_key: ProvingKey<ShamirUltraHonkDriver<ark_bn254::Fr, ShamirMpcNet>, Bn254> =
+                bincode::deserialize_from(proving_key_file)
+                    .context("while deserializing input share")?;
+            let public_input = proving_key.get_public_inputs();
+
+            // init MPC protocol
+            // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+            let n = proving_key.circuit_size as usize;
+            let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
+                + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
+                + OINK_CRAND_PAIRS_CONST;
+            // log2(n) * ((n >>= 1) / 2) == n - 1
+            let num_pairs_sumcheck_prove =
+                SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+            let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
+            let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
+            let mut protocol0 = ShamirProtocol::from(preprocessing);
+            let protocol1 = protocol0.fork_with_pairs(0)?;
+            let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
+
+            // execute prover in MPC
+            tracing::info!("Party {}: starting proof generation..", id);
+            match hasher {
+                TranscriptHash::POSEIDON => {
+                    let start = Instant::now();
+                    let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+
+                    (proof, public_input)
+                }
+                TranscriptHash::KECCAK => {
+                    let start = Instant::now();
+                    let prover = CoUltraHonk::<_, _, Keccak256>::new(driver);
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+
+                    (proof, public_input)
+                }
+            }
+        }
+    };
+
+    // write result to output file
+    if let Some(out) = out {
+        let mut out_file =
+            BufWriter::new(std::fs::File::create(&out).context("while creating output file")?);
+
+        let proof_u8 = proof.to_buffer();
+        out_file
+            .write(proof_u8.as_slice())
+            .context("while writing proof to file")?;
+        tracing::info!("Wrote proof to file {}", out.display());
+    }
+
+    // write public input to output file
+    if let Some(public_input_filename) = public_input_filename {
+        let public_input_as_strings = public_input
+            .iter()
+            .map(|f| {
+                if f.is_zero() {
+                    "0".to_string()
+                } else {
+                    f.to_string()
+                }
+            })
+            .collect::<Vec<String>>();
+        let public_input_file = BufWriter::new(
+            std::fs::File::create(&public_input_filename)
+                .context("while creating public input file")?,
+        );
+        serde_json::to_writer(public_input_file, &public_input_as_strings)
+            .context("while writing out public inputs to JSON file")?;
+        tracing::info!(
+            "Wrote public inputs to file {}",
+            public_input_filename.display()
+        );
+    }
+
+    tracing::info!("Proof generation finished successfully");
+    Ok(ExitCode::SUCCESS)
+}
+
+#[instrument(skip(config))]
+fn run_build_and_generate_proof(
+    config: BuildAndGenerateProofConfig,
+) -> color_eyre::Result<ExitCode> {
     let witness = config.witness;
     let circuit_path = config.circuit;
     let crs_path = config.crs;
@@ -505,7 +992,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
-            let builder = Rep3CoBuilder::<Bn254, _>::create_circuit(
+            let builder = Rep3CoBuilder::<Bn254, Rep3MpcNet>::create_circuit(
                 constraint_system,
                 0,
                 witness_share,
@@ -514,11 +1001,11 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             );
 
             // parse the crs
-            let prover_crs = ProvingKey::get_prover_crs(
+            let prover_crs = ProvingKey::<Rep3UltraHonkDriver<Rep3MpcNet>, _>::get_prover_crs(
                 &builder,
                 crs_path.to_str().context("while opening crs file")?,
             )
-            .expect("failed to get prover crs");
+            .context("failed to get prover crs")?;
 
             // Get the proving key and prover
             let proving_key = ProvingKey::create(id, builder, prover_crs)?;
@@ -572,7 +1059,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
-            let builder = ShamirCoBuilder::<Bn254, _>::create_circuit(
+            let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
                 constraint_system,
                 0,
                 witness_share,
@@ -581,11 +1068,12 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             );
 
             // parse the crs
-            let prover_crs = ProvingKey::get_prover_crs(
-                &builder,
-                crs_path.to_str().context("while opening crs file")?,
-            )
-            .expect("failed to get prover crs");
+            let prover_crs =
+                ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _>::get_prover_crs(
+                    &builder,
+                    crs_path.to_str().context("while opening crs file")?,
+                )
+                .context("failed to get prover crs")?;
 
             // Get the proving key and prover
             let proving_key = ProvingKey::create(id, builder, prover_crs)?;
@@ -703,7 +1191,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
         &builder,
         crs_path.to_str().context("while opening crs file")?,
     )
-    .expect("failed to get prover crs");
+    .context("failed to get prover crs")?;
 
     // Get vk
     let vk = builder
@@ -748,7 +1236,7 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let crs = VerifyingKey::<Bn254>::get_verifier_crs(
         crs_path.to_str().context("while opening crs file")?,
     )
-    .expect("failed to get verifier crs");
+    .context("failed to get verifier crs")?;
 
     // parse verification key file
     let vk_u8 = std::fs::read(&vk_path).context("while reading vk file")?;
