@@ -11,16 +11,8 @@ pub(crate) mod rep3;
 pub trait VmCircomWitnessExtension<F: PrimeField> {
     /// The arithemitc share type
     type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
-    /// The binary share type
-    type BinaryShare;
     /// The VM type
-    type VmType: Clone
-        + Default
-        + fmt::Debug
-        + fmt::Display
-        + From<F>
-        + From<Self::ArithmeticShare>
-        + From<Self::BinaryShare>;
+    type VmType: Clone + Default + fmt::Debug + fmt::Display + From<F> + From<Self::ArithmeticShare>;
 
     /// Add two VM-types: c = a + b.
     fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
