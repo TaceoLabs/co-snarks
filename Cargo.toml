@@ -31,14 +31,14 @@ readme = "./README.md"
 [workspace.dependencies]
 acir = { version = "0.49.0", git = "https://github.com/noir-lang/noir/", tag = "v0.33.0", package = "acir" }
 acvm = { version = "0.49.0", git = "https://github.com/noir-lang/noir/", tag = "v0.33.0", package = "acvm" }
-ark-bls12-381 = "0.4.0"
-ark-bn254 = "0.4.0"
-ark-ec = { version = "0.4.2", default-features = false }
-ark-ff = "0.4.2"
-ark-poly = "0.4.2"
-ark-relations = { version = "0.4.0", default-features = false }
-ark-serialize = { version = "0.4", features = ["derive", "std"] }
-ark-std = { version = "0.4.0", features = ["std"] }
+ark-bls12-381 = "0.5.0"
+ark-bn254 = "0.5.0"
+ark-ec = { version = "0.5", default-features = false }
+ark-ff = "0.5"
+ark-poly = "0.5"
+ark-relations = { version = "0.5", default-features = false }
+ark-serialize = { version = "0.5", features = ["derive", "std"] }
+ark-std = { version = "0.5.0", features = ["std"] }
 bincode = "1.3.3"
 bytemuck = { version = "1.15", features = ["derive"] }
 byteorder = "1.5.0"

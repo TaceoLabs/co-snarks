@@ -7,7 +7,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use crate::{mpc::plain::PlainPlonkDriver, plonk_utils, types::Domains, CoPlonk};
-use ark_ec::{pairing::Pairing, Group};
+use ark_ec::{pairing::Pairing, PrimeGroup};
 use ark_ff::Field;
 use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof, ZKey},
@@ -282,7 +282,7 @@ where
     /// *Locally* create a `Plonk` proof. This is just the [`CoPlonk`] prover
     /// initialized with the [`PlainPlonkDriver`].
     ///
-    /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
+    /// DOES NOT PERFORM ANY MPC.
     pub fn plain_prove(
         zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
