@@ -20,9 +20,11 @@ circom-compiler = { version = "2.1.9", git = "https://github.com/TaceoLabs/circo
 circom-types = { version = "0.5.0", path = "../circom-types" }
 circom-mpc-vm = { version = "0.4.2", path = "../circom-mpc-vm" }
 circom-program_structure = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "program_structure", rev = "8ef896c" }
+clap.workspace = true
 eyre.workspace = true
 itertools.workspace = true
 serde.workspace = true
+sha2.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
