@@ -112,11 +112,23 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     // TODO do we want this here?
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>>;
 
+    /// Transforms a public value into a shared value: \[a\] = a.
+    fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare;
+
+    /// Elementwise transformation of a vector of public values into a vector of shared values: \[a_i\] = a_i.
+    fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare>;
+    /// todo
     fn decompose_arithmetic(
         &mut self,
         input: Self::ArithmeticShare,
         // io_context: &mut IoContext<N>,
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
+    /// todo
+    fn sort(
+        &mut self,
+        inputs: &[Self::ArithmeticShare],
+        bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
 }

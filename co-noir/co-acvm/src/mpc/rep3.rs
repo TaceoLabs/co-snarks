@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
+use mpc_core::protocols::rep3::gadgets::sort::batcher_odd_even_merge_sort_yao;
 use mpc_core::protocols::rep3::{arithmetic, yao};
 use mpc_core::{
     lut::LookupTableProvider,
@@ -11,6 +12,7 @@ use mpc_core::{
         Rep3PrimeFieldShare,
     },
 };
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::plain::PlainAcvmSolver;
@@ -379,5 +381,27 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Shared(result)
             }
         }
+    }
+
+    fn sort(
+        &mut self,
+        inputs: &[Self::ArithmeticShare],
+        bitsize: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        batcher_odd_even_merge_sort_yao(inputs, &mut self.io_context, bitsize)
+    }
+
+    fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
+        let id = self.io_context.id;
+        arithmetic::promote_to_trivial_share(id, public_value)
+    }
+
+    fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
+        let id = self.io_context.id;
+        public_values
+            .par_iter()
+            .with_min_len(1024)
+            .map(|value| Self::ArithmeticShare::promote_from_trivial(value, id))
+            .collect()
     }
 }

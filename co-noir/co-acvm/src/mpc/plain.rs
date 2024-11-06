@@ -150,4 +150,20 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     ) -> Self::AcvmType {
         share_1 + share_2
     }
+
+    fn sort(
+        &mut self,
+        inputs: &[Self::ArithmeticShare],
+        bitsize: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        todo!()
+    }
+
+    fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
+        public_value
+    }
+
+    fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
+        public_values.to_vec()
+    }
 }

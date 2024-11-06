@@ -1740,7 +1740,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         read_data
     }
 
-    pub fn finalize_circuit(&mut self, ensure_nonzero: bool) {
+    pub fn finalize_circuit(&mut self, ensure_nonzero: bool, driver: &mut T) {
         // /**
         //  * First of all, add the gates related to ROM arrays and range lists.
         //  * Note that the total number of rows in an UltraPlonk program can be divided as following:
@@ -1777,7 +1777,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.process_non_native_field_multiplications();
             self.process_rom_arrays();
             self.process_ram_arrays();
-            self.process_range_lists();
+            self.process_range_lists(driver);
             self.circuit_finalized = true;
         }
     }
@@ -1794,7 +1794,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
     }
 
-    fn process_range_lists(&mut self) {
+    fn process_range_lists(&mut self, driver: &mut T) -> std::io::Result<()> {
         let lists: Vec<RangeList> = self
             .range_lists
             .iter_mut()
@@ -1802,10 +1802,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             .collect();
         // todo maybe this is wrong have to check if changes to lists are relevant or only to self
         for mut list in lists {
-            self.process_range_list(&mut list);
+            self.process_range_list(&mut list, driver)?;
         }
+        Ok(())
     }
-    fn process_range_list(&mut self, list: &mut RangeList) {
+    fn process_range_list(&mut self, list: &mut RangeList, driver: &mut T) -> std::io::Result<()> {
         self.assert_valid_variables(&list.variable_indices);
 
         assert!(
@@ -1827,15 +1828,24 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // go over variables
         // iterate over each variable and create mirror variable with same value - with tau tag
         // need to make sure that, in original list, increments of at most 3
-        let mut sorted_list: Vec<u32> = Vec::with_capacity(list.variable_indices.len());
+        let mut sorted_list: Vec<T::ArithmeticShare> =
+            Vec::with_capacity(list.variable_indices.len());
         for &variable_index in &list.variable_indices {
             let field_element = self.get_variable(variable_index as usize);
+            let field_element = if T::is_shared(&field_element) {
+                T::get_shared(&field_element).expect("Already checked it is shared")
+            } else {
+                T::promote_to_trivial_share(
+                    driver,
+                    T::get_public(&field_element).expect("Already checked it is public"),
+                )
+            };
             // let shrinked_value = field_element.into_bigint().data[0] as u32;
-            sorted_list.push(0);
+            sorted_list.push(field_element);
         }
 
-        todo!("TODO This needs to be done in MPC, will write a sort...");
-        sorted_list.sort();
+        // really 32?
+        let sorted_list = T::sort(driver, &sorted_list, 32)?;
 
         // list must be padded to a multipe of 4 and larger than 4 (gate_width)
         const GATE_WIDTH: usize = NUM_WIRES;
@@ -1851,8 +1861,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             indices.push(self.zero_idx);
         }
 
-        for &sorted_value in &sorted_list {
-            let index = self.put_constant_variable(sorted_value.into());
+        for sorted_value in sorted_list {
+            let index = self.add_variable(T::AcvmType::from(sorted_value));
             if index != 6 {
                 self.assign_tag(index, list.tau_tag);
             }
@@ -1864,6 +1874,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             P::ScalarField::zero(),
             list.target_range.into(),
         );
+        Ok(())
     }
 
     fn process_non_native_field_multiplications(&mut self) {

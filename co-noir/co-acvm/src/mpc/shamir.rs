@@ -1,13 +1,13 @@
+use super::NoirWitnessExtensionProtocol;
 use crate::PlainAcvmSolver;
 use ark_ff::PrimeField;
 use mpc_core::protocols::{
     rep3::{lut::NaiveRep3LookupTable, network::Rep3MpcNet},
     shamir::{arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
 };
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
-
-use super::NoirWitnessExtensionProtocol;
 
 pub struct ShamirAcvmSolver<F: PrimeField, N: ShamirNetwork> {
     protocol: ShamirProtocol<F, N>,
@@ -309,5 +309,21 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
                 ShamirAcvmType::Shared(result)
             }
         }
+    }
+
+    fn sort(
+        &mut self,
+        _inputs: &[Self::ArithmeticShare],
+        _bitsize: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        panic!("functionality sort not feasible for Shamir")
+    }
+
+    fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
+        arithmetic::promote_to_trivial_share(public_value)
+    }
+
+    fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
+        todo!()
     }
 }
