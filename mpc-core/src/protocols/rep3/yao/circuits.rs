@@ -173,19 +173,6 @@ impl GarbledCircuits {
         Ok(c)
     }
 
-    /// If `b = 0` returns `x` else `y`.
-    fn mux<G: FancyBinary>(
-        g: &mut G,
-        b: &G::Item,
-        x: &G::Item,
-        y: &G::Item,
-    ) -> Result<G::Item, G::Error> {
-        // let r = g.mux(&ov, s, a)?; // Has two ANDs, only need one though
-        let xor = g.xor(x, y)?;
-        let and = g.and(b, &xor)?;
-        g.xor(&and, x)
-    }
-
     fn sub_p_and_mux_with_output_size<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires: &[G::Item],
@@ -225,7 +212,7 @@ impl GarbledCircuits {
         let mut result = Vec::with_capacity(outlen);
         for (s, a) in subtracted.iter().zip(wires.iter()).take(outlen) {
             // CMUX
-            let r = Self::mux(g, &ov, s, a)?;
+            let r = g.mux(&ov, s, a)?;
             result.push(r);
         }
 
