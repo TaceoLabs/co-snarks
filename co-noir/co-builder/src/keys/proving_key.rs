@@ -35,6 +35,8 @@ impl<P: Pairing> ProvingKey<P> {
         circuit.finalize_circuit(true, driver);
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
+        print!("dyadic_circuit_sizeLEFT: {dyadic_circuit_size}");
+
         let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);
         // Construct and add to proving key the wire, selector and copy constraint polynomials
         proving_key.populate_trace(&mut circuit, false);

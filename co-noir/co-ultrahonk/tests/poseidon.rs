@@ -66,3 +66,49 @@ fn poseidon_plaindriver_test_keccak256() {
     const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/keccak_proof";
     poseidon_plaindriver_test::<Keccak256>(PROOF_FILE);
 }
+
+fn add3_plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
+    const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
+    const CIRCUIT_FILE: &str = "/home/fabsits/secondary/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3u64/add3u64.json";
+    const WITNESS_FILE: &str = "/home/fabsits/secondary/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3u64/add3u64.gz";
+
+    let constraint_system = Utils::get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
+    let witness = Utils::get_witness_from_file(WITNESS_FILE).unwrap();
+
+    let witness = promote_public_witness_vector::<_, PlainAcvmSolver<ark_bn254::Fr>>(witness);
+    let mut driver = PlainAcvmSolver::new();
+    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+        constraint_system,
+        0,
+        witness,
+        true,
+        false,
+        &mut driver,
+    );
+
+    let crs =
+        ProvingKey::<PlainUltraHonkDriver, _>::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
+    let (proving_key, verifying_key) =
+        ProvingKey::create_keys(0, builder, crs, &mut driver).unwrap();
+
+    let driver = PlainUltraHonkDriver;
+    let prover = CoUltraHonk::<_, _, H>::new(driver);
+    let proof = prover.prove(proving_key).unwrap();
+
+    // let proof_u8 = proof.to_buffer();
+
+    // let read_proof_u8 = std::fs::read(proof_file).unwrap();
+    // assert_eq!(proof_u8, read_proof_u8);
+
+    // let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
+    // assert_eq!(proof, read_proof);
+
+    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
+    assert!(is_valid);
+}
+#[test]
+fn add3_plaindriver_test_keccak256() {
+    const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/keccak_proof";
+    add3_plaindriver_test::<Keccak256>(PROOF_FILE);
+}

@@ -241,10 +241,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let mut builder = Self::new(size_hint);
 
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
-
         let len = witness_values.len();
         for witness in witness_values.into_iter().take(varnum) {
-            builder.add_variable(witness);
+            let idx = builder.add_variable(witness);
         }
         // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
         // be "set" later on via the assert_equal mechanism.
@@ -266,11 +265,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
     pub(crate) fn add_variable(&mut self, value: T::AcvmType) -> u32 {
         let idx = self.variables.len() as u32;
+        // println!("index: {} and input: {:?}", idx, value.to_string());
         self.variables.push(value);
         self.real_variable_index.push(idx);
         self.next_var_index.push(Self::REAL_VARIABLE);
         self.prev_var_index.push(Self::FIRST_VARIABLE_IN_CLASS);
         self.real_variable_tags.push(Self::DUMMY_TAG);
+
         idx
     }
 
@@ -279,6 +280,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             *val
         } else {
             let variable_index = self.add_variable(T::AcvmType::from(variable));
+
             self.fix_witness(variable_index, variable);
             self.constant_variable_indices
                 .insert(variable, variable_index);
@@ -1851,7 +1853,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
 
         // really DEFAULT_PLOOKUP_RANGE_BITNUM?
-        let sorted_list = T::sort(driver, &sorted_list, Self::DEFAULT_PLOOKUP_RANGE_BITNUM)?;
+        let sorted_list = T::sort(driver, &sorted_list, list.target_range.try_into().unwrap())?;
 
         // list must be padded to a multipe of 4 and larger than 4 (gate_width)
         const GATE_WIDTH: usize = NUM_WIRES;
@@ -1869,9 +1871,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         for sorted_value in sorted_list {
             let index = self.add_variable(T::AcvmType::from(sorted_value));
-            if index != 6 {
-                self.assign_tag(index, list.tau_tag);
-            }
+
+            self.assign_tag(index, list.tau_tag);
+
             indices.push(index);
         }
 
@@ -2140,6 +2142,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         for (i, sublimb) in sublimbs.iter().enumerate() {
             let limb_idx = self.add_variable(sublimb.clone());
+            // println!(
+            //     "Index: {}, sublimb: {:?}, Line: {}",
+            //     limb_idx,
+            //     sublimb.to_string(),
+            //     line!()
+            // );
+
             sublimb_indices.push(limb_idx);
             if i == sublimbs.len() - 1 && has_remainder_bits {
                 self.create_new_range_constraint(limb_idx, last_limb_range);
@@ -2203,13 +2212,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             ];
             let term0 = T::acvm_mul_with_public(
                 driver,
-                P::ScalarField::from(1u64 << shifts[0]),
+                P::ScalarField::from(BigUint::one() << shifts[0]),
                 round_sublimbs[0].clone(),
             );
 
             let term1 = T::acvm_mul_with_public(
                 driver,
-                P::ScalarField::from(1u64 << shifts[1]),
+                P::ScalarField::from(BigUint::one() << shifts[1]),
                 round_sublimbs[1].clone(),
             );
 
@@ -2217,7 +2226,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
             let term2 = T::acvm_mul_with_public(
                 driver,
-                P::ScalarField::from(1u64 << shifts[2]),
+                P::ScalarField::from(BigUint::one() << shifts[2]),
                 round_sublimbs[2].clone(),
             );
 
@@ -2258,12 +2267,24 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         if self.real_variable_tags[index] == tag {
             return;
         }
-
+        // if self.real_variable_tags[index] != Self::DUMMY_TAG {
+        // println!(
+        //         "self.real_variable_tags[index]:{}, variable_index: {variable_index}, tag: {tag}",
+        //         self.real_variable_tags[index]
+        //     );
+        // }
+        // if index == 6 {
+        // println!("--------");
+        // println!(
+        //     "self.real_variable_tags[index]:{}, variable_index: {variable_index}, tag: {tag}",
+        //     self.real_variable_tags[index]
+        // );
+        // println!("--------");
+        // }
         assert!(
             self.real_variable_tags[index] == Self::DUMMY_TAG,
             "Tag mismatch: expected DUMMY_TAG"
         );
-
         self.real_variable_tags[index] = tag;
     }
     fn get_new_tag(&mut self) -> u32 {
@@ -2294,19 +2315,24 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         result.tau_tag = tau_tag;
 
         let num_multiples_of_three = target_range / Self::DEFAULT_PLOOKUP_RANGE_STEP_SIZE as u64;
-
+        // println!("num_multiples_of_three: {num_multiples_of_three}");
         result
             .variable_indices
             .reserve(num_multiples_of_three as usize + 1);
         for i in 0..=num_multiples_of_three {
-            let index = self
-                .put_constant_variable((i * Self::DEFAULT_PLOOKUP_RANGE_STEP_SIZE as u64).into());
-            result.variable_indices.push(index);
+            let index = self.add_variable(T::AcvmType::from(P::ScalarField::from(
+                i * Self::DEFAULT_PLOOKUP_RANGE_STEP_SIZE as u64,
+            )));
+            // println!("Index: {}, Line: {}", index, line!());
 
+            result.variable_indices.push(index);
+            // println!("Index: {}, Line: {}", index, line!());
+            // if index == 6 && result.range_tag == 1 {
+            // println!("HERE");
+            // }
             self.assign_tag(index, result.range_tag);
         }
-
-        let index = self.put_constant_variable(target_range.into());
+        let index = self.add_variable(T::AcvmType::from(P::ScalarField::from(target_range)));
         result.variable_indices.push(index);
 
         self.assign_tag(index, result.range_tag);
@@ -2335,6 +2361,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 chunk[2],
                 chunk[3],
             );
+            self.num_gates += 1;
         }
     }
     fn create_sort_constraint_with_edges(
