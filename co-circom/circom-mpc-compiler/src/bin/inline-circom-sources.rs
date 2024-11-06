@@ -23,14 +23,7 @@ struct Args {
 }
 
 fn main() -> eyre::Result<()> {
-    let mut args = Args::parse();
-
-    let input_file_path = args
-        .input
-        .parent()
-        .expect("input file to have a parent directory");
-
-    args.link_library.push(input_file_path.to_path_buf());
+    let args = Args::parse();
 
     let mut output_file = BufWriter::new(File::create(&args.output)?);
 
@@ -57,29 +50,37 @@ fn map_file_to_output(
     input_file: impl AsRef<Path>,
     output: &mut impl io::Write,
     link_library: Vec<PathBuf>,
-    supress_pragma: bool,
+    suppress_pragma: bool,
     already_inlined: &mut HashMap<Hash, PathBuf>,
 ) -> eyre::Result<()> {
-    let input_file = BufReader::new(
+    let input_file_reader = BufReader::new(
         File::open(input_file.as_ref())
             .with_context(|| format!("while trying to open: {}", input_file.as_ref().display()))?,
     );
-    for line in input_file.lines() {
+    for line in input_file_reader.lines() {
         let line = line?;
         let trimmed = line.trim();
-        if trimmed.starts_with("pragma circom") && supress_pragma {
+        if trimmed.starts_with("pragma circom") && suppress_pragma {
             continue;
         }
 
         if trimmed.starts_with("include") {
             let mut parts = trimmed.split_whitespace();
-            parts.next(); // Skip "import"
+            parts.next(); // Skip "include"
             let file = parts.next().unwrap();
             let file = file.trim_end_matches(";");
             let file = file.trim_matches('"');
+            let mut link_library_local = link_library.clone();
+            link_library_local.push(
+                input_file
+                    .as_ref()
+                    .parent()
+                    .expect("input file to have a parent directory")
+                    .to_path_buf(),
+            );
 
             let (found, path, _, rel_path, _) =
-                circom_parser::find_file(file.into(), link_library.clone());
+                circom_parser::find_file(file.into(), link_library_local.clone());
             if !found {
                 bail!("Could not find imported file: {}", file);
             }
