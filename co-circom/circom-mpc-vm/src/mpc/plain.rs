@@ -78,8 +78,6 @@ impl<F: PrimeField> CircomPlainVmWitnessExtension<F> {
 impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtension<F> {
     type ArithmeticShare = F;
 
-    type BinaryShare = F;
-
     type VmType = F;
 
     fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
