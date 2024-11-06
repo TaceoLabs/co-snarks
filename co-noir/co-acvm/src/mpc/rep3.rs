@@ -28,7 +28,7 @@ pub struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
 
 impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
     // TODO remove unwrap
-    pub(crate) fn new(network: N) -> Self {
+    pub fn new(network: N) -> Self {
         let plain_solver = PlainAcvmSolver::<F>::default();
         let mut io_context = IoContext::init(network).unwrap();
         let forked = io_context.fork().unwrap();
@@ -38,6 +38,9 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
             plain_solver,
             phantom_data: PhantomData,
         }
+    }
+    pub fn get_io_context(self) -> IoContext<N> {
+        self.io_context
     }
 }
 

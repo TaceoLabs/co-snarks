@@ -34,12 +34,12 @@ fn poseidon_plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(proof_fil
         &mut driver,
     );
 
-    let driver = PlainUltraHonkDriver;
-
     let crs =
         ProvingKey::<PlainUltraHonkDriver, _>::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
-    let (proving_key, verifying_key) = ProvingKey::create_keys(0, builder, crs).unwrap();
+    let (proving_key, verifying_key) =
+        ProvingKey::create_keys(0, builder, crs, &mut driver).unwrap();
 
+    let driver = PlainUltraHonkDriver;
     let prover = CoUltraHonk::<_, _, H>::new(driver);
     let proof = prover.prove(proving_key).unwrap();
 

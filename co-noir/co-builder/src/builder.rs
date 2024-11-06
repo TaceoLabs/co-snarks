@@ -35,11 +35,12 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
     pub fn create_vk_barretenberg(
         self,
         crs: ProverCrs<P>,
+        driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<VerifyingKeyBarretenberg<P>> {
         let contains_recursive_proof = self.contains_recursive_proof;
         let recursive_proof_public_input_indices = self.recursive_proof_public_input_indices;
 
-        let pk = ProvingKey::create(self, crs);
+        let pk = ProvingKey::create::<PlainAcvmSolver<P::ScalarField>>(self, crs, driver);
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -64,13 +65,18 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         Ok(vk)
     }
 
-    pub fn create_keys(self, crs: Crs<P>) -> HonkProofResult<(ProvingKey<P>, VerifyingKey<P>)> {
+    // todo: didnt think too much about the driver here, since we only really use it in tests i think?
+    pub fn create_keys(
+        self,
+        crs: Crs<P>,
+        driver: &mut PlainAcvmSolver<P::ScalarField>,
+    ) -> HonkProofResult<(ProvingKey<P>, VerifyingKey<P>)> {
         let prover_crs = ProverCrs {
             monomials: crs.monomials,
         };
         let verifier_crs = crs.g2_x;
 
-        let pk = ProvingKey::create(self, prover_crs);
+        let pk = ProvingKey::create::<PlainAcvmSolver<P::ScalarField>>(self, prover_crs, driver);
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -2021,10 +2027,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //     }
         // }
 
-        let new_range_list = self.create_range_list(target_range);
-        self.range_lists
-            .entry(target_range)
-            .or_insert(new_range_list);
+        if !self.range_lists.contains_key(&target_range) {
+            let new_range_list = self.create_range_list(target_range);
+            self.range_lists.insert(target_range, new_range_list);
+        }
 
         let existing_tag =
             self.real_variable_tags[self.real_variable_index[variable_index as usize] as usize];

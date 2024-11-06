@@ -29,7 +29,7 @@ fn poseidon_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
 
     let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
 
-    let (proving_key, verifying_key) = builder.create_keys(crs).unwrap();
+    let (proving_key, verifying_key) = builder.create_keys(crs, &mut driver).unwrap();
 
     let proof = UltraHonk::<_, H>::prove(proving_key).unwrap();
 

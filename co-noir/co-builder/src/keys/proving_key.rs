@@ -10,7 +10,7 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
-use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
 use eyre::Result;
 
 pub struct ProvingKey<P: Pairing> {
@@ -26,9 +26,13 @@ pub struct ProvingKey<P: Pairing> {
 
 impl<P: Pairing> ProvingKey<P> {
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
-    pub fn create(mut circuit: UltraCircuitBuilder<P>, crs: ProverCrs<P>) -> Self {
+    pub fn create<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        mut circuit: UltraCircuitBuilder<P>,
+        crs: ProverCrs<P>,
+        driver: &mut PlainAcvmSolver<<P as ark_ec::pairing::Pairing>::ScalarField>,
+    ) -> Self {
         tracing::trace!("ProvingKey create");
-        circuit.finalize_circuit(true);
+        circuit.finalize_circuit(true, driver);
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
         let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);

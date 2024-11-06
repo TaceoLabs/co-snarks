@@ -293,7 +293,11 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
         crs_path.to_str().context("while opening crs file")?,
     )
     .context("failed to get prover crs")?;
-    let proving_key = PlainProvingKey::create(builder, prover_crs);
+    let proving_key = PlainProvingKey::create::<
+        PlainAcvmSolver<
+            <ark_ec::models::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::ScalarField,
+        >,
+    >(builder, prover_crs, &mut driver);
 
     let witness_entities = proving_key
         .polynomials
@@ -741,7 +745,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
 
             // Get the proving key and prover
             let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, _> =
-                ProvingKey::create(id, builder, prover_crs)?;
+                ProvingKey::create(id, builder, prover_crs, &mut circuit_driver)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!(
                 "Party {}: Proving key generation took {} ms",
@@ -996,11 +1000,6 @@ fn run_build_and_generate_proof(
             // connect to network
             let net = Rep3MpcNet::new(network_config)?;
             let id = net.get_id();
-
-            let mut io_context0 = IoContext::init(net)?;
-            let io_context1 = io_context0.fork()?;
-            // init MPC protocol
-            let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
             // Create driver for circuit builder
             let mut circuit_driver = Rep3AcvmSolver::new(net);
             // Create the circuit
@@ -1021,9 +1020,12 @@ fn run_build_and_generate_proof(
                 crs_path.to_str().context("while opening crs file")?,
             )
             .context("failed to get prover crs")?;
-
             // Get the proving key and prover
-            let proving_key = ProvingKey::create(id, builder, prover_crs)?;
+            let proving_key = ProvingKey::create(id, builder, prover_crs, &mut circuit_driver)?;
+            let mut io_context0 = circuit_driver.get_io_context();
+            let io_context1 = io_context0.fork()?;
+            // init MPC protocol
+            let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
             let public_input = proving_key.get_public_inputs();
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON => {
@@ -1218,7 +1220,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
 
     // Get vk
     let vk = builder
-        .create_vk_barretenberg(prover_crs)
+        .create_vk_barretenberg(prover_crs, &mut driver)
         .context("while creating vk")?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
 
