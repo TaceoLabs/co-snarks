@@ -133,6 +133,15 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub(crate) memory_write_records: Vec<u32>,
 }
 
+// This workaround is required due to mutability issues
+macro_rules! create_dummy_gate {
+    ($builder:expr, $block:expr, $ixd_1:expr, $ixd_2:expr, $ixd_3:expr, $ixd_4:expr, ) => {
+        Self::create_dummy_gate($block, $ixd_1, $ixd_2, $ixd_3, $ixd_4);
+        $builder.check_selector_length_consistency();
+        $builder.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
+    };
+}
+
 impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCircuitBuilder<P, T> {
     pub(crate) const DUMMY_TAG: u32 = 0;
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
@@ -1325,15 +1334,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
-        Self::create_dummy_gate(
+
+        create_dummy_gate!(
+            self,
             &mut self.blocks.delta_range,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
-        self.check_selector_length_consistency();
-        self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
 
         // q_elliptic
         self.blocks.elliptic.populate_wires(
@@ -1373,15 +1382,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
-        Self::create_dummy_gate(
+
+        create_dummy_gate!(
+            self,
             &mut self.blocks.elliptic,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
-        self.check_selector_length_consistency();
-        self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
 
         // q_aux
         self.blocks
@@ -1409,15 +1418,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
-        Self::create_dummy_gate(
+
+        create_dummy_gate!(
+            self,
             &mut self.blocks.aux,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
-        self.check_selector_length_consistency();
-        self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
 
         // Add nonzero values in w_4 and q_c (q_4*w_4 + q_c --> 1*1 - 1 = 0)
         self.one_idx = self.put_constant_variable(P::ScalarField::one());
@@ -1528,15 +1537,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.num_gates += 1;
 
         // dummy gate to be read into by previous poseidon external gate via shifts
-        Self::create_dummy_gate(
+        create_dummy_gate!(
+            self,
             &mut self.blocks.poseidon2_external,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
-        self.check_selector_length_consistency();
-        self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
 
         // mock a poseidon internal gate, with all zeros as input
         self.blocks.poseidon2_internal.populate_wires(
@@ -1602,15 +1610,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.num_gates += 1;
 
         // dummy gate to be read into by previous poseidon internal gate via shifts
-        Self::create_dummy_gate(
+        create_dummy_gate!(
+            self,
             &mut self.blocks.poseidon2_internal,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
-        self.check_selector_length_consistency();
-        self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
     }
 
     pub fn get_num_gates_added_to_ensure_nonzero_polynomials() -> usize {
@@ -2354,14 +2361,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.assert_valid_variables(&padded_list);
 
         for chunk in padded_list.chunks(GATE_WIDTH) {
-            Self::create_dummy_gate(
+            create_dummy_gate!(
+                self,
                 &mut self.blocks.arithmetic,
-                chunk[0],
-                chunk[1],
-                chunk[2],
-                chunk[3],
+                self.zero_idx,
+                self.zero_idx,
+                self.zero_idx,
+                self.zero_idx,
             );
-            self.num_gates += 1;
         }
     }
     fn create_sort_constraint_with_edges(
@@ -2493,13 +2500,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This was formerly a single arithmetic gate. A
         // dummy gate has been added to allow the previous gate to access the required wire data via shifts, allowing the
         // arithmetic gate to occur out of sequence.
-        Self::create_dummy_gate(
+
+        create_dummy_gate!(
+            self,
             &mut self.blocks.delta_range,
             variable_index[variable_index.len() - 1],
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
+
         self.create_add_gate(&AddTriple {
             a: variable_index[variable_index.len() - 1],
             b: self.zero_idx,
