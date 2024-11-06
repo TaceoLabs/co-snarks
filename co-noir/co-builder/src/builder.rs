@@ -1245,7 +1245,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         block.q_poseidon2_internal().push(P::ScalarField::zero());
 
         // TACEO TODO these are uncommented due to mutability issues
-        // Taken care of by the caller
+        // Taken care of by the caller uisng the create_dummy_gate! macro
         // self.check_selector_length_consistency();
         // self.num_gates += 1;
     }
