@@ -2,8 +2,7 @@ use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Parser, Subcommand};
 use co_acvm::{
-    solver::Rep3CoSolver, PlainAcvmSolver, Rep3AcvmSolver, Rep3AcvmType, ShamirAcvmSolver,
-    ShamirAcvmType,
+    solver::Rep3CoSolver, PlainAcvmSolver, Rep3AcvmSolver, Rep3AcvmType, ShamirAcvmType,
 };
 use co_noir::{
     convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
@@ -18,7 +17,7 @@ use co_noir::{
 use co_ultrahonk::{
     prelude::{
         CoUltraHonk, HonkProof, PlainProvingKey, Polynomial, Polynomials, Poseidon2Sponge,
-        ProverWitnessEntities, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver, ShamirCoBuilder,
+        ProverWitnessEntities, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver,
         ShamirUltraHonkDriver, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
         VerifyingKeyBarretenberg,
     },

@@ -1850,8 +1850,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             sorted_list.push(field_element);
         }
 
-        // really 32?
-        let sorted_list = T::sort(driver, &sorted_list, 32)?;
+        // really DEFAULT_PLOOKUP_RANGE_BITNUM?
+        let sorted_list = T::sort(driver, &sorted_list, Self::DEFAULT_PLOOKUP_RANGE_BITNUM)?;
 
         // list must be padded to a multipe of 4 and larger than 4 (gate_width)
         const GATE_WIDTH: usize = NUM_WIRES;

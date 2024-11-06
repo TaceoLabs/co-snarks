@@ -113,8 +113,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
     ) -> std::result::Result<std::vec::Vec<F>, std::io::Error> {
-        let mut should_result =
-            Vec::with_capacity(total_bit_size_per_field.div_ceil(decompose_bit_size));
+        let mut result = Vec::with_capacity(total_bit_size_per_field.div_ceil(decompose_bit_size));
         let big_mask = (BigUint::from(1u64) << total_bit_size_per_field) - BigUint::one();
         let small_mask = (BigUint::from(1u64) << decompose_bit_size) - BigUint::one();
         let mut x: BigUint = input.into();
@@ -122,9 +121,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         for _ in 0..total_bit_size_per_field.div_ceil(decompose_bit_size) {
             let chunk = &x & &small_mask;
             x >>= decompose_bit_size;
-            should_result.push(F::from(chunk));
+            result.push(F::from(chunk));
         }
-        Ok(should_result)
+        Ok(result)
     }
 
     fn acvm_add_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
@@ -156,7 +155,15 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         inputs: &[Self::ArithmeticShare],
         bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        todo!()
+        let mut result = Vec::with_capacity(inputs.len());
+        let mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
+        for x in inputs.iter() {
+            let mut x: BigUint = (*x).into();
+            x &= &mask;
+            result.push(F::from(x));
+        }
+        result.sort();
+        Ok(result)
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {

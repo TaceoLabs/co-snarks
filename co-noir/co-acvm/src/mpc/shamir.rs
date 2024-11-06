@@ -5,7 +5,6 @@ use mpc_core::protocols::{
     rep3::{lut::NaiveRep3LookupTable, network::Rep3MpcNet},
     shamir::{arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
 };
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
@@ -324,6 +323,6 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     }
 
     fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
-        todo!()
+        arithmetic::promote_to_trivial_shares(public_values)
     }
 }
