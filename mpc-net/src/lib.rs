@@ -154,27 +154,37 @@ impl MpcNetworkHandler {
                 endpoints.push(endpoint);
             } else {
                 // we are the server, accept a connection
-                if let Some(maybe_conn) = server_endpoint.accept().await {
-                    let conn = maybe_conn.await?;
-                    tracing::trace!(
-                        "Conn with id {} from {} to {}",
-                        conn.stable_id(),
-                        server_endpoint.local_addr().unwrap(),
-                        conn.remote_address(),
-                    );
-                    let mut uni = conn.accept_uni().await?;
-                    let other_party_id = uni.read_u32().await?;
-                    assert!(connections
-                        .insert(
-                            usize::try_from(other_party_id).expect("u32 fits into usize"),
-                            conn
-                        )
-                        .is_none());
-                } else {
-                    return Err(eyre::eyre!(
-                        "server endpoint did not accept a connection from party {}",
-                        party.id
-                    ));
+                match tokio::time::timeout(Duration::from_secs(60), server_endpoint.accept()).await
+                {
+                    Ok(Some(maybe_conn)) => {
+                        let conn = maybe_conn.await?;
+                        tracing::trace!(
+                            "Conn with id {} from {} to {}",
+                            conn.stable_id(),
+                            server_endpoint.local_addr().unwrap(),
+                            conn.remote_address(),
+                        );
+                        let mut uni = conn.accept_uni().await?;
+                        let other_party_id = uni.read_u32().await?;
+                        assert!(connections
+                            .insert(
+                                usize::try_from(other_party_id).expect("u32 fits into usize"),
+                                conn
+                            )
+                            .is_none());
+                    }
+                    Ok(None) => {
+                        return Err(eyre::eyre!(
+                            "server endpoint did not accept a connection from party {}",
+                            party.id
+                        ))
+                    }
+                    Err(_) => {
+                        return Err(eyre::eyre!(
+                            "party {} did not connect within 60 seconds - timeout",
+                            party.id
+                        ))
+                    }
                 }
             }
         }
