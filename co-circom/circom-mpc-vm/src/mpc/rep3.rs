@@ -562,10 +562,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             Rep3VmType::Arithmetic(a) => {
                 let a_bits = conversion::a2b_selector(a, &mut self.io_context0)?;
                 let a_bits_split = (0..bits)
-                    .map(|i| {
-                        let bit = (&a_bits >> i) & BigUint::one();
-                        bit
-                    })
+                    .map(|i| (&a_bits >> i) & BigUint::one())
                     .collect_vec();
                 Ok(bit_inject_many(&a_bits_split, &mut self.io_context0)?
                     .into_iter()

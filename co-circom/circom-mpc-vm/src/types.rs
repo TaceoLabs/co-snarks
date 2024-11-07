@@ -32,6 +32,7 @@ pub struct TemplateDecl {
 }
 
 impl TemplateDecl {
+    #[allow(clippy::too_many_arguments)]
     /// Creates a new template declaration. Only the MPC-compiler should use this method!
     pub fn new(
         symbol: String,
