@@ -257,3 +257,4 @@ witness_extension_test_rep3!(smtverifier10_test);
 witness_extension_test_rep3!(sum_test);
 witness_extension_test_rep3!(winner);
 witness_extension_test_rep3!(bitonic_sort);
+witness_extension_test_rep3!(num2bits_accelerator);
