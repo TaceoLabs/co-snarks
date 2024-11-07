@@ -620,23 +620,36 @@ pub(crate) fn arithmetic_xor<F: PrimeField, N: Rep3Network>(
     y: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3PrimeFieldShare<F>> {
-    let d = mul(x, y, io_context)?;
-    let d = add(d, d);
-    let e = add(x, y);
-    let d = sub(e, d);
-    Ok(d)
+    let mut d = x * y + io_context.rngs.rand.masking_field_element::<F>();
+    d.double_in_place();
+    let e = x.a + y.a;
+    let res_a = e - d;
+
+    let res_b = io_context.network.reshare(res_a)?;
+    Ok(FieldShare { a: res_a, b: res_b })
 }
 
 pub(crate) fn arithmetic_xor_many<F: PrimeField, N: Rep3Network>(
-    mut x: Vec<Rep3PrimeFieldShare<F>>,
-    y: Vec<Rep3PrimeFieldShare<F>>,
+    x: &[Rep3PrimeFieldShare<F>],
+    y: &[Rep3PrimeFieldShare<F>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
-    let mut d = mul_vec(&x, &y, io_context)?;
-    for dd in d.iter_mut() {
-        *dd = add(*dd, *dd);
+    debug_assert_eq!(x.len(), y.len());
+
+    let mut a = Vec::with_capacity(x.len());
+    for (x, y) in x.iter().zip(y.iter()) {
+        let mut d = x * y + io_context.rngs.rand.masking_field_element::<F>();
+        d.double_in_place();
+        let e = x.a + y.a;
+        let res_a = e - d;
+        a.push(res_a);
     }
-    add_vec_assign(&mut x, &y);
-    sub_vec_assign(&mut x, &d);
-    Ok(x)
+
+    let b = io_context.network.reshare_many(&a)?;
+    let res = a
+        .into_iter()
+        .zip(b)
+        .map(|(a, b)| FieldShare { a, b })
+        .collect();
+    Ok(res)
 }
