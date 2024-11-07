@@ -10,6 +10,7 @@ use super::{
 use crate::mpc::VmCircomWitnessExtension;
 use ark_ff::PrimeField;
 use co_circom_snarks::{SharedInput, SharedWitness};
+use core::panic;
 use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
 use mpc_core::protocols::rep3::conversion::A2BType;
@@ -72,6 +73,7 @@ struct Component<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     amount_vars: usize,
     provided_input_signals: usize,
     input_signals: usize,
+    output_signals: usize,
     current_return_vals: usize,
     /// the offset inside the signals array
     my_offset: usize,
@@ -238,6 +240,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
             amount_vars: templ_decl.vars,
             provided_input_signals: 0,
             input_signals: templ_decl.input_signals,
+            output_signals: templ_decl.output_signals,
             current_return_vals: 0,
             my_offset: signal_offset,
             field_stack: Stack::default(),
@@ -364,7 +367,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     if ctx.mpc_accelerator.has_fn_accelerator(symbol) {
                         tracing::debug!("calling accelerator for {symbol}");
                         //call the accelerator
-                        let mut result = ctx.mpc_accelerator.run_accelerator(
+                        let mut result = ctx.mpc_accelerator.run_fn_accelerator(
                             symbol,
                             protocol,
                             &self.field_stack.peek_stack_frame()[to_copy..],
@@ -463,13 +466,29 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     component.provided_input_signals += amount;
                     if component.provided_input_signals == component.input_signals {
                         // check if we have an accelerator for this
-                        println!("{}", component.component_name);
                         if ctx
                             .mpc_accelerator
                             .has_cmp_accelerator(&component.component_name)
                         {
+                            let inputs = &ctx.signals[offset_in_component
+                                ..offset_in_component + component.input_signals];
+                            let result = ctx.mpc_accelerator.run_cmp_accelerator(
+                                &component.component_name,
+                                protocol,
+                                inputs,
+                                component.output_signals,
+                            )?;
+                            let mapped_offset = if *mapped {
+                                component.mappings[*signal_code]
+                            } else {
+                                0
+                            };
+                            let start = component.my_offset + mapped_offset;
+                            let end = start + component.output_signals;
+                            ctx.signals[start..end].clone_from_slice(&result);
+                        } else {
+                            component.run(protocol, ctx, config)?;
                         }
-                        component.run(protocol, ctx, config)?;
                     }
                 }
                 op_codes::MpcOpCode::Assert(line) => {
