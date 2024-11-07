@@ -76,7 +76,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
             if args.len() != 1 {
                 bail!("Calling Num2Bits accelerator with more than one argument!");
             }
-            Ok(protocol.num2bits(8)?)
+            Ok(protocol.num2bits(args[0].to_owned(), 8)?)
         });
     }
 

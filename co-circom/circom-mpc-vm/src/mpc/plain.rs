@@ -270,7 +270,12 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok(())
     }
 
-    fn num2bits(&mut self, bits: usize) -> Result<Vec<Self::VmType>> {
-        todo!()
+    fn num2bits(&mut self, a: Self::VmType, bits: usize) -> Result<Vec<Self::VmType>> {
+        let a = to_bigint!(a);
+        let mut res = Vec::with_capacity(bits);
+        for i in 0..bits {
+            res.push(F::from((&a >> i) & BigUint::one()));
+        }
+        Ok(res)
     }
 }

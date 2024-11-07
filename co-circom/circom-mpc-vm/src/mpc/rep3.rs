@@ -5,10 +5,12 @@ use super::{
 use crate::mpc_vm::VMConfig;
 use ark_ff::{One, PrimeField};
 use eyre::{bail, eyre};
+use itertools::Itertools;
 use mpc_core::protocols::rep3::{
-    arithmetic, binary, conversion,
+    arithmetic, binary,
+    conversion::{self, bit_inject_many},
     network::{IoContext, Rep3Network},
-    Rep3PrimeFieldShare,
+    Rep3BigUintShare, Rep3PrimeFieldShare,
 };
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
@@ -549,8 +551,28 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         Ok(())
     }
 
-    fn num2bits(&mut self, bits: usize) -> eyre::Result<Vec<Self::VmType>> {
-        todo!()
+    fn num2bits(&mut self, a: Self::VmType, bits: usize) -> eyre::Result<Vec<Self::VmType>> {
+        match a {
+            Rep3VmType::Public(a) => Ok(self
+                .plain
+                .num2bits(a, bits)?
+                .into_iter()
+                .map(Into::into)
+                .collect()),
+            Rep3VmType::Arithmetic(a) => {
+                let a_bits = conversion::a2b_selector(a, &mut self.io_context0)?;
+                let a_bits_split = (0..bits)
+                    .map(|i| {
+                        let bit = (&a_bits >> i) & BigUint::one();
+                        bit
+                    })
+                    .collect_vec();
+                Ok(bit_inject_many(&a_bits_split, &mut self.io_context0)?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect())
+            }
+        }
     }
 }
 
