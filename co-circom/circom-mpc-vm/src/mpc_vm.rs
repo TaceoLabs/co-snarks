@@ -285,6 +285,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
         let mut current_body = Arc::clone(&self.component_body);
         let mut current_vars = vec![C::VmType::default(); self.amount_vars];
         let mut current_shared_ret_vals = vec![];
+
+        let name = self.symbol.clone();
+        tracing::debug!("running component {name}");
+
+        // if ctx.mpc_accelerator.has_accelerator(name)
+
         loop {
             let inst = &current_body[ip];
             tracing::trace!("{ip:0>4}|   {inst}");

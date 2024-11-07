@@ -74,6 +74,13 @@ pub fn sub_assign<F: PrimeField>(shared: &mut FieldShare<F>, b: FieldShare<F>) {
     *shared -= b;
 }
 
+/// Performs element-wise subtraction of two vectors of shared values in place.
+pub fn sub_vec_assign<F: PrimeField>(lhs: &mut [FieldShare<F>], rhs: &[FieldShare<F>]) {
+    for (a, b) in izip!(lhs.iter_mut(), rhs.iter()) {
+        *a -= *b;
+    }
+}
+
 /// Performs subtraction between a shared value and a public value, returning shared - public.
 pub fn sub_shared_by_public<F: PrimeField>(
     shared: FieldShare<F>,
@@ -618,4 +625,18 @@ pub(crate) fn arithmetic_xor<F: PrimeField, N: Rep3Network>(
     let e = add(x, y);
     let d = sub(e, d);
     Ok(d)
+}
+
+pub(crate) fn arithmetic_xor_many<F: PrimeField, N: Rep3Network>(
+    mut x: Vec<Rep3PrimeFieldShare<F>>,
+    y: Vec<Rep3PrimeFieldShare<F>>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let mut d = mul_vec(&x, &y, io_context)?;
+    for dd in d.iter_mut() {
+        *dd = add(*dd, *dd);
+    }
+    add_vec_assign(&mut x, &y);
+    sub_vec_assign(&mut x, &d);
+    Ok(x)
 }

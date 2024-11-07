@@ -199,6 +199,44 @@ pub fn bit_inject<F: PrimeField, N: Rep3Network>(
     Ok(e)
 }
 
+/// Translates a vector of shared bit into a vector of arithmetic sharings of the same bits. See [bit_inject] for details.
+pub fn bit_inject_many<F: PrimeField, N: Rep3Network>(
+    x: &[Rep3BigUintShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    // standard bit inject
+    assert!(x.iter().all(|a| a.a.bits() <= 1));
+
+    let mut b0 = vec![Rep3PrimeFieldShare::<F>::default(); x.len()];
+    let mut b1 = vec![Rep3PrimeFieldShare::<F>::default(); x.len()];
+    let mut b2 = vec![Rep3PrimeFieldShare::<F>::default(); x.len()];
+
+    match io_context.id {
+        PartyID::ID0 => {
+            for i in 0..x.len() {
+                b0[i].a = x[i].a.to_owned().into();
+                b2[i].b = x[i].b.to_owned().into();
+            }
+        }
+        PartyID::ID1 => {
+            for i in 0..x.len() {
+                b1[i].a = x[i].a.to_owned().into();
+                b0[i].b = x[i].b.to_owned().into();
+            }
+        }
+        PartyID::ID2 => {
+            for i in 0..x.len() {
+                b2[i].a = x[i].a.to_owned().into();
+                b1[i].b = x[i].b.to_owned().into();
+            }
+        }
+    };
+
+    let d = arithmetic::arithmetic_xor_many(b0, b1, io_context)?;
+    let e = arithmetic::arithmetic_xor_many(d, b2, io_context)?;
+    Ok(e)
+}
+
 /// Transforms the replicated shared value x from an arithmetic sharing to a yao sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into wires, such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x.
 pub fn a2y<F: PrimeField, N: Rep3Network>(
     x: Rep3PrimeFieldShare<F>,
