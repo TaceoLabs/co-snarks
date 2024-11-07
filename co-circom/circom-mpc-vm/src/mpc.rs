@@ -114,4 +114,7 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
 
     /// Compares the VM Config with other parties
     fn compare_vm_config(&mut self, config: &VMConfig) -> Result<()>;
+
+    /// num2bits accelerator
+    fn num2bits(&mut self, bits: usize) -> Result<Vec<Self::VmType>>;
 }

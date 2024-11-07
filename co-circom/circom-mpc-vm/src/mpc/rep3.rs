@@ -548,6 +548,10 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
 
         Ok(())
     }
+
+    fn num2bits(&mut self, bits: usize) -> eyre::Result<Vec<Self::VmType>> {
+        todo!()
+    }
 }
 
 impl<F: PrimeField> std::fmt::Debug for Rep3VmType<F> {

@@ -16,12 +16,14 @@ type AcceleratorFunction<F, C> = Box<
 #[derive(Default)]
 pub struct MpcAccelerator<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     registered_functions: HashMap<String, AcceleratorFunction<F, C>>,
+    registered_component: HashMap<String, AcceleratorFunction<F, C>>,
 }
 
 impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
     pub fn empty_accelerator() -> Self {
         Self {
             registered_functions: HashMap::default(),
+            registered_component: HashMap::default(),
         }
     }
 
@@ -39,8 +41,23 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         self.registered_functions.insert(name, Box::new(fun));
     }
 
-    pub(crate) fn has_accelerator(&self, name: &str) -> bool {
+    pub fn register_component(
+        &mut self,
+        name: String,
+        fun: impl Fn(&mut C, &[C::VmType]) -> eyre::Result<Vec<C::VmType>> + Send + 'static,
+    ) {
+        self.registered_component.insert(name, Box::new(fun));
+    }
+
+    pub(crate) fn has_fn_accelerator(&self, name: &str) -> bool {
         self.registered_functions.contains_key(name)
+    }
+
+    pub(crate) fn has_cmp_accelerator(&self, name: &str) -> bool {
+        if name == "Num2Bits" {
+            panic!("uwu");
+        }
+        self.registered_component.contains_key(name)
     }
 
     fn register_sqrt(&mut self) {
@@ -50,6 +67,16 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
                 bail!("Calling SQRT accelerator with more than one argument!");
             }
             Ok(vec![protocol.sqrt(args[0].to_owned())?])
+        });
+    }
+
+    fn register_num2bits(&mut self) {
+        self.register_function("Num2Bits".to_string(), |protocol, args| {
+            tracing::debug!("calling pre-defined Num2Bits accelerator");
+            if args.len() != 1 {
+                bail!("Calling Num2Bits accelerator with more than one argument!");
+            }
+            Ok(protocol.num2bits(8)?)
         });
     }
 

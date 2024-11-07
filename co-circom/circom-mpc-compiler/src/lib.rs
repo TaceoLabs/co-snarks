@@ -100,6 +100,13 @@ impl Default for CompilerConfig {
     }
 }
 
+impl CompilerConfig {
+    /// Creates a new instance of the compiler config with
+    /// values set to default
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 /// The compiler. Can only be initiated internally. Have a look at these two methods for usage:
 ///     * [`CoCircomCompiler::parse`]
 ///     * [`CoCircomCompiler::get_public_inputs`]
@@ -705,6 +712,7 @@ where
                 templ.header.clone(),
                 TemplateDecl::new(
                     templ.header.clone(),
+                    templ.name.clone(),
                     templ.number_of_inputs,
                     templ.number_of_components,
                     templ.var_stack_depth,

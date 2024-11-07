@@ -269,4 +269,8 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
     fn compare_vm_config(&mut self, _config: &VMConfig) -> Result<()> {
         Ok(())
     }
+
+    fn num2bits(&mut self, bits: usize) -> Result<Vec<Self::VmType>> {
+        todo!()
+    }
 }

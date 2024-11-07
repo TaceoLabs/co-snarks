@@ -22,6 +22,7 @@ use eyre::Result;
 #[derive(Clone)]
 pub struct TemplateDecl {
     pub(crate) symbol: String,
+    pub(crate) component_name: String,
     pub(crate) input_signals: usize,
     pub(crate) sub_components: usize,
     pub(crate) vars: usize,
@@ -33,6 +34,7 @@ impl TemplateDecl {
     /// Creates a new template declaration. Only the MPC-compiler should use this method!
     pub fn new(
         symbol: String,
+        component_name: String,
         input_signals: usize,
         sub_components: usize,
         vars: usize,
@@ -41,6 +43,7 @@ impl TemplateDecl {
     ) -> Self {
         Self {
             symbol,
+            component_name,
             input_signals,
             sub_components,
             vars,
