@@ -44,10 +44,6 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing.workspace = true
 rustls.workspace = true
 
-
-tokio.workspace = true
-bytes.workspace = true
-itertools.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 
