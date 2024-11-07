@@ -337,7 +337,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
         ctx: &mut WitnessExtensionCtx<F, C>,
         config: &VMConfig,
     ) -> Result<()> {
-        ctx.start_component_measurement(&self);
+        ctx.start_component_measurement(self);
         let mut ip = 0;
         let mut current_body = Arc::clone(&self.component_body);
         let mut current_vars = vec![C::VmType::default(); self.amount_vars];
@@ -725,7 +725,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                 op_codes::MpcOpCode::Return => {
                     //we are done
                     //just return
-                    ctx.finish_component_measurement(&self);
+                    ctx.finish_component_measurement(self);
                     break;
                 }
                 op_codes::MpcOpCode::ReturnFun => {
@@ -823,7 +823,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     current_shared_ret_vals = shared_return_vals;
                     std::mem::swap(&mut current_vars, &mut old_vars);
                     current_body = old_body;
-                    ctx.finish_component_measurement(&self);
+                    ctx.finish_component_measurement(self);
                 }
                 op_codes::MpcOpCode::ReturnSharedIfFun => {
                     self.handle_shared_fun_return(protocol, &current_shared_ret_vals)?;
