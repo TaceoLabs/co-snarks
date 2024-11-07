@@ -2,8 +2,6 @@
 //!
 //! This module contains conversions between share types
 
-use crate::protocols::rep3::yao::input_field_id2;
-
 use super::{
     arithmetic, detail,
     id::PartyID,
@@ -15,8 +13,10 @@ use super::{
     },
     IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
 };
+use crate::protocols::rep3::yao::input_field_id2;
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
+use itertools::izip;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
@@ -213,27 +213,27 @@ pub fn bit_inject_many<F: PrimeField, N: Rep3Network>(
 
     match io_context.id {
         PartyID::ID0 => {
-            for i in 0..x.len() {
-                b0[i].a = x[i].a.to_owned().into();
-                b2[i].b = x[i].b.to_owned().into();
+            for (b0, b2, x) in izip!(&mut b0, &mut b2, x.iter().cloned()) {
+                b0.a = x.a.into();
+                b2.b = x.b.into();
             }
         }
         PartyID::ID1 => {
-            for i in 0..x.len() {
-                b1[i].a = x[i].a.to_owned().into();
-                b0[i].b = x[i].b.to_owned().into();
+            for (b1, b0, x) in izip!(&mut b1, &mut b0, x.iter().cloned()) {
+                b1.a = x.a.into();
+                b0.b = x.b.into();
             }
         }
         PartyID::ID2 => {
-            for i in 0..x.len() {
-                b2[i].a = x[i].a.to_owned().into();
-                b1[i].b = x[i].b.to_owned().into();
+            for (b2, b1, x) in izip!(&mut b2, &mut b1, x.iter().cloned()) {
+                b2.a = x.a.into();
+                b1.b = x.b.into();
             }
         }
     };
 
-    let d = arithmetic::arithmetic_xor_many(b0, b1, io_context)?;
-    let e = arithmetic::arithmetic_xor_many(d, b2, io_context)?;
+    let d = arithmetic::arithmetic_xor_many(&b0, &b1, io_context)?;
+    let e = arithmetic::arithmetic_xor_many(&d, &b2, io_context)?;
     Ok(e)
 }
 
