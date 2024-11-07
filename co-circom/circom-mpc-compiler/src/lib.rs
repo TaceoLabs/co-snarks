@@ -714,6 +714,7 @@ where
                     templ.header.clone(),
                     templ.name.clone(),
                     templ.number_of_inputs,
+                    templ.number_of_outputs,
                     templ.number_of_components,
                     templ.var_stack_depth,
                     mappings,

@@ -10,7 +10,7 @@ use mpc_core::protocols::rep3::{
     arithmetic, binary,
     conversion::{self, bit_inject_many},
     network::{IoContext, Rep3Network},
-    Rep3BigUintShare, Rep3PrimeFieldShare,
+    Rep3PrimeFieldShare,
 };
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;

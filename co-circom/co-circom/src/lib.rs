@@ -544,9 +544,9 @@ impl GenerateWitnessConfig {
     }
 }
 
-fn reshare_vec<F: PrimeField>(
+fn reshare_vec<F: PrimeField, N: Rep3Network>(
     vec: Vec<F>,
-    mpc_net: &mut Rep3MpcNet,
+    mpc_net: &mut N,
 ) -> color_eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
     mpc_net.send_next_many(&vec)?;
     let b: Vec<F> = mpc_net.recv_prev_many()?;
@@ -683,9 +683,9 @@ where
 }
 
 /// Try to parse a [SharedInput] from a [Read]er.
-pub fn parse_shared_input<R: Read, F: PrimeField>(
+pub fn parse_shared_input<R: Read, F: PrimeField, N: Rep3Network>(
     reader: R,
-    mpc_net: &mut Rep3MpcNet,
+    mpc_net: &mut N,
 ) -> color_eyre::Result<SharedInput<F, Rep3PrimeFieldShare<F>>> {
     let deserialized: SerializeableSharedRep3Input<F, SeedRng> =
         bincode::deserialize_from(reader).context("trying to parse input share file")?;
