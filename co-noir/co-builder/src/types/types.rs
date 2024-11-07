@@ -17,7 +17,7 @@ use std::ops::{Index, IndexMut};
 use super::plookup::MultiTableId;
 
 #[derive(Default, PartialEq, Eq)]
-pub(crate) struct PolyTriple<F: PrimeField> {
+pub struct PolyTriple<F: PrimeField> {
     pub(crate) a: u32,
     pub(crate) b: u32,
     pub(crate) c: u32,

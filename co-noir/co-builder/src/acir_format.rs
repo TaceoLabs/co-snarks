@@ -57,7 +57,7 @@ pub struct AcirFormat<F: PrimeField> {
     /// A standard plonk arithmetic constraint, as defined in the poly_triple struct, consists of selector values
     /// for q_M,q_L,q_R,q_O,q_C and indices of three variables taking the role of left, right and output wire
     /// This could be a large vector, we don't expect the blackbox implementations to be so large.
-    pub(crate) poly_triple_constraints: Vec<PolyTriple<F>>,
+    pub poly_triple_constraints: Vec<PolyTriple<F>>,
     pub(crate) quad_constraints: Vec<MulQuad<F>>,
     pub(crate) block_constraints: Vec<BlockConstraint<F>>,
 
@@ -169,10 +169,11 @@ impl<F: PrimeField> AcirFormat<F> {
         af: &mut AcirFormat<F>,
         opcode_index: usize,
     ) {
-        if arg.linear_combinations.len() <= 3 {
+        if arg.linear_combinations.len() <= 3 && arg.mul_terms.len() <= 1 {
             let pt = Self::serialize_arithmetic_gate(&arg);
 
             let (w1, w2) = Self::is_assert_equal(&arg, &pt, af);
+
             if !w1.is_zero() {
                 if w1 != w2 {
                     af.assert_equalities.push(pt);
@@ -287,7 +288,7 @@ impl<F: PrimeField> AcirFormat<F> {
             return (0, 0);
         }
         if (pt.q_l == -pt.q_r && !pt.q_l.is_zero() && pt.q_c.is_zero())
-            && (af.constrained_witness.contains(&pt.a) && af.constrained_witness.contains(&pt.b))
+            && (af.constrained_witness.contains(&pt.a) || af.constrained_witness.contains(&pt.b))
         {
             return (pt.a, pt.b);
         }
@@ -436,13 +437,12 @@ impl<F: PrimeField> AcirFormat<F> {
             BlackBoxFuncCall::RANGE { input } => {
                 af.range_constraints.push(RangeConstraint {
                     witness: input.to_witness().witness_index(),
-                    num_bits: input.num_bits,
+                    num_bits: input.num_bits(),
                 });
                 af.original_opcode_indices
                     .range_constraints
                     .push(opcode_index);
             }
-            BlackBoxFuncCall::SHA256 { inputs, outputs } => todo!("BlackBoxFuncCall::SHA256"),
             BlackBoxFuncCall::Blake2s { inputs, outputs } => todo!("BlackBoxFuncCall::Blake2s"),
             BlackBoxFuncCall::Blake3 { inputs, outputs } => todo!("BlackBoxFuncCall::Blake3"),
             BlackBoxFuncCall::SchnorrVerify {
@@ -452,16 +452,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 message,
                 output,
             } => todo!("BlackBoxFuncCall::SchnorrVerify"),
-            BlackBoxFuncCall::PedersenCommitment {
-                inputs,
-                domain_separator,
-                outputs,
-            } => todo!("BlackBoxFuncCall::PedersenCommitment"),
-            BlackBoxFuncCall::PedersenHash {
-                inputs,
-                domain_separator,
-                output,
-            } => todo!("BlackBoxFuncCall::PedersenHash"),
+
             BlackBoxFuncCall::EcdsaSecp256k1 {
                 public_key_x,
                 public_key_y,
@@ -486,20 +477,11 @@ impl<F: PrimeField> AcirFormat<F> {
                 input2,
                 outputs,
             } => todo!("BlackBoxFuncCall::EmbeddedCurveAdd"),
-            BlackBoxFuncCall::Keccak256 {
-                inputs,
-                var_message_size,
-                outputs,
-            } => todo!("BlackBoxFuncCall::Keccak256"),
+
             BlackBoxFuncCall::Keccakf1600 { inputs, outputs } => {
                 todo!("BlackBoxFuncCall::Keccakf1600")
             }
-            BlackBoxFuncCall::RecursiveAggregation {
-                verification_key,
-                proof,
-                public_inputs,
-                key_hash,
-            } => todo!("BlackBoxFuncCall::RecursiveAggregation"),
+
             BlackBoxFuncCall::BigIntAdd { lhs, rhs, output } => {
                 todo!("BlackBoxFuncCall::BigIntAdd")
             }
@@ -528,6 +510,13 @@ impl<F: PrimeField> AcirFormat<F> {
                 hash_values,
                 outputs,
             } => todo!("BlackBoxFuncCall::Sha256Compression"),
+            BlackBoxFuncCall::RecursiveAggregation {
+                verification_key,
+                proof,
+                public_inputs,
+                key_hash,
+                proof_type,
+            } => todo!("BlackBoxFuncCall::RecursiveAggregation"),
         }
     }
 }

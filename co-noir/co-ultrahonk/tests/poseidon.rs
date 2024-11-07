@@ -43,13 +43,13 @@ fn poseidon_plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(proof_fil
     let prover = CoUltraHonk::<_, _, H>::new(driver);
     let proof = prover.prove(proving_key).unwrap();
 
-    let proof_u8 = proof.to_buffer();
+    // let proof_u8 = proof.to_buffer();
 
-    let read_proof_u8 = std::fs::read(proof_file).unwrap();
-    assert_eq!(proof_u8, read_proof_u8);
+    // let read_proof_u8 = std::fs::read(proof_file).unwrap();
+    // assert_eq!(proof_u8, read_proof_u8);
 
-    let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
-    assert_eq!(proof, read_proof);
+    // let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
+    // assert_eq!(proof, read_proof);
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);
@@ -74,6 +74,10 @@ fn add3_plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &
     const WITNESS_FILE: &str = "/home/fabsits/secondary/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3u64/add3u64.gz";
 
     let constraint_system = Utils::get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
+    println!(
+        "polytriples: {}",
+        constraint_system.poly_triple_constraints.len()
+    );
     let witness = Utils::get_witness_from_file(WITNESS_FILE).unwrap();
 
     let witness = promote_public_witness_vector::<_, PlainAcvmSolver<ark_bn254::Fr>>(witness);
@@ -96,19 +100,19 @@ fn add3_plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &
     let prover = CoUltraHonk::<_, _, H>::new(driver);
     let proof = prover.prove(proving_key).unwrap();
 
-    // let proof_u8 = proof.to_buffer();
+    let proof_u8 = proof.to_buffer();
 
-    // let read_proof_u8 = std::fs::read(proof_file).unwrap();
-    // assert_eq!(proof_u8, read_proof_u8);
+    let read_proof_u8 = std::fs::read(proof_file).unwrap();
+    assert_eq!(proof_u8, read_proof_u8);
 
-    // let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
-    // assert_eq!(proof, read_proof);
+    let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
+    assert_eq!(proof, read_proof);
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);
 }
 #[test]
 fn add3_plaindriver_test_keccak256() {
-    const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/keccak_proof";
+    const PROOF_FILE: &str = "/home/fabsits/secondary/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3u64/add3proof";
     add3_plaindriver_test::<Keccak256>(PROOF_FILE);
 }

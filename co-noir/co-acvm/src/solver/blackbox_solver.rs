@@ -21,7 +21,7 @@ where
         inputs: &[FunctionInput<GenericFieldElement<F>>],
     ) -> Option<Witness> {
         inputs.iter().find_map(|input| {
-            if let ConstantOrWitnessEnum::Witness(ref witness) = input.input {
+            if let ConstantOrWitnessEnum::Witness(ref witness) = input.input() {
                 if witness_assignments.contains_key(witness) {
                     None
                 } else {
@@ -61,7 +61,7 @@ where
         input: FunctionInput<GenericFieldElement<F>>,
         skip_bitsize_checks: bool,
     ) -> CoAcvmResult<T::AcvmType> {
-        match input.input {
+        match input.input() {
             ConstantOrWitnessEnum::Witness(witness) => {
                 let initial_value = Self::witness_to_value(initial_witness, witness)?;
 
