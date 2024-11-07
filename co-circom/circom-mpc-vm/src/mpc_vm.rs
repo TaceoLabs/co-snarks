@@ -68,6 +68,7 @@ struct IfCtxStack<F: PrimeField, C: VmCircomWitnessExtension<F>>(Vec<IfCtx<F, C>
 #[derive(Default, Clone)]
 struct Component<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     symbol: String,
+    component_name: String,
     amount_vars: usize,
     provided_input_signals: usize,
     input_signals: usize,
@@ -233,6 +234,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
     fn init(templ_decl: &TemplateDecl, signal_offset: usize) -> Self {
         Self {
             symbol: templ_decl.symbol.clone(),
+            component_name: templ_decl.component_name.clone(),
             amount_vars: templ_decl.vars,
             provided_input_signals: 0,
             input_signals: templ_decl.input_signals,
@@ -359,7 +361,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         "{symbol} not found in function declaration. This must be a bug.."
                     ))?;
                     let to_copy = self.field_stack.frame_len() - fun_decl.num_params;
-                    if ctx.mpc_accelerator.has_accelerator(symbol) {
+                    if ctx.mpc_accelerator.has_fn_accelerator(symbol) {
                         tracing::debug!("calling accelerator for {symbol}");
                         //call the accelerator
                         let mut result = ctx.mpc_accelerator.run_accelerator(
@@ -417,6 +419,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                             .collect_vec()
                     };
                     //check if we can run it instantly
+                    // TODO check if we can do an accelerator run
                     for mut component in new_components {
                         if component.input_signals == 0 {
                             component.run(protocol, ctx, config)?;
@@ -459,6 +462,13 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         .clone_from_slice(&input_signals);
                     component.provided_input_signals += amount;
                     if component.provided_input_signals == component.input_signals {
+                        // check if we have an accelerator for this
+                        println!("{}", component.component_name);
+                        if ctx
+                            .mpc_accelerator
+                            .has_cmp_accelerator(&component.component_name)
+                        {
+                        }
                         component.run(protocol, ctx, config)?;
                     }
                 }
