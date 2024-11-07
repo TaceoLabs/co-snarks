@@ -98,7 +98,7 @@ struct WitnessExtensionCtx<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     debug_information: HashMap<String, DebugInformation>,
 }
 
-/// Debug Information for the run of a single [Component]. At the moment
+/// Debug Information for the run of a single Component. At the moment
 /// we only store the duration each component took.
 pub struct DebugInformation {
     /// The symbol of the component
