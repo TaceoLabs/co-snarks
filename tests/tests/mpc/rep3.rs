@@ -18,6 +18,7 @@ mod field_share {
     use mpc_core::protocols::rep3::{self, arithmetic, network::IoContext};
     use num_bigint::BigUint;
     use rand::thread_rng;
+    use rand::Rng;
     use std::sync::mpsc;
     use std::thread;
     use tests::rep3_network::Rep3TestNetwork;
@@ -444,6 +445,84 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_element(result1, result2, result3);
         assert!(is_result == x_ || is_result == -x_);
+    }
+
+    #[test]
+    fn rep3_bit_inject() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::from(rng.gen::<bool>() as u64);
+        let mut x_shares = rep3::share_biguint(x, &mut rng);
+        // Simulate sharing of just one bit
+        for x in x_shares.iter_mut() {
+            x.a &= BigUint::one();
+            x.b &= BigUint::one();
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(conversion::bit_inject(&x, &mut rep3).unwrap())
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_element(result1, result2, result3);
+        assert_eq!(is_result, x);
+    }
+
+    #[test]
+    fn rep3_bit_inject_many() {
+        const VEC_SIZE: usize = 10;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let mut should_result = Vec::with_capacity(VEC_SIZE);
+        let mut x0_shares = Vec::with_capacity(VEC_SIZE);
+        let mut x1_shares = Vec::with_capacity(VEC_SIZE);
+        let mut x2_shares = Vec::with_capacity(VEC_SIZE);
+        for _ in 0..VEC_SIZE {
+            let x = ark_bn254::Fr::from(rng.gen::<bool>() as u64);
+            should_result.push(x);
+            let mut x_shares = rep3::share_biguint(x, &mut rng);
+            // Simulate sharing of just one bit
+            for x in x_shares.iter_mut() {
+                x.a &= BigUint::one();
+                x.b &= BigUint::one();
+            }
+            x0_shares.push(x_shares[0].to_owned());
+            x1_shares.push(x_shares[1].to_owned());
+            x2_shares.push(x_shares[2].to_owned());
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip([x0_shares, x1_shares, x2_shares].into_iter())
+        {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(conversion::bit_inject_many(&x, &mut rep3).unwrap())
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        assert_eq!(is_result, should_result);
     }
 
     use arithmetic::ge_public;
