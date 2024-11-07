@@ -96,6 +96,9 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
         inputs.push(input);
         i += 1
     }
+    if inputs.is_empty() {
+        panic!("No test cases found for {fn_name}");
+    }
     TestInputs { inputs, witnesses }
 }
 
