@@ -20,6 +20,7 @@ use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 /// The mpc-vm configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -94,6 +95,41 @@ struct WitnessExtensionCtx<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     constant_table: Vec<C::VmType>,
     string_table: Vec<String>,
     mpc_accelerator: MpcAccelerator<F, C>,
+    debug_information: HashMap<String, DebugInformation>,
+}
+
+/// Debug Information for the run of a single [Component]. At the moment
+/// we only store the duration each component took.
+pub struct DebugInformation {
+    /// The symbol of the component
+    pub symbol: String,
+    /// The start time of the component
+    pub start_time: Instant,
+    /// The end time of the component
+    pub end_time: Instant,
+}
+
+impl std::fmt::Debug for DebugInformation {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let duration = self.end_time - self.start_time;
+        fmt.write_str(&format!(
+            "{} took {}.{}.{} s",
+            &self.symbol,
+            duration.as_secs(),
+            duration.subsec_millis(),
+            duration.subsec_nanos(),
+        ))
+    }
+}
+
+impl From<&str> for DebugInformation {
+    fn from(symbol: &str) -> Self {
+        Self {
+            start_time: Instant::now(),
+            end_time: Instant::now(), // init it to now for the moment
+            symbol: symbol.to_string(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -191,7 +227,22 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtensionCtx<F, C> {
             templ_decls,
             string_table,
             mpc_accelerator,
+            debug_information: HashMap::new(),
         }
+    }
+
+    fn start_component_measurement(&mut self, component: &Component<F, C>) {
+        let debug_information = DebugInformation::from(component.symbol.as_str());
+        self.debug_information
+            .insert(component.symbol.to_string(), debug_information);
+    }
+
+    fn finish_component_measurement(&mut self, component: &Component<F, C>) {
+        tracing::info!("setting component measurement for {}", component.symbol);
+        self.debug_information
+            .get_mut(component.symbol.as_str())
+            .expect("must be there")
+            .end_time = Instant::now();
     }
 }
 
@@ -286,6 +337,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
         ctx: &mut WitnessExtensionCtx<F, C>,
         config: &VMConfig,
     ) -> Result<()> {
+        ctx.start_component_measurement(&self);
         let mut ip = 0;
         let mut current_body = Arc::clone(&self.component_body);
         let mut current_vars = vec![C::VmType::default(); self.amount_vars];
@@ -673,6 +725,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                 op_codes::MpcOpCode::Return => {
                     //we are done
                     //just return
+                    ctx.finish_component_measurement(&self);
                     break;
                 }
                 op_codes::MpcOpCode::ReturnFun => {
@@ -770,6 +823,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     current_shared_ret_vals = shared_return_vals;
                     std::mem::swap(&mut current_vars, &mut old_vars);
                     current_body = old_body;
+                    ctx.finish_component_measurement(&self);
                 }
                 op_codes::MpcOpCode::ReturnSharedIfFun => {
                     self.handle_shared_fun_return(protocol, &current_shared_ret_vals)?;
@@ -858,8 +912,10 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
                 public_inputs,
                 witness,
             },
-            // TODO take instead of clone? or consume self again and close network in here?
-            output_mapping: self.output_mapping.clone(),
+            output_mapping: std::mem::take(&mut self.output_mapping),
+            debug_information: std::mem::take(&mut self.ctx.debug_information)
+                .into_values()
+                .collect(),
         })
     }
 
@@ -980,6 +1036,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
 pub struct FinalizedWitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     shared_witness: SharedWitness<F, C::ArithmeticShare>,
     output_mapping: OutputMapping,
+    debug_information: Vec<DebugInformation>,
 }
 
 impl<F: PrimeField, C: VmCircomWitnessExtension<F>> From<FinalizedWitnessExtension<F, C>>
@@ -1023,6 +1080,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> FinalizedWitnessExtension<F,
         self.output_mapping.get(name).map(|(offset, amount)| {
             self.shared_witness.public_inputs[*offset..*offset + *amount].to_vec()
         })
+    }
+
+    /// Returns the collected [DebugInformation] of the witness extension.
+    /// You can print timings and inspect which componenents took how long.
+    pub fn get_component_measurements(&self) -> &[DebugInformation] {
+        &self.debug_information
     }
 }
 
