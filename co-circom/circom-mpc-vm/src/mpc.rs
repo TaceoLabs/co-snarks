@@ -116,5 +116,5 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     fn compare_vm_config(&mut self, config: &VMConfig) -> Result<()>;
 
     /// num2bits accelerator
-    fn num2bits(&mut self, bits: usize) -> Result<Vec<Self::VmType>>;
+    fn num2bits(&mut self, a: Self::VmType, bits: usize) -> Result<Vec<Self::VmType>>;
 }
