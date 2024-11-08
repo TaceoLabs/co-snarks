@@ -1,4 +1,4 @@
-use acir::{acir_field::GenericFieldElement, native_types::Expression, AcirField};
+use acir::{acir_field::GenericFieldElement, native_types::Expression, AcirField, FieldElement};
 use ark_ff::PrimeField;
 
 use crate::{mpc::NoirWitnessExtensionProtocol, solver::solver_utils};
@@ -19,44 +19,45 @@ where
         if expr.mul_terms.is_empty() {
             tracing::trace!("no mul term. we are done");
             Ok(())
-        } else if expr.mul_terms.len() == 1 {
-            let (c, lhs, rhs) = &expr.mul_terms[0];
-            tracing::trace!("looking at mul term {c} * _{} * _{}", lhs.0, rhs.0);
-            if c.is_zero() {
-                tracing::trace!("c is zero. We can skip this mul term");
-                Ok(())
-            } else {
-                match (
-                    self.witness().get(lhs).cloned(),
-                    self.witness().get(rhs).cloned(),
-                ) {
-                    // we could batch this multiplication but our currently planed network design
-                    // should solve this without batching
-                    (Some(lhs), Some(rhs)) => {
-                        tracing::trace!("solving mul term...");
-                        self.driver
-                            .solve_mul_term(c.into_repr(), lhs, rhs, &mut acc.q_c)?;
-                    }
-                    (Some(lhs), None) => {
-                        tracing::trace!("partially solving mul term...");
-                        let partly_solved = self.driver.acvm_mul_with_public(c.into_repr(), lhs);
-                        acc.linear_combinations.push((partly_solved, *rhs));
-                    }
-                    (None, Some(rhs)) => {
-                        tracing::trace!("partially solving mul term...");
-                        let partly_solved = self.driver.acvm_mul_with_public(c.into_repr(), rhs);
-                        acc.linear_combinations.push((partly_solved, *lhs));
-                    }
-                    (None, None) => Err(eyre::eyre!(
-                        "two unknowns in evaluate mul term. Not solvable for expr: {:?}",
-                        expr
-                    ))?,
-                };
-                tracing::trace!("after eval mul term: {acc:?}");
-                Ok(())
-            }
         } else {
-            Err(eyre::eyre!("more than one mul term found!"))?
+            for mul in expr.mul_terms.iter() {
+                let (c, lhs, rhs) = mul;
+                tracing::trace!("looking at mul term {c} * _{} * _{}", lhs.0, rhs.0);
+                if c.is_zero() {
+                    tracing::trace!("c is zero. We can skip this mul term");
+                } else {
+                    match (
+                        self.witness().get(lhs).cloned(),
+                        self.witness().get(rhs).cloned(),
+                    ) {
+                        // we could batch this multiplication but our currently planed network design
+                        // should solve this without batching
+                        (Some(lhs), Some(rhs)) => {
+                            tracing::trace!("solving mul term...");
+                            let solved = self.driver.solve_mul_term(c.into_repr(), lhs, rhs)?;
+                            self.driver.add_assign(&mut acc.q_c, solved);
+                        }
+                        (Some(lhs), None) => {
+                            tracing::trace!("partially solving mul term...");
+                            let partly_solved =
+                                self.driver.acvm_mul_with_public(c.into_repr(), lhs);
+                            acc.linear_combinations.push((partly_solved, *rhs));
+                        }
+                        (None, Some(rhs)) => {
+                            tracing::trace!("partially solving mul term...");
+                            let partly_solved =
+                                self.driver.acvm_mul_with_public(c.into_repr(), rhs);
+                            acc.linear_combinations.push((partly_solved, *lhs));
+                        }
+                        (None, None) => Err(eyre::eyre!(
+                            "two unknowns in evaluate mul term. Not solvable for expr: {:?}",
+                            expr
+                        ))?,
+                    };
+                    tracing::trace!("after eval mul term: {acc:?}");
+                }
+            }
+            Ok(())
         }
     }
 
@@ -115,6 +116,10 @@ where
         tracing::trace!("simplified expr:     {:?}", simplified);
         // if we are here, we do not have any mul terms
         debug_assert!(simplified.mul_terms.is_empty());
+        debug_assert!(
+            simplified.linear_combinations.len() <= 4,
+            "we need to simplify!!!"
+        );
         // also if we are here and have more than one linear combination, we
         // cannot solve the expression
         if simplified.linear_combinations.is_empty() {

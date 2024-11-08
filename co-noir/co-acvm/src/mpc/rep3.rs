@@ -12,7 +12,7 @@ use mpc_core::{
         Rep3PrimeFieldShare,
     },
 };
-use rayon::prelude::*;
+use rayon::{prelude::*, result};
 use serde::{Deserialize, Serialize};
 
 use super::plain::PlainAcvmSolver;
@@ -168,13 +168,29 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         *target = result;
     }
 
+    fn add_assign(&mut self, target: &mut Self::AcvmType, rhs: Self::AcvmType) {
+        let id = self.io_context.id;
+        let result = match (target.clone(), rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                Rep3AcvmType::Public(lhs + rhs)
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Rep3AcvmType::Shared(arithmetic::add_public(shared, public, id))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                Rep3AcvmType::Shared(arithmetic::add(lhs, rhs))
+            }
+        };
+        *target = result;
+    }
+
     fn solve_mul_term(
         &mut self,
         c: F,
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
-        target: &mut Self::AcvmType,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<Self::AcvmType> {
         let result = match (lhs, rhs) {
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
                 Rep3AcvmType::Public(lhs * rhs * c)
@@ -188,8 +204,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Shared(arithmetic::mul_public(shared_mul, c))
             }
         };
-        *target = result;
-        Ok(())
+        Ok(result)
     }
 
     fn solve_equation(

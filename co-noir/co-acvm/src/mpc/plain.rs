@@ -46,15 +46,17 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         *result += q_l * w_l;
     }
 
+    fn add_assign(&mut self, lhs: &mut Self::AcvmType, rhs: Self::AcvmType) {
+        *lhs += rhs;
+    }
+
     fn solve_mul_term(
         &mut self,
         c: F,
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
-        target: &mut Self::AcvmType,
-    ) -> io::Result<()> {
-        *target = c * lhs * rhs;
-        Ok(())
+    ) -> io::Result<Self::AcvmType> {
+        Ok(c * lhs * rhs)
     }
 
     fn solve_equation(

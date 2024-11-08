@@ -48,14 +48,15 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Multiply an ACVM-types with a public value and add_assign with result: \[result\] += q_l * \[w_l\].
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType);
 
+    fn add_assign(&mut self, lhs: &mut Self::AcvmType, rhs: Self::AcvmType);
+
     /// Multiply two acvm-types and a public value and stores them at target: \[*result\] = c * \[lhs\] * \[rhs\].
     fn solve_mul_term(
         &mut self,
         c: F,
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
-        target: &mut Self::AcvmType,
-    ) -> io::Result<()>;
+    ) -> io::Result<Self::AcvmType>;
 
     /// Solves the equation \[q_l\] * w_l + \[c\] = 0, by computing \[-c\]/\[q_l\] and returning the result.
     fn solve_equation(

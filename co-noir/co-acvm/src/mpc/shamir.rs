@@ -147,13 +147,28 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         *target = result;
     }
 
+    fn add_assign(&mut self, target: &mut Self::AcvmType, rhs: Self::AcvmType) {
+        let result = match (target.clone(), rhs) {
+            (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
+                ShamirAcvmType::Public(lhs + rhs)
+            }
+            (ShamirAcvmType::Public(public), ShamirAcvmType::Shared(shared))
+            | (ShamirAcvmType::Shared(shared), ShamirAcvmType::Public(public)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(shared, public))
+            }
+            (ShamirAcvmType::Shared(lhs), ShamirAcvmType::Shared(rhs)) => {
+                ShamirAcvmType::Shared(arithmetic::add(lhs, rhs))
+            }
+        };
+        *target = result;
+    }
+
     fn solve_mul_term(
         &mut self,
         c: F,
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
-        target: &mut Self::AcvmType,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<Self::AcvmType> {
         let result = match (lhs, rhs) {
             (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
                 ShamirAcvmType::Public(lhs * rhs * c)
@@ -167,8 +182,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
                 ShamirAcvmType::Shared(arithmetic::mul_public(shared_mul, c))
             }
         };
-        *target = result;
-        Ok(())
+        Ok(result)
     }
 
     fn solve_equation(
