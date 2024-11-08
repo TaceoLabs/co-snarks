@@ -8,14 +8,16 @@ use ultrahonk::{
     Utils,
 };
 
-fn poseidon_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
+fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
+    proof_file: &str,
+    circuit_file: &str,
+    witness_file: &str,
+) {
     const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
     const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
-    const CIRCUIT_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.json";
-    const WITNESS_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.gz";
 
-    let constraint_system = Utils::get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
-    let witness = Utils::get_witness_from_file(WITNESS_FILE).unwrap();
+    let constraint_system = Utils::get_constraint_system_from_file(circuit_file, true).unwrap();
+    let witness = Utils::get_witness_from_file(witness_file).unwrap();
     let mut driver = PlainAcvmSolver::new();
     let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
         constraint_system,
@@ -47,11 +49,33 @@ fn poseidon_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &str) {
 #[test]
 fn poseidon_test_poseidon2sponge() {
     const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/pos_proof";
-    poseidon_test::<Poseidon2Sponge>(PROOF_FILE);
+    const CIRCUIT_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.json";
+    const WITNESS_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.gz";
+
+    plain_test::<Poseidon2Sponge>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE);
 }
 
 #[test]
 fn poseidon_test_keccak256() {
     const PROOF_FILE: &str = "../../test_vectors/noir/poseidon/kat/keccak_proof";
-    poseidon_test::<Keccak256>(PROOF_FILE);
+    const CIRCUIT_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.json";
+    const WITNESS_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.gz";
+
+    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE);
+}
+
+#[test]
+fn add3_test_keccak256() {
+    const PROOF_FILE: &str = "../../test_vectors/add3u64/add3proof";
+    const CIRCUIT_FILE: &str = "../../test_vectors/add3u64/add3u64.json";
+    const WITNESS_FILE: &str = "../../test_vectors/add3u64/add3u64.gz";
+    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE);
+}
+
+#[test]
+fn add3_test_poseidon2sponge() {
+    const PROOF_FILE: &str = "../../test_vectors/add3u64/add3proof";
+    const CIRCUIT_FILE: &str = "../../test_vectors/add3u64/add3u64.json";
+    const WITNESS_FILE: &str = "../../test_vectors/add3u64/add3u64.gz";
+    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE);
 }
