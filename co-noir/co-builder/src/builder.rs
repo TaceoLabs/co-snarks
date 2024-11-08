@@ -252,7 +252,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
         let len = witness_values.len();
         for witness in witness_values.into_iter().take(varnum) {
-            let idx = builder.add_variable(witness);
+            builder.add_variable(witness);
         }
         // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
         // be "set" later on via the assert_equal mechanism.
@@ -274,13 +274,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
     pub(crate) fn add_variable(&mut self, value: T::AcvmType) -> u32 {
         let idx = self.variables.len() as u32;
-        // println!("index: {} and input: {:?}", idx, value.to_string());
         self.variables.push(value);
         self.real_variable_index.push(idx);
         self.next_var_index.push(Self::REAL_VARIABLE);
         self.prev_var_index.push(Self::FIRST_VARIABLE_IN_CLASS);
         self.real_variable_tags.push(Self::DUMMY_TAG);
-
         idx
     }
 
@@ -1707,6 +1705,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             } else {
                 self.add_variable(T::AcvmType::from(read_values[ColumnIdx::C1][i]))
             };
+
             #[allow(clippy::unnecessary_unwrap)]
             let second_idx = if i == 0 && (key_b_index.is_some()) {
                 key_b_index.unwrap()
@@ -1714,6 +1713,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 self.add_variable(T::AcvmType::from(read_values[ColumnIdx::C2][i]))
             };
             let third_idx = self.add_variable(T::AcvmType::from(read_values[ColumnIdx::C3][i]));
+
             read_data[ColumnIdx::C1].push(first_idx);
             read_data[ColumnIdx::C2].push(second_idx);
             read_data[ColumnIdx::C3].push(third_idx);
@@ -1804,13 +1804,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             }
 
             self.process_non_native_field_multiplications();
-
             self.process_rom_arrays();
-
             self.process_ram_arrays();
-
             self.process_range_lists(driver);
-
             self.circuit_finalized = true;
         }
     }
@@ -1828,15 +1824,19 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     }
 
     fn process_range_lists(&mut self, driver: &mut T) -> std::io::Result<()> {
-        let lists: Vec<RangeList> = self
+        // We copy due to mutability issues
+        let mut lists = self
             .range_lists
             .iter_mut()
             .map(|(_, list)| list.clone())
-            .collect();
+            .collect::<Vec<_>>();
 
-        // todo maybe this is wrong have to check if changes to lists are relevant or only to self
-        for mut list in lists {
-            self.process_range_list(&mut list, driver)?;
+        for list in lists.iter_mut() {
+            self.process_range_list(list, driver)?;
+        }
+        // We copy back (not strictly necessary, but should take no performance)
+        for (src, des) in lists.into_iter().zip(self.range_lists.iter_mut()) {
+            *des.1 = src;
         }
         Ok(())
     }
@@ -1858,15 +1858,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // remove duplicate witness indices to prevent the sorted list set size being wrong!
         list.variable_indices.sort();
         list.variable_indices.dedup();
-        println!(
-            "range list: {}, {}, {}, ",
-            list.target_range, list.range_tag, list.tau_tag
-        );
         // go over variables
         // iterate over each variable and create mirror variable with same value - with tau tag
         // need to make sure that, in original list, increments of at most 3
-        let mut sorted_list: Vec<T::ArithmeticShare> =
-            Vec::with_capacity(list.variable_indices.len());
+        let mut sorted_list = Vec::with_capacity(list.variable_indices.len());
         for &variable_index in &list.variable_indices {
             let field_element = self.get_variable(variable_index as usize);
             let field_element = if T::is_shared(&field_element) {
@@ -1877,20 +1872,19 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                     T::get_public(&field_element).expect("Already checked it is public"),
                 )
             };
-            // let shrinked_value = field_element.into_bigint().data[0] as u32;
             sorted_list.push(field_element);
         }
 
         let sorted_list = T::sort(
             driver,
             &sorted_list,
-            32, //Utils::get_msb64(list.target_range) as usize,
+            Utils::get_msb64(list.target_range) as usize,
         )?;
 
         // list must be padded to a multipe of 4 and larger than 4 (gate_width)
         const GATE_WIDTH: usize = NUM_WIRES;
         let mut padding = (GATE_WIDTH - (list.variable_indices.len() % GATE_WIDTH)) % GATE_WIDTH;
-        let mut indices: Vec<u32> = Vec::with_capacity(padding + sorted_list.len());
+        let mut indices = Vec::with_capacity(padding + sorted_list.len());
 
         // Ensure the list size is greater than GATE_WIDTH and pad it
 
@@ -1901,10 +1895,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             indices.push(self.zero_idx);
         }
         for sorted_value in sorted_list {
-            let tmp = T::AcvmType::from(sorted_value);
-            // println!("sorted_value: {:?}", tmp.to_string());
-            let index = self.add_variable(tmp);
-            // println!(" and index: {}", index);
+            let promoted = T::AcvmType::from(sorted_value);
+            let index = self.add_variable(promoted);
             self.assign_tag(index, list.tau_tag);
 
             indices.push(index);
@@ -2062,6 +2054,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //         this->failure(msg);
         //     }
         // }
+        #[allow(clippy::map_entry)] // Required due to borrowing self twice otherwise
         if !self.range_lists.contains_key(&target_range) {
             let new_range_list = self.create_range_list(target_range);
             self.range_lists.insert(target_range, new_range_list);
@@ -2303,11 +2296,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         );
         self.real_variable_tags[index] = tag;
     }
+
     fn get_new_tag(&mut self) -> u32 {
         self.current_tag += 1;
 
         self.current_tag
     }
+
     fn create_tag(&mut self, tag_index: u32, tau_index: u32) -> u32 {
         self.tau.insert(tag_index, tau_index);
         self.current_tag += 1;
@@ -2315,44 +2310,35 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     }
 
     fn create_range_list(&mut self, target_range: u64) -> RangeList {
-        let mut result = RangeList {
-            target_range,
-            range_tag: 0,
-            tau_tag: 0,
-            variable_indices: Vec::new(),
-        };
-
         let range_tag = self.get_new_tag();
         let tau_tag = self.get_new_tag();
         self.create_tag(range_tag, tau_tag);
         self.create_tag(tau_tag, range_tag);
 
-        result.range_tag = range_tag;
-        result.tau_tag = tau_tag;
-
         let num_multiples_of_three = target_range / Self::DEFAULT_PLOOKUP_RANGE_STEP_SIZE as u64;
-        // println!("num_multiples_of_three: {num_multiples_of_three}");
-        result
-            .variable_indices
-            .reserve(num_multiples_of_three as usize + 1);
+        let mut variable_indices = Vec::with_capacity(num_multiples_of_three as usize + 2);
         for i in 0..=num_multiples_of_three {
             let index = self.add_variable(T::AcvmType::from(P::ScalarField::from(
                 i * Self::DEFAULT_PLOOKUP_RANGE_STEP_SIZE as u64,
             )));
 
-            result.variable_indices.push(index);
-
-            self.assign_tag(index, result.range_tag);
+            variable_indices.push(index);
+            self.assign_tag(index, range_tag);
         }
         let index = self.add_variable(T::AcvmType::from(P::ScalarField::from(target_range)));
-        result.variable_indices.push(index);
+        variable_indices.push(index);
 
-        self.assign_tag(index, result.range_tag);
+        self.assign_tag(index, range_tag);
+        self.create_dummy_constraints(&variable_indices);
 
-        self.create_dummy_constraints(&result.variable_indices);
-
-        result
+        RangeList {
+            target_range,
+            range_tag,
+            tau_tag,
+            variable_indices,
+        }
     }
+
     fn create_dummy_constraints(&mut self, variable_index: &[u32]) {
         let mut padded_list = variable_index.to_owned();
         const GATE_WIDTH: usize = NUM_WIRES;
@@ -2376,6 +2362,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             );
         }
     }
+
     fn create_sort_constraint_with_edges(
         &mut self,
         variable_index: &[u32],
@@ -2447,9 +2434,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 .q_poseidon2_internal()
                 .push(P::ScalarField::zero());
 
-            // if HasAdditionalSelectors::<Arithmetization>::is_some() {
-            //     block.pad_additional();
-            // }
             self.check_selector_length_consistency();
         }
 
@@ -2494,9 +2478,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 .q_poseidon2_internal()
                 .push(P::ScalarField::zero());
 
-            // if HasAdditionalSelectors::<Arithmetization>::is_some() {
-            //     block.pad_additional();
-            // }
             self.check_selector_length_consistency();
         }
 
@@ -2525,6 +2506,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             const_scaling: (-end),
         });
     }
+
     fn create_bool_gate(&mut self, variable_index: u32) {
         self.is_valid_variable(variable_index as usize);
 
