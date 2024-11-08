@@ -1,11 +1,5 @@
 # split input into shares
 cargo run --release --bin co-noir -- split-input --circuit test_vectors/add3_assert/add3_assert.json --input test_vectors/add3_assert/Prover.toml --protocol REP3 --out-dir test_vectors/add3_assert
-cargo run --release --bin co-noir -- split-input --circuit test_vectors/add3_assert/add3_assert.json --input test_vectors/add3_assert/Prover.toml --protocol REP3 --out-dir test_vectors/add3_assert
-cargo run --release --bin co-noir -- split-input --circuit test_vectors/add3_assert/add3_assert.json --input test_vectors/add3_assert/Prover.toml --protocol REP3 --out-dir test_vectors/add3_assert
-# merge inputs into single input file
-# cargo run --release --bin co-noir -- merge-input-shares --inputs test_vectors/add3_assert/Alice.toml.0.shared --inputs test_vectors/add3_assert/Bob.toml.0.shared --inputs test_vectors/add3_assert/Davina.toml.0.shared --protocol REP3 --out test_vectors/add3_assert/Prover.toml.0.shared
-# cargo run --release --bin co-noir -- merge-input-shares --inputs test_vectors/add3_assert/Alice.toml.2.shared --inputs test_vectors/add3_assert/Bob.toml.2.shared --inputs test_vectors/add3_assert/Davina.toml.2.shared --protocol REP3 --out test_vectors/add3_assert/Prover.toml.2.shared
-# cargo run --release --bin co-noir -- merge-input-shares --inputs test_vectors/add3_assert/Alice.toml.1.shared --inputs test_vectors/add3_assert/Bob.toml.1.shared --inputs test_vectors/add3_assert/Davina.toml.1.shared --protocol REP3 --out test_vectors/add3_assert/Prover.toml.1.shared
 # run witness extension in MPC
 cargo run --release --bin co-noir -- generate-witness --input test_vectors/add3_assert/Prover.toml.0.shared --circuit test_vectors/add3_assert/add3_assert.json --protocol REP3 --config configs/party1.toml --out test_vectors/add3_assert/add3_assert.gz.0.shared &
 cargo run --release --bin co-noir -- generate-witness --input test_vectors/add3_assert/Prover.toml.1.shared --circuit test_vectors/add3_assert/add3_assert.json --protocol REP3 --config configs/party2.toml --out test_vectors/add3_assert/add3_assert.gz.1.shared &
