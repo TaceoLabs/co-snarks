@@ -1051,6 +1051,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) fn assert_equal(&mut self, a_idx: usize, b_idx: usize) {
         self.is_valid_variable(a_idx);
         self.is_valid_variable(b_idx);
+        {
+            let a = T::get_public(&self.get_variable(a_idx));
+            let b = T::get_public(&self.get_variable(b_idx));
+            if let (Some(a), Some(b)) = (a, b) {
+                assert_eq!(a, b);
+                return;
+            } else {
+                // We can not check the equality of the witnesses since they are secret shared, but the proof will fail if they are not equal
+            }
+        }
         assert_eq!(self.get_variable(a_idx), self.get_variable(b_idx));
 
         let a_real_idx = self.real_variable_index[a_idx] as usize;
