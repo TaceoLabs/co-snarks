@@ -41,7 +41,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         let contains_recursive_proof = self.contains_recursive_proof;
         let recursive_proof_public_input_indices = self.recursive_proof_public_input_indices;
 
-        let pk = ProvingKey::create::<PlainAcvmSolver<P::ScalarField>>(self, crs, driver);
+        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver);
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -66,7 +66,6 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         Ok(vk)
     }
 
-    // todo: didnt think too much about the driver here, since we only really use it in tests i think?
     pub fn create_keys(
         self,
         crs: Crs<P>,
@@ -77,7 +76,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         };
         let verifier_crs = crs.g2_x;
 
-        let pk = ProvingKey::create::<PlainAcvmSolver<P::ScalarField>>(self, prover_crs, driver);
+        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver);
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -117,7 +116,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub(crate) zero_idx: u32,
     one_idx: u32,
     pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
-    pub num_gates: usize,
+    num_gates: usize,
     circuit_finalized: bool,
     pub contains_recursive_proof: bool,
     pub recursive_proof_public_input_indices: AggregationObjectPubInputIndices,

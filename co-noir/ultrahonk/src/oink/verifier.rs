@@ -52,10 +52,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let pub_inputs_offset = transcript
             .receive_u64_from_prover("pub_inputs_offset".to_string())
             .context("Failed to receive pub_inputs_offset")?;
-        println!(
-            "----\n circuit_size: {circuit_size}, verifying_key.circuit_size: {}\n ----",
-            verifying_key.circuit_size
-        );
+
         if circuit_size != verifying_key.circuit_size as u64 {
             return Err(eyre::eyre!("OinkVerifier::execute_preamble_round: proof circuit size does not match verification key!"));
         }
