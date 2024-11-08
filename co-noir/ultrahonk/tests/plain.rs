@@ -66,16 +66,16 @@ fn poseidon_test_keccak256() {
 
 #[test]
 fn add3_test_keccak256() {
-    const PROOF_FILE: &str = "../../test_vectors/add3u64/add3proof";
-    const CIRCUIT_FILE: &str = "../../test_vectors/add3u64/add3u64.json";
-    const WITNESS_FILE: &str = "../../test_vectors/add3u64/add3u64.gz";
+    const PROOF_FILE: &str = "../../test_vectors/noir/add3u64/add3proof";
+    const CIRCUIT_FILE: &str = "../../test_vectors/noir/add3u64/add3u64.json";
+    const WITNESS_FILE: &str = "../../test_vectors/noir/add3u64/add3u64.gz";
     plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE);
 }
 
 #[test]
 fn add3_test_poseidon2sponge() {
-    const PROOF_FILE: &str = "../../test_vectors/add3u64/add3proof";
-    const CIRCUIT_FILE: &str = "../../test_vectors/add3u64/add3u64.json";
-    const WITNESS_FILE: &str = "../../test_vectors/add3u64/add3u64.gz";
+    const PROOF_FILE: &str = "../../test_vectors/noir/add3u64/add3proof";
+    const CIRCUIT_FILE: &str = "../../test_vectors/noir/add3u64/add3u64.json";
+    const WITNESS_FILE: &str = "../../test_vectors/noir/add3u64/add3u64.gz";
     plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE);
 }
