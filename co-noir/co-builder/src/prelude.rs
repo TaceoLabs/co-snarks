@@ -13,3 +13,4 @@ pub use crate::polynomials::polynomial_types::{PrecomputedEntities, PRECOMPUTED_
 pub use crate::serialize::{Serialize, SerializeP};
 pub use crate::types::types::{CycleNode, CyclicPermutation, NUM_SELECTORS, NUM_WIRES};
 pub use crate::utils::Utils;
+pub use co_acvm::PlainAcvmSolver;

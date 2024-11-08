@@ -1,10 +1,9 @@
 use ark_bn254::Bn254;
-use co_acvm::PlainAcvmSolver;
 use sha3::Keccak256;
 use ultrahonk::{
     prelude::{
-        HonkProof, Poseidon2Sponge, ProvingKey, TranscriptFieldType, TranscriptHasher,
-        UltraCircuitBuilder, UltraHonk,
+        HonkProof, PlainAcvmSolver, Poseidon2Sponge, ProvingKey, TranscriptFieldType,
+        TranscriptHasher, UltraCircuitBuilder, UltraHonk,
     },
     Utils,
 };

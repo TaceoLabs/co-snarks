@@ -16,7 +16,6 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 ark-serialize.workspace = true
 co-builder = { version = "0.1.0", path = "../co-builder" }
-co-acvm = { version = "0.2.0", path = "../co-acvm" }
 eyre.workspace = true
 itertools.workspace = true
 noirc-artifacts.workspace = true
