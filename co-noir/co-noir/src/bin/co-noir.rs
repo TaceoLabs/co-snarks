@@ -2,7 +2,8 @@ use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Parser, Subcommand};
 use co_acvm::{
-    solver::Rep3CoSolver, PlainAcvmSolver, Rep3AcvmSolver, Rep3AcvmType, ShamirAcvmType,
+    solver::Rep3CoSolver, PlainAcvmSolver, Rep3AcvmSolver, Rep3AcvmType, ShamirAcvmSolver,
+    ShamirAcvmType,
 };
 use co_noir::{
     convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
@@ -21,8 +22,9 @@ use co_ultrahonk::{
         ShamirUltraHonkDriver, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
         VerifyingKeyBarretenberg,
     },
-    MAX_PARTIAL_RELATION_LENGTH, OINK_CRAND_PAIRS_CONST, OINK_CRAND_PAIRS_FACTOR_N,
-    OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE, SUMCHECK_ROUND_CRAND_PAIRS_FACTOR,
+    ShamirCoBuilder, MAX_PARTIAL_RELATION_LENGTH, OINK_CRAND_PAIRS_CONST,
+    OINK_CRAND_PAIRS_FACTOR_N, OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE,
+    SUMCHECK_ROUND_CRAND_PAIRS_FACTOR,
 };
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
@@ -292,11 +294,8 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
         crs_path.to_str().context("while opening crs file")?,
     )
     .context("failed to get prover crs")?;
-    let proving_key = PlainProvingKey::create::<
-        PlainAcvmSolver<
-            <ark_ec::models::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::ScalarField,
-        >,
-    >(builder, prover_crs, &mut driver);
+    let proving_key =
+        PlainProvingKey::create::<PlainAcvmSolver<_>>(builder, prover_crs, &mut driver);
 
     let witness_entities = proving_key
         .polynomials
@@ -721,6 +720,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             // connect to network
             let net = Rep3MpcNet::new(network_config)?;
             let id = net.get_id();
+
             // Create driver for circuit builder
             let mut circuit_driver = Rep3AcvmSolver::new(net);
             // Create the circuit
@@ -757,45 +757,50 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             tracing::info!("Proving Key successfully written to {}", out.display());
         }
         MPCProtocol::SHAMIR => {
-            todo!("add driver")
-            // let witness_share = bincode::deserialize_from(witness_file)
-            //     .context("while deserializing witness share")?;
-            // // connect to network
-            // let net = ShamirMpcNet::new(network_config)?;
-            // let id = net.get_id();
+            let witness_share = bincode::deserialize_from(witness_file)
+                .context("while deserializing witness share")?;
+            // connect to network
+            let net = ShamirMpcNet::new(network_config)?;
+            let id = net.get_id();
 
-            // // Create the circuit
-            // tracing::info!("Party {}: starting to generate proving key..", id);
-            // let start = Instant::now();
-            // let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
-            //     constraint_system,
-            //     0,
-            //     witness_share,
-            //     true,
-            //     false,
-            // );
+            // Create driver for circuit builder
+            let preprocessing = ShamirPreprocessing::new(t, net, 0).unwrap(); // TODO this 0 is not yet handled correctly
+            let protocol = ShamirProtocol::from(preprocessing);
+            let mut circuit_driver = ShamirAcvmSolver::new(protocol);
 
-            // // parse the crs
-            // let prover_crs =
-            //     ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _>::get_prover_crs(
-            //         &builder,
-            //         crs_path.to_str().context("while opening crs file")?,
-            //     )
-            //     .context("failed to get prover crs")?;
+            // Create the circuit
+            tracing::info!("Party {}: starting to generate proving key..", id);
+            let start = Instant::now();
+            let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
+                constraint_system,
+                0,
+                witness_share,
+                true,
+                false,
+                &mut circuit_driver,
+            );
 
-            // // Get the proving key and prover
-            // let proving_key: ProvingKey<ShamirUltraHonkDriver<_, ShamirMpcNet>, _> =
-            //     ProvingKey::create(id, builder, prover_crs)?;
-            // let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            // tracing::info!(
-            //     "Party {}: Proving key generation took {} ms",
-            //     id,
-            //     duration_ms
-            // );
-            // // write result to output file
-            // let out_file = BufWriter::new(std::fs::File::create(&out)?);
-            // bincode::serialize_into(out_file, &proving_key)?;
-            // tracing::info!("Proving Key successfully written to {}", out.display());
+            // parse the crs
+            let prover_crs =
+                ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _>::get_prover_crs(
+                    &builder,
+                    crs_path.to_str().context("while opening crs file")?,
+                )
+                .context("failed to get prover crs")?;
+
+            // Get the proving key and prover
+            let proving_key: ProvingKey<ShamirUltraHonkDriver<_, ShamirMpcNet>, _> =
+                ProvingKey::create(id, builder, prover_crs, &mut circuit_driver)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!(
+                "Party {}: Proving key generation took {} ms",
+                id,
+                duration_ms
+            );
+            // write result to output file
+            let out_file = BufWriter::new(std::fs::File::create(&out)?);
+            bincode::serialize_into(out_file, &proving_key)?;
+            tracing::info!("Proving Key successfully written to {}", out.display());
         }
     };
 
@@ -999,6 +1004,7 @@ fn run_build_and_generate_proof(
             // connect to network
             let net = Rep3MpcNet::new(network_config)?;
             let id = net.get_id();
+
             // Create driver for circuit builder
             let mut circuit_driver = Rep3AcvmSolver::new(net);
             // Create the circuit
@@ -1021,8 +1027,9 @@ fn run_build_and_generate_proof(
             .context("failed to get prover crs")?;
             // Get the proving key and prover
             let proving_key = ProvingKey::create(id, builder, prover_crs, &mut circuit_driver)?;
-            let (io_context0, io_context1) = circuit_driver.get_io_contexts();
+
             // init MPC protocol
+            let (io_context0, io_context1) = circuit_driver.get_io_contexts();
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
             let public_input = proving_key.get_public_inputs();
             let (proof, public_input) = match hasher {
@@ -1065,81 +1072,86 @@ fn run_build_and_generate_proof(
             (proof, public_input)
         }
         MPCProtocol::SHAMIR => {
-            todo!("add driver")
-            //     let witness_share = bincode::deserialize_from(witness_file)
-            //         .context("while deserializing witness share")?;
-            //     // connect to network
-            //     let net = ShamirMpcNet::new(network_config)?;
-            //     let id = net.get_id();
-            // // Create driver for circuit builder
-            // let mut circuit_driver = ShamirAcvmSolver::new(protocol);
-            // // Create the circuit
-            // tracing::info!("Party {}: starting to generate proving key..", id);
-            // let start = Instant::now();
-            // let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
-            //     constraint_system,
-            //     0,
-            //     witness_share,
-            //     true,
-            //     false,
-            // );
+            let witness_share = bincode::deserialize_from(witness_file)
+                .context("while deserializing witness share")?;
+            // connect to network
+            let net = ShamirMpcNet::new(network_config)?;
+            let id = net.get_id();
 
-            // // parse the crs
-            // let prover_crs =
-            //     ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _>::get_prover_crs(
-            //         &builder,
-            //         crs_path.to_str().context("while opening crs file")?,
-            //     )
-            //     .context("failed to get prover crs")?;
+            // Create driver for circuit builder
+            let preprocessing = ShamirPreprocessing::new(t, net, 0).unwrap();
+            let protocol = ShamirProtocol::from(preprocessing);
+            let mut circuit_driver = ShamirAcvmSolver::new(protocol);
 
-            // // Get the proving key and prover
-            // let proving_key = ProvingKey::create(id, builder, prover_crs)?;
-            // let public_input = proving_key.get_public_inputs();
-            // let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            // tracing::info!(
-            //     "Party {}: Proving key generation took {} ms",
-            //     id,
-            //     duration_ms
-            // );
+            // Create the circuit
+            tracing::info!("Party {}: starting to generate proving key..", id);
+            let start = Instant::now();
+            let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
+                constraint_system,
+                0,
+                witness_share,
+                true,
+                false,
+                &mut circuit_driver,
+            );
 
-            // // init MPC protocol
-            // // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
-            // let n = proving_key.circuit_size as usize;
-            // let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
-            //     + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
-            //     + OINK_CRAND_PAIRS_CONST;
-            // // log2(n) * ((n >>= 1) / 2) == n - 1
-            // let num_pairs_sumcheck_prove =
-            //     SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
-            // let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
-            // let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
-            // let mut protocol0 = ShamirProtocol::from(preprocessing);
-            // let protocol1 = protocol0.fork_with_pairs(0)?;
-            // let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
+            // parse the crs
+            let prover_crs =
+                ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _>::get_prover_crs(
+                    &builder,
+                    crs_path.to_str().context("while opening crs file")?,
+                )
+                .context("failed to get prover crs")?;
 
-            // let (proof, public_input) = match hasher {
-            //     TranscriptHash::POSEIDON => {
-            //         // execute prover in MPC
-            //         tracing::info!("Party {}: starting proof generation..", id);
-            //         let start = Instant::now();
-            //         let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
-            //         let proof = prover.prove(proving_key)?;
-            //         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            //         tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-            //         (proof, public_input)
-            //     }
-            //     TranscriptHash::KECCAK => {
-            //         // execute prover in MPC
-            //         tracing::info!("Party {}: starting proof generation..", id);
-            //         let start = Instant::now();
-            //         let prover = CoUltraHonk::<_, _, Keccak256>::new(driver);
-            //         let proof = prover.prove(proving_key)?;
-            //         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            //         tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-            //         (proof, public_input)
-            //     }
-            // };
-            // (proof, public_input)
+            // Get the proving key and prover
+            let proving_key = ProvingKey::create(id, builder, prover_crs, &mut circuit_driver)?;
+            let public_input = proving_key.get_public_inputs();
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!(
+                "Party {}: Proving key generation took {} ms",
+                id,
+                duration_ms
+            );
+
+            let net = circuit_driver.into_network();
+            // init MPC protocol
+            // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+            let n = proving_key.circuit_size as usize;
+            let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
+                + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
+                + OINK_CRAND_PAIRS_CONST;
+            // log2(n) * ((n >>= 1) / 2) == n - 1
+            let num_pairs_sumcheck_prove =
+                SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+            let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
+            let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
+            let mut protocol0 = ShamirProtocol::from(preprocessing);
+            let protocol1 = protocol0.fork_with_pairs(0)?;
+            let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
+
+            let (proof, public_input) = match hasher {
+                TranscriptHash::POSEIDON => {
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+                TranscriptHash::KECCAK => {
+                    // execute prover in MPC
+                    tracing::info!("Party {}: starting proof generation..", id);
+                    let start = Instant::now();
+                    let prover = CoUltraHonk::<_, _, Keccak256>::new(driver);
+                    let proof = prover.prove(proving_key)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    (proof, public_input)
+                }
+            };
+            (proof, public_input)
         }
     };
 
@@ -1197,6 +1209,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
         .context("while parsing program artifact")?;
     let mut driver = PlainAcvmSolver::new();
+
     // get builder
     tracing::info!("Starting to generate verification key..");
     let start = Instant::now();
