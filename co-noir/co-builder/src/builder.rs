@@ -1061,7 +1061,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 // We can not check the equality of the witnesses since they are secret shared, but the proof will fail if they are not equal
             }
         }
-        assert_eq!(self.get_variable(a_idx), self.get_variable(b_idx));
 
         let a_real_idx = self.real_variable_index[a_idx] as usize;
         let b_real_idx = self.real_variable_index[b_idx] as usize;
