@@ -1,6 +1,6 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
-use co_acvm::ShamirAcvmType;
+use co_acvm::{PlainAcvmSolver, ShamirAcvmSolver, ShamirAcvmType};
 use co_ultrahonk::{
     prelude::{
         CoUltraHonk, Poseidon2Sponge, ProvingKey, ShamirCoBuilder, ShamirUltraHonkDriver,
@@ -40,12 +40,18 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         threads.push(thread::spawn(move || {
             let constraint_system = Utils::get_constraint_system_from_artifact(&artifact, true);
 
+            let id = net.id;
+            let preprocessing = ShamirPreprocessing::new(threshold, net, 0).unwrap();
+            let protocol = ShamirProtocol::from(preprocessing);
+            let mut driver = ShamirAcvmSolver::new(protocol);
+
             let builder = ShamirCoBuilder::<Bn254, PartyTestNetwork>::create_circuit(
                 constraint_system,
                 0,
                 witness,
                 true,
                 false,
+                &mut driver,
             );
 
             let prover_crs =
@@ -55,10 +61,9 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 )
                 .expect("failed to get prover crs");
 
-            let id = net.id;
+            let proving_key = ProvingKey::create(id, builder, prover_crs, &mut driver).unwrap();
 
-            let proving_key = ProvingKey::create(id, builder, prover_crs).unwrap();
-
+            let net = driver.into_network();
             let n = proving_key.circuit_size as usize;
             let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
                 + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
@@ -87,11 +92,18 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     }
 
     // Get vk
+    let mut driver = PlainAcvmSolver::new();
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-    let builder =
-        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, vec![], true, false);
+    let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
+        constraint_system,
+        0,
+        vec![],
+        true,
+        false,
+        &mut driver,
+    );
     let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
-    let verifying_key = VerifyingKey::create(builder, crs).unwrap();
+    let verifying_key = VerifyingKey::create(builder, crs, &mut driver).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);

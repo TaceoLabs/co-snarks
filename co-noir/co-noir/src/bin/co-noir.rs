@@ -1021,8 +1021,7 @@ fn run_build_and_generate_proof(
             .context("failed to get prover crs")?;
             // Get the proving key and prover
             let proving_key = ProvingKey::create(id, builder, prover_crs, &mut circuit_driver)?;
-            let mut io_context0 = circuit_driver.get_io_context();
-            let io_context1 = io_context0.fork()?;
+            let (io_context0, io_context1) = circuit_driver.get_io_contexts();
             // init MPC protocol
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
             let public_input = proving_key.get_public_inputs();

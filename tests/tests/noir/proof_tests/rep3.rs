@@ -2,12 +2,11 @@ use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
-use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
+use co_acvm::{solver::Rep3CoSolver, PlainAcvmSolver, Rep3AcvmSolver, Rep3AcvmType};
 use co_ultrahonk::prelude::{
     CoUltraHonk, Poseidon2Sponge, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver,
     TranscriptFieldType, TranscriptHasher, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
 };
-use mpc_core::protocols::rep3::network::IoContext;
 use sha3::Keccak256;
 use std::thread;
 use tests::rep3_network::{PartyTestNetwork, Rep3TestNetwork};
@@ -64,12 +63,15 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
         threads.push(thread::spawn(move || {
             let constraint_system = Utils::get_constraint_system_from_artifact(&artifact, true);
 
+            let id = net.id;
+            let mut driver = Rep3AcvmSolver::new(net);
             let builder = Rep3CoBuilder::<Bn254, PartyTestNetwork>::create_circuit(
                 constraint_system,
                 0,
                 witness,
                 true,
                 false,
+                &mut driver,
             );
 
             let crs = ProvingKey::<Rep3UltraHonkDriver<PartyTestNetwork>, _>::get_prover_crs(
@@ -78,12 +80,10 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
             )
             .expect("failed to get prover crs");
 
-            let id = net.id;
+            let proving_key = ProvingKey::create(id, builder, crs, &mut driver).unwrap();
 
-            let mut io_context0 = IoContext::init(net).unwrap();
-            let io_context1 = io_context0.fork().unwrap();
+            let (io_context0, io_context1) = driver.get_io_contexts();
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
-            let proving_key = ProvingKey::create(id, builder, crs).unwrap();
 
             let prover = CoUltraHonk::<_, _, H>::new(driver);
             prover.prove(proving_key).unwrap()
@@ -100,11 +100,18 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     }
 
     // Get vk
+    let mut driver = PlainAcvmSolver::new();
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-    let builder =
-        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, vec![], true, false);
+    let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
+        constraint_system,
+        0,
+        vec![],
+        true,
+        false,
+        &mut driver,
+    );
     let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
-    let verifying_key = VerifyingKey::create(builder, crs).unwrap();
+    let verifying_key = VerifyingKey::create(builder, crs, &mut driver).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);
@@ -133,12 +140,15 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
             let witness = solver.solve().unwrap();
             let witness = convert_witness_rep3(witness);
 
+            let id = net2.id;
+            let mut driver = Rep3AcvmSolver::new(net2);
             let builder = Rep3CoBuilder::<Bn254, PartyTestNetwork>::create_circuit(
                 constraint_system,
                 0,
                 witness,
                 true,
                 false,
+                &mut driver,
             );
 
             let prover_crs =
@@ -148,13 +158,10 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
                 )
                 .expect("failed to get prover crs");
 
-            let id = net2.id;
+            let proving_key = ProvingKey::create(id, builder, prover_crs, &mut driver).unwrap();
 
-            let mut io_context0 = IoContext::init(net2).unwrap();
-            let io_context1 = io_context0.fork().unwrap();
+            let (io_context0, io_context1) = driver.get_io_contexts();
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
-            let proving_key = ProvingKey::create(id, builder, prover_crs).unwrap();
-
             let prover = CoUltraHonk::<_, _, H>::new(driver);
             prover.prove(proving_key).unwrap()
         }));
@@ -170,11 +177,18 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     }
 
     // Get vk
+    let mut driver = PlainAcvmSolver::new();
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-    let builder =
-        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, vec![], true, false);
+    let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
+        constraint_system,
+        0,
+        vec![],
+        true,
+        false,
+        &mut driver,
+    );
     let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
-    let verifying_key = VerifyingKey::create(builder, crs).unwrap();
+    let verifying_key = VerifyingKey::create(builder, crs, &mut driver).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);

@@ -39,8 +39,9 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
             phantom_data: PhantomData,
         }
     }
-    pub fn get_io_context(self) -> IoContext<N> {
-        self.io_context
+
+    pub fn get_io_contexts(self) -> (IoContext<N>, IoContext<N>) {
+        (self.io_context, self.lut_provider.get_io_context())
     }
 }
 

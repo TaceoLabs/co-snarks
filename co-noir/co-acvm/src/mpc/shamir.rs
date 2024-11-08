@@ -15,13 +15,17 @@ pub struct ShamirAcvmSolver<F: PrimeField, N: ShamirNetwork> {
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirAcvmSolver<F, N> {
-    pub(crate) fn new(protocol: ShamirProtocol<F, N>) -> Self {
+    pub fn new(protocol: ShamirProtocol<F, N>) -> Self {
         let plain_solver = PlainAcvmSolver::<F>::default();
         Self {
             protocol,
             plain_solver,
             phantom_data: PhantomData,
         }
+    }
+
+    pub fn into_network(self) -> N {
+        self.protocol.network
     }
 }
 

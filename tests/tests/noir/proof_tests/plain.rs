@@ -2,7 +2,7 @@ use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
-use co_acvm::solver::PlainCoSolver;
+use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
 use co_ultrahonk::prelude::{
     CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey,
     TranscriptFieldType, TranscriptHasher, UltraHonk, Utils,
@@ -42,15 +42,22 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
         .expect("failed to parse program artifact");
     let witness = Utils::get_witness_from_file(&witness_file).expect("failed to parse witness");
 
-    let builder =
-        PlainCoBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
-
-    let driver = PlainUltraHonkDriver;
+    let mut driver = PlainAcvmSolver::new();
+    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+        constraint_system,
+        0,
+        witness,
+        true,
+        false,
+        &mut driver,
+    );
 
     let crs = ProvingKey::<PlainUltraHonkDriver, _>::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2)
         .expect("failed to get crs");
-    let (proving_key, verifying_key) = ProvingKey::create_keys(0, builder, crs).unwrap();
+    let (proving_key, verifying_key) =
+        ProvingKey::create_keys(0, builder, crs, &mut driver).unwrap();
 
+    let driver = PlainUltraHonkDriver;
     let prover = CoUltraHonk::<_, _, H>::new(driver);
     let proof = prover.prove(proving_key).unwrap();
 
@@ -70,14 +77,22 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     let witness = solver.solve().unwrap();
     let witness = convert_witness_plain(witness);
 
-    let builder =
-        PlainCoBuilder::<Bn254>::create_circuit(constraint_system, 0, witness, true, false);
-
-    let driver = PlainUltraHonkDriver;
+    let mut driver = PlainAcvmSolver::new();
+    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+        constraint_system,
+        0,
+        witness,
+        true,
+        false,
+        &mut driver,
+    );
 
     let crs = ProvingKey::<PlainUltraHonkDriver, _>::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2)
         .expect("failed to get crs");
-    let (proving_key, verifying_key) = ProvingKey::create_keys(0, builder, crs).unwrap();
+    let (proving_key, verifying_key) =
+        ProvingKey::create_keys(0, builder, crs, &mut driver).unwrap();
+
+    let driver = PlainUltraHonkDriver;
 
     let prover = CoUltraHonk::<_, _, H>::new(driver);
     let proof = prover.prove(proving_key).unwrap();
