@@ -17,7 +17,7 @@ use std::ops::{Index, IndexMut};
 use super::plookup::MultiTableId;
 
 #[derive(Default, PartialEq, Eq)]
-pub struct PolyTriple<F: PrimeField> {
+pub(crate) struct PolyTriple<F: PrimeField> {
     pub(crate) a: u32,
     pub(crate) b: u32,
     pub(crate) c: u32,
@@ -1031,7 +1031,7 @@ pub(crate) enum ColumnIdx {
     C2,
     C3,
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct RangeList {
     pub(crate) target_range: u64,
     pub(crate) range_tag: u32,
