@@ -23,6 +23,7 @@ use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::Level;
 
 /// The mpc-vm configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -309,6 +310,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
         ctx: &mut WitnessExtensionCtx<F, C>,
         config: &VMConfig,
     ) -> Result<()> {
+        let _entered = flamegraph::start_sample!(self.symbol);
         let mut ip = 0;
         let mut current_body = Arc::clone(&self.component_body);
         let mut current_vars = vec![protocol.public_zero(); self.amount_vars];
@@ -404,13 +406,13 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     }
                 }
                 op_codes::MpcOpCode::Call(symbol, return_vals) => {
-                    tracing::debug!("Calling {symbol}");
+                    tracing::trace!("Calling {symbol}");
                     let fun_decl = ctx.fun_decls.get(symbol).ok_or(eyre!(
                         "{symbol} not found in function declaration. This must be a bug.."
                     ))?;
                     let to_copy = self.field_stack.frame_len() - fun_decl.num_params;
                     if ctx.mpc_accelerator.has_fn_accelerator(symbol) {
-                        tracing::debug!("calling accelerator for {symbol}");
+                        tracing::trace!("calling accelerator for {symbol}");
                         //call the accelerator
                         let mut result = ctx.mpc_accelerator.run_fn_accelerator(
                             symbol,
@@ -942,6 +944,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
             .ok_or(eyre!("cannot find main template: {}", self.main))?;
         let mut main_component = Component::init(main_templ, 1);
         main_component.run(&mut self.driver, &mut self.ctx, &self.config)?;
+        flamegraph::end_profiling!();
         Ok(())
     }
 
