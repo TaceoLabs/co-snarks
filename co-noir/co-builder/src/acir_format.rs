@@ -57,7 +57,7 @@ pub struct AcirFormat<F: PrimeField> {
     /// A standard plonk arithmetic constraint, as defined in the poly_triple struct, consists of selector values
     /// for q_M,q_L,q_R,q_O,q_C and indices of three variables taking the role of left, right and output wire
     /// This could be a large vector, we don't expect the blackbox implementations to be so large.
-    pub poly_triple_constraints: Vec<PolyTriple<F>>,
+    pub(crate) poly_triple_constraints: Vec<PolyTriple<F>>,
     pub(crate) quad_constraints: Vec<MulQuad<F>>,
     pub(crate) block_constraints: Vec<BlockConstraint<F>>,
 
@@ -452,7 +452,6 @@ impl<F: PrimeField> AcirFormat<F> {
                 message,
                 output,
             } => todo!("BlackBoxFuncCall::SchnorrVerify"),
-
             BlackBoxFuncCall::EcdsaSecp256k1 {
                 public_key_x,
                 public_key_y,
@@ -477,11 +476,9 @@ impl<F: PrimeField> AcirFormat<F> {
                 input2,
                 outputs,
             } => todo!("BlackBoxFuncCall::EmbeddedCurveAdd"),
-
             BlackBoxFuncCall::Keccakf1600 { inputs, outputs } => {
                 todo!("BlackBoxFuncCall::Keccakf1600")
             }
-
             BlackBoxFuncCall::BigIntAdd { lhs, rhs, output } => {
                 todo!("BlackBoxFuncCall::BigIntAdd")
             }

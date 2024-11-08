@@ -35,20 +35,8 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
 
-    /// Adds a public value to an ACVM-type: secret + public
-    fn acvm_add_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType;
-
-    /// Subtracts a public value from an ACVM-type: secret - public
-    fn acvm_sub_by_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType;
-
     /// Subtracts two shared ACVM-type values: secret - secret
     fn acvm_sub_by_shared(
-        &mut self,
-        share_1: Self::AcvmType,
-        share_2: Self::AcvmType,
-    ) -> Self::AcvmType;
-    /// Adds two shared ACVM-type values: secret - secret
-    fn acvm_add_by_shared(
         &mut self,
         share_1: Self::AcvmType,
         share_2: Self::AcvmType,
@@ -117,7 +105,8 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     /// Elementwise transformation of a vector of public values into a vector of shared values: \[a_i\] = a_i.
     fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare>;
-    /// todo
+
+    /// Decompose a shared value into a vector of shared values: \[a\] = a_1 + a_2 + ... + a_n. Each value a_i has at most decompose_bit_size bits, whereas the total bit size of the shares is total_bit_size_per_field. Thus, a_n, might have a smaller bitsize than the other chunks
     fn decompose_arithmetic(
         &mut self,
         input: Self::ArithmeticShare,
@@ -125,7 +114,8 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
-    /// todo
+
+    /// Sorts a vector of shared values in ascending order, only considering the first bitsize bits.
     fn sort(
         &mut self,
         inputs: &[Self::ArithmeticShare],

@@ -74,10 +74,6 @@ fn add3_plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(proof_file: &
     const WITNESS_FILE: &str = "/home/fabsits/secondary/collaborative-circom/co-noir/co-noir/examples/test_vectors/add3u64/add3u64.gz";
 
     let constraint_system = Utils::get_constraint_system_from_file(CIRCUIT_FILE, true).unwrap();
-    println!(
-        "polytriples: {}",
-        constraint_system.poly_triple_constraints.len()
-    );
     let witness = Utils::get_witness_from_file(WITNESS_FILE).unwrap();
 
     let witness = promote_public_witness_vector::<_, PlainAcvmSolver<ark_bn254::Fr>>(witness);

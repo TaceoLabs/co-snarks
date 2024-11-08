@@ -306,7 +306,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn decompose_arithmetic(
         &mut self,
         input: Self::ArithmeticShare,
-        // io_context: &mut IoContext<N>,
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
@@ -316,26 +315,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             total_bit_size_per_field,
             decompose_bit_size,
         )
-    }
-
-    fn acvm_add_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
-        let id = self.io_context.id;
-        match secret {
-            Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public + secret),
-            Rep3AcvmType::Shared(secret) => {
-                Rep3AcvmType::Shared(arithmetic::add_public(secret, public, id))
-            }
-        }
-    }
-
-    fn acvm_sub_by_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
-        let id = self.io_context.id;
-        match secret {
-            Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(secret - public),
-            Rep3AcvmType::Shared(secret) => {
-                Rep3AcvmType::Shared(arithmetic::sub_shared_by_public(secret, public, id))
-            }
-        }
     }
 
     fn acvm_sub_by_shared(
@@ -357,30 +336,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Shared(share_2)) => {
                 let result = arithmetic::sub(share_1, share_2);
-                Rep3AcvmType::Shared(result)
-            }
-        }
-    }
-
-    fn acvm_add_by_shared(
-        &mut self,
-        share_1: Self::AcvmType,
-        share_2: Self::AcvmType,
-    ) -> Self::AcvmType {
-        let id = self.io_context.id;
-
-        match (share_1, share_2) {
-            (Rep3AcvmType::Public(share_1), Rep3AcvmType::Public(share_2)) => {
-                Rep3AcvmType::Public(share_1 + share_2)
-            }
-            (Rep3AcvmType::Public(share_1), Rep3AcvmType::Shared(share_2)) => {
-                Rep3AcvmType::Shared(arithmetic::add_public(share_2, share_1, id))
-            }
-            (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Public(share_2)) => {
-                Rep3AcvmType::Shared(arithmetic::add_public(share_1, share_2, id))
-            }
-            (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Shared(share_2)) => {
-                let result = arithmetic::add(share_1, share_2);
                 Rep3AcvmType::Shared(result)
             }
         }

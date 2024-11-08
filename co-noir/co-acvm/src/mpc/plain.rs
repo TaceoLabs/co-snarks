@@ -109,7 +109,6 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn decompose_arithmetic(
         &mut self,
         input: Self::ArithmeticShare,
-        // io_context: &mut IoContext<N>,
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
     ) -> std::result::Result<std::vec::Vec<F>, std::io::Error> {
@@ -126,28 +125,12 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(result)
     }
 
-    fn acvm_add_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
-        public + secret
-    }
-
-    fn acvm_sub_by_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
-        secret - public
-    }
-
     fn acvm_sub_by_shared(
         &mut self,
         share_1: Self::AcvmType,
         share_2: Self::AcvmType,
     ) -> Self::AcvmType {
         share_1 - share_2
-    }
-
-    fn acvm_add_by_shared(
-        &mut self,
-        share_1: Self::AcvmType,
-        share_2: Self::AcvmType,
-    ) -> Self::AcvmType {
-        share_1 + share_2
     }
 
     fn sort(
