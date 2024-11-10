@@ -6,7 +6,7 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_types::Witness;
 use mpc_core::protocols::{
-    rep3::{self, Rep3PrimeFieldShare, Rep3ShareVecType},
+    rep3::{self, MaybeRep3ShareVecType, Rep3PrimeFieldShare, Rep3ShareVecType},
     shamir::{self, ShamirPrimeFieldShare},
 };
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, SeedableRng};
@@ -83,6 +83,9 @@ where
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub shared_inputs: BTreeMap<String, Rep3ShareVecType<F, U>>,
+    /// A map from variable names to vecs with maybe unknown elements that need to be merged.
+    /// This is a BTreeMap because it implements Canonical(De)Serialize.
+    pub maybe_shared_inputs: BTreeMap<String, MaybeRep3ShareVecType<F>>,
 }
 
 impl<F: PrimeField, U: Rng + SeedableRng + CryptoRng> Default for SerializeableSharedRep3Input<F, U>
@@ -93,6 +96,7 @@ where
         Self {
             public_inputs: BTreeMap::new(),
             shared_inputs: BTreeMap::new(),
+            maybe_shared_inputs: BTreeMap::new(),
         }
     }
 }
@@ -109,14 +113,14 @@ where
         seeded: bool,
         additive: bool,
     ) -> [Rep3ShareVecType<F, U>; 3] {
-        let (share1, share2, share3) = match (seeded, additive) {
+        match (seeded, additive) {
             (true, true) => {
                 let [share1, share2, share3] =
                     rep3::share_field_elements_additive_seeded::<_, _, U>(input, rng);
                 let share1 = Rep3ShareVecType::SeededAdditive(share1);
                 let share2 = Rep3ShareVecType::SeededAdditive(share2);
                 let share3 = Rep3ShareVecType::SeededAdditive(share3);
-                (share1, share2, share3)
+                [share1, share2, share3]
             }
             (true, false) => {
                 let [share1, share2, share3] =
@@ -124,30 +128,61 @@ where
                 let share1 = Rep3ShareVecType::SeededReplicated(share1);
                 let share2 = Rep3ShareVecType::SeededReplicated(share2);
                 let share3 = Rep3ShareVecType::SeededReplicated(share3);
-                (share1, share2, share3)
+                [share1, share2, share3]
             }
             (false, true) => {
                 let [share1, share2, share3] = rep3::share_field_elements_additive(input, rng);
                 let share1 = Rep3ShareVecType::Additive(share1);
                 let share2 = Rep3ShareVecType::Additive(share2);
                 let share3 = Rep3ShareVecType::Additive(share3);
-                (share1, share2, share3)
+                [share1, share2, share3]
             }
             (false, false) => {
                 let [share1, share2, share3] = rep3::share_field_elements(input, rng);
                 let share1 = Rep3ShareVecType::Replicated(share1);
                 let share2 = Rep3ShareVecType::Replicated(share2);
                 let share3 = Rep3ShareVecType::Replicated(share3);
-                (share1, share2, share3)
+                [share1, share2, share3]
             }
-        };
-        [share1, share2, share3]
+        }
+    }
+
+    /// Shares a given input with unknown elements into a [MaybeRep3ShareVecType] type.
+    pub fn maybe_share_rep3<R: Rng + CryptoRng>(
+        input: &[Option<F>],
+        rng: &mut R,
+        additive: bool,
+    ) -> [MaybeRep3ShareVecType<F>; 3] {
+        if additive {
+            let [share1, share2, share3] = rep3::share_maybe_field_elements_additive(input, rng);
+            let share1 = MaybeRep3ShareVecType::Additive(share1);
+            let share2 = MaybeRep3ShareVecType::Additive(share2);
+            let share3 = MaybeRep3ShareVecType::Additive(share3);
+            [share1, share2, share3]
+        } else {
+            let [share1, share2, share3] = rep3::share_maybe_field_elements(input, rng);
+            let share1 = MaybeRep3ShareVecType::Replicated(share1);
+            let share2 = MaybeRep3ShareVecType::Replicated(share2);
+            let share3 = MaybeRep3ShareVecType::Replicated(share3);
+            [share1, share2, share3]
+        }
     }
 
     /// Merges two [SerializeableSharedRep3Input]s into one, performing basic sanity checks.
     pub fn merge(self, other: Self) -> eyre::Result<Self> {
         let mut shared_inputs = self.shared_inputs;
+        let maybe_shared_inputs = self.maybe_shared_inputs;
         let public_inputs = self.public_inputs;
+
+        for (key, value) in other.public_inputs.iter() {
+            if !public_inputs.contains_key(key) {
+                eyre::bail!("Public input \"{key}\" must be present in all files");
+            }
+            if public_inputs.get(key).expect("is there we checked") != value {
+                eyre::bail!("Public input \"{key}\" must be same in all files");
+            }
+        }
+
         for (key, value) in other.shared_inputs {
             if shared_inputs.contains_key(&key) {
                 eyre::bail!("Input with name {} present in multiple input shares", key);
@@ -159,18 +194,70 @@ where
             }
             shared_inputs.insert(key, value);
         }
-        for (key, value) in other.public_inputs {
-            if !public_inputs.contains_key(&key) {
-                eyre::bail!("Public input \"{key}\" must be present in all files");
+
+        let mut merged_maybe_shared_inputs = BTreeMap::new();
+        if maybe_shared_inputs.len() != other.maybe_shared_inputs.len() {
+            eyre::bail!("Both inputs must have the same number of unmerged entries");
+        }
+        for ((k1, v1), (k2, v2)) in maybe_shared_inputs
+            .into_iter()
+            .zip(other.maybe_shared_inputs.into_iter())
+        {
+            if k1 != k2 {
+                eyre::bail!("Both inputs must have the same keys for unmerged elements");
             }
-            if public_inputs.get(&key).expect("is there we checked") != &value {
-                eyre::bail!("Public input \"{key}\" must be same in all files");
+
+            match (v1, v2) {
+                (
+                    MaybeRep3ShareVecType::Replicated(shares),
+                    MaybeRep3ShareVecType::Replicated(other_shares),
+                ) => {
+                    let merged = shares
+                        .into_iter()
+                        .zip(other_shares.into_iter())
+                        .map(|(a, b)| match (a, b) {
+                            (None, None) => Ok(None),
+                            (a @ Some(_), None) | (None, a @ Some(_)) => Ok(a),
+                            _ => Err(eyre::eyre!("Input {} present in both unmerged inputs", k1)),
+                        })
+                        .collect::<Result<Vec<_>, eyre::Report>>()?;
+                    if let Some(merged) = merged.iter().cloned().collect::<Option<Vec<_>>>() {
+                        shared_inputs.insert(k1.clone(), Rep3ShareVecType::Replicated(merged));
+                    } else {
+                        merged_maybe_shared_inputs
+                            .insert(k1.clone(), MaybeRep3ShareVecType::Replicated(merged));
+                    }
+                }
+                (
+                    MaybeRep3ShareVecType::Additive(shares),
+                    MaybeRep3ShareVecType::Additive(other_shares),
+                ) => {
+                    let merged = shares
+                        .into_iter()
+                        .zip(other_shares.into_iter())
+                        .map(|(a, b)| match (a, b) {
+                            (None, None) => Ok(None),
+                            (a @ Some(_), None) | (None, a @ Some(_)) => Ok(a),
+                            _ => Err(eyre::eyre!("Input {} present in both unmerged inputs", k1)),
+                        })
+                        .collect::<Result<Vec<_>, eyre::Report>>()?;
+                    if let Some(merged) = merged.iter().cloned().collect::<Option<Vec<_>>>() {
+                        shared_inputs.insert(k1.clone(), Rep3ShareVecType::Additive(merged));
+                    } else {
+                        merged_maybe_shared_inputs
+                            .insert(k1.clone(), MaybeRep3ShareVecType::Additive(merged));
+                    }
+                }
+                _ => {
+                    eyre::bail!("Input {} cannot be merged, the share type is different", k1);
+                }
             }
         }
 
         Ok(Self {
-            shared_inputs,
             public_inputs,
+            shared_inputs,
+            maybe_shared_inputs: merged_maybe_shared_inputs,
         })
     }
 }

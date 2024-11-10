@@ -61,6 +61,28 @@ where
     SeededAdditive(SeededType<Vec<F>, U>),
 }
 
+/// A type representing the different states a unmerged share can have. Either full replicated share, only an additive share, or both variants in compressed form.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub enum MaybeRep3ShareVecType<F: PrimeField> {
+    /// A fully expanded replicated share with unkown elements that need to be merged.
+    Replicated(
+        #[serde(
+            serialize_with = "super::serde_compat::ark_se",
+            deserialize_with = "super::serde_compat::ark_de"
+        )]
+        Vec<Option<Rep3PrimeFieldShare<F>>>,
+    ),
+    /// A fully expanded additive share with unkown elements that need to be merged.
+    Additive(
+        #[serde(
+            serialize_with = "super::serde_compat::ark_se",
+            deserialize_with = "super::serde_compat::ark_de"
+        )]
+        Vec<Option<F>>,
+    ),
+}
+
 /// A type that represents a compressed additive share. It can either be a seed (with length) or the actual share.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
@@ -307,6 +329,29 @@ pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
     [shares1, shares2, shares3]
 }
 
+/// Secret shares a vector of field element using replicated secret sharing and the provided random number generator. The field elements are split into three additive shares each, where each party holds two. The outputs are of type [Rep3PrimeFieldShare].
+pub fn share_maybe_field_elements<F: PrimeField, R: Rng + CryptoRng>(
+    vals: &[Option<F>],
+    rng: &mut R,
+) -> [Vec<Option<Rep3PrimeFieldShare<F>>>; 3] {
+    let mut shares1 = Vec::with_capacity(vals.len());
+    let mut shares2 = Vec::with_capacity(vals.len());
+    let mut shares3 = Vec::with_capacity(vals.len());
+    for val in vals {
+        if let Some(val) = val {
+            let [share1, share2, share3] = share_field_element(*val, rng);
+            shares1.push(Some(share1));
+            shares2.push(Some(share2));
+            shares3.push(Some(share3));
+        } else {
+            shares1.push(None);
+            shares2.push(None);
+            shares3.push(None);
+        }
+    }
+    [shares1, shares2, shares3]
+}
+
 /// Secret shares a vector of field element using additive secret sharing and the provided random number generator. The field elements are split into three additive shares each. The outputs are `Vecs` of type [`PrimeField`].
 pub fn share_field_elements_additive<F: PrimeField, R: Rng + CryptoRng>(
     vals: &[F],
@@ -320,6 +365,29 @@ pub fn share_field_elements_additive<F: PrimeField, R: Rng + CryptoRng>(
         shares1.push(share1);
         shares2.push(share2);
         shares3.push(share3);
+    }
+    [shares1, shares2, shares3]
+}
+
+/// Secret shares a vector of field element using additive secret sharing and the provided random number generator. The field elements are split into three additive shares each. The outputs are `Vecs` of type [`PrimeField`].
+pub fn share_maybe_field_elements_additive<F: PrimeField, R: Rng + CryptoRng>(
+    vals: &[Option<F>],
+    rng: &mut R,
+) -> [Vec<Option<F>>; 3] {
+    let mut shares1 = Vec::with_capacity(vals.len());
+    let mut shares2 = Vec::with_capacity(vals.len());
+    let mut shares3 = Vec::with_capacity(vals.len());
+    for val in vals {
+        if let Some(val) = val {
+            let [share1, share2, share3] = share_field_element_additive(*val, rng);
+            shares1.push(Some(share1));
+            shares2.push(Some(share2));
+            shares3.push(Some(share3));
+        } else {
+            shares1.push(None);
+            shares2.push(None);
+            shares3.push(None);
+        }
     }
     [shares1, shares2, shares3]
 }
