@@ -23,7 +23,7 @@ use co_circom_snarks::{
     SerializeableSharedRep3Input, SerializeableSharedRep3Witness, SharedInput, SharedWitness,
 };
 use co_groth16::Rep3CoGroth16;
-use color_eyre::eyre::Context;
+use color_eyre::eyre::{bail, Context, ContextCompat};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
@@ -659,11 +659,15 @@ where
         let parsed_vals = if val.is_array() {
             file_utils::parse_array(&val)?
         } else if val.is_boolean() {
-            vec![file_utils::parse_boolean(&val)?]
+            vec![Some(file_utils::parse_boolean(&val)?)]
         } else {
-            vec![file_utils::parse_field(&val)?]
+            vec![Some(file_utils::parse_field(&val)?)]
         };
         if public_inputs.contains(&name) {
+            let parsed_vals = parsed_vals
+                .into_iter()
+                .collect::<Option<Vec<P::ScalarField>>>()
+                .context("Public inputs must not be unkown")?;
             shares[0]
                 .public_inputs
                 .insert(name.clone(), parsed_vals.clone());
@@ -672,11 +676,33 @@ where
                 .insert(name.clone(), parsed_vals.clone());
             shares[2].public_inputs.insert(name.clone(), parsed_vals);
         } else {
-            let [share0, share1, share2] =
-                SerializeableSharedRep3Input::share_rep3(&parsed_vals, &mut rng, seeded, additive);
-            shares[0].shared_inputs.insert(name.clone(), share0);
-            shares[1].shared_inputs.insert(name.clone(), share1);
-            shares[2].shared_inputs.insert(name.clone(), share2);
+            // if all elements are Some, then we can share normally
+            // else we can only share as Vec<Option<T>> and we have to merge unknown inputs later
+            if parsed_vals.iter().all(Option::is_some) {
+                let parsed_vals = parsed_vals
+                    .into_iter()
+                    .collect::<Option<Vec<_>>>()
+                    .expect("all are Some");
+                let [share0, share1, share2] = SerializeableSharedRep3Input::share_rep3(
+                    &parsed_vals,
+                    &mut rng,
+                    seeded,
+                    additive,
+                );
+                shares[0].shared_inputs.insert(name.clone(), share0);
+                shares[1].shared_inputs.insert(name.clone(), share1);
+                shares[2].shared_inputs.insert(name.clone(), share2);
+            } else {
+                let [share0, share1, share2] =
+                    SerializeableSharedRep3Input::<_, SeedRng>::maybe_share_rep3(
+                        &parsed_vals,
+                        &mut rng,
+                        additive,
+                    );
+                shares[0].maybe_shared_inputs.insert(name.clone(), share0);
+                shares[1].maybe_shared_inputs.insert(name.clone(), share1);
+                shares[2].maybe_shared_inputs.insert(name.clone(), share2);
+            };
         }
     }
     Ok(shares)
@@ -689,6 +715,10 @@ pub fn parse_shared_input<R: Read, F: PrimeField, N: Rep3Network>(
 ) -> color_eyre::Result<SharedInput<F, Rep3PrimeFieldShare<F>>> {
     let deserialized: SerializeableSharedRep3Input<F, SeedRng> =
         bincode::deserialize_from(reader).context("trying to parse input share file")?;
+
+    if !deserialized.maybe_shared_inputs.is_empty() {
+        bail!("still unmerged elements left");
+    }
 
     let public_inputs = deserialized.public_inputs;
     let shared_inputs_ = deserialized.shared_inputs;

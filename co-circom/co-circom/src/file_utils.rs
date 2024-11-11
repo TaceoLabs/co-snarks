@@ -90,16 +90,20 @@ where
     }
 }
 
-pub(crate) fn parse_array<F: PrimeField>(val: &serde_json::Value) -> color_eyre::Result<Vec<F>> {
+pub(crate) fn parse_array<F: PrimeField>(
+    val: &serde_json::Value,
+) -> color_eyre::Result<Vec<Option<F>>> {
     let json_arr = val.as_array().expect("is an array");
     let mut field_elements = vec![];
     for ele in json_arr {
         if ele.is_array() {
             field_elements.extend(parse_array::<F>(ele)?);
         } else if ele.is_boolean() {
-            field_elements.push(parse_boolean(ele)?);
+            field_elements.push(Some(parse_boolean(ele)?));
+        } else if ele.as_str().is_some_and(|e| e == "?") {
+            field_elements.push(None);
         } else {
-            field_elements.push(parse_field(ele)?);
+            field_elements.push(Some(parse_field(ele)?));
         }
     }
     Ok(field_elements)
