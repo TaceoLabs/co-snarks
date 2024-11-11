@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.2.0](https://github.com/TaceoLabs/co-snarks/compare/co-ultrahonk-v0.1.0...co-ultrahonk-v0.2.0) (2024-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* Add more commands to co-noir binary to prepare for cases where
+* Use ACVMType in co-builder
+* Move builder to new co-builder crate
+* removed point G2 from ultra-honk prover
+* The interface of the UltraCircuitVariable trait has change. Thus, also ProvingKey::create() throws an error now.
+* The produced proofs are now different due to new transcript handling in bb 0.55.1, and they are no longer backwards compatible.
+
+### Features
+
+* Add more commands to co-noir binary to prepare for cases where ([268ebe9](https://github.com/TaceoLabs/co-snarks/commit/268ebe9f243146cc6ea251e6b8fdef28cc8ca035))
+* Replace a panic from the ultracircuitbuilder with an Error ([#217](https://github.com/TaceoLabs/co-snarks/issues/217)) ([5d9c870](https://github.com/TaceoLabs/co-snarks/commit/5d9c8703525e90ee3d9215006df527ad6a6ae777))
+* squashed commit of co-noir ([b132afc](https://github.com/TaceoLabs/co-snarks/commit/b132afcadb96914cd85070f87d7aa03bf9f87bfd))
+* Update UltraHonk to BB v0.62.0, required to replace zeromorph with shplemini ([#251](https://github.com/TaceoLabs/co-snarks/issues/251)) ([f35cdd4](https://github.com/TaceoLabs/co-snarks/commit/f35cdd490f8a3daa8bb44f6aa502f42147efb4b6))
+* Upgrade UltraHonk to be compatible with Barretenberg v0.55.1  ([#211](https://github.com/TaceoLabs/co-snarks/issues/211)) ([f817d76](https://github.com/TaceoLabs/co-snarks/commit/f817d768760ffbbf6b58489562aed5327567c561))
+
+
+### Code Refactoring
+
+* Move builder to new co-builder crate ([3cd8955](https://github.com/TaceoLabs/co-snarks/commit/3cd89551d9fd58fad994942aa9a9660737db19b8))
+* removed point G2 from ultra-honk prover ([1840fb4](https://github.com/TaceoLabs/co-snarks/commit/1840fb4821c597b7ad2d2c0ae83217582b1b5ad5))
+* Use ACVMType in co-builder ([e078c22](https://github.com/TaceoLabs/co-snarks/commit/e078c22e4d19580b4a0531c0ac4232e7dd9f3bae))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.2.0 to 0.3.0
+    * mpc-core bumped from 0.5.0 to 0.6.0
+    * ultrahonk bumped from 0.1.0 to 0.2.0
+
 ## [0.1.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-ultrahonk-v0.0.1...co-ultrahonk-v0.1.0) (2024-10-03)
 
 

@@ -7,6 +7,52 @@
     * co-groth16 bumped from 0.5.0 to 0.5.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-compiler-v0.6.1...circom-mpc-compiler-v0.7.0) (2024-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* MPC accelerator changed public API. Also now stores #output signals in component
+* Also added name of cmp to Component Init instead of only symbol
+* input to compiler now takes PathBuf
+* In accordance to the circom 2.2.0 release, the default simplification level is now O1
+* run and run_with_flat methods on WitnessExtension now consume self again
+* Small refactor to use API changes
+
+### Features
+
+* added run_and_get_network to CircomRep3VmWitnessExtension, changed run and run_with_flat back to consume self ([b362504](https://github.com/TaceoLabs/co-snarks/commit/b362504d8a5affa8a5e8eca3f214c04951ad5b50))
+* added stub for cmp accelerator ([bc1525e](https://github.com/TaceoLabs/co-snarks/commit/bc1525effdd38e9308cc4a0050b7e20c97be1974))
+* allow to set circom simplification level via CLI ([b0d64ba](https://github.com/TaceoLabs/co-snarks/commit/b0d64ba683c1dbab67102d31f1e1ab80108fb7d9))
+* num2bits accelerator working ([13cdf10](https://github.com/TaceoLabs/co-snarks/commit/13cdf100b79c642649d31501833ed182dd7e8b90))
+* provide binary to inline circom sources ([#232](https://github.com/TaceoLabs/co-snarks/issues/232)) ([2f4722e](https://github.com/TaceoLabs/co-snarks/commit/2f4722ee95905f9c5c280e197a1c0113cffadff1))
+
+
+### Bug Fixes
+
+* get the size from new SizeOption type ([9417877](https://github.com/TaceoLabs/co-snarks/commit/941787746d9bdc60d5327a009bd3b766bf74ea2e))
+* handle new AccessType type ([bc519ba](https://github.com/TaceoLabs/co-snarks/commit/bc519ba7d48d9bd7995c485568dadcd3e4d1eaf9))
+* map new circom type to our own type ([95abe2e](https://github.com/TaceoLabs/co-snarks/commit/95abe2e473c400439d81c12c612f352f4ae55fe5))
+* pass field into circom parser ([a8ed24e](https://github.com/TaceoLabs/co-snarks/commit/a8ed24ef204934eb3892781db205f4d30acec6ba))
+
+
+### Code Refactoring
+
+* input to compiler now takes PathBuf ([9f36774](https://github.com/TaceoLabs/co-snarks/commit/9f36774f0ff93c3c3abd28efae6599fc531bb1fb))
+* Small refactor to use API changes ([639f438](https://github.com/TaceoLabs/co-snarks/commit/639f438adc9480e1b6c0e2d1f068ed82adee3cf1))
+* update to circom 2.2.0 behavior ([2b4dbc9](https://github.com/TaceoLabs/co-snarks/commit/2b4dbc9d34155cde2d7e2e30b6a4068170954804))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.5.0 to 0.6.0
+    * circom-mpc-vm bumped from 0.4.2 to 0.5.0
+  * dev-dependencies
+    * co-groth16 bumped from 0.5.1 to 0.6.0
+    * mpc-core bumped from 0.5.0 to 0.6.0
+
 ## [0.6.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-compiler-v0.5.0...circom-mpc-compiler-v0.6.0) (2024-08-21)
 
 
