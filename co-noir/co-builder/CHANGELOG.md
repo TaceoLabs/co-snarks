@@ -1,5 +1,9 @@
 # Changelog
 
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.3.0 to 0.4.0
+
 ## [0.1.0](https://github.com/TaceoLabs/co-snarks/compare/co-builder-v0.0.1...co-builder-v0.1.0) (2024-11-11)
 
 

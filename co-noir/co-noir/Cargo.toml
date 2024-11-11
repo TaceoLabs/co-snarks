@@ -1,6 +1,6 @@
 [package]
 name = "co-noir"
-version = "0.3.0"
+version = "0.4.0"
 
 publish.workspace = true
 authors.workspace = true
@@ -19,8 +19,8 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 bincode.workspace = true
 clap.workspace = true
-co-acvm = { version = "0.3.0", path = "../co-acvm" }
-co-ultrahonk = { version = "0.2.0", path = "../co-ultrahonk" }
+co-acvm = { version = "0.4.0", path = "../co-acvm" }
+co-ultrahonk = { version = "0.2.1", path = "../co-ultrahonk" }
 color-eyre.workspace = true
 figment.workspace = true
 mpc-core = { version = "0.6.0", path = "../../mpc-core" }

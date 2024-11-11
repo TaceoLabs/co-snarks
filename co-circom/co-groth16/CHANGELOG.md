@@ -11,6 +11,29 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/co-groth16-v0.6.0...co-groth16-v0.7.0) (2024-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* Removes the zkey in the said function signature. We needed it earlier because we had to know domain size, which we now no longer need.
+* the prover for Groth16/Plonk now expects an Arc<ZKey>. Cleaner than having multiple Arcs in ZKey
+* the public interface of the Groth16MPCProver trait has changed.
+* refactors everything that all groth16 specific functionallity is not in MPC-core anymore.
+
+### Features
+
+* added plain prover shorthand function ([b365fcd](https://github.com/TaceoLabs/co-snarks/commit/b365fcd89390dad585933f39a2db32473081d060))
+* prepare functions for compressed rep3 sharing ([55bef10](https://github.com/TaceoLabs/co-snarks/commit/55bef10313378e8ca14f2f22f312c84462a92a7e))
+* refactors all according to MPC-core + Rayon ([44a5d2d](https://github.com/TaceoLabs/co-snarks/commit/44a5d2d4f1e406331f127cd89de369a66d41b105))
+
+
+### Code Refactoring
+
+* make pointshare in Groth16 MPC trait generic over the curve ([dc5acd2](https://github.com/TaceoLabs/co-snarks/commit/dc5acd28db03920982de623f51dd4df236ff7381))
+* prove for circom now expect Arc&lt;ZKey&gt; ([c2ac465](https://github.com/TaceoLabs/co-snarks/commit/c2ac465ebf6f3a28b902d9f0489e3f57c0843d7f))
+* with_network_config for ShamirGroth16 doesn't need zkey anymore ([2052d89](https://github.com/TaceoLabs/co-snarks/commit/2052d89cc4abb531702886daf70c47ee3b1ecf1a))
+
 ## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-groth16-v0.5.1...co-groth16-v0.6.0) (2024-11-11)
 
 

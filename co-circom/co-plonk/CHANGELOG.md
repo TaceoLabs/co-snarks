@@ -5,6 +5,24 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-plonk-v0.4.0...co-plonk-v0.5.0) (2024-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* the prover for Groth16/Plonk now expects an Arc<ZKey>. Cleaner than having multiple Arcs in ZKey
+* now uses new mpc-core and forked networking but NO rayon
+
+### Features
+
+* prepare functions for compressed rep3 sharing ([55bef10](https://github.com/TaceoLabs/co-snarks/commit/55bef10313378e8ca14f2f22f312c84462a92a7e))
+* refactor to use new mpc-core ([43da344](https://github.com/TaceoLabs/co-snarks/commit/43da344be00f00a46849508cea1d279cf29a95b2))
+
+
+### Code Refactoring
+
+* prove for circom now expect Arc&lt;ZKey&gt; ([c2ac465](https://github.com/TaceoLabs/co-snarks/commit/c2ac465ebf6f3a28b902d9f0489e3f57c0843d7f))
+
 ## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-plonk-v0.3.1...co-plonk-v0.4.0) (2024-11-11)
 
 
