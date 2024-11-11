@@ -10,6 +10,48 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.4.2...circom-mpc-vm-v0.5.0) (2024-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* MPC accelerator changed public API. Also now stores #output signals in component
+* Also added name of cmp to Component Init instead of only symbol
+* Witness extension VM trait no longer has binary share type.
+* run and run_with_flat methods on WitnessExtension now consume self again
+* Creating a Rep3Witnessextension now requires an additional argument, the A2B strategy
+* now uses new mpc-core and networking model. Also uses binary shares and does not convert to arithmetic shares everytime
+
+### Features
+
+* add a selector for choosing a2b and b2a implementations and expose ([bf12246](https://github.com/TaceoLabs/co-snarks/commit/bf1224613599919fc90d1a23eecfbabc9ca1f037))
+* added run_and_get_network to CircomRep3VmWitnessExtension, changed run and run_with_flat back to consume self ([b362504](https://github.com/TaceoLabs/co-snarks/commit/b362504d8a5affa8a5e8eca3f214c04951ad5b50))
+* added stub for cmp accelerator ([bc1525e](https://github.com/TaceoLabs/co-snarks/commit/bc1525effdd38e9308cc4a0050b7e20c97be1974))
+* bit_inject_many ([4155f57](https://github.com/TaceoLabs/co-snarks/commit/4155f570cb5ad9b3325c70df48993c3fde33ffb4))
+* Check that VM config is equal amongst parties ([0623d7d](https://github.com/TaceoLabs/co-snarks/commit/0623d7d716809969fa52fb18e995dd2bb2ee6543))
+* implement num2bits function ([5db7532](https://github.com/TaceoLabs/co-snarks/commit/5db753293ccba4e67bebf08b8a4977c47f7cb7ca))
+* num2bits accelerator working ([13cdf10](https://github.com/TaceoLabs/co-snarks/commit/13cdf100b79c642649d31501833ed182dd7e8b90))
+* rewrite that witness extension for circom to use forked networking and implements binary shares ([4c7e9ff](https://github.com/TaceoLabs/co-snarks/commit/4c7e9ff09aaf533f54ac60222b7981c6000f1f1e))
+
+
+### Bug Fixes
+
+* use a2b selector everywhere ([6c40fd6](https://github.com/TaceoLabs/co-snarks/commit/6c40fd65a31caa2c24ef65c4701bc27b88a74028))
+
+
+### Code Refactoring
+
+* removed binary shares from wtnx extension ([1370a7a](https://github.com/TaceoLabs/co-snarks/commit/1370a7a7202f26d20dc1857f64e2fd6874bd2f56))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-snarks bumped from 0.1.2 to 0.2.0
+    * mpc-core bumped from 0.5.0 to 0.6.0
+    * mpc-net bumped from 0.1.2 to 0.2.0
+
 ## [0.4.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-mpc-vm-v0.3.0...circom-mpc-vm-v0.4.0) (2024-08-14)
 
 

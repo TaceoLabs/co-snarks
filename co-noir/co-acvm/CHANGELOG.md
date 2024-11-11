@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-acvm-v0.2.0...co-acvm-v0.3.0) (2024-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* Use ACVMType in co-builder
+* co-noir now stores shared inputs in a different format (`BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>>` instead of `BTreeMap<String, Rep3PrimeFieldShare<ark_bn254::Fr>>`)
+
+### Features
+
+* squashed commit of co-noir ([b132afc](https://github.com/TaceoLabs/co-snarks/commit/b132afcadb96914cd85070f87d7aa03bf9f87bfd))
+
+
+### Bug Fixes
+
+* Adapt co-noir binary to handle public noir inputs correctly ([#216](https://github.com/TaceoLabs/co-snarks/issues/216)) ([bed3996](https://github.com/TaceoLabs/co-snarks/commit/bed399621558ca5d2ee22e9bdaa42f14f66b74d9))
+
+
+### Code Refactoring
+
+* Use ACVMType in co-builder ([e078c22](https://github.com/TaceoLabs/co-snarks/commit/e078c22e4d19580b4a0531c0ac4232e7dd9f3bae))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.5.0 to 0.6.0
+
 ## [0.2.0](https://github.com/TaceoLabs/collaborative-circom/compare/co-acvm-v0.1.0...co-acvm-v0.2.0) (2024-10-04)
 
 
