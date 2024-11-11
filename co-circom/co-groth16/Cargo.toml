@@ -1,6 +1,6 @@
 [package]
 name = "co-groth16"
-version = "0.7.0"
+version = "0.8.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
