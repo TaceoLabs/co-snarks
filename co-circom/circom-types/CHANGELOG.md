@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.5.0...circom-types-v0.6.0) (2024-11-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* the prover for Groth16/Plonk now expects an Arc<ZKey>. Cleaner than having multiple Arcs in ZKey
+
+### Code Refactoring
+
+* prove for circom now expect Arc&lt;ZKey&gt; ([c2ac465](https://github.com/TaceoLabs/co-snarks/commit/c2ac465ebf6f3a28b902d9f0489e3f57c0843d7f))
+
 ## [0.5.0](https://github.com/TaceoLabs/collaborative-circom/compare/circom-types-v0.4.0...circom-types-v0.5.0) (2024-08-21)
 
 

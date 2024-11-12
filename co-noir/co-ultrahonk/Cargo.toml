@@ -1,6 +1,6 @@
 [package]
 name = "co-ultrahonk"
-version = "0.1.0"
+version = "0.2.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -15,15 +15,15 @@ ark-ff.workspace = true
 ark-bn254.workspace = true
 ark-serialize.workspace = true
 ark-poly.workspace = true
-co-acvm = { version = "0.2.0", path = "../co-acvm" }
+co-acvm = { version = "0.3.0", path = "../co-acvm" }
 co-builder = { version = "0.1.0", path = "../co-builder" }
 eyre.workspace = true
 itertools.workspace = true
-mpc-core = { version = "0.5.0", path = "../../mpc-core" }
+mpc-core = { version = "0.6.0", path = "../../mpc-core" }
 num-bigint.workspace = true
 num-traits.workspace = true
 tracing.workspace = true
-ultrahonk = { version = "0.1.0", path = "../ultrahonk" }
+ultrahonk = { version = "0.2.0", path = "../ultrahonk" }
 rand.workspace = true
 rayon.workspace = true
 serde.workspace = true

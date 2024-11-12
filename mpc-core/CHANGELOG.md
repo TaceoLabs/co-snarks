@@ -2,6 +2,56 @@
 
 
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.5.0...mpc-core-v0.6.0) (2024-11-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* serialization format of shared inputs has changed to allow for optional values used to indicate missing elements of an array
+* Use ACVMType in co-builder
+* Creating a Rep3Witnessextension now requires an additional argument, the A2B strategy
+* breaks all interfaces. Removed Rep3Protocol monster struct. Added IOContext and split rep3/shamir better. Removed duplicated code. Added naive LUT
+
+### Features
+
+* Add a garbled circuit based soritng algorithm ([#252](https://github.com/TaceoLabs/co-snarks/issues/252)) ([7d38334](https://github.com/TaceoLabs/co-snarks/commit/7d38334902129acf5707b790aa9a28430babe999))
+* add a selector for choosing a2b and b2a implementations and expose ([bf12246](https://github.com/TaceoLabs/co-snarks/commit/bf1224613599919fc90d1a23eecfbabc9ca1f037))
+* Add functionality to decompose a shared fieldelement with yao ([3d7a37d](https://github.com/TaceoLabs/co-snarks/commit/3d7a37d2d12edf671a6bd78d1d876155e38a90f8))
+* Add Rep3 compatible garbled circuit implementations and conversion methods for a2y, y2a, b2y, y2b, a2y2b, and b2y2a. ([#233](https://github.com/TaceoLabs/co-snarks/issues/233)) ([12c8713](https://github.com/TaceoLabs/co-snarks/commit/12c8713f88b30e04dd4ac2b7b9244ca28b749b56))
+* add support for merging input arrays ([#260](https://github.com/TaceoLabs/co-snarks/issues/260)) ([2c72231](https://github.com/TaceoLabs/co-snarks/commit/2c722317efee4b07fef92dcc7c6218033a25f04b))
+* added conversions a&lt;-&gt;b ([d1c806c](https://github.com/TaceoLabs/co-snarks/commit/d1c806c0d165569c16d11cc15fc9dbd4f908b807))
+* added new rep3 impl ([d9b8412](https://github.com/TaceoLabs/co-snarks/commit/d9b8412d794fe9596a3292f717f00e11f2bc08f2))
+* added plain prover shorthand function ([b365fcd](https://github.com/TaceoLabs/co-snarks/commit/b365fcd89390dad585933f39a2db32473081d060))
+* bit_inject_many ([4155f57](https://github.com/TaceoLabs/co-snarks/commit/4155f570cb5ad9b3325c70df48993c3fde33ffb4))
+* make yao the default for a2b ([b91e4ac](https://github.com/TaceoLabs/co-snarks/commit/b91e4ac9e854f2726bccf1064e91bdaaf93b143a))
+* optimize arithmetic::is_zero() to have less communication rounds ([dc4152c](https://github.com/TaceoLabs/co-snarks/commit/dc4152c774140392f22a5cc580ec22a69f5c1448))
+* optimize bit_inject and bit_inject many ([7fb2fee](https://github.com/TaceoLabs/co-snarks/commit/7fb2feecc7a9302427f97f25dc61877a4a460ab7))
+* Optimize shamir double randomnes generation using seeds ([#214](https://github.com/TaceoLabs/co-snarks/issues/214)) ([f6ad386](https://github.com/TaceoLabs/co-snarks/commit/f6ad3863affb42754ae56935102d19af63a068b7))
+* prepare functions for compressed rep3 sharing ([55bef10](https://github.com/TaceoLabs/co-snarks/commit/55bef10313378e8ca14f2f22f312c84462a92a7e))
+* rewrite all mpc related functions ([ed8fcb7](https://github.com/TaceoLabs/co-snarks/commit/ed8fcb73aca24ee2dfda2770ef0512eba8695650))
+* unify the 3-party and n-party shamir double-randomness generation case ([b4d4141](https://github.com/TaceoLabs/co-snarks/commit/b4d41411de001fb84ea953ea20360ebd36edb1cc))
+* Update UltraHonk to BB v0.62.0, required to replace zeromorph with shplemini ([#251](https://github.com/TaceoLabs/co-snarks/issues/251)) ([f35cdd4](https://github.com/TaceoLabs/co-snarks/commit/f35cdd490f8a3daa8bb44f6aa502f42147efb4b6))
+
+
+### Bug Fixes
+
+* add gracefull shutdown ensure all data received from the quinn stack ([a9cbcbf](https://github.com/TaceoLabs/co-snarks/commit/a9cbcbf8a5fa00f01c94cd80eae45cbf7f65390f))
+* change shamir preprocessing time log to float ([#249](https://github.com/TaceoLabs/co-snarks/issues/249)) ([c4c6a73](https://github.com/TaceoLabs/co-snarks/commit/c4c6a73d44eee62d37a196fa553ab795295ccc9b))
+* fix a bug in y2b, send the correct values around ([564d498](https://github.com/TaceoLabs/co-snarks/commit/564d4984f421e1f15d65fa9ca96627e127479d91))
+* fixed read task breaking too early, caused error during proof gen ([6a8e829](https://github.com/TaceoLabs/co-snarks/commit/6a8e82913b88414ee05a7159fbd390a32db70b9d))
+
+
+### Code Refactoring
+
+* Use ACVMType in co-builder ([e078c22](https://github.com/TaceoLabs/co-snarks/commit/e078c22e4d19580b4a0531c0ac4232e7dd9f3bae))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-net bumped from 0.1.2 to 0.2.0
+
 ## [0.5.0](https://github.com/TaceoLabs/collaborative-circom/compare/mpc-core-v0.4.0...mpc-core-v0.5.0) (2024-10-03)
 
 
