@@ -1,6 +1,6 @@
 [package]
 name = "circom-mpc-compiler"
-version = "0.6.1"
+version = "0.7.0"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -17,8 +17,8 @@ circom-type_analysis = { version = "2.1.9", git = "https://github.com/TaceoLabs/
 circom-constraint_generation = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "constraint_generation", rev = "1cc17fb" }
 circom-parser = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "parser", rev = "1cc17fb" }
 circom-compiler = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "compiler", rev = "1cc17fb" }
-circom-types = { version = "0.5.0", path = "../circom-types" }
-circom-mpc-vm = { version = "0.4.2", path = "../circom-mpc-vm" }
+circom-types = { version = "0.6.0", path = "../circom-types" }
+circom-mpc-vm = { version = "0.5.0", path = "../circom-mpc-vm" }
 circom-program_structure = { version = "2.1.9", git = "https://github.com/TaceoLabs/circom", package = "program_structure", rev = "1cc17fb" }
 clap.workspace = true
 eyre.workspace = true
@@ -29,6 +29,6 @@ tracing.workspace = true
 
 [dev-dependencies]
 ark-bn254.workspace = true
-co-groth16 = { version = "0.5.1", path = "../co-groth16" }
-mpc-core = { version = "0.5.0", path = "../../mpc-core" }
+co-groth16 = { version = "0.6.0", path = "../co-groth16" }
+mpc-core = { version = "0.6.0", path = "../../mpc-core" }
 tracing.workspace = true
