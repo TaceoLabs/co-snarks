@@ -8,10 +8,7 @@ use acir::{
     AcirField,
 };
 use ark_ff::{PrimeField, Zero};
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    hash::Hash,
-};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::types::types::{
     AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, MulQuad, PolyTriple,

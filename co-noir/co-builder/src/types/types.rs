@@ -129,7 +129,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
 }
 
 pub struct UltraTraceBlocks<T: Default> {
-    pub(crate) pub_inputs: T,
+    pub pub_inputs: T,
     pub(crate) arithmetic: T,
     pub(crate) delta_range: T,
     pub(crate) elliptic: T,

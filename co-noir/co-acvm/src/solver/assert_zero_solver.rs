@@ -1,4 +1,4 @@
-use acir::{acir_field::GenericFieldElement, native_types::Expression, AcirField, FieldElement};
+use acir::{acir_field::GenericFieldElement, native_types::Expression, AcirField};
 use ark_ff::PrimeField;
 
 use crate::{mpc::NoirWitnessExtensionProtocol, solver::solver_utils};

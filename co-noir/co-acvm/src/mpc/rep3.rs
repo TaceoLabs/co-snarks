@@ -12,7 +12,7 @@ use mpc_core::{
         Rep3PrimeFieldShare,
     },
 };
-use rayon::{prelude::*, result};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::plain::PlainAcvmSolver;

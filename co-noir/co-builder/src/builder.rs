@@ -256,7 +256,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
         let len = witness_values.len();
         for witness in witness_values.into_iter().take(varnum) {
-            let idx = builder.add_variable(witness);
+            builder.add_variable(witness);
         }
         // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
         // be "set" later on via the assert_equal mechanism.
@@ -1052,20 +1052,20 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) fn assert_equal(&mut self, a_idx: usize, b_idx: usize) {
         self.is_valid_variable(a_idx);
         self.is_valid_variable(b_idx);
+        // TACEO TODO: need to fix something here(?), with this code the proof and vk are different from bb, but they verify (at least with plaindriver)
+        {
+            let a = T::get_public(&self.get_variable(a_idx));
 
-        // TACEO TODO: need to fix this, with this code the proof and vk are different from bb, but they verify (at least with plaindriver)
-        // {
-        //     let a = T::get_public(&self.get_variable(a_idx));
+            let b = T::get_public(&self.get_variable(b_idx));
 
-        //     let b = T::get_public(&self.get_variable(b_idx));
-
-        //     if let (Some(a), Some(b)) = (a, b) {
-        //         assert_eq!(a, b);
-        //         return;
-        //     } else {
-        //         // We can not check the equality of the witnesses since they are secret shared, but the proof will fail if they are not equal
-        //     }
-        // }
+            if let (Some(a), Some(b)) = (a, b) {
+                assert_eq!(a, b);
+                return;
+            } else {
+                return; //TODO ADD AN ERROR/MESSAGE HERE
+                        // We can not check the equality of the witnesses since they are secret shared, but the proof will fail if they are not equal
+            }
+        }
 
         let a_real_idx = self.real_variable_index[a_idx] as usize;
         let b_real_idx = self.real_variable_index[b_idx] as usize;
@@ -1076,7 +1076,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // Otherwise update the real_idx of b-chain members to that of a
 
         let b_start_idx = self.get_first_variable_in_class(b_idx);
-        self.update_real_variable_indices(b_start_idx, a_real_idx as u32);
+
+        self.update_real_variable_indices(b_start_idx, a_real_idx as u32); //here something bad happens
+
         // Now merge equivalence classes of a and b by tying last (= real) element of b-chain to first element of a-chain
         let a_start_idx = self.get_first_variable_in_class(a_idx);
         self.next_var_index[b_real_idx] = a_start_idx as u32;
