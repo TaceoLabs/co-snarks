@@ -8,7 +8,10 @@ use acir::{
     AcirField,
 };
 use ark_ff::{PrimeField, Zero};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    hash::Hash,
+};
 
 use crate::types::types::{
     AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, MulQuad, PolyTriple,
@@ -67,7 +70,7 @@ pub struct AcirFormat<F: PrimeField> {
 
     /// Set of constrained witnesses
     pub(crate) constrained_witness: HashSet<u32>,
-
+    pub(crate) minimal_range: BTreeMap<u32, u32>,
     /// Indices of the original opcode that originated each constraint in AcirFormat.
     pub(crate) original_opcode_indices: AcirFormatOriginalOpcodeIndices,
 }
@@ -170,12 +173,38 @@ impl<F: PrimeField> AcirFormat<F> {
         opcode_index: usize,
     ) {
         if arg.linear_combinations.len() <= 3 && arg.mul_terms.len() <= 1 {
-            let pt = Self::serialize_arithmetic_gate(&arg);
+            let mut pt = Self::serialize_arithmetic_gate(&arg);
 
             let (w1, w2) = Self::is_assert_equal(&arg, &pt, af);
 
             if !w1.is_zero() {
                 if w1 != w2 {
+                    // TODO TACEO I don't know if the following is necessary?
+                    if !af.constrained_witness.contains(&pt.a) {
+                        // we mark it as constrained because it is going to be asserted to be equal to a constrained one.
+                        af.constrained_witness.insert(pt.a);
+                        // swap the witnesses so that the first one is always properly constrained.
+                        std::mem::swap(&mut pt.a, &mut pt.b);
+                    }
+                    if !af.constrained_witness.contains(&pt.b) {
+                        // we mark it as constrained because it is going to be asserted to be equal to a constrained one.
+                        af.constrained_witness.insert(pt.b);
+                    }
+                    // minimal_range of a witness is the smallest range of the witness and the witness that are
+                    // 'assert_equal' to it
+                    if af.minimal_range.contains_key(&pt.b) && af.minimal_range.contains_key(&pt.a)
+                    {
+                        if af.minimal_range[&pt.a] < af.minimal_range[&pt.b] {
+                            af.minimal_range.insert(pt.a, af.minimal_range[&pt.b]);
+                        } else {
+                            af.minimal_range.insert(pt.b, af.minimal_range[&pt.a]);
+                        }
+                    } else if af.minimal_range.contains_key(&pt.b) {
+                        af.minimal_range.insert(pt.a, af.minimal_range[&pt.b]);
+                    } else if af.minimal_range.contains_key(&pt.a) {
+                        af.minimal_range.insert(pt.b, af.minimal_range[&pt.a]);
+                    }
+
                     af.assert_equalities.push(pt);
                     af.original_opcode_indices
                         .assert_equalities
@@ -439,9 +468,22 @@ impl<F: PrimeField> AcirFormat<F> {
                     witness: input.to_witness().witness_index(),
                     num_bits: input.num_bits(),
                 });
+
                 af.original_opcode_indices
                     .range_constraints
                     .push(opcode_index);
+                if (af
+                    .minimal_range
+                    .contains_key(&input.to_witness().witness_index()))
+                {
+                    if (af.minimal_range[&input.to_witness().witness_index()] > input.num_bits()) {
+                        af.minimal_range
+                            .insert(input.to_witness().witness_index(), input.num_bits());
+                    }
+                } else {
+                    af.minimal_range
+                        .insert(input.to_witness().witness_index(), input.num_bits());
+                }
             }
             BlackBoxFuncCall::Blake2s { inputs, outputs } => todo!("BlackBoxFuncCall::Blake2s"),
             BlackBoxFuncCall::Blake3 { inputs, outputs } => todo!("BlackBoxFuncCall::Blake3"),

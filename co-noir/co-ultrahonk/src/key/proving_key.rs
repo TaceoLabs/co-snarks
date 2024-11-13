@@ -183,12 +183,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         &mut self,
         id: T::PartyID,
         builder: &mut GenericUltraCircuitBuilder<P, U>,
-        is_strucutred: bool,
+        is_structured: bool,
     ) {
         tracing::trace!("Populating trace");
 
         let mut trace_data = TraceData::new(builder, self);
-        trace_data.construct_trace_data(id, builder, is_strucutred);
+        trace_data.construct_trace_data(id, builder, is_structured);
 
         let ram_rom_offset = trace_data.ram_rom_offset;
         let copy_cycles = trace_data.copy_cycles;

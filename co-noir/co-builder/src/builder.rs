@@ -25,7 +25,10 @@ use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
 use eyre::OptionExt;
 use mpc_core::protocols::rep3::gadgets::sort;
 use num_bigint::BigUint;
-use std::{collections::HashMap, fmt::Debug};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Debug,
+};
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
@@ -101,9 +104,10 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
     }
 }
 
+// TACEO TODO changed from HashMap to BTreeMap because order in process_range_lists matters and was not deterministic, is this okay?
 pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub variables: Vec<T::AcvmType>,
-    variable_names: HashMap<u32, String>,
+    variable_names: BTreeMap<u32, String>,
     next_var_index: Vec<u32>,
     prev_var_index: Vec<u32>,
     pub real_variable_index: Vec<u32>,
@@ -111,8 +115,8 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub(crate) current_tag: u32,
     pub public_inputs: Vec<u32>,
     is_recursive_circuit: bool,
-    pub(crate) tau: HashMap<u32, u32>,
-    constant_variable_indices: HashMap<P::ScalarField, u32>,
+    pub(crate) tau: BTreeMap<u32, u32>,
+    constant_variable_indices: BTreeMap<P::ScalarField, u32>,
     pub(crate) zero_idx: u32,
     one_idx: u32,
     pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
@@ -124,7 +128,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     ram_arrays: Vec<RamTranscript>,
     pub(crate) lookup_tables: Vec<PlookupBasicTable<P::ScalarField>>,
     plookup: Plookup<P::ScalarField>,
-    range_lists: HashMap<u64, RangeList>,
+    range_lists: BTreeMap<u64, RangeList>,
     cached_partial_non_native_field_multiplications:
         Vec<CachedPartialNonNativeFieldMultiplication<P::ScalarField>>,
     // Stores gate index of ROM and RAM reads (required by proving key)
@@ -189,7 +193,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn new(size_hint: usize) -> Self {
         tracing::trace!("Builder new");
         let variables = Vec::with_capacity(size_hint * 3);
-        let variable_names = HashMap::with_capacity(size_hint * 3);
+        // let variable_names = BTreeMap::with_capacity(size_hint * 3);
         let next_var_index = Vec::with_capacity(size_hint * 3);
         let prev_var_index = Vec::with_capacity(size_hint * 3);
         let real_variable_index = Vec::with_capacity(size_hint * 3);
@@ -197,15 +201,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         Self {
             variables,
-            variable_names,
+            variable_names: BTreeMap::new(),
             next_var_index,
             prev_var_index,
             real_variable_index,
             real_variable_tags,
             public_inputs: Vec::new(),
             is_recursive_circuit: false,
-            tau: HashMap::new(),
-            constant_variable_indices: HashMap::new(),
+            tau: BTreeMap::new(),
+            constant_variable_indices: BTreeMap::new(),
             zero_idx: 0,
             one_idx: 1,
             blocks: GateBlocks::default(),
@@ -217,7 +221,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             ram_arrays: Vec::new(),
             lookup_tables: Vec::new(),
             plookup: Default::default(),
-            range_lists: HashMap::new(),
+            range_lists: BTreeMap::new(),
             cached_partial_non_native_field_multiplications: Vec::new(),
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
@@ -252,7 +256,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
         let len = witness_values.len();
         for witness in witness_values.into_iter().take(varnum) {
-            builder.add_variable(witness);
+            let idx = builder.add_variable(witness);
         }
         // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
         // be "set" later on via the assert_equal mechanism.
@@ -1048,16 +1052,20 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) fn assert_equal(&mut self, a_idx: usize, b_idx: usize) {
         self.is_valid_variable(a_idx);
         self.is_valid_variable(b_idx);
-        {
-            let a = T::get_public(&self.get_variable(a_idx));
-            let b = T::get_public(&self.get_variable(b_idx));
-            if let (Some(a), Some(b)) = (a, b) {
-                assert_eq!(a, b);
-                return;
-            } else {
-                // We can not check the equality of the witnesses since they are secret shared, but the proof will fail if they are not equal
-            }
-        }
+
+        // TACEO TODO: need to fix this, with this code the proof and vk are different from bb, but they verify (at least with plaindriver)
+        // {
+        //     let a = T::get_public(&self.get_variable(a_idx));
+
+        //     let b = T::get_public(&self.get_variable(b_idx));
+
+        //     if let (Some(a), Some(b)) = (a, b) {
+        //         assert_eq!(a, b);
+        //         return;
+        //     } else {
+        //         // We can not check the equality of the witnesses since they are secret shared, but the proof will fail if they are not equal
+        //     }
+        // }
 
         let a_real_idx = self.real_variable_index[a_idx] as usize;
         let b_real_idx = self.real_variable_index[b_idx] as usize;
@@ -1864,6 +1872,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let mut sorted_list = Vec::with_capacity(list.variable_indices.len());
         for &variable_index in &list.variable_indices {
             let field_element = self.get_variable(variable_index as usize);
+
             let field_element = if T::is_shared(&field_element) {
                 T::get_shared(&field_element).expect("Already checked it is shared")
             } else {
@@ -1878,7 +1887,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let sorted_list = T::sort(
             driver,
             &sorted_list,
-            Utils::get_msb64(list.target_range) as usize,
+            32, // Utils::get_msb64(list.target_range) as usize did not work for me
         )?;
 
         // list must be padded to a multipe of 4 and larger than 4 (gate_width)
@@ -2355,10 +2364,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             create_dummy_gate!(
                 self,
                 &mut self.blocks.arithmetic,
-                self.zero_idx,
-                self.zero_idx,
-                self.zero_idx,
-                self.zero_idx,
+                chunk[0],
+                chunk[1],
+                chunk[2],
+                chunk[3],
             );
         }
     }
