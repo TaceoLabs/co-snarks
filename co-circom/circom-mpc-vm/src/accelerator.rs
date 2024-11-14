@@ -13,12 +13,18 @@ type AcceleratorFunction<F, C> = Box<
         + Send,
 >;
 
+pub struct ComponentAcceleratorOutput<T> {
+    pub(crate) output: Vec<T>,
+    pub(crate) intermediate: Vec<T>,
+}
+
 type AcceleratorComponent<F, C> = Box<
     dyn Fn(
             &mut C,
             &[<C as VmCircomWitnessExtension<F>>::VmType],
             usize,
-        ) -> eyre::Result<Vec<<C as VmCircomWitnessExtension<F>>::VmType>>
+        )
+            -> eyre::Result<ComponentAcceleratorOutput<<C as VmCircomWitnessExtension<F>>::VmType>>
         + Send,
 >;
 
@@ -54,7 +60,9 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
     pub fn register_component(
         &mut self,
         name: String,
-        fun: impl Fn(&mut C, &[C::VmType], usize) -> eyre::Result<Vec<C::VmType>> + Send + 'static,
+        fun: impl Fn(&mut C, &[C::VmType], usize) -> eyre::Result<ComponentAcceleratorOutput<C::VmType>>
+            + Send
+            + 'static,
     ) {
         self.registered_component.insert(name, Box::new(fun));
     }
@@ -83,7 +91,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
             if args.len() != 1 {
                 bail!("Calling Num2Bits accelerator with more than one argument!");
             }
-            protocol.num2bits(args[0].to_owned(), amount_outputs)
+            protocol
+                .num2bits(args[0].to_owned(), amount_outputs)
+                .map(|output| ComponentAcceleratorOutput {
+                    output,
+                    intermediate: Vec::new(),
+                })
         });
     }
 
@@ -93,7 +106,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         protocol: &mut C,
         args: &[C::VmType],
         amount_outputs: usize,
-    ) -> eyre::Result<Vec<C::VmType>> {
+    ) -> eyre::Result<ComponentAcceleratorOutput<C::VmType>> {
         let fun = self
             .registered_component
             .get(name)

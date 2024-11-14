@@ -480,9 +480,14 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                             } else {
                                 0
                             };
+                            // insert outputs into the signals
                             let start = component.my_offset + mapped_offset;
                             let end = start + component.output_signals;
-                            ctx.signals[start..end].clone_from_slice(&result);
+                            ctx.signals[start..end].clone_from_slice(&result.output);
+                            // insert intermediate values into the signals
+                            let start = offset_in_component + component.input_signals;
+                            let end = start + result.intermediate.len();
+                            ctx.signals[start..end].clone_from_slice(&result.intermediate);
                         } else {
                             component.run(protocol, ctx, config)?;
                         }
