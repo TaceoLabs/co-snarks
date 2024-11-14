@@ -450,7 +450,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     let mut input_signals = vec![C::VmType::default(); *amount];
                     for i in 0..*amount {
                         input_signals[*amount - i - 1] = self.pop_field();
-                        tracing::debug!("poping {}", input_signals.last().unwrap());
+                        tracing::debug!("popping {}", input_signals.last().unwrap());
                     }
 
                     let component = &mut self.sub_components[sub_comp_index];
@@ -463,10 +463,14 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     component.provided_input_signals += amount;
                     if component.provided_input_signals == component.input_signals {
                         // check if we have an accelerator for this
+                        println!("running sub component {}", component.component_name);
                         if ctx
                             .mpc_accelerator
                             .has_cmp_accelerator(&component.component_name)
                         {
+                            println!("running accelerator for {}", component.component_name);
+                            println!("component input signals: {}", component.input_signals);
+                            println!("component offset: {}", offset_in_component);
                             let inputs = &ctx.signals[offset_in_component
                                 ..offset_in_component + component.input_signals];
                             let result = ctx.mpc_accelerator.run_cmp_accelerator(

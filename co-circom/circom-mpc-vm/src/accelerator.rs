@@ -46,6 +46,8 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         let mut accelerator = Self::empty_accelerator();
         accelerator.register_sqrt();
         accelerator.register_num2bits();
+        accelerator.register_addbits();
+        accelerator.register_iszero();
         accelerator
     }
 
@@ -97,6 +99,34 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
                     output,
                     intermediate: Vec::new(),
                 })
+        });
+    }
+
+    fn register_addbits(&mut self) {
+        self.register_component("AddBits".to_string(), |protocol, args, amount_outputs| {
+            tracing::debug!("calling pre-defined AddBits accelerator");
+            Ok(ComponentAcceleratorOutput {
+                output: Vec::new(),
+                intermediate: Vec::new(),
+            })
+        });
+    }
+
+    fn register_iszero(&mut self) {
+        self.register_component("IsZero".to_string(), |protocol, args, _amount_outputs| {
+            tracing::debug!("calling pre-defined IsZero accelerator");
+            if args.len() != 1 {
+                bail!("Calling IsZero accelerator with more than one argument!");
+            }
+            let is_zero = protocol.eq(args[0].to_owned(), protocol.public_zero())?;
+            let inv_input =
+                protocol.cmux(is_zero.clone(), protocol.public_one(), args[0].to_owned())?;
+            let inv = protocol.div(protocol.public_one(), inv_input)?;
+            let helper = protocol.cmux(is_zero.clone(), protocol.public_zero(), inv)?;
+            Ok(ComponentAcceleratorOutput {
+                output: vec![is_zero],
+                intermediate: vec![helper],
+            })
         });
     }
 
