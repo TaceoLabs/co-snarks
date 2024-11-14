@@ -15,7 +15,7 @@ fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<
 }
 
 fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
-    proof_file: &str,
+    _proof_file: &str,
     circuit_file: &str,
     witness_file: &str,
 ) {
@@ -45,9 +45,9 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     let prover = CoUltraHonk::<_, _, H>::new(driver);
     let proof = prover.prove(proving_key).unwrap();
 
-    let proof_u8 = proof.to_buffer();
-
     // does not work atm as proofs are not the same as in bb 62, but they verify their nevertheless
+
+    // let proof_u8 = proof.to_buffer();
     // let read_proof_u8 = std::fs::read(proof_file).unwrap();
     // assert_eq!(proof_u8, read_proof_u8);
 
