@@ -170,3 +170,4 @@ witness_extension_test_plain!(sum_test);
 witness_extension_test_plain!(winner);
 witness_extension_test_plain!(bitonic_sort);
 witness_extension_test_plain!(num2bits_accelerator);
+witness_extension_test_plain!(reclaim_addbits_accelerator);
