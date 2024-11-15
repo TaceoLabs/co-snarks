@@ -117,4 +117,14 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
 
     /// num2bits accelerator
     fn num2bits(&mut self, a: Self::VmType, bits: usize) -> Result<Vec<Self::VmType>>;
+
+    /// addbits accelerator
+    ///
+    /// Returns the binary addition result of two bit vectors a and b. The bit vectors are expected to have the same length. Also returns the carry output bit.
+    /// a and b are ordered such that the MSB is at the first index, as well as the result
+    fn addbits(
+        &mut self,
+        a: Vec<Self::VmType>,
+        b: Vec<Self::VmType>,
+    ) -> Result<(Vec<Self::VmType>, Self::VmType)>;
 }

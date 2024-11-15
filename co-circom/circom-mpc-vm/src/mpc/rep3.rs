@@ -7,7 +7,8 @@ use ark_ff::{One, PrimeField};
 use eyre::{bail, eyre};
 use itertools::Itertools;
 use mpc_core::protocols::rep3::{
-    arithmetic, binary,
+    arithmetic::{self, promote_to_trivial_share},
+    binary,
     conversion::{self, bit_inject_many},
     network::{IoContext, Rep3Network},
     Rep3PrimeFieldShare,
@@ -570,6 +571,38 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                     .collect())
             }
         }
+    }
+
+    fn addbits(
+        &mut self,
+        a: Vec<Self::VmType>,
+        b: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Self::VmType)> {
+        assert!(a.len() == b.len());
+        let bitlen = a.len();
+        let a = a.into_iter().map(|x| match x {
+            Rep3VmType::Public(x) => promote_to_trivial_share(self.io_context0.id, x),
+            Rep3VmType::Arithmetic(x) => x,
+        });
+        let b = b.into_iter().map(|x| match x {
+            Rep3VmType::Public(x) => promote_to_trivial_share(self.io_context0.id, x),
+            Rep3VmType::Arithmetic(x) => x,
+        });
+        let two = F::one() + F::one();
+
+        let a_sum = a.fold(Rep3PrimeFieldShare::zero_share(), |acc, x| acc * two + x);
+        let b_sum = b.fold(Rep3PrimeFieldShare::zero_share(), |acc, x| acc * two + x);
+
+        let sum = a_sum + b_sum;
+
+        let sum_bits = conversion::a2b_selector(sum, &mut self.io_context0)?;
+        let individual_bits = (0..bitlen + 1)
+            .map(|i| (&sum_bits >> i) & BigUint::one())
+            .collect_vec();
+        let mut result = bit_inject_many(&individual_bits, &mut self.io_context0)?;
+        let carry = result.pop().unwrap();
+        result.reverse();
+        Ok((result.into_iter().map(Into::into).collect(), carry.into()))
     }
 }
 

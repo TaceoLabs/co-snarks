@@ -103,11 +103,17 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
     }
 
     fn register_addbits(&mut self) {
-        self.register_component("AddBits".to_string(), |protocol, args, amount_outputs| {
+        self.register_component("AddBits".to_string(), |protocol, args, _amount_outputs| {
             tracing::debug!("calling pre-defined AddBits accelerator");
+            if args.len() % 2 != 0 {
+                bail!("Calling AddBits accelerator with odd number of arguments!");
+            }
+            let a = args[0..args.len() / 2].to_vec();
+            let b = args[args.len() / 2..].to_vec();
+            let (output, carry) = protocol.addbits(a, b)?;
             Ok(ComponentAcceleratorOutput {
-                output: Vec::new(),
-                intermediate: Vec::new(),
+                output,
+                intermediate: vec![carry],
             })
         });
     }
