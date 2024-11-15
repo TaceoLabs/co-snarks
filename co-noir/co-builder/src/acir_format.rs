@@ -59,6 +59,7 @@ pub struct AcirFormat<F: PrimeField> {
     /// This could be a large vector, we don't expect the blackbox implementations to be so large.
     pub(crate) poly_triple_constraints: Vec<PolyTriple<F>>,
     pub(crate) quad_constraints: Vec<MulQuad<F>>,
+    pub(crate) big_quad_constraints: Vec<Vec<MulQuad<F>>>,
     pub(crate) block_constraints: Vec<BlockConstraint<F>>,
 
     /// Number of gates added to the circuit per original opcode.
@@ -225,12 +226,37 @@ impl<F: PrimeField> AcirFormat<F> {
                     .poly_triple_constraints
                     .push(opcode_index);
             }
-        } else {
-            af.quad_constraints
-                .push(Self::serialize_mul_quad_gate(&arg));
-            af.original_opcode_indices
-                .quad_constraints
-                .push(opcode_index);
+        }
+        // } else {
+        //     af.quad_constraints
+        //         .push(Self::serialize_mul_quad_gate(&arg));
+        //     af.original_opcode_indices
+        //         .quad_constraints
+        //         .push(opcode_index);
+        // }
+        else {
+            let mut mul_quads: Vec<MulQuad<F>> = vec![];
+            // We try to use a single mul_quad gate to represent the expression.
+            if arg.mul_terms.len() <= 1 {
+                let quad = Self::serialize_mul_quad_gate(&arg);
+                // add it to the result vector if it worked
+                if quad.a != 0 || quad.mul_scaling != F::zero() || quad.a_scaling != F::zero() {
+                    mul_quads.push(quad);
+                }
+            }
+            if mul_quads.is_empty() {
+                // If not, we need to split the expression into multiple gates
+                mul_quads = Self::split_into_mul_quad_gates(&arg);
+            }
+            if mul_quads.len() == 1 {
+                af.quad_constraints.push(mul_quads[0].clone());
+                af.original_opcode_indices
+                    .quad_constraints
+                    .push(opcode_index);
+            }
+            if mul_quads.len() > 1 {
+                af.big_quad_constraints.push(mul_quads);
+            }
         }
         Self::constrain_witnesses(arg, af);
     }
@@ -346,7 +372,7 @@ impl<F: PrimeField> AcirFormat<F> {
             b_set = true;
         }
         // If necessary, set values for linears terms q_l * w_l, q_r * w_r and q_o * w_o
-        assert!(arg.linear_combinations.len() <= 4); // We can only accommodate 4 linear terms
+        // assert!(arg.linear_combinations.len() <= 4); // We can only accommodate 4 linear terms
         for linear_term in arg.linear_combinations.iter() {
             let selector_value = linear_term.0.into_repr();
             let witness_idx = linear_term.1 .0;
@@ -373,7 +399,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 quad.d_scaling = selector_value;
                 d_set = true;
             } else {
-                panic!("Cannot assign linear term to a constraint of width 4");
+                return MulQuad::default();
             }
         }
 
@@ -381,7 +407,160 @@ impl<F: PrimeField> AcirFormat<F> {
         quad.const_scaling = arg.q_c.into_repr();
         quad
     }
+    fn split_into_mul_quad_gates(arg: &Expression<GenericFieldElement<F>>) -> Vec<MulQuad<F>> {
+        let mut result: Vec<MulQuad<F>> = vec![];
+        let mut current_mul_term = if !arg.mul_terms.is_empty() {
+            arg.mul_terms[0]
+        } else {
+            (
+                GenericFieldElement::<F>::default(),
+                Witness::default(),
+                Witness::default(),
+            )
+        };
+        let mut current_linear_term = if !arg.mul_terms.is_empty() {
+            arg.linear_combinations[0]
+        } else {
+            (GenericFieldElement::<F>::default(), Witness::default())
+        };
+        let last_mul_term = if !arg.mul_terms.is_empty() {
+            *arg.mul_terms.last().unwrap()
+        } else {
+            (
+                GenericFieldElement::<F>::default(),
+                Witness::default(),
+                Witness::default(),
+            )
+        };
+        let last_linear_term = if !arg.linear_combinations.is_empty() {
+            *arg.linear_combinations.last().unwrap()
+        } else {
+            (GenericFieldElement::<F>::default(), Witness::default())
+        };
 
+        let mut idx_1 = 0;
+        let mut idx_2 = 0;
+
+        // number of wires to use in the intermediate gate
+        let mut max_size = 4;
+        let mut done = false;
+        // the intermediate 'big add' gates. The first one contains the constant term.
+        let mut mul_gate = MulQuad {
+            a: 0,
+            b: 0,
+            c: 0,
+            d: 0,
+            mul_scaling: F::zero(),
+            a_scaling: F::zero(),
+            b_scaling: F::zero(),
+            c_scaling: F::zero(),
+            d_scaling: F::zero(),
+            const_scaling: arg.q_c.into_repr(),
+        };
+
+        // list of witnesses that are part of mul terms
+        let mut all_mul_terms: HashSet<u32> = HashSet::new();
+        if !arg.mul_terms.is_empty() {
+            for term in &arg.mul_terms {
+                all_mul_terms.insert(term.1 .0);
+                all_mul_terms.insert(term.2 .0);
+            }
+        }
+        // The 'mul term' witnesses that have been processed
+        let mut processed_mul_terms: HashSet<u32> = HashSet::new();
+        while !done {
+            let mut i = 0; // index of the current free wire in the new intermediate gate
+
+            // we add a mul term (if there are some) to every intermediate gate
+            if current_mul_term != last_mul_term {
+                mul_gate.mul_scaling = current_mul_term.0.into_repr();
+                mul_gate.a = current_mul_term.1 .0;
+                mul_gate.b = current_mul_term.2 .0;
+                mul_gate.a_scaling = F::zero();
+                mul_gate.b_scaling = F::zero();
+                // Try to add corresponding linear terms, only if they were not already added
+                if !processed_mul_terms.contains(&mul_gate.a)
+                    || !processed_mul_terms.contains(&mul_gate.b)
+                {
+                    for lin_term in &arg.linear_combinations {
+                        let w = lin_term.1 .0;
+                        if w == mul_gate.a {
+                            if !processed_mul_terms.contains(&mul_gate.a) {
+                                mul_gate.a_scaling = lin_term.0.into_repr();
+                                processed_mul_terms.insert(w);
+                            }
+                            if mul_gate.a == mul_gate.b {
+                                break;
+                            }
+                        } else if w == mul_gate.b {
+                            if !processed_mul_terms.contains(&mul_gate.b) {
+                                mul_gate.b_scaling = lin_term.0.into_repr();
+                                processed_mul_terms.insert(w);
+                            }
+                            break;
+                        }
+                    }
+                }
+                idx_1 += 1;
+                i = 2; // a and b are used because of the mul term
+                current_mul_term = arg.mul_terms[idx_1];
+            }
+            // We need to process all the mul terms before being done.
+            done = current_mul_term == last_mul_term;
+
+            // Assign available wires with the remaining linear terms which are not also a 'mul term'
+            if !arg.linear_combinations.is_empty() {
+                while current_linear_term != last_linear_term {
+                    let w = current_linear_term.1 .0;
+                    if !all_mul_terms.contains(&w) {
+                        if i < max_size {
+                            Self::assign_linear_term(
+                                &mut mul_gate,
+                                i,
+                                w,
+                                &current_linear_term.0.into_repr(),
+                            ); // * fr(-1)));
+                            i += 1;
+                        } else {
+                            // No more available wire, but there is still some linear terms; we need another mul_gate
+                            done = false;
+                            break;
+                        }
+                    }
+                    idx_2 += 1;
+                    current_linear_term = arg.linear_combinations[idx_2];
+                }
+            }
+
+            // Index 4 of the next gate will be used
+            max_size = 3;
+            result.push(mul_gate);
+            mul_gate = MulQuad::default();
+        }
+
+        result
+    }
+    fn assign_linear_term(gate: &mut MulQuad<F>, index: usize, witness_index: u32, scaling: &F) {
+        match index {
+            0 => {
+                gate.a = witness_index;
+                gate.a_scaling = *scaling;
+            }
+            1 => {
+                gate.b = witness_index;
+                gate.b_scaling = *scaling;
+            }
+            2 => {
+                gate.c = witness_index;
+                gate.c_scaling = *scaling;
+            }
+            3 => {
+                gate.d = witness_index;
+                gate.d_scaling = *scaling;
+            }
+            _ => panic!("Invalid index in assign_linear_term"),
+        }
+    }
     fn constrain_witnesses(arg: Expression<GenericFieldElement<F>>, af: &mut AcirFormat<F>) {
         for linear_term in arg.linear_combinations {
             let witness_idx = linear_term.1 .0;

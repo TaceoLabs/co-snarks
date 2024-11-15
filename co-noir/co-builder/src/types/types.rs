@@ -52,7 +52,7 @@ pub(crate) struct AddQuad<F: PrimeField> {
     pub(crate) const_scaling: F,
 }
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default, PartialEq, Eq, Clone)]
 pub(crate) struct MulQuad<F: PrimeField> {
     pub(crate) a: u32,
     pub(crate) b: u32,
