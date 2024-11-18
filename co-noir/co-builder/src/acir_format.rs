@@ -334,12 +334,11 @@ impl<F: PrimeField> AcirFormat<F> {
             return (0, 0);
         }
         if (pt.q_l == -pt.q_r && !pt.q_l.is_zero() && pt.q_c.is_zero())
-            && (af.constrained_witness.contains(&pt.a) || af.constrained_witness.contains(&pt.b))
+            &&
+             // we require that one of the 2 witnesses to be constrained in an arithmetic gate
+            (af.constrained_witness.contains(&pt.a) || af.constrained_witness.contains(&pt.b))
         {
-            // we require that one of the 2 witnesses to be constrained in an arithmetic gate
-            if af.constrained_witness.contains(&pt.a) || af.constrained_witness.contains(&pt.b) {
-                return (pt.a, pt.b);
-            }
+            return (pt.a, pt.b);
         }
         (0, 0)
     }
