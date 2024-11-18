@@ -13,12 +13,18 @@ type AcceleratorFunction<F, C> = Box<
         + Send,
 >;
 
+pub struct ComponentAcceleratorOutput<T> {
+    pub(crate) output: Vec<T>,
+    pub(crate) intermediate: Vec<T>,
+}
+
 type AcceleratorComponent<F, C> = Box<
     dyn Fn(
             &mut C,
             &[<C as VmCircomWitnessExtension<F>>::VmType],
             usize,
-        ) -> eyre::Result<Vec<<C as VmCircomWitnessExtension<F>>::VmType>>
+        )
+            -> eyre::Result<ComponentAcceleratorOutput<<C as VmCircomWitnessExtension<F>>::VmType>>
         + Send,
 >;
 
@@ -40,6 +46,8 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         let mut accelerator = Self::empty_accelerator();
         accelerator.register_sqrt();
         accelerator.register_num2bits();
+        accelerator.register_addbits();
+        accelerator.register_iszero();
         accelerator
     }
 
@@ -54,7 +62,9 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
     pub fn register_component(
         &mut self,
         name: String,
-        fun: impl Fn(&mut C, &[C::VmType], usize) -> eyre::Result<Vec<C::VmType>> + Send + 'static,
+        fun: impl Fn(&mut C, &[C::VmType], usize) -> eyre::Result<ComponentAcceleratorOutput<C::VmType>>
+            + Send
+            + 'static,
     ) {
         self.registered_component.insert(name, Box::new(fun));
     }
@@ -83,7 +93,45 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
             if args.len() != 1 {
                 bail!("Calling Num2Bits accelerator with more than one argument!");
             }
-            protocol.num2bits(args[0].to_owned(), amount_outputs)
+            protocol
+                .num2bits(args[0].to_owned(), amount_outputs)
+                .map(|output| ComponentAcceleratorOutput {
+                    output,
+                    intermediate: Vec::new(),
+                })
+        });
+    }
+
+    fn register_addbits(&mut self) {
+        self.register_component("AddBits".to_string(), |protocol, args, _amount_outputs| {
+            tracing::debug!("calling pre-defined AddBits accelerator");
+            if args.len() % 2 != 0 {
+                bail!("Calling AddBits accelerator with odd number of arguments!");
+            }
+            let a = args[0..args.len() / 2].to_vec();
+            let b = args[args.len() / 2..].to_vec();
+            let (output, carry) = protocol.addbits(a, b)?;
+            Ok(ComponentAcceleratorOutput {
+                output,
+                intermediate: vec![carry],
+            })
+        });
+    }
+
+    fn register_iszero(&mut self) {
+        self.register_component("IsZero".to_string(), |protocol, args, _amount_outputs| {
+            tracing::debug!("calling pre-defined IsZero accelerator");
+            if args.len() != 1 {
+                bail!("Calling IsZero accelerator with more than one argument!");
+            }
+            let is_zero = protocol.eq(args[0].to_owned(), protocol.public_zero())?;
+            let inv_input = protocol.add(args[0].to_owned(), is_zero.clone())?;
+            let maybe_masked_inv = protocol.div(protocol.public_one(), inv_input)?;
+            let helper = protocol.sub(maybe_masked_inv, is_zero.clone())?;
+            Ok(ComponentAcceleratorOutput {
+                output: vec![is_zero],
+                intermediate: vec![helper],
+            })
         });
     }
 
@@ -93,7 +141,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         protocol: &mut C,
         args: &[C::VmType],
         amount_outputs: usize,
-    ) -> eyre::Result<Vec<C::VmType>> {
+    ) -> eyre::Result<ComponentAcceleratorOutput<C::VmType>> {
         let fun = self
             .registered_component
             .get(name)

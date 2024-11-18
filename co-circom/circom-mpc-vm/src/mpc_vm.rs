@@ -450,7 +450,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     let mut input_signals = vec![C::VmType::default(); *amount];
                     for i in 0..*amount {
                         input_signals[*amount - i - 1] = self.pop_field();
-                        tracing::debug!("poping {}", input_signals.last().unwrap());
+                        tracing::debug!("popping {}", input_signals.last().unwrap());
                     }
 
                     let component = &mut self.sub_components[sub_comp_index];
@@ -467,8 +467,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                             .mpc_accelerator
                             .has_cmp_accelerator(&component.component_name)
                         {
-                            let inputs = &ctx.signals[offset_in_component
-                                ..offset_in_component + component.input_signals];
+                            let component_input_signals_start =
+                                component.my_offset + component.output_signals;
+                            let component_intermediate_signals_start =
+                                component_input_signals_start + component.input_signals;
+                            let inputs = &ctx.signals[component_input_signals_start
+                                ..component_input_signals_start + component.input_signals];
                             let result = ctx.mpc_accelerator.run_cmp_accelerator(
                                 &component.component_name,
                                 protocol,
@@ -480,9 +484,14 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                             } else {
                                 0
                             };
+                            // insert outputs into the signals
                             let start = component.my_offset + mapped_offset;
                             let end = start + component.output_signals;
-                            ctx.signals[start..end].clone_from_slice(&result);
+                            ctx.signals[start..end].clone_from_slice(&result.output);
+                            // insert intermediate values into the signals
+                            let start = component_intermediate_signals_start;
+                            let end = start + result.intermediate.len();
+                            ctx.signals[start..end].clone_from_slice(&result.intermediate);
                         } else {
                             component.run(protocol, ctx, config)?;
                         }

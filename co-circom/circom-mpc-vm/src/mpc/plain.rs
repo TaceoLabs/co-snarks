@@ -278,4 +278,27 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         }
         Ok(res)
     }
+
+    fn addbits(
+        &mut self,
+        a: Vec<Self::VmType>,
+        b: Vec<Self::VmType>,
+    ) -> Result<(Vec<Self::VmType>, Self::VmType)> {
+        assert!(a.len() == b.len());
+        let bitlen = a.len();
+        assert!(bitlen < F::MODULUS_BIT_SIZE as usize - 1);
+        let acc_a = a.into_iter().fold(F::ZERO, |acc, x| acc.double() + x);
+        let acc_b = b.into_iter().fold(F::ZERO, |acc, x| acc.double() + x);
+
+        let sum = acc_a + acc_b;
+        let sum = to_bigint!(sum);
+        let carry_mask = BigUint::one() << bitlen;
+        let carry = F::from((&sum & carry_mask) >> bitlen);
+        let mut res = Vec::with_capacity(bitlen);
+        for i in 0..bitlen {
+            res.push(F::from((&sum >> i) & BigUint::one()));
+        }
+        res.reverse();
+        Ok((res, carry))
+    }
 }

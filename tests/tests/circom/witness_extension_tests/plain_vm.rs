@@ -101,7 +101,7 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
             .map(|s| read_field_element(s.as_str().unwrap()))
             .collect::<Vec<_>>();
         inputs.push(input);
-        i += 1
+        i += 1;
     }
     println!("i: {}", i);
     TestInputs { inputs, witnesses }
@@ -170,3 +170,5 @@ witness_extension_test_plain!(sum_test);
 witness_extension_test_plain!(winner);
 witness_extension_test_plain!(bitonic_sort);
 witness_extension_test_plain!(num2bits_accelerator);
+witness_extension_test_plain!(reclaim_addbits_accelerator);
+witness_extension_test_plain!(reclaim_addbits_accelerator_small);
