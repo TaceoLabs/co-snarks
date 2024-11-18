@@ -644,9 +644,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             .enumerate()
         {
             // auto& big_constraint = constraint_system.big_quad_constraints.at(i);
-            let mut next_w4_wire_value = T::AcvmType::from(P::ScalarField::zero());
+            let mut next_w4_wire_value = T::AcvmType::default();
             // Define the 4th wire of these mul_quad gates, which is implicitly used by the previous gate.
-            // for (size_t j = 0; j < constraint.size() - 1; ++j) {
             let constraint_size = constraint.len();
             for (j, small_constraint) in constraint.iter_mut().enumerate().take(constraint_size - 1)
             {
