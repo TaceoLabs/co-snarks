@@ -140,9 +140,9 @@ impl<F: PrimeField> AcirFormat<F> {
                 acir::circuit::Opcode::MemoryInit {
                     block_id,
                     init,
-                    block_type,
+                    block_type: _,
                 } => {
-                    let block = Self::handle_memory_init(init, block_type);
+                    let block = Self::handle_memory_init(init);
                     let block_id = block_id.0;
                     let opcode_indices = vec![i];
                     block_id_to_block_constraint.insert(block_id, (block, opcode_indices));
@@ -537,10 +537,7 @@ impl<F: PrimeField> AcirFormat<F> {
         }
     }
 
-    fn handle_memory_init(
-        mem_init: Vec<Witness>,
-        _block_type: acir::circuit::opcodes::BlockType,
-    ) -> BlockConstraint<F> {
+    fn handle_memory_init(mem_init: Vec<Witness>) -> BlockConstraint<F> {
         let mut block = BlockConstraint::default();
         block.init.reserve(mem_init.len());
 
@@ -586,7 +583,7 @@ impl<F: PrimeField> AcirFormat<F> {
         block.trace.push(acir_mem_op);
     }
 
-    #[allow(unused)]
+    #[allow(unused)] // TACEO TODO remove later
     fn handle_blackbox_func_call(
         arg: BlackBoxFuncCall<GenericFieldElement<F>>,
         af: &mut AcirFormat<F>,
@@ -603,21 +600,18 @@ impl<F: PrimeField> AcirFormat<F> {
             BlackBoxFuncCall::AND { lhs, rhs, output } => todo!("BlackBoxFuncCall::AND"),
             BlackBoxFuncCall::XOR { lhs, rhs, output } => todo!("BlackBoxFuncCall::XOR"),
             BlackBoxFuncCall::RANGE { input } => {
+                let witness_input = input.to_witness().witness_index();
                 af.range_constraints.push(RangeConstraint {
-                    witness: input.to_witness().witness_index(),
+                    witness: witness_input,
                     num_bits: input.num_bits(),
                 });
-
                 af.original_opcode_indices
                     .range_constraints
                     .push(opcode_index);
-                if (af
-                    .minimal_range
-                    .contains_key(&input.to_witness().witness_index()))
-                {
-                    if (af.minimal_range[&input.to_witness().witness_index()] > input.num_bits()) {
-                        af.minimal_range
-                            .insert(input.to_witness().witness_index(), input.num_bits());
+
+                if (af.minimal_range.contains_key(&witness_input)) {
+                    if (af.minimal_range[&witness_input] > input.num_bits()) {
+                        af.minimal_range.insert(witness_input, input.num_bits());
                     }
                 } else {
                     af.minimal_range
