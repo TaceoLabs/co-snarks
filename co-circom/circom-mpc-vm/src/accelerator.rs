@@ -125,10 +125,9 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
                 bail!("Calling IsZero accelerator with more than one argument!");
             }
             let is_zero = protocol.eq(args[0].to_owned(), protocol.public_zero())?;
-            let inv_input =
-                protocol.cmux(is_zero.clone(), protocol.public_one(), args[0].to_owned())?;
-            let inv = protocol.div(protocol.public_one(), inv_input)?;
-            let helper = protocol.cmux(is_zero.clone(), protocol.public_zero(), inv)?;
+            let inv_input = protocol.add(args[0].to_owned(), is_zero.clone())?;
+            let maybe_masked_inv = protocol.div(protocol.public_one(), inv_input)?;
+            let helper = protocol.sub(maybe_masked_inv, is_zero.clone())?;
             Ok(ComponentAcceleratorOutput {
                 output: vec![is_zero],
                 intermediate: vec![helper],
