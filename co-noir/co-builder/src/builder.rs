@@ -415,6 +415,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.check_selector_length_consistency();
         self.num_gates += 1;
     }
+
     pub(crate) fn create_big_mul_add_gate(
         &mut self,
         inp: &MulQuad<P::ScalarField>,
@@ -652,136 +653,32 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 if (j == 0) {
                     next_w4_wire_value = self.get_variable(small_constraint.d.try_into().unwrap());
                 } else {
-                    let next_w4_wire_value_clone = next_w4_wire_value.clone();
-                    let next_w4_wire = self.add_variable(next_w4_wire_value_clone);
+                    let next_w4_wire = self.add_variable(next_w4_wire_value.to_owned());
                     small_constraint.d = next_w4_wire;
                     small_constraint.d_scaling = -P::ScalarField::one();
                 }
 
                 self.create_big_mul_add_gate(small_constraint, true);
 
-                let mut term_1 =
-                    if T::is_shared(&self.get_variable(small_constraint.a.try_into().unwrap()))
-                        && !T::is_shared(&self.get_variable(small_constraint.b.try_into().unwrap()))
-                    {
-                        let tmp = T::acvm_mul_with_public(
-                            driver,
-                            T::get_public(
-                                &self.get_variable(small_constraint.b.try_into().unwrap()),
-                            )
-                            .expect("Already checked it is public"),
-                            self.get_variable(small_constraint.a.try_into().unwrap()),
-                        );
+                let var_a = self.get_variable(small_constraint.a.try_into().unwrap());
+                let var_b = self.get_variable(small_constraint.b.try_into().unwrap());
+                let var_c = self.get_variable(small_constraint.c.try_into().unwrap());
 
-                        T::acvm_mul_with_public(driver, small_constraint.mul_scaling, tmp)
-                    } else if !T::is_shared(
-                        &self.get_variable(small_constraint.a.try_into().unwrap()),
-                    ) && T::is_shared(
-                        &self.get_variable(small_constraint.b.try_into().unwrap()),
-                    ) {
-                        let tmp = T::acvm_mul_with_public(
-                            driver,
-                            T::get_public(
-                                &self.get_variable(small_constraint.a.try_into().unwrap()),
-                            )
-                            .expect("Already checked it is public"),
-                            self.get_variable(small_constraint.b.try_into().unwrap()),
-                        );
-
-                        T::acvm_mul_with_public(driver, small_constraint.mul_scaling, tmp)
-                    } else if !T::is_shared(
-                        &self.get_variable(small_constraint.a.try_into().unwrap()),
-                    ) && !T::is_shared(
-                        &self.get_variable(small_constraint.b.try_into().unwrap()),
-                    ) {
-                        T::AcvmType::from(
-                            T::get_public(
-                                &self.get_variable(small_constraint.a.try_into().unwrap()),
-                            )
-                            .expect("Already checked it is public")
-                                * T::get_public(
-                                    &self.get_variable(small_constraint.b.try_into().unwrap()),
-                                )
-                                .expect("Already checked it is public")
-                                * small_constraint.mul_scaling,
-                        )
-                    } else {
-                        let tmp = T::acvm_mul_with_shared(
-                            driver,
-                            self.get_variable(small_constraint.a.try_into().unwrap()),
-                            self.get_variable(small_constraint.b.try_into().unwrap()),
-                        )?;
-                        T::acvm_mul_with_public(driver, small_constraint.mul_scaling, tmp)
-                    };
-
-                let term_2 =
-                    if T::is_shared(&self.get_variable(small_constraint.a.try_into().unwrap())) {
-                        T::acvm_mul_with_public(
-                            driver,
-                            small_constraint.a_scaling,
-                            self.get_variable(small_constraint.a.try_into().unwrap()),
-                        )
-                    } else {
-                        T::AcvmType::from(
-                            T::get_public(
-                                &self.get_variable(small_constraint.a.try_into().unwrap()),
-                            )
-                            .expect("Already checked it is public")
-                                * small_constraint.a_scaling,
-                        )
-                    };
-
-                let term_3 =
-                    if T::is_shared(&self.get_variable(small_constraint.b.try_into().unwrap())) {
-                        T::acvm_mul_with_public(
-                            driver,
-                            small_constraint.b_scaling,
-                            self.get_variable(small_constraint.b.try_into().unwrap()),
-                        )
-                    } else {
-                        T::AcvmType::from(
-                            T::get_public(
-                                &self.get_variable(small_constraint.b.try_into().unwrap()),
-                            )
-                            .expect("Already checked it is public")
-                                * small_constraint.b_scaling,
-                        )
-                    };
-
-                let term_4 =
-                    if T::is_shared(&self.get_variable(small_constraint.c.try_into().unwrap())) {
-                        T::acvm_mul_with_public(
-                            driver,
-                            small_constraint.c_scaling,
-                            self.get_variable(small_constraint.c.try_into().unwrap()),
-                        )
-                    } else {
-                        T::AcvmType::from(
-                            T::get_public(
-                                &self.get_variable(small_constraint.c.try_into().unwrap()),
-                            )
-                            .expect("Already checked it is public")
-                                * small_constraint.c_scaling,
-                        )
-                    };
-
-                let term_5 = if T::is_shared(&next_w4_wire_value) {
-                    T::acvm_mul_with_public(driver, small_constraint.d_scaling, next_w4_wire_value)
-                } else {
-                    T::AcvmType::from(
-                        T::get_public(&next_w4_wire_value).expect("Already checked it is shared")
-                            * small_constraint.d_scaling,
-                    )
-                };
-                T::add_assign(driver, &mut term_1, term_2);
-                T::add_assign(driver, &mut term_1, term_3);
-                T::add_assign(driver, &mut term_1, term_4);
-                T::add_assign(driver, &mut term_1, term_5);
-                T::acvm_add_assign_with_public(driver, small_constraint.const_scaling, &mut term_1);
-                next_w4_wire_value = term_1;
-                next_w4_wire_value =
-                    T::acvm_mul_with_public(driver, -P::ScalarField::one(), next_w4_wire_value);
+                let term1 = driver.acvm_mul_with_shared(var_a.to_owned(), var_b.to_owned())?;
+                let term1 = driver.acvm_mul_with_public(small_constraint.mul_scaling, term1);
+                let term2 = driver.acvm_mul_with_public(small_constraint.a_scaling, var_a);
+                let term3 = driver.acvm_mul_with_public(small_constraint.b_scaling, var_b);
+                let term4 = driver.acvm_mul_with_public(small_constraint.c_scaling, var_c);
+                let term5 =
+                    driver.acvm_mul_with_public(small_constraint.d_scaling, next_w4_wire_value);
+                next_w4_wire_value = small_constraint.const_scaling.into();
+                driver.add_assign(&mut next_w4_wire_value, term1);
+                driver.add_assign(&mut next_w4_wire_value, term2);
+                driver.add_assign(&mut next_w4_wire_value, term3);
+                driver.add_assign(&mut next_w4_wire_value, term4);
+                driver.add_assign(&mut next_w4_wire_value, term5);
             }
+
             let next_w4_wire = self.add_variable(next_w4_wire_value);
             constraint.last_mut().unwrap().d = next_w4_wire;
             constraint.last_mut().unwrap().d_scaling = -P::ScalarField::one();
