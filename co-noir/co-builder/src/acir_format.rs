@@ -613,8 +613,7 @@ impl<F: PrimeField> AcirFormat<F> {
                         af.minimal_range.insert(witness_input, input.num_bits());
                     }
                 } else {
-                    af.minimal_range
-                        .insert(input.to_witness().witness_index(), input.num_bits());
+                    af.minimal_range.insert(witness_input, input.num_bits());
                 }
             }
             BlackBoxFuncCall::Blake2s { inputs, outputs } => todo!("BlackBoxFuncCall::Blake2s"),
