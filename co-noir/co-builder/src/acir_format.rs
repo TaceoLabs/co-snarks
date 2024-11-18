@@ -179,7 +179,6 @@ impl<F: PrimeField> AcirFormat<F> {
 
             if !w1.is_zero() {
                 if w1 != w2 {
-                    // TODO TACEO I don't know if the following is necessary?
                     if !af.constrained_witness.contains(&pt.a) {
                         // we mark it as constrained because it is going to be asserted to be equal to a constrained one.
                         af.constrained_witness.insert(pt.a);
@@ -228,22 +227,14 @@ impl<F: PrimeField> AcirFormat<F> {
                     .poly_triple_constraints
                     .push(opcode_index);
             }
-        }
-        // } else {
-        //     af.quad_constraints
-        //         .push(Self::serialize_mul_quad_gate(&arg));
-        //     af.original_opcode_indices
-        //         .quad_constraints
-        //         .push(opcode_index);
-        // }
-        else {
-            let mut mul_quads: Vec<MulQuad<F>> = vec![];
+        } else {
+            let mut mul_quads = Vec::new();
             // We try to use a single mul_quad gate to represent the expression.
             if arg.mul_terms.len() <= 1 {
                 let quad = Self::serialize_mul_quad_gate(&arg);
 
                 // add it to the result vector if it worked
-                if quad.a != 0 || quad.mul_scaling != F::zero() || quad.a_scaling != F::zero() {
+                if !quad.a.is_zero() || !quad.mul_scaling.is_zero() || !quad.a_scaling.is_zero() {
                     mul_quads.push(quad);
                 }
             }
@@ -413,24 +404,14 @@ impl<F: PrimeField> AcirFormat<F> {
         quad.const_scaling = arg.q_c.into_repr();
         quad
     }
+
     fn split_into_mul_quad_gates(arg: &Expression<GenericFieldElement<F>>) -> Vec<MulQuad<F>> {
-        let mut result: Vec<MulQuad<F>> = vec![];
-        let mut current_mul_term = if !arg.mul_terms.is_empty() {
-            arg.mul_terms[0]
-        } else {
-            (
-                GenericFieldElement::<F>::default(),
-                Witness::default(),
-                Witness::default(),
-            )
-        };
-        let mut current_linear_term = if !arg.linear_combinations.is_empty() {
-            arg.linear_combinations[0]
-        } else {
-            (GenericFieldElement::<F>::default(), Witness::default())
-        };
-        let mut idx_1 = 0;
-        let mut idx_2 = 0;
+        let mut result = Vec::new();
+
+        let mut current_mul_term_iter = arg.mul_terms.iter();
+        let mut current_mul_term = current_mul_term_iter.next();
+        let mut current_linear_term_iter = arg.linear_combinations.iter();
+        let mut current_linear_term = current_linear_term_iter.next();
 
         // number of wires to use in the intermediate gate
         let mut max_size = 4;
@@ -450,84 +431,68 @@ impl<F: PrimeField> AcirFormat<F> {
         };
 
         // list of witnesses that are part of mul terms
-        let mut all_mul_terms: HashSet<u32> = HashSet::new();
-        if !arg.mul_terms.is_empty() {
-            for term in &arg.mul_terms {
-                all_mul_terms.insert(term.1 .0);
-                all_mul_terms.insert(term.2 .0);
-            }
+        let mut all_mul_terms = HashSet::new();
+        for term in &arg.mul_terms {
+            all_mul_terms.insert(term.1 .0);
+            all_mul_terms.insert(term.2 .0);
         }
         // The 'mul term' witnesses that have been processed
-        let mut processed_mul_terms: HashSet<u32> = HashSet::new();
+        let mut processed_mul_terms = HashSet::new();
 
         while !done {
             let mut i = 0; // index of the current free wire in the new intermediate gate
 
             // we add a mul term (if there are some) to every intermediate gate
-            if !arg.mul_terms.is_empty() {
-                if idx_1 < arg.mul_terms.len() - 1 {
-                    mul_gate.mul_scaling = current_mul_term.0.into_repr();
-                    mul_gate.a = current_mul_term.1 .0;
-                    mul_gate.b = current_mul_term.2 .0;
-                    mul_gate.a_scaling = F::zero();
-                    mul_gate.b_scaling = F::zero();
-                    // Try to add corresponding linear terms, only if they were not already added
-                    if !processed_mul_terms.contains(&mul_gate.a)
-                        || !processed_mul_terms.contains(&mul_gate.b)
-                    {
-                        for lin_term in &arg.linear_combinations {
-                            let w = lin_term.1 .0;
-                            if w == mul_gate.a {
-                                if !processed_mul_terms.contains(&mul_gate.a) {
-                                    mul_gate.a_scaling = lin_term.0.into_repr();
-                                    processed_mul_terms.insert(w);
-                                }
-                                if mul_gate.a == mul_gate.b {
-                                    break;
-                                }
-                            } else if w == mul_gate.b {
-                                if !processed_mul_terms.contains(&mul_gate.b) {
-                                    mul_gate.b_scaling = lin_term.0.into_repr();
-                                    processed_mul_terms.insert(w);
-                                }
+            if let Some(mul_term) = current_mul_term {
+                mul_gate.mul_scaling = mul_term.0.into_repr();
+                mul_gate.a = mul_term.1 .0;
+                mul_gate.b = mul_term.2 .0;
+                mul_gate.a_scaling = F::zero();
+                mul_gate.b_scaling = F::zero();
+                // Try to add corresponding linear terms, only if they were not already added
+                if !processed_mul_terms.contains(&mul_gate.a)
+                    || !processed_mul_terms.contains(&mul_gate.b)
+                {
+                    for lin_term in &arg.linear_combinations {
+                        let w = lin_term.1 .0;
+                        if w == mul_gate.a {
+                            if !processed_mul_terms.contains(&mul_gate.a) {
+                                mul_gate.a_scaling = lin_term.0.into_repr();
+                                processed_mul_terms.insert(w);
+                            }
+                            if mul_gate.a == mul_gate.b {
                                 break;
                             }
-                        }
-                    }
-                    idx_1 += 1;
-                    i = 2; // a and b are used because of the mul term
-                    current_mul_term = arg.mul_terms[idx_1];
-                }
-            }
-            // We need to process all the mul terms before being done.
-            done = if !arg.mul_terms.is_empty() {
-                idx_1 == arg.mul_terms.len() - 1
-            } else {
-                true
-            };
-
-            // Assign available wires with the remaining linear terms which are not also a 'mul term'
-            if !arg.linear_combinations.is_empty() {
-                while idx_2 < arg.linear_combinations.len() - 1 {
-                    let w = current_linear_term.1 .0;
-                    if !all_mul_terms.contains(&w) {
-                        if i < max_size {
-                            Self::assign_linear_term(
-                                &mut mul_gate,
-                                i,
-                                w,
-                                &current_linear_term.0.into_repr(),
-                            ); // * fr(-1)));
-                            i += 1;
-                        } else {
-                            // No more available wire, but there is still some linear terms; we need another mul_gate
-                            done = false;
+                        } else if w == mul_gate.b {
+                            if !processed_mul_terms.contains(&mul_gate.b) {
+                                mul_gate.b_scaling = lin_term.0.into_repr();
+                                processed_mul_terms.insert(w);
+                            }
                             break;
                         }
                     }
-                    idx_2 += 1;
-                    current_linear_term = arg.linear_combinations[idx_2];
                 }
+                i = 2; // a and b are used because of the mul term
+                current_mul_term = current_mul_term_iter.next();
+            }
+            // We need to process all the mul terms before being done.
+            done = current_mul_term.is_none();
+
+            // Assign available wires with the remaining linear terms which are not also a 'mul term'
+            while current_linear_term.is_some() {
+                let current_term = current_linear_term.unwrap();
+                let w = current_term.1 .0;
+                if !all_mul_terms.contains(&w) {
+                    if i < max_size {
+                        Self::assign_linear_term(&mut mul_gate, i, w, current_term.0.into_repr()); // * fr(-1)));
+                        i += 1;
+                    } else {
+                        // No more available wire, but there is still some linear terms; we need another mul_gate
+                        done = false;
+                        break;
+                    }
+                }
+                current_linear_term = current_linear_term_iter.next();
             }
 
             // Index 4 of the next gate will be used
@@ -537,23 +502,24 @@ impl<F: PrimeField> AcirFormat<F> {
         }
         result
     }
-    fn assign_linear_term(gate: &mut MulQuad<F>, index: usize, witness_index: u32, scaling: &F) {
+
+    fn assign_linear_term(gate: &mut MulQuad<F>, index: usize, witness_index: u32, scaling: F) {
         match index {
             0 => {
                 gate.a = witness_index;
-                gate.a_scaling = *scaling;
+                gate.a_scaling = scaling;
             }
             1 => {
                 gate.b = witness_index;
-                gate.b_scaling = *scaling;
+                gate.b_scaling = scaling;
             }
             2 => {
                 gate.c = witness_index;
-                gate.c_scaling = *scaling;
+                gate.c_scaling = scaling;
             }
             3 => {
                 gate.d = witness_index;
-                gate.d_scaling = *scaling;
+                gate.d_scaling = scaling;
             }
             _ => panic!("Invalid index in assign_linear_term"),
         }
