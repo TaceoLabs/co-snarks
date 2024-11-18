@@ -12,6 +12,7 @@ members = [
     "co-noir/ultrahonk",
     "co-noir/co-ultrahonk",
     "co-noir/co-noir",
+    "flamegraph",
     "mpc-core",
     "mpc-net",
     "tests",

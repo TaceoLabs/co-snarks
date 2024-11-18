@@ -20,6 +20,7 @@ use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::Level;
 
 /// The mpc-vm configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -286,6 +287,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
         ctx: &mut WitnessExtensionCtx<F, C>,
         config: &VMConfig,
     ) -> Result<()> {
+        let _entered = flamegraph::start_sample!(self.symbol);
         let mut ip = 0;
         let mut current_body = Arc::clone(&self.component_body);
         let mut current_vars = vec![C::VmType::default(); self.amount_vars];
@@ -299,7 +301,6 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
             match inst {
                 op_codes::MpcOpCode::PushConstant(index) => {
                     let constant = ctx.constant_table[*index].clone();
-                    tracing::debug!("pushing constant {}", constant);
                     self.push_field(constant);
                 }
                 op_codes::MpcOpCode::PushIndex(index) => self.push_index(*index),
@@ -310,7 +311,6 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         .iter()
                         .cloned()
                         .for_each(|signal| {
-                            tracing::debug!("pushing signal {signal}");
                             self.push_field(signal);
                         });
                 }
@@ -356,13 +356,13 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     }
                 }
                 op_codes::MpcOpCode::Call(symbol, return_vals) => {
-                    tracing::debug!("Calling {symbol}");
+                    tracing::trace!("Calling {symbol}");
                     let fun_decl = ctx.fun_decls.get(symbol).ok_or(eyre!(
                         "{symbol} not found in function declaration. This must be a bug.."
                     ))?;
                     let to_copy = self.field_stack.frame_len() - fun_decl.num_params;
                     if ctx.mpc_accelerator.has_fn_accelerator(symbol) {
-                        tracing::debug!("calling accelerator for {symbol}");
+                        tracing::trace!("calling accelerator for {symbol}");
                         //call the accelerator
                         let mut result = ctx.mpc_accelerator.run_fn_accelerator(
                             symbol,
@@ -450,7 +450,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     let mut input_signals = vec![C::VmType::default(); *amount];
                     for i in 0..*amount {
                         input_signals[*amount - i - 1] = self.pop_field();
-                        tracing::debug!("poping {}", input_signals.last().unwrap());
+                        tracing::trace!("poping {}", input_signals.last().unwrap());
                     }
 
                     let component = &mut self.sub_components[sub_comp_index];
@@ -911,6 +911,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
             .ok_or(eyre!("cannot find main template: {}", self.main))?;
         let mut main_component = Component::init(main_templ, 1);
         main_component.run(&mut self.driver, &mut self.ctx, &self.config)?;
+        flamegraph::end_profiling!();
         Ok(())
     }
 
