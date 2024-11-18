@@ -153,7 +153,9 @@ impl<F: PrimeField> AcirFormat<F> {
 
         for (_, (block_constraint, opcode_indices)) in block_id_to_block_constraint {
             // Note: the trace will always be empty for ReturnData since it cannot be explicitly read from in noir
-            if !block_constraint.trace.is_empty() || block_constraint.type_ == BlockType::ReturnData
+            if !block_constraint.trace.is_empty()
+                || block_constraint.type_ == BlockType::ReturnData
+                || block_constraint.type_ == BlockType::CallData
             {
                 af.block_constraints.push(block_constraint);
                 af.original_opcode_indices
