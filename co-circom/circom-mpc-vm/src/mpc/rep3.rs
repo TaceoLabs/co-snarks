@@ -580,6 +580,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     ) -> eyre::Result<(Vec<Self::VmType>, Self::VmType)> {
         assert!(a.len() == b.len());
         let bitlen = a.len();
+        assert!(bitlen < F::MODULUS_BIT_SIZE as usize - 1);
         let a = a.into_iter().map(|x| match x {
             Rep3VmType::Public(x) => promote_to_trivial_share(self.io_context0.id, x),
             Rep3VmType::Arithmetic(x) => x,
@@ -588,10 +589,9 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             Rep3VmType::Public(x) => promote_to_trivial_share(self.io_context0.id, x),
             Rep3VmType::Arithmetic(x) => x,
         });
-        let two = F::one() + F::one();
 
-        let a_sum = a.fold(Rep3PrimeFieldShare::zero_share(), |acc, x| acc * two + x);
-        let b_sum = b.fold(Rep3PrimeFieldShare::zero_share(), |acc, x| acc * two + x);
+        let a_sum = a.fold(Rep3PrimeFieldShare::zero_share(), |acc, x| acc + acc + x);
+        let b_sum = b.fold(Rep3PrimeFieldShare::zero_share(), |acc, x| acc + acc + x);
 
         let sum = a_sum + b_sum;
 
