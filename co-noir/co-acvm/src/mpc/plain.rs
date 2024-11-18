@@ -158,4 +158,12 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
         public_values.to_vec()
     }
+
+    fn acvm_mul_with_shared(
+        &mut self,
+        secret_1: Self::AcvmType,
+        secret_2: Self::AcvmType,
+    ) -> io::Result<Self::AcvmType> {
+        Ok(secret_1 * secret_2)
+    }
 }

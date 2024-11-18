@@ -302,4 +302,12 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
         arithmetic::promote_to_trivial_shares(public_values)
     }
+
+    fn acvm_mul_with_shared(
+        &mut self,
+        secret_1: Self::AcvmType,
+        secret_2: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        todo!()
+    }
 }

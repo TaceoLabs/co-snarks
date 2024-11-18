@@ -73,7 +73,6 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
 
         let mut offset = 1; // Offset at which to place each block in the trace polynomials
                             // For each block in the trace, populate wire polys, copy cycles and selector polys
-
         for block in builder.blocks.get() {
             let block_size = block.len();
 

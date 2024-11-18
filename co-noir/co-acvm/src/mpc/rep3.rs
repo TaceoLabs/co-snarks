@@ -378,4 +378,26 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .map(|value| Self::ArithmeticShare::promote_from_trivial(value, id))
             .collect()
     }
+
+    fn acvm_mul_with_shared(
+        &mut self,
+        secret_1: Self::AcvmType,
+        secret_2: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        match (secret_1, secret_2) {
+            (Rep3AcvmType::Public(secret_1), Rep3AcvmType::Public(secret_2)) => {
+                Ok(Rep3AcvmType::Public(secret_1 * secret_2))
+            }
+            (Rep3AcvmType::Public(secret_1), Rep3AcvmType::Shared(secret_2)) => Ok(
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret_2, secret_1)),
+            ),
+            (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Public(secret_2)) => Ok(
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret_1, secret_2)),
+            ),
+            (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Shared(secret_2)) => {
+                let result = arithmetic::mul(secret_1, secret_2, &mut self.io_context)?;
+                Ok(Rep3AcvmType::Shared(result))
+            }
+        }
+    }
 }

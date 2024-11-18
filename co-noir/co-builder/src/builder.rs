@@ -415,6 +415,59 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.check_selector_length_consistency();
         self.num_gates += 1;
     }
+    pub(crate) fn create_big_mul_add_gate(
+        &mut self,
+        inp: &MulQuad<P::ScalarField>,
+        include_next_gate_w_4: bool,
+    ) {
+        self.assert_valid_variables(&[inp.a, inp.b, inp.c, inp.d]);
+        self.blocks
+            .arithmetic
+            .populate_wires(inp.a, inp.b, inp.c, inp.d);
+        self.blocks.arithmetic.q_m().push(if include_next_gate_w_4 {
+            inp.mul_scaling * P::ScalarField::from(2u64)
+        } else {
+            inp.mul_scaling
+        });
+        self.blocks.arithmetic.q_1().push(inp.a_scaling);
+        self.blocks.arithmetic.q_2().push(inp.b_scaling);
+        self.blocks.arithmetic.q_3().push(inp.c_scaling);
+        self.blocks.arithmetic.q_c().push(inp.const_scaling);
+        self.blocks
+            .arithmetic
+            .q_arith()
+            .push(if include_next_gate_w_4 {
+                P::ScalarField::from(2u64)
+            } else {
+                P::ScalarField::one()
+            });
+        self.blocks.arithmetic.q_4().push(inp.d_scaling);
+        self.blocks
+            .arithmetic
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_elliptic()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        self.check_selector_length_consistency();
+
+        self.num_gates += 1;
+    }
 
     pub(crate) fn create_big_add_gate(
         &mut self,
@@ -582,6 +635,158 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 &mut constraint_system.gates_per_opcode,
                 constraint_system.original_opcode_indices.quad_constraints[i],
             );
+        }
+        // Oversize gates are a vector of mul_quad gates.
+        for (i, constraint) in constraint_system
+            .big_quad_constraints
+            .iter_mut()
+            .enumerate()
+        {
+            // auto& big_constraint = constraint_system.big_quad_constraints.at(i);
+            let mut next_w4_wire_value = T::AcvmType::from(P::ScalarField::zero());
+            // Define the 4th wire of these mul_quad gates, which is implicitly used by the previous gate.
+            // for (size_t j = 0; j < constraint.size() - 1; ++j) {
+            let constraint_size = constraint.len();
+            for (j, small_constraint) in constraint.iter_mut().enumerate().take(constraint_size - 1)
+            {
+                if (j == 0) {
+                    next_w4_wire_value = self.get_variable(small_constraint.d.try_into().unwrap());
+                } else {
+                    let next_w4_wire_value_clone = next_w4_wire_value.clone();
+                    let next_w4_wire = self.add_variable(next_w4_wire_value_clone);
+                    small_constraint.d = next_w4_wire;
+                    small_constraint.d_scaling = -P::ScalarField::one();
+                }
+
+                self.create_big_mul_add_gate(small_constraint, true);
+
+                let mut term_1 =
+                    if T::is_shared(&self.get_variable(small_constraint.a.try_into().unwrap()))
+                        && !T::is_shared(&self.get_variable(small_constraint.b.try_into().unwrap()))
+                    {
+                        let tmp = T::acvm_mul_with_public(
+                            driver,
+                            T::get_public(
+                                &self.get_variable(small_constraint.b.try_into().unwrap()),
+                            )
+                            .expect("Already checked it is public"),
+                            self.get_variable(small_constraint.a.try_into().unwrap()),
+                        );
+
+                        T::acvm_mul_with_public(driver, small_constraint.mul_scaling, tmp)
+                    } else if !T::is_shared(
+                        &self.get_variable(small_constraint.a.try_into().unwrap()),
+                    ) && T::is_shared(
+                        &self.get_variable(small_constraint.b.try_into().unwrap()),
+                    ) {
+                        let tmp = T::acvm_mul_with_public(
+                            driver,
+                            T::get_public(
+                                &self.get_variable(small_constraint.a.try_into().unwrap()),
+                            )
+                            .expect("Already checked it is public"),
+                            self.get_variable(small_constraint.b.try_into().unwrap()),
+                        );
+
+                        T::acvm_mul_with_public(driver, small_constraint.mul_scaling, tmp)
+                    } else if !T::is_shared(
+                        &self.get_variable(small_constraint.a.try_into().unwrap()),
+                    ) && !T::is_shared(
+                        &self.get_variable(small_constraint.b.try_into().unwrap()),
+                    ) {
+                        T::AcvmType::from(
+                            T::get_public(
+                                &self.get_variable(small_constraint.a.try_into().unwrap()),
+                            )
+                            .expect("Already checked it is public")
+                                * T::get_public(
+                                    &self.get_variable(small_constraint.b.try_into().unwrap()),
+                                )
+                                .expect("Already checked it is public")
+                                * small_constraint.mul_scaling,
+                        )
+                    } else {
+                        let tmp = T::acvm_mul_with_shared(
+                            driver,
+                            self.get_variable(small_constraint.a.try_into().unwrap()),
+                            self.get_variable(small_constraint.b.try_into().unwrap()),
+                        )?;
+                        T::acvm_mul_with_public(driver, small_constraint.mul_scaling, tmp)
+                    };
+
+                let term_2 =
+                    if T::is_shared(&self.get_variable(small_constraint.a.try_into().unwrap())) {
+                        T::acvm_mul_with_public(
+                            driver,
+                            small_constraint.a_scaling,
+                            self.get_variable(small_constraint.a.try_into().unwrap()),
+                        )
+                    } else {
+                        T::AcvmType::from(
+                            T::get_public(
+                                &self.get_variable(small_constraint.a.try_into().unwrap()),
+                            )
+                            .expect("Already checked it is public")
+                                * small_constraint.a_scaling,
+                        )
+                    };
+
+                let term_3 =
+                    if T::is_shared(&self.get_variable(small_constraint.b.try_into().unwrap())) {
+                        T::acvm_mul_with_public(
+                            driver,
+                            small_constraint.b_scaling,
+                            self.get_variable(small_constraint.b.try_into().unwrap()),
+                        )
+                    } else {
+                        T::AcvmType::from(
+                            T::get_public(
+                                &self.get_variable(small_constraint.b.try_into().unwrap()),
+                            )
+                            .expect("Already checked it is public")
+                                * small_constraint.b_scaling,
+                        )
+                    };
+
+                let term_4 =
+                    if T::is_shared(&self.get_variable(small_constraint.c.try_into().unwrap())) {
+                        T::acvm_mul_with_public(
+                            driver,
+                            small_constraint.c_scaling,
+                            self.get_variable(small_constraint.c.try_into().unwrap()),
+                        )
+                    } else {
+                        T::AcvmType::from(
+                            T::get_public(
+                                &self.get_variable(small_constraint.c.try_into().unwrap()),
+                            )
+                            .expect("Already checked it is public")
+                                * small_constraint.c_scaling,
+                        )
+                    };
+
+                let term_5 = if T::is_shared(&next_w4_wire_value) {
+                    T::acvm_mul_with_public(driver, small_constraint.d_scaling, next_w4_wire_value)
+                } else {
+                    T::AcvmType::from(
+                        T::get_public(&next_w4_wire_value).expect("Already checked it is shared")
+                            * small_constraint.d_scaling,
+                    )
+                };
+                T::add_assign(driver, &mut term_1, term_2);
+                T::add_assign(driver, &mut term_1, term_3);
+                T::add_assign(driver, &mut term_1, term_4);
+                T::add_assign(driver, &mut term_1, term_5);
+                T::acvm_add_assign_with_public(driver, small_constraint.const_scaling, &mut term_1);
+                next_w4_wire_value = term_1;
+                next_w4_wire_value =
+                    T::acvm_mul_with_public(driver, -P::ScalarField::one(), next_w4_wire_value);
+            }
+            let next_w4_wire = self.add_variable(next_w4_wire_value);
+            constraint.last_mut().unwrap().d = next_w4_wire;
+            constraint.last_mut().unwrap().d_scaling = -P::ScalarField::one();
+
+            self.create_big_mul_add_gate(constraint.last_mut().unwrap(), false);
         }
 
         // Add logic constraint
@@ -1052,7 +1257,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) fn assert_equal(&mut self, a_idx: usize, b_idx: usize) {
         self.is_valid_variable(a_idx);
         self.is_valid_variable(b_idx);
-        // TACEO TODO: need to fix something here(?), with this code the proof and vk are different from bb, but they verify (at least with plaindriver)
+
         {
             let a = T::get_public(&self.get_variable(a_idx));
 
@@ -1060,10 +1265,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
             if let (Some(a), Some(b)) = (a, b) {
                 assert_eq!(a, b);
-                return;
             } else {
-                return; //TODO ADD AN ERROR/MESSAGE HERE
-                        // We can not check the equality of the witnesses since they are secret shared, but the proof will fail if they are not equal
+                // We can not check the equality of the witnesses since they are secret shared, but the proof will fail if they are not equal
             }
         }
 

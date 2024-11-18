@@ -239,6 +239,7 @@ impl<F: PrimeField> AcirFormat<F> {
             // We try to use a single mul_quad gate to represent the expression.
             if arg.mul_terms.len() <= 1 {
                 let quad = Self::serialize_mul_quad_gate(&arg);
+
                 // add it to the result vector if it worked
                 if quad.a != 0 || quad.mul_scaling != F::zero() || quad.a_scaling != F::zero() {
                     mul_quads.push(quad);
@@ -418,26 +419,11 @@ impl<F: PrimeField> AcirFormat<F> {
                 Witness::default(),
             )
         };
-        let mut current_linear_term = if !arg.mul_terms.is_empty() {
+        let mut current_linear_term = if !arg.linear_combinations.is_empty() {
             arg.linear_combinations[0]
         } else {
             (GenericFieldElement::<F>::default(), Witness::default())
         };
-        let last_mul_term = if !arg.mul_terms.is_empty() {
-            *arg.mul_terms.last().unwrap()
-        } else {
-            (
-                GenericFieldElement::<F>::default(),
-                Witness::default(),
-                Witness::default(),
-            )
-        };
-        let last_linear_term = if !arg.linear_combinations.is_empty() {
-            *arg.linear_combinations.last().unwrap()
-        } else {
-            (GenericFieldElement::<F>::default(), Witness::default())
-        };
-
         let mut idx_1 = 0;
         let mut idx_2 = 0;
 
@@ -468,49 +454,56 @@ impl<F: PrimeField> AcirFormat<F> {
         }
         // The 'mul term' witnesses that have been processed
         let mut processed_mul_terms: HashSet<u32> = HashSet::new();
+
         while !done {
             let mut i = 0; // index of the current free wire in the new intermediate gate
 
             // we add a mul term (if there are some) to every intermediate gate
-            if current_mul_term != last_mul_term {
-                mul_gate.mul_scaling = current_mul_term.0.into_repr();
-                mul_gate.a = current_mul_term.1 .0;
-                mul_gate.b = current_mul_term.2 .0;
-                mul_gate.a_scaling = F::zero();
-                mul_gate.b_scaling = F::zero();
-                // Try to add corresponding linear terms, only if they were not already added
-                if !processed_mul_terms.contains(&mul_gate.a)
-                    || !processed_mul_terms.contains(&mul_gate.b)
-                {
-                    for lin_term in &arg.linear_combinations {
-                        let w = lin_term.1 .0;
-                        if w == mul_gate.a {
-                            if !processed_mul_terms.contains(&mul_gate.a) {
-                                mul_gate.a_scaling = lin_term.0.into_repr();
-                                processed_mul_terms.insert(w);
-                            }
-                            if mul_gate.a == mul_gate.b {
+            if !arg.mul_terms.is_empty() {
+                if idx_1 < arg.mul_terms.len() - 1 {
+                    mul_gate.mul_scaling = current_mul_term.0.into_repr();
+                    mul_gate.a = current_mul_term.1 .0;
+                    mul_gate.b = current_mul_term.2 .0;
+                    mul_gate.a_scaling = F::zero();
+                    mul_gate.b_scaling = F::zero();
+                    // Try to add corresponding linear terms, only if they were not already added
+                    if !processed_mul_terms.contains(&mul_gate.a)
+                        || !processed_mul_terms.contains(&mul_gate.b)
+                    {
+                        for lin_term in &arg.linear_combinations {
+                            let w = lin_term.1 .0;
+                            if w == mul_gate.a {
+                                if !processed_mul_terms.contains(&mul_gate.a) {
+                                    mul_gate.a_scaling = lin_term.0.into_repr();
+                                    processed_mul_terms.insert(w);
+                                }
+                                if mul_gate.a == mul_gate.b {
+                                    break;
+                                }
+                            } else if w == mul_gate.b {
+                                if !processed_mul_terms.contains(&mul_gate.b) {
+                                    mul_gate.b_scaling = lin_term.0.into_repr();
+                                    processed_mul_terms.insert(w);
+                                }
                                 break;
                             }
-                        } else if w == mul_gate.b {
-                            if !processed_mul_terms.contains(&mul_gate.b) {
-                                mul_gate.b_scaling = lin_term.0.into_repr();
-                                processed_mul_terms.insert(w);
-                            }
-                            break;
                         }
                     }
+                    idx_1 += 1;
+                    i = 2; // a and b are used because of the mul term
+                    current_mul_term = arg.mul_terms[idx_1];
                 }
-                idx_1 += 1;
-                i = 2; // a and b are used because of the mul term
-                current_mul_term = arg.mul_terms[idx_1];
             }
             // We need to process all the mul terms before being done.
-            done = current_mul_term == last_mul_term;
+            done = if !arg.mul_terms.is_empty() {
+                idx_1 == arg.mul_terms.len() - 1
+            } else {
+                true
+            };
 
             // Assign available wires with the remaining linear terms which are not also a 'mul term'
             if !arg.linear_combinations.is_empty() {
-                while current_linear_term != last_linear_term {
+                while idx_2 < arg.linear_combinations.len() - 1 {
                     let w = current_linear_term.1 .0;
                     if !all_mul_terms.contains(&w) {
                         if i < max_size {
@@ -537,7 +530,6 @@ impl<F: PrimeField> AcirFormat<F> {
             result.push(mul_gate);
             mul_gate = MulQuad::default();
         }
-
         result
     }
     fn assign_linear_term(gate: &mut MulQuad<F>, index: usize, witness_index: u32, scaling: &F) {
