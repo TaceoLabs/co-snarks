@@ -42,6 +42,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         secret * public
     }
 
+    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType) {
+        a.neg_in_place();
+    }
+
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType) {
         *result += q_l * w_l;
     }

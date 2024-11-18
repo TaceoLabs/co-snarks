@@ -677,6 +677,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 driver.add_assign(&mut next_w4_wire_value, term3);
                 driver.add_assign(&mut next_w4_wire_value, term4);
                 driver.add_assign(&mut next_w4_wire_value, term5);
+
+                driver.acvm_negate_inplace(&mut next_w4_wire_value);
             }
 
             let next_w4_wire = self.add_variable(next_w4_wire_value);

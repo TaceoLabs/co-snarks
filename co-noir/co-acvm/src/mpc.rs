@@ -52,6 +52,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         secret_2: Self::AcvmType,
     ) -> io::Result<Self::AcvmType>;
 
+    /// Negates an ACVM-type inplace: \[a\] = -\[a\].
+    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType);
+
     /// Multiply an ACVM-types with a public value and add_assign with result: \[result\] += q_l * \[w_l\].
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType);
 

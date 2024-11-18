@@ -127,6 +127,15 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
+    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType) {
+        match a {
+            ShamirAcvmType::Public(public) => {
+                public.neg_in_place();
+            }
+            ShamirAcvmType::Shared(shared) => *shared = arithmetic::neg(*shared),
+        }
+    }
+
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, target: &mut Self::AcvmType) {
         let result = match (w_l, target.to_owned()) {
             (ShamirAcvmType::Public(w_l), ShamirAcvmType::Public(result)) => {
@@ -308,6 +317,20 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
     ) -> std::io::Result<Self::AcvmType> {
-        todo!()
+        match (secret_1, secret_2) {
+            (ShamirAcvmType::Public(secret_1), ShamirAcvmType::Public(secret_2)) => {
+                Ok(ShamirAcvmType::Public(secret_1 * secret_2))
+            }
+            (ShamirAcvmType::Public(secret_1), ShamirAcvmType::Shared(secret_2)) => Ok(
+                ShamirAcvmType::Shared(arithmetic::mul_public(secret_2, secret_1)),
+            ),
+            (ShamirAcvmType::Shared(secret_1), ShamirAcvmType::Public(secret_2)) => Ok(
+                ShamirAcvmType::Shared(arithmetic::mul_public(secret_1, secret_2)),
+            ),
+            (ShamirAcvmType::Shared(secret_1), ShamirAcvmType::Shared(secret_2)) => {
+                let result = arithmetic::mul(secret_1, secret_2, &mut self.protocol)?;
+                Ok(ShamirAcvmType::Shared(result))
+            }
+        }
     }
 }

@@ -147,6 +147,15 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType) {
+        match a {
+            Rep3AcvmType::Public(public) => {
+                public.neg_in_place();
+            }
+            Rep3AcvmType::Shared(shared) => *shared = arithmetic::neg(*shared),
+        }
+    }
+
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, target: &mut Self::AcvmType) {
         let id = self.io_context.id;
         let result = match (w_l, target.to_owned()) {
