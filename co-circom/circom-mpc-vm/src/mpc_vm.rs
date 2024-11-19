@@ -275,7 +275,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
         self.index_stack.pop()
     }
 
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     fn debug_code_block(code_block: Arc<CodeBlock>) {
         for (idx, inst) in code_block.iter().enumerate() {
             tracing::info!("{idx:0>4}|   {inst}");
@@ -1117,7 +1117,7 @@ impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
     /// # Panics
     ///
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     pub fn run_and_get_network(
         mut self,
         input_signals: SharedInput<F, Rep3PrimeFieldShare<F>>,

@@ -1,6 +1,6 @@
 pub(crate) mod co_shplemini;
 pub(crate) mod co_sumcheck;
-#[allow(dead_code)]
+#[expect(dead_code)]
 // Zeromorph was replaced by Shplemini
 pub(crate) mod co_zeromorph;
 pub(crate) mod polynomial;

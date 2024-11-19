@@ -1,4 +1,4 @@
-#[allow(dead_code)] // TACEO TODO remove later
+#[expect(dead_code)]
 pub(crate) mod plookup;
-#[allow(dead_code, clippy::module_inception)] // TACEO TODO remove later
+#[expect(dead_code, clippy::module_inception)]
 pub(crate) mod types;

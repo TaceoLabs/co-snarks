@@ -6,6 +6,6 @@ pub(crate) mod sumcheck;
 pub(crate) mod types;
 pub(crate) mod univariate;
 pub(crate) mod verifier;
-#[allow(dead_code)]
+#[expect(dead_code)]
 // Zeromorph was replaced by Shplemini
 pub(crate) mod zeromorph;

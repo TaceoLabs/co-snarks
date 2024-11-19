@@ -36,9 +36,9 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     ftype: String,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     version: u32,
     sections: Vec<Vec<u8>>,
     phantom_data: PhantomData<P>,

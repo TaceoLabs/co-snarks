@@ -13,7 +13,7 @@ use tests::rep3_network::Rep3TestNetwork;
 use circom_mpc_compiler::CompilerConfig;
 use circom_mpc_vm::{mpc_vm::VMConfig, Rep3VmType};
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{fmt, EnvFilter};

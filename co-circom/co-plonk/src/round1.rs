@@ -89,7 +89,7 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
 }
 
 // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
     fn compute_single_wire_poly(
         party_id: T::PartyID,

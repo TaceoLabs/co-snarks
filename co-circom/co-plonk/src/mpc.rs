@@ -166,7 +166,6 @@ pub trait CircomPlonkProver<P: Pairing> {
     ) -> IoResult<Vec<Self::ArithmeticShare>>;
 
     /// Perform `array_prod_mul` for two sets of three inputs concurrently
-    #[allow(clippy::type_complexity)]
     fn array_prod_mul2(
         &mut self,
         n1: &[Self::ArithmeticShare],

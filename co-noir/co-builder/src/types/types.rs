@@ -73,7 +73,7 @@ pub(crate) struct MemOp<F: PrimeField> {
 }
 
 #[derive(PartialEq, Eq)]
-#[allow(clippy::upper_case_acronyms)]
+#[expect(clippy::upper_case_acronyms)]
 pub(crate) enum BlockType {
     ROM = 0,
     RAM = 1,
