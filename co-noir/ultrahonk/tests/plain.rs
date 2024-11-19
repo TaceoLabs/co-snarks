@@ -76,5 +76,5 @@ fn add3_test_poseidon2sponge() {
     const PROOF_FILE: &str = "../../test_vectors/noir/add3u64/kat/add3u64_proof_with_pos";
     const CIRCUIT_FILE: &str = "../../test_vectors/noir/add3u64/kat/add3u64.json";
     const WITNESS_FILE: &str = "../../test_vectors/noir/add3u64/kat/add3u64.gz";
-    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE);
+    plain_test::<Poseidon2Sponge>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE);
 }
