@@ -104,7 +104,6 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
     }
 }
 
-// TACEO TODO changed from HashMap to BTreeMap because order in process_range_lists matters and was not deterministic, is this okay?
 pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub variables: Vec<T::AcvmType>,
     variable_names: BTreeMap<u32, String>,
