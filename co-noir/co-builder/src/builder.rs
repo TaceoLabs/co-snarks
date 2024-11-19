@@ -1119,7 +1119,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     ) {
         let mut table = RomTable::new(init);
 
-        // AZTEC TODO this is just implemented for the Plain backend
+        // TACEO TODO this is just implemented for the Plain backend
         for op in constraint.trace.iter() {
             assert_eq!(op.access_type, 0);
             let value = self.poly_to_field_ct(&op.value);
@@ -1146,6 +1146,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.variables[self.real_variable_index[index] as usize].to_owned()
     }
 
+    fn update_variable(&mut self, index: usize, value: T::AcvmType) {
+        assert!(self.variables.len() > index);
+        self.variables[self.real_variable_index[index] as usize] = value;
+    }
+
     pub(crate) fn assert_equal_constant(&mut self, a_idx: usize, b: P::ScalarField) {
         assert_eq!(self.variables[a_idx], T::AcvmType::from(b));
         let b_idx = self.put_constant_variable(b);
@@ -1156,14 +1161,24 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.is_valid_variable(a_idx);
         self.is_valid_variable(b_idx);
 
-        {
-            let a = T::get_public(&self.get_variable(a_idx));
+        let a = T::get_public(&self.get_variable(a_idx));
 
-            let b = T::get_public(&self.get_variable(b_idx));
+        let b = T::get_public(&self.get_variable(b_idx));
 
-            if let (Some(a), Some(b)) = (a, b) {
+        match (a, b) {
+            (Some(a), Some(b)) => {
                 assert_eq!(a, b);
-            } else {
+            }
+
+            (Some(a), None) => {
+                // The values are supposed to be equal. One is public though, one is private, so we can just set the private value to be the public one
+                self.update_variable(b_idx, T::AcvmType::from(a));
+            }
+            (None, Some(b)) => {
+                // The values are supposed to be equal. One is public though, one is private, so we can just set the private value to be the public one
+                self.update_variable(a_idx, T::AcvmType::from(b));
+            }
+            _ => {
                 // We can not check the equality of the witnesses since they are secret shared, but the proof will fail if they are not equal
             }
         }
