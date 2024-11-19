@@ -68,13 +68,13 @@ impl<P: Pairing> VerifyingKey<P> {
 }
 
 pub struct VerifyingKeyBarretenberg<P: Pairing> {
-    pub(crate) circuit_size: u64,
-    pub(crate) log_circuit_size: u64,
-    pub(crate) num_public_inputs: u64,
-    pub(crate) pub_inputs_offset: u64,
-    pub(crate) contains_recursive_proof: bool,
-    pub(crate) recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
-    pub(crate) commitments: PrecomputedEntities<P::G1Affine>,
+    pub circuit_size: u64,
+    pub log_circuit_size: u64,
+    pub num_public_inputs: u64,
+    pub pub_inputs_offset: u64,
+    pub contains_recursive_proof: bool,
+    pub recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
+    pub commitments: PrecomputedEntities<P::G1Affine>,
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {

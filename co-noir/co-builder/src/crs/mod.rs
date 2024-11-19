@@ -16,3 +16,14 @@ pub struct ProverCrs<P: Pairing> {
     )]
     pub monomials: Vec<P::G1Affine>,
 }
+
+impl<P: Pairing> Crs<P> {
+    pub fn split(self) -> (ProverCrs<P>, P::G2Affine) {
+        (
+            ProverCrs {
+                monomials: self.monomials,
+            },
+            self.g2_x,
+        )
+    }
+}
