@@ -88,12 +88,12 @@ where
         HonkProof::new(self.proof_data)
     }
 
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn print(&self) {
         self.manifest.print();
     }
 
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn get_manifest(&self) -> &TranscriptManifest {
         &self.manifest
     }
@@ -367,7 +367,7 @@ impl TranscriptManifest {
             .push((element_label, element_size));
     }
 
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn size(&self) -> usize {
         self.manifest.len()
     }

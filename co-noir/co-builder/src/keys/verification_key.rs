@@ -10,7 +10,7 @@ use crate::{
     HonkProofError, HonkProofResult, TranscriptFieldType,
 };
 use ark_ec::pairing::Pairing;
-use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
 use eyre::Result;
 
 pub struct VerifyingKey<P: Pairing> {
@@ -22,8 +22,12 @@ pub struct VerifyingKey<P: Pairing> {
 }
 
 impl<P: Pairing> VerifyingKey<P> {
-    pub fn create(circuit: UltraCircuitBuilder<P>, crs: Crs<P>) -> HonkProofResult<Self> {
-        let (_, vk) = circuit.create_keys(crs)?;
+    pub fn create(
+        circuit: UltraCircuitBuilder<P>,
+        crs: Crs<P>,
+        driver: &mut PlainAcvmSolver<P::ScalarField>,
+    ) -> HonkProofResult<Self> {
+        let (_, vk) = circuit.create_keys(crs, driver)?;
         Ok(vk)
     }
 

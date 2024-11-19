@@ -2,7 +2,8 @@ use std::marker::PhantomData;
 
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
-use mpc_core::protocols::rep3::arithmetic;
+use mpc_core::protocols::rep3::gadgets::sort::batcher_odd_even_merge_sort_yao;
+use mpc_core::protocols::rep3::{arithmetic, yao};
 use mpc_core::{
     lut::LookupTableProvider,
     protocols::rep3::{
@@ -11,6 +12,7 @@ use mpc_core::{
         Rep3PrimeFieldShare,
     },
 };
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::plain::PlainAcvmSolver;
@@ -26,7 +28,7 @@ pub struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
 
 impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
     // TODO remove unwrap
-    pub(crate) fn new(network: N) -> Self {
+    pub fn new(network: N) -> Self {
         let plain_solver = PlainAcvmSolver::<F>::default();
         let mut io_context = IoContext::init(network).unwrap();
         let forked = io_context.fork().unwrap();
@@ -36,6 +38,10 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
             plain_solver,
             phantom_data: PhantomData,
         }
+    }
+
+    pub fn get_io_contexts(self) -> (IoContext<N>, IoContext<N>) {
+        (self.io_context, self.lut_provider.get_io_context())
     }
 }
 
@@ -141,6 +147,15 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType) {
+        match a {
+            Rep3AcvmType::Public(public) => {
+                public.neg_in_place();
+            }
+            Rep3AcvmType::Shared(shared) => *shared = arithmetic::neg(*shared),
+        }
+    }
+
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, target: &mut Self::AcvmType) {
         let id = self.io_context.id;
         let result = match (w_l, target.to_owned()) {
@@ -162,13 +177,29 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         *target = result;
     }
 
+    fn add_assign(&mut self, target: &mut Self::AcvmType, rhs: Self::AcvmType) {
+        let id = self.io_context.id;
+        let result = match (target.clone(), rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                Rep3AcvmType::Public(lhs + rhs)
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Rep3AcvmType::Shared(arithmetic::add_public(shared, public, id))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                Rep3AcvmType::Shared(arithmetic::add(lhs, rhs))
+            }
+        };
+        *target = result;
+    }
+
     fn solve_mul_term(
         &mut self,
         c: F,
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
-        target: &mut Self::AcvmType,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<Self::AcvmType> {
         let result = match (lhs, rhs) {
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
                 Rep3AcvmType::Public(lhs * rhs * c)
@@ -182,8 +213,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Shared(arithmetic::mul_public(shared_mul, c))
             }
         };
-        *target = result;
-        Ok(())
+        Ok(result)
     }
 
     fn solve_equation(
@@ -297,5 +327,82 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 
         Ok(cs)
+    }
+    fn decompose_arithmetic(
+        &mut self,
+        input: Self::ArithmeticShare,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        yao::decompose_arithmetic(
+            input,
+            &mut self.io_context,
+            total_bit_size_per_field,
+            decompose_bit_size,
+        )
+    }
+
+    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+        let id = self.io_context.id;
+
+        match (share_1, share_2) {
+            (Rep3AcvmType::Public(share_1), Rep3AcvmType::Public(share_2)) => {
+                Rep3AcvmType::Public(share_1 - share_2)
+            }
+            (Rep3AcvmType::Public(share_1), Rep3AcvmType::Shared(share_2)) => {
+                Rep3AcvmType::Shared(arithmetic::sub_public_by_shared(share_1, share_2, id))
+            }
+            (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Public(share_2)) => {
+                Rep3AcvmType::Shared(arithmetic::sub_shared_by_public(share_1, share_2, id))
+            }
+            (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Shared(share_2)) => {
+                let result = arithmetic::sub(share_1, share_2);
+                Rep3AcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn sort(
+        &mut self,
+        inputs: &[Self::ArithmeticShare],
+        bitsize: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        batcher_odd_even_merge_sort_yao(inputs, &mut self.io_context, bitsize)
+    }
+
+    fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
+        let id = self.io_context.id;
+        arithmetic::promote_to_trivial_share(id, public_value)
+    }
+
+    fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
+        let id = self.io_context.id;
+        public_values
+            .par_iter()
+            .with_min_len(1024)
+            .map(|value| Self::ArithmeticShare::promote_from_trivial(value, id))
+            .collect()
+    }
+
+    fn acvm_mul(
+        &mut self,
+        secret_1: Self::AcvmType,
+        secret_2: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        match (secret_1, secret_2) {
+            (Rep3AcvmType::Public(secret_1), Rep3AcvmType::Public(secret_2)) => {
+                Ok(Rep3AcvmType::Public(secret_1 * secret_2))
+            }
+            (Rep3AcvmType::Public(secret_1), Rep3AcvmType::Shared(secret_2)) => Ok(
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret_2, secret_1)),
+            ),
+            (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Public(secret_2)) => Ok(
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret_1, secret_2)),
+            ),
+            (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Shared(secret_2)) => {
+                let result = arithmetic::mul(secret_1, secret_2, &mut self.io_context)?;
+                Ok(Rep3AcvmType::Shared(result))
+            }
+        }
     }
 }

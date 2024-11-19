@@ -1,6 +1,6 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
-use co_acvm::ShamirAcvmType;
+use co_acvm::{PlainAcvmSolver, ShamirAcvmSolver, ShamirAcvmType};
 use co_ultrahonk::{
     prelude::{
         CoUltraHonk, Poseidon2Sponge, ProvingKey, ShamirCoBuilder, ShamirUltraHonkDriver,
@@ -13,6 +13,18 @@ use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
 use sha3::Keccak256;
 use std::thread;
 use tests::shamir_network::{PartyTestNetwork, ShamirTestNetwork};
+
+pub fn ultrahonk_num_randomness(circuit_size: usize) -> usize {
+    // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+    let n = circuit_size;
+    let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
+        + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
+        + OINK_CRAND_PAIRS_CONST;
+    // log2(n) * ((n >>= 1) / 2) == n - 1
+    let num_pairs_sumcheck_prove =
+        SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+    num_pairs_oink_prove + num_pairs_sumcheck_prove
+}
 
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
@@ -40,13 +52,20 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         threads.push(thread::spawn(move || {
             let constraint_system = Utils::get_constraint_system_from_artifact(&artifact, true);
 
+            let id = net.id;
+            let preprocessing = ShamirPreprocessing::new(threshold, net, 0).unwrap();
+            let protocol = ShamirProtocol::from(preprocessing);
+            let mut driver = ShamirAcvmSolver::new(protocol);
+
             let builder = ShamirCoBuilder::<Bn254, PartyTestNetwork>::create_circuit(
                 constraint_system,
                 0,
                 witness,
                 true,
                 false,
-            );
+                &mut driver,
+            )
+            .unwrap();
 
             let prover_crs =
                 ProvingKey::<ShamirUltraHonkDriver<_, PartyTestNetwork>, _>::get_prover_crs(
@@ -55,18 +74,14 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 )
                 .expect("failed to get prover crs");
 
-            let id = net.id;
+            let proving_key = ProvingKey::create(id, builder, prover_crs, &mut driver).unwrap();
 
-            let proving_key = ProvingKey::create(id, builder, prover_crs).unwrap();
-
-            let n = proving_key.circuit_size as usize;
-            let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
-                + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
-                + OINK_CRAND_PAIRS_CONST;
-            // log2(n) * ((n >>= 1) / 2) == n - 1
-            let num_pairs_sumcheck_prove =
-                SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
-            let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
+            let net = driver.into_network();
+            let num_pairs = if num_parties == 3 {
+                0 // Precomputation is done on the fly since it requires no comminication
+            } else {
+                ultrahonk_num_randomness(proving_key.circuit_size as usize)
+            };
             let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs).unwrap();
             let mut io_context0 = ShamirProtocol::from(preprocessing);
             let io_context1 = io_context0.fork_with_pairs(0).unwrap();
@@ -87,11 +102,19 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     }
 
     // Get vk
+    let mut driver = PlainAcvmSolver::new();
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-    let builder =
-        UltraCircuitBuilder::<Bn254>::create_circuit(constraint_system, 0, vec![], true, false);
+    let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
+        constraint_system,
+        0,
+        vec![],
+        true,
+        false,
+        &mut driver,
+    )
+    .unwrap();
     let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
-    let verifying_key = VerifyingKey::create(builder, crs).unwrap();
+    let verifying_key = VerifyingKey::create(builder, crs, &mut driver).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);

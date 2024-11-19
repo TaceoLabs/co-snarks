@@ -20,11 +20,10 @@ use crate::{
     HonkProofError, HonkProofResult,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{One, Zero};
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
-use eyre::OptionExt;
 use num_bigint::BigUint;
-use std::{collections::HashMap, fmt::Debug};
+use std::collections::BTreeMap;
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
@@ -35,11 +34,12 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
     pub fn create_vk_barretenberg(
         self,
         crs: ProverCrs<P>,
+        driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<VerifyingKeyBarretenberg<P>> {
         let contains_recursive_proof = self.contains_recursive_proof;
         let recursive_proof_public_input_indices = self.recursive_proof_public_input_indices;
 
-        let pk = ProvingKey::create(self, crs);
+        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -64,13 +64,17 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         Ok(vk)
     }
 
-    pub fn create_keys(self, crs: Crs<P>) -> HonkProofResult<(ProvingKey<P>, VerifyingKey<P>)> {
+    pub fn create_keys(
+        self,
+        crs: Crs<P>,
+        driver: &mut PlainAcvmSolver<P::ScalarField>,
+    ) -> HonkProofResult<(ProvingKey<P>, VerifyingKey<P>)> {
         let prover_crs = ProverCrs {
             monomials: crs.monomials,
         };
         let verifier_crs = crs.g2_x;
 
-        let pk = ProvingKey::create(self, prover_crs);
+        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -97,15 +101,16 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
 pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub variables: Vec<T::AcvmType>,
-    variable_names: HashMap<u32, String>,
+    _variable_names: BTreeMap<u32, String>,
     next_var_index: Vec<u32>,
     prev_var_index: Vec<u32>,
     pub real_variable_index: Vec<u32>,
     pub(crate) real_variable_tags: Vec<u32>,
+    pub(crate) current_tag: u32,
     pub public_inputs: Vec<u32>,
     is_recursive_circuit: bool,
-    pub(crate) tau: HashMap<u32, u32>,
-    constant_variable_indices: HashMap<P::ScalarField, u32>,
+    pub(crate) tau: BTreeMap<u32, u32>,
+    constant_variable_indices: BTreeMap<P::ScalarField, u32>,
     pub(crate) zero_idx: u32,
     one_idx: u32,
     pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
@@ -117,13 +122,22 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     ram_arrays: Vec<RamTranscript>,
     pub(crate) lookup_tables: Vec<PlookupBasicTable<P::ScalarField>>,
     plookup: Plookup<P::ScalarField>,
-    range_lists: HashMap<u64, RangeList>,
+    range_lists: BTreeMap<u64, RangeList>,
     cached_partial_non_native_field_multiplications:
         Vec<CachedPartialNonNativeFieldMultiplication<P::ScalarField>>,
     // Stores gate index of ROM and RAM reads (required by proving key)
     pub(crate) memory_read_records: Vec<u32>,
     // Stores gate index of RAM writes (required by proving key)
     pub(crate) memory_write_records: Vec<u32>,
+}
+
+// This workaround is required due to mutability issues
+macro_rules! create_dummy_gate {
+    ($builder:expr, $block:expr, $ixd_1:expr, $ixd_2:expr, $ixd_3:expr, $ixd_4:expr, ) => {
+        Self::create_dummy_gate($block, $ixd_1, $ixd_2, $ixd_3, $ixd_4);
+        $builder.check_selector_length_consistency();
+        $builder.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
+    };
 }
 
 impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCircuitBuilder<P, T> {
@@ -134,6 +148,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) const NUMBER_OF_GATES_PER_RAM_ACCESS: usize = 2;
     pub(crate) const NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY: usize = 1;
     pub(crate) const NUM_RESERVED_GATES: usize = 4;
+    pub(crate) const DEFAULT_PLOOKUP_RANGE_BITNUM: usize = 14;
+    pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
     // number of gates created per non-native field operation in process_non_native_field_multiplications
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
 
@@ -143,7 +159,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         witness: Vec<T::AcvmType>,
         honk_recursion: bool,           // true for ultrahonk
         collect_gates_per_opcode: bool, // false for ultrahonk
-    ) -> Self {
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
         tracing::trace!("Builder create circuit");
 
         let has_valid_witness_assignments = !witness.is_empty();
@@ -157,19 +174,20 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         );
 
         builder.build_constraints(
+            driver,
             constraint_system,
             has_valid_witness_assignments,
             honk_recursion,
             collect_gates_per_opcode,
-        );
+        )?;
 
-        builder
+        Ok(builder)
     }
 
     fn new(size_hint: usize) -> Self {
         tracing::trace!("Builder new");
         let variables = Vec::with_capacity(size_hint * 3);
-        let variable_names = HashMap::with_capacity(size_hint * 3);
+        // let _variable_names = BTreeMap::with_capacity(size_hint * 3);
         let next_var_index = Vec::with_capacity(size_hint * 3);
         let prev_var_index = Vec::with_capacity(size_hint * 3);
         let real_variable_index = Vec::with_capacity(size_hint * 3);
@@ -177,15 +195,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         Self {
             variables,
-            variable_names,
+            _variable_names: BTreeMap::new(),
             next_var_index,
             prev_var_index,
             real_variable_index,
             real_variable_tags,
             public_inputs: Vec::new(),
             is_recursive_circuit: false,
-            tau: HashMap::new(),
-            constant_variable_indices: HashMap::new(),
+            tau: BTreeMap::new(),
+            constant_variable_indices: BTreeMap::new(),
             zero_idx: 0,
             one_idx: 1,
             blocks: GateBlocks::default(),
@@ -197,10 +215,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             ram_arrays: Vec::new(),
             lookup_tables: Vec::new(),
             plookup: Default::default(),
-            range_lists: HashMap::new(),
+            range_lists: BTreeMap::new(),
             cached_partial_non_native_field_multiplications: Vec::new(),
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
+            current_tag: 0,
         }
     }
 
@@ -229,7 +248,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let mut builder = Self::new(size_hint);
 
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
-
         let len = witness_values.len();
         for witness in witness_values.into_iter().take(varnum) {
             builder.add_variable(witness);
@@ -392,6 +410,60 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.num_gates += 1;
     }
 
+    pub(crate) fn create_big_mul_add_gate(
+        &mut self,
+        inp: &MulQuad<P::ScalarField>,
+        include_next_gate_w_4: bool,
+    ) {
+        self.assert_valid_variables(&[inp.a, inp.b, inp.c, inp.d]);
+        self.blocks
+            .arithmetic
+            .populate_wires(inp.a, inp.b, inp.c, inp.d);
+        self.blocks.arithmetic.q_m().push(if include_next_gate_w_4 {
+            inp.mul_scaling * P::ScalarField::from(2u64)
+        } else {
+            inp.mul_scaling
+        });
+        self.blocks.arithmetic.q_1().push(inp.a_scaling);
+        self.blocks.arithmetic.q_2().push(inp.b_scaling);
+        self.blocks.arithmetic.q_3().push(inp.c_scaling);
+        self.blocks.arithmetic.q_c().push(inp.const_scaling);
+        self.blocks
+            .arithmetic
+            .q_arith()
+            .push(if include_next_gate_w_4 {
+                P::ScalarField::from(2u64)
+            } else {
+                P::ScalarField::one()
+            });
+        self.blocks.arithmetic.q_4().push(inp.d_scaling);
+        self.blocks
+            .arithmetic
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_elliptic()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        self.check_selector_length_consistency();
+
+        self.num_gates += 1;
+    }
+
     pub(crate) fn create_big_add_gate(
         &mut self,
         inp: &AddQuad<P::ScalarField>,
@@ -525,11 +597,12 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
     fn build_constraints(
         &mut self,
+        driver: &mut T,
         mut constraint_system: AcirFormat<P::ScalarField>,
         has_valid_witness_assignments: bool,
         honk_recursion: bool,
         collect_gates_per_opcode: bool,
-    ) {
+    ) -> std::io::Result<()> {
         tracing::trace!("Builder build constraints");
         if collect_gates_per_opcode {
             constraint_system
@@ -559,15 +632,64 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             );
         }
 
+        // Oversize gates are a vector of mul_quad gates.
+        for constraint in constraint_system.big_quad_constraints.iter_mut() {
+            let mut next_w4_wire_value = T::AcvmType::default();
+            // Define the 4th wire of these mul_quad gates, which is implicitly used by the previous gate.
+            let constraint_size = constraint.len();
+            for (j, small_constraint) in constraint.iter_mut().enumerate().take(constraint_size - 1)
+            {
+                if j == 0 {
+                    next_w4_wire_value = self.get_variable(small_constraint.d.try_into().unwrap());
+                } else {
+                    let next_w4_wire = self.add_variable(next_w4_wire_value.to_owned());
+                    small_constraint.d = next_w4_wire;
+                    small_constraint.d_scaling = -P::ScalarField::one();
+                }
+
+                self.create_big_mul_add_gate(small_constraint, true);
+
+                let var_a = self.get_variable(small_constraint.a.try_into().unwrap());
+                let var_b = self.get_variable(small_constraint.b.try_into().unwrap());
+                let var_c = self.get_variable(small_constraint.c.try_into().unwrap());
+
+                let term1 = driver.acvm_mul(var_a.to_owned(), var_b.to_owned())?;
+                let term1 = driver.acvm_mul_with_public(small_constraint.mul_scaling, term1);
+                let term2 = driver.acvm_mul_with_public(small_constraint.a_scaling, var_a);
+                let term3 = driver.acvm_mul_with_public(small_constraint.b_scaling, var_b);
+                let term4 = driver.acvm_mul_with_public(small_constraint.c_scaling, var_c);
+                let term5 =
+                    driver.acvm_mul_with_public(small_constraint.d_scaling, next_w4_wire_value);
+                next_w4_wire_value = small_constraint.const_scaling.into();
+                driver.add_assign(&mut next_w4_wire_value, term1);
+                driver.add_assign(&mut next_w4_wire_value, term2);
+                driver.add_assign(&mut next_w4_wire_value, term3);
+                driver.add_assign(&mut next_w4_wire_value, term4);
+                driver.add_assign(&mut next_w4_wire_value, term5);
+
+                driver.acvm_negate_inplace(&mut next_w4_wire_value);
+            }
+
+            let next_w4_wire = self.add_variable(next_w4_wire_value);
+            constraint.last_mut().unwrap().d = next_w4_wire;
+            constraint.last_mut().unwrap().d_scaling = -P::ScalarField::one();
+
+            self.create_big_mul_add_gate(constraint.last_mut().unwrap(), false);
+        }
+
         // Add logic constraint
         // for (i, constraint) in constraint_system.logic_constraints.iter().enumerate() {
         //     todo!("Logic gates");
         // }
 
-        // Add range constraint
-        // for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
-        //     todo!("rage gates");
-        // }
+        for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
+            self.create_range_constraint(driver, constraint.witness, constraint.num_bits)?;
+            gate_counter.track_diff(
+                self,
+                &mut constraint_system.gates_per_opcode,
+                constraint_system.original_opcode_indices.range_constraints[i],
+            );
+        }
 
         // Add aes128 constraints
         // for (i, constraint) in constraint_system.aes128_constraints.iter().enumerate() {
@@ -671,7 +793,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         // assert equals
         for (i, constraint) in constraint_system.assert_equalities.iter().enumerate() {
-            todo!("assert equalities gates");
+            self.assert_equal(
+                constraint.a.try_into().unwrap(),
+                constraint.b.try_into().unwrap(),
+            );
+            gate_counter.track_diff(
+                self,
+                &mut constraint_system.gates_per_opcode,
+                constraint_system.original_opcode_indices.assert_equalities[i],
+            );
         }
 
         // RecursionConstraints
@@ -703,15 +833,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             // final recursion output.
             self.add_recursive_proof(current_aggregation_object);
         }
+        Ok(())
     }
 
     fn process_plonk_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
-        has_valid_witness_assignments: bool,
-        gate_counter: &mut GateCounter,
+        _has_valid_witness_assignments: bool,
+        _gate_counter: &mut GateCounter,
     ) {
-        for (i, constraint) in constraint_system.recursion_constraints.iter().enumerate() {
+        for _constraint in constraint_system.recursion_constraints.iter() {
             todo!("Plonk recursion");
         }
     }
@@ -719,15 +850,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn process_honk_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
-        has_valid_witness_assignments: bool,
-        gate_counter: &mut GateCounter,
+        _has_valid_witness_assignments: bool,
+        _gate_counter: &mut GateCounter,
     ) {
         {
-            for (i, constraint) in constraint_system
-                .honk_recursion_constraints
-                .iter()
-                .enumerate()
-            {
+            for _constraint in constraint_system.honk_recursion_constraints.iter() {
                 todo!("Honk recursion");
             }
         }
@@ -736,16 +863,12 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn process_avm_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
-        has_valid_witness_assignments: bool,
-        gate_counter: &mut GateCounter,
+        _has_valid_witness_assignments: bool,
+        _gate_counter: &mut GateCounter,
     ) {
-        let current_aggregation_object = self.init_default_agg_obj_indices();
+        let _current_aggregation_object = self.init_default_agg_obj_indices();
 
-        for (i, constraint) in constraint_system
-            .avm_recursion_constraints
-            .iter()
-            .enumerate()
-        {
+        for _constraint in constraint_system.avm_recursion_constraints.iter() {
             todo!("avm recursion");
         }
     }
@@ -978,7 +1101,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     ) {
         let mut table = RomTable::new(init);
 
-        // AZTEC TODO this is just implemented for the Plain backend
+        // TACEO TODO this is just implemented for the Plain backend
         for op in constraint.trace.iter() {
             assert_eq!(op.access_type, 0);
             let value = self.poly_to_field_ct(&op.value);
@@ -1005,6 +1128,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.variables[self.real_variable_index[index] as usize].to_owned()
     }
 
+    fn update_variable(&mut self, index: usize, value: T::AcvmType) {
+        assert!(self.variables.len() > index);
+        self.variables[self.real_variable_index[index] as usize] = value;
+    }
+
     pub(crate) fn assert_equal_constant(&mut self, a_idx: usize, b: P::ScalarField) {
         assert_eq!(self.variables[a_idx], T::AcvmType::from(b));
         let b_idx = self.put_constant_variable(b);
@@ -1014,7 +1142,28 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) fn assert_equal(&mut self, a_idx: usize, b_idx: usize) {
         self.is_valid_variable(a_idx);
         self.is_valid_variable(b_idx);
-        assert_eq!(self.get_variable(a_idx), self.get_variable(b_idx));
+
+        let a = T::get_public(&self.get_variable(a_idx));
+
+        let b = T::get_public(&self.get_variable(b_idx));
+
+        match (a, b) {
+            (Some(a), Some(b)) => {
+                assert_eq!(a, b);
+            }
+
+            (Some(a), None) => {
+                // The values are supposed to be equal. One is public though, one is private, so we can just set the private value to be the public one
+                self.update_variable(b_idx, T::AcvmType::from(a));
+            }
+            (None, Some(b)) => {
+                // The values are supposed to be equal. One is public though, one is private, so we can just set the private value to be the public one
+                self.update_variable(a_idx, T::AcvmType::from(b));
+            }
+            _ => {
+                // We can not check the equality of the witnesses since they are secret shared, but the proof will fail if they are not equal
+            }
+        }
 
         let a_real_idx = self.real_variable_index[a_idx] as usize;
         let b_real_idx = self.real_variable_index[b_idx] as usize;
@@ -1025,7 +1174,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // Otherwise update the real_idx of b-chain members to that of a
 
         let b_start_idx = self.get_first_variable_in_class(b_idx);
+
         self.update_real_variable_indices(b_start_idx, a_real_idx as u32);
+
         // Now merge equivalence classes of a and b by tying last (= real) element of b-chain to first element of a-chain
         let a_start_idx = self.get_first_variable_in_class(a_idx);
         self.next_var_index[b_real_idx] = a_start_idx as u32;
@@ -1216,7 +1367,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         block.q_poseidon2_internal().push(P::ScalarField::zero());
 
         // TACEO TODO these are uncommented due to mutability issues
-        // Taken care of by the caller
+        // Taken care of by the caller uisng the create_dummy_gate! macro
         // self.check_selector_length_consistency();
         // self.num_gates += 1;
     }
@@ -1305,15 +1456,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
-        Self::create_dummy_gate(
+
+        create_dummy_gate!(
+            self,
             &mut self.blocks.delta_range,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
-        self.check_selector_length_consistency();
-        self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
 
         // q_elliptic
         self.blocks.elliptic.populate_wires(
@@ -1353,15 +1504,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
-        Self::create_dummy_gate(
+
+        create_dummy_gate!(
+            self,
             &mut self.blocks.elliptic,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
-        self.check_selector_length_consistency();
-        self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
 
         // q_aux
         self.blocks
@@ -1389,15 +1540,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
-        Self::create_dummy_gate(
+
+        create_dummy_gate!(
+            self,
             &mut self.blocks.aux,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
-        self.check_selector_length_consistency();
-        self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
 
         // Add nonzero values in w_4 and q_c (q_4*w_4 + q_c --> 1*1 - 1 = 0)
         self.one_idx = self.put_constant_variable(P::ScalarField::one());
@@ -1508,15 +1659,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.num_gates += 1;
 
         // dummy gate to be read into by previous poseidon external gate via shifts
-        Self::create_dummy_gate(
+        create_dummy_gate!(
+            self,
             &mut self.blocks.poseidon2_external,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
-        self.check_selector_length_consistency();
-        self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
 
         // mock a poseidon internal gate, with all zeros as input
         self.blocks.poseidon2_internal.populate_wires(
@@ -1582,15 +1732,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.num_gates += 1;
 
         // dummy gate to be read into by previous poseidon internal gate via shifts
-        Self::create_dummy_gate(
+        create_dummy_gate!(
+            self,
             &mut self.blocks.poseidon2_internal,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
         );
-        self.check_selector_length_consistency();
-        self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
     }
 
     pub fn get_num_gates_added_to_ensure_nonzero_polynomials() -> usize {
@@ -1728,7 +1877,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         read_data
     }
 
-    pub fn finalize_circuit(&mut self, ensure_nonzero: bool) {
+    pub fn finalize_circuit(
+        &mut self,
+        ensure_nonzero: bool,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
         // /**
         //  * First of all, add the gates related to ROM arrays and range lists.
         //  * Note that the total number of rows in an UltraPlonk program can be divided as following:
@@ -1765,9 +1918,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.process_non_native_field_multiplications();
             self.process_rom_arrays();
             self.process_ram_arrays();
-            self.process_range_lists();
+            self.process_range_lists(driver)?;
             self.circuit_finalized = true;
         }
+        Ok(())
     }
 
     fn process_rom_arrays(&mut self) {
@@ -1782,10 +1936,93 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
     }
 
-    fn process_range_lists(&mut self) {
-        for _ in self.range_lists.iter() {
-            todo!("process range lists");
+    fn process_range_lists(&mut self, driver: &mut T) -> std::io::Result<()> {
+        // We copy due to mutability issues
+        let mut lists = self
+            .range_lists
+            .iter_mut()
+            .map(|(_, list)| list.clone())
+            .collect::<Vec<_>>();
+
+        for list in lists.iter_mut() {
+            self.process_range_list(list, driver)?;
         }
+        // We copy back (not strictly necessary, but should take no performance)
+        for (src, des) in lists.into_iter().zip(self.range_lists.iter_mut()) {
+            *des.1 = src;
+        }
+        Ok(())
+    }
+
+    fn process_range_list(&mut self, list: &mut RangeList, driver: &mut T) -> std::io::Result<()> {
+        self.assert_valid_variables(&list.variable_indices);
+
+        assert!(
+            !list.variable_indices.is_empty(),
+            "variable_indices must not be empty"
+        );
+
+        // replace witness index in variable_indices with the real variable index i.e. if a copy constraint has been
+        // applied on a variable after it was range constrained, this makes sure the indices in list point to the updated
+        // index in the range list so the set equivalence does not fail
+        for x in list.variable_indices.iter_mut() {
+            *x = self.real_variable_index[*x as usize];
+        }
+
+        // remove duplicate witness indices to prevent the sorted list set size being wrong!
+        list.variable_indices.sort();
+        list.variable_indices.dedup();
+        // go over variables
+        // iterate over each variable and create mirror variable with same value - with tau tag
+        // need to make sure that, in original list, increments of at most 3
+        let mut sorted_list = Vec::with_capacity(list.variable_indices.len());
+        for &variable_index in &list.variable_indices {
+            let field_element = self.get_variable(variable_index as usize);
+
+            let field_element = if T::is_shared(&field_element) {
+                T::get_shared(&field_element).expect("Already checked it is shared")
+            } else {
+                T::promote_to_trivial_share(
+                    driver,
+                    T::get_public(&field_element).expect("Already checked it is public"),
+                )
+            };
+            sorted_list.push(field_element);
+        }
+
+        let sorted_list = T::sort(
+            driver,
+            &sorted_list,
+            Utils::get_msb64(list.target_range.next_power_of_two()) as usize,
+        )?;
+
+        // list must be padded to a multipe of 4 and larger than 4 (gate_width)
+        const GATE_WIDTH: usize = NUM_WIRES;
+        let mut padding = (GATE_WIDTH - (list.variable_indices.len() % GATE_WIDTH)) % GATE_WIDTH;
+        let mut indices = Vec::with_capacity(padding + sorted_list.len());
+
+        // Ensure the list size is greater than GATE_WIDTH and pad it
+
+        if list.variable_indices.len() <= GATE_WIDTH {
+            padding += GATE_WIDTH;
+        }
+        for _ in 0..padding {
+            indices.push(self.zero_idx);
+        }
+        for sorted_value in sorted_list {
+            let promoted = T::AcvmType::from(sorted_value);
+            let index = self.add_variable(promoted);
+            self.assign_tag(index, list.tau_tag);
+
+            indices.push(index);
+        }
+
+        self.create_sort_constraint_with_edges(
+            &indices,
+            P::ScalarField::zero(),
+            list.target_range.into(),
+        );
+        Ok(())
     }
 
     fn process_non_native_field_multiplications(&mut self) {
@@ -1878,5 +2115,553 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 selector.push(P::ScalarField::zero());
             }
         }
+    }
+
+    fn create_range_constraint(
+        &mut self,
+        driver: &mut T,
+        variable_index: u32,
+        num_bits: u32,
+    ) -> std::io::Result<()> {
+        if num_bits == 1 {
+            self.create_bool_gate(variable_index);
+        } else if num_bits <= Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32 {
+            // /**
+            //  * N.B. if `variable_index` is not used in any arithmetic constraints, this will create an unsatisfiable
+            //  *      circuit!
+            //  *      this range constraint will increase the size of the 'sorted set' of range-constrained integers by 1.
+            //  *      The 'non-sorted set' of range-constrained integers is a subset of the wire indices of all arithmetic
+            //  *      gates. No arithmetic gate => size imbalance between sorted and non-sorted sets. Checking for this
+            //  *      and throwing an error would require a refactor of the Composer to catelog all 'orphan' variables not
+            //  *      assigned to gates.
+            //  *
+            //  * TODO(Suyash):
+            //  *    The following is a temporary fix to make sure the range constraints on numbers with
+            //  *    num_bits <= DEFAULT_PLOOKUP_RANGE_BITNUM is correctly enforced in the circuit.
+            //  *    Longer term, as Zac says, we would need to refactor the composer to fix this.
+            //  **/
+            self.create_poly_gate(&PolyTriple::<P::ScalarField> {
+                a: variable_index,
+                b: variable_index,
+                c: variable_index,
+                q_m: P::ScalarField::zero(),
+                q_l: P::ScalarField::one(),
+                q_r: -P::ScalarField::one(),
+                q_o: P::ScalarField::zero(),
+                q_c: P::ScalarField::zero(),
+            });
+
+            self.create_new_range_constraint(variable_index, (1u64 << num_bits) - 1);
+        } else {
+            self.decompose_into_default_range(
+                driver,
+                variable_index,
+                num_bits as u64,
+                Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn create_new_range_constraint(&mut self, variable_index: u32, target_range: u64) {
+        // We ignore this check because it is definitely more expensive in MPC, the proof will just not verify if this constraint is not given
+        // if (uint256_t(this->get_variable(variable_index)).data[0] > target_range) {
+        //     if (!this->failed()) {
+        //         this->failure(msg);
+        //     }
+        // }
+        #[allow(clippy::map_entry)] // Required due to borrowing self twice otherwise
+        if !self.range_lists.contains_key(&target_range) {
+            let new_range_list = self.create_range_list(target_range);
+            self.range_lists.insert(target_range, new_range_list);
+        }
+
+        let existing_tag =
+            self.real_variable_tags[self.real_variable_index[variable_index as usize] as usize];
+        // If the variable's tag matches the target range list's tag, do nothing.
+        if existing_tag != self.range_lists[&target_range].range_tag {
+            // If the variable is 'untagged' (i.e., it has the dummy tag), assign it the appropriate tag.
+            // Otherwise, find the range for which the variable has already been tagged.
+            if existing_tag != Self::DUMMY_TAG {
+                let found_tag = false;
+                for (range, range_list) in &self.range_lists {
+                    if range_list.range_tag == existing_tag {
+                        // found_tag = true;
+                        if *range < target_range {
+                            // The variable already has a more restrictive range check, so do nothing.
+                            return;
+                        } else {
+                            // The range constraint we are trying to impose is more restrictive than the existing range
+                            // constraint. It would be difficult to remove an existing range check. Instead deep-copy the
+                            // variable and apply a range check to new variable.
+                            let copied_witness =
+                                self.add_variable(self.get_variable(variable_index as usize));
+                            self.create_add_gate(&AddTriple::<P::ScalarField> {
+                                a: variable_index,
+                                b: copied_witness,
+                                c: self.zero_idx,
+                                a_scaling: P::ScalarField::one(),
+                                b_scaling: -P::ScalarField::one(),
+                                c_scaling: P::ScalarField::zero(),
+                                const_scaling: P::ScalarField::zero(),
+                            });
+                            // Recurse with new witness that has no tag attached.
+                            self.create_new_range_constraint(copied_witness, target_range);
+                            return;
+                        }
+                    }
+                }
+                assert!(found_tag);
+            }
+
+            self.assign_tag(variable_index, self.range_lists[&target_range].range_tag);
+            self.range_lists
+                .get_mut(&target_range)
+                .unwrap()
+                .variable_indices
+                .push(variable_index);
+        }
+    }
+
+    fn decompose_into_default_range(
+        &mut self,
+        driver: &mut T,
+        variable_index: u32,
+        num_bits: u64,
+        target_range_bitnum: u64,
+    ) -> std::io::Result<Vec<u32>> {
+        assert!(self.is_valid_variable(variable_index as usize));
+
+        assert!(num_bits > 0);
+        let val = self.get_variable(variable_index as usize);
+        // We cannot check that easily in MPC:
+        // If the value is out of range, set the composer error to the given msg.
+        // if val.msb() >= num_bits && !self.failed() {
+        //     self.failure(msg);
+        // }
+
+        let sublimb_mask: u64 = (1u64 << target_range_bitnum) - 1;
+        // /**
+        //  * AZTEC TODO: Support this commented-out code!
+        //  * At the moment, `decompose_into_default_range` generates a minimum of 1 arithmetic gate.
+        //  * This is not strictly required iff num_bits <= target_range_bitnum.
+        //  * However, this produces an edge-case where a variable is range-constrained but NOT present in an arithmetic gate.
+        //  * This in turn produces an unsatisfiable circuit (see `create_new_range_constraint`). We would need to check for
+        //  * and accommodate/reject this edge case to support not adding addition gates here if not reqiured
+        //  * if (num_bits <= target_range_bitnum) {
+        //  *     const uint64_t expected_range = (1ULL << num_bits) - 1ULL;
+        //  *     create_new_range_constraint(variable_index, expected_range);
+        //  *     return { variable_index };
+        //  * }
+        //  **/
+        let has_remainder_bits = num_bits % target_range_bitnum != 0;
+        let num_limbs = num_bits / target_range_bitnum + if has_remainder_bits { 1 } else { 0 };
+        let last_limb_size = num_bits - (num_bits / target_range_bitnum * target_range_bitnum);
+        let last_limb_range = (1u64 << last_limb_size) - 1;
+
+        let mut sublimb_indices: Vec<u32> = Vec::with_capacity(num_limbs as usize);
+        let sublimbs = if T::is_shared(&val) {
+            let decomp = T::decompose_arithmetic(
+                driver,
+                T::get_shared(&val).expect("Already checked it is shared"),
+                num_bits as usize,
+                target_range_bitnum as usize,
+            )?;
+            decomp.into_iter().map(T::AcvmType::from).collect()
+        } else {
+            let mut sublimbs = Vec::with_capacity(num_limbs as usize);
+            let mut accumulator: BigUint = T::get_public(&val)
+                .expect("Already checked it is public")
+                .into();
+            for _ in 0..num_limbs {
+                let sublimb_value = P::ScalarField::from(&accumulator & &sublimb_mask.into());
+                sublimbs.push(T::AcvmType::from(sublimb_value));
+                accumulator >>= target_range_bitnum;
+            }
+
+            sublimbs
+        };
+
+        for (i, sublimb) in sublimbs.iter().enumerate() {
+            let limb_idx = self.add_variable(sublimb.clone());
+
+            sublimb_indices.push(limb_idx);
+            if i == sublimbs.len() - 1 && has_remainder_bits {
+                self.create_new_range_constraint(limb_idx, last_limb_range);
+            } else {
+                self.create_new_range_constraint(limb_idx, sublimb_mask);
+            }
+        }
+
+        let num_limb_triples = num_limbs / 3 + if num_limbs % 3 != 0 { 1 } else { 0 };
+        let leftovers = if num_limbs % 3 == 0 { 3 } else { num_limbs % 3 };
+
+        let mut accumulator_idx = variable_index;
+        let mut accumulator = val;
+
+        for i in 0..num_limb_triples {
+            let real_limbs = [
+                !(i == num_limb_triples - 1 && leftovers < 1),
+                !(i == num_limb_triples - 1 && leftovers < 2),
+                !(i == num_limb_triples - 1 && leftovers < 3),
+            ];
+
+            let round_sublimbs = [
+                if real_limbs[0] {
+                    sublimbs[3 * i as usize].clone()
+                } else {
+                    T::public_zero()
+                },
+                if real_limbs[1] {
+                    sublimbs[(3 * i + 1) as usize].clone()
+                } else {
+                    T::public_zero()
+                },
+                if real_limbs[2] {
+                    sublimbs[(3 * i + 2) as usize].clone()
+                } else {
+                    T::public_zero()
+                },
+            ];
+
+            let new_limbs = [
+                if real_limbs[0] {
+                    sublimb_indices[3 * i as usize]
+                } else {
+                    self.zero_idx
+                },
+                if real_limbs[1] {
+                    sublimb_indices[(3 * i + 1) as usize]
+                } else {
+                    self.zero_idx
+                },
+                if real_limbs[2] {
+                    sublimb_indices[(3 * i + 2) as usize]
+                } else {
+                    self.zero_idx
+                },
+            ];
+
+            let shifts = [
+                target_range_bitnum * (3 * i),
+                target_range_bitnum * (3 * i + 1),
+                target_range_bitnum * (3 * i + 2),
+            ];
+
+            let term0 = T::acvm_mul_with_public(
+                driver,
+                P::ScalarField::from(BigUint::one() << shifts[0]),
+                round_sublimbs[0].clone(),
+            );
+
+            let term1 = T::acvm_mul_with_public(
+                driver,
+                P::ScalarField::from(BigUint::one() << shifts[1]),
+                round_sublimbs[1].clone(),
+            );
+
+            let sub1 = T::acvm_sub(driver, term0, term1);
+
+            let term2 = T::acvm_mul_with_public(
+                driver,
+                P::ScalarField::from(BigUint::one() << shifts[2]),
+                round_sublimbs[2].clone(),
+            );
+
+            let subtrahend = T::acvm_sub(driver, sub1, term2);
+
+            let new_accumulator = T::acvm_sub(driver, accumulator.clone(), subtrahend);
+            self.create_big_add_gate(
+                &AddQuad {
+                    a: new_limbs[0],
+                    b: new_limbs[1],
+                    c: new_limbs[2],
+                    d: accumulator_idx,
+                    a_scaling: (BigUint::one() << shifts[0]).into(),
+                    b_scaling: (BigUint::one() << shifts[1]).into(),
+                    c_scaling: (BigUint::one() << shifts[2]).into(),
+                    d_scaling: -P::ScalarField::one(),
+                    const_scaling: P::ScalarField::zero(),
+                },
+                i != num_limb_triples - 1,
+            );
+
+            accumulator_idx = self.add_variable(new_accumulator.clone());
+
+            accumulator = new_accumulator;
+        }
+
+        Ok(sublimb_indices)
+    }
+
+    fn assign_tag(&mut self, variable_index: u32, tag: u32) {
+        assert!(
+            tag <= self.current_tag,
+            "Tag is greater than the current tag"
+        );
+
+        // If we've already assigned this tag to this variable, return (can happen due to copy constraints)
+        let index = self.real_variable_index[variable_index as usize] as usize;
+        if self.real_variable_tags[index] == tag {
+            return;
+        }
+
+        assert!(
+            self.real_variable_tags[index] == Self::DUMMY_TAG,
+            "Tag mismatch: expected DUMMY_TAG"
+        );
+        self.real_variable_tags[index] = tag;
+    }
+
+    fn get_new_tag(&mut self) -> u32 {
+        self.current_tag += 1;
+
+        self.current_tag
+    }
+
+    fn create_tag(&mut self, tag_index: u32, tau_index: u32) -> u32 {
+        self.tau.insert(tag_index, tau_index);
+        self.current_tag += 1;
+        self.current_tag
+    }
+
+    fn create_range_list(&mut self, target_range: u64) -> RangeList {
+        let range_tag = self.get_new_tag();
+        let tau_tag = self.get_new_tag();
+        self.create_tag(range_tag, tau_tag);
+        self.create_tag(tau_tag, range_tag);
+
+        let num_multiples_of_three = target_range / Self::DEFAULT_PLOOKUP_RANGE_STEP_SIZE as u64;
+        let mut variable_indices = Vec::with_capacity(num_multiples_of_three as usize + 2);
+        for i in 0..=num_multiples_of_three {
+            let index = self.add_variable(T::AcvmType::from(P::ScalarField::from(
+                i * Self::DEFAULT_PLOOKUP_RANGE_STEP_SIZE as u64,
+            )));
+
+            variable_indices.push(index);
+            self.assign_tag(index, range_tag);
+        }
+        let index = self.add_variable(T::AcvmType::from(P::ScalarField::from(target_range)));
+        variable_indices.push(index);
+
+        self.assign_tag(index, range_tag);
+        self.create_dummy_constraints(&variable_indices);
+
+        RangeList {
+            target_range,
+            range_tag,
+            tau_tag,
+            variable_indices,
+        }
+    }
+
+    fn create_dummy_constraints(&mut self, variable_index: &[u32]) {
+        let mut padded_list = variable_index.to_owned();
+        const GATE_WIDTH: usize = NUM_WIRES;
+        let padding = (GATE_WIDTH - (padded_list.len() % GATE_WIDTH)) % GATE_WIDTH;
+
+        for _ in 0..padding {
+            padded_list.push(self.zero_idx);
+        }
+
+        self.assert_valid_variables(variable_index);
+        self.assert_valid_variables(&padded_list);
+
+        for chunk in padded_list.chunks(GATE_WIDTH) {
+            create_dummy_gate!(
+                self,
+                &mut self.blocks.arithmetic,
+                chunk[0],
+                chunk[1],
+                chunk[2],
+                chunk[3],
+            );
+        }
+    }
+
+    fn create_sort_constraint_with_edges(
+        &mut self,
+        variable_index: &[u32],
+        start: P::ScalarField,
+        end: P::ScalarField,
+    ) {
+        // Convenient to assume size is at least 8 (gate_width = 4) for separate gates for start and end conditions
+        const GATE_WIDTH: usize = NUM_WIRES;
+        assert!(
+            variable_index.len() % GATE_WIDTH == 0 && variable_index.len() > GATE_WIDTH,
+            "Variable index size ({}) must be a multiple of {} and greater than {}",
+            variable_index.len(),
+            GATE_WIDTH,
+            GATE_WIDTH
+        );
+
+        self.assert_valid_variables(variable_index);
+
+        // Add an arithmetic gate to ensure the first input is equal to the start value of the range being checked
+        self.create_add_gate(&AddTriple {
+            a: variable_index[0],
+            b: self.zero_idx,
+            c: self.zero_idx,
+            a_scaling: P::ScalarField::one(),
+            b_scaling: P::ScalarField::zero(),
+            c_scaling: P::ScalarField::zero(),
+            const_scaling: (-start),
+        });
+        // enforce range check for all but the final row
+        for i in (0..variable_index.len() - GATE_WIDTH).step_by(GATE_WIDTH) {
+            self.blocks.delta_range.populate_wires(
+                variable_index[i],
+                variable_index[i + 1],
+                variable_index[i + 2],
+                variable_index[i + 3],
+            );
+            self.num_gates += 1;
+            self.blocks.delta_range.q_m().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_1().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_2().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_3().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_c().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_arith()
+                .push(P::ScalarField::zero());
+            self.blocks.delta_range.q_4().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_delta_range()
+                .push(P::ScalarField::one());
+            self.blocks
+                .delta_range
+                .q_elliptic()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_lookup_type()
+                .push(P::ScalarField::zero());
+            self.blocks.delta_range.q_aux().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_poseidon2_external()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_poseidon2_internal()
+                .push(P::ScalarField::zero());
+
+            self.check_selector_length_consistency();
+        }
+
+        // enforce range checks of last row and ending at end
+        if variable_index.len() > GATE_WIDTH {
+            self.blocks.delta_range.populate_wires(
+                variable_index[variable_index.len() - 4],
+                variable_index[variable_index.len() - 3],
+                variable_index[variable_index.len() - 2],
+                variable_index[variable_index.len() - 1],
+            );
+            self.num_gates += 1;
+            self.blocks.delta_range.q_m().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_1().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_2().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_3().push(P::ScalarField::zero());
+            self.blocks.delta_range.q_c().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_arith()
+                .push(P::ScalarField::zero());
+            self.blocks.delta_range.q_4().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_delta_range()
+                .push(P::ScalarField::one());
+            self.blocks
+                .delta_range
+                .q_elliptic()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_lookup_type()
+                .push(P::ScalarField::zero());
+            self.blocks.delta_range.q_aux().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_poseidon2_external()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_poseidon2_internal()
+                .push(P::ScalarField::zero());
+
+            self.check_selector_length_consistency();
+        }
+
+        // dummy gate needed because of sort widget's check of next row
+        // use this gate to check end condition
+        // TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This was formerly a single arithmetic gate. A
+        // dummy gate has been added to allow the previous gate to access the required wire data via shifts, allowing the
+        // arithmetic gate to occur out of sequence.
+
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.delta_range,
+            variable_index[variable_index.len() - 1],
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+        );
+
+        self.create_add_gate(&AddTriple {
+            a: variable_index[variable_index.len() - 1],
+            b: self.zero_idx,
+            c: self.zero_idx,
+            a_scaling: P::ScalarField::one(),
+            b_scaling: P::ScalarField::zero(),
+            c_scaling: P::ScalarField::zero(),
+            const_scaling: (-end),
+        });
+    }
+
+    fn create_bool_gate(&mut self, variable_index: u32) {
+        self.is_valid_variable(variable_index as usize);
+
+        self.blocks.arithmetic.populate_wires(
+            variable_index,
+            variable_index,
+            self.zero_idx,
+            self.zero_idx,
+        );
+
+        self.blocks.arithmetic.q_m().push(P::ScalarField::one());
+        self.blocks.arithmetic.q_1().push(-P::ScalarField::one());
+        self.blocks.arithmetic.q_2().push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_3().push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_c().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+
+        self.blocks.arithmetic.q_arith().push(P::ScalarField::one());
+        self.blocks.arithmetic.q_4().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_elliptic()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        self.check_selector_length_consistency();
+        self.num_gates += 1;
     }
 }

@@ -63,8 +63,7 @@ macro_rules! add_test_impl {
                         let mut io_context0 = IoContext::init(net).unwrap();
                         let io_context1 = io_context0.fork().unwrap();
                         let rep3 = [< Rep3 $proof_system Driver>]::new(io_context0, io_context1);
-                        #[allow(unused_mut)]
-                        let mut prover = [< Co $proof_system>]::<
+                        let  prover = [< Co $proof_system>]::<
                             $curve, [< Rep3 $proof_system Driver>]<PartyTestNetwork>
                         >::new(rep3);
                         prover.prove(zkey, x).unwrap()
