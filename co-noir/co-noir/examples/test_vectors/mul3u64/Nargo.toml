@@ -2,6 +2,6 @@
 name = "mul3u64"
 type = "bin"
 authors = [""]
-compiler_version = ">=0.33.0"
+compiler_version = ">=0.38.0"
 
 [dependencies]

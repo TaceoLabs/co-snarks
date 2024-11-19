@@ -1,5 +1,5 @@
 [package]
-name = "poseidon"
+name = "poseidon_assert"
 type = "bin"
 authors = [""]
 compiler_version = ">=0.38.0"
