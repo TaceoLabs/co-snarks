@@ -2508,8 +2508,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         self.assert_valid_variables(variable_index);
 
-        // let block = &mut self.blocks.delta_range;
-
         // Add an arithmetic gate to ensure the first input is equal to the start value of the range being checked
         self.create_add_gate(&AddTriple {
             a: variable_index[0],

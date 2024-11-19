@@ -44,7 +44,7 @@ where
     // Returns the concrete value for a particular witness
     // If the witness has no assignment, then
     // an error is returned
-    pub fn witness_to_value(
+    pub(crate) fn witness_to_value(
         initial_witness: &WitnessMap<T::AcvmType>,
         witness: Witness,
     ) -> CoAcvmResult<&T::AcvmType> {
@@ -56,7 +56,7 @@ where
 
     // TODO(https://github.com/noir-lang/noir/issues/5985):
     // remove skip_bitsize_checks
-    pub fn input_to_value(
+    pub(crate) fn input_to_value(
         initial_witness: &WitnessMap<T::AcvmType>,
         input: FunctionInput<GenericFieldElement<F>>,
         skip_bitsize_checks: bool,
