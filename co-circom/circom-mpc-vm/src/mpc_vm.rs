@@ -1,3 +1,4 @@
+use crate::accelerator::MpcAcceleratorConfig;
 use crate::mpc::plain::CircomPlainVmWitnessExtension;
 use crate::mpc::rep3::{CircomRep3VmWitnessExtension, Rep3VmType};
 use crate::types::{CoCircomCompilerParsed, FunDecl, InputList, OutputMapping, TemplateDecl};
@@ -1043,7 +1044,7 @@ impl<F: PrimeField> PlainWitnessExtension<F> {
                 parser.fun_decls,
                 parser.templ_decls,
                 parser.string_table,
-                MpcAccelerator::full_mpc_accelerator(),
+                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,

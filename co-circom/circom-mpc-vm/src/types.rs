@@ -5,7 +5,7 @@ use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
 use mpc_net::config::NetworkConfig;
 
 use crate::{
-    accelerator::MpcAccelerator,
+    accelerator::{MpcAccelerator, MpcAcceleratorConfig},
     mpc::plain::CircomPlainVmWitnessExtension,
     mpc_vm::{PlainWitnessExtension, Rep3WitnessExtension, VMConfig, WitnessExtension},
     op_codes::CodeBlock,
@@ -176,7 +176,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         Rep3WitnessExtension::new(
             self,
             network_config,
-            MpcAccelerator::full_mpc_accelerator(),
+            MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             vm_config,
         )
     }
@@ -197,7 +197,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         Rep3WitnessExtension::from_network(
             self,
             network,
-            MpcAccelerator::full_mpc_accelerator(),
+            MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             vm_config,
         )
     }

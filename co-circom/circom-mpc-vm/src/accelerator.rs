@@ -28,6 +28,79 @@ type AcceleratorComponent<F, C> = Box<
         + Send,
 >;
 
+#[derive(Debug, Clone)]
+pub struct MpcAcceleratorConfig {
+    /// Whether to use the pre-defined SQRT accelerator
+    /// Default: true
+    pub(crate) sqrt: bool,
+    /// Whether to use the pre-defined NUM2BITS accelerator
+    /// Default: true
+    pub(crate) num2bits: bool,
+    /// Whether to use the pre-defined ADDBITS accelerator
+    /// Default: true
+    pub(crate) addbits: bool,
+    /// Whether to use the pre-defined ISZERO accelerator
+    /// Default: true
+    pub(crate) iszero: bool,
+}
+
+impl Default for MpcAcceleratorConfig {
+    fn default() -> Self {
+        Self {
+            sqrt: true,
+            num2bits: true,
+            addbits: true,
+            iszero: true,
+        }
+    }
+}
+
+fn map_env_string_to_bool(value: &str) -> bool {
+    match value.to_ascii_lowercase().as_str() {
+        "1" => true,
+        "true" => true,
+        "on" => true,
+        "0" => false,
+        "false" => false,
+        "off" => false,
+        _ => {
+            tracing::warn!("Invalid value for boolean ENV var, defaulting to true");
+            true
+        }
+    }
+}
+
+impl MpcAcceleratorConfig {
+    /// Constructs an MpcAcceleratorConfig from the environment variables
+    ///
+    /// If a variable is not set, it defaults to true
+    /// The variables are of the form `CIRCOM_MPC_ACCELERATOR_<NAME>` where `<NAME>` is the name of the accelerator.
+    ///
+    /// Supported accelerators:
+    /// - SQRT
+    /// - NUM2BITS
+    /// - ADDBITS
+    /// - ISZERO
+    ///
+    /// Possible values for the boolean variables are: "1", "true", "on", "0", "false", "off"
+    pub fn from_env() -> Self {
+        Self {
+            sqrt: std::env::var("CIRCOM_MPC_ACCELERATOR_SQRT")
+                .map(|x| map_env_string_to_bool(&x))
+                .unwrap_or(true),
+            num2bits: std::env::var("CIRCOM_MPC_ACCELERATOR_NUM2BITS")
+                .map(|x| map_env_string_to_bool(&x))
+                .unwrap_or(true),
+            addbits: std::env::var("CIRCOM_MPC_ACCELERATOR_ADDBITS")
+                .map(|x| map_env_string_to_bool(&x))
+                .unwrap_or(true),
+            iszero: std::env::var("CIRCOM_MPC_ACCELERATOR_ISZERO")
+                .map(|x| map_env_string_to_bool(&x))
+                .unwrap_or(true),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct MpcAccelerator<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     registered_functions: HashMap<String, AcceleratorFunction<F, C>>,
@@ -35,19 +108,32 @@ pub struct MpcAccelerator<F: PrimeField, C: VmCircomWitnessExtension<F>> {
 }
 
 impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
-    pub fn empty_accelerator() -> Self {
+    pub fn empty() -> Self {
         Self {
             registered_functions: HashMap::default(),
             registered_component: HashMap::default(),
         }
     }
 
-    pub fn full_mpc_accelerator() -> Self {
-        let mut accelerator = Self::empty_accelerator();
-        accelerator.register_sqrt();
-        accelerator.register_num2bits();
-        accelerator.register_addbits();
-        accelerator.register_iszero();
+    #[expect(unused)]
+    pub fn full() -> Self {
+        Self::from_config(Default::default())
+    }
+
+    pub fn from_config(config: MpcAcceleratorConfig) -> Self {
+        let mut accelerator = Self::empty();
+        if config.sqrt {
+            accelerator.register_sqrt();
+        }
+        if config.num2bits {
+            accelerator.register_num2bits();
+        }
+        if config.addbits {
+            accelerator.register_addbits();
+        }
+        if config.iszero {
+            accelerator.register_iszero();
+        }
         accelerator
     }
 
