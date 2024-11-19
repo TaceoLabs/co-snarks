@@ -93,7 +93,7 @@ impl<F: PrimeField> AcirFormat<F> {
         wv
     }
 
-    #[allow(clippy::field_reassign_with_default)]
+    #[expect(clippy::field_reassign_with_default)]
     pub fn circuit_serde_to_acir_format(
         circuit: Circuit<GenericFieldElement<F>>,
         honk_recursion: bool,

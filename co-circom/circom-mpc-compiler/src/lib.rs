@@ -356,7 +356,7 @@ where
         }
     }
 
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     fn debug_code_block(&self) {
         for (idx, op) in self.current_code_block.iter().enumerate() {
             println!("{idx:0>3}|    {op}");

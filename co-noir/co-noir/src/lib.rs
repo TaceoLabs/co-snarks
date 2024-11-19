@@ -662,7 +662,6 @@ impl_config!(BuildAndGenerateProofCli, BuildAndGenerateProofConfig);
 impl_config!(CreateVKCli, CreateVKConfig);
 impl_config!(VerifyCli, VerifyConfig);
 
-#[allow(clippy::type_complexity)]
 pub fn share_rep3<F: PrimeField, R: Rng + CryptoRng>(
     witness: Vec<PubShared<F>>,
     rng: &mut R,
@@ -687,7 +686,6 @@ pub fn share_rep3<F: PrimeField, R: Rng + CryptoRng>(
     res
 }
 
-#[allow(clippy::type_complexity)]
 pub fn share_shamir<F: PrimeField, R: Rng + CryptoRng>(
     witness: Vec<PubShared<F>>,
     degree: usize,

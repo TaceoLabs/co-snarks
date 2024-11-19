@@ -163,7 +163,7 @@ impl<P: Pairing> ProverMemory<P> {
 }
 
 impl<P: Pairing> VerifierMemory<P> {
-    #[allow(clippy::field_reassign_with_default)]
+    #[expect(clippy::field_reassign_with_default)]
     pub(crate) fn from_memory_and_key(
         verifier_memory: crate::oink::types::VerifierMemory<P>,
         vk: VerifyingKey<P>,

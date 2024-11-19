@@ -129,7 +129,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     ) -> std::io::Result<(P::G1, P::G2)>;
 
     /// Reconstruct point G_a and perform scalar multiplication of G1_b and r concurrently
-    #[allow(clippy::type_complexity)]
+    #[expect(clippy::type_complexity)]
     fn open_point_and_scalar_mul(
         &mut self,
         g_a: &Self::PointShare<P::G1>,

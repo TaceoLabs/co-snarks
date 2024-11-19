@@ -32,7 +32,7 @@ pub struct TemplateDecl {
 }
 
 impl TemplateDecl {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     /// Creates a new template declaration. Only the MPC-compiler should use this method!
     pub fn new(
         symbol: String,
@@ -113,7 +113,7 @@ pub struct CoCircomCompilerParsed<F: PrimeField> {
 impl<F: PrimeField> CoCircomCompilerParsed<F> {
     /// > **Warning**: DO NOT CALL THIS DIRECTLY! This struct is intended for internal use by the compiler crate
     /// > and should not be instantiated directly. It is publicly visible due to requirements imposed by licensing constraints.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn new(
         main: String,
         amount_signals: usize,

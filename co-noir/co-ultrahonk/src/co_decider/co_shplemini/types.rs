@@ -29,7 +29,7 @@ impl<'a, Shared: Default, Public: Default> PolyG<'a, Shared, Public> {
     }
 }
 // apparently not necessary for Shplemini anymore, lets leave them here for now
-#[allow(dead_code)]
+#[expect(dead_code)]
 impl<'a, T: Default> PolyGShift<'a, T> {
     pub(crate) fn tables_iter(&self) -> impl Iterator<Item = &T> {
         self.tables.iter()
