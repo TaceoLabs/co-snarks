@@ -14,6 +14,18 @@ use sha3::Keccak256;
 use std::thread;
 use tests::shamir_network::{PartyTestNetwork, ShamirTestNetwork};
 
+pub fn ultrahonk_num_randomness(circuit_size: usize) -> usize {
+    // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+    let n = circuit_size;
+    let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
+        + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
+        + OINK_CRAND_PAIRS_CONST;
+    // log2(n) * ((n >>= 1) / 2) == n - 1
+    let num_pairs_sumcheck_prove =
+        SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+    num_pairs_oink_prove + num_pairs_sumcheck_prove
+}
+
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
     num_parties: usize,
@@ -65,14 +77,11 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
             let proving_key = ProvingKey::create(id, builder, prover_crs, &mut driver).unwrap();
 
             let net = driver.into_network();
-            let n = proving_key.circuit_size as usize;
-            let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
-                + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
-                + OINK_CRAND_PAIRS_CONST;
-            // log2(n) * ((n >>= 1) / 2) == n - 1
-            let num_pairs_sumcheck_prove =
-                SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
-            let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
+            let num_pairs = if num_parties == 3 {
+                0 // Precomputation is done on the fly since it requires no comminication
+            } else {
+                ultrahonk_num_randomness(proving_key.circuit_size as usize)
+            };
             let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs).unwrap();
             let mut io_context0 = ShamirProtocol::from(preprocessing);
             let io_context1 = io_context0.fork_with_pairs(0).unwrap();
