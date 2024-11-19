@@ -69,6 +69,27 @@ impl<F: PrimeField> ShamirRng<F> {
         self.matrix.len()
     }
 
+    /// Create a forked [`ShamirRng`] that consumes `amount` number of corr rand pairs from its parent
+    pub(super) fn fork_with_pairs(&mut self, amount: usize) -> Self {
+        let rng = RngType::from_seed(self.rng.gen());
+        let mut shared_rngs = Vec::with_capacity(self.shared_rngs.len());
+        for rng in self.shared_rngs.iter_mut() {
+            shared_rngs.push(RngType::from_seed(rng.gen()));
+        }
+        Self {
+            id: self.id,
+            rng,
+            threshold: self.threshold,
+            num_parties: self.num_parties,
+            precomputed_interpolation_r_t: self.precomputed_interpolation_r_t.clone(),
+            precomputed_interpolation_r_2t: self.precomputed_interpolation_r_2t.clone(),
+            shared_rngs,
+            matrix: self.matrix.clone(),
+            r_t: self.r_t.drain(..amount).collect(),
+            r_2t: self.r_2t.drain(..amount).collect(),
+        }
+    }
+
     fn get_shared_rngs<N: ShamirNetwork>(
         network: &mut N,
         rng: &mut RngType,
