@@ -251,6 +251,7 @@ impl<F: PrimeField, N: ShamirNetwork> From<ShamirPreprocessing<F, N>> for Shamir
             mul_reconstruct_with_zeros,
             network: value.network,
             rng_buffer: value.rng_buffer,
+            generation_amount: Self::DEFAULT_PAIR_GEN_AMOUNT,
         }
     }
 }
@@ -270,11 +271,12 @@ pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
     /// The underlying [`ShamirNetwork`]
     pub network: N,
     rng_buffer: ShamirRng<F>,
+    generation_amount: usize,
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     const KING_ID: usize = 0;
-    const DEFAULT_PAIR_GEN_AMOUNT: usize = 1;
+    const DEFAULT_PAIR_GEN_AMOUNT: usize = 1024;
 
     /// Create a forked [`ShamirProtocol`] that consumes `amount` number of corr rand pairs from its parent
     pub fn fork_with_pairs(&mut self, amount: usize) -> std::io::Result<Self> {
@@ -286,6 +288,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             mul_reconstruct_with_zeros: self.mul_reconstruct_with_zeros.clone(),
             network: self.network.fork()?,
             rng_buffer: self.rng_buffer.fork_with_pairs(amount),
+            generation_amount: self.generation_amount,
         })
     }
 
@@ -298,7 +301,8 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 tracing::warn!("Precomputed randomness buffer empty, refilling...");
             }
             self.rng_buffer
-                .buffer_triples(&mut self.network, Self::DEFAULT_PAIR_GEN_AMOUNT)?;
+                .buffer_triples(&mut self.network, self.generation_amount)?;
+            self.generation_amount *= 2; // We increase the amount for preprocessing exponentially
         }
 
         Ok((

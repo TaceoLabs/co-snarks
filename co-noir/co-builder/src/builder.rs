@@ -1953,6 +1953,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
         Ok(())
     }
+
     fn process_range_list(&mut self, list: &mut RangeList, driver: &mut T) -> std::io::Result<()> {
         self.assert_valid_variables(&list.variable_indices);
 
@@ -2115,6 +2116,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             }
         }
     }
+
     fn create_range_constraint(
         &mut self,
         driver: &mut T,
