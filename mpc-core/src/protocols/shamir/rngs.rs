@@ -69,6 +69,27 @@ impl<F: PrimeField> ShamirRng<F> {
         self.matrix.len()
     }
 
+    /// Create a forked [`ShamirRng`] that consumes `amount` number of corr rand pairs from its parent
+    pub(super) fn fork_with_pairs(&mut self, amount: usize) -> Self {
+        let rng = RngType::from_seed(self.rng.gen());
+        let mut shared_rngs = Vec::with_capacity(self.shared_rngs.len());
+        for rng in self.shared_rngs.iter_mut() {
+            shared_rngs.push(RngType::from_seed(rng.gen()));
+        }
+        Self {
+            id: self.id,
+            rng,
+            threshold: self.threshold,
+            num_parties: self.num_parties,
+            precomputed_interpolation_r_t: self.precomputed_interpolation_r_t.clone(),
+            precomputed_interpolation_r_2t: self.precomputed_interpolation_r_2t.clone(),
+            shared_rngs,
+            matrix: self.matrix.clone(),
+            r_t: self.r_t.drain(..amount).collect(),
+            r_2t: self.r_2t.drain(..amount).collect(),
+        }
+    }
+
     fn get_shared_rngs<N: ShamirNetwork>(
         network: &mut N,
         rng: &mut RngType,
@@ -118,7 +139,7 @@ impl<F: PrimeField> ShamirRng<F> {
     // [1, 2^2, 3^2, 4^2, ..., n^2]
     // ...
     // [1, 2^t, 3^t, 4^t, ..., n^t]
-    #[allow(unused)]
+    #[allow(dead_code)]
     fn create_vandermonde_matrix(num_parties: usize, threshold: usize) -> Vec<Vec<F>> {
         let mut result = Vec::with_capacity(threshold + 1);
         let first_row = vec![F::one(); num_parties];
@@ -147,7 +168,7 @@ impl<F: PrimeField> ShamirRng<F> {
     // [1, 2^n, 3^n, 4^n, ..., t^n]
 
     // This gives the resulting (n x n) matrix = Atlas x DN07: Each cell (row, col) has the value: sum_{i=0}^{t} (i + 1) ^ row * (col + 1) ^ i
-    #[allow(unused)]
+    #[allow(dead_code)]
     fn generate_atlas_dn_matrix(num_parties: usize, threshold: usize) -> Vec<Vec<F>> {
         let mut result = Vec::with_capacity(num_parties);
         for row in 0..num_parties {

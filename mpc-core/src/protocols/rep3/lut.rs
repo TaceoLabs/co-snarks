@@ -27,6 +27,11 @@ impl<N: Rep3Network> NaiveRep3LookupTable<N> {
     pub fn new(io_context: IoContext<N>) -> Self {
         Self { io_context }
     }
+
+    /// Consumes self and returns the inner [`IoContext`]
+    pub fn get_io_context(self) -> IoContext<N> {
+        self.io_context
+    }
 }
 
 impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for NaiveRep3LookupTable<N> {

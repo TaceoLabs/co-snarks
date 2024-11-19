@@ -249,10 +249,9 @@ impl<F: PrimeField, N: ShamirNetwork> From<ShamirPreprocessing<F, N>> for Shamir
             open_lagrange_2t,
             mul_lagrange_2t,
             mul_reconstruct_with_zeros,
-            rng: value.rng_buffer.rng,
-            r_t: value.rng_buffer.r_t,
-            r_2t: value.rng_buffer.r_2t,
             network: value.network,
+            rng_buffer: value.rng_buffer,
+            generation_amount: Self::DEFAULT_PAIR_GEN_AMOUNT,
         }
     }
 }
@@ -269,15 +268,15 @@ pub struct ShamirProtocol<F: PrimeField, N: ShamirNetwork> {
     pub open_lagrange_2t: Vec<F>,
     mul_lagrange_2t: Vec<F>,
     mul_reconstruct_with_zeros: Vec<F>,
-    rng: RngType,
-    pub(crate) r_t: Vec<F>,
-    pub(crate) r_2t: Vec<F>,
     /// The underlying [`ShamirNetwork`]
     pub network: N,
+    rng_buffer: ShamirRng<F>,
+    generation_amount: usize,
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
     const KING_ID: usize = 0;
+    const DEFAULT_PAIR_GEN_AMOUNT: usize = 1024;
 
     /// Create a forked [`ShamirProtocol`] that consumes `amount` number of corr rand pairs from its parent
     pub fn fork_with_pairs(&mut self, amount: usize) -> std::io::Result<Self> {
@@ -287,23 +286,29 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
             open_lagrange_2t: self.open_lagrange_2t.clone(),
             mul_lagrange_2t: self.mul_lagrange_2t.clone(),
             mul_reconstruct_with_zeros: self.mul_reconstruct_with_zeros.clone(),
-            rng: RngType::from_seed(self.rng.gen()),
-            r_t: self.r_t.drain(0..amount).collect(),
-            r_2t: self.r_2t.drain(0..amount).collect(),
             network: self.network.fork()?,
+            rng_buffer: self.rng_buffer.fork_with_pairs(amount),
+            generation_amount: self.generation_amount,
         })
     }
 
     /// Get a correlated randomness pair
     pub fn get_pair(&mut self) -> std::io::Result<(F, F)> {
-        if let (Some(r_t), Some(r_2t)) = (self.r_t.pop(), self.r_2t.pop()) {
-            Ok((r_t, r_2t))
-        } else {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "not enough correlated random pairs",
-            ))
+        if self.rng_buffer.r_t.is_empty() {
+            debug_assert!(self.rng_buffer.r_2t.is_empty());
+            if self.rng_buffer.num_parties != 3 {
+                // In the 3-party case no communication is required, so we do not print a warning
+                tracing::warn!("Precomputed randomness buffer empty, refilling...");
+            }
+            self.rng_buffer
+                .buffer_triples(&mut self.network, self.generation_amount)?;
+            self.generation_amount *= 2; // We increase the amount for preprocessing exponentially
         }
+
+        Ok((
+            self.rng_buffer.r_t.pop().unwrap(),
+            self.rng_buffer.r_2t.pop().unwrap(),
+        ))
     }
 
     /// Generates a random field element and returns it as a share.
