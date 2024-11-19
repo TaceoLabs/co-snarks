@@ -61,8 +61,7 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
     }
 
     fn neg_vec_in_place(&mut self, vec: &mut [Self::ArithmeticShare]) {
-        #[allow(unused_mut)]
-        for mut a in vec.iter_mut() {
+        for a in vec.iter_mut() {
             *a = arithmetic::neg(*a);
         }
     }
