@@ -368,7 +368,6 @@ impl<F: PrimeField> AcirFormat<F> {
             b_set = true;
         }
         // If necessary, set values for linears terms q_l * w_l, q_r * w_r and q_o * w_o
-        // assert!(arg.linear_combinations.len() <= 4); // We can only accommodate 4 linear terms
         for linear_term in arg.linear_combinations.iter() {
             let selector_value = linear_term.0.into_repr();
             let witness_idx = linear_term.1 .0;

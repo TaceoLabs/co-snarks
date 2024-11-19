@@ -636,6 +636,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 constraint_system.original_opcode_indices.quad_constraints[i],
             );
         }
+
         // Oversize gates are a vector of mul_quad gates.
         for (i, constraint) in constraint_system
             .big_quad_constraints
@@ -1192,7 +1193,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         let b_start_idx = self.get_first_variable_in_class(b_idx);
 
-        self.update_real_variable_indices(b_start_idx, a_real_idx as u32); //here something bad happens
+        self.update_real_variable_indices(b_start_idx, a_real_idx as u32);
 
         // Now merge equivalence classes of a and b by tying last (= real) element of b-chain to first element of a-chain
         let a_start_idx = self.get_first_variable_in_class(a_idx);
