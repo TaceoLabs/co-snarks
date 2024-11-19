@@ -195,7 +195,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             .context("While creating keys")?;
 
     // Write the vk to a file
-    let out_path = out_dir.join("proof");
+    let out_path = out_dir.join("vk");
     let mut out_file = BufWriter::new(
         std::fs::File::create(&out_path).context("while creating output file for vk")?,
     );
