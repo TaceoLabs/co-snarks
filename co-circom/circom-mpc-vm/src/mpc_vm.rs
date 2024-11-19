@@ -293,6 +293,33 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
 
         let name = self.symbol.clone();
         tracing::trace!("running component {name}");
+        // check if we have an accelerator for this
+        if ctx
+            .mpc_accelerator
+            .has_cmp_accelerator(&self.component_name)
+        {
+            let component_input_signals_start = self.my_offset + self.output_signals;
+            let component_intermediate_signals_start =
+                component_input_signals_start + self.input_signals;
+            let inputs = &ctx.signals
+                [component_input_signals_start..component_input_signals_start + self.input_signals];
+            let result = ctx.mpc_accelerator.run_cmp_accelerator(
+                &self.component_name,
+                protocol,
+                inputs,
+                self.output_signals,
+            )?;
+            // insert outputs into the signals
+            let start = self.my_offset;
+            let end = start + self.output_signals;
+            ctx.signals[start..end].clone_from_slice(&result.output);
+            // insert intermediate values into the signals
+            let start = component_intermediate_signals_start;
+            let end = start + result.intermediate.len();
+            ctx.signals[start..end].clone_from_slice(&result.intermediate);
+            return Ok(());
+        }
+
         loop {
             let inst = &current_body[ip];
             tracing::trace!("{ip:0>4}|   {inst}");
@@ -419,7 +446,6 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                             .collect_vec()
                     };
                     //check if we can run it instantly
-                    // TODO check if we can do an accelerator run
                     for mut component in new_components {
                         if component.input_signals == 0 {
                             component.run(protocol, ctx, config)?;
@@ -462,39 +488,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         .clone_from_slice(&input_signals);
                     component.provided_input_signals += amount;
                     if component.provided_input_signals == component.input_signals {
-                        // check if we have an accelerator for this
-                        if ctx
-                            .mpc_accelerator
-                            .has_cmp_accelerator(&component.component_name)
-                        {
-                            let component_input_signals_start =
-                                component.my_offset + component.output_signals;
-                            let component_intermediate_signals_start =
-                                component_input_signals_start + component.input_signals;
-                            let inputs = &ctx.signals[component_input_signals_start
-                                ..component_input_signals_start + component.input_signals];
-                            let result = ctx.mpc_accelerator.run_cmp_accelerator(
-                                &component.component_name,
-                                protocol,
-                                inputs,
-                                component.output_signals,
-                            )?;
-                            let mapped_offset = if *mapped {
-                                component.mappings[*signal_code]
-                            } else {
-                                0
-                            };
-                            // insert outputs into the signals
-                            let start = component.my_offset + mapped_offset;
-                            let end = start + component.output_signals;
-                            ctx.signals[start..end].clone_from_slice(&result.output);
-                            // insert intermediate values into the signals
-                            let start = component_intermediate_signals_start;
-                            let end = start + result.intermediate.len();
-                            ctx.signals[start..end].clone_from_slice(&result.intermediate);
-                        } else {
-                            component.run(protocol, ctx, config)?;
-                        }
+                        component.run(protocol, ctx, config)?;
                     }
                 }
                 op_codes::MpcOpCode::Assert(line) => {
