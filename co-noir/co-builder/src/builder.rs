@@ -662,7 +662,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 let var_b = self.get_variable(small_constraint.b.try_into().unwrap());
                 let var_c = self.get_variable(small_constraint.c.try_into().unwrap());
 
-                let term1 = driver.acvm_mul_with_shared(var_a.to_owned(), var_b.to_owned())?;
+                let term1 = driver.acvm_mul(var_a.to_owned(), var_b.to_owned())?;
                 let term1 = driver.acvm_mul_with_public(small_constraint.mul_scaling, term1);
                 let term2 = driver.acvm_mul_with_public(small_constraint.a_scaling, var_a);
                 let term3 = driver.acvm_mul_with_public(small_constraint.b_scaling, var_b);
@@ -2370,7 +2370,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 round_sublimbs[1].clone(),
             );
 
-            let sub1 = T::acvm_sub_by_shared(driver, term0, term1);
+            let sub1 = T::acvm_sub(driver, term0, term1);
 
             let term2 = T::acvm_mul_with_public(
                 driver,
@@ -2378,9 +2378,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 round_sublimbs[2].clone(),
             );
 
-            let subtrahend = T::acvm_sub_by_shared(driver, sub1, term2);
+            let subtrahend = T::acvm_sub(driver, sub1, term2);
 
-            let new_accumulator = T::acvm_sub_by_shared(driver, accumulator.clone(), subtrahend);
+            let new_accumulator = T::acvm_sub(driver, accumulator.clone(), subtrahend);
             self.create_big_add_gate(
                 &AddQuad {
                     a: new_limbs[0],

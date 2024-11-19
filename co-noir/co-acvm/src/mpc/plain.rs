@@ -131,11 +131,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(result)
     }
 
-    fn acvm_sub_by_shared(
-        &mut self,
-        share_1: Self::AcvmType,
-        share_2: Self::AcvmType,
-    ) -> Self::AcvmType {
+    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         share_1 - share_2
     }
 
@@ -163,7 +159,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         public_values.to_vec()
     }
 
-    fn acvm_mul_with_shared(
+    fn acvm_mul(
         &mut self,
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,

@@ -274,11 +274,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         panic!("functionality decompose_arithmetic not feasible for Shamir")
     }
 
-    fn acvm_sub_by_shared(
-        &mut self,
-        share_1: Self::AcvmType,
-        share_2: Self::AcvmType,
-    ) -> Self::AcvmType {
+    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         match (share_1, share_2) {
             (ShamirAcvmType::Public(share_1), ShamirAcvmType::Public(share_2)) => {
                 ShamirAcvmType::Public(share_1 - share_2)
@@ -312,7 +308,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         arithmetic::promote_to_trivial_shares(public_values)
     }
 
-    fn acvm_mul_with_shared(
+    fn acvm_mul(
         &mut self,
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
