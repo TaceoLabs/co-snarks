@@ -10,6 +10,10 @@ use co_acvm::{
     solver::{partial_abi::PublicMarker, Rep3CoSolver},
     Rep3AcvmType, ShamirAcvmType,
 };
+use co_ultrahonk::{
+    MAX_PARTIAL_RELATION_LENGTH, OINK_CRAND_PAIRS_CONST, OINK_CRAND_PAIRS_FACTOR_N,
+    OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE, SUMCHECK_ROUND_CRAND_PAIRS_FACTOR,
+};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
@@ -765,4 +769,16 @@ pub fn convert_witness_to_vec_rep3<F: PrimeField>(
         index += 1;
     }
     wv
+}
+
+pub fn ultrahonk_num_randomness(circuit_size: usize) -> usize {
+    // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+    let n = circuit_size;
+    let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
+        + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
+        + OINK_CRAND_PAIRS_CONST;
+    // log2(n) * ((n >>= 1) / 2) == n - 1
+    let num_pairs_sumcheck_prove =
+        SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+    num_pairs_oink_prove + num_pairs_sumcheck_prove
 }

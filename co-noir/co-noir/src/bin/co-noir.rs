@@ -7,13 +7,13 @@ use co_acvm::{
 };
 use co_noir::{
     convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
-    translate_witness_share_rep3, BuildAndGenerateProofCli, BuildAndGenerateProofConfig,
-    BuildProvingKeyCLi, BuildProvingKeyConfig, CreateVKCli, CreateVKConfig, GenerateProofCli,
-    GenerateProofConfig, GenerateWitnessCli, GenerateWitnessConfig, MPCProtocol,
-    MergeInputSharesCli, MergeInputSharesConfig, PubShared, SplitInputCli, SplitInputConfig,
-    SplitProvingKeyCli, SplitProvingKeyConfig, SplitWitnessCli, SplitWitnessConfig, TranscriptHash,
-    TranslateProvingKeyCli, TranslateProvingKeyConfig, TranslateWitnessCli, TranslateWitnessConfig,
-    VerifyCli, VerifyConfig,
+    translate_witness_share_rep3, ultrahonk_num_randomness, BuildAndGenerateProofCli,
+    BuildAndGenerateProofConfig, BuildProvingKeyCLi, BuildProvingKeyConfig, CreateVKCli,
+    CreateVKConfig, GenerateProofCli, GenerateProofConfig, GenerateWitnessCli,
+    GenerateWitnessConfig, MPCProtocol, MergeInputSharesCli, MergeInputSharesConfig, PubShared,
+    SplitInputCli, SplitInputConfig, SplitProvingKeyCli, SplitProvingKeyConfig, SplitWitnessCli,
+    SplitWitnessConfig, TranscriptHash, TranslateProvingKeyCli, TranslateProvingKeyConfig,
+    TranslateWitnessCli, TranslateWitnessConfig, VerifyCli, VerifyConfig,
 };
 use co_ultrahonk::{
     prelude::{
@@ -22,9 +22,7 @@ use co_ultrahonk::{
         ShamirUltraHonkDriver, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
         VerifyingKeyBarretenberg,
     },
-    ShamirCoBuilder, MAX_PARTIAL_RELATION_LENGTH, OINK_CRAND_PAIRS_CONST,
-    OINK_CRAND_PAIRS_FACTOR_N, OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE,
-    SUMCHECK_ROUND_CRAND_PAIRS_FACTOR,
+    ShamirCoBuilder,
 };
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
@@ -764,7 +762,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             let id = net.get_id();
 
             // Create driver for circuit builder
-            let preprocessing = ShamirPreprocessing::new(t, net, 0).unwrap(); // TODO this 0 is not yet handled correctly
+            let preprocessing = ShamirPreprocessing::new(t, net, 0).unwrap(); // We have to handle precomputation on the fly
             let protocol = ShamirProtocol::from(preprocessing);
             let mut circuit_driver = ShamirAcvmSolver::new(protocol);
 
@@ -884,15 +882,11 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let public_input = proving_key.get_public_inputs();
 
             // init MPC protocol
-            // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
-            let n = proving_key.circuit_size as usize;
-            let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
-                + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
-                + OINK_CRAND_PAIRS_CONST;
-            // log2(n) * ((n >>= 1) / 2) == n - 1
-            let num_pairs_sumcheck_prove =
-                SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
-            let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
+            let num_pairs = if net.get_num_parties() == 3 {
+                0 // Precomputation is done on the fly since it requires no comminication
+            } else {
+                ultrahonk_num_randomness(proving_key.circuit_size as usize)
+            };
             let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
             let mut protocol0 = ShamirProtocol::from(preprocessing);
             let protocol1 = protocol0.fork_with_pairs(0)?;
@@ -1079,7 +1073,7 @@ fn run_build_and_generate_proof(
             let id = net.get_id();
 
             // Create driver for circuit builder
-            let preprocessing = ShamirPreprocessing::new(t, net, 0).unwrap();
+            let preprocessing = ShamirPreprocessing::new(t, net, 0).unwrap(); // We have to handle precomputation on the fly
             let protocol = ShamirProtocol::from(preprocessing);
             let mut circuit_driver = ShamirAcvmSolver::new(protocol);
 
@@ -1115,15 +1109,11 @@ fn run_build_and_generate_proof(
 
             let net = circuit_driver.into_network();
             // init MPC protocol
-            // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
-            let n = proving_key.circuit_size as usize;
-            let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
-                + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
-                + OINK_CRAND_PAIRS_CONST;
-            // log2(n) * ((n >>= 1) / 2) == n - 1
-            let num_pairs_sumcheck_prove =
-                SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
-            let num_pairs = num_pairs_oink_prove + num_pairs_sumcheck_prove;
+            let num_pairs = if net.get_num_parties() == 3 {
+                0 // Precomputation is done on the fly since it requires no comminication
+            } else {
+                ultrahonk_num_randomness(proving_key.circuit_size as usize)
+            };
             let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
             let mut protocol0 = ShamirProtocol::from(preprocessing);
             let protocol1 = protocol0.fork_with_pairs(0)?;
