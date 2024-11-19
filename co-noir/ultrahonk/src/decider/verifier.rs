@@ -37,7 +37,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     // Note: The pairing check can be expressed naturally as
     // e(C - v * [1]_1, [1]_2) = e([W]_1, [X - r]_2) where C =[p(X)]_1. This can be rearranged (e.g. see the plonk
     // paper) as e(C + r*[W]_1 - v*[1]_1, [1]_2) * e(-[W]_1, [X]_2) = 1, or e(P_0, [1]_2) * e(P_1, [X]_2) = 1
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn reduce_verify_zm(
         opening_pair: ZeroMorphVerifierOpeningClaim<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,

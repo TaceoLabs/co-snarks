@@ -2,7 +2,7 @@ use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
 
 pub trait FieldHash<F: PrimeField, const T: usize> {
-    #[allow(unused)]
+    #[allow(dead_code)]
     fn permutation(&self, input: &[F; T]) -> [F; T] {
         let mut state = *input;
         self.permutation_in_place(&mut state);
@@ -140,7 +140,7 @@ where
         Self::hash_internal::<OUT_LEN, false>(input)
     }
 
-    #[allow(unused)]
+    #[allow(dead_code)]
     pub(crate) fn hash_variable_length<const OUT_LEN: usize>(input: &[F]) -> [F; OUT_LEN] {
         Self::hash_internal::<OUT_LEN, true>(input)
     }

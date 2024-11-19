@@ -35,11 +35,26 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
 
+    /// Subtracts two ACVM-type values: secret - secret
+    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType;
+
     /// Multiply an ACVM-types with a public value: \[c\] = public * \[secret\].
     fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType;
 
+    /// Multiply two ACVM-types: \[c\] = \[secret_1\] * \[secret_2\].
+    fn acvm_mul(
+        &mut self,
+        secret_1: Self::AcvmType,
+        secret_2: Self::AcvmType,
+    ) -> io::Result<Self::AcvmType>;
+
+    /// Negates an ACVM-type inplace: \[a\] = -\[a\].
+    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType);
+
     /// Multiply an ACVM-types with a public value and add_assign with result: \[result\] += q_l * \[w_l\].
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType);
+
+    fn add_assign(&mut self, lhs: &mut Self::AcvmType, rhs: Self::AcvmType);
 
     /// Multiply two acvm-types and a public value and stores them at target: \[*result\] = c * \[lhs\] * \[rhs\].
     fn solve_mul_term(
@@ -47,8 +62,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         c: F,
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
-        target: &mut Self::AcvmType,
-    ) -> io::Result<()>;
+    ) -> io::Result<Self::AcvmType>;
 
     /// Solves the equation \[q_l\] * w_l + \[c\] = 0, by computing \[-c\]/\[q_l\] and returning the result.
     fn solve_equation(
@@ -92,4 +106,26 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     // TODO do we want this here?
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>>;
+
+    /// Transforms a public value into a shared value: \[a\] = a.
+    fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare;
+
+    /// Elementwise transformation of a vector of public values into a vector of shared values: \[a_i\] = a_i.
+    fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare>;
+
+    /// Decompose a shared value into a vector of shared values: \[a\] = a_1 + a_2 + ... + a_n. Each value a_i has at most decompose_bit_size bits, whereas the total bit size of the shares is total_bit_size_per_field. Thus, a_n, might have a smaller bitsize than the other chunks
+    fn decompose_arithmetic(
+        &mut self,
+        input: Self::ArithmeticShare,
+        // io_context: &mut IoContext<N>,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
+
+    /// Sorts a vector of shared values in ascending order, only considering the first bitsize bits.
+    fn sort(
+        &mut self,
+        inputs: &[Self::ArithmeticShare],
+        bitsize: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
 }

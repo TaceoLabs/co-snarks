@@ -12,6 +12,7 @@ use super::add_rep3_acvm_test;
 // basic assert zero tests
 add_rep3_acvm_test!("addition_multiplication");
 add_rep3_acvm_test!("poseidon");
+add_rep3_acvm_test!("poseidon_input2");
 add_rep3_acvm_test!("poseidon2");
 add_rep3_acvm_test!("poseidon_stdlib");
 

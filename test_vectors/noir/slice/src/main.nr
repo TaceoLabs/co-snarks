@@ -1,5 +1,3 @@
-use dep::std;
-
 fn flatten_slice(slice: [Field]) -> Field {
     slice[0] + slice[1]
 }

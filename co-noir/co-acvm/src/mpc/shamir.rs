@@ -1,3 +1,4 @@
+use super::NoirWitnessExtensionProtocol;
 use crate::PlainAcvmSolver;
 use ark_ff::PrimeField;
 use mpc_core::protocols::{
@@ -7,8 +8,6 @@ use mpc_core::protocols::{
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-use super::NoirWitnessExtensionProtocol;
-
 pub struct ShamirAcvmSolver<F: PrimeField, N: ShamirNetwork> {
     protocol: ShamirProtocol<F, N>,
     plain_solver: PlainAcvmSolver<F>,
@@ -16,13 +15,17 @@ pub struct ShamirAcvmSolver<F: PrimeField, N: ShamirNetwork> {
 }
 
 impl<F: PrimeField, N: ShamirNetwork> ShamirAcvmSolver<F, N> {
-    pub(crate) fn new(protocol: ShamirProtocol<F, N>) -> Self {
+    pub fn new(protocol: ShamirProtocol<F, N>) -> Self {
         let plain_solver = PlainAcvmSolver::<F>::default();
         Self {
             protocol,
             plain_solver,
             phantom_data: PhantomData,
         }
+    }
+
+    pub fn into_network(self) -> N {
+        self.protocol.network
     }
 }
 
@@ -124,6 +127,15 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
+    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType) {
+        match a {
+            ShamirAcvmType::Public(public) => {
+                public.neg_in_place();
+            }
+            ShamirAcvmType::Shared(shared) => *shared = arithmetic::neg(*shared),
+        }
+    }
+
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, target: &mut Self::AcvmType) {
         let result = match (w_l, target.to_owned()) {
             (ShamirAcvmType::Public(w_l), ShamirAcvmType::Public(result)) => {
@@ -144,13 +156,28 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         *target = result;
     }
 
+    fn add_assign(&mut self, target: &mut Self::AcvmType, rhs: Self::AcvmType) {
+        let result = match (target.clone(), rhs) {
+            (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
+                ShamirAcvmType::Public(lhs + rhs)
+            }
+            (ShamirAcvmType::Public(public), ShamirAcvmType::Shared(shared))
+            | (ShamirAcvmType::Shared(shared), ShamirAcvmType::Public(public)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(shared, public))
+            }
+            (ShamirAcvmType::Shared(lhs), ShamirAcvmType::Shared(rhs)) => {
+                ShamirAcvmType::Shared(arithmetic::add(lhs, rhs))
+            }
+        };
+        *target = result;
+    }
+
     fn solve_mul_term(
         &mut self,
         c: F,
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
-        target: &mut Self::AcvmType,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<Self::AcvmType> {
         let result = match (lhs, rhs) {
             (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
                 ShamirAcvmType::Public(lhs * rhs * c)
@@ -164,8 +191,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
                 ShamirAcvmType::Shared(arithmetic::mul_public(shared_mul, c))
             }
         };
-        *target = result;
-        Ok(())
+        Ok(result)
     }
 
     fn solve_equation(
@@ -237,5 +263,70 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
 
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<F>> {
         arithmetic::open_vec(a, &mut self.protocol)
+    }
+
+    fn decompose_arithmetic(
+        &mut self,
+        _input: Self::ArithmeticShare,
+        _total_bit_size_per_field: usize,
+        _decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        panic!("functionality decompose_arithmetic not feasible for Shamir")
+    }
+
+    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+        match (share_1, share_2) {
+            (ShamirAcvmType::Public(share_1), ShamirAcvmType::Public(share_2)) => {
+                ShamirAcvmType::Public(share_1 - share_2)
+            }
+            (ShamirAcvmType::Public(share_1), ShamirAcvmType::Shared(share_2)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(-share_2, share_1))
+            }
+            (ShamirAcvmType::Shared(share_1), ShamirAcvmType::Public(share_2)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(share_1, -share_2))
+            }
+            (ShamirAcvmType::Shared(share_1), ShamirAcvmType::Shared(share_2)) => {
+                let result = arithmetic::sub(share_1, share_2);
+                ShamirAcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn sort(
+        &mut self,
+        _inputs: &[Self::ArithmeticShare],
+        _bitsize: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        panic!("functionality sort not feasible for Shamir")
+    }
+
+    fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
+        arithmetic::promote_to_trivial_share(public_value)
+    }
+
+    fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
+        arithmetic::promote_to_trivial_shares(public_values)
+    }
+
+    fn acvm_mul(
+        &mut self,
+        secret_1: Self::AcvmType,
+        secret_2: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        match (secret_1, secret_2) {
+            (ShamirAcvmType::Public(secret_1), ShamirAcvmType::Public(secret_2)) => {
+                Ok(ShamirAcvmType::Public(secret_1 * secret_2))
+            }
+            (ShamirAcvmType::Public(secret_1), ShamirAcvmType::Shared(secret_2)) => Ok(
+                ShamirAcvmType::Shared(arithmetic::mul_public(secret_2, secret_1)),
+            ),
+            (ShamirAcvmType::Shared(secret_1), ShamirAcvmType::Public(secret_2)) => Ok(
+                ShamirAcvmType::Shared(arithmetic::mul_public(secret_1, secret_2)),
+            ),
+            (ShamirAcvmType::Shared(secret_1), ShamirAcvmType::Shared(secret_2)) => {
+                let result = arithmetic::mul(secret_1, secret_2, &mut self.protocol)?;
+                Ok(ShamirAcvmType::Shared(result))
+            }
+        }
     }
 }

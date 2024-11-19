@@ -49,9 +49,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         id: T::PartyID,
         mut circuit: GenericUltraCircuitBuilder<P, U>,
         crs: ProverCrs<P>,
+        driver: &mut U,
     ) -> HonkProofResult<Self> {
         tracing::trace!("ProvingKey create");
-        circuit.finalize_circuit(true);
+        circuit.finalize_circuit(true, driver)?;
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
         let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);
@@ -105,13 +106,14 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         id: T::PartyID,
         circuit: GenericUltraCircuitBuilder<P, U>,
         crs: Crs<P>,
+        driver: &mut U,
     ) -> HonkProofResult<(Self, VerifyingKey<P>)> {
         let prover_crs = ProverCrs {
             monomials: crs.monomials,
         };
         let verifier_crs = crs.g2_x;
 
-        let pk = ProvingKey::create(id, circuit, prover_crs)?;
+        let pk = ProvingKey::create(id, circuit, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -181,12 +183,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         &mut self,
         id: T::PartyID,
         builder: &mut GenericUltraCircuitBuilder<P, U>,
-        is_strucutred: bool,
+        is_structured: bool,
     ) {
         tracing::trace!("Populating trace");
 
         let mut trace_data = TraceData::new(builder, self);
-        trace_data.construct_trace_data(id, builder, is_strucutred);
+        trace_data.construct_trace_data(id, builder, is_structured);
 
         let ram_rom_offset = trace_data.ram_rom_offset;
         let copy_cycles = trace_data.copy_cycles;
