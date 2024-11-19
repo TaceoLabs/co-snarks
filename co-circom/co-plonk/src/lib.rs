@@ -167,11 +167,10 @@ mod plonk_utils {
         poly: &mut Vec<T::ArithmeticShare>,
         coeff_rev: &[T::ArithmeticShare],
     ) {
-        #[allow(unused_mut)]
         poly.par_iter_mut()
             .zip(coeff_rev.par_iter().rev())
             .with_min_len(512)
-            .for_each(|(mut p, c)| {
+            .for_each(|(p, c)| {
                 *p = T::sub(*p, *c);
             });
         // Extend

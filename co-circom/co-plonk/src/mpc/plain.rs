@@ -54,8 +54,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
     }
 
     fn neg_vec_in_place(&mut self, a: &mut [Self::ArithmeticShare]) {
-        #[allow(unused_mut)]
-        for mut a in a.iter_mut() {
+        for a in a.iter_mut() {
             *a = -*a;
         }
     }

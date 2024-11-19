@@ -139,7 +139,7 @@ impl<F: PrimeField> ShamirRng<F> {
     // [1, 2^2, 3^2, 4^2, ..., n^2]
     // ...
     // [1, 2^t, 3^t, 4^t, ..., n^t]
-    #[allow(unused)]
+    #[allow(dead_code)]
     fn create_vandermonde_matrix(num_parties: usize, threshold: usize) -> Vec<Vec<F>> {
         let mut result = Vec::with_capacity(threshold + 1);
         let first_row = vec![F::one(); num_parties];
@@ -168,7 +168,7 @@ impl<F: PrimeField> ShamirRng<F> {
     // [1, 2^n, 3^n, 4^n, ..., t^n]
 
     // This gives the resulting (n x n) matrix = Atlas x DN07: Each cell (row, col) has the value: sum_{i=0}^{t} (i + 1) ^ row * (col + 1) ^ i
-    #[allow(unused)]
+    #[allow(dead_code)]
     fn generate_atlas_dn_matrix(num_parties: usize, threshold: usize) -> Vec<Vec<F>> {
         let mut result = Vec::with_capacity(num_parties);
         for row in 0..num_parties {

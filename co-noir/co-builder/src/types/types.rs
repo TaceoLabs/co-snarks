@@ -4,7 +4,7 @@ use crate::polynomials::polynomial::Polynomial;
 use crate::types::plookup::BasicTableId;
 use crate::utils::Utils;
 use ark_ec::pairing::Pairing;
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;

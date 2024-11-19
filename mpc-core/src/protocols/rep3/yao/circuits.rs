@@ -127,7 +127,7 @@ impl GarbledCircuits {
 
     /// Binary subtraction. Returns the result and whether it underflowed.
     /// I.e., calculates 2^k + x1 - x2
-    #[allow(unused, clippy::type_complexity)]
+    #[allow(dead_code, clippy::type_complexity)]
     fn bin_subtraction<G: FancyBinary>(
         g: &mut G,
         xs: &[G::Item],
@@ -399,7 +399,7 @@ impl GarbledCircuits {
         g.negate(&ge)
     }
 
-    #[allow(unused)]
+    #[allow(dead_code)]
     fn unsigned_le<G: FancyBinary>(
         g: &mut G,
         a: &[G::Item],

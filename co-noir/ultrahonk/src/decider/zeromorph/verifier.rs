@@ -1,10 +1,6 @@
 use super::types::{PolyF, PolyGShift};
 use crate::{
-    decider::{
-        shplemini::ZeroMorphVerifierOpeningClaim,
-        types::{ClaimedEvaluations, VerifierCommitments},
-        verifier::DeciderVerifier,
-    },
+    decider::{shplemini::ZeroMorphVerifierOpeningClaim, verifier::DeciderVerifier},
     prelude::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,

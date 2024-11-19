@@ -48,7 +48,7 @@ pub(crate) fn share<F: PrimeField, R: Rng>(
 }
 
 // sets the shares of parties in points to 0
-#[allow(unused)]
+#[allow(dead_code)]
 pub(crate) fn share_with_zeros<F: PrimeField>(
     secret: &F,
     zero_points: &[usize],
@@ -212,7 +212,7 @@ pub(crate) fn interpolate_poly_from_precomputed<F: PrimeField>(
     res
 }
 
-#[allow(unused)]
+#[allow(dead_code)]
 pub(crate) fn interpolate_poly<F: PrimeField>(shares: &[F], coeffs: &[usize]) -> Vec<F> {
     debug_assert_eq!(shares.len(), coeffs.len());
 

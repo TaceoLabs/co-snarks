@@ -71,8 +71,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         coeffs: &mut [Self::ArithmeticShare],
         roots: &[P::ScalarField],
     ) {
-        #[allow(unused_mut)]
-        for (mut c, pow) in coeffs.iter_mut().zip(roots) {
+        for (c, pow) in coeffs.iter_mut().zip(roots) {
             *c *= pow;
         }
     }
