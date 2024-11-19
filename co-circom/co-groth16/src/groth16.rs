@@ -263,7 +263,6 @@ where
             c_domain.ifft_in_place(&mut ab);
             ifft_span.exit();
             let dist_pows_span = tracing::debug_span!("c: dist pows").entered();
-            #[allow(unused_mut)]
             ab.par_iter_mut()
                 .zip_eq(c_roots.par_iter())
                 .with_min_len(512)

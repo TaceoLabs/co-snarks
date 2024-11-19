@@ -71,8 +71,7 @@ impl<P: Pairing> std::fmt::Display for Round1Proof<P> {
 impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
     pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::ArithmeticShare::default());
-        #[allow(unused_mut)]
-        for mut x in b.iter_mut() {
+        for x in b.iter_mut() {
             *x = driver.rand()?;
         }
         Ok(Self { b })

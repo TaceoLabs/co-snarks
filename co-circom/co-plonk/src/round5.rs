@@ -84,8 +84,7 @@ where
         let inv_beta = beta.inverse().expect("Highly unlikely to be zero");
         let inv_beta_neg = -inv_beta;
 
-        #[allow(unused_mut)]
-        for mut el in inout.iter_mut().take(n) {
+        for el in inout.iter_mut().take(n) {
             *el = T::mul_with_public(*el, inv_beta_neg);
         }
         for i in n..inout.len() {
@@ -101,8 +100,7 @@ where
             inout.resize(add_poly.len(), P::ScalarField::zero());
         }
 
-        #[allow(unused_mut)]
-        for (mut inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
             *inout += *add;
         }
     }
@@ -116,8 +114,7 @@ where
             inout.resize(add_poly.len(), P::ScalarField::zero());
         }
 
-        #[allow(unused_mut)]
-        for (mut inout, add) in inout.iter_mut().zip(add_poly.iter()) {
+        for (inout, add) in inout.iter_mut().zip(add_poly.iter()) {
             *inout += *add * factor;
         }
     }
@@ -160,8 +157,8 @@ where
         let e24 = e2 + e4;
 
         let mut poly_r = zkey.qm_poly.coeffs.clone();
-        #[allow(unused_mut)]
-        for mut coeff in poly_r.iter_mut() {
+
+        for coeff in poly_r.iter_mut() {
             *coeff *= coef_ab;
         }
         Self::add_factor_poly(&mut poly_r.coeffs, &zkey.ql_poly.coeffs, proof.eval_a);
@@ -178,41 +175,33 @@ where
 
         let mut poly_r_shared = vec![T::ArithmeticShare::default(); len];
 
-        #[allow(unused_mut)]
-        for (mut inout, add) in poly_r_shared
+        for (inout, add) in poly_r_shared
             .iter_mut()
             .zip(polys.z.poly.clone().into_iter())
         {
             *inout = T::mul_with_public(add, e24);
         }
 
-        #[allow(unused_mut)]
-        for (mut inout, add) in poly_r_shared.iter_mut().zip(poly_r.iter()) {
+        for (inout, add) in poly_r_shared.iter_mut().zip(poly_r.iter()) {
             *inout = T::add_with_public(party_id, *inout, *add);
         }
 
         let mut tmp_poly = vec![T::ArithmeticShare::default(); len];
         let xin2 = xin.square();
-        #[allow(unused_mut)]
-        for (mut inout, add) in tmp_poly.iter_mut().zip(polys.t3.clone().into_iter()) {
+        for (inout, add) in tmp_poly.iter_mut().zip(polys.t3.clone().into_iter()) {
             *inout = T::mul_with_public(add, xin2);
         }
-        #[allow(unused_mut)]
-        for (mut inout, add) in tmp_poly.iter_mut().zip(polys.t2.clone().into_iter()) {
+        for (inout, add) in tmp_poly.iter_mut().zip(polys.t2.clone().into_iter()) {
             let tmp = T::mul_with_public(add, xin);
             *inout = T::add(*inout, tmp);
         }
-        #[allow(unused_mut)]
-        for (mut inout, add) in tmp_poly.iter_mut().zip(polys.t1.clone().into_iter()) {
+        for (inout, add) in tmp_poly.iter_mut().zip(polys.t1.clone().into_iter()) {
             *inout = T::add(*inout, add);
         }
-        #[allow(unused_mut)]
-        for mut inout in tmp_poly.iter_mut() {
+        for inout in tmp_poly.iter_mut() {
             *inout = T::mul_with_public(*inout, zh);
         }
-
-        #[allow(unused_mut)]
-        for (mut inout, sub) in poly_r_shared.iter_mut().zip(tmp_poly.iter()) {
+        for (inout, sub) in poly_r_shared.iter_mut().zip(tmp_poly.iter()) {
             *inout = T::sub(*inout, *sub);
         }
 
