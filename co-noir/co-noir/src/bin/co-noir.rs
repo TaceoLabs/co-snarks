@@ -287,7 +287,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
         true,
         false,
         &mut driver,
-    );
+    )?;
     // parse the crs
     let prover_crs = PlainProvingKey::get_prover_crs(
         &builder,
@@ -295,7 +295,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     )
     .context("failed to get prover crs")?;
     let proving_key =
-        PlainProvingKey::create::<PlainAcvmSolver<_>>(builder, prover_crs, &mut driver);
+        PlainProvingKey::create::<PlainAcvmSolver<_>>(builder, prover_crs, &mut driver)?;
 
     let witness_entities = proving_key
         .polynomials
@@ -733,7 +733,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 true,
                 false,
                 &mut circuit_driver,
-            );
+            )?;
 
             // parse the crs
             let prover_crs = ProvingKey::<Rep3UltraHonkDriver<Rep3MpcNet>, _>::get_prover_crs(
@@ -778,7 +778,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 true,
                 false,
                 &mut circuit_driver,
-            );
+            )?;
 
             // parse the crs
             let prover_crs =
@@ -1017,7 +1017,7 @@ fn run_build_and_generate_proof(
                 true,
                 false,
                 &mut circuit_driver,
-            );
+            )?;
 
             // parse the crs
             let prover_crs = ProvingKey::<Rep3UltraHonkDriver<Rep3MpcNet>, _>::get_prover_crs(
@@ -1093,7 +1093,7 @@ fn run_build_and_generate_proof(
                 true,
                 false,
                 &mut circuit_driver,
-            );
+            )?;
 
             // parse the crs
             let prover_crs =
@@ -1220,7 +1220,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
         true,
         false,
         &mut driver,
-    );
+    )?;
 
     // parse the crs
     let prover_crs = VerifyingKey::get_prover_crs(

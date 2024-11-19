@@ -433,6 +433,7 @@ impl<
 
         transcript
             .send_u64_to_verifier("circuit_size".to_string(), proving_key.circuit_size as u64);
+        println!("circuit_size: {}", proving_key.circuit_size as u64);
         transcript.send_u64_to_verifier(
             "public_input_size".to_string(),
             proving_key.num_public_inputs as u64,

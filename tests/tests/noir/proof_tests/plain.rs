@@ -50,7 +50,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
         true,
         false,
         &mut driver,
-    );
+    )
+    .unwrap();
 
     let crs = ProvingKey::<PlainUltraHonkDriver, _>::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2)
         .expect("failed to get crs");
@@ -85,7 +86,8 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
         true,
         false,
         &mut driver,
-    );
+    )
+    .unwrap();
 
     let crs = ProvingKey::<PlainUltraHonkDriver, _>::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2)
         .expect("failed to get crs");

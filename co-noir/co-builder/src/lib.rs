@@ -1,5 +1,4 @@
 pub(crate) mod acir_format;
-#[allow(unused)] // TACEO TODO remove later
 pub(crate) mod builder;
 pub(crate) mod crs;
 pub(crate) mod honk_curve;

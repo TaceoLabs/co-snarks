@@ -72,7 +72,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
                 true,
                 false,
                 &mut driver,
-            );
+            )
+            .unwrap();
 
             let crs = ProvingKey::<Rep3UltraHonkDriver<PartyTestNetwork>, _>::get_prover_crs(
                 &builder,
@@ -109,7 +110,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
         true,
         false,
         &mut driver,
-    );
+    )
+    .unwrap();
     let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
     let verifying_key = VerifyingKey::create(builder, crs, &mut driver).unwrap();
 
@@ -149,7 +151,8 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
                 true,
                 false,
                 &mut driver,
-            );
+            )
+            .unwrap();
 
             let prover_crs =
                 ProvingKey::<Rep3UltraHonkDriver<PartyTestNetwork>, _>::get_prover_crs(
@@ -186,7 +189,8 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
         true,
         false,
         &mut driver,
-    );
+    )
+    .unwrap();
     let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
     let verifying_key = VerifyingKey::create(builder, crs, &mut driver).unwrap();
 

@@ -581,22 +581,29 @@ impl<F: PrimeField> AcirFormat<F> {
         block.trace.push(acir_mem_op);
     }
 
-    #[allow(unused)] // TACEO TODO remove later
     fn handle_blackbox_func_call(
         arg: BlackBoxFuncCall<GenericFieldElement<F>>,
         af: &mut AcirFormat<F>,
-        honk_recursive: bool,
+        _honk_recursive: bool,
         opcode_index: usize,
     ) {
         match arg {
             BlackBoxFuncCall::AES128Encrypt {
-                inputs,
-                iv,
-                key,
-                outputs,
+                inputs: _,
+                iv: _,
+                key: _,
+                outputs: _,
             } => todo!("BlackBoxFuncCall::AES128Encrypt "),
-            BlackBoxFuncCall::AND { lhs, rhs, output } => todo!("BlackBoxFuncCall::AND"),
-            BlackBoxFuncCall::XOR { lhs, rhs, output } => todo!("BlackBoxFuncCall::XOR"),
+            BlackBoxFuncCall::AND {
+                lhs: _,
+                rhs: _,
+                output: _,
+            } => todo!("BlackBoxFuncCall::AND"),
+            BlackBoxFuncCall::XOR {
+                lhs: _,
+                rhs: _,
+                output: _,
+            } => todo!("BlackBoxFuncCall::XOR"),
             BlackBoxFuncCall::RANGE { input } => {
                 let witness_input = input.to_witness().witness_index();
                 af.range_constraints.push(RangeConstraint {
@@ -607,84 +614,112 @@ impl<F: PrimeField> AcirFormat<F> {
                     .range_constraints
                     .push(opcode_index);
 
-                if (af.minimal_range.contains_key(&witness_input)) {
-                    if (af.minimal_range[&witness_input] > input.num_bits()) {
+                if af.minimal_range.contains_key(&witness_input) {
+                    if af.minimal_range[&witness_input] > input.num_bits() {
                         af.minimal_range.insert(witness_input, input.num_bits());
                     }
                 } else {
                     af.minimal_range.insert(witness_input, input.num_bits());
                 }
             }
-            BlackBoxFuncCall::Blake2s { inputs, outputs } => todo!("BlackBoxFuncCall::Blake2s"),
-            BlackBoxFuncCall::Blake3 { inputs, outputs } => todo!("BlackBoxFuncCall::Blake3"),
+            BlackBoxFuncCall::Blake2s {
+                inputs: _,
+                outputs: _,
+            } => todo!("BlackBoxFuncCall::Blake2s"),
+            BlackBoxFuncCall::Blake3 {
+                inputs: _,
+                outputs: _,
+            } => todo!("BlackBoxFuncCall::Blake3"),
             BlackBoxFuncCall::SchnorrVerify {
-                public_key_x,
-                public_key_y,
-                signature,
-                message,
-                output,
+                public_key_x: _,
+                public_key_y: _,
+                signature: _,
+                message: _,
+                output: _,
             } => todo!("BlackBoxFuncCall::SchnorrVerify"),
             BlackBoxFuncCall::EcdsaSecp256k1 {
-                public_key_x,
-                public_key_y,
-                signature,
-                hashed_message,
-                output,
+                public_key_x: _,
+                public_key_y: _,
+                signature: _,
+                hashed_message: _,
+                output: _,
             } => todo!("BlackBoxFuncCall::EcdsaSecp256k1"),
             BlackBoxFuncCall::EcdsaSecp256r1 {
-                public_key_x,
-                public_key_y,
-                signature,
-                hashed_message,
-                output,
+                public_key_x: _,
+                public_key_y: _,
+                signature: _,
+                hashed_message: _,
+                output: _,
             } => todo!("BlackBoxFuncCall::EcdsaSecp256r1"),
             BlackBoxFuncCall::MultiScalarMul {
-                points,
-                scalars,
-                outputs,
+                points: _,
+                scalars: _,
+                outputs: _,
             } => todo!(),
             BlackBoxFuncCall::EmbeddedCurveAdd {
-                input1,
-                input2,
-                outputs,
+                input1: _,
+                input2: _,
+                outputs: _,
             } => todo!("BlackBoxFuncCall::EmbeddedCurveAdd"),
-            BlackBoxFuncCall::Keccakf1600 { inputs, outputs } => {
+            BlackBoxFuncCall::Keccakf1600 {
+                inputs: _,
+                outputs: _,
+            } => {
                 todo!("BlackBoxFuncCall::Keccakf1600")
             }
-            BlackBoxFuncCall::BigIntAdd { lhs, rhs, output } => {
+            BlackBoxFuncCall::BigIntAdd {
+                lhs: _,
+                rhs: _,
+                output: _,
+            } => {
                 todo!("BlackBoxFuncCall::BigIntAdd")
             }
-            BlackBoxFuncCall::BigIntSub { lhs, rhs, output } => {
+            BlackBoxFuncCall::BigIntSub {
+                lhs: _,
+                rhs: _,
+                output: _,
+            } => {
                 todo!("BlackBoxFuncCall::BigIntSub")
             }
-            BlackBoxFuncCall::BigIntMul { lhs, rhs, output } => {
+            BlackBoxFuncCall::BigIntMul {
+                lhs: _,
+                rhs: _,
+                output: _,
+            } => {
                 todo!("BlackBoxFuncCall::BigIntMul")
             }
-            BlackBoxFuncCall::BigIntDiv { lhs, rhs, output } => {
+            BlackBoxFuncCall::BigIntDiv {
+                lhs: _,
+                rhs: _,
+                output: _,
+            } => {
                 todo!("BlackBoxFuncCall::BigIntDiv")
             }
             BlackBoxFuncCall::BigIntFromLeBytes {
-                inputs,
-                modulus,
-                output,
+                inputs: _,
+                modulus: _,
+                output: _,
             } => todo!("BlackBoxFuncCall::BigIntFromLeBytes"),
-            BlackBoxFuncCall::BigIntToLeBytes { input, outputs } => todo!(),
+            BlackBoxFuncCall::BigIntToLeBytes {
+                input: _,
+                outputs: _,
+            } => todo!(),
             BlackBoxFuncCall::Poseidon2Permutation {
-                inputs,
-                outputs,
-                len,
+                inputs: _,
+                outputs: _,
+                len: _,
             } => todo!("BlackBoxFuncCall::Poseidon2Permutation"),
             BlackBoxFuncCall::Sha256Compression {
-                inputs,
-                hash_values,
-                outputs,
+                inputs: _,
+                hash_values: _,
+                outputs: _,
             } => todo!("BlackBoxFuncCall::Sha256Compression"),
             BlackBoxFuncCall::RecursiveAggregation {
-                verification_key,
-                proof,
-                public_inputs,
-                key_hash,
-                proof_type,
+                verification_key: _,
+                proof: _,
+                public_inputs: _,
+                key_hash: _,
+                proof_type: _,
             } => todo!("BlackBoxFuncCall::RecursiveAggregation"),
         }
     }

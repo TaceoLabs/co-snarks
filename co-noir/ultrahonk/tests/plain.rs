@@ -26,7 +26,8 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         true,
         false,
         &mut driver,
-    );
+    )
+    .unwrap();
 
     let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
 

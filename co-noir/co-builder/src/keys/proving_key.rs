@@ -7,6 +7,7 @@ use crate::{
     },
     types::types::{CyclicPermutation, Mapping, PermutationMapping, TraceData, NUM_WIRES},
     utils::Utils,
+    HonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
@@ -30,9 +31,9 @@ impl<P: Pairing> ProvingKey<P> {
         mut circuit: UltraCircuitBuilder<P>,
         crs: ProverCrs<P>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
-    ) -> Self {
+    ) -> HonkProofResult<Self> {
         tracing::trace!("ProvingKey create");
-        circuit.finalize_circuit(true, driver);
+        circuit.finalize_circuit(true, driver)?;
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
         let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);
@@ -76,7 +77,7 @@ impl<P: Pairing> ProvingKey<P> {
             proving_key.public_inputs.push(*input);
         }
 
-        proving_key
+        Ok(proving_key)
     }
 
     fn get_crs_size<T: NoirWitnessExtensionProtocol<P::ScalarField>>(

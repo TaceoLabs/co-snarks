@@ -20,15 +20,10 @@ use crate::{
     HonkProofError, HonkProofResult,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{One, Zero};
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
-use eyre::OptionExt;
-use mpc_core::protocols::rep3::gadgets::sort;
 use num_bigint::BigUint;
-use std::{
-    collections::{BTreeMap, HashMap},
-    fmt::Debug,
-};
+use std::collections::BTreeMap;
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
@@ -44,7 +39,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         let contains_recursive_proof = self.contains_recursive_proof;
         let recursive_proof_public_input_indices = self.recursive_proof_public_input_indices;
 
-        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver);
+        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -79,7 +74,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         };
         let verifier_crs = crs.g2_x;
 
-        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver);
+        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -106,7 +101,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
 pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub variables: Vec<T::AcvmType>,
-    variable_names: BTreeMap<u32, String>,
+    _variable_names: BTreeMap<u32, String>,
     next_var_index: Vec<u32>,
     prev_var_index: Vec<u32>,
     pub real_variable_index: Vec<u32>,
@@ -165,7 +160,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         honk_recursion: bool,           // true for ultrahonk
         collect_gates_per_opcode: bool, // false for ultrahonk
         driver: &mut T,
-    ) -> Self {
+    ) -> std::io::Result<Self> {
         tracing::trace!("Builder create circuit");
 
         let has_valid_witness_assignments = !witness.is_empty();
@@ -184,15 +179,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             has_valid_witness_assignments,
             honk_recursion,
             collect_gates_per_opcode,
-        );
+        )?;
 
-        builder
+        Ok(builder)
     }
 
     fn new(size_hint: usize) -> Self {
         tracing::trace!("Builder new");
         let variables = Vec::with_capacity(size_hint * 3);
-        // let variable_names = BTreeMap::with_capacity(size_hint * 3);
+        // let _variable_names = BTreeMap::with_capacity(size_hint * 3);
         let next_var_index = Vec::with_capacity(size_hint * 3);
         let prev_var_index = Vec::with_capacity(size_hint * 3);
         let real_variable_index = Vec::with_capacity(size_hint * 3);
@@ -200,7 +195,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         Self {
             variables,
-            variable_names: BTreeMap::new(),
+            _variable_names: BTreeMap::new(),
             next_var_index,
             prev_var_index,
             real_variable_index,
@@ -638,18 +633,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
 
         // Oversize gates are a vector of mul_quad gates.
-        for (i, constraint) in constraint_system
-            .big_quad_constraints
-            .iter_mut()
-            .enumerate()
-        {
-            // auto& big_constraint = constraint_system.big_quad_constraints.at(i);
+        for constraint in constraint_system.big_quad_constraints.iter_mut() {
             let mut next_w4_wire_value = T::AcvmType::default();
             // Define the 4th wire of these mul_quad gates, which is implicitly used by the previous gate.
             let constraint_size = constraint.len();
             for (j, small_constraint) in constraint.iter_mut().enumerate().take(constraint_size - 1)
             {
-                if (j == 0) {
+                if j == 0 {
                     next_w4_wire_value = self.get_variable(small_constraint.d.try_into().unwrap());
                 } else {
                     let next_w4_wire = self.add_variable(next_w4_wire_value.to_owned());
@@ -849,10 +839,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn process_plonk_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
-        has_valid_witness_assignments: bool,
-        gate_counter: &mut GateCounter,
+        _has_valid_witness_assignments: bool,
+        _gate_counter: &mut GateCounter,
     ) {
-        for (i, constraint) in constraint_system.recursion_constraints.iter().enumerate() {
+        for _constraint in constraint_system.recursion_constraints.iter() {
             todo!("Plonk recursion");
         }
     }
@@ -860,15 +850,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn process_honk_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
-        has_valid_witness_assignments: bool,
-        gate_counter: &mut GateCounter,
+        _has_valid_witness_assignments: bool,
+        _gate_counter: &mut GateCounter,
     ) {
         {
-            for (i, constraint) in constraint_system
-                .honk_recursion_constraints
-                .iter()
-                .enumerate()
-            {
+            for _constraint in constraint_system.honk_recursion_constraints.iter() {
                 todo!("Honk recursion");
             }
         }
@@ -877,16 +863,12 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn process_avm_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
-        has_valid_witness_assignments: bool,
-        gate_counter: &mut GateCounter,
+        _has_valid_witness_assignments: bool,
+        _gate_counter: &mut GateCounter,
     ) {
-        let current_aggregation_object = self.init_default_agg_obj_indices();
+        let _current_aggregation_object = self.init_default_agg_obj_indices();
 
-        for (i, constraint) in constraint_system
-            .avm_recursion_constraints
-            .iter()
-            .enumerate()
-        {
+        for _constraint in constraint_system.avm_recursion_constraints.iter() {
             todo!("avm recursion");
         }
     }
@@ -1895,7 +1877,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         read_data
     }
 
-    pub fn finalize_circuit(&mut self, ensure_nonzero: bool, driver: &mut T) {
+    pub fn finalize_circuit(
+        &mut self,
+        ensure_nonzero: bool,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
         // /**
         //  * First of all, add the gates related to ROM arrays and range lists.
         //  * Note that the total number of rows in an UltraPlonk program can be divided as following:
@@ -1932,9 +1918,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.process_non_native_field_multiplications();
             self.process_rom_arrays();
             self.process_ram_arrays();
-            self.process_range_lists(driver);
+            self.process_range_lists(driver)?;
             self.circuit_finalized = true;
         }
+        Ok(())
     }
 
     fn process_rom_arrays(&mut self) {
@@ -2162,7 +2149,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 q_c: P::ScalarField::zero(),
             });
 
-            self.create_new_range_constraint(variable_index, ((1u64 << num_bits) - 1));
+            self.create_new_range_constraint(variable_index, (1u64 << num_bits) - 1);
         } else {
             self.decompose_into_default_range(
                 driver,
@@ -2194,10 +2181,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             // If the variable is 'untagged' (i.e., it has the dummy tag), assign it the appropriate tag.
             // Otherwise, find the range for which the variable has already been tagged.
             if existing_tag != Self::DUMMY_TAG {
-                let mut found_tag = false;
+                let found_tag = false;
                 for (range, range_list) in &self.range_lists {
                     if range_list.range_tag == existing_tag {
-                        found_tag = true;
+                        // found_tag = true;
                         if *range < target_range {
                             // The variable already has a more restrictive range check, so do nothing.
                             return;

@@ -52,7 +52,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 true,
                 false,
                 &mut driver,
-            );
+            )
+            .unwrap();
 
             let prover_crs =
                 ProvingKey::<ShamirUltraHonkDriver<_, PartyTestNetwork>, _>::get_prover_crs(
@@ -101,7 +102,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         true,
         false,
         &mut driver,
-    );
+    )
+    .unwrap();
     let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
     let verifying_key = VerifyingKey::create(builder, crs, &mut driver).unwrap();
 
