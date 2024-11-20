@@ -7,13 +7,13 @@ use co_acvm::{
 };
 use co_noir::{
     convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
-    translate_witness_share_rep3, ultrahonk_num_randomness, BuildAndGenerateProofCli,
-    BuildAndGenerateProofConfig, BuildProvingKeyCLi, BuildProvingKeyConfig, CreateVKCli,
-    CreateVKConfig, GenerateProofCli, GenerateProofConfig, GenerateWitnessCli,
-    GenerateWitnessConfig, MPCProtocol, MergeInputSharesCli, MergeInputSharesConfig, PubShared,
-    SplitInputCli, SplitInputConfig, SplitProvingKeyCli, SplitProvingKeyConfig, SplitWitnessCli,
-    SplitWitnessConfig, TranscriptHash, TranslateProvingKeyCli, TranslateProvingKeyConfig,
-    TranslateWitnessCli, TranslateWitnessConfig, VerifyCli, VerifyConfig,
+    translate_witness_share_rep3, BuildAndGenerateProofCli, BuildAndGenerateProofConfig,
+    BuildProvingKeyCLi, BuildProvingKeyConfig, CreateVKCli, CreateVKConfig, GenerateProofCli,
+    GenerateProofConfig, GenerateWitnessCli, GenerateWitnessConfig, MPCProtocol,
+    MergeInputSharesCli, MergeInputSharesConfig, PubShared, SplitInputCli, SplitInputConfig,
+    SplitProvingKeyCli, SplitProvingKeyConfig, SplitWitnessCli, SplitWitnessConfig, TranscriptHash,
+    TranslateProvingKeyCli, TranslateProvingKeyConfig, TranslateWitnessCli, TranslateWitnessConfig,
+    VerifyCli, VerifyConfig,
 };
 use co_ultrahonk::{
     prelude::{
@@ -280,6 +280,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
 
     let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
         constraint_system,
+        false, // We don't support recursive atm
         0,
         witness,
         true,
@@ -671,6 +672,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
         pub_inputs_offset: proving_key.pub_inputs_offset,
         memory_read_records: proving_key.memory_read_records,
         memory_write_records: proving_key.memory_write_records,
+        final_active_wire_idx: proving_key.final_active_wire_idx,
         phantom: std::marker::PhantomData,
     };
 
@@ -726,6 +728,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             let start = Instant::now();
             let builder = Rep3CoBuilder::<Bn254, Rep3MpcNet>::create_circuit(
                 constraint_system,
+                false, // We don't support recursive atm
                 0,
                 witness_share,
                 true,
@@ -771,6 +774,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             let start = Instant::now();
             let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
                 constraint_system,
+                false, // We don't support recursive atm
                 0,
                 witness_share,
                 true,
@@ -885,7 +889,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let num_pairs = if net.get_num_parties() == 3 {
                 0 // Precomputation is done on the fly since it requires no comminication
             } else {
-                ultrahonk_num_randomness(proving_key.circuit_size as usize)
+                proving_key.ultrahonk_num_randomness()
             };
             let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
             let mut protocol0 = ShamirProtocol::from(preprocessing);
@@ -1006,6 +1010,7 @@ fn run_build_and_generate_proof(
             let start = Instant::now();
             let builder = Rep3CoBuilder::<Bn254, Rep3MpcNet>::create_circuit(
                 constraint_system,
+                false, // We don't support recursive atm
                 0,
                 witness_share,
                 true,
@@ -1082,6 +1087,7 @@ fn run_build_and_generate_proof(
             let start = Instant::now();
             let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
                 constraint_system,
+                false, // We don't support recursive atm
                 0,
                 witness_share,
                 true,
@@ -1112,7 +1118,7 @@ fn run_build_and_generate_proof(
             let num_pairs = if net.get_num_parties() == 3 {
                 0 // Precomputation is done on the fly since it requires no comminication
             } else {
-                ultrahonk_num_randomness(proving_key.circuit_size as usize)
+                proving_key.ultrahonk_num_randomness()
             };
             let preprocessing = ShamirPreprocessing::new(t, net, num_pairs)?;
             let mut protocol0 = ShamirProtocol::from(preprocessing);
@@ -1205,6 +1211,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let start = Instant::now();
     let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
         constraint_system,
+        false, // We don't support recursive atm
         0,
         vec![],
         true,

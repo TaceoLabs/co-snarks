@@ -1,30 +1,14 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
 use co_acvm::{PlainAcvmSolver, ShamirAcvmSolver, ShamirAcvmType};
-use co_ultrahonk::{
-    prelude::{
-        CoUltraHonk, Poseidon2Sponge, ProvingKey, ShamirCoBuilder, ShamirUltraHonkDriver,
-        TranscriptFieldType, TranscriptHasher, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
-    },
-    MAX_PARTIAL_RELATION_LENGTH, OINK_CRAND_PAIRS_CONST, OINK_CRAND_PAIRS_FACTOR_N,
-    OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE, SUMCHECK_ROUND_CRAND_PAIRS_FACTOR,
+use co_ultrahonk::prelude::{
+    CoUltraHonk, Poseidon2Sponge, ProvingKey, ShamirCoBuilder, ShamirUltraHonkDriver,
+    TranscriptFieldType, TranscriptHasher, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
 };
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
 use sha3::Keccak256;
 use std::thread;
 use tests::shamir_network::{PartyTestNetwork, ShamirTestNetwork};
-
-pub fn ultrahonk_num_randomness(circuit_size: usize) -> usize {
-    // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
-    let n = circuit_size;
-    let num_pairs_oink_prove = OINK_CRAND_PAIRS_FACTOR_N * n
-        + OINK_CRAND_PAIRS_FACTOR_N_MINUS_ONE * (n - 1)
-        + OINK_CRAND_PAIRS_CONST;
-    // log2(n) * ((n >>= 1) / 2) == n - 1
-    let num_pairs_sumcheck_prove =
-        SUMCHECK_ROUND_CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
-    num_pairs_oink_prove + num_pairs_sumcheck_prove
-}
 
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
@@ -59,6 +43,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
 
             let builder = ShamirCoBuilder::<Bn254, PartyTestNetwork>::create_circuit(
                 constraint_system,
+                false, // We don't support recursive atm
                 0,
                 witness,
                 true,
@@ -80,7 +65,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
             let num_pairs = if num_parties == 3 {
                 0 // Precomputation is done on the fly since it requires no comminication
             } else {
-                ultrahonk_num_randomness(proving_key.circuit_size as usize)
+                proving_key.ultrahonk_num_randomness()
             };
             let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs).unwrap();
             let mut io_context0 = ShamirProtocol::from(preprocessing);
@@ -106,6 +91,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
         constraint_system,
+        false, // We don't support recursive atm
         0,
         vec![],
         true,

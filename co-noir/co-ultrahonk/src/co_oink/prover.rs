@@ -288,6 +288,7 @@ impl<
         num / denom
     }
 
+    #[expect(clippy::too_many_arguments)]
     fn batched_grand_product_num_denom(
         driver: &mut T,
         shared1: &Polynomial<T::ArithmeticShare>,
@@ -296,16 +297,19 @@ impl<
         pub2: &Polynomial<P::ScalarField>,
         beta: &P::ScalarField,
         gamma: &P::ScalarField,
+        output_len: usize,
     ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
-        let len = shared1.len();
-        debug_assert_eq!(len, shared2.len());
+        debug_assert!(shared1.len() >= output_len);
+        debug_assert!(shared2.len() >= output_len);
+        debug_assert!(pub1.len() >= output_len);
+        debug_assert!(pub2.len() >= output_len);
 
         // We drop the last element since it is not needed for the grand product
-        let mut mul1 = Vec::with_capacity(len - 1);
-        let mut mul2 = Vec::with_capacity(len - 1);
+        let mut mul1 = Vec::with_capacity(output_len);
+        let mut mul2 = Vec::with_capacity(output_len);
 
         for (s1, s2, p1, p2) in
-            izip!(shared1.iter(), shared2.iter(), pub1.iter(), pub2.iter()).take(len - 1)
+            izip!(shared1.iter(), shared2.iter(), pub1.iter(), pub2.iter()).take(output_len)
         {
             let m1 = driver.add_with_public(*p1 * beta + gamma, *s1);
             let m2 = driver.add_with_public(*p2 * beta + gamma, *s2);
@@ -349,6 +353,11 @@ impl<
         tracing::trace!("compute grand product");
         // Barratenberg uses multithreading here
 
+        // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
+        // the permutation grand product does not need to be computed beyond the index of the last active wire
+        let domain_size = proving_key.final_active_wire_idx + 1;
+        let domain_upper_limit = domain_size - 1;
+
         // In Barretenberg circuit size is taken from the q_c polynomial
         // Step (1)
         // Populate `numerator` and `denominator` with the algebra described by Relation
@@ -362,6 +371,7 @@ impl<
             proving_key.polynomials.precomputed.sigma_2(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
+            domain_upper_limit,
         )?;
         let denom2 = Self::batched_grand_product_num_denom(
             self.driver,
@@ -371,6 +381,7 @@ impl<
             proving_key.polynomials.precomputed.sigma_4(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
+            domain_upper_limit,
         )?;
         let num1 = Self::batched_grand_product_num_denom(
             self.driver,
@@ -380,6 +391,7 @@ impl<
             proving_key.polynomials.precomputed.id_2(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
+            domain_upper_limit,
         )?;
         let num2 = Self::batched_grand_product_num_denom(
             self.driver,
@@ -389,6 +401,7 @@ impl<
             proving_key.polynomials.precomputed.id_4(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
+            domain_upper_limit,
         )?;
 
         // TACEO TODO could batch here as well
@@ -409,6 +422,10 @@ impl<
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
         let mut z_perm = self.driver.mul_many(&numerator, &denominator)?;
         z_perm.insert(0, T::ArithmeticShare::default()); // insert a default element at the beginning
+        z_perm.resize(
+            proving_key.circuit_size as usize,
+            T::ArithmeticShare::default(),
+        );
         self.memory.z_perm = Polynomial::new(z_perm);
         Ok(())
     }

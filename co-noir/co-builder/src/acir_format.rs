@@ -24,7 +24,6 @@ pub struct AcirFormat<F: PrimeField> {
     /// of another SNARK. For example, a recursive friendly proof may use Blake3Pedersen for
     /// hashing in its transcript, while we still want a prove that uses Keccak for its transcript in order
     /// to be able to verify SNARKs on Ethereum.
-    pub(crate) recursive: bool,
     pub(crate) num_acir_opcodes: u32,
     //  using PolyTripleConstraint = bb::poly_triple_<bb::curve::BN254::ScalarField>;
     pub public_inputs: Vec<u32>,
@@ -102,7 +101,6 @@ impl<F: PrimeField> AcirFormat<F> {
 
         // `varnum` is the true number of variables, thus we add one to the index which starts at zero
         af.varnum = circuit.current_witness_index + 1;
-        af.recursive = circuit.recursive;
         af.num_acir_opcodes = circuit.opcodes.len() as u32;
 
         af.public_inputs = circuit

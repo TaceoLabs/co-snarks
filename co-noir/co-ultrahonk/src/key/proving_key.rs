@@ -1,3 +1,8 @@
+use crate::co_decider::relations::CRAND_PAIRS_FACTOR;
+use crate::co_decider::types::MAX_PARTIAL_RELATION_LENGTH;
+use crate::co_oink::{
+    CRAND_PAIRS_CONST, CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE, CRAND_PAIRS_FACTOR_N,
+};
 use crate::key::types::TraceData;
 use crate::mpc::NoirUltraHonkProver;
 use crate::types::Polynomials;
@@ -36,6 +41,7 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub polynomials: Polynomials<T::ArithmeticShare, P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
+    pub final_active_wire_idx: usize,
     pub phantom: PhantomData<T>,
 }
 
@@ -56,13 +62,33 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         circuit.finalize_circuit(true, driver)?;
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
-        let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);
+
+        // Complete the public inputs execution trace block from builder.public_inputs
+        circuit.populate_public_inputs_block();
+        circuit.blocks.compute_offsets(false);
+
+        // Find index of last non-trivial wire value in the trace
+        let mut final_active_wire_idx = 0;
+        for block in circuit.blocks.get() {
+            if block.len() > 0 {
+                final_active_wire_idx = block.trace_offset as usize + block.len() - 1;
+            }
+        }
+
+        // TACEO TODO BB allocates less memory for the different polynomials
+
+        let mut proving_key = Self::new(
+            dyadic_circuit_size,
+            circuit.public_inputs.len(),
+            crs,
+            final_active_wire_idx,
+        );
         // Construct and add to proving key the wire, selector and copy constraint polynomials
         proving_key.populate_trace(id, &mut circuit, false);
 
         // First and last lagrange polynomials (in the full circuit size)
         proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
-        proving_key.polynomials.precomputed.lagrange_last_mut()[dyadic_circuit_size - 1] =
+        proving_key.polynomials.precomputed.lagrange_last_mut()[final_active_wire_idx] =
             P::ScalarField::one();
 
         PlainProvingKey::construct_lookup_table_polynomials(
@@ -194,7 +220,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         PlainProvingKey::get_crs(circuit, path_g1, path_g2)
     }
 
-    fn new(circuit_size: usize, num_public_inputs: usize, crs: ProverCrs<P>) -> Self {
+    fn new(
+        circuit_size: usize,
+        num_public_inputs: usize,
+        crs: ProverCrs<P>,
+        final_active_wire_idx: usize,
+    ) -> Self {
         tracing::trace!("ProvingKey new");
         let polynomials = Polynomials::new(circuit_size);
 
@@ -207,6 +238,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             polynomials,
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
+            final_active_wire_idx,
             phantom: PhantomData,
         }
     }
@@ -256,6 +288,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         let pub_inputs_offset = plain_key.pub_inputs_offset;
         let memory_read_records = plain_key.memory_read_records.to_owned();
         let memory_write_records = plain_key.memory_write_records.to_owned();
+        let final_active_wire_idx = plain_key.final_active_wire_idx;
 
         if shares.len() != circuit_size as usize * 4 {
             return Err(eyre::eyre!("Share length is not 4 times circuit size"));
@@ -301,7 +334,19 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             polynomials,
             memory_read_records,
             memory_write_records,
+            final_active_wire_idx,
             phantom: PhantomData,
         })
+    }
+
+    pub fn ultrahonk_num_randomness(&self) -> usize {
+        // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+        let n = self.circuit_size as usize;
+        let num_pairs_oink_prove = CRAND_PAIRS_FACTOR_N * n
+            + CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE * self.final_active_wire_idx
+            + CRAND_PAIRS_CONST;
+        // log2(n) * ((n >>= 1) / 2) == n - 1
+        let num_pairs_sumcheck_prove = CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+        num_pairs_oink_prove + num_pairs_sumcheck_prove
     }
 }
