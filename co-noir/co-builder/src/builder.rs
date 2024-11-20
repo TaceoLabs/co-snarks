@@ -1848,7 +1848,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 self.add_variable(T::AcvmType::from(read_values[ColumnIdx::C1][i]))
             };
 
-            #[allow(clippy::unnecessary_unwrap)]
+            #[expect(clippy::unnecessary_unwrap)]
             let second_idx = if i == 0 && (key_b_index.is_some()) {
                 key_b_index.unwrap()
             } else {
@@ -2204,7 +2204,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //         this->failure(msg);
         //     }
         // }
-        #[allow(clippy::map_entry)] // Required due to borrowing self twice otherwise
+        #[expect(clippy::map_entry)] // Required due to borrowing self twice otherwise
         if !self.range_lists.contains_key(&target_range) {
             let new_range_list = self.create_range_list(target_range);
             self.range_lists.insert(target_range, new_range_list);

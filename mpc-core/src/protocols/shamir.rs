@@ -233,10 +233,7 @@ impl<F: PrimeField, N: ShamirNetwork> From<ShamirPreprocessing<F, N>> for Shamir
         let mul_lagrange_2t =
             core::lagrange_from_coeff(&(1..=2 * value.threshold + 1).collect::<Vec<_>>());
 
-        #[allow(clippy::assertions_on_constants)]
-        {
-            debug_assert_eq!(Self::KING_ID, 0); // Slightly different implementation required in degree reduce if not
-        }
+        debug_assert_eq!(Self::KING_ID, 0); // Slightly different implementation required in degree reduce if not
 
         // precompute the poly for interpolating a secret with known zero shares
         let num_non_zero = num_parties - value.threshold;

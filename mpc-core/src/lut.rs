@@ -10,7 +10,6 @@ use std::{
 
 use ark_ff::PrimeField;
 
-#[allow(async_fn_in_trait)]
 /// This is some place holder definition. This will change most likely
 pub trait LookupTableProvider<F: PrimeField> {
     /// The type used in LUTs

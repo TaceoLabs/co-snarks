@@ -277,7 +277,7 @@ impl<T: Default> ShiftedWitnessEntities<T> {
     }
 }
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 impl<T: Default> ShiftedTableEntities<T> {
     /// column 0
     const TABLE_1: usize = 0;

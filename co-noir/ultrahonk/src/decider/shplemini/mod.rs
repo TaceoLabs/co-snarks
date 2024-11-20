@@ -21,7 +21,6 @@ pub(crate) struct OpeningPair<F: PrimeField> {
     pub(crate) evaluation: F,
 }
 
-#[allow(dead_code)]
 pub(crate) struct ZeroMorphVerifierOpeningClaim<P: Pairing> {
     pub(crate) challenge: P::ScalarField,
     pub(crate) evaluation: P::ScalarField,

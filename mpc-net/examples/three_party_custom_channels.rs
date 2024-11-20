@@ -73,7 +73,7 @@ async fn main() -> Result<()> {
 
 // A message type that can be sent over the network
 
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum Message {
     Ping([u8; 1024]),
     Pong([u8; 512]),

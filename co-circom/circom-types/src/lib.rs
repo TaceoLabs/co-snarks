@@ -1,5 +1,4 @@
 #![warn(missing_docs)]
-#![allow(clippy::needless_borrows_for_generic_args)]
 //! This crate defines types used in circom and utilities to read these types from files.
 mod binfile;
 pub mod groth16;
