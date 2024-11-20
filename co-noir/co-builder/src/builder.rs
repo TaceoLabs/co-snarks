@@ -97,6 +97,40 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
         Ok((pk, vk))
     }
+
+    pub fn create_keys_barretenberg(
+        self,
+        crs: ProverCrs<P>,
+        driver: &mut PlainAcvmSolver<P::ScalarField>,
+    ) -> HonkProofResult<(ProvingKey<P>, VerifyingKeyBarretenberg<P>)> {
+        let contains_recursive_proof = self.contains_recursive_proof;
+        let recursive_proof_public_input_indices = self.recursive_proof_public_input_indices;
+
+        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
+        let circuit_size = pk.circuit_size;
+
+        let mut commitments = PrecomputedEntities::default();
+        for (des, src) in commitments
+            .iter_mut()
+            .zip(pk.polynomials.precomputed.iter())
+        {
+            let comm = Utils::commit(src.as_ref(), &pk.crs)?;
+            *des = P::G1Affine::from(comm);
+        }
+
+        // Create and return the VerifyingKey instance
+        let vk = VerifyingKeyBarretenberg {
+            circuit_size: circuit_size as u64,
+            log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
+            num_public_inputs: pk.num_public_inputs as u64,
+            pub_inputs_offset: pk.pub_inputs_offset as u64,
+            contains_recursive_proof,
+            recursive_proof_public_input_indices,
+            commitments,
+        };
+
+        Ok((pk, vk))
+    }
 }
 
 pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {

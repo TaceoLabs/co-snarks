@@ -18,6 +18,7 @@ use eyre::Result;
 use serde::Deserialize;
 use serde::Serialize;
 use std::marker::PhantomData;
+use ultrahonk::prelude::VerifyingKeyBarretenberg;
 use ultrahonk::Utils;
 
 #[derive(Serialize, Deserialize)]
@@ -108,10 +109,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         crs: Crs<P>,
         driver: &mut U,
     ) -> HonkProofResult<(Self, VerifyingKey<P>)> {
-        let prover_crs = ProverCrs {
-            monomials: crs.monomials,
-        };
-        let verifier_crs = crs.g2_x;
+        let (prover_crs, verifier_crs) = crs.split();
 
         let pk = ProvingKey::create(id, circuit, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
@@ -134,6 +132,42 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             commitments,
         };
 
+        Ok((pk, vk))
+    }
+
+    pub fn create_keys_barretenberg<
+        U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        id: T::PartyID,
+        circuit: GenericUltraCircuitBuilder<P, U>,
+        crs: ProverCrs<P>,
+        driver: &mut U,
+    ) -> HonkProofResult<(Self, VerifyingKeyBarretenberg<P>)> {
+        let contains_recursive_proof = circuit.contains_recursive_proof;
+        let recursive_proof_public_input_indices = circuit.recursive_proof_public_input_indices;
+
+        let pk = ProvingKey::create(id, circuit, crs, driver)?;
+        let circuit_size = pk.circuit_size;
+
+        let mut commitments = PrecomputedEntities::default();
+        for (des, src) in commitments
+            .iter_mut()
+            .zip(pk.polynomials.precomputed.iter())
+        {
+            let comm = Utils::commit(src.as_ref(), &pk.crs)?;
+            *des = P::G1Affine::from(comm);
+        }
+
+        // Create and return the VerifyingKey instance
+        let vk = VerifyingKeyBarretenberg {
+            circuit_size: circuit_size as u64,
+            log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
+            num_public_inputs: pk.num_public_inputs as u64,
+            pub_inputs_offset: pk.pub_inputs_offset as u64,
+            contains_recursive_proof,
+            recursive_proof_public_input_indices,
+            commitments,
+        };
         Ok((pk, vk))
     }
 
