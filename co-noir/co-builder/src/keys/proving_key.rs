@@ -23,6 +23,7 @@ pub struct ProvingKey<P: Pairing> {
     pub polynomials: Polynomials<P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
+    pub final_active_wire_idx: usize,
 }
 
 impl<P: Pairing> ProvingKey<P> {
@@ -36,13 +37,33 @@ impl<P: Pairing> ProvingKey<P> {
         circuit.finalize_circuit(true, driver)?;
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
-        let mut proving_key = Self::new(dyadic_circuit_size, circuit.public_inputs.len(), crs);
+
+        // Complete the public inputs execution trace block from builder.public_inputs
+        circuit.populate_public_inputs_block();
+        circuit.blocks.compute_offsets(false);
+
+        // Find index of last non-trivial wire value in the trace
+        let mut final_active_wire_idx = 0;
+        for block in circuit.blocks.get() {
+            if block.len() > 0 {
+                final_active_wire_idx = block.trace_offset as usize + block.len() - 1;
+            }
+        }
+
+        // TACEO TODO BB allocates less memory for the different polynomials
+
+        let mut proving_key = Self::new(
+            dyadic_circuit_size,
+            circuit.public_inputs.len(),
+            crs,
+            final_active_wire_idx,
+        );
         // Construct and add to proving key the wire, selector and copy constraint polynomials
         proving_key.populate_trace(&mut circuit, false);
 
         // First and last lagrange polynomials (in the full circuit size)
         proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
-        proving_key.polynomials.precomputed.lagrange_last_mut()[dyadic_circuit_size - 1] =
+        proving_key.polynomials.precomputed.lagrange_last_mut()[final_active_wire_idx] =
             P::ScalarField::one();
 
         Self::construct_lookup_table_polynomials(
@@ -116,7 +137,12 @@ impl<P: Pairing> ProvingKey<P> {
         CrsParser::<P>::get_crs(path_g1, path_g2, srs_size)
     }
 
-    fn new(circuit_size: usize, num_public_inputs: usize, crs: ProverCrs<P>) -> Self {
+    fn new(
+        circuit_size: usize,
+        num_public_inputs: usize,
+        crs: ProverCrs<P>,
+        final_active_wire_idx: usize,
+    ) -> Self {
         tracing::trace!("ProvingKey new");
         let polynomials = Polynomials::new(circuit_size);
 
@@ -129,6 +155,7 @@ impl<P: Pairing> ProvingKey<P> {
             polynomials,
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
+            final_active_wire_idx,
         }
     }
 

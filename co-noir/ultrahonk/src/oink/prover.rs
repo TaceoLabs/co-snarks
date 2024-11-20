@@ -278,16 +278,22 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     fn compute_grand_product(&mut self, proving_key: &ProvingKey<P>) {
         tracing::trace!("compute grand product");
+
         // Barratenberg uses multithreading here
 
+        // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
+        // the permutation grand product does not need to be computed beyond the index of the last active wire
+        let domain_size = proving_key.final_active_wire_idx + 1;
+        let domain_upper_limit = domain_size - 1;
+
         // In Barretenberg circuit size is taken from the q_c polynomial
-        let mut numerator = Vec::with_capacity(proving_key.circuit_size as usize);
-        let mut denominator = Vec::with_capacity(proving_key.circuit_size as usize);
+        let mut numerator = Vec::with_capacity(domain_upper_limit);
+        let mut denominator = Vec::with_capacity(domain_upper_limit);
 
         // Step (1)
         // Populate `numerator` and `denominator` with the algebra described by Relation
 
-        for i in 0..proving_key.circuit_size as usize {
+        for i in 0..domain_upper_limit {
             numerator.push(self.compute_grand_product_numerator(proving_key, i));
             denominator.push(self.grand_product_denominator(proving_key, i));
         }
@@ -296,7 +302,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Compute the accumulating product of the numerator and denominator terms.
         // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation signlethreaded for simplicity
 
-        for i in 1..proving_key.circuit_size as usize {
+        for i in 1..domain_upper_limit {
             numerator[i] = numerator[i] * numerator[i - 1];
             denominator[i] = denominator[i] * denominator[i - 1];
         }

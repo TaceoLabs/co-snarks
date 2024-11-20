@@ -189,6 +189,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
     pub fn create_circuit(
         constraint_system: AcirFormat<P::ScalarField>,
+        recursive: bool,
         size_hint: usize,
         witness: Vec<T::AcvmType>,
         honk_recursion: bool,           // true for ultrahonk
@@ -204,7 +205,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             witness,
             constraint_system.public_inputs.to_owned(),
             constraint_system.varnum as usize,
-            constraint_system.recursive,
+            recursive,
         );
 
         builder.build_constraints(

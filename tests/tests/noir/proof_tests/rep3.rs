@@ -67,6 +67,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
             let mut driver = Rep3AcvmSolver::new(net);
             let builder = Rep3CoBuilder::<Bn254, PartyTestNetwork>::create_circuit(
                 constraint_system,
+                false, // We don't support recursive atm
                 0,
                 witness,
                 true,
@@ -105,6 +106,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
         constraint_system,
+        false, // We don't support recursive atm
         0,
         vec![],
         true,
@@ -146,6 +148,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
             let mut driver = Rep3AcvmSolver::new(net2);
             let builder = Rep3CoBuilder::<Bn254, PartyTestNetwork>::create_circuit(
                 constraint_system,
+                false, // We don't support recursive atm
                 0,
                 witness,
                 true,
@@ -184,6 +187,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
         constraint_system,
+        false, // We don't support recursive atm
         0,
         vec![],
         true,

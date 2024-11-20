@@ -169,6 +169,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     let mut driver = PlainAcvmSolver::new();
     let builder = PlainCoBuilder::<Bn254>::create_circuit(
         constraint_system,
+        false, // We don't support recursive atm
         0,
         witness,
         true,

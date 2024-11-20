@@ -153,6 +153,19 @@ impl<T: Default> UltraTraceBlocks<T> {
         ]
     }
 
+    pub fn get_mut(&mut self) -> [&mut T; 8] {
+        [
+            &mut self.pub_inputs,
+            &mut self.arithmetic,
+            &mut self.delta_range,
+            &mut self.elliptic,
+            &mut self.aux,
+            &mut self.lookup,
+            &mut self.poseidon2_external,
+            &mut self.poseidon2_internal,
+        ]
+    }
+
     pub fn get_pub_inputs(&self) -> &T {
         &self.pub_inputs
     }
@@ -167,6 +180,7 @@ pub struct ExecutionTraceBlock<F: PrimeField, const NUM_WIRES: usize, const NUM_
     pub selectors: [Vec<F>; NUM_SELECTORS],
     pub has_ram_rom: bool,      // does the block contain RAM/ROM gates
     pub is_pub_inputs: bool,    // is this the public inputs block
+    pub trace_offset: u32,      // where this block starts in the trace
     pub(crate) fixed_size: u32, // Fixed size for use in structured trace
 }
 
@@ -179,6 +193,7 @@ impl<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> Default
             selectors: array::from_fn(|_| Vec::new()),
             has_ram_rom: false,
             is_pub_inputs: false,
+            trace_offset: 0,
             fixed_size: 0,
         }
     }
@@ -200,6 +215,21 @@ impl<F: PrimeField> Default for UltraTraceBlocks<UltraTraceBlock<F>> {
         res.pub_inputs.is_pub_inputs = true;
         res.aux.has_ram_rom = true;
         res
+    }
+}
+
+impl<F: PrimeField> UltraTraceBlocks<UltraTraceBlock<F>> {
+    pub fn compute_offsets(&mut self, is_structured: bool) {
+        assert!(
+            !is_structured,
+            "Trace is structuring not implemented for UltraHonk",
+        );
+
+        let mut offset = 1; // start at 1 because the 0th row is unused for selectors for Honk
+        for block in self.get_mut() {
+            block.trace_offset = offset;
+            offset += block.get_fixed_size(is_structured);
+        }
     }
 }
 
@@ -1159,8 +1189,6 @@ impl<'a, P: Pairing> TraceData<'a, P> {
         is_structured: bool,
     ) {
         tracing::trace!("Construct trace data");
-        // Complete the public inputs execution trace block from builder.public_inputs
-        builder.populate_public_inputs_block();
 
         let mut offset = 1; // Offset at which to place each block in the trace polynomials
                             // For each block in the trace, populate wire polys, copy cycles and selector polys

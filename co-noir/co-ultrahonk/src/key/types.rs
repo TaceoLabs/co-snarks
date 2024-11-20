@@ -68,8 +68,6 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
         is_structured: bool,
     ) {
         tracing::trace!("Construct trace data");
-        // Complete the public inputs execution trace block from builder.public_inputs
-        builder.populate_public_inputs_block();
 
         let mut offset = 1; // Offset at which to place each block in the trace polynomials
                             // For each block in the trace, populate wire polys, copy cycles and selector polys
