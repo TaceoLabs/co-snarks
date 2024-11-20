@@ -167,7 +167,7 @@ pub fn b2a<F: PrimeField, N: Rep3Network>(
     Ok(res)
 }
 
-/// Translates one shared bit into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
+/// Translates one shared bits into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
 pub fn bit_inject<F: PrimeField, N: Rep3Network>(
     x: &Rep3BigUintShare<F>,
     io_context: &mut IoContext<N>,

@@ -148,10 +148,10 @@ fn and_twice<F: PrimeField, N: Rep3Network>(
 
     let local_a1 = (b1 & a) ^ mask1;
     let local_a2 = (a & b2) ^ mask2;
-    io_context.network.send_next(local_a1.to_owned())?;
-    io_context.network.send_next(local_a2.to_owned())?;
-    let local_b1 = io_context.network.recv_prev()?;
-    let local_b2 = io_context.network.recv_prev()?;
+    io_context
+        .network
+        .send_next([local_a1.to_owned(), local_a2.to_owned()])?;
+    let [local_b1, local_b2] = io_context.network.recv_prev()?;
 
     let r1 = Rep3BigUintShare {
         a: local_a1,
