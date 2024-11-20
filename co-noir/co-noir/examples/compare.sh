@@ -6,6 +6,13 @@ BARRETENBERG_VERSION=0.62.0 ##specify the desired barretenberg version here or u
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
+REMOVE_OUTPUT=1
+PIPE=""
+if [[ $REMOVE_OUTPUT -eq 1 ]];
+then
+    PIPE=" > /dev/null 2>&1"
+fi
+
 # build the plaindriver binary
 cargo build --release --bin plaindriver
 
@@ -49,40 +56,41 @@ run_proof_verification() {
     verify_command="verify_ultra_keccak_honk"
   fi
 
- echo "comparing" $name "with bb and $algorithm transcript"
+  echo "comparing" $name "with bb and $algorithm transcript"
 
-    $BARRETENBERG_BINARY $prove_command -b test_vectors/${name}/target/${name}.json -w test_vectors/${name}/target/${name}.gz -o test_vectors/${name}/${proof_file} > /dev/null 2>&1
+  bash -c "$BARRETENBERG_BINARY $prove_command -b test_vectors/${name}/target/${name}.json -w test_vectors/${name}/target/${name}.gz -o test_vectors/${name}/${proof_file} $PIPE"
 
-    diff test_vectors/${name}/${proof_file} test_vectors/${name}/proof
-    if [[ $? -ne 0 ]]; then
+  diff test_vectors/${name}/${proof_file} test_vectors/${name}/proof
+  if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name diff check of proofs failed"
   fi
 
-    $BARRETENBERG_BINARY $write_command -b test_vectors/${name}/target/${name}.json -o test_vectors/${name}/${vk_file} > /dev/null 2>&1
+  bash -c "$BARRETENBERG_BINARY $write_command -b test_vectors/${name}/target/${name}.json -o test_vectors/${name}/${vk_file} $PIPE"
 
-    $BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/vk
-    if [[ $? -ne 0 ]]; then
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/vk"
+  if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, our proof and our key failed"
   fi
 
-    $BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/${vk_file}
-    if [[ $? -ne 0 ]]; then
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/${vk_file}"
+  if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, our proof and their key failed"
   fi
 
-    $BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/vk
-    if [[ $? -ne 0 ]]; then
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/vk"
+  if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, their proof and our key failed"
-    fi
-  $BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/${vk_file}
-    if [[ $? -ne 0 ]]; then
+  fi
+
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/${vk_file}"
+  if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, their proof and their key failed"
-    fi
+  fi
   return $exit_code
 }
 
@@ -93,11 +101,11 @@ for f in "${test_cases[@]}"; do
   failed=0
 
   # compile witnesses and bytecode with specified nargo version
-    echo "computing witnesses with nargo"
-  bash -c "(cd test_vectors/${f} && nargo execute)"  > /dev/null 2>&1
+  echo "computing witnesses with nargo"
+  bash -c "(cd test_vectors/${f} && nargo execute) $PIPE"
 
   # -e to exit on first error
-  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher POSEIDON --out-dir test_vectors/${f}" > /dev/null 2>&1 || failed=1
+  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher POSEIDON --out-dir test_vectors/${f} $PIPE" || failed=1
 
   if [ "$failed" -ne 0 ]
   then
@@ -108,7 +116,7 @@ for f in "${test_cases[@]}"; do
   bash cleanup.sh
 
    # -e to exit on first error
-  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher KECCAK --out-dir test_vectors/${f}" > /dev/null 2>&1  || failed=1
+  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher KECCAK --out-dir test_vectors/${f} $PIPE"  || failed=1
 
   if [ "$failed" -ne 0 ]
   then
