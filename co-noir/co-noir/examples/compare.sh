@@ -1,8 +1,8 @@
 export CARGO_TERM_QUIET=true
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
-NARGO_VERSION=38 ##specify the desired nargo version here
-BARRETENBERG_VERSION=62 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
+NARGO_VERSION=0.38.0 ##specify the desired nargo version here
+BARRETENBERG_VERSION=0.62.0 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
@@ -11,22 +11,22 @@ cargo build --release --bin plaindriver
 
 ## install noirup: curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
 r=$(bash -c "nargo --version")
-if  [[ $r != "nargo version = 0.$NARGO_VERSION.0"* ]];
+if  [[ $r != "nargo version = $NARGO_VERSION"* ]];
 then
-    bash -c "noirup -v 0.${NARGO_VERSION}.0"
+    bash -c "noirup -v ${NARGO_VERSION}"
 fi
 
 ## use one of these two methods
 ## install bbup: curl -L bbup.dev | bash
 # bash -c "bbup -nv 0.${NARGO_VERSION}.0"
 r=$(bash -c "$BARRETENBERG_BINARY --version")
-if  [[ $r != "0.$BARRETENBERG_VERSION.0" ]];
+if  [[ $r != "$BARRETENBERG_VERSION" ]];
 then
-    bash -c "bbup -v 0.${BARRETENBERG_VERSION}.0"
+    bash -c "bbup -v ${BARRETENBERG_VERSION}"
 fi
 
-echo "Using nargo version 0.$NARGO_VERSION.0"
-echo "Using bb version 0.$BARRETENBERG_VERSION.0"
+echo "Using nargo version $NARGO_VERSION"
+echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
 test_cases=("add3" "add3_assert" "add3u64" "mul3u64" "poseidon" "poseidon_input2")
