@@ -5,7 +5,6 @@
 use std::sync::Arc;
 
 use crate::RngType;
-use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
@@ -97,11 +96,6 @@ impl<N: Rep3Network> IoContext<N> {
     /// Allows to change the used arithmetic/binary conversion protocol
     pub fn set_a2b_type(&mut self, a2b_type: A2BType) {
         self.a2b_type = a2b_type;
-    }
-
-    /// Generate two random field elements
-    pub fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
-        self.rngs.rand.random_fes()
     }
 
     /// Cronstruct a fork of the [`IoContext`]. This fork can be used concurrently with its parent.
