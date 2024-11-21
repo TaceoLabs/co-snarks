@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use ark_ff::PrimeField;
+use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
 use mpc_core::protocols::rep3::gadgets::sort::batcher_odd_even_merge_sort_yao;
 use mpc_core::protocols::rep3::{arithmetic, yao};
@@ -104,12 +105,24 @@ impl<F: PrimeField> From<ArithmeticShare<F>> for Rep3AcvmType<F> {
     }
 }
 
+impl<F: PrimeField> Into<Rep3BrilligType> for Rep3AcvmType<F> {
+    fn into(self) -> Rep3BrilligType {
+        todo!()
+    }
+}
+
 impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<F, N> {
     type Lookup = NaiveRep3LookupTable<N>;
 
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
 
     type AcvmType = Rep3AcvmType<F>;
+
+    type BrilligDriver = Rep3BrilligDriver<F>;
+
+    fn init_brillig_driver(&self) -> Self::BrilligDriver {
+        todo!()
+    }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {
         if let Rep3AcvmType::Public(x) = a {

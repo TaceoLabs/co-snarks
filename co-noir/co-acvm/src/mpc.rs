@@ -1,6 +1,7 @@
 use std::{fmt, io};
 
 use ark_ff::PrimeField;
+use co_brillig::mpc::BrilligDriver;
 use mpc_core::lut::LookupTableProvider;
 
 pub(super) mod plain;
@@ -19,7 +20,12 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + fmt::Display
         + From<Self::ArithmeticShare>
         + From<F>
-        + PartialEq;
+        + PartialEq
+        + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
+
+    type BrilligDriver: BrilligDriver<F>;
+
+    fn init_brillig_driver(&self) -> Self::BrilligDriver;
 
     /// Returns F::zero() as a ACVM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
     fn public_zero() -> Self::AcvmType {

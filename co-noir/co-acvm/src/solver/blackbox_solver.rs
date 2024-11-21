@@ -1,5 +1,6 @@
-use super::{CoAcvmResult, CoSolver};
 use crate::mpc::NoirWitnessExtensionProtocol;
+
+use super::{CoAcvmResult, CoSolver};
 use acir::{
     acir_field::GenericFieldElement,
     circuit::opcodes::{BlackBoxFuncCall, ConstantOrWitnessEnum, FunctionInput},

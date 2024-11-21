@@ -1,0 +1,7 @@
+[package]
+name = "unconstrained_fn"
+type = "bin"
+authors = [""]
+compiler_version = ">=0.38.0"
+
+[dependencies]

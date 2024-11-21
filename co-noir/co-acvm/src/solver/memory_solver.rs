@@ -1,3 +1,4 @@
+use crate::mpc::NoirWitnessExtensionProtocol;
 use acir::{
     acir_field::GenericFieldElement,
     circuit::opcodes::{BlockId, MemOp},
@@ -5,7 +6,7 @@ use acir::{
 };
 use ark_ff::PrimeField;
 
-use crate::{mpc::NoirWitnessExtensionProtocol, solver::solver_utils};
+use crate::solver::solver_utils;
 
 use super::{CoAcvmResult, CoSolver};
 

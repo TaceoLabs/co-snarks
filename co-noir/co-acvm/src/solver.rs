@@ -1,10 +1,11 @@
 use acir::{
     acir_field::GenericFieldElement,
-    circuit::{Circuit, ExpressionWidth, Opcode, Program},
+    circuit::{brillig::BrilligBytecode, Circuit, ExpressionWidth, Opcode, Program},
     native_types::{WitnessMap, WitnessStack},
     FieldElement,
 };
 use ark_ff::PrimeField;
+use co_brillig::{mpc::BrilligDriver, CoBrilligVM};
 use intmap::IntMap;
 use mpc_core::{
     lut::LookupTableProvider,
@@ -22,11 +23,13 @@ use crate::mpc::{
     plain::PlainAcvmSolver, rep3::Rep3AcvmSolver, shamir::ShamirAcvmSolver,
     NoirWitnessExtensionProtocol,
 };
+
 /// The default expression width defined used by the ACVM.
 pub(crate) const CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounded { width: 4 };
 
 mod assert_zero_solver;
 mod blackbox_solver;
+mod brillig_call_solver;
 mod memory_solver;
 pub mod partial_abi;
 
@@ -70,6 +73,7 @@ where
     F: PrimeField,
 {
     driver: T,
+    brillig: CoBrilligVM<T::BrilligDriver, F>,
     abi: Abi,
     functions: Vec<Circuit<GenericFieldElement<F>>>,
     // maybe this can be an array. lets see..
@@ -159,7 +163,12 @@ where
             vec![WitnessMap::default(); compiled_program.bytecode.functions.len()];
         witness_map[Self::DEFAULT_FUNCTION_INDEX] =
             Self::read_abi_bn254(prover_path, &compiled_program.abi)?;
+        let brillig = CoBrilligVM::init(
+            driver.init_brillig_driver(),
+            compiled_program.bytecode.unconstrained_functions,
+        );
         Ok(Self {
+            brillig,
             driver,
             abi: compiled_program.abi,
             functions: compiled_program
@@ -183,8 +192,14 @@ where
         let mut witness_map =
             vec![WitnessMap::default(); compiled_program.bytecode.functions.len()];
         witness_map[Self::DEFAULT_FUNCTION_INDEX] = witness;
+
+        let brillig = CoBrilligVM::init(
+            driver.init_brillig_driver(),
+            compiled_program.bytecode.unconstrained_functions,
+        );
         Ok(Self {
             driver,
+            brillig,
             abi: compiled_program.abi,
             functions: compiled_program
                 .bytecode
@@ -202,7 +217,7 @@ where
 
 impl<N: Rep3Network> Rep3CoSolver<ark_bn254::Fr, N> {
     pub fn from_network<P>(
-        network: N,
+        mut network: N,
         compiled_program: ProgramArtifact,
         prover_path: P,
     ) -> eyre::Result<Self>
@@ -365,6 +380,12 @@ where
                     predicate,
                 } => self.solve_memory_op(*block_id, op, predicate.to_owned())?,
                 Opcode::BlackBoxFuncCall(bb_func) => self.solve_blackbox(bb_func)?,
+                Opcode::BrilligCall {
+                    id,
+                    inputs,
+                    outputs,
+                    predicate,
+                } => self.brillig_call(id, inputs, outputs, predicate)?,
                 _ => todo!("opcode {} detected, not supported yet", opcode),
             }
         }
