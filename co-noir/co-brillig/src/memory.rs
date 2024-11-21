@@ -90,3 +90,35 @@ where
         &self.inner
     }
 }
+
+// we paste here some methods copied from Brillig Repo. Unfortunately, we cannot
+// call a lot of function because they are generic over AcirField, therefore we need to
+// copy them here
+pub(super) mod memory_utils {
+    use acvm::brillig_vm::MemoryValue;
+    use brillig::IntegerBitSize;
+
+    pub fn expect_int_with_bit_size<F>(
+        value: MemoryValue<F>,
+        expected_bit_size: IntegerBitSize,
+    ) -> eyre::Result<u128> {
+        match value {
+            MemoryValue::Integer(value, bit_size) => {
+                if bit_size != expected_bit_size {
+                    eyre::bail!(
+                        "expected bit size {}, but is {}",
+                        expected_bit_size,
+                        bit_size
+                    )
+                }
+                Ok(value)
+            }
+            MemoryValue::Field(_) => eyre::bail!("expected int but got Field"),
+        }
+    }
+
+    pub fn to_bool<F>(value: MemoryValue<F>) -> eyre::Result<bool> {
+        let bool_val = expect_int_with_bit_size(value, IntegerBitSize::U1)?;
+        Ok(bool_val != 0)
+    }
+}

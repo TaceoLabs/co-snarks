@@ -217,7 +217,7 @@ where
 
 impl<N: Rep3Network> Rep3CoSolver<ark_bn254::Fr, N> {
     pub fn from_network<P>(
-        mut network: N,
+        network: N,
         compiled_program: ProgramArtifact,
         prover_path: P,
     ) -> eyre::Result<Self>
