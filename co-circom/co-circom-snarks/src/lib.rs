@@ -85,6 +85,7 @@ where
     pub shared_inputs: BTreeMap<String, Rep3ShareVecType<F, U>>,
     /// A map from variable names to vecs with maybe unknown elements that need to be merged.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
+    #[serde(default)]
     pub maybe_shared_inputs: BTreeMap<String, MaybeRep3ShareVecType<F>>,
 }
 
