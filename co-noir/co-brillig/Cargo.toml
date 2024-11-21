@@ -1,6 +1,6 @@
 [package]
-name = "co-acvm"
-version = "0.3.0"
+name = "co-brillig"
+version = "0.1.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -14,7 +14,7 @@ acir.workspace = true
 acvm.workspace = true
 ark-bn254.workspace = true
 ark-ff.workspace = true
-co-brillig.workspace = true
+brillig.workspace = true
 eyre.workspace = true
 intmap.workspace = true
 itertools.workspace = true
