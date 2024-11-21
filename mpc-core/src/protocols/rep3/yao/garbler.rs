@@ -25,10 +25,10 @@ use sha3::{Digest, Sha3_256};
 /// This struct implements the garbler for replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
 pub struct Rep3Garbler<'a, N: Rep3Network> {
     io_context: &'a mut IoContext<N>,
-    delta: WireMod2,
+    pub(crate) delta: WireMod2,
     current_output: usize,
     current_gate: usize,
-    rng: RngType,
+    pub(crate) rng: RngType,
     hash: Sha3_256, // For the ID2 to match everything sent with one hash
     circuit: Vec<[u8; 16]>,
 }

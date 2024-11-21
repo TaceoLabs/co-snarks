@@ -132,12 +132,16 @@ impl GarbledCircuits {
         ys: &[G::Item],
     ) -> Result<Vec<G::Item>, G::Error> {
         debug_assert_eq!(xs.len(), ys.len());
+        if xs.len() == 1 {
+            return Ok(vec![g.xor(&xs[0], &ys[0])?]);
+        }
+
         let mut result = Vec::with_capacity(xs.len());
 
         let (mut s, mut c) = Self::half_adder(g, &xs[0], &ys[0])?;
         result.push(s);
 
-        for (x, y) in xs.iter().zip(ys.iter()).skip(1).take(xs.len() - 2) {
+        for (x, y) in xs.iter().zip(ys.iter()).take(xs.len() - 1).skip(1) {
             let res = Self::full_adder(g, x, y, &c)?;
             s = res.0;
             c = res.1;

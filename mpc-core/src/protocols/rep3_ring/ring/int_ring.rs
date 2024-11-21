@@ -1,3 +1,7 @@
+//! IntRing
+//!
+//! Contains the IntRing2k trait that specifies different datatypes for rings Z_{2^k}
+
 use super::bit::Bit;
 use crate::protocols::rep3::IoResult;
 use num_traits::{
@@ -10,6 +14,7 @@ use std::{
     ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Neg, Not},
 };
 
+/// Types implementing this trait can be used as elements of a ring Z_{2^k}
 pub trait IntRing2k:
     std::fmt::Display
     + Serialize
@@ -27,7 +32,6 @@ pub trait IntRing2k:
     + BitXorAssign
     + BitAndAssign
     + BitOrAssign
-    + PartialEq
     + From<bool>
     + Into<u128>
     + TryInto<usize, Error: Debug>
@@ -38,13 +42,25 @@ pub trait IntRing2k:
     + Sized
     + Send
     + Sync
+    + TryFrom<u128, Error: Debug>
+    + TryFrom<u64, Error: Debug>
+    + PartialEq
+    + PartialOrd
     + 'static
 {
+    /// Specifies the signed version of this type
     type Signed: Neg<Output = Self::Signed> + From<bool> + AsPrimitive<Self>;
+
+    /// Specifies the number of bits in this type
     const K: usize;
+
+    /// Specifies the number of bytes used for storage in this type
     const BYTES: usize;
 
+    /// Reads a value of this type from a reader
     fn from_reader<R: std::io::Read>(reader: R) -> IoResult<Self>;
+
+    /// Writes a value of this type to a writer
     fn write<W: std::io::Write>(&self, writer: W) -> IoResult<()>;
 
     /// Returns the effective number of bits (i.e., how many LSBs are set)
@@ -123,6 +139,9 @@ impl IntRing2k for u8 {
     }
 
     fn bits(&self) -> usize {
+        if *self == 0 {
+            return 0;
+        }
         self.ilog2() as usize
     }
 }
@@ -143,6 +162,9 @@ impl IntRing2k for u16 {
     }
 
     fn bits(&self) -> usize {
+        if *self == 0 {
+            return 0;
+        }
         self.ilog2() as usize
     }
 }
@@ -163,6 +185,9 @@ impl IntRing2k for u32 {
     }
 
     fn bits(&self) -> usize {
+        if *self == 0 {
+            return 0;
+        }
         self.ilog2() as usize
     }
 }
@@ -183,6 +208,9 @@ impl IntRing2k for u64 {
     }
 
     fn bits(&self) -> usize {
+        if *self == 0 {
+            return 0;
+        }
         self.ilog2() as usize
     }
 }
@@ -203,6 +231,9 @@ impl IntRing2k for u128 {
     }
 
     fn bits(&self) -> usize {
+        if *self == 0 {
+            return 0;
+        }
         self.ilog2() as usize
     }
 }

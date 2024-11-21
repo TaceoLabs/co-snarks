@@ -1,38 +1,39 @@
-mod field_share {
-    use ark_ff::Field;
-    use ark_ff::One;
-    use ark_ff::PrimeField;
-    use ark_std::{UniformRand, Zero};
+mod ring_share {
+    use ark_ff::{One, Zero};
     use itertools::izip;
-    use itertools::Itertools;
-    use mpc_core::protocols::rep3::conversion;
-    use mpc_core::protocols::rep3::gadgets;
     use mpc_core::protocols::rep3::id::PartyID;
-    use mpc_core::protocols::rep3::yao;
+    use mpc_core::protocols::rep3::network::IoContext;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
     use mpc_core::protocols::rep3::yao::evaluator::Rep3Evaluator;
     use mpc_core::protocols::rep3::yao::garbler::Rep3Garbler;
     use mpc_core::protocols::rep3::yao::streaming_evaluator::StreamingRep3Evaluator;
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
-    use mpc_core::protocols::rep3::{self, arithmetic, network::IoContext};
-    use num_bigint::BigUint;
+    use mpc_core::protocols::rep3_ring;
+    use mpc_core::protocols::rep3_ring::arithmetic;
+    use mpc_core::protocols::rep3_ring::conversion;
+    use mpc_core::protocols::rep3_ring::ring::bit::Bit;
+    use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
+    use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
+    use rand::distributions::Standard;
+    use rand::prelude::Distribution;
     use rand::thread_rng;
     use rand::Rng;
-    use std::str::FromStr;
     use std::sync::mpsc;
     use std::thread;
     use tests::rep3_network::Rep3TestNetwork;
 
     // TODO we dont need channels, we can just join
 
-    #[test]
-    fn rep3_add() {
+    fn rep3_add_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
-        let y_shares = rep3::share_field_element(y, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let y = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+        let y_shares = rep3_ring::share_ring_element(y, &mut rng);
         let should_result = x + y;
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -43,17 +44,29 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[test]
-    fn rep3_sub() {
+    fn rep3_add() {
+        rep3_add_t::<Bit>();
+        rep3_add_t::<u8>();
+        rep3_add_t::<u16>();
+        rep3_add_t::<u32>();
+        rep3_add_t::<u64>();
+        rep3_add_t::<u128>();
+    }
+
+    fn rep3_sub_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
-        let y_shares = rep3::share_field_element(y, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let y = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+        let y_shares = rep3_ring::share_ring_element(y, &mut rng);
         let should_result = x - y;
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -64,16 +77,28 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[test]
-    fn rep3_sub_shared_by_public() {
+    fn rep3_sub() {
+        rep3_sub_t::<Bit>();
+        rep3_sub_t::<u8>();
+        rep3_sub_t::<u16>();
+        rep3_sub_t::<u32>();
+        rep3_sub_t::<u64>();
+        rep3_sub_t::<u128>();
+    }
+
+    fn rep3_sub_shared_by_public_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let y = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
         let should_result = x - y;
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -88,16 +113,28 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[test]
-    fn rep3_sub_public_by_shared() {
+    fn rep3_sub_shared_by_public() {
+        rep3_sub_shared_by_public_t::<Bit>();
+        rep3_sub_shared_by_public_t::<u8>();
+        rep3_sub_shared_by_public_t::<u16>();
+        rep3_sub_shared_by_public_t::<u32>();
+        rep3_sub_shared_by_public_t::<u64>();
+        rep3_sub_shared_by_public_t::<u128>();
+    }
+
+    fn rep3_sub_public_by_shared_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let y = ark_bn254::Fr::rand(&mut rng);
-        let y_shares = rep3::share_field_element(y, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let y = rng.gen::<RingElement<T>>();
+        let y_shares = rep3_ring::share_ring_element(y, &mut rng);
         let should_result = x - y;
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -112,18 +149,30 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[test]
-    fn rep3_mul() {
+    fn rep3_sub_public_by_shared() {
+        rep3_sub_public_by_shared_t::<Bit>();
+        rep3_sub_public_by_shared_t::<u8>();
+        rep3_sub_public_by_shared_t::<u16>();
+        rep3_sub_public_by_shared_t::<u32>();
+        rep3_sub_public_by_shared_t::<u64>();
+        rep3_sub_public_by_shared_t::<u128>();
+    }
+
+    fn rep3_mul_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
-        let y_shares = rep3::share_field_element(y, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let y = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+        let y_shares = rep3_ring::share_ring_element(y, &mut rng);
         let should_result = x * y;
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -143,53 +192,34 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[test]
-    fn rep3_div() {
-        let test_network = Rep3TestNetwork::default();
-        let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
-        let y_shares = rep3::share_field_element(y, &mut rng);
-        let should_result = x / y;
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-            y_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let mul = arithmetic::div(x, y, &mut ctx).unwrap();
-                tx.send(mul)
-            });
-        }
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
-        assert_eq!(is_result, should_result);
+    fn rep3_mul() {
+        rep3_mul_t::<Bit>();
+        rep3_mul_t::<u8>();
+        rep3_mul_t::<u16>();
+        rep3_mul_t::<u32>();
+        rep3_mul_t::<u64>();
+        rep3_mul_t::<u128>();
     }
 
-    #[test]
-    fn rep3_fork_mul() {
+    fn rep3_fork_mul_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x0 = ark_bn254::Fr::rand(&mut rng);
-        let x1 = ark_bn254::Fr::rand(&mut rng);
-        let y0 = ark_bn254::Fr::rand(&mut rng);
-        let y1 = ark_bn254::Fr::rand(&mut rng);
-        let x_shares0 = rep3::share_field_element(x0, &mut rng);
-        let x_shares1 = rep3::share_field_element(x1, &mut rng);
-        let y_shares0 = rep3::share_field_element(y0, &mut rng);
-        let y_shares1 = rep3::share_field_element(y1, &mut rng);
+        let x0 = rng.gen::<RingElement<T>>();
+        let x1 = rng.gen::<RingElement<T>>();
+        let y0 = rng.gen::<RingElement<T>>();
+        let y1 = rng.gen::<RingElement<T>>();
+        let x_shares0 = rep3_ring::share_ring_element(x0, &mut rng);
+        let x_shares1 = rep3_ring::share_ring_element(x1, &mut rng);
+        let y_shares0 = rep3_ring::share_ring_element(y0, &mut rng);
+        let y_shares1 = rep3_ring::share_ring_element(y1, &mut rng);
         let should_result0 = x0 * y0;
         let should_result1 = x1 * y1;
         let mut threads = vec![];
@@ -211,20 +241,32 @@ mod field_share {
         let result3 = threads.pop().unwrap().join().unwrap();
         let result2 = threads.pop().unwrap().join().unwrap();
         let result1 = threads.pop().unwrap().join().unwrap();
-        let is_result0 = rep3::combine_field_element(result1.0, result2.0, result3.0);
-        let is_result1 = rep3::combine_field_element(result1.1, result2.1, result3.1);
+        let is_result0 = rep3_ring::combine_ring_element(result1.0, result2.0, result3.0);
+        let is_result1 = rep3_ring::combine_ring_element(result1.1, result2.1, result3.1);
         assert_eq!(is_result0, should_result0);
         assert_eq!(is_result1, should_result1);
     }
 
     #[test]
-    fn rep3_mul2_then_add() {
+    fn rep3_fork_mul() {
+        rep3_fork_mul_t::<Bit>();
+        rep3_fork_mul_t::<u8>();
+        rep3_fork_mul_t::<u16>();
+        rep3_fork_mul_t::<u32>();
+        rep3_fork_mul_t::<u64>();
+        rep3_fork_mul_t::<u128>();
+    }
+
+    fn rep3_mul2_then_add_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let y = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
-        let y_shares = rep3::share_field_element(y, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let y = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+        let y_shares = rep3_ring::share_ring_element(y, &mut rng);
         let should_result = ((x * y) * y) + x;
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -245,110 +287,38 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[test]
-    fn rep3_mul_vec_bn() {
-        let test_network = Rep3TestNetwork::default();
-        let mut rng = thread_rng();
-        let x = [
-            ark_bn254::Fr::from_str(
-                "13839525561076761625780930844889299788193703994911163378019280196128582690055",
-            )
-            .unwrap(),
-            ark_bn254::Fr::from_str(
-                "19302971480864839163158232064620707211435225928426123775531639309944891593977",
-            )
-            .unwrap(),
-            ark_bn254::Fr::from_str(
-                "8048717310762513532550620831072439583505607813129662608591015555880153427210",
-            )
-            .unwrap(),
-            ark_bn254::Fr::from_str(
-                "2585271390974436123003027749932103593962191064365118925254473311197989280023",
-            )
-            .unwrap(),
-        ];
-        let y = [
-            ark_bn254::Fr::from_str(
-                "2688648969035332064113669477511029957484512453056743431884706385750388613065",
-            )
-            .unwrap(),
-            ark_bn254::Fr::from_str(
-                "13632770404954969699480437686769008635735921498648460325387842712839596176806",
-            )
-            .unwrap(),
-            ark_bn254::Fr::from_str(
-                "19199593902803943133889170931116903997086625101975591190159463567024116566625",
-            )
-            .unwrap(),
-            ark_bn254::Fr::from_str(
-                "8255472466884305547009533395117607586789669747151273739964395707537515634749",
-            )
-            .unwrap(),
-        ];
-        let should_result = vec![
-            ark_bn254::Fr::from_str(
-                "14012338922664984944451142760937475581748095944353358534203030914664561190462",
-            )
-            .unwrap(),
-            ark_bn254::Fr::from_str(
-                "4297594441150501195973997511775989720904927516253689527653694984160382713321",
-            )
-            .unwrap(),
-            ark_bn254::Fr::from_str(
-                "7875903949174289914141782934879682497141865775307179984684659764891697566272",
-            )
-            .unwrap(),
-            ark_bn254::Fr::from_str(
-                "6646526994769136778802685410292764833027657364709823469005920616147071273574",
-            )
-            .unwrap(),
-        ];
-
-        let x_shares = rep3::share_field_elements(&x, &mut rng);
-        let y_shares = rep3::share_field_elements(&y, &mut rng);
-
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x, y) in izip!(
-            test_network.get_party_networks(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-            y_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let mul = arithmetic::mul_vec(&x, &y, &mut rep3).unwrap();
-                tx.send(mul)
-            });
-        }
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_elements(result1, result2, result3);
-        assert_eq!(is_result, should_result);
+    fn rep3_mul2_then_add() {
+        rep3_mul2_then_add_t::<Bit>();
+        rep3_mul2_then_add_t::<u8>();
+        rep3_mul2_then_add_t::<u16>();
+        rep3_mul2_then_add_t::<u32>();
+        rep3_mul2_then_add_t::<u64>();
+        rep3_mul2_then_add_t::<u128>();
     }
 
-    #[test]
-    fn rep3_mul_vec() {
+    fn rep3_mul_vec_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let x = (0..1)
-            .map(|_| ark_bn254::Fr::from_str("2").unwrap())
+            .map(|_| rng.gen::<RingElement<T>>())
             .collect::<Vec<_>>();
         let y = (0..1)
-            .map(|_| ark_bn254::Fr::from_str("3").unwrap())
+            .map(|_| rng.gen::<RingElement<T>>())
             .collect::<Vec<_>>();
-        let x_shares = rep3::share_field_elements(&x, &mut rng);
-        let y_shares = rep3::share_field_elements(&y, &mut rng);
+        let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
+        let y_shares = rep3_ring::share_ring_elements(&y, &mut rng);
 
         let mut should_result = vec![];
         for (x, y) in x.iter().zip(y.iter()) {
-            should_result.push((x * y) * y);
+            should_result.push((*x * y) * y);
         }
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -370,15 +340,27 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_elements(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[test]
-    fn rep3_neg() {
+    fn rep3_mul_vec() {
+        rep3_mul_vec_t::<Bit>();
+        rep3_mul_vec_t::<u8>();
+        rep3_mul_vec_t::<u16>();
+        rep3_mul_vec_t::<u32>();
+        rep3_mul_vec_t::<u64>();
+        rep3_mul_vec_t::<u128>();
+    }
+
+    fn rep3_neg_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
         let should_result = -x;
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -389,74 +371,32 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, should_result);
     }
 
     #[test]
-    fn rep3_inv() {
-        let test_network = Rep3TestNetwork::default();
-        let mut rng = thread_rng();
-        let mut x = ark_bn254::Fr::rand(&mut rng);
-        while x.is_zero() {
-            x = ark_bn254::Fr::rand(&mut rng);
-        }
-        let x_shares = rep3::share_field_element(x, &mut rng);
-        let should_result = x.inverse().unwrap();
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(arithmetic::inv(x, &mut rep3).unwrap())
-            });
-        }
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
-        assert_eq!(is_result, should_result);
+    fn rep3_neg() {
+        rep3_neg_t::<Bit>();
+        rep3_neg_t::<u8>();
+        rep3_neg_t::<u16>();
+        rep3_neg_t::<u32>();
+        rep3_neg_t::<u64>();
+        rep3_neg_t::<u128>();
     }
 
-    #[test]
-    fn rep3_sqrt() {
+    fn rep3_bit_inject_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x_ = ark_bn254::Fr::rand(&mut rng);
-        let x = x_.square(); // Guarantees a square root exists
-        let x_shares = rep3::share_field_element(x, &mut rng);
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x) in izip!(test_network.get_party_networks(), [tx1, tx2, tx3], x_shares,) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(arithmetic::sqrt(x, &mut rep3).unwrap())
-            });
-        }
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
-        assert!(is_result == x_ || is_result == -x_);
-    }
-
-    #[test]
-    fn rep3_bit_inject() {
-        let test_network = Rep3TestNetwork::default();
-        let mut rng = thread_rng();
-        let x = ark_bn254::Fr::from(rng.gen::<bool>() as u64);
-        let mut x_shares = rep3::share_biguint(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>() & RingElement::one();
+        let mut x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
         // Simulate sharing of just one bit
         for x in x_shares.iter_mut() {
-            x.a &= BigUint::one();
-            x.b &= BigUint::one();
+            x.a &= RingElement::one();
+            x.b &= RingElement::one();
         }
 
         let (tx1, rx1) = mpsc::channel();
@@ -476,12 +416,24 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, x);
     }
 
     #[test]
-    fn rep3_bit_inject_many() {
+    fn rep3_bit_inject() {
+        rep3_bit_inject_t::<Bit>();
+        rep3_bit_inject_t::<u8>();
+        rep3_bit_inject_t::<u16>();
+        rep3_bit_inject_t::<u32>();
+        rep3_bit_inject_t::<u64>();
+        rep3_bit_inject_t::<u128>();
+    }
+
+    fn rep3_bit_inject_many_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         const VEC_SIZE: usize = 10;
 
         let test_network = Rep3TestNetwork::default();
@@ -491,13 +443,13 @@ mod field_share {
         let mut x1_shares = Vec::with_capacity(VEC_SIZE);
         let mut x2_shares = Vec::with_capacity(VEC_SIZE);
         for _ in 0..VEC_SIZE {
-            let x = ark_bn254::Fr::from(rng.gen::<bool>() as u64);
+            let x = rng.gen::<RingElement<T>>() & RingElement::one();
             should_result.push(x);
-            let mut x_shares = rep3::share_biguint(x, &mut rng);
+            let mut x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
             // Simulate sharing of just one bit
             for x in x_shares.iter_mut() {
-                x.a &= BigUint::one();
-                x.b &= BigUint::one();
+                x.a &= RingElement::one();
+                x.b &= RingElement::one();
             }
             x0_shares.push(x_shares[0].to_owned());
             x1_shares.push(x_shares[1].to_owned());
@@ -521,8 +473,18 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_elements(result1, result2, result3);
         assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_bit_inject_many() {
+        rep3_bit_inject_many_t::<Bit>();
+        rep3_bit_inject_many_t::<u8>();
+        rep3_bit_inject_many_t::<u16>();
+        rep3_bit_inject_many_t::<u32>();
+        rep3_bit_inject_many_t::<u64>();
+        rep3_bit_inject_many_t::<u128>();
     }
 
     use arithmetic::ge_public;
@@ -530,59 +492,71 @@ mod field_share {
     use arithmetic::le_public;
     use arithmetic::lt_public;
     macro_rules! bool_op_test {
-        ($name: ident, $op: tt) => {
-            paste::item! {
-                #[test]
-                 fn $name() {
-                    let constant_number = ark_bn254::Fr::from_str("50").unwrap();
-                    for i in -1..=1 {
-                        let compare = constant_number + ark_bn254::Fr::from(i);
-                        let test_network = Rep3TestNetwork::default();
-                        let mut rng = thread_rng();
-                        let x_shares = rep3::share_field_element(constant_number, &mut rng);
-                        let y_shares = rep3::share_field_element(compare, &mut rng);
-                        let should_result = ark_bn254::Fr::from(constant_number $op compare);
-                        let (tx1, rx1) = mpsc::channel();
-                        let (tx2, rx2) = mpsc::channel();
-                        let (tx3, rx3) = mpsc::channel();
-                        for (net, tx, x, y, public) in izip!(
-                            test_network.get_party_networks(),
-                            [tx1, tx2, tx3],
-                            x_shares,
-                            y_shares,
-                            vec![compare; 3]
-                        ) {
-            thread::spawn(move || {
-                                let mut rep3 = IoContext::init(net).unwrap();
-                                let shared_compare = arithmetic::$name(x, y, &mut rep3).unwrap();
-                                let rhs_const =[< $name _public >](x, public, &mut rep3).unwrap();
-                                tx.send([shared_compare, rhs_const])
-                            });
-                        }
-                        let results1 = rx1.recv().unwrap();
-                        let results2 = rx2.recv().unwrap();
-                        let results3 = rx3.recv().unwrap();
-                        for (a, b, c) in izip!(results1, results2, results3) {
-                            let is_result = rep3::combine_field_element(a, b, c);
-                            println!("{constant_number} {} {compare} = {is_result}", stringify!($op));
-                            assert_eq!(is_result, should_result.into());
+            ($name: ident, $name_t: ident, $op: tt) => {
+                paste::item! {
+                     fn $name_t<T: IntRing2k>() where Standard: Distribution<T> {
+                        let constant_number: RingElement<T> = RingElement(T::try_from(50u64).unwrap());
+                        let compare = constant_number - RingElement::one();
+                        for i in 0u64..3 {
+                            let compare = compare + RingElement(T::try_from(i).unwrap());
+                            let test_network = Rep3TestNetwork::default();
+                            let mut rng = thread_rng();
+                            let x_shares = rep3_ring::share_ring_element(constant_number, &mut rng);
+                            let y_shares = rep3_ring::share_ring_element(compare, &mut rng);
+                            let should_result = constant_number $op compare;
+                            let (tx1, rx1) = mpsc::channel();
+                            let (tx2, rx2) = mpsc::channel();
+                            let (tx3, rx3) = mpsc::channel();
+                            for (net, tx, x, y, public) in izip!(
+                                test_network.get_party_networks(),
+                                [tx1, tx2, tx3],
+                                x_shares,
+                                y_shares,
+                                vec![compare; 3]
+                            ) {
+                            thread::spawn(move || {
+                                    let mut rep3 = IoContext::init(net).unwrap();
+                                    let shared_compare = arithmetic::$name(x, y, &mut rep3).unwrap();
+                                    let rhs_const =[< $name _public >](x, public, &mut rep3).unwrap();
+                                    tx.send([shared_compare, rhs_const])
+                                });
+                            }
+                            let results1 = rx1.recv().unwrap();
+                            let results2 = rx2.recv().unwrap();
+                            let results3 = rx3.recv().unwrap();
+                            for (a, b, c) in izip!(results1, results2, results3) {
+                                let is_result = rep3_ring::combine_ring_element(a, b, c);
+                                println!("{constant_number} {} {compare} = {is_result}", stringify!($op));
+                                assert_eq!(is_result.0.convert(), should_result);
+                            }
                         }
                     }
-                }
-            }
-        };
-    }
-    bool_op_test!(lt, <);
-    bool_op_test!(le, <=);
-    bool_op_test!(gt, >);
-    bool_op_test!(ge, >=);
 
-    #[test]
-    fn rep3_a2b_zero() {
+                    #[test]
+                    fn $name() {
+                        // $name_t::<Bit>();
+                        $name_t::<u8>();
+                        $name_t::<u16>();
+                        $name_t::<u32>();
+                        $name_t::<u64>();
+                        $name_t::<u128>();
+                    }
+                }
+            };
+        }
+    bool_op_test!(lt, lt_t, <);
+    bool_op_test!(le, le_t, <=);
+    bool_op_test!(gt, gt_t, >);
+    bool_op_test!(ge, ge_t, >=);
+
+    fn rep3_a2b_zero_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::zero();
-        let x_shares = rep3::share_field_element(x, &mut rng);
+        let x = RingElement::<T>::zero();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -601,50 +575,68 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_binary_element(result1, result2, result3);
-        let should_result = x.into();
-        assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
-        assert_eq!(is_result_f, x);
+        let is_result = rep3_ring::combine_ring_element_binary(result1, result2, result3);
+        assert_eq!(is_result, x);
+    }
+
+    #[test]
+    fn rep3_a2b_zero() {
+        rep3_a2b_zero_t::<Bit>();
+        rep3_a2b_zero_t::<u8>();
+        rep3_a2b_zero_t::<u16>();
+        rep3_a2b_zero_t::<u32>();
+        rep3_a2b_zero_t::<u64>();
+        rep3_a2b_zero_t::<u128>();
+    }
+
+    fn rep3_a2y2b_zero_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = RingElement::<T>::zero();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for ((net, tx), x) in test_network
+            .get_party_networks()
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip(x_shares.into_iter())
+        {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(conversion::a2y2b(x, &mut rep3).unwrap())
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_element_binary(result1, result2, result3);
+        assert_eq!(is_result, x);
     }
 
     #[test]
     fn rep3_a2y2b_zero() {
-        let test_network = Rep3TestNetwork::default();
-        let mut rng = thread_rng();
-        let x = ark_bn254::Fr::zero();
-        let x_shares = rep3::share_field_element(x, &mut rng);
-
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2y2b(x, &mut rep3).unwrap())
-            });
-        }
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_binary_element(result1, result2, result3);
-        let should_result = x.into();
-        assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
-        assert_eq!(is_result_f, x);
+        rep3_a2y2b_zero_t::<Bit>();
+        rep3_a2y2b_zero_t::<u8>();
+        rep3_a2y2b_zero_t::<u16>();
+        rep3_a2y2b_zero_t::<u32>();
+        rep3_a2y2b_zero_t::<u64>();
+        rep3_a2y2b_zero_t::<u128>();
     }
 
-    #[test]
-    fn rep3_a2y2b_streaming_zero() {
+    fn rep3_a2y2b_streaming_zero_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::zero();
-        let x_shares = rep3::share_field_element(x, &mut rng);
+        let x = RingElement::<T>::zero();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -663,19 +655,28 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_binary_element(result1, result2, result3);
-        let should_result = x.into();
-        assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
-        assert_eq!(is_result_f, x);
+        let is_result = rep3_ring::combine_ring_element_binary(result1, result2, result3);
+        assert_eq!(is_result, x);
     }
 
     #[test]
-    fn rep3_a2b() {
+    fn rep3_a2y2b_streaming_zero() {
+        rep3_a2y2b_streaming_zero_t::<Bit>();
+        rep3_a2y2b_streaming_zero_t::<u8>();
+        rep3_a2y2b_streaming_zero_t::<u16>();
+        rep3_a2y2b_streaming_zero_t::<u32>();
+        rep3_a2y2b_streaming_zero_t::<u64>();
+        rep3_a2y2b_streaming_zero_t::<u128>();
+    }
+
+    fn rep3_a2b_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -694,20 +695,28 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_binary_element(result1, result2, result3);
-
-        let should_result = x.into();
-        assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
-        assert_eq!(is_result_f, x);
+        let is_result = rep3_ring::combine_ring_element_binary(result1, result2, result3);
+        assert_eq!(is_result, x);
     }
 
     #[test]
-    fn rep3_a2y2b() {
+    fn rep3_a2b() {
+        rep3_a2b_t::<Bit>();
+        rep3_a2b_t::<u8>();
+        rep3_a2b_t::<u16>();
+        rep3_a2b_t::<u32>();
+        rep3_a2b_t::<u64>();
+        rep3_a2b_t::<u128>();
+    }
+
+    fn rep3_a2y2b_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -726,20 +735,28 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_binary_element(result1, result2, result3);
-
-        let should_result = x.into();
-        assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
-        assert_eq!(is_result_f, x);
+        let is_result = rep3_ring::combine_ring_element_binary(result1, result2, result3);
+        assert_eq!(is_result, x);
     }
 
     #[test]
-    fn rep3_a2y2b_streaming() {
+    fn rep3_a2y2b() {
+        rep3_a2y2b_t::<Bit>();
+        rep3_a2y2b_t::<u8>();
+        rep3_a2y2b_t::<u16>();
+        rep3_a2y2b_t::<u32>();
+        rep3_a2y2b_t::<u64>();
+        rep3_a2y2b_t::<u128>();
+    }
+
+    fn rep3_a2y2b_streaming_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -758,20 +775,28 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_binary_element(result1, result2, result3);
-
-        let should_result = x.into();
-        assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
-        assert_eq!(is_result_f, x);
+        let is_result = rep3_ring::combine_ring_element_binary(result1, result2, result3);
+        assert_eq!(is_result, x);
     }
 
     #[test]
-    fn rep3_b2a() {
+    fn rep3_a2y2b_streaming() {
+        rep3_a2y2b_streaming_t::<Bit>();
+        rep3_a2y2b_streaming_t::<u8>();
+        rep3_a2y2b_streaming_t::<u16>();
+        rep3_a2y2b_streaming_t::<u32>();
+        rep3_a2y2b_streaming_t::<u64>();
+        rep3_a2y2b_streaming_t::<u128>();
+    }
+
+    fn rep3_b2a_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -790,16 +815,28 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, x);
     }
 
     #[test]
-    fn rep3_b2y2a() {
+    fn rep3_b2a() {
+        rep3_b2a_t::<Bit>();
+        rep3_b2a_t::<u8>();
+        rep3_b2a_t::<u16>();
+        rep3_b2a_t::<u32>();
+        rep3_b2a_t::<u64>();
+        rep3_b2a_t::<u128>();
+    }
+
+    fn rep3_b2y2a_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -818,16 +855,28 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, x);
     }
 
     #[test]
-    fn rep3_b2y2a_streaming() {
+    fn rep3_b2y2a() {
+        rep3_b2y2a_t::<Bit>();
+        rep3_b2y2a_t::<u8>();
+        rep3_b2y2a_t::<u16>();
+        rep3_b2y2a_t::<u32>();
+        rep3_b2y2a_t::<u64>();
+        rep3_b2y2a_t::<u128>();
+    }
+
+    fn rep3_b2y2a_streaming_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -846,16 +895,28 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, x);
     }
 
     #[test]
-    fn rep3_gc() {
+    fn rep3_b2y2a_streaming() {
+        rep3_b2y2a_streaming_t::<Bit>();
+        rep3_b2y2a_streaming_t::<u8>();
+        rep3_b2y2a_streaming_t::<u16>();
+        rep3_b2y2a_streaming_t::<u32>();
+        rep3_b2y2a_streaming_t::<u64>();
+        rep3_b2y2a_streaming_t::<u128>();
+    }
+
+    fn rep3_gc_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let y = ark_bn254::Fr::rand(&mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let y = rng.gen::<RingElement<T>>();
         let should_result = x + y;
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -869,14 +930,14 @@ mod field_share {
                 let mut ctx = IoContext::init(net).unwrap();
 
                 let mut garbler = Rep3Garbler::new(&mut ctx);
-                let x_ = garbler.encode_field(x);
-                let y_ = garbler.encode_field(y);
+                let x_ = garbler.encode_ring(x);
+                let y_ = garbler.encode_ring(y);
 
                 // This is without OT, just a simulation
                 garbler.add_bundle_to_circuit(&x_.evaluator_wires);
                 garbler.add_bundle_to_circuit(&y_.evaluator_wires);
 
-                let circuit_output = GarbledCircuits::adder_mod_p::<_, ark_bn254::Fr>(
+                let circuit_output = GarbledCircuits::adder_mod_2k(
                     &mut garbler,
                     &x_.garbler_wires,
                     &y_.garbler_wires,
@@ -884,7 +945,7 @@ mod field_share {
                 .unwrap();
 
                 let output = garbler.output_all_parties(circuit_output.wires()).unwrap();
-                let add = GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap();
+                let add = GCUtils::bits_to_ring::<T>(&output).unwrap();
                 tx.send(add)
             });
         }
@@ -894,20 +955,19 @@ mod field_share {
             let mut ctx = IoContext::init(net1).unwrap();
 
             let mut evaluator = Rep3Evaluator::new(&mut ctx);
-            let n_bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
+            let n_bits = T::K;
 
             // This is without OT, just a simulation
             evaluator.receive_circuit().unwrap();
             let x_ = evaluator.receive_bundle_from_circuit(n_bits).unwrap();
             let y_ = evaluator.receive_bundle_from_circuit(n_bits).unwrap();
 
-            let circuit_output =
-                GarbledCircuits::adder_mod_p::<_, ark_bn254::Fr>(&mut evaluator, &x_, &y_).unwrap();
+            let circuit_output = GarbledCircuits::adder_mod_2k(&mut evaluator, &x_, &y_).unwrap();
 
             let output = evaluator
                 .output_all_parties(circuit_output.wires())
                 .unwrap();
-            let add = GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap();
+            let add = GCUtils::bits_to_ring::<T>(&output).unwrap();
             tx1.send(add)
         });
 
@@ -920,11 +980,23 @@ mod field_share {
     }
 
     #[test]
-    fn rep3_gc_streaming() {
+    fn rep3_gc() {
+        rep3_gc_t::<Bit>();
+        rep3_gc_t::<u8>();
+        rep3_gc_t::<u16>();
+        rep3_gc_t::<u32>();
+        rep3_gc_t::<u64>();
+        rep3_gc_t::<u128>();
+    }
+
+    fn rep3_gc_streaming_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let y = ark_bn254::Fr::rand(&mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let y = rng.gen::<RingElement<T>>();
         let should_result = x + y;
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -938,14 +1010,14 @@ mod field_share {
                 let mut ctx = IoContext::init(net).unwrap();
 
                 let mut garbler = StreamingRep3Garbler::new(&mut ctx);
-                let x_ = garbler.encode_field(x);
-                let y_ = garbler.encode_field(y);
+                let x_ = garbler.encode_ring(x);
+                let y_ = garbler.encode_ring(y);
 
                 // This is without OT, just a simulation
                 garbler.send_bundle(&x_.evaluator_wires).unwrap();
                 garbler.send_bundle(&y_.evaluator_wires).unwrap();
 
-                let circuit_output = GarbledCircuits::adder_mod_p::<_, ark_bn254::Fr>(
+                let circuit_output = GarbledCircuits::adder_mod_2k(
                     &mut garbler,
                     &x_.garbler_wires,
                     &y_.garbler_wires,
@@ -953,7 +1025,7 @@ mod field_share {
                 .unwrap();
 
                 let output = garbler.output_all_parties(circuit_output.wires()).unwrap();
-                let add = GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap();
+                let add = GCUtils::bits_to_ring::<T>(&output).unwrap();
                 tx.send(add)
             });
         }
@@ -963,19 +1035,18 @@ mod field_share {
             let mut ctx = IoContext::init(net1).unwrap();
 
             let mut evaluator = StreamingRep3Evaluator::new(&mut ctx);
-            let n_bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
+            let n_bits = T::K;
 
             // This is without OT, just a simulation
             let x_ = evaluator.receive_bundle(n_bits).unwrap();
             let y_ = evaluator.receive_bundle(n_bits).unwrap();
 
-            let circuit_output =
-                GarbledCircuits::adder_mod_p::<_, ark_bn254::Fr>(&mut evaluator, &x_, &y_).unwrap();
+            let circuit_output = GarbledCircuits::adder_mod_2k(&mut evaluator, &x_, &y_).unwrap();
 
             let output = evaluator
                 .output_all_parties(circuit_output.wires())
                 .unwrap();
-            let add = GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap();
+            let add = GCUtils::bits_to_ring::<T>(&output).unwrap();
             tx1.send(add)
         });
 
@@ -988,11 +1059,23 @@ mod field_share {
     }
 
     #[test]
-    fn rep3_a2y() {
+    fn rep3_gc_streaming() {
+        rep3_gc_streaming_t::<Bit>();
+        rep3_gc_streaming_t::<u8>();
+        rep3_gc_streaming_t::<u16>();
+        rep3_gc_streaming_t::<u32>();
+        rep3_gc_streaming_t::<u64>();
+        rep3_gc_streaming_t::<u128>();
+    }
+
+    fn rep3_a2y_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -1022,7 +1105,7 @@ mod field_share {
                     }
                 };
 
-                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
+                tx.send(GCUtils::bits_to_ring::<T>(&output).unwrap())
                     .unwrap();
             });
         }
@@ -1036,11 +1119,23 @@ mod field_share {
     }
 
     #[test]
-    fn rep3_a2y_streaming() {
+    fn rep3_a2y() {
+        rep3_a2y_t::<Bit>();
+        rep3_a2y_t::<u8>();
+        rep3_a2y_t::<u16>();
+        rep3_a2y_t::<u32>();
+        rep3_a2y_t::<u64>();
+        rep3_a2y_t::<u128>();
+    }
+
+    fn rep3_a2y_streaming_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_field_element(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -1070,7 +1165,7 @@ mod field_share {
                     }
                 };
 
-                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
+                tx.send(GCUtils::bits_to_ring::<T>(&output).unwrap())
                     .unwrap();
             });
         }
@@ -1084,12 +1179,72 @@ mod field_share {
     }
 
     #[test]
-    fn rep3_y2a() {
+    fn rep3_a2y_streaming() {
+        rep3_a2y_streaming_t::<Bit>();
+        rep3_a2y_streaming_t::<u8>();
+        rep3_a2y_streaming_t::<u16>();
+        rep3_a2y_streaming_t::<u32>();
+        rep3_a2y_streaming_t::<u64>();
+        rep3_a2y_streaming_t::<u128>();
+    }
+
+    fn rep3_y2a_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = GCUtils::encode_field(x, &mut rng, delta);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = GCUtils::encode_ring(x, &mut rng, delta);
+        let x_shares = [
+            x_shares.evaluator_wires,
+            x_shares.garbler_wires.to_owned(),
+            x_shares.garbler_wires,
+        ];
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                let converted = conversion::y2a::<T, _>(x, Some(delta), &mut rep3).unwrap();
+                tx.send(converted).unwrap();
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
+        assert_eq!(is_result, x);
+    }
+
+    #[test]
+    fn rep3_y2a() {
+        rep3_y2a_t::<Bit>();
+        rep3_y2a_t::<u8>();
+        rep3_y2a_t::<u16>();
+        rep3_y2a_t::<u32>();
+        rep3_y2a_t::<u64>();
+        rep3_y2a_t::<u128>();
+    }
+
+    fn rep3_y2a_streaming_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let delta = GCUtils::random_delta(&mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = GCUtils::encode_ring(x, &mut rng, delta);
         let x_shares = [
             x_shares.evaluator_wires,
             x_shares.garbler_wires.to_owned(),
@@ -1108,7 +1263,7 @@ mod field_share {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
                 let converted =
-                    conversion::y2a::<ark_bn254::Fr, _>(x, Some(delta), &mut rep3).unwrap();
+                    conversion::y2a_streaming::<T, _>(x, Some(delta), &mut rep3).unwrap();
                 tx.send(converted).unwrap();
             });
         }
@@ -1116,54 +1271,28 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
         assert_eq!(is_result, x);
     }
 
     #[test]
     fn rep3_y2a_streaming() {
-        let test_network = Rep3TestNetwork::default();
-        let mut rng = thread_rng();
-        let delta = GCUtils::random_delta(&mut rng);
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = GCUtils::encode_field(x, &mut rng, delta);
-        let x_shares = [
-            x_shares.evaluator_wires,
-            x_shares.garbler_wires.to_owned(),
-            x_shares.garbler_wires,
-        ];
-
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let converted =
-                    conversion::y2a_streaming::<ark_bn254::Fr, _>(x, Some(delta), &mut rep3)
-                        .unwrap();
-                tx.send(converted).unwrap();
-            });
-        }
-
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_element(result1, result2, result3);
-        assert_eq!(is_result, x);
+        rep3_y2a_streaming_t::<Bit>();
+        rep3_y2a_streaming_t::<u8>();
+        rep3_y2a_streaming_t::<u16>();
+        rep3_y2a_streaming_t::<u32>();
+        rep3_y2a_streaming_t::<u64>();
+        rep3_y2a_streaming_t::<u128>();
     }
 
-    #[test]
-    fn rep3_b2y() {
+    fn rep3_b2y_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -1193,7 +1322,7 @@ mod field_share {
                     }
                 };
 
-                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
+                tx.send(GCUtils::bits_to_ring::<T>(&output).unwrap())
                     .unwrap();
             });
         }
@@ -1206,11 +1335,23 @@ mod field_share {
     }
 
     #[test]
-    fn rep3_b2y_streaming() {
+    fn rep3_b2y() {
+        rep3_b2y_t::<Bit>();
+        rep3_b2y_t::<u8>();
+        rep3_b2y_t::<u16>();
+        rep3_b2y_t::<u32>();
+        rep3_b2y_t::<u64>();
+        rep3_b2y_t::<u128>();
+    }
+
+    fn rep3_b2y_streaming_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -1240,7 +1381,7 @@ mod field_share {
                     }
                 };
 
-                tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
+                tx.send(GCUtils::bits_to_ring::<T>(&output).unwrap())
                     .unwrap();
             });
         }
@@ -1253,12 +1394,24 @@ mod field_share {
     }
 
     #[test]
-    fn rep3_y2b() {
+    fn rep3_b2y_streaming() {
+        rep3_b2y_streaming_t::<Bit>();
+        rep3_b2y_streaming_t::<u8>();
+        rep3_b2y_streaming_t::<u16>();
+        rep3_b2y_streaming_t::<u32>();
+        rep3_b2y_streaming_t::<u64>();
+        rep3_b2y_streaming_t::<u128>();
+    }
+
+    fn rep3_y2b_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
         let test_network = Rep3TestNetwork::default();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
-        let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = GCUtils::encode_field(x, &mut rng, delta);
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = GCUtils::encode_ring(x, &mut rng, delta);
         let x_shares = [
             x_shares.evaluator_wires,
             x_shares.garbler_wires.to_owned(),
@@ -1276,7 +1429,7 @@ mod field_share {
         ) {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                let converted = conversion::y2b::<ark_bn254::Fr, _>(x, &mut rep3).unwrap();
+                let converted = conversion::y2b::<T, _>(x, &mut rep3).unwrap();
                 tx.send(converted).unwrap();
             });
         }
@@ -1284,211 +1437,17 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_binary_element(result1, result2, result3);
-
-        let should_result = x.into();
-        assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
-        assert_eq!(is_result_f, x);
+        let is_result = rep3_ring::combine_ring_element_binary(result1, result2, result3);
+        assert_eq!(is_result, x);
     }
 
     #[test]
-    fn rep3_decompose_shared_field_many_via_yao() {
-        const VEC_SIZE: usize = 10;
-        const TOTAL_BIT_SIZE: usize = 64;
-        const CHUNK_SIZE: usize = 14;
-
-        let test_network = Rep3TestNetwork::default();
-        let mut rng = thread_rng();
-        let x = (0..VEC_SIZE)
-            .map(|_| ark_bn254::Fr::rand(&mut rng))
-            .collect_vec();
-        let x_shares = rep3::share_field_elements(&x, &mut rng);
-
-        let mut should_result =
-            Vec::with_capacity(VEC_SIZE * (TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE)));
-        let big_mask = (BigUint::from(1u64) << TOTAL_BIT_SIZE) - BigUint::one();
-        let small_mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
-        for x in x.into_iter() {
-            let mut x: BigUint = x.into();
-            x &= &big_mask;
-            for _ in 0..TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE) {
-                let chunk = &x & &small_mask;
-                x >>= CHUNK_SIZE;
-                should_result.push(ark_bn254::Fr::from(chunk));
-            }
-        }
-
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-
-                let decomposed =
-                    yao::decompose_arithmetic_many(&x, &mut rep3, TOTAL_BIT_SIZE, CHUNK_SIZE)
-                        .unwrap();
-                tx.send(decomposed)
-            });
-        }
-
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_elements(result1, result2, result3);
-        assert_eq!(is_result, should_result);
-    }
-
-    #[test]
-    fn rep3_batcher_odd_even_merge_sort_via_yao() {
-        const VEC_SIZE: usize = 10;
-        const CHUNK_SIZE: usize = 14;
-
-        let test_network = Rep3TestNetwork::default();
-        let mut rng = thread_rng();
-        let x = (0..VEC_SIZE)
-            .map(|_| ark_bn254::Fr::rand(&mut rng))
-            .collect_vec();
-        let x_shares = rep3::share_field_elements(&x, &mut rng);
-
-        let mut should_result = Vec::with_capacity(VEC_SIZE);
-        let mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
-        for x in x.into_iter() {
-            let mut x: BigUint = x.into();
-            x &= &mask;
-            should_result.push(ark_bn254::Fr::from(x));
-        }
-        should_result.sort();
-
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-
-                let decomposed =
-                    gadgets::sort::batcher_odd_even_merge_sort_yao(&x, &mut rep3, CHUNK_SIZE)
-                        .unwrap();
-                tx.send(decomposed)
-            });
-        }
-
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_elements(result1, result2, result3);
-        assert_eq!(is_result, should_result);
-    }
-}
-
-mod curve_share {
-    use std::{sync::mpsc, thread};
-
-    use ark_std::UniformRand;
-    use itertools::izip;
-
-    use mpc_core::protocols::rep3::{self, pointshare};
-    use rand::thread_rng;
-
-    #[test]
-    fn rep3_add() {
-        let mut rng = thread_rng();
-        let x = ark_bn254::G1Projective::rand(&mut rng);
-        let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = rep3::share_curve_point(x, &mut rng);
-        let y_shares = rep3::share_curve_point(y, &mut rng);
-        let should_result = x + y;
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-
-        for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            thread::spawn(move || tx.send(pointshare::add(&x, &y)));
-        }
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_curve_point(result1, result2, result3);
-        assert_eq!(is_result, should_result);
-    }
-
-    #[test]
-    fn rep3_sub() {
-        let mut rng = thread_rng();
-        let x = ark_bn254::G1Projective::rand(&mut rng);
-        let y = ark_bn254::G1Projective::rand(&mut rng);
-        let x_shares = rep3::share_curve_point(x, &mut rng);
-        let y_shares = rep3::share_curve_point(y, &mut rng);
-        let should_result = x - y;
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-        for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            thread::spawn(move || tx.send(pointshare::sub(&x, &y)));
-        }
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_curve_point(result1, result2, result3);
-        assert_eq!(is_result, should_result);
-    }
-
-    #[test]
-    fn rep3_scalar_mul_public_point() {
-        let mut rng = thread_rng();
-        let public_point = ark_bn254::G1Projective::rand(&mut rng);
-        let scalar = ark_bn254::Fr::rand(&mut rng);
-        let scalar_shares = rep3::share_field_element(scalar, &mut rng);
-        let should_result = public_point * scalar;
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-
-        for (tx, scalar) in izip!([tx1, tx2, tx3], scalar_shares,) {
-            thread::spawn(move || {
-                tx.send(pointshare::scalar_mul_public_point(&public_point, scalar))
-            });
-        }
-
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_curve_point(result1, result2, result3);
-        assert_eq!(is_result, should_result);
-    }
-
-    #[test]
-    fn rep3_scalar_mul_public_scalar() {
-        let mut rng = thread_rng();
-        let point = ark_bn254::G1Projective::rand(&mut rng);
-        let public_scalar = ark_bn254::Fr::rand(&mut rng);
-        let point_shares = rep3::share_curve_point(point, &mut rng);
-        let should_result = point * public_scalar;
-        let (tx1, rx1) = mpsc::channel();
-        let (tx2, rx2) = mpsc::channel();
-        let (tx3, rx3) = mpsc::channel();
-
-        for (tx, point) in izip!([tx1, tx2, tx3], point_shares) {
-            thread::spawn(move || {
-                tx.send(pointshare::scalar_mul_public_scalar(&point, public_scalar))
-            });
-        }
-        let result1 = rx1.recv().unwrap();
-        let result2 = rx2.recv().unwrap();
-        let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_curve_point(result1, result2, result3);
-        assert_eq!(is_result, should_result);
+    fn rep3_y2b() {
+        rep3_y2b_t::<Bit>();
+        rep3_y2b_t::<u8>();
+        rep3_y2b_t::<u16>();
+        rep3_y2b_t::<u32>();
+        rep3_y2b_t::<u64>();
+        rep3_y2b_t::<u128>();
     }
 }
