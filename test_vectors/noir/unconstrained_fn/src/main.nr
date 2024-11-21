@@ -1,8 +1,8 @@
-unconstrained fn add(x: Field, y: Field) -> Field {
+unconstrained fn add(x: u32, y: u32) -> u32 {
     x + y
 }
 
-fn main(x: Field, y: Field, z: pub Field) {
+fn main(x: u32, y: u32, z: pub u32) {
     assert(unsafe { add(x, y) } == z);
 }
 

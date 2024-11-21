@@ -20,4 +20,8 @@ impl<F: PrimeField> From<F> for Rep3BrilligType {
 
 impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
     type BrilligType = Rep3BrilligType;
+
+    fn cast_to_int(&self, src: Self::BrilligType, bit_size: brillig::IntegerBitSize) -> u128 {
+        todo!()
+    }
 }

@@ -44,7 +44,7 @@ where
                 BrilligInputs::MemoryArray(_) => todo!("memory array calldata TODO"),
             };
         }
-        self.brillig.run(id, calldata, outputs);
+        self.brillig.run(id, calldata, outputs)?;
 
         //CoBrilligVM::<T, F>::solve(&function_to_run, calldata, outputs);
 
