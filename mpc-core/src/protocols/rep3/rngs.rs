@@ -208,6 +208,22 @@ impl Rep3Rand {
         val & &mask
     }
 
+    /// Generate a random [`T`] from rng1
+    pub fn random_element_rng1<T>(&mut self) -> T
+    where
+        Standard: Distribution<T>,
+    {
+        self.rng1.gen()
+    }
+
+    /// Generate a random [`T`] from rng1
+    pub fn random_element_rng2<T>(&mut self) -> T
+    where
+        Standard: Distribution<T>,
+    {
+        self.rng2.gen()
+    }
+
     /// Generate a seed from each rng
     pub fn random_seeds(&mut self) -> ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) {
         let seed1 = self.rng1.gen();
@@ -253,6 +269,21 @@ impl Rep3RandBitComp {
         let b = F::rand(&mut self.rng2);
         let c = if let Some(rng3) = &mut self.rng3 {
             F::rand(rng3)
+        } else {
+            unreachable!()
+        };
+        (a, b, c)
+    }
+
+    /// Generate three random field elements
+    pub fn random_elements_3keys<T>(&mut self) -> (T, T, T)
+    where
+        Standard: Distribution<T>,
+    {
+        let a = self.rng1.gen();
+        let b = self.rng2.gen();
+        let c = if let Some(rng3) = &mut self.rng3 {
+            rng3.gen()
         } else {
             unreachable!()
         };

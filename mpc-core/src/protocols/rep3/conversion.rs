@@ -13,7 +13,6 @@ use super::{
     },
     IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
 };
-use crate::protocols::rep3::yao::input_field_id2;
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::izip;
@@ -318,7 +317,7 @@ macro_rules! y2a_impl_p1 {
 
         let k2 = $io_context.rngs.bitcomp1.random_fes_3keys::<F>();
         $res.a = (k2.0 + k2.1 + k2.2).neg();
-        let x23 = input_field_id2::<F, _>(None, None, $io_context)?;
+        let x23 = yao::input_field_id2::<F, _>(None, None, $io_context)?;
 
         let mut garbler = <$garbler>::new_with_delta($io_context, delta);
         let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &$x, &x23);
@@ -352,7 +351,7 @@ macro_rules! y2a_impl_p2 {
         let x23 = Some(k2_comp + k3_comp);
         $res.a = k3_comp.neg();
         $res.b = k2_comp.neg();
-        let x23 = input_field_id2(x23, Some(delta), $io_context)?;
+        let x23 = yao::input_field_id2(x23, Some(delta), $io_context)?;
 
         let mut garbler = <$garbler>::new_with_delta($io_context, delta);
         let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &$x, &x23);
@@ -383,7 +382,7 @@ pub fn y2a<F: PrimeField, N: Rep3Network>(
         PartyID::ID0 => {
             let k3 = io_context.rngs.bitcomp2.random_fes_3keys::<F>();
             res.b = (k3.0 + k3.1 + k3.2).neg();
-            let x23 = input_field_id2::<F, _>(None, None, io_context)?;
+            let x23 = yao::input_field_id2::<F, _>(None, None, io_context)?;
 
             let mut evaluator = Rep3Evaluator::new(io_context);
             evaluator.receive_circuit()?;
@@ -419,7 +418,7 @@ pub fn y2a_streaming<F: PrimeField, N: Rep3Network>(
         PartyID::ID0 => {
             let k3 = io_context.rngs.bitcomp2.random_fes_3keys::<F>();
             res.b = (k3.0 + k3.1 + k3.2).neg();
-            let x23 = input_field_id2::<F, _>(None, None, io_context)?;
+            let x23 = yao::input_field_id2::<F, _>(None, None, io_context)?;
 
             let mut evaluator = StreamingRep3Evaluator::new(io_context);
             let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x, &x23);

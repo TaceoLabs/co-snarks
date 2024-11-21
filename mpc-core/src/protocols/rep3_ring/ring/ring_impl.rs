@@ -213,8 +213,16 @@ where
 impl<T: IntRing2k> Not for RingElement<T> {
     type Output = Self;
 
-    fn not(self) -> Self {
+    fn not(self) -> Self::Output {
         Self(!self.0)
+    }
+}
+
+impl<T: IntRing2k> Not for &RingElement<T> {
+    type Output = RingElement<T>;
+
+    fn not(self) -> Self::Output {
+        RingElement(!self.0)
     }
 }
 
