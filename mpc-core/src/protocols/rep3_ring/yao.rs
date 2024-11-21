@@ -16,13 +16,20 @@ use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use num_traits::{One, Zero};
 use rand::{CryptoRng, Rng};
 
+mod garbler;
+mod streaming_garbler;
+
 impl GCUtils {
     /// Converts bits into a ring element
     pub fn bits_to_ring<T: IntRing2k>(bits: &[bool]) -> IoResult<RingElement<T>> {
         if bits.len() > T::K {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "Invalid number of bits",
+                format!(
+                    "Invalid number of bits: {}, should be: {}",
+                    bits.len(),
+                    T::K
+                ),
             ));
         }
 
@@ -40,7 +47,7 @@ impl GCUtils {
         let mut el = input;
         for _ in 0..T::K {
             res.push(((el & RingElement::one()) == RingElement::one()) as u16);
-            el <<= 1;
+            el >>= 1;
         }
         res
     }
@@ -62,7 +69,7 @@ impl GCUtils {
         if bitlen > T::K {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Bit length exceeds K",
+                format!("Bit length exceeds K={}: {}", T::K, bitlen),
             ));
         }
 

@@ -16,7 +16,7 @@ use types::Rep3RingShare;
 
 use super::{
     binary, conversion, detail,
-    ring::{int_ring::IntRing2k, ring_impl::RingElement},
+    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
 
 pub(super) mod ops;
@@ -353,7 +353,7 @@ pub fn lt<T: IntRing2k, N: Rep3Network>(
     lhs: RingShare<T>,
     rhs: RingShare<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
@@ -367,13 +367,13 @@ pub fn lt_public<T: IntRing2k, N: Rep3Network>(
     lhs: RingShare<T>,
     rhs: RingElement<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
     // a < b is equivalent to !(a >= b)
     let tmp = ge_public(lhs, rhs, io_context)?;
-    Ok(sub_public_by_shared(RingElement::one(), tmp, io_context.id))
+    Ok(!tmp)
 }
 
 /// Returns 1 if lhs <= rhs and 0 otherwise. Checks if one shared value is less than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is less than or equal to the second shared value and 0 otherwise.
@@ -381,7 +381,7 @@ pub fn le<T: IntRing2k, N: Rep3Network>(
     lhs: RingShare<T>,
     rhs: RingShare<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
@@ -394,12 +394,11 @@ pub fn le_public<T: IntRing2k, N: Rep3Network>(
     lhs: RingShare<T>,
     rhs: RingElement<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
-    let res = detail::unsigned_ge_const_lhs(rhs, lhs, io_context)?;
-    conversion::bit_inject_from_bit(&res, io_context)
+    detail::unsigned_ge_const_lhs(rhs, lhs, io_context)
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if one shared value is greater than another shared value. The result is a shared value that has value 1 if the first shared value is greater than the second shared value and 0 otherwise.
@@ -407,13 +406,13 @@ pub fn gt<T: IntRing2k, N: Rep3Network>(
     lhs: RingShare<T>,
     rhs: RingShare<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
     // a > b is equivalent to !(a <= b)
     let tmp = le(lhs, rhs, io_context)?;
-    Ok(sub_public_by_shared(RingElement::one(), tmp, io_context.id))
+    Ok(!tmp)
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if a shared value is greater than the public value. The result is a shared value that has value 1 if the shared value is greater than the public value and 0 otherwise.
@@ -421,13 +420,13 @@ pub fn gt_public<T: IntRing2k, N: Rep3Network>(
     lhs: RingShare<T>,
     rhs: RingElement<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
     // a > b is equivalent to !(a <= b)
     let tmp = le_public(lhs, rhs, io_context)?;
-    Ok(sub_public_by_shared(RingElement::one(), tmp, io_context.id))
+    Ok(!tmp)
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
@@ -435,12 +434,11 @@ pub fn ge<T: IntRing2k, N: Rep3Network>(
     lhs: RingShare<T>,
     rhs: RingShare<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
-    let res = detail::unsigned_ge(lhs, rhs, io_context)?;
-    conversion::bit_inject_from_bit(&res, io_context)
+    detail::unsigned_ge(lhs, rhs, io_context)
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.
@@ -448,33 +446,11 @@ pub fn ge_public<T: IntRing2k, N: Rep3Network>(
     lhs: RingShare<T>,
     rhs: RingElement<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
-    let res = detail::unsigned_ge_const_rhs(lhs, rhs, io_context)?;
-    conversion::bit_inject_from_bit(&res, io_context)
-}
-
-//TODO FN REMARK - I think we can skip the bit_inject.
-//Circom has dedicated op codes for bool ops so we would know
-//for bool_and/bool_or etc that we are a boolean value (and therefore
-//bit len 1).
-//
-//We leave it like that and come back to that later. Maybe it doesn't matter...
-
-/// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
-pub fn eq<T: IntRing2k, N: Rep3Network>(
-    a: RingShare<T>,
-    b: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
-where
-    Standard: Distribution<T>,
-{
-    let is_zero = eq_bit(a, b, io_context)?;
-    let res = conversion::bit_inject(&is_zero, io_context)?;
-    Ok(res)
+    detail::unsigned_ge_const_rhs(lhs, rhs, io_context)
 }
 
 /// Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
@@ -482,7 +458,7 @@ pub fn eq_public<T: IntRing2k, N: Rep3Network>(
     shared: RingShare<T>,
     public: RingElement<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
@@ -490,12 +466,12 @@ where
     eq(shared, public, io_context)
 }
 
-/// Same as eq but without using bit_inject on the result. Checks whether two shares are equal and return a binary share of 0 or 1. 1 means they are equal.
-pub fn eq_bit<T: IntRing2k, N: Rep3Network>(
+/// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
+pub fn eq<T: IntRing2k, N: Rep3Network>(
     a: RingShare<T>,
     b: RingShare<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
@@ -510,12 +486,12 @@ pub fn neq<T: IntRing2k, N: Rep3Network>(
     a: RingShare<T>,
     b: RingShare<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
     let eq = eq(a, b, io_context)?;
-    Ok(sub_public_by_shared(RingElement::one(), eq, io_context.id))
+    Ok(!eq)
 }
 
 /// Checks if a shared value is not equal to a public value. The result is a shared value that has value 1 if the two values are not equal and 0 otherwise.
@@ -523,7 +499,7 @@ pub fn neq_public<T: IntRing2k, N: Rep3Network>(
     shared: RingShare<T>,
     public: RingElement<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
@@ -540,9 +516,9 @@ where
     Standard: Distribution<T>,
 {
     let zero_share = RingShare::default();
-    let res = eq_bit(zero_share, a, io_context)?;
+    let res = eq(zero_share, a, io_context)?;
     let x = open_bit(res, io_context)?;
-    Ok(x.is_one())
+    Ok(x.0.convert())
 }
 
 /// Computes `shared*2^public`. This is the same as `shared << public`.

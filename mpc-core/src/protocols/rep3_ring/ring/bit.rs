@@ -1,3 +1,7 @@
+//! Bit
+//!
+//! Contains an implementation of a Bit type that can be used with the Ring traits of this crate
+
 use num_traits::{
     AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingShl, WrappingShr, WrappingSub,
     Zero,
@@ -12,7 +16,7 @@ use std::ops::{
 /// Bit is a sharable wrapper for a boolean value
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(transparent)]
-/// This transparent is important due to some typecasts!
+// This transparent is important due to some typecasts!
 pub struct Bit(pub(super) bool);
 
 impl AsPrimitive<Self> for Bit {
@@ -31,44 +35,39 @@ impl std::fmt::Display for Bit {
 }
 
 impl Bit {
+    /// Wraps a bool into a Bit
     pub fn new(value: bool) -> Self {
         Self(value)
     }
 
+    /// Unwraps a Bit into a bool
     pub fn convert(self) -> bool {
         self.0
     }
 }
 
-impl TryFrom<u8> for Bit {
-    type Error = std::io::Error;
+macro_rules! try_from_impl {
+    ($($t:ty),*) => {
+        $(
+            impl TryFrom<$t> for Bit {
+                type Error = std::io::Error;
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Bit(false)),
-            1 => Ok(Bit(true)),
-            _ => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Invalid value for Bit",
-            )),
-        }
-    }
+                fn try_from(value: $t) -> Result<Self, Self::Error> {
+                    match value {
+                        0 => Ok(Bit(false)),
+                        1 => Ok(Bit(true)),
+                        _ => Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "Invalid value for Bit",
+                        )),
+                    }
+                }
+            }
+        )*
+    };
 }
 
-impl TryFrom<usize> for Bit {
-    type Error = std::io::Error;
-
-    fn try_from(value: usize) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Bit(false)),
-            1 => Ok(Bit(true)),
-            _ => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Invalid value for Bit",
-            )),
-        }
-    }
-}
+try_from_impl!(u8, u16, u32, u64, u128, usize);
 
 impl TryInto<usize> for Bit {
     type Error = std::io::Error;

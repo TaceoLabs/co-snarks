@@ -4,7 +4,7 @@
 
 use super::{
     arithmetic::RingShare,
-    ring::{int_ring::IntRing2k, ring_impl::RingElement},
+    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
 use crate::protocols::rep3::{
     id::PartyID,
@@ -201,7 +201,7 @@ where
 pub fn is_zero<T: IntRing2k, N: Rep3Network>(
     x: &RingShare<T>,
     io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+) -> IoResult<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
@@ -220,5 +220,8 @@ where
         x = and(&(x & mask), &(y & mask), io_context)?;
     }
     // extract LSB
-    Ok(x & RingElement::one())
+    Ok(RingShare {
+        a: RingElement(Bit::new((x.a & RingElement::one()) == RingElement::one())),
+        b: RingElement(Bit::new((x.b & RingElement::one()) == RingElement::one())),
+    })
 }

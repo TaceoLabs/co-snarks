@@ -1,3 +1,7 @@
+//! RingImpl
+//!
+//! This type is a wrapper for all datatypes implementing the [`IntRing2k`] trait. The purpose is explicitly allowing wrapping arithmetic opearations.
+
 use super::int_ring::IntRing2k;
 use crate::protocols::rep3::IoResult;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Valid};
@@ -15,6 +19,7 @@ use std::{
     },
 };
 
+/// The RingElement type is a wrapper for all datatypes implementing the [`IntRing2k`] trait to explicitly allow wrapping arithmetic opearations.
 #[derive(
     Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, PartialOrd, Eq, Ord, Hash,
 )]
@@ -23,24 +28,27 @@ use std::{
 pub struct RingElement<T: IntRing2k + std::fmt::Display>(pub T);
 
 impl<T: IntRing2k> RingElement<T> {
-    /// Safe because RingElement has repr(transparent)
+    /// Transform a slice of RingElement into a slice of T
+    // Safe because RingElement has repr(transparent)
     pub fn convert_slice_rev(vec: &[T]) -> &[Self] {
         // SAFETY: RingElement has repr(transparent)
         unsafe { &*(vec as *const [T] as *const [Self]) }
     }
 
-    /// Safe because RingElement has repr(transparent)
+    /// Transfroms a vector of T into a vector of RingElements
+    // Safe because RingElement has repr(transparent)
     pub fn convert_vec_rev(vec: Vec<T>) -> Vec<Self> {
         let me = ManuallyDrop::new(vec);
         // SAFETY: RingElement has repr(transparent)
         unsafe { Vec::from_raw_parts(me.as_ptr() as *mut Self, me.len(), me.capacity()) }
     }
 
+    /// Unwraps the RingElement into the inner type
     pub fn convert(self) -> T {
         self.0
     }
 
-    // Returns the effective number of bits (i.e., how many LSBs are set)
+    /// Returns the effective number of bits (i.e., how many LSBs are set)
     pub fn bits(&self) -> usize {
         self.0.bits()
     }
@@ -53,6 +61,7 @@ impl<T: IntRing2k> RingElement<T> {
         T::write(&self.0, writer)
     }
 
+    /// Returns the bit at the given index
     pub fn get_bit(&self, index: usize) -> Self {
         RingElement((self.0 >> index) & T::one())
     }
