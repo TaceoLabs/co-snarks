@@ -13,3 +13,4 @@ use ring::bit::Bit;
 pub type Rep3BitShare = Rep3RingShare<Bit>;
 
 pub use arithmetic::types::Rep3RingShare;
+pub mod yao;

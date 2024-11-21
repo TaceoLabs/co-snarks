@@ -149,7 +149,7 @@ impl GCUtils {
         Ok(v)
     }
 
-    fn receive_bundle_from<N: Rep3Network>(
+    pub(crate) fn receive_bundle_from<N: Rep3Network>(
         n_bits: usize,
         network: &mut N,
         id: PartyID,
@@ -185,7 +185,7 @@ impl GCUtils {
         network.send_many(id, &blocks)
     }
 
-    fn send_inputs<N: Rep3Network>(
+    pub(crate) fn send_inputs<N: Rep3Network>(
         input: &GCInputs<WireMod2>,
         network: &mut N,
         garbler_id: PartyID,
@@ -288,7 +288,7 @@ impl GCUtils {
     }
 
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
-    fn encode_bits_as_wires<R: Rng + CryptoRng>(
+    pub(crate) fn encode_bits_as_wires<R: Rng + CryptoRng>(
         bits: Vec<u16>,
         rng: &mut R,
         delta: WireMod2,
@@ -304,7 +304,7 @@ impl GCUtils {
     }
 
     /// Makes a GCInput out of the wires
-    fn wires_to_gcinput(
+    pub(crate) fn wires_to_gcinput(
         garbler_wires: Vec<WireMod2>,
         evaluator_wires: Vec<WireMod2>,
         delta: WireMod2,
@@ -317,7 +317,7 @@ impl GCUtils {
     }
 
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
-    fn encode_bits<R: Rng + CryptoRng>(
+    pub(crate) fn encode_bits<R: Rng + CryptoRng>(
         bits: Vec<u16>,
         rng: &mut R,
         delta: WireMod2,
