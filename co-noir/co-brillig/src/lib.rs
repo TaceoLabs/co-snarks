@@ -1,17 +1,17 @@
 use acir::{
     acir_field::GenericFieldElement,
     circuit::brillig::{BrilligBytecode, BrilligFunctionId, BrilligOutputs},
-    AcirField as _,
 };
-use acvm::brillig_vm::MemoryValue;
 use ark_ff::PrimeField;
-use brillig::{BitSize, Label, MemoryAddress, Opcode as BrilligOpcode};
-use memory::{memory_utils, Memory};
+use brillig::{BitSize, HeapVector, Label, MemoryAddress, Opcode as BrilligOpcode};
+use memory::Memory;
 use mpc::BrilligDriver;
 
 mod int_ops;
 mod memory;
 pub mod mpc;
+
+type CoBrilligResult = (usize, usize);
 
 pub struct CoBrilligVM<T, F>
 where
@@ -35,22 +35,104 @@ where
         &mut self,
         id: &BrilligFunctionId,
         calldata: Vec<T::BrilligType>,
-        outputs: &[BrilligOutputs],
-    ) -> eyre::Result<Vec<F>> {
-        // reset VM for a fresh run
-        // TODO this can be nicer
+    ) -> eyre::Result<Vec<T::BrilligType>> {
         self.calldata = calldata;
-        self.memory = Memory::new();
-        self.run_inner(id)?;
-        todo!()
+        let (return_data_offset, return_data_size) = self.run_inner(id)?;
+        // take memory - this also resets it for next run
+        let memory = std::mem::take(&mut self.memory).into_inner();
+        Ok(memory[return_data_offset..return_data_offset + return_data_size].to_vec())
     }
 
-    fn run_inner(&mut self, id: &BrilligFunctionId) -> eyre::Result<()> {
+    fn run_inner(&mut self, id: &BrilligFunctionId) -> eyre::Result<CoBrilligResult> {
         // TODO remove clone
         let opcodes = self.unconstrained_functions[id.as_usize()].bytecode.clone();
         loop {
             let opcode = &opcodes[self.ip];
-            self.process_opcode(opcode)?;
+            tracing::debug!("running opcode: {:?}", opcode);
+            match opcode {
+                BrilligOpcode::BinaryFieldOp {
+                    destination,
+                    op,
+                    lhs,
+                    rhs,
+                } => todo!(),
+                BrilligOpcode::BinaryIntOp {
+                    destination,
+                    op,
+                    bit_size,
+                    lhs,
+                    rhs,
+                } => self.handle_binary_int_op(*destination, *op, *bit_size, *lhs, *rhs)?,
+                BrilligOpcode::Not {
+                    destination,
+                    source,
+                    bit_size,
+                } => todo!(),
+                BrilligOpcode::Cast {
+                    destination,
+                    source,
+                    bit_size,
+                } => self.handle_cast(*destination, *source, *bit_size)?,
+                BrilligOpcode::JumpIfNot {
+                    condition,
+                    location,
+                } => todo!(),
+                BrilligOpcode::JumpIf {
+                    condition,
+                    location,
+                } => self.handle_jump_if(*condition, *location)?,
+
+                BrilligOpcode::Jump { location } => todo!(),
+                BrilligOpcode::CalldataCopy {
+                    destination_address,
+                    size_address,
+                    offset_address,
+                } => {
+                    self.handle_calldata_copy(destination_address, size_address, offset_address)?
+                }
+                BrilligOpcode::Call { location } => self.handle_call(location)?,
+                BrilligOpcode::Const {
+                    destination,
+                    bit_size,
+                    value,
+                } => self.handle_const(*destination, *bit_size, *value)?,
+                BrilligOpcode::IndirectConst {
+                    destination_pointer,
+                    bit_size,
+                    value,
+                } => todo!(),
+                BrilligOpcode::Return => self.handle_return()?,
+                BrilligOpcode::ForeignCall {
+                    function,
+                    destinations,
+                    destination_value_types,
+                    inputs,
+                    input_value_types,
+                } => todo!(),
+                BrilligOpcode::Mov {
+                    destination,
+                    source,
+                } => self.handle_move(destination, source)?,
+                BrilligOpcode::ConditionalMov {
+                    destination,
+                    source_a,
+                    source_b,
+                    condition,
+                } => todo!(),
+                BrilligOpcode::Load {
+                    destination,
+                    source_pointer,
+                } => todo!(),
+                BrilligOpcode::Store {
+                    destination_pointer,
+                    source,
+                } => todo!(),
+                BrilligOpcode::BlackBox(_) => todo!(),
+                BrilligOpcode::Trap { revert_data } => todo!(),
+                BrilligOpcode::Stop { return_data } => {
+                    return self.handle_stop(*return_data);
+                }
+            }
         }
     }
 
@@ -68,91 +150,6 @@ where
         }
     }
 
-    fn process_opcode(
-        &mut self,
-        opcode: &BrilligOpcode<GenericFieldElement<F>>,
-    ) -> eyre::Result<()> {
-        tracing::debug!("running opcode: {:?}", opcode);
-        match opcode {
-            BrilligOpcode::BinaryFieldOp {
-                destination,
-                op,
-                lhs,
-                rhs,
-            } => todo!(),
-            BrilligOpcode::BinaryIntOp {
-                destination,
-                op,
-                bit_size,
-                lhs,
-                rhs,
-            } => self.handle_binary_int_op(destination, op, bit_size, lhs, rhs),
-            BrilligOpcode::Not {
-                destination,
-                source,
-                bit_size,
-            } => todo!(),
-            BrilligOpcode::Cast {
-                destination,
-                source,
-                bit_size,
-            } => self.handle_cast(destination, source, bit_size),
-            BrilligOpcode::JumpIfNot {
-                condition,
-                location,
-            } => todo!(),
-            BrilligOpcode::JumpIf {
-                condition,
-                location,
-            } => self.handle_jump_if(condition, location),
-            BrilligOpcode::Jump { location } => todo!(),
-            BrilligOpcode::CalldataCopy {
-                destination_address,
-                size_address,
-                offset_address,
-            } => self.handle_calldata_copy(destination_address, size_address, offset_address),
-            BrilligOpcode::Call { location } => self.handle_call(location),
-            BrilligOpcode::Const {
-                destination,
-                bit_size,
-                value,
-            } => self.handle_const(destination, bit_size, value),
-            BrilligOpcode::IndirectConst {
-                destination_pointer,
-                bit_size,
-                value,
-            } => todo!(),
-            BrilligOpcode::Return => self.handle_return(),
-            BrilligOpcode::ForeignCall {
-                function,
-                destinations,
-                destination_value_types,
-                inputs,
-                input_value_types,
-            } => todo!(),
-            BrilligOpcode::Mov {
-                destination,
-                source,
-            } => self.handle_move(destination, source),
-            BrilligOpcode::ConditionalMov {
-                destination,
-                source_a,
-                source_b,
-                condition,
-            } => todo!(),
-            BrilligOpcode::Load {
-                destination,
-                source_pointer,
-            } => todo!(),
-            BrilligOpcode::Store {
-                destination_pointer,
-                source,
-            } => todo!(),
-            BrilligOpcode::BlackBox(_) => todo!(),
-            BrilligOpcode::Trap { revert_data } => todo!(),
-            BrilligOpcode::Stop { return_data } => todo!(),
-        }
-    }
     fn increment_program_counter(&mut self) {
         self.set_program_counter(self.ip + 1)
     }
@@ -174,8 +171,8 @@ where
         destination: &MemoryAddress,
         source: &MemoryAddress,
     ) -> eyre::Result<()> {
-        let source_value = self.memory.read(*source);
-        self.memory.write(*destination, source_value);
+        let source_value = self.memory.read(*source)?;
+        self.memory.write(*destination, source_value)?;
         self.increment_program_counter();
         Ok(())
     }
@@ -186,41 +183,31 @@ where
         size_address: &MemoryAddress,
         offset_address: &MemoryAddress,
     ) -> eyre::Result<()> {
-        let size = self.memory.read(*size_address).to_usize();
-        let offset = self.memory.read(*offset_address).to_usize();
-        let values: Vec<_> = self.calldata[offset..(offset + size)]
-            .iter()
-            .map(|value| MemoryValue::new_field(value.clone()))
-            .collect();
-        self.memory.write_slice(*destination_address, &values);
+        let size = self.memory.try_read_usize(*size_address)?;
+        let offset = self.memory.try_read_usize(*offset_address)?;
+        self.memory.write_slice(
+            *destination_address,
+            &self.calldata[offset..(offset + size)],
+        )?;
         self.increment_program_counter();
         Ok(())
     }
 
     fn handle_const(
         &mut self,
-        destination: &MemoryAddress,
-        bit_size: &BitSize,
-        value: &GenericFieldElement<F>,
+        destination: MemoryAddress,
+        bit_size: BitSize,
+        value: GenericFieldElement<F>,
     ) -> eyre::Result<()> {
-        let constant = if let BitSize::Integer(bit_size) = bit_size {
-            //MemoryValue::new_integer(value.to_u128(), bit_size)
-            // TODO THIS IS WRONG - WE NEED THE RING IMPL ASAP
-            MemoryValue::new_integer(value.to_u128(), *bit_size)
-        } else {
-            MemoryValue::new_field(T::BrilligType::from(value.into_repr()))
-        };
-        self.memory.write(*destination, constant);
+        let constant = T::constant(value.into_repr(), bit_size);
+        self.memory.write(destination, constant)?;
         self.increment_program_counter();
         Ok(())
     }
 
-    fn handle_jump_if(&mut self, condition: &MemoryAddress, location: &Label) -> eyre::Result<()> {
-        // TODO UPDATE THIS AS SOON AS WE HAVE RING MPC IMPL
-        // Check if condition is true
-        // We use 0 to mean false and any other value to mean true
-        if memory_utils::to_bool(self.memory.read(*condition))? {
-            self.set_program_counter(*location);
+    fn handle_jump_if(&mut self, condition: MemoryAddress, location: Label) -> eyre::Result<()> {
+        if T::try_into_bool(self.memory.read(condition)?)? {
+            self.set_program_counter(location);
         } else {
             self.increment_program_counter();
         }
@@ -238,22 +225,24 @@ where
 
     fn handle_cast(
         &mut self,
-        destination: &MemoryAddress,
-        source: &MemoryAddress,
-        bit_size: &BitSize,
+        destination: MemoryAddress,
+        source: MemoryAddress,
+        bit_size: BitSize,
     ) -> eyre::Result<()> {
-        let source_value = self.memory.read(*source);
-        let casted_value = match (source_value, bit_size) {
-            (MemoryValue::Field(_), BitSize::Field) => todo!(),
-            (MemoryValue::Field(field), BitSize::Integer(bit_size)) => {
-                let casted = self.driver.cast_to_int(field, *bit_size);
-                MemoryValue::new_integer(casted, *bit_size)
-            }
-            (MemoryValue::Integer(_, _), BitSize::Field) => todo!(),
-            (MemoryValue::Integer(_, _), BitSize::Integer(_)) => todo!(),
-        };
-        self.memory.write(*destination, casted_value);
+        let source_value = self.memory.read(source)?;
+        let casted_value = self.driver.cast(source_value, bit_size)?;
+        self.memory.write(destination, casted_value)?;
         self.increment_program_counter();
         Ok(())
+    }
+
+    fn handle_stop(&mut self, return_data: HeapVector) -> eyre::Result<CoBrilligResult> {
+        let size = self.memory.try_read_usize(return_data.size)?;
+        let offset = if size > 0 {
+            self.memory.read_ref(return_data.pointer)?.unwrap_direct()
+        } else {
+            0
+        };
+        Ok((offset, size))
     }
 }

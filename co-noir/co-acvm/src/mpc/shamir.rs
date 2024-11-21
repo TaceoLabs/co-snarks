@@ -85,8 +85,14 @@ impl<F: PrimeField> From<ShamirPrimeFieldShare<F>> for ShamirAcvmType<F> {
     }
 }
 
-impl<F: PrimeField> Into<ShamirBrilligType> for ShamirAcvmType<F> {
-    fn into(self) -> ShamirBrilligType {
+impl<F: PrimeField> Into<ShamirBrilligType<F>> for ShamirAcvmType<F> {
+    fn into(self) -> ShamirBrilligType<F> {
+        todo!()
+    }
+}
+
+impl<F: PrimeField> From<ShamirBrilligType<F>> for ShamirAcvmType<F> {
+    fn from(value: ShamirBrilligType<F>) -> Self {
         todo!()
     }
 }
@@ -106,6 +112,10 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
 
     fn public_zero() -> Self::AcvmType {
         Self::AcvmType::default()
+    }
+
+    fn from_brillig_result(brillig_result: Vec<ShamirBrilligType<F>>) -> Vec<Self::AcvmType> {
+        todo!()
     }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {

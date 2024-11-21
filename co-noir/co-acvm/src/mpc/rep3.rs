@@ -105,8 +105,14 @@ impl<F: PrimeField> From<ArithmeticShare<F>> for Rep3AcvmType<F> {
     }
 }
 
-impl<F: PrimeField> Into<Rep3BrilligType> for Rep3AcvmType<F> {
-    fn into(self) -> Rep3BrilligType {
+impl<F: PrimeField> Into<Rep3BrilligType<F>> for Rep3AcvmType<F> {
+    fn into(self) -> Rep3BrilligType<F> {
+        todo!()
+    }
+}
+
+impl<F: PrimeField> From<Rep3BrilligType<F>> for Rep3AcvmType<F> {
+    fn from(value: Rep3BrilligType<F>) -> Self {
         todo!()
     }
 }
@@ -121,6 +127,10 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     type BrilligDriver = Rep3BrilligDriver<F>;
 
     fn init_brillig_driver(&self) -> Self::BrilligDriver {
+        todo!()
+    }
+
+    fn from_brillig_result(brillig_result: Vec<Rep3BrilligType<F>>) -> Vec<Self::AcvmType> {
         todo!()
     }
 

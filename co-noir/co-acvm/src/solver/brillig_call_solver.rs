@@ -20,7 +20,7 @@ where
         id: &BrilligFunctionId,
         inputs: &[BrilligInputs<GenericFieldElement<F>>],
         outputs: &[BrilligOutputs],
-        predicate: &Option<Expression<GenericFieldElement<F>>>,
+        _predicate: &Option<Expression<GenericFieldElement<F>>>,
     ) -> CoAcvmResult<()> {
         tracing::debug!("solving brillig call: {}", id);
 
@@ -44,11 +44,25 @@ where
                 BrilligInputs::MemoryArray(_) => todo!("memory array calldata TODO"),
             };
         }
-        self.brillig.run(id, calldata, outputs)?;
+        let brillig_result = T::from_brillig_result(self.brillig.run(id, calldata)?);
+        let mut current_ret_data_idx = 0;
+        for output in outputs.iter() {
+            match output {
+                BrilligOutputs::Simple(witness) => {
+                    self.witness()
+                        .insert(*witness, brillig_result[current_ret_data_idx].clone());
+                    current_ret_data_idx += 1;
+                }
+                BrilligOutputs::Array(witness_arr) => {
+                    for witness in witness_arr.iter() {
+                        self.witness()
+                            .insert(*witness, brillig_result[current_ret_data_idx].clone());
+                        current_ret_data_idx += 1;
+                    }
+                }
+            }
+        }
 
-        //CoBrilligVM::<T, F>::solve(&function_to_run, calldata, outputs);
-
-        // spin up CoBrillig instance
-        todo!()
+        Ok(())
     }
 }
