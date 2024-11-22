@@ -1,11 +1,11 @@
 use acir::{
     acir_field::GenericFieldElement,
-    circuit::{brillig::BrilligBytecode, Circuit, ExpressionWidth, Opcode, Program},
+    circuit::{Circuit, ExpressionWidth, Opcode, Program},
     native_types::{WitnessMap, WitnessStack},
     FieldElement,
 };
 use ark_ff::PrimeField;
-use co_brillig::{mpc::BrilligDriver, CoBrilligVM};
+use co_brillig::CoBrilligVM;
 use intmap::IntMap;
 use mpc_core::{
     lut::LookupTableProvider,
