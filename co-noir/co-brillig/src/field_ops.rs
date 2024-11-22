@@ -18,9 +18,6 @@ where
         rhs: MemoryAddress,
         destination: MemoryAddress,
     ) -> eyre::Result<()> {
-        let lhs_value = self.memory.read(lhs);
-        let rhs_value = self.memory.read(rhs);
-
         // TODO
         // let a = match lhs {
         //     T::BrilligType::Field(a) => a,
@@ -42,29 +39,18 @@ where
         //         // });
         //     }
         // };
-        let a = self.memory.read(lhs)?;
-        let b = self.memory.read(rhs)?;
+        let lhs = T::expect_field(self.memory.read(lhs)?)?;
+        let rhs = T::expect_field(self.memory.read(rhs)?)?;
         let result = match op {
             // Perform addition, subtraction, multiplication, and division based on the BinaryOp variant.
-            BinaryFieldOp::Add => self.driver.add_franco(a, b),
-            BinaryFieldOp::Sub => self.driver.sub(a, b),
-            BinaryFieldOp::Mul => self.driver.mul(a, b),
-            BinaryFieldOp::Div => self.driver.div(a, b),
-            BinaryFieldOp::IntegerDiv => {
-                todo!()
-                // if T::is_public_zero(&b) {
-                //     todo!("division by zero error")
-                // } else {
-                //     let a_big = BigUint::from_bytes_be(&a.to_be_bytes());
-                //     let b_big = BigUint::from_bytes_be(&b.to_be_bytes());
-
-                //     let result = a_big / b_big;
-                //     MemoryValue::new_field(F::from_be_bytes_reduce(&result.to_bytes_be()))
-                // }
-            }
-            BinaryFieldOp::Equals => self.driver.equal(a, b), // (a == b).into(),
-            BinaryFieldOp::LessThan => self.driver.lt_franco(a, b),
-            BinaryFieldOp::LessThanEquals => self.driver.le_franco(a, b),
+            BinaryFieldOp::Add => self.driver.add(lhs, rhs),
+            BinaryFieldOp::Sub => self.driver.sub(lhs, rhs),
+            BinaryFieldOp::Mul => self.driver.mul(lhs, rhs),
+            BinaryFieldOp::Div => self.driver.div(lhs, rhs),
+            BinaryFieldOp::IntegerDiv => self.driver.int_div(lhs, rhs),
+            BinaryFieldOp::Equals => self.driver.eq(lhs, rhs), // (a == b).into(),
+            BinaryFieldOp::LessThan => self.driver.lt(lhs, rhs),
+            BinaryFieldOp::LessThanEquals => self.driver.le(lhs, rhs),
         }?;
 
         self.memory.write(destination, result)?;

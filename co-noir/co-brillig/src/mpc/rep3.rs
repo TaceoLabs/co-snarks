@@ -66,37 +66,10 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
         todo!()
     }
 
-    fn add_franco(
+    fn add(
         &self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        todo!()
-    }
-
-    fn lt_franco(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        todo!()
-    }
-
-    fn not_franco(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
-        todo!()
-    }
-
-    fn gt_franco(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        todo!()
-    }
-
-    fn expect_int_bit_size(
-        val: Self::BrilligType,
-        bit_size: IntegerBitSize,
     ) -> eyre::Result<Self::BrilligType> {
         todo!()
     }
@@ -129,7 +102,46 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
         todo!()
     }
 
-    fn equal(
+    fn not(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
+    fn eq(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
+    fn lt(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
+    fn gt(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
+    fn expect_int_bit_size(
+        val: Self::BrilligType,
+        bit_size: IntegerBitSize,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
+    fn expect_field(val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
+    fn int_div(
         &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,

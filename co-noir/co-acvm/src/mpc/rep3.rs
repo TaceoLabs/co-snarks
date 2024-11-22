@@ -127,7 +127,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     type BrilligDriver = Rep3BrilligDriver<F>;
 
     fn init_brillig_driver(&self) -> Self::BrilligDriver {
-        todo!()
+        Rep3BrilligDriver::default()
     }
 
     fn from_brillig_result(brillig_result: Vec<Rep3BrilligType<F>>) -> Vec<Self::AcvmType> {

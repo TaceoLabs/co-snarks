@@ -27,13 +27,13 @@ where
         let rhs = T::expect_int_bit_size(self.memory.read(rhs)?, rhs_bit_size)?;
 
         let result = match op {
-            BinaryIntOp::Add => self.driver.add_franco(lhs, rhs),
+            BinaryIntOp::Add => self.driver.add(lhs, rhs),
             BinaryIntOp::Sub => todo!(),
             BinaryIntOp::Mul => todo!(),
             BinaryIntOp::Div => todo!(),
             BinaryIntOp::Equals => todo!(),
-            BinaryIntOp::LessThan => self.driver.lt_franco(lhs, rhs),
-            BinaryIntOp::LessThanEquals => self.driver.le_franco(lhs, rhs),
+            BinaryIntOp::LessThan => self.driver.lt(lhs, rhs),
+            BinaryIntOp::LessThanEquals => self.driver.le(lhs, rhs),
             BinaryIntOp::And => todo!(),
             BinaryIntOp::Or => todo!(),
             BinaryIntOp::Xor => todo!(),
