@@ -19,12 +19,6 @@ use std::ops::{
 // This transparent is important due to some typecasts!
 pub struct Bit(pub(super) bool);
 
-impl AsPrimitive<Self> for Bit {
-    fn as_(self) -> Self {
-        self
-    }
-}
-
 impl std::fmt::Display for Bit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.0 {
@@ -69,6 +63,38 @@ macro_rules! try_from_impl {
 
 try_from_impl!(u8, u16, u32, u64, u128, usize);
 
+impl AsPrimitive<bool> for Bit {
+    fn as_(self) -> bool {
+        self.0
+    }
+}
+
+impl AsPrimitive<Bit> for Bit {
+    fn as_(self) -> Bit {
+        self
+    }
+}
+
+macro_rules! as_impl {
+    ($($t:ty),*) => {
+        $(
+            impl AsPrimitive<Bit> for $t {
+                fn as_(self) -> Bit {
+                    Bit(self & 1 == 1)
+                }
+            }
+
+            impl AsPrimitive<$t> for Bit {
+                fn as_(self) -> $t {
+                    self.0 as $t
+                }
+            }
+        )*
+    };
+}
+
+as_impl!(u8, u16, u32, u64, u128);
+
 impl TryInto<usize> for Bit {
     type Error = std::io::Error;
 
@@ -80,7 +106,7 @@ impl TryInto<usize> for Bit {
 impl Add for Bit {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
+    #[expect(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
     fn add(self, rhs: Self) -> Self::Output {
         self ^ rhs
@@ -90,7 +116,7 @@ impl Add for Bit {
 impl Add<&Bit> for Bit {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
+    #[expect(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
     fn add(self, rhs: &Self) -> Self::Output {
         self ^ rhs
@@ -107,7 +133,7 @@ impl WrappingAdd for Bit {
 impl Sub for Bit {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
+    #[expect(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
     fn sub(self, rhs: Self) -> Self::Output {
         self ^ rhs
@@ -117,7 +143,7 @@ impl Sub for Bit {
 impl Sub<&Bit> for Bit {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
+    #[expect(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
     fn sub(self, rhs: &Self) -> Self::Output {
         self ^ rhs
@@ -254,7 +280,7 @@ impl BitAndAssign<&Bit> for Bit {
 impl Mul for Bit {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
+    #[expect(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
     fn mul(self, rhs: Self) -> Self::Output {
         self & rhs
@@ -264,7 +290,7 @@ impl Mul for Bit {
 impl Mul<&Bit> for Bit {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
+    #[expect(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
     fn mul(self, rhs: &Self) -> Self::Output {
         self & rhs

@@ -4,17 +4,28 @@
 
 use super::{
     arithmetic::types::Rep3RingShare,
-    ring::{int_ring::IntRing2k, ring_impl::RingElement},
+    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
-use crate::protocols::rep3::{
-    id::PartyID,
-    network::{IoContext, Rep3Network},
-    yao::{GCInputs, GCUtils},
-    IoResult,
+use crate::protocols::{
+    rep3::{
+        self,
+        id::PartyID,
+        network::{IoContext, Rep3Network},
+        yao::{
+            circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler, GCInputs,
+            GCUtils,
+        },
+        IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
+    },
+    rep3_ring::conversion,
 };
+use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
+use itertools::izip;
+use num_bigint::BigUint;
 use num_traits::{One, Zero};
-use rand::{CryptoRng, Rng};
+use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng};
+use std::{any::TypeId, ops::Neg};
 
 mod garbler;
 mod streaming_garbler;
@@ -312,4 +323,368 @@ pub fn joint_input_binary_xored<T: IntRing2k, N: Rep3Network>(
     };
 
     Ok([x01, x2])
+}
+
+/// A cast of a vector of Rep3RingShare to a vector of Rep3PrimeFieldShare
+pub fn ring_to_field_many<T: IntRing2k, F: PrimeField, N: Rep3Network>(
+    inputs: &[Rep3RingShare<T>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>>
+where
+    Standard: Distribution<T>,
+{
+    // Special case for Bit
+    if TypeId::of::<T>() == TypeId::of::<Bit>() {
+        // SAFTEY: We already checked that the type matches
+        let shares =
+            unsafe { &*(inputs as *const [Rep3RingShare<T>] as *const [Rep3RingShare<Bit>]) };
+        let biguint_shares = shares
+            .iter()
+            .map(|share| {
+                Rep3BigUintShare::new(
+                    BigUint::from(share.a.0.convert() as u64),
+                    BigUint::from(share.b.0.convert() as u64),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        return rep3::conversion::bit_inject_many(&biguint_shares, io_context);
+    }
+
+    // The actual garbled circuit implementation
+    let num_inputs = inputs.len();
+    let delta = io_context.rngs.generate_random_garbler_delta(io_context.id);
+
+    let [x01, x2] = joint_input_arithmetic_added_many(inputs, delta, io_context)?;
+
+    let mut res = vec![Rep3PrimeFieldShare::zero_share(); num_inputs];
+
+    match io_context.id {
+        PartyID::ID0 => {
+            for res in res.iter_mut() {
+                let k3 = io_context.rngs.bitcomp2.random_fes_3keys::<F>();
+                res.b = (k3.0 + k3.1 + k3.2).neg();
+            }
+
+            // TODO this can be parallelized with joint_input_arithmetic_added_many
+            let x23 = rep3::yao::input_field_id2_many::<F, _>(None, None, num_inputs, io_context)?;
+
+            let mut evaluator = Rep3Evaluator::new(io_context);
+            evaluator.receive_circuit()?;
+
+            let x1 =
+                GarbledCircuits::ring_to_field_many::<_, F>(&mut evaluator, &x01, &x2, &x23, T::K);
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
+
+            // Compose the bits
+            for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
+                res.a = GCUtils::bits_to_field(x1)?;
+            }
+        }
+        PartyID::ID1 => {
+            for res in res.iter_mut() {
+                let k2 = io_context.rngs.bitcomp1.random_fes_3keys::<F>();
+                res.a = (k2.0 + k2.1 + k2.2).neg();
+            }
+
+            // TODO this can be parallelized with joint_input_arithmetic_added_many
+            let x23 = rep3::yao::input_field_id2_many::<F, _>(None, None, num_inputs, io_context)?;
+
+            let mut garbler =
+                Rep3Garbler::new_with_delta(io_context, delta.expect("Delta not provided"));
+
+            let x1 =
+                GarbledCircuits::ring_to_field_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+            let x1 = match x1 {
+                Some(x1) => x1,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "No output received",
+                ))?,
+            };
+
+            // Compose the bits
+            for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
+                res.b = GCUtils::bits_to_field(x1)?;
+            }
+        }
+        PartyID::ID2 => {
+            let mut x23 = Vec::with_capacity(num_inputs);
+            for res in res.iter_mut() {
+                let k2 = io_context.rngs.bitcomp1.random_fes_3keys::<F>();
+                let k3 = io_context.rngs.bitcomp2.random_fes_3keys::<F>();
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                let k3_comp = k3.0 + k3.1 + k3.2;
+                x23.push(k2_comp + k3_comp);
+                res.a = k3_comp.neg();
+                res.b = k2_comp.neg();
+            }
+
+            // TODO this can be parallelized with joint_input_arithmetic_added_many
+            let x23 = rep3::yao::input_field_id2_many(Some(x23), delta, num_inputs, io_context)?;
+
+            let mut garbler =
+                Rep3Garbler::new_with_delta(io_context, delta.expect("Delta not provided"));
+
+            let x1 =
+                GarbledCircuits::ring_to_field_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+            if x1.is_some() {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Unexpected output received",
+                ))?;
+            }
+        }
+    }
+
+    Ok(res)
+}
+
+/// A cast of a vector of Rep3PrimeFieldShare to a vector of Rep3RingShare
+pub fn field_to_ring_many<F: PrimeField, T: IntRing2k, N: Rep3Network>(
+    inputs: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let num_inputs = inputs.len();
+    let delta = io_context.rngs.generate_random_garbler_delta(io_context.id);
+
+    let [x01, x2] = rep3::yao::joint_input_arithmetic_added_many(inputs, delta, io_context)?;
+
+    let mut res = vec![Rep3RingShare::zero_share(); num_inputs];
+
+    match io_context.id {
+        PartyID::ID0 => {
+            for res in res.iter_mut() {
+                let k3 = io_context
+                    .rngs
+                    .bitcomp2
+                    .random_elements_3keys::<RingElement<T>>();
+                res.b = (k3.0 + k3.1 + k3.2).neg();
+            }
+
+            // TODO this can be parallelized with joint_input_arithmetic_added_many
+            let x23 = input_ring_id2_many::<T, _>(None, None, num_inputs, io_context)?;
+
+            let mut evaluator = Rep3Evaluator::new(io_context);
+            evaluator.receive_circuit()?;
+
+            let x1 =
+                GarbledCircuits::field_to_ring_many::<_, F>(&mut evaluator, &x01, &x2, &x23, T::K);
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
+
+            // Compose the bits
+            for (res, x1) in izip!(res.iter_mut(), x1.chunks(T::K)) {
+                res.a = GCUtils::bits_to_ring(x1)?;
+            }
+        }
+        PartyID::ID1 => {
+            for res in res.iter_mut() {
+                let k2 = io_context
+                    .rngs
+                    .bitcomp1
+                    .random_elements_3keys::<RingElement<T>>();
+                res.a = (k2.0 + k2.1 + k2.2).neg();
+            }
+
+            // TODO this can be parallelized with joint_input_arithmetic_added_many
+            let x23 = input_ring_id2_many::<T, _>(None, None, num_inputs, io_context)?;
+
+            let mut garbler =
+                Rep3Garbler::new_with_delta(io_context, delta.expect("Delta not provided"));
+
+            let x1 =
+                GarbledCircuits::field_to_ring_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+            let x1 = match x1 {
+                Some(x1) => x1,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "No output received",
+                ))?,
+            };
+
+            // Compose the bits
+            for (res, x1) in izip!(res.iter_mut(), x1.chunks(T::K)) {
+                res.b = GCUtils::bits_to_ring(x1)?;
+            }
+        }
+        PartyID::ID2 => {
+            let mut x23 = Vec::with_capacity(num_inputs);
+            for res in res.iter_mut() {
+                let k2 = io_context
+                    .rngs
+                    .bitcomp1
+                    .random_elements_3keys::<RingElement<T>>();
+                let k3 = io_context
+                    .rngs
+                    .bitcomp2
+                    .random_elements_3keys::<RingElement<T>>();
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                let k3_comp = k3.0 + k3.1 + k3.2;
+                x23.push(k2_comp + k3_comp);
+                res.a = k3_comp.neg();
+                res.b = k2_comp.neg();
+            }
+
+            // TODO this can be parallelized with joint_input_arithmetic_added_many
+            let x23 = input_ring_id2_many(Some(x23), delta, num_inputs, io_context)?;
+
+            let mut garbler =
+                Rep3Garbler::new_with_delta(io_context, delta.expect("Delta not provided"));
+
+            let x1 =
+                GarbledCircuits::field_to_ring_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+            if x1.is_some() {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Unexpected output received",
+                ))?;
+            }
+        }
+    }
+
+    Ok(res)
+}
+
+macro_rules! decompose_circuit_compose_blueprint {
+    ($inputs:expr, $io_context:expr, $output_size:expr, $t:ty, $circuit:expr, ($( $args:expr ),*)) => {{
+        use $crate::protocols::rep3::id::PartyID;
+        use itertools::izip;
+        use $crate::protocols::rep3_ring::yao;
+        use $crate::protocols::rep3_ring::Rep3RingShare;
+
+        let delta = $io_context
+            .rngs
+            .generate_random_garbler_delta($io_context.id);
+
+        let [x01, x2] = yao::joint_input_arithmetic_added_many($inputs, delta, $io_context)?;
+
+        let mut res = vec![Rep3RingShare::zero_share(); $output_size];
+
+        match $io_context.id {
+            PartyID::ID0 => {
+                for res in res.iter_mut() {
+                    let k3 = $io_context.rngs.bitcomp2.random_elements_3keys::<RingElement<$t>>();
+                    res.b = (k3.0 + k3.1 + k3.2).neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_ring_id2_many::<$t, _>(None, None, $output_size, $io_context)?;
+
+                let mut evaluator = rep3::yao::evaluator::Rep3Evaluator::new($io_context);
+                evaluator.receive_circuit()?;
+
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
+
+                // Compose the bits
+                for (res, x1) in izip!(res.iter_mut(), x1.chunks(<$t>::K)) {
+                    res.a = yao::GCUtils::bits_to_ring(x1)?;
+                }
+            }
+            PartyID::ID1 => {
+                for res in res.iter_mut() {
+                    let k2 = $io_context.rngs.bitcomp1.random_elements_3keys::<RingElement<$t>>();
+                    res.a = (k2.0 + k2.1 + k2.2).neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_ring_id2_many::<$t, _>(None, None, $output_size, $io_context)?;
+
+                let mut garbler =
+                    rep3::yao::garbler::Rep3Garbler::new_with_delta($io_context, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+                let x1 = match x1 {
+                    Some(x1) => x1,
+                    None => Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "No output received",
+                    ))?,
+                };
+
+                // Compose the bits
+                for (res, x1) in izip!(res.iter_mut(), x1.chunks(<$t>::K)) {
+                    res.b = yao::GCUtils::bits_to_ring(x1)?;
+                }
+            }
+            PartyID::ID2 => {
+                let mut x23 = Vec::with_capacity($output_size);
+                for res in res.iter_mut() {
+                    let k2 = $io_context.rngs.bitcomp1.random_elements_3keys::<RingElement<$t>>();
+                    let k3 = $io_context.rngs.bitcomp2.random_elements_3keys::<RingElement<$t>>();
+                    let k2_comp = k2.0 + k2.1 + k2.2;
+                    let k3_comp = k3.0 + k3.1 + k3.2;
+                    x23.push(k2_comp + k3_comp);
+                    res.a = k3_comp.neg();
+                    res.b = k2_comp.neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_ring_id2_many(Some(x23), delta, $output_size, $io_context)?;
+
+                let mut garbler =
+                   rep3::yao::garbler::Rep3Garbler::new_with_delta($io_context, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+                if x1.is_some() {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Unexpected output received",
+                    ))?;
+                }
+            }
+        }
+
+        Ok(res)
+    }};
+}
+pub(crate) use decompose_circuit_compose_blueprint;
+
+/// An upcast of a vector Rep3RingShares from a smaller ring to a larger ring
+pub fn upcast_many<T: IntRing2k, U: IntRing2k, N: Rep3Network>(
+    inputs: &[Rep3RingShare<T>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<U>>>
+where
+    Standard: Distribution<U>,
+{
+    assert!(T::K < U::K);
+
+    // Special case for Bit
+    if TypeId::of::<T>() == TypeId::of::<Bit>() {
+        // SAFTEY: We already checked that the type matches
+        let shares =
+            unsafe { &*(inputs as *const [Rep3RingShare<T>] as *const [Rep3RingShare<Bit>]) };
+        return conversion::bit_inject_from_bits_many(shares, io_context);
+    }
+
+    // The actual garbled circuit implementation
+    let num_inputs = inputs.len();
+
+    decompose_circuit_compose_blueprint!(
+        inputs,
+        io_context,
+        num_inputs,
+        U,
+        GarbledCircuits::ring_to_ring_upcast_many,
+        (T::K, U::K)
+    )
 }

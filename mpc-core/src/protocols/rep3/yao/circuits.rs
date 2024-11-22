@@ -291,8 +291,7 @@ impl GarbledCircuits {
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
     ) -> Result<BinaryBundle<G::Item>, G::Error> {
-        let bitlen = wires_a.size();
-        debug_assert_eq!(bitlen, wires_b.size());
+        debug_assert_eq!(wires_a.size(), wires_b.size());
         let res = Self::bin_addition_no_carry(g, wires_a.wires(), wires_b.wires())?;
         Ok(BinaryBundle::new(res))
     }
@@ -553,6 +552,181 @@ impl GarbledCircuits {
         for (xs, ys) in izip!(inputs, wires_c.wires().chunks(input_bitlen),) {
             let result = Self::compose_field_element::<_, F>(g, &xs, ys)?;
             results.extend(result);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Transforms a field_sharing (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing of a ring. The ring share is composed using wires_c.
+    fn field_to_ring<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &[G::Item],
+        wires_b: &[G::Item],
+        wires_c: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let output_bitlen = wires_c.len();
+        debug_assert_eq!(input_bitlen, wires_a.len());
+        debug_assert_eq!(input_bitlen, wires_b.len());
+        debug_assert!(output_bitlen <= input_bitlen);
+
+        // Add wires_a and wires_b to get the input bits as Yao wires
+        let input_bits =
+            Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, output_bitlen)?;
+        Self::bin_addition_no_carry(g, &input_bits, wires_c)
+    }
+
+    /// Transforms a vector of field_sharings (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing vector of rings. The ring shares are composed using wires_c.
+    pub(crate) fn field_to_ring_many<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        output_bitlen: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    where
+        G::Item: Default,
+    {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_a.size(), wires_b.size());
+        let input_size = wires_a.size();
+        let num_inputs = input_size / input_bitlen;
+
+        debug_assert_eq!(input_size % input_bitlen, 0);
+        debug_assert_eq!(wires_c.size(), num_inputs * output_bitlen);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_a, chunk_b, chunk_c) in izip!(
+            wires_a.wires().chunks(input_bitlen),
+            wires_b.wires().chunks(input_bitlen),
+            wires_c.wires().chunks(output_bitlen),
+        ) {
+            results.extend(Self::field_to_ring::<_, F>(g, chunk_a, chunk_b, chunk_c)?);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Transforms a ring_sharing (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing of a field. The field share is composed using wires_c.
+    fn ring_to_field<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &[G::Item],
+        wires_b: &[G::Item],
+        wires_c: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bitlen = wires_a.len();
+        let output_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(input_bitlen, wires_b.len());
+        debug_assert_eq!(wires_c.len(), output_bitlen);
+
+        // Add wires_a and wires_b to get the input bits as Yao wires
+        let input_bits = Self::bin_addition_no_carry(g, wires_a, wires_b)?;
+        Self::compose_field_element::<_, F>(g, &input_bits, wires_c)
+    }
+
+    /// Transforms a vector of ring_sharings (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing vector of fields. The field shares are composed using wires_c.
+    pub(crate) fn ring_to_field_many<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        input_bitlen: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    where
+        G::Item: Default,
+    {
+        debug_assert_eq!(wires_a.size(), wires_b.size());
+        let input_size = wires_a.size();
+        let num_inputs = input_size / input_bitlen;
+
+        debug_assert_eq!(input_size % input_bitlen, 0);
+        let output_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_c.size(), num_inputs * output_bitlen);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_a, chunk_b, chunk_c) in izip!(
+            wires_a.wires().chunks(input_bitlen),
+            wires_b.wires().chunks(input_bitlen),
+            wires_c.wires().chunks(output_bitlen),
+        ) {
+            results.extend(Self::ring_to_field::<_, F>(g, chunk_a, chunk_b, chunk_c)?);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Transforms a ring_sharing (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing of another ring. The output ring share is composed using wires_c.
+    fn ring_to_ring_upcast<G: FancyBinary>(
+        g: &mut G,
+        wires_a: &[G::Item],
+        wires_b: &[G::Item],
+        wires_c: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bitlen = wires_a.len();
+        let output_bitlen = wires_c.len();
+        debug_assert_eq!(input_bitlen, wires_b.len());
+        debug_assert!(output_bitlen > input_bitlen);
+
+        // Add wires_a and wires_b to get the input bits as Yao wires
+        let input_bits = Self::bin_addition_no_carry(g, wires_a, wires_b)?;
+
+        // compose chunk_bits again
+        // For the bin addition, our input is not of size output_bitlen, thus we can optimize a little bit
+
+        let mut added = Vec::with_capacity(input_bitlen);
+
+        let xs = input_bits;
+        let ys = wires_c;
+        let (mut s, mut c) = Self::half_adder(g, &xs[0], &ys[0])?;
+        added.push(s);
+
+        for (x, y) in xs.iter().zip(ys.iter()).skip(1) {
+            let res = Self::full_adder(g, x, y, &c)?;
+            s = res.0;
+            c = res.1;
+            added.push(s);
+        }
+        for y in ys.iter().take(ys.len() - 1).skip(xs.len()) {
+            let res = Self::full_adder_const(g, y, false, &c)?;
+            s = res.0;
+            c = res.1;
+            added.push(s);
+        }
+
+        // Finally, just the xor of the full_adder, where x is 0...
+        added.push(ys.last().unwrap().to_owned());
+        Ok(added)
+    }
+
+    /// Transforms a vector of ring_sharings (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing vector of another ring. The output ring shares are composed using wires_c.
+    pub(crate) fn ring_to_ring_upcast_many<G: FancyBinary>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        input_bitlen: usize,
+        output_bitlen: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    where
+        G::Item: Default,
+    {
+        debug_assert_eq!(wires_a.size(), wires_b.size());
+        let input_size = wires_a.size();
+        let num_inputs = input_size / input_bitlen;
+
+        debug_assert_eq!(input_size % input_bitlen, 0);
+        debug_assert_eq!(wires_c.size(), num_inputs * output_bitlen);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_a, chunk_b, chunk_c) in izip!(
+            wires_a.wires().chunks(input_bitlen),
+            wires_b.wires().chunks(input_bitlen),
+            wires_c.wires().chunks(output_bitlen),
+        ) {
+            results.extend(Self::ring_to_ring_upcast(g, chunk_a, chunk_b, chunk_c)?);
         }
 
         Ok(BinaryBundle::new(results))
