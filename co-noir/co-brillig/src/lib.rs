@@ -2,11 +2,13 @@ use acir::{
     acir_field::GenericFieldElement,
     circuit::brillig::{BrilligBytecode, BrilligFunctionId, BrilligOutputs},
 };
+use acvm::brillig_vm::{MemoryValue, VMStatus};
 use ark_ff::PrimeField;
 use brillig::{BitSize, HeapVector, Label, MemoryAddress, Opcode as BrilligOpcode};
 use memory::Memory;
 use mpc::BrilligDriver;
 
+mod field_ops;
 mod int_ops;
 mod memory;
 pub mod mpc;
@@ -51,11 +53,11 @@ where
             tracing::debug!("running opcode: {:?}", opcode);
             match opcode {
                 BrilligOpcode::BinaryFieldOp {
-                    destination,
                     op,
                     lhs,
                     rhs,
-                } => todo!(),
+                    destination,
+                } => self.handle_binary_field_op(*op, *lhs, *rhs, *destination)?,
                 BrilligOpcode::BinaryIntOp {
                     destination,
                     op,
@@ -100,7 +102,7 @@ where
                     destination_pointer,
                     bit_size,
                     value,
-                } => todo!(),
+                } => self.handle_indirect_const(*destination_pointer, *bit_size, *value)?,
                 BrilligOpcode::Return => self.handle_return()?,
                 BrilligOpcode::ForeignCall {
                     function,
@@ -244,5 +246,20 @@ where
             0
         };
         Ok((offset, size))
+    }
+
+    fn handle_indirect_const(
+        &mut self,
+        destination_pointer: MemoryAddress,
+        bit_size: BitSize,
+        value: GenericFieldElement<F>,
+    ) -> eyre::Result<()> {
+        // Convert our destination_pointer to an address
+        let constant = T::constant(value.into_repr(), bit_size);
+        let destination = self.memory.read_ref(destination_pointer)?;
+        // Use our usize destination index to set the value in memory
+        self.memory.write(destination, constant)?;
+        self.increment_program_counter();
+        Ok(())
     }
 }

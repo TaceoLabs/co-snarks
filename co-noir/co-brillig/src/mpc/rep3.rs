@@ -100,4 +100,40 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
     ) -> eyre::Result<Self::BrilligType> {
         todo!()
     }
+
+    fn sub(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
+    fn mul(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
+    fn div(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
+    fn is_zero(&mut self, val: Self::BrilligType) {
+        todo!()
+    }
+
+    fn equal(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
 }
