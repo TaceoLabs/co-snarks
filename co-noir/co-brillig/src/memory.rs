@@ -3,12 +3,6 @@ use brillig::{IntegerBitSize, MemoryAddress};
 
 use crate::mpc::BrilligDriver;
 
-/**
-*  Copied form https://github.com/noir-lang/noir/blob/68c32b4ffd9b069fe4b119327dbf4018c17ab9d4/acvm-repo/brillig_vm/src/memory.rs
-*
-*  We cannot use the implementation because it is bound to [AcirField]
-**/
-
 pub(super) struct Memory<T, F>
 where
     T: BrilligDriver<F>,

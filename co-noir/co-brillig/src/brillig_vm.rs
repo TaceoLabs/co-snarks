@@ -53,9 +53,8 @@ where
     }
 
     fn run_inner(&mut self, id: &BrilligFunctionId) -> eyre::Result<CoBrilligResult> {
-        // TODO remove clone
-        let opcodes = self.unconstrained_functions[id.as_usize()].bytecode.clone();
-        loop {
+        let opcodes = std::mem::take(&mut self.unconstrained_functions[id.as_usize()].bytecode);
+        let result = loop {
             let opcode = &opcodes[self.ip];
             tracing::debug!("running opcode: {:?}", opcode);
             match opcode {
@@ -139,10 +138,13 @@ where
                 BrilligOpcode::BlackBox(blackbox_op) => self.handle_blackbox(*blackbox_op)?,
                 BrilligOpcode::Trap { revert_data: _ } => todo!(),
                 BrilligOpcode::Stop { return_data } => {
-                    return self.handle_stop(*return_data);
+                    break self.handle_stop(*return_data);
                 }
             }
-        }
+        };
+        // move the opcodes back in
+        self.unconstrained_functions[id.as_usize()].bytecode = opcodes;
+        result
     }
 
     /// Creates a new instance of the coBrillig-VM from the provided

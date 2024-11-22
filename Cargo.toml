@@ -46,7 +46,6 @@ bytemuck = { version = "1.15", features = ["derive"] }
 byteorder = "1.5.0"
 bytes = "1.5.0"
 clap = { version = "4.4.8", features = ["derive"] }
-co-brillig = { version = "0.1.0", path = "co-noir/co-brillig" }
 color-eyre = "0.6.3"
 criterion = { version = "0.5", features = ["async_tokio"] }
 eyre = "0.6"
