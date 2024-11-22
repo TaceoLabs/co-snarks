@@ -86,4 +86,26 @@ pub trait BrilligDriver<F: PrimeField> {
         val: Self::BrilligType,
         bit_size: IntegerBitSize,
     ) -> eyre::Result<Self::BrilligType>;
+
+    fn sub(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType>;
+    fn mul(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType>;
+    fn div(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType>;
+    fn is_zero(&mut self, val: Self::BrilligType); // -> ?
+    fn equal(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType>;
 }

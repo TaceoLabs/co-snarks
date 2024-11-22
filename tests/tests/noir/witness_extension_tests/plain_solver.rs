@@ -18,3 +18,11 @@ add_plain_acvm_test!("write_access");
 
 // unconstrained functions
 add_plain_acvm_test!("unconstrained_fn");
+add_plain_acvm_test!("unconstrained_fn_field");
+add_plain_acvm_test!("approx_sigmoid");
+add_plain_acvm_test!("assert");
+add_plain_acvm_test!("get_bytes");
+add_plain_acvm_test!("if_then");
+add_plain_acvm_test!("negative");
+add_plain_acvm_test!("quantized");
+add_plain_acvm_test!("poseidon_assert");

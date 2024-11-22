@@ -224,4 +224,107 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
             eyre::bail!("expected int with size: {should_bit_size}, but got {val:?}")
         }
     }
+
+    // just copied this from you franco(?)
+    fn sub(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        match (lhs, rhs) {
+            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
+                Ok(PlainBrilligType::Field(lhs - rhs))
+            }
+
+            (
+                PlainBrilligType::Int(lhs, IntegerBitSize::U128),
+                PlainBrilligType::Int(rhs, IntegerBitSize::U128),
+            ) => {
+                let result = lhs.wrapping_sub(rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            }
+            (
+                PlainBrilligType::Int(lhs, lhs_bit_size),
+                PlainBrilligType::Int(rhs, rhs_bit_size),
+            ) if lhs_bit_size == rhs_bit_size => {
+                let result = wrapping_op!(lhs, -, rhs, lhs_bit_size);
+                Ok(PlainBrilligType::Int(result, lhs_bit_size))
+            }
+            x => eyre::bail!(
+                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+            ),
+        }
+    }
+
+    fn mul(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        match (lhs, rhs) {
+            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
+                Ok(PlainBrilligType::Field(lhs * rhs))
+            }
+
+            (
+                PlainBrilligType::Int(lhs, IntegerBitSize::U128),
+                PlainBrilligType::Int(rhs, IntegerBitSize::U128),
+            ) => {
+                let result = lhs.wrapping_mul(rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            }
+            (
+                PlainBrilligType::Int(lhs, lhs_bit_size),
+                PlainBrilligType::Int(rhs, rhs_bit_size),
+            ) if lhs_bit_size == rhs_bit_size => {
+                let result = wrapping_op!(lhs, *, rhs, lhs_bit_size);
+                Ok(PlainBrilligType::Int(result, lhs_bit_size))
+            }
+            x => eyre::bail!(
+                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+            ),
+        }
+    }
+
+    fn div(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        match (lhs, rhs) {
+            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
+                Ok(PlainBrilligType::Field(lhs / rhs))
+            }
+
+            (
+                PlainBrilligType::Int(lhs, IntegerBitSize::U128),
+                PlainBrilligType::Int(rhs, IntegerBitSize::U128),
+            ) => {
+                let result = lhs.wrapping_div(rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            }
+            (
+                PlainBrilligType::Int(lhs, lhs_bit_size),
+                PlainBrilligType::Int(rhs, rhs_bit_size),
+            ) if lhs_bit_size == rhs_bit_size => {
+                let result = wrapping_op!(lhs, /, rhs, lhs_bit_size);
+                Ok(PlainBrilligType::Int(result, lhs_bit_size))
+            }
+            x => eyre::bail!(
+                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+            ),
+        }
+    }
+
+    fn is_zero(&mut self, val: Self::BrilligType) {
+        todo!()
+    }
+
+    fn equal(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!();
+    }
 }
