@@ -10,6 +10,7 @@ pub(crate) mod ring;
 
 use ring::bit::Bit;
 
+/// Shorthand type for a secret shared bit.
 pub type Rep3BitShare = Rep3RingShare<Bit>;
 
 pub use arithmetic::types::Rep3RingShare;

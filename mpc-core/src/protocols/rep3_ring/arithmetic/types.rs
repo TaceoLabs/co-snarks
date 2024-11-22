@@ -34,6 +34,7 @@ impl<T: IntRing2k> Rep3RingShare<T> {
         }
     }
 
+    /// Constructs a new share from two ring elements
     pub fn new_ring(a: RingElement<T>, b: RingElement<T>) -> Self {
         Self { a, b }
     }
