@@ -39,8 +39,8 @@ where
         //         // });
         //     }
         // };
-        let lhs = T::expect_field(self.memory.read(lhs)?)?;
-        let rhs = T::expect_field(self.memory.read(rhs)?)?;
+        let lhs = self.memory.try_read_field(lhs)?;
+        let rhs = self.memory.try_read_field(rhs)?;
         let result = match op {
             // Perform addition, subtraction, multiplication, and division based on the BinaryOp variant.
             BinaryFieldOp::Add => self.driver.add(lhs, rhs),

@@ -98,6 +98,14 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
         todo!()
     }
 
+    fn int_div(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
     fn is_zero(&mut self, val: Self::BrilligType) {
         todo!()
     }
@@ -130,7 +138,7 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
         todo!()
     }
 
-    fn expect_int_bit_size(
+    fn expect_int(
         val: Self::BrilligType,
         bit_size: IntegerBitSize,
     ) -> eyre::Result<Self::BrilligType> {
@@ -141,11 +149,31 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
         todo!()
     }
 
-    fn int_div(
-        &mut self,
+    fn to_radix(
+        &self,
+        val: Self::BrilligType,
+        radix: Self::BrilligType,
+        output_size: usize,
+        bits: bool,
+    ) -> eyre::Result<Vec<Self::BrilligType>> {
+        todo!()
+    }
+
+    fn le(
+        &self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let gt = self.gt(lhs, rhs)?;
+        self.not(gt)
+    }
+
+    fn ge(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        let gt = self.lt(lhs, rhs)?;
+        self.not(gt)
     }
 }

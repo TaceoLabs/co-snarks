@@ -3,6 +3,8 @@ use std::marker::PhantomData;
 use acvm::brillig_vm::MEMORY_ADDRESSING_BIT_SIZE;
 use ark_ff::PrimeField;
 use brillig::{BitSize, IntegerBitSize};
+use num_bigint::BigUint;
+use num_traits::Zero;
 
 use super::{acir_field_utils, BrilligDriver};
 
@@ -277,7 +279,22 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!();
+        match (lhs, rhs) {
+            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
+                let result = u128::from(lhs == rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            }
+            (
+                PlainBrilligType::Int(lhs, lhs_bit_size),
+                PlainBrilligType::Int(rhs, rhs_bit_size),
+            ) if lhs_bit_size == rhs_bit_size => {
+                let result = u128::from(lhs == rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            }
+            x => eyre::bail!(
+                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+            ),
+        }
     }
 
     fn lt(
@@ -286,9 +303,10 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
         match (lhs, rhs) {
-            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
-                let result = u128::from(lhs < rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            (PlainBrilligType::Field(_), PlainBrilligType::Field(_)) => {
+                todo!("lt for fields?");
+                //let result = u128::from(lhs < rhs);
+                //Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
@@ -309,9 +327,10 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
         match (lhs, rhs) {
-            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
-                let result = u128::from(lhs > rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            (PlainBrilligType::Field(_), PlainBrilligType::Field(_)) => {
+                todo!("gt for fields?");
+                //let result = u128::from(lhs > rhs);
+                //Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
@@ -326,7 +345,49 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         }
     }
 
-    fn expect_int_bit_size(
+    fn to_radix(
+        &self,
+        val: Self::BrilligType,
+        radix: Self::BrilligType,
+        output_size: usize,
+        bits: bool,
+    ) -> eyre::Result<Vec<Self::BrilligType>> {
+        if let (PlainBrilligType::Field(val), PlainBrilligType::Int(radix, IntegerBitSize::U32)) =
+            (val, radix)
+        {
+            // this method is copied from
+            // https://github.com/noir-lang/noir/blob/7216f0829dcece948d3243471e6d57380522e997/acvm-repo/brillig_vm/src/black_box.rs#L323
+            // and modified for our implementation
+
+            let mut bytes = Vec::new();
+            val.serialize_uncompressed(&mut bytes).unwrap();
+            bytes.reverse();
+
+            let mut input = BigUint::from_bytes_be(&bytes);
+            let radix = BigUint::from_bytes_be(&radix.to_be_bytes());
+
+            let mut limbs = vec![PlainBrilligType::default(); output_size];
+
+            for i in (0..output_size).rev() {
+                let limb = &input % &radix;
+                if bits {
+                    let limb = if limb.is_zero() { 0 } else { 1 };
+                    limbs[i] = PlainBrilligType::Int(limb, IntegerBitSize::U1);
+                } else {
+                    let limb: u128 = limb
+                        .try_into()
+                        .expect("fits into u128 radix is at most 256");
+                    limbs[i] = PlainBrilligType::Int(limb, IntegerBitSize::U8);
+                };
+                input /= &radix;
+            }
+            Ok(limbs)
+        } else {
+            eyre::bail!("can only ToRadix on field and radix must be Int32")
+        }
+    }
+
+    fn expect_int(
         val: Self::BrilligType,
         should_bit_size: IntegerBitSize,
     ) -> eyre::Result<Self::BrilligType> {

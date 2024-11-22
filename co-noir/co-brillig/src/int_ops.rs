@@ -1,5 +1,6 @@
 use ark_ff::PrimeField;
 use brillig::{BinaryIntOp, IntegerBitSize, MemoryAddress};
+use eyre::Context;
 
 use crate::{mpc::BrilligDriver, CoBrilligVM};
 
@@ -23,15 +24,21 @@ where
             bit_size
         };
 
-        let lhs = T::expect_int_bit_size(self.memory.read(lhs)?, bit_size)?;
-        let rhs = T::expect_int_bit_size(self.memory.read(rhs)?, rhs_bit_size)?;
+        let lhs = self
+            .memory
+            .try_read_int(lhs, bit_size)
+            .context("while getting lhs int for int binary op")?;
+        let rhs = self
+            .memory
+            .try_read_int(rhs, rhs_bit_size)
+            .context("while getting rhs for int binary op")?;
 
         let result = match op {
             BinaryIntOp::Add => self.driver.add(lhs, rhs),
             BinaryIntOp::Sub => todo!(),
             BinaryIntOp::Mul => todo!(),
             BinaryIntOp::Div => todo!(),
-            BinaryIntOp::Equals => todo!(),
+            BinaryIntOp::Equals => self.driver.eq(lhs, rhs),
             BinaryIntOp::LessThan => self.driver.lt(lhs, rhs),
             BinaryIntOp::LessThanEquals => self.driver.le(lhs, rhs),
             BinaryIntOp::And => todo!(),
