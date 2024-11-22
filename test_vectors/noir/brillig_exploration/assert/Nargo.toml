@@ -1,7 +1,0 @@
-[package]
-name = "assert"
-type = "bin"
-authors = [""]
-compiler_version = ">=0.39.0"
-
-[dependencies]
