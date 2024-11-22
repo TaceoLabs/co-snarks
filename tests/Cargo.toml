@@ -27,6 +27,7 @@ co-ultrahonk = { version = "0.2.0", path = "../co-noir/co-ultrahonk" }
 criterion = { workspace = true }
 itertools = { workspace = true }
 mpc-core = { version = "0.6.0", path = "../mpc-core" }
+num-traits = { workspace = true }
 noirc-artifacts = { workspace = true }
 rand = { workspace = true }
 serde_json = { workspace = true }

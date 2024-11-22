@@ -255,7 +255,6 @@ where
     Standard: Distribution<T>,
 {
     // standard bit inject
-    assert!(x.a.bits() <= 1);
 
     let mut b0 = Rep3RingShare::default();
     let mut b1 = Rep3RingShare::default();

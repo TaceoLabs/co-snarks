@@ -1,6 +1,7 @@
 mod ring_share {
-    use ark_ff::{One, Zero};
+    use ark_std::UniformRand;
     use itertools::izip;
+    use mpc_core::protocols::rep3;
     use mpc_core::protocols::rep3::id::PartyID;
     use mpc_core::protocols::rep3::network::IoContext;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
@@ -11,10 +12,14 @@ mod ring_share {
     use mpc_core::protocols::rep3::yao::GCUtils;
     use mpc_core::protocols::rep3_ring;
     use mpc_core::protocols::rep3_ring::arithmetic;
+    use mpc_core::protocols::rep3_ring::casts;
     use mpc_core::protocols::rep3_ring::conversion;
     use mpc_core::protocols::rep3_ring::ring::bit::Bit;
     use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
+    use mpc_core::protocols::rep3_ring::yao;
+    use num_bigint::BigUint;
+    use num_traits::{AsPrimitive, One, Zero};
     use rand::distributions::Standard;
     use rand::prelude::Distribution;
     use rand::thread_rng;
@@ -22,6 +27,27 @@ mod ring_share {
     use std::sync::mpsc;
     use std::thread;
     use tests::rep3_network::Rep3TestNetwork;
+
+    macro_rules! apply_to_all {
+        ($expr:ident,[$($t:ty),*]) => {
+            $(
+                $expr::<$t>();
+            )*
+        };
+    }
+
+    macro_rules! apply_to_all2 {
+        ($expr:ident,[$t1:ty],[$($t2:ty),*]) => {
+            $(
+                $expr::<$t1,$t2>();
+            )*
+        };
+        ($expr:ident,[$($t1:ty),*],$t2:tt) => {
+            $(
+                apply_to_all2!($expr,[$t1], $t2);
+            )*
+        };
+    }
 
     // TODO we dont need channels, we can just join
 
@@ -50,12 +76,7 @@ mod ring_share {
 
     #[test]
     fn rep3_add() {
-        rep3_add_t::<Bit>();
-        rep3_add_t::<u8>();
-        rep3_add_t::<u16>();
-        rep3_add_t::<u32>();
-        rep3_add_t::<u64>();
-        rep3_add_t::<u128>();
+        apply_to_all!(rep3_add_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_sub_t<T: IntRing2k>()
@@ -83,12 +104,7 @@ mod ring_share {
 
     #[test]
     fn rep3_sub() {
-        rep3_sub_t::<Bit>();
-        rep3_sub_t::<u8>();
-        rep3_sub_t::<u16>();
-        rep3_sub_t::<u32>();
-        rep3_sub_t::<u64>();
-        rep3_sub_t::<u128>();
+        apply_to_all!(rep3_sub_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_sub_shared_by_public_t<T: IntRing2k>()
@@ -119,12 +135,7 @@ mod ring_share {
 
     #[test]
     fn rep3_sub_shared_by_public() {
-        rep3_sub_shared_by_public_t::<Bit>();
-        rep3_sub_shared_by_public_t::<u8>();
-        rep3_sub_shared_by_public_t::<u16>();
-        rep3_sub_shared_by_public_t::<u32>();
-        rep3_sub_shared_by_public_t::<u64>();
-        rep3_sub_shared_by_public_t::<u128>();
+        apply_to_all!(rep3_sub_shared_by_public_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_sub_public_by_shared_t<T: IntRing2k>()
@@ -155,12 +166,7 @@ mod ring_share {
 
     #[test]
     fn rep3_sub_public_by_shared() {
-        rep3_sub_public_by_shared_t::<Bit>();
-        rep3_sub_public_by_shared_t::<u8>();
-        rep3_sub_public_by_shared_t::<u16>();
-        rep3_sub_public_by_shared_t::<u32>();
-        rep3_sub_public_by_shared_t::<u64>();
-        rep3_sub_public_by_shared_t::<u128>();
+        apply_to_all!(rep3_sub_public_by_shared_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_mul_t<T: IntRing2k>()
@@ -198,12 +204,7 @@ mod ring_share {
 
     #[test]
     fn rep3_mul() {
-        rep3_mul_t::<Bit>();
-        rep3_mul_t::<u8>();
-        rep3_mul_t::<u16>();
-        rep3_mul_t::<u32>();
-        rep3_mul_t::<u64>();
-        rep3_mul_t::<u128>();
+        apply_to_all!(rep3_mul_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_fork_mul_t<T: IntRing2k>()
@@ -249,12 +250,7 @@ mod ring_share {
 
     #[test]
     fn rep3_fork_mul() {
-        rep3_fork_mul_t::<Bit>();
-        rep3_fork_mul_t::<u8>();
-        rep3_fork_mul_t::<u16>();
-        rep3_fork_mul_t::<u32>();
-        rep3_fork_mul_t::<u64>();
-        rep3_fork_mul_t::<u128>();
+        apply_to_all!(rep3_fork_mul_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_mul2_then_add_t<T: IntRing2k>()
@@ -293,12 +289,7 @@ mod ring_share {
 
     #[test]
     fn rep3_mul2_then_add() {
-        rep3_mul2_then_add_t::<Bit>();
-        rep3_mul2_then_add_t::<u8>();
-        rep3_mul2_then_add_t::<u16>();
-        rep3_mul2_then_add_t::<u32>();
-        rep3_mul2_then_add_t::<u64>();
-        rep3_mul2_then_add_t::<u128>();
+        apply_to_all!(rep3_mul2_then_add_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_mul_vec_t<T: IntRing2k>()
@@ -346,12 +337,7 @@ mod ring_share {
 
     #[test]
     fn rep3_mul_vec() {
-        rep3_mul_vec_t::<Bit>();
-        rep3_mul_vec_t::<u8>();
-        rep3_mul_vec_t::<u16>();
-        rep3_mul_vec_t::<u32>();
-        rep3_mul_vec_t::<u64>();
-        rep3_mul_vec_t::<u128>();
+        apply_to_all!(rep3_mul_vec_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_neg_t<T: IntRing2k>()
@@ -377,12 +363,7 @@ mod ring_share {
 
     #[test]
     fn rep3_neg() {
-        rep3_neg_t::<Bit>();
-        rep3_neg_t::<u8>();
-        rep3_neg_t::<u16>();
-        rep3_neg_t::<u32>();
-        rep3_neg_t::<u64>();
-        rep3_neg_t::<u128>();
+        apply_to_all!(rep3_neg_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_bit_inject_t<T: IntRing2k>()
@@ -422,12 +403,7 @@ mod ring_share {
 
     #[test]
     fn rep3_bit_inject() {
-        rep3_bit_inject_t::<Bit>();
-        rep3_bit_inject_t::<u8>();
-        rep3_bit_inject_t::<u16>();
-        rep3_bit_inject_t::<u32>();
-        rep3_bit_inject_t::<u64>();
-        rep3_bit_inject_t::<u128>();
+        apply_to_all!(rep3_bit_inject_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_bit_inject_many_t<T: IntRing2k>()
@@ -479,12 +455,7 @@ mod ring_share {
 
     #[test]
     fn rep3_bit_inject_many() {
-        rep3_bit_inject_many_t::<Bit>();
-        rep3_bit_inject_many_t::<u8>();
-        rep3_bit_inject_many_t::<u16>();
-        rep3_bit_inject_many_t::<u32>();
-        rep3_bit_inject_many_t::<u64>();
-        rep3_bit_inject_many_t::<u128>();
+        apply_to_all!(rep3_bit_inject_many_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     use arithmetic::ge_public;
@@ -535,11 +506,7 @@ mod ring_share {
                     #[test]
                     fn $name() {
                         // $name_t::<Bit>();
-                        $name_t::<u8>();
-                        $name_t::<u16>();
-                        $name_t::<u32>();
-                        $name_t::<u64>();
-                        $name_t::<u128>();
+                        apply_to_all!($name_t,[u8, u16, u32, u64, u128]);
                     }
                 }
             };
@@ -581,12 +548,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2b_zero() {
-        rep3_a2b_zero_t::<Bit>();
-        rep3_a2b_zero_t::<u8>();
-        rep3_a2b_zero_t::<u16>();
-        rep3_a2b_zero_t::<u32>();
-        rep3_a2b_zero_t::<u64>();
-        rep3_a2b_zero_t::<u128>();
+        apply_to_all!(rep3_a2b_zero_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_a2y2b_zero_t<T: IntRing2k>()
@@ -621,12 +583,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b_zero() {
-        rep3_a2y2b_zero_t::<Bit>();
-        rep3_a2y2b_zero_t::<u8>();
-        rep3_a2y2b_zero_t::<u16>();
-        rep3_a2y2b_zero_t::<u32>();
-        rep3_a2y2b_zero_t::<u64>();
-        rep3_a2y2b_zero_t::<u128>();
+        apply_to_all!(rep3_a2y2b_zero_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_a2y2b_streaming_zero_t<T: IntRing2k>()
@@ -661,12 +618,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b_streaming_zero() {
-        rep3_a2y2b_streaming_zero_t::<Bit>();
-        rep3_a2y2b_streaming_zero_t::<u8>();
-        rep3_a2y2b_streaming_zero_t::<u16>();
-        rep3_a2y2b_streaming_zero_t::<u32>();
-        rep3_a2y2b_streaming_zero_t::<u64>();
-        rep3_a2y2b_streaming_zero_t::<u128>();
+        apply_to_all!(rep3_a2y2b_streaming_zero_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_a2b_t<T: IntRing2k>()
@@ -701,12 +653,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2b() {
-        rep3_a2b_t::<Bit>();
-        rep3_a2b_t::<u8>();
-        rep3_a2b_t::<u16>();
-        rep3_a2b_t::<u32>();
-        rep3_a2b_t::<u64>();
-        rep3_a2b_t::<u128>();
+        apply_to_all!(rep3_a2b_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_a2y2b_t<T: IntRing2k>()
@@ -741,12 +688,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b() {
-        rep3_a2y2b_t::<Bit>();
-        rep3_a2y2b_t::<u8>();
-        rep3_a2y2b_t::<u16>();
-        rep3_a2y2b_t::<u32>();
-        rep3_a2y2b_t::<u64>();
-        rep3_a2y2b_t::<u128>();
+        apply_to_all!(rep3_a2y2b_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_a2y2b_streaming_t<T: IntRing2k>()
@@ -781,12 +723,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b_streaming() {
-        rep3_a2y2b_streaming_t::<Bit>();
-        rep3_a2y2b_streaming_t::<u8>();
-        rep3_a2y2b_streaming_t::<u16>();
-        rep3_a2y2b_streaming_t::<u32>();
-        rep3_a2y2b_streaming_t::<u64>();
-        rep3_a2y2b_streaming_t::<u128>();
+        apply_to_all!(rep3_a2y2b_streaming_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_b2a_t<T: IntRing2k>()
@@ -821,12 +758,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2a() {
-        rep3_b2a_t::<Bit>();
-        rep3_b2a_t::<u8>();
-        rep3_b2a_t::<u16>();
-        rep3_b2a_t::<u32>();
-        rep3_b2a_t::<u64>();
-        rep3_b2a_t::<u128>();
+        apply_to_all!(rep3_b2a_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_b2y2a_t<T: IntRing2k>()
@@ -861,12 +793,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y2a() {
-        rep3_b2y2a_t::<Bit>();
-        rep3_b2y2a_t::<u8>();
-        rep3_b2y2a_t::<u16>();
-        rep3_b2y2a_t::<u32>();
-        rep3_b2y2a_t::<u64>();
-        rep3_b2y2a_t::<u128>();
+        apply_to_all!(rep3_b2y2a_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_b2y2a_streaming_t<T: IntRing2k>()
@@ -901,12 +828,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y2a_streaming() {
-        rep3_b2y2a_streaming_t::<Bit>();
-        rep3_b2y2a_streaming_t::<u8>();
-        rep3_b2y2a_streaming_t::<u16>();
-        rep3_b2y2a_streaming_t::<u32>();
-        rep3_b2y2a_streaming_t::<u64>();
-        rep3_b2y2a_streaming_t::<u128>();
+        apply_to_all!(rep3_b2y2a_streaming_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_gc_t<T: IntRing2k>()
@@ -981,12 +903,7 @@ mod ring_share {
 
     #[test]
     fn rep3_gc() {
-        rep3_gc_t::<Bit>();
-        rep3_gc_t::<u8>();
-        rep3_gc_t::<u16>();
-        rep3_gc_t::<u32>();
-        rep3_gc_t::<u64>();
-        rep3_gc_t::<u128>();
+        apply_to_all!(rep3_gc_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_gc_streaming_t<T: IntRing2k>()
@@ -1060,12 +977,7 @@ mod ring_share {
 
     #[test]
     fn rep3_gc_streaming() {
-        rep3_gc_streaming_t::<Bit>();
-        rep3_gc_streaming_t::<u8>();
-        rep3_gc_streaming_t::<u16>();
-        rep3_gc_streaming_t::<u32>();
-        rep3_gc_streaming_t::<u64>();
-        rep3_gc_streaming_t::<u128>();
+        apply_to_all!(rep3_gc_streaming_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_a2y_t<T: IntRing2k>()
@@ -1120,12 +1032,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y() {
-        rep3_a2y_t::<Bit>();
-        rep3_a2y_t::<u8>();
-        rep3_a2y_t::<u16>();
-        rep3_a2y_t::<u32>();
-        rep3_a2y_t::<u64>();
-        rep3_a2y_t::<u128>();
+        apply_to_all!(rep3_a2y_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_a2y_streaming_t<T: IntRing2k>()
@@ -1180,12 +1087,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y_streaming() {
-        rep3_a2y_streaming_t::<Bit>();
-        rep3_a2y_streaming_t::<u8>();
-        rep3_a2y_streaming_t::<u16>();
-        rep3_a2y_streaming_t::<u32>();
-        rep3_a2y_streaming_t::<u64>();
-        rep3_a2y_streaming_t::<u128>();
+        apply_to_all!(rep3_a2y_streaming_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_y2a_t<T: IntRing2k>()
@@ -1228,12 +1130,7 @@ mod ring_share {
 
     #[test]
     fn rep3_y2a() {
-        rep3_y2a_t::<Bit>();
-        rep3_y2a_t::<u8>();
-        rep3_y2a_t::<u16>();
-        rep3_y2a_t::<u32>();
-        rep3_y2a_t::<u64>();
-        rep3_y2a_t::<u128>();
+        apply_to_all!(rep3_y2a_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_y2a_streaming_t<T: IntRing2k>()
@@ -1277,12 +1174,7 @@ mod ring_share {
 
     #[test]
     fn rep3_y2a_streaming() {
-        rep3_y2a_streaming_t::<Bit>();
-        rep3_y2a_streaming_t::<u8>();
-        rep3_y2a_streaming_t::<u16>();
-        rep3_y2a_streaming_t::<u32>();
-        rep3_y2a_streaming_t::<u64>();
-        rep3_y2a_streaming_t::<u128>();
+        apply_to_all!(rep3_y2a_streaming_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_b2y_t<T: IntRing2k>()
@@ -1336,12 +1228,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y() {
-        rep3_b2y_t::<Bit>();
-        rep3_b2y_t::<u8>();
-        rep3_b2y_t::<u16>();
-        rep3_b2y_t::<u32>();
-        rep3_b2y_t::<u64>();
-        rep3_b2y_t::<u128>();
+        apply_to_all!(rep3_b2y_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_b2y_streaming_t<T: IntRing2k>()
@@ -1395,12 +1282,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y_streaming() {
-        rep3_b2y_streaming_t::<Bit>();
-        rep3_b2y_streaming_t::<u8>();
-        rep3_b2y_streaming_t::<u16>();
-        rep3_b2y_streaming_t::<u32>();
-        rep3_b2y_streaming_t::<u64>();
-        rep3_b2y_streaming_t::<u128>();
+        apply_to_all!(rep3_b2y_streaming_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_y2b_t<T: IntRing2k>()
@@ -1443,11 +1325,303 @@ mod ring_share {
 
     #[test]
     fn rep3_y2b() {
-        rep3_y2b_t::<Bit>();
-        rep3_y2b_t::<u8>();
-        rep3_y2b_t::<u16>();
-        rep3_y2b_t::<u32>();
-        rep3_y2b_t::<u64>();
-        rep3_y2b_t::<u128>();
+        apply_to_all!(rep3_y2b_t, [Bit, u8, u16, u32, u64, u128]);
+    }
+
+    fn rep3_ring_cast_a2b_t<T, U>()
+    where
+        Standard: Distribution<T> + Distribution<U>,
+        T: IntRing2k + AsPrimitive<U>,
+        U: IntRing2k,
+    {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+        let should_result = RingElement(x.0.as_());
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+        ) {
+            thread::spawn(move || {
+                let mut ctx = IoContext::init(net).unwrap();
+                let y = casts::cast_a2b(x, &mut ctx).unwrap();
+                tx.send(y)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_ring_cast_a2b() {
+        apply_to_all2!(
+            rep3_ring_cast_a2b_t,
+            [Bit, u8, u16, u32, u64, u128],
+            [Bit, u8, u16, u32, u64, u128]
+        );
+    }
+
+    fn rep3_field_to_ring_cast_a2b_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
+        let should_result_biguint: BigUint = x.into();
+        let should_result = RingElement(T::cast_from_biguint(&should_result_biguint));
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+        ) {
+            thread::spawn(move || {
+                let mut ctx = IoContext::init(net).unwrap();
+                let y = casts::field_to_ring_a2b(x, &mut ctx).unwrap();
+                tx.send(y)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_field_to_ring_a2b_cast() {
+        apply_to_all!(
+            rep3_field_to_ring_cast_a2b_t,
+            [Bit, u8, u16, u32, u64, u128]
+        );
+    }
+
+    fn rep3_ring_to_field_cast_a2b_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+        let should_result = ark_bn254::Fr::from(T::cast_to_biguint(&x.0));
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+        ) {
+            thread::spawn(move || {
+                let mut ctx = IoContext::init(net).unwrap();
+                let y = casts::ring_to_field_a2b::<_, ark_bn254::Fr, _>(x, &mut ctx).unwrap();
+                tx.send(y)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_element(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_ring_to_field_cast_a2b() {
+        apply_to_all!(
+            rep3_ring_to_field_cast_a2b_t,
+            [Bit, u8, u16, u32, u64, u128]
+        );
+    }
+
+    fn rep3_field_to_ring_cast_gc_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        const VEC_SIZE: usize = 10;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect::<Vec<_>>();
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+        let should_result = x
+            .into_iter()
+            .map(|x| {
+                let should_result_biguint: BigUint = x.into();
+                RingElement(T::cast_from_biguint(&should_result_biguint))
+            })
+            .collect::<Vec<_>>();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+        ) {
+            thread::spawn(move || {
+                let mut ctx = IoContext::init(net).unwrap();
+                let y = yao::field_to_ring_many::<_, T, _>(&x, &mut ctx).unwrap();
+                tx.send(y)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_elements(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_field_to_ring_cast_gc() {
+        apply_to_all!(rep3_field_to_ring_cast_gc_t, [Bit, u8, u16, u32, u64, u128]);
+    }
+
+    fn rep3_ring_to_field_cast_gc_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        const VEC_SIZE: usize = 10;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| rng.gen::<RingElement<T>>())
+            .collect::<Vec<_>>();
+        let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
+        let should_result = x
+            .into_iter()
+            .map(|x| ark_bn254::Fr::from(T::cast_to_biguint(&x.0)))
+            .collect::<Vec<_>>();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+        ) {
+            thread::spawn(move || {
+                let mut ctx = IoContext::init(net).unwrap();
+                let y = yao::ring_to_field_many::<_, ark_bn254::Fr, _>(&x, &mut ctx).unwrap();
+                tx.send(y)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_ring_to_field_cast_gc() {
+        apply_to_all!(rep3_ring_to_field_cast_gc_t, [Bit, u8, u16, u32, u64, u128]);
+    }
+
+    fn rep3_ring_upcast_gc_t<T, U>()
+    where
+        Standard: Distribution<T> + Distribution<U>,
+        T: IntRing2k + AsPrimitive<U>,
+        U: IntRing2k,
+    {
+        const VEC_SIZE: usize = 10;
+
+        if U::K <= T::K {
+            return;
+        }
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| rng.gen::<RingElement<T>>())
+            .collect::<Vec<_>>();
+        let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
+        let should_result = x
+            .into_iter()
+            .map(|x| RingElement(x.0.as_()))
+            .collect::<Vec<_>>();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+        ) {
+            thread::spawn(move || {
+                let mut ctx = IoContext::init(net).unwrap();
+                let y = yao::upcast_many(&x, &mut ctx).unwrap();
+                tx.send(y)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_elements(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_ring_upcast_gc() {
+        apply_to_all2!(
+            rep3_ring_upcast_gc_t,
+            [Bit, u8, u16, u32, u64, u128],
+            [Bit, u8, u16, u32, u64, u128]
+        );
+    }
+
+    fn rep3_ring_cast_gc_t<T, U>()
+    where
+        Standard: Distribution<T> + Distribution<U>,
+        T: IntRing2k + AsPrimitive<U>,
+        U: IntRing2k,
+    {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = rng.gen::<RingElement<T>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+        let should_result = RingElement(x.0.as_());
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+        ) {
+            thread::spawn(move || {
+                let mut ctx = IoContext::init(net).unwrap();
+                let y = casts::cast_gc(x, &mut ctx).unwrap();
+                tx.send(y)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_element(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_ring_cast_gc() {
+        apply_to_all2!(
+            rep3_ring_cast_gc_t,
+            [Bit, u8, u16, u32, u64, u128],
+            [Bit, u8, u16, u32, u64, u128]
+        );
     }
 }

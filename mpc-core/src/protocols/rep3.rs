@@ -312,7 +312,7 @@ where
     [a, b, c]
 }
 
-/// Secret shares a vector of field element using replicated secret sharing and the provided random number generator. The field elements are split into three additive shares each, where each party holds two. The outputs are of type [Rep3PrimeFieldShare].
+/// Secret shares a vector of field elements using replicated secret sharing and the provided random number generator. The field elements are split into three additive shares each, where each party holds two. The outputs are of type [Rep3PrimeFieldShare].
 pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
     vals: &[F],
     rng: &mut R,

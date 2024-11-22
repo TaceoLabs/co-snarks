@@ -4,6 +4,7 @@
 
 use super::bit::Bit;
 use crate::protocols::rep3::IoResult;
+use num_bigint::BigUint;
 use num_traits::{
     AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingShl, WrappingShr, WrappingSub,
     Zero,
@@ -66,6 +67,12 @@ pub trait IntRing2k:
     /// Returns the effective number of bits (i.e., how many LSBs are set)
     fn bits(&self) -> usize;
 
+    /// Casts this type to a BigUint
+    fn cast_to_biguint(&self) -> BigUint;
+
+    /// Casts a BigUint to this type
+    fn cast_from_biguint(biguint: &BigUint) -> Self;
+
     /// a += b
     #[inline(always)]
     fn wrapping_add_assign(&mut self, rhs: &Self) {
@@ -121,6 +128,14 @@ impl IntRing2k for Bit {
     fn bits(&self) -> usize {
         self.0 as usize
     }
+
+    fn cast_to_biguint(&self) -> BigUint {
+        BigUint::from(self.0 as u64)
+    }
+
+    fn cast_from_biguint(biguint: &BigUint) -> Self {
+        biguint.iter_u64_digits().next().unwrap_or_default().as_()
+    }
 }
 
 impl IntRing2k for u8 {
@@ -143,6 +158,14 @@ impl IntRing2k for u8 {
             return 0;
         }
         self.ilog2() as usize
+    }
+
+    fn cast_to_biguint(&self) -> BigUint {
+        BigUint::from(*self)
+    }
+
+    fn cast_from_biguint(biguint: &BigUint) -> Self {
+        biguint.iter_u64_digits().next().unwrap_or_default() as Self
     }
 }
 
@@ -167,6 +190,14 @@ impl IntRing2k for u16 {
         }
         self.ilog2() as usize
     }
+
+    fn cast_to_biguint(&self) -> BigUint {
+        BigUint::from(*self)
+    }
+
+    fn cast_from_biguint(biguint: &BigUint) -> Self {
+        biguint.iter_u64_digits().next().unwrap_or_default() as Self
+    }
 }
 
 impl IntRing2k for u32 {
@@ -189,6 +220,14 @@ impl IntRing2k for u32 {
             return 0;
         }
         self.ilog2() as usize
+    }
+
+    fn cast_to_biguint(&self) -> BigUint {
+        BigUint::from(*self)
+    }
+
+    fn cast_from_biguint(biguint: &BigUint) -> Self {
+        biguint.iter_u64_digits().next().unwrap_or_default() as Self
     }
 }
 
@@ -213,6 +252,14 @@ impl IntRing2k for u64 {
         }
         self.ilog2() as usize
     }
+
+    fn cast_to_biguint(&self) -> BigUint {
+        BigUint::from(*self)
+    }
+
+    fn cast_from_biguint(biguint: &BigUint) -> Self {
+        biguint.iter_u64_digits().next().unwrap_or_default() as Self
+    }
 }
 
 impl IntRing2k for u128 {
@@ -235,5 +282,16 @@ impl IntRing2k for u128 {
             return 0;
         }
         self.ilog2() as usize
+    }
+
+    fn cast_to_biguint(&self) -> BigUint {
+        BigUint::from(*self)
+    }
+
+    fn cast_from_biguint(biguint: &BigUint) -> Self {
+        let mut iter = biguint.iter_u64_digits();
+        let x0 = iter.next().unwrap_or_default();
+        let x1 = iter.next().unwrap_or_default();
+        (x1 as u128) << 64 | x0 as u128
     }
 }

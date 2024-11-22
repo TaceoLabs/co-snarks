@@ -7,6 +7,7 @@ use ring::{int_ring::IntRing2k, ring_impl::RingElement};
 
 pub mod arithmetic;
 pub mod binary;
+pub mod casts;
 pub mod conversion;
 mod detail;
 pub mod ring;
@@ -16,7 +17,7 @@ pub mod yao;
 pub type Rep3BitShare = Rep3RingShare<ring::bit::Bit>;
 pub use arithmetic::types::Rep3RingShare;
 
-/// Secret shares a ring element using replicated secret sharing and the provided random number generator. The ring element is split into three additive shares, where each party holds two. The outputs are of type [Rep3RingShare].
+/// Secret shares a ring element using replicated secret sharing and the provided random number generator. The ring element is split into three additive shares, where each party holds two. The outputs are of type [`Rep3RingShare`].
 pub fn share_ring_element<T: IntRing2k, R: Rng + CryptoRng>(
     val: RingElement<T>,
     rng: &mut R,
@@ -33,7 +34,7 @@ where
     [share1, share2, share3]
 }
 
-/// Secret shares a vector of ring element using replicated secret sharing and the provided random number generator. The ring elements are split into three additive shares each, where each party holds two. The outputs are of type [Rep3RingShare].
+/// Secret shares a vector of ring elements using replicated secret sharing and the provided random number generator. The ring elements are split into three additive shares each, where each party holds two. The outputs are of type [`Rep3RingShare`].
 pub fn share_ring_elements<T: IntRing2k, R: Rng + CryptoRng>(
     vals: &[RingElement<T>],
     rng: &mut R,
@@ -53,7 +54,7 @@ where
     [shares1, shares2, shares3]
 }
 
-/// Secret shares a ring element using replicated secret sharing and the provided random number generator. The ring element is split into three binary shares, where each party holds two. The outputs are of type [Rep3RingShare].
+/// Secret shares a ring element using replicated secret sharing and the provided random number generator. The ring element is split into three binary shares, where each party holds two. The outputs are of type [`Rep3RingShare`].
 pub fn share_ring_element_binary<T: IntRing2k, R: Rng + CryptoRng>(
     val: RingElement<T>,
     rng: &mut R,
