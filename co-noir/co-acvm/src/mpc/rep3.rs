@@ -106,8 +106,11 @@ impl<F: PrimeField> From<ArithmeticShare<F>> for Rep3AcvmType<F> {
 }
 
 impl<F: PrimeField> From<Rep3AcvmType<F>> for Rep3BrilligType<F> {
-    fn from(_val: Rep3AcvmType<F>) -> Self {
-        todo!()
+    fn from(val: Rep3AcvmType<F>) -> Self {
+        match val {
+            Rep3AcvmType::Public(public) => Rep3BrilligType::public_field(public),
+            Rep3AcvmType::Shared(share) => Rep3BrilligType::shared_field(share),
+        }
     }
 }
 
@@ -124,10 +127,10 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     type AcvmType = Rep3AcvmType<F>;
 
-    type BrilligDriver = Rep3BrilligDriver<F>;
+    type BrilligDriver = Rep3BrilligDriver<F, N>;
 
-    fn init_brillig_driver(&self) -> Self::BrilligDriver {
-        Rep3BrilligDriver::default()
+    fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver> {
+        Ok(Rep3BrilligDriver::with_io_context(self.io_context.fork()?))
     }
 
     fn from_brillig_result(_brillig_result: Vec<Rep3BrilligType<F>>) -> Vec<Self::AcvmType> {

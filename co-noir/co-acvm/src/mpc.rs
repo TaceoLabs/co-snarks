@@ -25,7 +25,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     type BrilligDriver: BrilligDriver<F>;
 
-    fn init_brillig_driver(&self) -> Self::BrilligDriver;
+    fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver>;
 
     fn from_brillig_result(
         brillig_result: Vec<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>,

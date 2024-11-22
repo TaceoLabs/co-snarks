@@ -1,15 +1,20 @@
+use core::panic;
 use std::marker::PhantomData;
 
 use ark_ff::PrimeField;
 use brillig::{BitSize, IntegerBitSize};
+use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use mpc_core::protocols::rep3::Rep3PrimeFieldShare;
 use mpc_core::protocols::rep3_ring::{Rep3BitShare, Rep3RingShare};
 
-use super::BrilligDriver;
+use super::{BrilligDriver, PlainBrilligDriver};
+
+use super::PlainBrilligType as Public;
 
 /// A driver for the coBrillig-VM that uses replicated secret sharing.
-#[derive(Default)]
-pub struct Rep3BrilligDriver<F: PrimeField> {
+pub struct Rep3BrilligDriver<F: PrimeField, N: Rep3Network> {
+    io_context: IoContext<N>,
+    plain_driver: PlainBrilligDriver<F>,
     phantom_data: PhantomData<F>,
 }
 
@@ -21,13 +26,6 @@ pub enum Rep3BrilligType<F: PrimeField> {
     Public(Public<F>),
     /// A shared value
     Shared(Shared<F>),
-}
-
-/// The potential public values of the co-Brillig Rep3 driver.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Public<F: PrimeField> {
-    Field(F),
-    Int(u128, IntegerBitSize),
 }
 
 /// The potential shared values of the co-Brillig Rep3 driver.
@@ -54,23 +52,58 @@ impl<F: PrimeField> Default for Rep3BrilligType<F> {
     }
 }
 
-impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
-    type BrilligType = Rep3BrilligType<F>;
+impl<F: PrimeField, N: Rep3Network> Rep3BrilligDriver<F, N> {
+    /// Creates a new instance of the rep3 driver with the provided
+    /// io context.
+    pub fn with_io_context(io_context: IoContext<N>) -> Self {
+        Self {
+            io_context,
+            plain_driver: PlainBrilligDriver::default(),
+            phantom_data: PhantomData,
+        }
+    }
+}
 
-    fn cast(&self, _src: Self::BrilligType, _bit_size: BitSize) -> eyre::Result<Self::BrilligType> {
-        todo!()
+impl<F: PrimeField> Rep3BrilligType<F> {
+    /// Creates a new public field element from the provided field
+    pub fn public_field(val: F) -> Self {
+        Self::Public(Public::Field(val))
     }
 
-    fn try_into_usize(_val: Self::BrilligType) -> eyre::Result<usize> {
-        todo!()
+    /// Creates a new shared field element from the provided share
+    pub fn shared_field(share: Rep3PrimeFieldShare<F>) -> Self {
+        Self::Shared(Shared::Field(share))
+    }
+}
+
+impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N> {
+    type BrilligType = Rep3BrilligType<F>;
+
+    fn cast(&self, val: Self::BrilligType, bit_size: BitSize) -> eyre::Result<Self::BrilligType> {
+        if let Rep3BrilligType::Public(public) = val {
+            let casted = self.plain_driver.cast(public, bit_size)?;
+            Ok(Rep3BrilligType::Public(casted))
+        } else {
+            todo!("wait for romans cast impl")
+        }
+    }
+
+    fn try_into_usize(val: Self::BrilligType) -> eyre::Result<usize> {
+        // for now we only support casting public values to usize
+        // we return an error if we call this on a shared value
+        if let Rep3BrilligType::Public(public) = val {
+            PlainBrilligDriver::try_into_usize(public)
+        } else {
+            eyre::bail!("cannot convert shared value to usize")
+        }
     }
 
     fn try_into_bool(_val: Self::BrilligType) -> eyre::Result<bool> {
         todo!()
     }
 
-    fn public_value(_val: F, _bit_size: BitSize) -> Self::BrilligType {
-        todo!()
+    fn public_value(val: F, bit_size: BitSize) -> Self::BrilligType {
+        Rep3BrilligType::Public(PlainBrilligDriver::public_value(val, bit_size))
     }
 
     fn add(
@@ -127,10 +160,18 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
 
     fn lt(
         &self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        match (lhs, rhs) {
+            (Rep3BrilligType::Public(lhs), Rep3BrilligType::Public(rhs)) => {
+                let result = self.plain_driver.lt(lhs, rhs)?;
+                Ok(Rep3BrilligType::Public(result))
+            }
+            (Rep3BrilligType::Public(_), Rep3BrilligType::Shared(_)) => todo!(),
+            (Rep3BrilligType::Shared(_), Rep3BrilligType::Public(_)) => todo!(),
+            (Rep3BrilligType::Shared(_), Rep3BrilligType::Shared(_)) => todo!(),
+        }
     }
 
     fn le(
@@ -170,13 +211,30 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
     }
 
     fn expect_int(
-        _val: Self::BrilligType,
-        _bit_size: IntegerBitSize,
+        val: Self::BrilligType,
+        bit_size: IntegerBitSize,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        if let Rep3BrilligType::Public(public) = val {
+            let result = PlainBrilligDriver::expect_int(public, bit_size)?;
+            Ok(Rep3BrilligType::Public(result))
+        } else {
+            match (&val, bit_size) {
+                (Rep3BrilligType::Shared(Shared::Ring1(_)), IntegerBitSize::U1)
+                | (Rep3BrilligType::Shared(Shared::Ring8(_)), IntegerBitSize::U8)
+                | (Rep3BrilligType::Shared(Shared::Ring16(_)), IntegerBitSize::U16)
+                | (Rep3BrilligType::Shared(Shared::Ring32(_)), IntegerBitSize::U32)
+                | (Rep3BrilligType::Shared(Shared::Ring64(_)), IntegerBitSize::U64)
+                | (Rep3BrilligType::Shared(Shared::Ring128(_)), IntegerBitSize::U128) => Ok(val),
+                _ => eyre::bail!("expected int with bit size {bit_size}, but was something else"),
+            }
+        }
     }
 
-    fn expect_field(_val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
-        todo!()
+    fn expect_field(val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
+        match &val {
+            Rep3BrilligType::Public(Public::Field(_))
+            | Rep3BrilligType::Shared(Shared::Field(_)) => Ok(val),
+            _ => eyre::bail!("expected field but got int"),
+        }
     }
 }
