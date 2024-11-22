@@ -85,14 +85,14 @@ impl<F: PrimeField> From<ShamirPrimeFieldShare<F>> for ShamirAcvmType<F> {
     }
 }
 
-impl<F: PrimeField> Into<ShamirBrilligType<F>> for ShamirAcvmType<F> {
-    fn into(self) -> ShamirBrilligType<F> {
+impl<F: PrimeField> From<ShamirAcvmType<F>> for ShamirBrilligType<F> {
+    fn from(_val: ShamirAcvmType<F>) -> Self {
         todo!()
     }
 }
 
 impl<F: PrimeField> From<ShamirBrilligType<F>> for ShamirAcvmType<F> {
-    fn from(value: ShamirBrilligType<F>) -> Self {
+    fn from(_value: ShamirBrilligType<F>) -> Self {
         todo!()
     }
 }
@@ -114,7 +114,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         Self::AcvmType::default()
     }
 
-    fn from_brillig_result(brillig_result: Vec<ShamirBrilligType<F>>) -> Vec<Self::AcvmType> {
+    fn from_brillig_result(_brillig_result: Vec<ShamirBrilligType<F>>) -> Vec<Self::AcvmType> {
         todo!()
     }
 

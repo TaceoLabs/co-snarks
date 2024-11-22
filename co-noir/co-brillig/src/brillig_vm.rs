@@ -1,5 +1,3 @@
-#![warn(missing_docs)]
-
 use acir::{
     acir_field::GenericFieldElement,
     circuit::brillig::{BrilligBytecode, BrilligFunctionId},
@@ -8,12 +6,6 @@ use ark_ff::PrimeField;
 use brillig::{BitSize, HeapVector, Label, MemoryAddress, Opcode as BrilligOpcode};
 use memory::Memory;
 use mpc::BrilligDriver;
-
-mod blackbox;
-mod field_ops;
-mod int_ops;
-mod memory;
-pub mod mpc;
 
 type CoBrilligResult = (usize, usize);
 
