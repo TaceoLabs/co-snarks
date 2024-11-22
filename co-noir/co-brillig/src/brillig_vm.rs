@@ -1,11 +1,11 @@
+use crate::memory::Memory;
+use crate::mpc::BrilligDriver;
 use acir::{
     acir_field::GenericFieldElement,
     circuit::brillig::{BrilligBytecode, BrilligFunctionId},
 };
 use ark_ff::PrimeField;
 use brillig::{BitSize, HeapVector, Label, MemoryAddress, Opcode as BrilligOpcode};
-use memory::Memory;
-use mpc::BrilligDriver;
 
 type CoBrilligResult = (usize, usize);
 
@@ -14,10 +14,10 @@ where
     T: BrilligDriver<F>,
     F: PrimeField,
 {
-    driver: T,
+    pub(crate) memory: Memory<T, F>,
+    pub(crate) driver: T,
     calldata: Vec<T::BrilligType>,
     unconstrained_functions: Vec<BrilligBytecode<GenericFieldElement<F>>>,
-    memory: Memory<T, F>,
     call_stack: Vec<usize>,
     ip: usize,
 }
@@ -147,11 +147,11 @@ where
         }
     }
 
-    fn increment_program_counter(&mut self) {
+    pub(crate) fn increment_program_counter(&mut self) {
         self.set_program_counter(self.ip + 1)
     }
 
-    fn set_program_counter(&mut self, value: usize) {
+    pub(crate) fn set_program_counter(&mut self, value: usize) {
         //assert!(self.ip < self.opcodes.len());
         self.ip = value;
     }
