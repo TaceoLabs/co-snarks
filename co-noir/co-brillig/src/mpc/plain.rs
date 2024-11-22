@@ -303,10 +303,9 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
         match (lhs, rhs) {
-            (PlainBrilligType::Field(_), PlainBrilligType::Field(_)) => {
-                todo!("lt for fields?");
-                //let result = u128::from(lhs < rhs);
-                //Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
+                let result = u128::from(lhs < rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
@@ -327,10 +326,9 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
         match (lhs, rhs) {
-            (PlainBrilligType::Field(_), PlainBrilligType::Field(_)) => {
-                todo!("gt for fields?");
-                //let result = u128::from(lhs > rhs);
-                //Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
+                let result = u128::from(lhs > rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
