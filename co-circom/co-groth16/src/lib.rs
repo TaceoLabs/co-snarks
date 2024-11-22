@@ -18,6 +18,7 @@ mod tests {
     use ark_bn254::Bn254;
     use circom_types::{
         groth16::{Groth16Proof, JsonPublicInput, JsonVerificationKey, ZKey},
+        traits::CheckElement,
         Witness,
     };
     use co_circom_snarks::SharedWitness;
@@ -30,27 +31,31 @@ mod tests {
 
     #[test]
     fn create_proof_and_verify_bn254() {
-        let zkey_file =
-            File::open("../../test_vectors/Groth16/bn254/multiplier2/circuit.zkey").unwrap();
-        let witness_file =
-            File::open("../../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
-        let vk_file =
-            File::open("../../test_vectors/Groth16/bn254/multiplier2/verification_key.json")
-                .unwrap();
+        for check in [CheckElement::Yes, CheckElement::No] {
+            let zkey_file =
+                File::open("../../test_vectors/Groth16/bn254/multiplier2/circuit.zkey").unwrap();
+            let witness_file =
+                File::open("../../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
+            let vk_file =
+                File::open("../../test_vectors/Groth16/bn254/multiplier2/verification_key.json")
+                    .unwrap();
 
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let zkey = Arc::new(ZKey::<Bn254>::from_reader(zkey_file).unwrap());
-        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
-        let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness {
-            public_inputs: public_input.clone(),
-            witness: witness.values[zkey.n_public + 1..].to_vec(),
-        };
-        let proof = Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
-        let ser_proof = serde_json::to_string(&proof).unwrap();
-        let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
-        let verified = Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
-        assert!(verified);
+            let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+            let zkey = Arc::new(ZKey::<Bn254>::from_reader(zkey_file, check).unwrap());
+            let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
+            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let witness = SharedWitness {
+                public_inputs: public_input.clone(),
+                witness: witness.values[zkey.n_public + 1..].to_vec(),
+            };
+            let proof =
+                Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
+            let ser_proof = serde_json::to_string(&proof).unwrap();
+            let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
+            let verified =
+                Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
+            assert!(verified);
+        }
     }
 
     #[test]
@@ -75,26 +80,30 @@ mod tests {
 
     #[test]
     fn create_proof_and_verify_poseidon_hash_bn254() {
-        let zkey_file =
-            File::open("../../test_vectors/Groth16/bn254/poseidon/circuit.zkey").unwrap();
-        let witness_file =
-            File::open("../../test_vectors/Groth16/bn254/poseidon/witness.wtns").unwrap();
-        let vk_file =
-            File::open("../../test_vectors/Groth16/bn254/poseidon/verification_key.json").unwrap();
-
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let zkey = Arc::new(ZKey::<Bn254>::from_reader(zkey_file).unwrap());
-        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
-        let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness {
-            public_inputs: public_input.clone(),
-            witness: witness.values[zkey.n_public + 1..].to_vec(),
-        };
-        let proof = Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
-        let ser_proof = serde_json::to_string(&proof).unwrap();
-        let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
-        let verified = Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
-        assert!(verified);
+        for check in [CheckElement::Yes, CheckElement::No] {
+            let zkey_file =
+                File::open("../../test_vectors/Groth16/bn254/poseidon/circuit.zkey").unwrap();
+            let witness_file =
+                File::open("../../test_vectors/Groth16/bn254/poseidon/witness.wtns").unwrap();
+            let vk_file =
+                File::open("../../test_vectors/Groth16/bn254/poseidon/verification_key.json")
+                    .unwrap();
+            let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+            let zkey = Arc::new(ZKey::<Bn254>::from_reader(zkey_file, check).unwrap());
+            let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
+            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let witness = SharedWitness {
+                public_inputs: public_input.clone(),
+                witness: witness.values[zkey.n_public + 1..].to_vec(),
+            };
+            let proof =
+                Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
+            let ser_proof = serde_json::to_string(&proof).unwrap();
+            let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
+            let verified =
+                Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
+            assert!(verified);
+        }
     }
 
     #[test]
@@ -138,60 +147,68 @@ mod tests {
 
     #[test]
     fn proof_circom_proof_bls12_381() {
-        let zkey_file =
-            File::open("../../test_vectors/Groth16/bls12_381/multiplier2/circuit.zkey").unwrap();
-        let witness_file =
-            File::open("../../test_vectors/Groth16/bls12_381/multiplier2/witness.wtns").unwrap();
-        let vk_file =
-            File::open("../../test_vectors/Groth16/bls12_381/multiplier2/verification_key.json")
-                .unwrap();
-        let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
-        let zkey = Arc::new(ZKey::<Bls12_381>::from_reader(zkey_file).unwrap());
-        let vk: JsonVerificationKey<Bls12_381> = serde_json::from_reader(vk_file).unwrap();
-        let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness {
-            public_inputs: public_input.clone(),
-            witness: witness.values[zkey.n_public + 1..].to_vec(),
-        };
+        for check in [CheckElement::Yes, CheckElement::No] {
+            let zkey_file =
+                File::open("../../test_vectors/Groth16/bls12_381/multiplier2/circuit.zkey")
+                    .unwrap();
+            let witness_file =
+                File::open("../../test_vectors/Groth16/bls12_381/multiplier2/witness.wtns")
+                    .unwrap();
+            let vk_file = File::open(
+                "../../test_vectors/Groth16/bls12_381/multiplier2/verification_key.json",
+            )
+            .unwrap();
+            let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
+            let zkey = Arc::new(ZKey::<Bls12_381>::from_reader(zkey_file, check).unwrap());
+            let vk: JsonVerificationKey<Bls12_381> = serde_json::from_reader(vk_file).unwrap();
+            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let witness = SharedWitness {
+                public_inputs: public_input.clone(),
+                witness: witness.values[zkey.n_public + 1..].to_vec(),
+            };
 
-        let proof =
-            Groth16::<Bls12_381>::plain_prove(zkey, witness).expect("proof generation works");
-        let verified =
-            Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
-        assert!(verified);
-        let ser_proof = serde_json::to_string(&proof).unwrap();
-        let der_proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&ser_proof).unwrap();
-        let verified =
-            Groth16::<Bls12_381>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
-        assert!(verified)
+            let proof =
+                Groth16::<Bls12_381>::plain_prove(zkey, witness).expect("proof generation works");
+            let verified =
+                Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
+            assert!(verified);
+            let ser_proof = serde_json::to_string(&proof).unwrap();
+            let der_proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&ser_proof).unwrap();
+            let verified = Groth16::<Bls12_381>::verify(&vk, &der_proof, &public_input[1..])
+                .expect("can verify");
+            assert!(verified)
+        }
     }
 
     #[test]
     fn proof_circom_proof_bn254() {
-        let zkey_file =
-            File::open("../../test_vectors/Groth16/bn254/multiplier2/circuit.zkey").unwrap();
-        let witness_file =
-            File::open("../../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
-        let vk_file =
-            File::open("../../test_vectors/Groth16/bn254/multiplier2/verification_key.json")
-                .unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let zkey = Arc::new(ZKey::<Bn254>::from_reader(zkey_file).unwrap());
-        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
-        let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness {
-            public_inputs: public_input.clone(),
-            witness: witness.values[zkey.n_public + 1..].to_vec(),
-        };
+        for check in [CheckElement::Yes, CheckElement::No] {
+            let zkey_file =
+                File::open("../../test_vectors/Groth16/bn254/multiplier2/circuit.zkey").unwrap();
+            let witness_file =
+                File::open("../../test_vectors/Groth16/bn254/multiplier2/witness.wtns").unwrap();
+            let vk_file =
+                File::open("../../test_vectors/Groth16/bn254/multiplier2/verification_key.json")
+                    .unwrap();
+            let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+            let zkey = Arc::new(ZKey::<Bn254>::from_reader(zkey_file, check).unwrap());
+            let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
+            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let witness = SharedWitness {
+                public_inputs: public_input.clone(),
+                witness: witness.values[zkey.n_public + 1..].to_vec(),
+            };
 
-        let proof = Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
-        let verified =
-            Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
-        assert!(verified);
-        let ser_proof = serde_json::to_string(&proof).unwrap();
-        let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
-        let verified =
-            Groth16::<Bn254>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
-        assert!(verified)
+            let proof =
+                Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
+            let verified =
+                Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
+            assert!(verified);
+            let ser_proof = serde_json::to_string(&proof).unwrap();
+            let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
+            let verified =
+                Groth16::<Bn254>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
+            assert!(verified)
+        }
     }
 }

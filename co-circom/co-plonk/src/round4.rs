@@ -173,72 +173,75 @@ pub mod tests {
         round1::{Round1, Round1Challenges},
     };
 
+    use circom_types::traits::CheckElement;
     use std::str::FromStr;
 
     #[test]
     fn test_round4_multiplier2() {
-        let mut driver = PlainPlonkDriver;
-        let mut reader = BufReader::new(
-            File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
-        );
-        let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
-        let witness_file =
-            File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness {
-            public_inputs: public_input.clone(),
-            witness: witness.values[zkey.n_public + 1..].to_vec(),
-        };
+        for check in [CheckElement::Yes, CheckElement::No] {
+            let mut driver = PlainPlonkDriver;
+            let mut reader = BufReader::new(
+                File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
+            );
+            let zkey = ZKey::<Bn254>::from_reader(&mut reader, check).unwrap();
+            let witness_file =
+                File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
+            let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let witness = SharedWitness {
+                public_inputs: public_input.clone(),
+                witness: witness.values[zkey.n_public + 1..].to_vec(),
+            };
 
-        let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
-        round1.challenges = challenges;
-        let round2 = round1.round1().unwrap();
-        let round3 = round2.round2().unwrap();
-        let round4 = round3.round3().unwrap();
-        let round5 = round4.round4().unwrap();
-        assert_eq!(
-            round5.proof.eval_a,
-            ark_bn254::Fr::from_str(
-                "9577617118727487156038114503197927927393325100881782676071854181913228129519"
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            round5.proof.eval_b,
-            ark_bn254::Fr::from_str(
-                "20597878711220885145139457487405665380092038394343281979206937623212519986448"
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            round5.proof.eval_c,
-            ark_bn254::Fr::from_str(
-                "15265494263612694384441473331344570152140354050926476508657731330784430744915"
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            round5.proof.eval_zw,
-            ark_bn254::Fr::from_str(
-                "13208748067365350181326696119359571057028048827339239951085850234164749233153"
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            round5.proof.eval_s1,
-            ark_bn254::Fr::from_str(
-                "14333100636430622287126878289812189552775054994479690945797668457655414216377"
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            round5.proof.eval_s2,
-            ark_bn254::Fr::from_str(
-                "5227675743165392606371559215386333900775466821923985579976650047914227054429"
-            )
-            .unwrap()
-        );
+            let challenges = Round1Challenges::deterministic(&mut driver);
+            let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+            round1.challenges = challenges;
+            let round2 = round1.round1().unwrap();
+            let round3 = round2.round2().unwrap();
+            let round4 = round3.round3().unwrap();
+            let round5 = round4.round4().unwrap();
+            assert_eq!(
+                round5.proof.eval_a,
+                ark_bn254::Fr::from_str(
+                    "9577617118727487156038114503197927927393325100881782676071854181913228129519"
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                round5.proof.eval_b,
+                ark_bn254::Fr::from_str(
+                    "20597878711220885145139457487405665380092038394343281979206937623212519986448"
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                round5.proof.eval_c,
+                ark_bn254::Fr::from_str(
+                    "15265494263612694384441473331344570152140354050926476508657731330784430744915"
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                round5.proof.eval_zw,
+                ark_bn254::Fr::from_str(
+                    "13208748067365350181326696119359571057028048827339239951085850234164749233153"
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                round5.proof.eval_s1,
+                ark_bn254::Fr::from_str(
+                    "14333100636430622287126878289812189552775054994479690945797668457655414216377"
+                )
+                .unwrap()
+            );
+            assert_eq!(
+                round5.proof.eval_s2,
+                ark_bn254::Fr::from_str(
+                    "5227675743165392606371559215386333900775466821923985579976650047914227054429"
+                )
+                .unwrap()
+            );
+        }
     }
 }

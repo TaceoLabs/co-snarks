@@ -286,7 +286,7 @@ pub mod tests {
 
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
-    use circom_types::plonk::ZKey;
+    use circom_types::{plonk::ZKey, traits::CheckElement};
     use co_circom_snarks::SharedWitness;
 
     use crate::mpc::plain::PlainPlonkDriver;
@@ -316,86 +316,90 @@ pub mod tests {
 
     #[test]
     fn test_round1_multiplier2() {
-        let mut driver = PlainPlonkDriver;
-        let mut reader = BufReader::new(
-            File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
-        );
-        let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
-        let witness_file =
-            File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let witness = SharedWitness {
-            public_inputs: witness.values[..=zkey.n_public].to_vec(),
-            witness: witness.values[zkey.n_public + 1..].to_vec(),
-        };
-        let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
-        round1.challenges = challenges;
-        let round2 = round1.round1().unwrap();
-        assert_eq!(
-            round2.proof.commit_a,
-            g1_bn254_from_xy!(
-                "17605081043163307645214588229802469503664729145403357283635330564965670333858",
-                "6586266374304386912414685272642968153787280144323447197846781700256409557611"
-            )
-        );
-        assert_eq!(
-            round2.proof.commit_b,
-            g1_bn254_from_xy!(
-                "5630355441221157622116381279042400483431873694148526624610332736752309357481",
-                "459435968793897134848228876468434334542717512356212242962101833939899171644"
-            )
-        );
-        assert_eq!(
-            round2.proof.commit_c,
-            g1_bn254_from_xy!(
-                "15206827023183180947877311390140741127921188782225553575654415094642569639438",
-                "14970166502897037710457760872123795383312785044242798403684409588772714154874"
-            )
-        );
+        for check in [CheckElement::Yes, CheckElement::No] {
+            let mut driver = PlainPlonkDriver;
+            let mut reader = BufReader::new(
+                File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
+            );
+            let zkey = ZKey::<Bn254>::from_reader(&mut reader, check).unwrap();
+            let witness_file =
+                File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
+            let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+            let witness = SharedWitness {
+                public_inputs: witness.values[..=zkey.n_public].to_vec(),
+                witness: witness.values[zkey.n_public + 1..].to_vec(),
+            };
+            let challenges = Round1Challenges::deterministic(&mut driver);
+            let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+            round1.challenges = challenges;
+            let round2 = round1.round1().unwrap();
+            assert_eq!(
+                round2.proof.commit_a,
+                g1_bn254_from_xy!(
+                    "17605081043163307645214588229802469503664729145403357283635330564965670333858",
+                    "6586266374304386912414685272642968153787280144323447197846781700256409557611"
+                )
+            );
+            assert_eq!(
+                round2.proof.commit_b,
+                g1_bn254_from_xy!(
+                    "5630355441221157622116381279042400483431873694148526624610332736752309357481",
+                    "459435968793897134848228876468434334542717512356212242962101833939899171644"
+                )
+            );
+            assert_eq!(
+                round2.proof.commit_c,
+                g1_bn254_from_xy!(
+                    "15206827023183180947877311390140741127921188782225553575654415094642569639438",
+                    "14970166502897037710457760872123795383312785044242798403684409588772714154874"
+                )
+            );
+        }
     }
 
     #[test]
     fn test_round1_poseidon_bls12_381() {
-        let mut driver = PlainPlonkDriver;
-        let mut reader = BufReader::new(
-            File::open("../../test_vectors/Plonk/bls12_381/poseidon/circuit.zkey").unwrap(),
-        );
-        let zkey = ZKey::<Bls12_381>::from_reader(&mut reader).unwrap();
-        let witness_file =
-            File::open("../../test_vectors/Plonk/bls12_381/poseidon/witness.wtns").unwrap();
-        let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
+        for check in [CheckElement::Yes, CheckElement::No] {
+            let mut driver = PlainPlonkDriver;
+            let mut reader = BufReader::new(
+                File::open("../../test_vectors/Plonk/bls12_381/poseidon/circuit.zkey").unwrap(),
+            );
+            let zkey = ZKey::<Bls12_381>::from_reader(&mut reader, check).unwrap();
+            let witness_file =
+                File::open("../../test_vectors/Plonk/bls12_381/poseidon/witness.wtns").unwrap();
+            let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
 
-        let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness {
-            public_inputs: public_input.clone(),
-            witness: witness.values[zkey.n_public + 1..].to_vec(),
-        };
+            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let witness = SharedWitness {
+                public_inputs: public_input.clone(),
+                witness: witness.values[zkey.n_public + 1..].to_vec(),
+            };
 
-        let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
-        round1.challenges = challenges;
-        let round2 = round1.round1().unwrap();
-        assert_eq!(
+            let challenges = Round1Challenges::deterministic(&mut driver);
+            let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+            round1.challenges = challenges;
+            let round2 = round1.round1().unwrap();
+            assert_eq!(
             round2.proof.commit_a.into_affine(),
             g1_bls12_381_from_xy!(
                 "1998528185362278337803945478659945086542519630073413629642105010067028189206141975508238821825915421715338325238864",
                 "436066057394619309469331627881449668678557518497178283348448576242129245895320288313540996356612092203769711134939"
             )
         );
-        assert_eq!(
+            assert_eq!(
             round2.proof.commit_b,
             g1_bls12_381_from_xy!(
                 "905523078516729029387874920505888326057985585766807058529621596028494573503715980387105934346404133401227192848784",
                 "817813208457279034981972137280354075285704598923875006670861630006742541882069169563142367502699866422101983374962"
             )
         );
-        assert_eq!(
+            assert_eq!(
             round2.proof.commit_c,
             g1_bls12_381_from_xy!(
                 "2045702311111033155343546707999313330868835292331631548140598745513449880984849831136790392158415943067742290277175",
                 "2263708941732971465915801396733005622347769540424301431567098497278413189155761949973582649025461644335372679621757"
             )
         );
+        }
     }
 }

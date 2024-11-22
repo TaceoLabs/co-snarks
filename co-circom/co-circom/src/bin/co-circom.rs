@@ -11,7 +11,7 @@ use circom_types::{
         Groth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, ZKey as Groth16ZKey,
     },
     plonk::{JsonVerificationKey as PlonkJsonVerificationKey, PlonkProof, ZKey as PlonkZKey},
-    traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
+    traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
     Witness,
 };
 use clap::{Parser, Subcommand};
@@ -477,7 +477,10 @@ where
 
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
-            let zkey = Arc::new(Groth16ZKey::<P>::from_reader(zkey_file).context("reading zkey")?);
+            let zkey = Arc::new(
+                Groth16ZKey::<P>::from_reader(zkey_file, CheckElement::Yes)
+                    .context("reading zkey")?,
+            );
 
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
@@ -524,8 +527,10 @@ where
             public_input
         }
         ProofSystem::Plonk => {
-            let zkey =
-                Arc::new(PlonkZKey::<P>::from_reader(zkey_file).context("while parsing zkey")?);
+            let zkey = Arc::new(
+                PlonkZKey::<P>::from_reader(zkey_file, CheckElement::Yes)
+                    .context("while parsing zkey")?,
+            );
 
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
