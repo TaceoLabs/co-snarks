@@ -5,11 +5,13 @@ use brillig::{BitSize, IntegerBitSize};
 
 use super::BrilligDriver;
 
+/// For now only a stub. Do we really want this?
 #[derive(Default)]
 pub struct ShamirBrilligDriver<F: PrimeField> {
     phantom_data: PhantomData<F>,
 }
 
+/// For now only a stub. Do we really want this?
 #[derive(Clone, Default, Debug, PartialEq)]
 pub struct ShamirBrilligType<F: PrimeField> {
     phantom_data: PhantomData<F>,
@@ -36,7 +38,7 @@ impl<F: PrimeField> BrilligDriver<F> for ShamirBrilligDriver<F> {
         todo!()
     }
 
-    fn constant(_val: F, _bit_size: BitSize) -> Self::BrilligType {
+    fn public_value(_val: F, _bit_size: BitSize) -> Self::BrilligType {
         todo!()
     }
 
@@ -77,10 +79,6 @@ impl<F: PrimeField> BrilligDriver<F> for ShamirBrilligDriver<F> {
         _lhs: Self::BrilligType,
         _rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
-    }
-
-    fn is_zero(&mut self, _val: Self::BrilligType) {
         todo!()
     }
 

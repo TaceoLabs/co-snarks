@@ -9,6 +9,11 @@ use brillig::{BitSize, HeapVector, Label, MemoryAddress, Opcode as BrilligOpcode
 
 type CoBrilligResult = (usize, usize);
 
+/// The coBrillig-VM. If executes unconstrained functions for coNoir.
+///
+/// In contrast to Noir's Brillig-VM, we initiate one instance and reuse
+/// it during the whole process. This is mostly because we need a network
+/// for the MPC operations.
 pub struct CoBrilligVM<T, F>
 where
     T: BrilligDriver<F>,
@@ -27,6 +32,13 @@ where
     T: BrilligDriver<F>,
     F: PrimeField,
 {
+    /// Runs the unconstrained function identified by the provided id
+    /// to completion.
+    ///
+    /// The input to this function is the identifier (just an index to
+    /// the initially provided Vec of unconstrained functions) and the
+    /// field elements from the witness serving as the arguments of the
+    /// unconstrained functions.
     pub fn run(
         &mut self,
         id: &BrilligFunctionId,
@@ -133,6 +145,11 @@ where
         }
     }
 
+    /// Creates a new instance of the coBrillig-VM from the provided
+    /// driver and a vec of unconstrained functions. This instance of
+    /// the VM can only run those unconstrained functions and panics
+    /// if a caller tries to call an index larger then provided
+    /// by this array.
     pub fn init(
         driver: T,
         unconstrained_functions: Vec<BrilligBytecode<GenericFieldElement<F>>>,
@@ -196,7 +213,7 @@ where
         bit_size: BitSize,
         value: GenericFieldElement<F>,
     ) -> eyre::Result<()> {
-        let constant = T::constant(value.into_repr(), bit_size);
+        let constant = T::public_value(value.into_repr(), bit_size);
         self.memory.write(destination, constant)?;
         self.increment_program_counter();
         Ok(())
@@ -283,7 +300,7 @@ where
         value: GenericFieldElement<F>,
     ) -> eyre::Result<()> {
         // Convert our destination_pointer to an address
-        let constant = T::constant(value.into_repr(), bit_size);
+        let constant = T::public_value(value.into_repr(), bit_size);
         let destination = self.memory.read_ref(destination_pointer)?;
         // Use our usize destination index to set the value in memory
         self.memory.write(destination, constant)?;

@@ -208,7 +208,7 @@ impl Rep3Rand {
         val & &mask
     }
 
-    /// Generate a random [`T`] from rng1
+    /// Generate a random `T` from rng1
     pub fn random_element_rng1<T>(&mut self) -> T
     where
         Standard: Distribution<T>,
@@ -216,7 +216,7 @@ impl Rep3Rand {
         self.rng1.gen()
     }
 
-    /// Generate a random [`T`] from rng1
+    /// Generate a random `T` from rng1
     pub fn random_element_rng2<T>(&mut self) -> T
     where
         Standard: Distribution<T>,
