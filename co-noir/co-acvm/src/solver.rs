@@ -152,7 +152,7 @@ where
     }
 
     pub fn new_bn254<P>(
-        driver: T,
+        mut driver: T,
         compiled_program: ProgramArtifact,
         prover_path: P,
     ) -> eyre::Result<Self>
@@ -164,7 +164,7 @@ where
         witness_map[Self::DEFAULT_FUNCTION_INDEX] =
             Self::read_abi_bn254(prover_path, &compiled_program.abi)?;
         let brillig = CoBrilligVM::init(
-            driver.init_brillig_driver(),
+            driver.init_brillig_driver()?,
             compiled_program.bytecode.unconstrained_functions,
         );
         Ok(Self {
@@ -185,7 +185,7 @@ where
     }
 
     pub fn new_bn254_with_witness(
-        driver: T,
+        mut driver: T,
         compiled_program: ProgramArtifact,
         witness: WitnessMap<T::AcvmType>,
     ) -> eyre::Result<Self> {
@@ -194,7 +194,7 @@ where
         witness_map[Self::DEFAULT_FUNCTION_INDEX] = witness;
 
         let brillig = CoBrilligVM::init(
-            driver.init_brillig_driver(),
+            driver.init_brillig_driver()?,
             compiled_program.bytecode.unconstrained_functions,
         );
         Ok(Self {
