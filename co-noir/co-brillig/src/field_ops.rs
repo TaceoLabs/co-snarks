@@ -1,6 +1,3 @@
-use std::fmt::Result;
-
-use acvm::brillig_vm::MemoryValue;
 use ark_ff::PrimeField;
 use brillig::{BinaryFieldOp, MemoryAddress};
 

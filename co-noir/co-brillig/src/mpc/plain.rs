@@ -111,7 +111,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
 
     fn try_into_bool(val: Self::BrilligType) -> eyre::Result<bool> {
         match val {
-            PlainBrilligType::Int(val, bit_size) if bit_size == IntegerBitSize::U1 => Ok(val != 0),
+            PlainBrilligType::Int(val, IntegerBitSize::U1) => Ok(val != 0),
             x => eyre::bail!("cannot cast {x:?} to bool"),
         }
     }
@@ -259,7 +259,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         }
     }
 
-    fn is_zero(&mut self, val: Self::BrilligType) {
+    fn is_zero(&mut self, _val: Self::BrilligType) {
         todo!()
     }
 

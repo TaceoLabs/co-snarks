@@ -79,17 +79,6 @@ where
         Ok(MemoryAddress::direct(self.try_read_usize(ptr)?))
     }
 
-    pub fn read_slice(&self, addr: MemoryAddress, len: usize) -> eyre::Result<&[T::BrilligType]> {
-        // Allows to read a slice of uninitialized memory if the length is zero.
-        // Ideally we'd be able to read uninitialized memory in general (as read does)
-        // but that's not possible if we want to return a slice instead of owned data.
-        if len == 0 {
-            return Ok(&[]);
-        }
-        let resolved_addr = self.resolve(addr)?;
-        Ok(&self.inner[resolved_addr..(resolved_addr + len)])
-    }
-
     /// Sets the value at `address` to `value`
     pub fn write(&mut self, address: MemoryAddress, value: T::BrilligType) -> eyre::Result<()> {
         let resolved_ptr = self.resolve(address)?;
@@ -115,11 +104,6 @@ where
         self.resize_to_fit(resolved_address + values.len());
         self.inner[resolved_address..(resolved_address + values.len())].clone_from_slice(values);
         Ok(())
-    }
-
-    /// Returns the values of the memory
-    pub fn values(&self) -> &[T::BrilligType] {
-        &self.inner
     }
 
     pub fn into_inner(self) -> Vec<T::BrilligType> {
