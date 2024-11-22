@@ -9,6 +9,7 @@ use circom_types::{
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
 use std::sync::Arc;
 
+use circom_types::traits::CheckElement;
 use co_circom_snarks::SharedWitness;
 use co_groth16::mpc::ShamirGroth16Driver;
 use co_groth16::CoGroth16;
@@ -42,7 +43,7 @@ macro_rules! add_test_impl {
                 let witness_file =
                     File::open(format!("../test_vectors/{}/{}/{}/witness.wtns", stringify!($proof_system), stringify!([< $curve:lower >]), $name)).unwrap();
                 let witness = Witness::<[< ark_ $curve:lower >]::Fr>::from_reader(witness_file).unwrap();
-                let zkey1 = Arc::new([< $proof_system ZK >]::<$curve>::from_reader(zkey_file).unwrap());
+                let zkey1 = Arc::new([< $proof_system ZK >]::<$curve>::from_reader(zkey_file, CheckElement::No).unwrap());
                 let zkey2 = Arc::clone(&zkey1);
                 let zkey3 = Arc::clone(&zkey1);
                 let r1cs = R1CS::<$curve>::from_reader(r1cs_file).unwrap();

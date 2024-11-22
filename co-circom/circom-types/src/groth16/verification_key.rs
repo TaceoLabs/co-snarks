@@ -8,7 +8,7 @@ use serde::{
     Deserialize, Serialize, Serializer,
 };
 
-use crate::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
+use crate::traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 
 /// Represents a verification key in JSON format that was created by circom. Supports de/serialization using [`serde`].
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,13 +83,14 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
     D: de::Deserializer<'de>,
 {
-    deserializer.deserialize_seq(G1SeqVisitor::<P>::new())
+    deserializer.deserialize_seq(G1SeqVisitor::<P>::new(CheckElement::Yes))
 }
 struct G1SeqVisitor<P: Pairing + CircomArkworksPairingBridge>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    check: CheckElement,
     phantom_data: PhantomData<P>,
 }
 
@@ -98,8 +99,9 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    fn new() -> Self {
+    fn new(check: CheckElement) -> Self {
         Self {
+            check,
             phantom_data: PhantomData,
         }
     }
@@ -131,9 +133,10 @@ where
                 return Err(de::Error::invalid_length(point.len(), &self));
             } else {
                 values.push(
-                    P::g1_from_strings_projective(&point[0], &point[1], &point[2]).map_err(
-                        |_| de::Error::custom("Invalid projective point on G1.".to_owned()),
-                    )?,
+                    P::g1_from_strings_projective(&point[0], &point[1], &point[2], self.check)
+                        .map_err(|_| {
+                            de::Error::custom("Invalid projective point on G1.".to_owned())
+                        })?,
                 );
             }
         }

@@ -36,6 +36,7 @@ macro_rules! impl_bls12_381 {
 macro_rules! impl_serde_for_curve {
     ($mod_name: ident, $config: ident, $curve: ident, $name: expr, $field_size: expr, $scalar_field_size: expr, $circom_name: expr) => {
 
+
 mod $mod_name {
 
     use $curve::{$config, Fq, Fq2, Fr};
@@ -104,7 +105,7 @@ mod $mod_name {
 
             //Circom serializes its field elements in montgomery form
             //therefore we use Fq::montgomery_bigint_from_reader
-            fn g1_from_bytes(bytes: &[u8]) -> IoResult<Self::G1Affine> {
+            fn g1_from_bytes(bytes: &[u8], check: CheckElement) -> IoResult<Self::G1Affine> {
                 //already in montgomery form
                 let x = Fq::montgomery_bigint_from_reader(&bytes[..Fq::SERIALIZED_BYTE_SIZE])?;
                 let y = Fq::montgomery_bigint_from_reader(&bytes[Fq::SERIALIZED_BYTE_SIZE..])?;
@@ -115,16 +116,17 @@ mod $mod_name {
 
                 let p = Self::G1Affine::new_unchecked(x, y);
 
-                if !p.is_on_curve() {
+                let curve_checks = matches!(check, CheckElement::Yes);
+                if curve_checks && !p.is_on_curve() {
                     return Err(SerializationError::InvalidData);
                 }
-                if !p.is_in_correct_subgroup_assuming_on_curve() {
+                if curve_checks && !p.is_in_correct_subgroup_assuming_on_curve() {
                     return Err(SerializationError::InvalidData);
                 }
                 Ok(p)
             }
 
-            fn g2_from_bytes(bytes: &[u8]) -> IoResult<Self::G2Affine> {
+            fn g2_from_bytes(bytes: &[u8], check: CheckElement) -> IoResult<Self::G2Affine> {
                 //already in montgomery form
                 let x0 = Fq::montgomery_bigint_from_reader(&bytes[..Fq::SERIALIZED_BYTE_SIZE])?;
                 let x1 = Fq::montgomery_bigint_from_reader(
@@ -145,28 +147,30 @@ mod $mod_name {
                 }
 
                 let p = Self::G2Affine::new_unchecked(x, y);
-                if !p.is_on_curve() {
+
+                let curve_checks = matches!(check, CheckElement::Yes);
+                if curve_checks && !p.is_on_curve() {
                     return Err(SerializationError::InvalidData);
                 }
-                if !p.is_in_correct_subgroup_assuming_on_curve() {
+                if curve_checks && !p.is_in_correct_subgroup_assuming_on_curve() {
                     return Err(SerializationError::InvalidData);
                 }
                 Ok(p)
             }
 
-            fn g1_from_reader(mut reader: impl Read) -> IoResult<Self::G1Affine> {
+            fn g1_from_reader(mut reader: impl Read, check: CheckElement) -> IoResult<Self::G1Affine> {
                 let mut buf = [0u8; Self::G1_SERIALIZED_BYTE_SIZE_UNCOMPRESSED];
                 reader.read_exact(&mut buf)?;
-                Self::g1_from_bytes(&buf)
+                Self::g1_from_bytes(&buf, check)
             }
 
-            fn g2_from_reader(mut reader: impl Read) -> IoResult<Self::G2Affine> {
+            fn g2_from_reader(mut reader: impl Read, check: CheckElement) -> IoResult<Self::G2Affine> {
                 let mut buf = [0u8; Self::G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED];
                 reader.read_exact(&mut buf)?;
-                Self::g2_from_bytes(&buf)
+                Self::g2_from_bytes(&buf, check)
             }
 
-            fn g1_from_strings_projective(x: &str, y: &str, z: &str) -> IoResult<Self::G1Affine> {
+            fn g1_from_strings_projective(x: &str, y: &str, z: &str, check: CheckElement) -> IoResult<Self::G1Affine> {
                 let x = parse_field(x)?;
                 let y = parse_field(y)?;
                 let z = parse_field(z)?;
@@ -174,10 +178,12 @@ mod $mod_name {
                 if p.is_zero() {
                     return Ok(p);
                 }
-                if !p.is_on_curve() {
+
+                let curve_check = matches!(check, CheckElement::Yes);
+                if curve_check && !p.is_on_curve() {
                     return Err(SerializationError::InvalidData);
                 }
-                if !p.is_in_correct_subgroup_assuming_on_curve() {
+                if curve_check && !p.is_in_correct_subgroup_assuming_on_curve() {
                     return Err(SerializationError::InvalidData);
                 }
                 Ok(p)
@@ -199,6 +205,7 @@ mod $mod_name {
                 y1: &str,
                 z0: &str,
                 z1: &str,
+                check: CheckElement
             ) -> IoResult<Self::G2Affine> {
                 let x0 = parse_field(x0)?;
                 let x1 = parse_field(x1)?;
@@ -214,10 +221,12 @@ mod $mod_name {
                 if p.is_zero() {
                     return Ok(p);
                 }
-                if !p.is_on_curve() {
+
+                let curve_checks = matches!(check, CheckElement::Yes);
+                if curve_checks && !p.is_on_curve() {
                     return Err(SerializationError::InvalidData);
                 }
-                if !p.is_in_correct_subgroup_assuming_on_curve() {
+                if curve_checks && !p.is_in_correct_subgroup_assuming_on_curve() {
                     return Err(SerializationError::InvalidData);
                 }
                 Ok(p)
@@ -382,6 +391,7 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    check: CheckElement,
     phantom_data: PhantomData<P>,
 }
 
@@ -390,8 +400,9 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    fn new() -> Self {
+    fn new(check: CheckElement) -> Self {
         Self {
+            check,
             phantom_data: PhantomData,
         }
     }
@@ -425,7 +436,7 @@ where
         if seq.next_element::<String>()?.is_some() {
             Err(de::Error::invalid_length(4, &self))
         } else {
-            P::g1_from_strings_projective(&x, &y, &z)
+            P::g1_from_strings_projective(&x, &y, &z, self.check)
                 .map_err(|_| de::Error::custom("Invalid projective point on G1.".to_owned()))
         }
     }
@@ -436,16 +447,18 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    check: CheckElement,
     phantom_data: PhantomData<P>,
 }
 
-impl<P: Pairing + CircomArkworksPairingBridge> TargetGroupVisitor<P>
+impl<P: Pairing + CircomArkworksPairingBridge> G2Visitor<P>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    fn new() -> Self {
+    fn new(check: CheckElement) -> Self {
         Self {
+            check,
             phantom_data: PhantomData,
         }
     }
@@ -495,7 +508,10 @@ where
                 z.len()
             )))
         } else {
-            Ok(P::g2_from_strings_projective(&x[0], &x[1], &y[0], &y[1], &z[0], &z[1]).unwrap())
+            Ok(
+                P::g2_from_strings_projective(&x[0], &x[1], &y[0], &y[1], &z[0], &z[1], self.check)
+                    .unwrap(),
+            )
         }
     }
 }
@@ -508,7 +524,7 @@ where
     phantom_data: PhantomData<P>,
 }
 
-impl<P: Pairing + CircomArkworksPairingBridge> G2Visitor<P>
+impl<P: Pairing + CircomArkworksPairingBridge> TargetGroupVisitor<P>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
@@ -542,34 +558,47 @@ where
     fn get_circom_name() -> String;
     /// Deserializes element of G1 from bytes where the element is already in montgomery form (no montgomery reduction performed)
     /// Used in default multithreaded impl of g1_vec_from_reader, because `Read` cannot be shared across threads
-    fn g1_from_bytes(bytes: &[u8]) -> IoResult<Self::G1Affine>;
+    fn g1_from_bytes(bytes: &[u8], check: CheckElement) -> IoResult<Self::G1Affine>;
     /// Deserializes element of G2 from bytes where the element is already in montgomery form (no montgomery reduction performed)
     /// Used in default multithreaded impl of g2_vec_from_reader, because `Read` cannot be shared across threads
-    fn g2_from_bytes(bytes: &[u8]) -> IoResult<Self::G2Affine>;
+    fn g2_from_bytes(bytes: &[u8], check: CheckElement) -> IoResult<Self::G2Affine>;
     /// Deserializes element of G1 from reader where the element is already in montgomery form (no montgomery reduction performed)
-    fn g1_from_reader(reader: impl Read) -> IoResult<Self::G1Affine>;
+    fn g1_from_reader(reader: impl Read, check: CheckElement) -> IoResult<Self::G1Affine>;
     /// Deserializes element of G2 from reader where the element is already in montgomery form (no montgomery reduction performed)
-    fn g2_from_reader(reader: impl Read) -> IoResult<Self::G2Affine>;
+    fn g2_from_reader(reader: impl Read, check: CheckElement) -> IoResult<Self::G2Affine>;
     /// Deserializes vec of G1 from reader where the elements are already in montgomery form (no montgomery reduction performed)
     /// The default implementation runs multithreaded using rayon
-    fn g1_vec_from_reader(mut reader: impl Read, num: usize) -> IoResult<Vec<Self::G1Affine>> {
+    fn g1_vec_from_reader(
+        mut reader: impl Read,
+        num: usize,
+        check: CheckElement,
+    ) -> IoResult<Vec<Self::G1Affine>> {
         let mut buf = vec![0u8; Self::G1_SERIALIZED_BYTE_SIZE_UNCOMPRESSED * num];
         reader.read_exact(&mut buf)?;
         buf.par_chunks_exact(Self::G1_SERIALIZED_BYTE_SIZE_UNCOMPRESSED)
-            .map(|chunk| Self::g1_from_bytes(chunk))
+            .map(|chunk| Self::g1_from_bytes(chunk, check))
             .collect::<Result<Vec<_>, SerializationError>>()
     }
     /// Deserializes vec of G2 from reader where the elements are already in montgomery form (no montgomery reduction performed)
     /// The default implementation runs multithreaded using rayon
-    fn g2_vec_from_reader(mut reader: impl Read, num: usize) -> IoResult<Vec<Self::G2Affine>> {
+    fn g2_vec_from_reader(
+        mut reader: impl Read,
+        num: usize,
+        check: CheckElement,
+    ) -> IoResult<Vec<Self::G2Affine>> {
         let mut buf = vec![0u8; Self::G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED * num];
         reader.read_exact(&mut buf)?;
         buf.par_chunks_exact(Self::G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED)
-            .map(|chunk| Self::g2_from_bytes(chunk))
+            .map(|chunk| Self::g2_from_bytes(chunk, check))
             .collect::<Result<Vec<_>, SerializationError>>()
     }
     /// Deserializes element of G1 from strings representing projective coordinates
-    fn g1_from_strings_projective(x: &str, y: &str, z: &str) -> IoResult<Self::G1Affine>;
+    fn g1_from_strings_projective(
+        x: &str,
+        y: &str,
+        z: &str,
+        check: CheckElement,
+    ) -> IoResult<Self::G1Affine>;
     /// Deserializes element of G2 from strings representing projective coordinates
     fn g2_from_strings_projective(
         x0: &str,
@@ -578,20 +607,25 @@ where
         y1: &str,
         z0: &str,
         z1: &str,
+        check: CheckElement,
     ) -> IoResult<Self::G2Affine>;
     /// Deserializes element of G1 using deserializer
     fn deserialize_g1_element<'de, D>(deserializer: D) -> Result<Self::G1Affine, D::Error>
     where
         D: de::Deserializer<'de>,
     {
-        deserializer.deserialize_seq(G1Visitor::<Self>::new())
+        // this is only called by proofs and verification key, therefore we
+        // always check as they are constant size and very small.
+        deserializer.deserialize_seq(G1Visitor::<Self>::new(CheckElement::Yes))
     }
     /// Deserializes element of G2 using deserializer
     fn deserialize_g2_element<'de, D>(deserializer: D) -> Result<Self::G2Affine, D::Error>
     where
         D: de::Deserializer<'de>,
     {
-        deserializer.deserialize_seq(G2Visitor::<Self>::new())
+        // this is only called by proofs and verification key, therefore we
+        // always check as they are constant size and very small.
+        deserializer.deserialize_seq(G2Visitor::<Self>::new(CheckElement::Yes))
     }
     /// Deserializes element of Gt using deserializer
     fn deserialize_gt_element<'de, D>(deserializer: D) -> Result<Self::TargetField, D::Error>
@@ -634,6 +668,19 @@ pub trait CircomArkworksPrimeFieldBridge: PrimeField {
     fn montgomery_bigint_from_reader(reader: impl Read) -> IoResult<Self>;
     /// deserializes field elements that are multiplied by R^2 already (elements in Groth16 zkey are of this form)
     fn from_reader_for_groth16_zkey(reader: impl Read) -> IoResult<Self>;
+}
+
+/// Indicates whether we should check if deserialized are valid
+/// points on the curves.
+/// `No` indicates to skip those checks, which is by orders of magnitude
+/// faster, but could potentially result in undefined behaviour. Use
+/// only with care.
+#[derive(Debug, Clone, Copy)]
+pub enum CheckElement {
+    /// Indicates to perform curve checks
+    Yes,
+    /// Indicates to skip curve checks
+    No,
 }
 
 impl_bn256!();

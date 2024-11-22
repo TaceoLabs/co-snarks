@@ -498,6 +498,9 @@ pub mod tests {
 
     use ark_ec::pairing::Pairing;
     use std::str::FromStr;
+
+    use circom_types::traits::CheckElement;
+
     macro_rules! g1_from_xy {
         ($x: expr,$y: expr) => {
             <ark_bn254::Bn254 as Pairing>::G1Affine::new(
@@ -509,46 +512,48 @@ pub mod tests {
 
     #[test]
     fn test_round3_multiplier2() {
-        let mut driver = PlainPlonkDriver;
-        let mut reader = BufReader::new(
-            File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
-        );
-        let zkey = ZKey::<Bn254>::from_reader(&mut reader).unwrap();
-        let witness_file =
-            File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness {
-            public_inputs: public_input.clone(),
-            witness: witness.values[zkey.n_public + 1..].to_vec(),
-        };
+        for check in [CheckElement::Yes, CheckElement::No] {
+            let mut driver = PlainPlonkDriver;
+            let mut reader = BufReader::new(
+                File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
+            );
+            let zkey = ZKey::<Bn254>::from_reader(&mut reader, check).unwrap();
+            let witness_file =
+                File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
+            let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let witness = SharedWitness {
+                public_inputs: public_input.clone(),
+                witness: witness.values[zkey.n_public + 1..].to_vec(),
+            };
 
-        let challenges = Round1Challenges::deterministic(&mut driver);
-        let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
-        round1.challenges = challenges;
-        let round2 = round1.round1().unwrap();
-        let round3 = round2.round2().unwrap();
-        let round4 = round3.round3().unwrap();
-        assert_eq!(
-            round4.proof.commit_t1,
-            g1_from_xy!(
-                "14195659590223391588638033663362337117591990036333098666602164584829450067964",
-                "3556648023705175372561455635244621029434015848660599980046006090530807598362"
-            )
-        );
-        assert_eq!(
-            round4.proof.commit_t2,
-            g1_from_xy!(
-                "3735872884021926351213137728148437717828227598563721199864822205706753909354",
-                "18937554230046023488342718793325695277505320264073327441600348965411357658388"
-            )
-        );
-        assert_eq!(
-            round4.proof.commit_t3,
-            g1_from_xy!(
-                "16143856432987537130591639896375147783771732347095191085601174356801897211531",
-                "181289684093540268434296060454656362990106137005120511426963659280111589561"
-            )
-        );
+            let challenges = Round1Challenges::deterministic(&mut driver);
+            let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+            round1.challenges = challenges;
+            let round2 = round1.round1().unwrap();
+            let round3 = round2.round2().unwrap();
+            let round4 = round3.round3().unwrap();
+            assert_eq!(
+                round4.proof.commit_t1,
+                g1_from_xy!(
+                    "14195659590223391588638033663362337117591990036333098666602164584829450067964",
+                    "3556648023705175372561455635244621029434015848660599980046006090530807598362"
+                )
+            );
+            assert_eq!(
+                round4.proof.commit_t2,
+                g1_from_xy!(
+                    "3735872884021926351213137728148437717828227598563721199864822205706753909354",
+                    "18937554230046023488342718793325695277505320264073327441600348965411357658388"
+                )
+            );
+            assert_eq!(
+                round4.proof.commit_t3,
+                g1_from_xy!(
+                    "16143856432987537130591639896375147783771732347095191085601174356801897211531",
+                    "181289684093540268434296060454656362990106137005120511426963659280111589561"
+                )
+            );
+        }
     }
 }

@@ -270,67 +270,75 @@ pub mod tests {
     use std::sync::Arc;
     use std::{fs::File, io::BufReader};
 
+    use circom_types::traits::CheckElement;
+
     use crate::plonk::Plonk;
 
     #[test]
     pub fn test_multiplier2_bn254() -> eyre::Result<()> {
-        let zkey_file = "../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey";
-        let witness_file = "../../test_vectors/Plonk/bn254/multiplier2/witness.wtns";
-        let zkey = Arc::new(ZKey::<Bn254>::from_reader(File::open(zkey_file)?)?);
-        let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
+        for check in [CheckElement::Yes, CheckElement::No] {
+            let zkey_file = "../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey";
+            let witness_file = "../../test_vectors/Plonk/bn254/multiplier2/witness.wtns";
+            let zkey = Arc::new(ZKey::<Bn254>::from_reader(File::open(zkey_file)?, check)?);
+            let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
 
-        let witness = SharedWitness {
-            public_inputs: witness.values[..=zkey.n_public].to_vec(),
-            witness: witness.values[zkey.n_public + 1..].to_vec(),
-        };
+            let witness = SharedWitness {
+                public_inputs: witness.values[..=zkey.n_public].to_vec(),
+                witness: witness.values[zkey.n_public + 1..].to_vec(),
+            };
 
-        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
-            File::open("../../test_vectors/Plonk/bn254/multiplier2/verification_key.json").unwrap(),
-        )
-        .unwrap();
+            let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
+                File::open("../../test_vectors/Plonk/bn254/multiplier2/verification_key.json")
+                    .unwrap(),
+            )
+            .unwrap();
 
-        let public_input: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
-            File::open("../../test_vectors/Plonk/bn254/multiplier2/public.json").unwrap(),
-        )
-        .unwrap();
+            let public_input: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
+                File::open("../../test_vectors/Plonk/bn254/multiplier2/public.json").unwrap(),
+            )
+            .unwrap();
 
-        let proof = Plonk::<Bn254>::plain_prove(zkey, witness).unwrap();
-        let result = Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
-        assert!(result);
+            let proof = Plonk::<Bn254>::plain_prove(zkey, witness).unwrap();
+            let result = Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
+            assert!(result);
+        }
         Ok(())
     }
 
     #[test]
     pub fn test_poseidon_bn254() {
-        let mut reader = BufReader::new(
-            File::open("../../test_vectors/Plonk/bn254/poseidon/circuit.zkey").unwrap(),
-        );
-        let zkey = Arc::new(ZKey::<Bn254>::from_reader(&mut reader).unwrap());
-        let witness_file =
-            File::open("../../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
-        let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-        let public_input = witness.values[..=zkey.n_public].to_vec();
-        let witness = SharedWitness {
-            public_inputs: public_input.clone(),
-            witness: witness.values[zkey.n_public + 1..].to_vec(),
-        };
+        for check in [CheckElement::Yes, CheckElement::No] {
+            let mut reader = BufReader::new(
+                File::open("../../test_vectors/Plonk/bn254/poseidon/circuit.zkey").unwrap(),
+            );
+            let zkey = Arc::new(ZKey::<Bn254>::from_reader(&mut reader, check).unwrap());
+            let witness_file =
+                File::open("../../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
+            let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
+            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let witness = SharedWitness {
+                public_inputs: public_input.clone(),
+                witness: witness.values[zkey.n_public + 1..].to_vec(),
+            };
 
-        let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
-            File::open("../../test_vectors/Plonk/bn254/poseidon/verification_key.json").unwrap(),
-        )
-        .unwrap();
+            let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(
+                File::open("../../test_vectors/Plonk/bn254/poseidon/verification_key.json")
+                    .unwrap(),
+            )
+            .unwrap();
 
-        let public_inputs: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
-            File::open("../../test_vectors/Plonk/bn254/poseidon/public.json").unwrap(),
-        )
-        .unwrap();
+            let public_inputs: JsonPublicInput<ark_bn254::Fr> = serde_json::from_reader(
+                File::open("../../test_vectors/Plonk/bn254/poseidon/public.json").unwrap(),
+            )
+            .unwrap();
 
-        let proof = Plonk::<Bn254>::plain_prove(zkey, witness).unwrap();
+            let proof = Plonk::<Bn254>::plain_prove(zkey, witness).unwrap();
 
-        let mut proof_bytes = vec![];
-        serde_json::to_writer(&mut proof_bytes, &proof).unwrap();
-        let proof = serde_json::from_reader(proof_bytes.as_slice()).unwrap();
-        let result = Plonk::<Bn254>::verify(&vk, &proof, &public_inputs.values).unwrap();
-        assert!(result)
+            let mut proof_bytes = vec![];
+            serde_json::to_writer(&mut proof_bytes, &proof).unwrap();
+            let proof = serde_json::from_reader(proof_bytes.as_slice()).unwrap();
+            let result = Plonk::<Bn254>::verify(&vk, &proof, &public_inputs.values).unwrap();
+            assert!(result)
+        }
     }
 }
