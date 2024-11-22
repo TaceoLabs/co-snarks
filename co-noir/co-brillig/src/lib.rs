@@ -1,13 +1,13 @@
 use acir::{
     acir_field::GenericFieldElement,
-    circuit::brillig::{BrilligBytecode, BrilligFunctionId, BrilligOutputs},
+    circuit::brillig::{BrilligBytecode, BrilligFunctionId},
 };
-use acvm::brillig_vm::{MemoryValue, VMStatus};
 use ark_ff::PrimeField;
 use brillig::{BitSize, HeapVector, Label, MemoryAddress, Opcode as BrilligOpcode};
 use memory::Memory;
 use mpc::BrilligDriver;
 
+mod blackbox;
 mod field_ops;
 mod int_ops;
 mod memory;
@@ -39,6 +39,7 @@ where
         calldata: Vec<T::BrilligType>,
     ) -> eyre::Result<Vec<T::BrilligType>> {
         self.calldata = calldata;
+        self.ip = 0;
         let (return_data_offset, return_data_size) = self.run_inner(id)?;
         // take memory - this also resets it for next run
         let memory = std::mem::take(&mut self.memory).into_inner();

@@ -123,7 +123,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         }
     }
 
-    fn add_franco(
+    fn add(
         &self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
@@ -150,78 +150,6 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
             x => eyre::bail!(
                 "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
             ),
-        }
-    }
-
-    fn lt_franco(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        match (lhs, rhs) {
-            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
-                let result = u128::from(lhs < rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
-            }
-            (
-                PlainBrilligType::Int(lhs, lhs_bit_size),
-                PlainBrilligType::Int(rhs, rhs_bit_size),
-            ) if lhs_bit_size == rhs_bit_size => {
-                let result = u128::from(lhs < rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
-            }
-            x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
-            ),
-        }
-    }
-
-    fn not_franco(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
-        if let PlainBrilligType::Int(val, IntegerBitSize::U1) = val {
-            Ok(PlainBrilligType::Int(
-                u128::from(val == 0),
-                IntegerBitSize::U1,
-            ))
-        } else {
-            eyre::bail!("")
-        }
-    }
-
-    fn gt_franco(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        match (lhs, rhs) {
-            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
-                let result = u128::from(lhs > rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
-            }
-            (
-                PlainBrilligType::Int(lhs, lhs_bit_size),
-                PlainBrilligType::Int(rhs, rhs_bit_size),
-            ) if lhs_bit_size == rhs_bit_size => {
-                let result = u128::from(lhs > rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
-            }
-            x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
-            ),
-        }
-    }
-
-    fn expect_int_bit_size(
-        val: Self::BrilligType,
-        should_bit_size: IntegerBitSize,
-    ) -> eyre::Result<Self::BrilligType> {
-        if let PlainBrilligType::Int(_, is_bit_size) = val {
-            if is_bit_size == should_bit_size {
-                Ok(val)
-            } else {
-                eyre::bail!("expected int with size: {should_bit_size}, but got {val:?}")
-            }
-        } else {
-            eyre::bail!("expected int with size: {should_bit_size}, but got {val:?}")
         }
     }
 
@@ -295,7 +223,6 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
             (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
                 Ok(PlainBrilligType::Field(lhs / rhs))
             }
-
             (
                 PlainBrilligType::Int(lhs, IntegerBitSize::U128),
                 PlainBrilligType::Int(rhs, IntegerBitSize::U128),
@@ -316,15 +243,109 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         }
     }
 
+    fn int_div(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        if let (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) = (lhs, rhs) {
+            let lhs = acir_field_utils::to_u128(lhs);
+            let rhs = acir_field_utils::to_u128(rhs);
+            Ok(PlainBrilligType::Field(F::from(lhs / rhs)))
+        } else {
+            eyre::bail!("IntDiv only supported on fields")
+        }
+    }
+
     fn is_zero(&mut self, val: Self::BrilligType) {
         todo!()
     }
 
-    fn equal(
+    fn not(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
+        if let PlainBrilligType::Int(val, IntegerBitSize::U1) = val {
+            Ok(PlainBrilligType::Int(
+                u128::from(val == 0),
+                IntegerBitSize::U1,
+            ))
+        } else {
+            eyre::bail!("")
+        }
+    }
+
+    fn eq(
         &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
         todo!();
+    }
+
+    fn lt(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        match (lhs, rhs) {
+            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
+                let result = u128::from(lhs < rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            }
+            (
+                PlainBrilligType::Int(lhs, lhs_bit_size),
+                PlainBrilligType::Int(rhs, rhs_bit_size),
+            ) if lhs_bit_size == rhs_bit_size => {
+                let result = u128::from(lhs < rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            }
+            x => eyre::bail!(
+                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+            ),
+        }
+    }
+
+    fn gt(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        match (lhs, rhs) {
+            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
+                let result = u128::from(lhs > rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            }
+            (
+                PlainBrilligType::Int(lhs, lhs_bit_size),
+                PlainBrilligType::Int(rhs, rhs_bit_size),
+            ) if lhs_bit_size == rhs_bit_size => {
+                let result = u128::from(lhs > rhs);
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+            }
+            x => eyre::bail!(
+                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+            ),
+        }
+    }
+
+    fn expect_int_bit_size(
+        val: Self::BrilligType,
+        should_bit_size: IntegerBitSize,
+    ) -> eyre::Result<Self::BrilligType> {
+        if let PlainBrilligType::Int(_, is_bit_size) = val {
+            if is_bit_size == should_bit_size {
+                Ok(val)
+            } else {
+                eyre::bail!("expected int with size: {should_bit_size}, but got {val:?}")
+            }
+        } else {
+            eyre::bail!("expected int with size: {should_bit_size}, but got {val:?}")
+        }
+    }
+
+    fn expect_field(val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
+        if let PlainBrilligType::Field(val) = val {
+            Ok(PlainBrilligType::Field(val))
+        } else {
+            eyre::bail!("expected field, but got {val:?}")
+        }
     }
 }

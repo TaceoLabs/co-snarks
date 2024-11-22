@@ -41,50 +41,10 @@ pub trait BrilligDriver<F: PrimeField> {
 
     fn constant(val: F, bit_size: BitSize) -> Self::BrilligType;
 
-    fn add_franco(
+    fn add(
         &self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType>;
-
-    fn not_franco(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType>;
-
-    fn lt_franco(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType>;
-
-    fn le_franco(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        let gt = self.gt_franco(lhs, rhs)?;
-        self.not_franco(gt)
-    }
-
-    fn gt_franco(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        let gt = self.lt_franco(lhs, rhs)?;
-        self.not_franco(gt)
-    }
-
-    fn ge_franco(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        let gt = self.lt_franco(lhs, rhs)?;
-        self.not_franco(gt)
-    }
-
-    fn expect_int_bit_size(
-        val: Self::BrilligType,
-        bit_size: IntegerBitSize,
     ) -> eyre::Result<Self::BrilligType>;
 
     fn sub(
@@ -102,10 +62,57 @@ pub trait BrilligDriver<F: PrimeField> {
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType>;
-    fn is_zero(&mut self, val: Self::BrilligType); // -> ?
-    fn equal(
+
+    fn int_div(
         &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType>;
+
+    fn is_zero(&mut self, val: Self::BrilligType); // -> ?
+
+    fn not(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType>;
+
+    fn eq(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType>;
+
+    fn lt(&self, lhs: Self::BrilligType, rhs: Self::BrilligType)
+        -> eyre::Result<Self::BrilligType>;
+
+    fn le(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        let gt = self.gt(lhs, rhs)?;
+        self.not(gt)
+    }
+
+    fn gt(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        let gt = self.lt(lhs, rhs)?;
+        self.not(gt)
+    }
+
+    fn ge(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        let gt = self.lt(lhs, rhs)?;
+        self.not(gt)
+    }
+
+    fn expect_int_bit_size(
+        val: Self::BrilligType,
+        bit_size: IntegerBitSize,
+    ) -> eyre::Result<Self::BrilligType>;
+
+    fn expect_field(val: Self::BrilligType) -> eyre::Result<Self::BrilligType>;
 }
