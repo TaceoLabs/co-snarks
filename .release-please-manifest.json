@@ -8,6 +8,7 @@
   "co-circom/co-plonk": "0.4.0",
   "co-noir/co-acvm": "0.3.0",
   "co-noir/co-builder": "0.1.0",
+  "co-noir/co-brillig": "0.1.0",
   "co-noir/co-noir": "0.3.0",
   "co-noir/co-ultrahonk": "0.2.0",
   "co-noir/ultrahonk": "0.2.0",
