@@ -85,7 +85,7 @@ where
                     location,
                 } => self.handle_jump_if(*condition, *location)?,
 
-                BrilligOpcode::Jump { location } => todo!(),
+                BrilligOpcode::Jump { location } => self.handle_jump(*location)?,
                 BrilligOpcode::CalldataCopy {
                     destination_address,
                     size_address,
@@ -125,12 +125,12 @@ where
                 BrilligOpcode::Load {
                     destination,
                     source_pointer,
-                } => todo!(),
+                } => self.handle_load(*destination, *source_pointer)?,
                 BrilligOpcode::Store {
                     destination_pointer,
                     source,
-                } => todo!(),
-                BrilligOpcode::BlackBox(_) => todo!(),
+                } => self.handle_store(*destination_pointer, *source)?,
+                BrilligOpcode::BlackBox(blackbox_op) => self.handle_blackbox(*blackbox_op)?,
                 BrilligOpcode::Trap { revert_data } => todo!(),
                 BrilligOpcode::Stop { return_data } => {
                     return self.handle_stop(*return_data);
@@ -217,6 +217,11 @@ where
         Ok(())
     }
 
+    fn handle_jump(&mut self, location: Label) -> eyre::Result<()> {
+        self.set_program_counter(location);
+        Ok(())
+    }
+
     fn handle_return(&mut self) -> eyre::Result<()> {
         if let Some(return_location) = self.call_stack.pop() {
             self.set_program_counter(return_location + 1);
@@ -247,6 +252,34 @@ where
             0
         };
         Ok((offset, size))
+    }
+
+    fn handle_load(
+        &mut self,
+        destination: MemoryAddress,
+        source_pointer: MemoryAddress,
+    ) -> eyre::Result<()> {
+        // Convert our source_pointer to an address
+        let source = self.memory.read_ref(source_pointer)?;
+        // Use our usize source index to lookup the value in memory
+        let value = self.memory.read(source)?;
+        self.memory.write(destination, value)?;
+        self.increment_program_counter();
+        Ok(())
+    }
+
+    fn handle_store(
+        &mut self,
+        destination_pointer: MemoryAddress,
+        source: MemoryAddress,
+    ) -> eyre::Result<()> {
+        // Convert our destination_pointer to an address
+        let destination = self.memory.read_ref(destination_pointer)?;
+        // Use our usize destination index to set the value in memory
+        let value = self.memory.read(source)?;
+        self.memory.write(destination, value)?;
+        self.increment_program_counter();
+        Ok(())
     }
 
     fn handle_indirect_const(

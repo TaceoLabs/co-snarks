@@ -1,5 +1,5 @@
 use ark_ff::PrimeField;
-use brillig::MemoryAddress;
+use brillig::{IntegerBitSize, MemoryAddress};
 
 use crate::mpc::BrilligDriver;
 
@@ -61,6 +61,18 @@ where
 
     pub fn try_read_usize(&self, ptr: MemoryAddress) -> eyre::Result<usize> {
         T::try_into_usize(self.read(ptr)?)
+    }
+
+    pub fn try_read_field(&self, ptr: MemoryAddress) -> eyre::Result<T::BrilligType> {
+        T::expect_field(self.read(ptr)?)
+    }
+
+    pub fn try_read_int(
+        &self,
+        ptr: MemoryAddress,
+        bit_size: IntegerBitSize,
+    ) -> eyre::Result<T::BrilligType> {
+        T::expect_int(self.read(ptr)?, bit_size)
     }
 
     pub fn read_ref(&self, ptr: MemoryAddress) -> eyre::Result<MemoryAddress> {

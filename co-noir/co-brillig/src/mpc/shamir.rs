@@ -72,6 +72,14 @@ impl<F: PrimeField> BrilligDriver<F> for ShamirBrilligDriver<F> {
         todo!()
     }
 
+    fn int_div(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
     fn is_zero(&mut self, val: Self::BrilligType) {
         todo!()
     }
@@ -96,33 +104,6 @@ impl<F: PrimeField> BrilligDriver<F> for ShamirBrilligDriver<F> {
         todo!()
     }
 
-    fn gt(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        todo!()
-    }
-
-    fn expect_int_bit_size(
-        val: Self::BrilligType,
-        bit_size: IntegerBitSize,
-    ) -> eyre::Result<Self::BrilligType> {
-        todo!()
-    }
-
-    fn expect_field(val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
-        todo!()
-    }
-
-    fn int_div(
-        &mut self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        todo!()
-    }
-
     fn le(
         &self,
         lhs: Self::BrilligType,
@@ -132,6 +113,14 @@ impl<F: PrimeField> BrilligDriver<F> for ShamirBrilligDriver<F> {
         self.not(gt)
     }
 
+    fn gt(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
     fn ge(
         &self,
         lhs: Self::BrilligType,
@@ -139,5 +128,26 @@ impl<F: PrimeField> BrilligDriver<F> for ShamirBrilligDriver<F> {
     ) -> eyre::Result<Self::BrilligType> {
         let gt = self.lt(lhs, rhs)?;
         self.not(gt)
+    }
+
+    fn to_radix(
+        &self,
+        val: Self::BrilligType,
+        radix: Self::BrilligType,
+        output_size: usize,
+        bits: bool,
+    ) -> eyre::Result<Vec<Self::BrilligType>> {
+        todo!()
+    }
+
+    fn expect_int(
+        val: Self::BrilligType,
+        bit_size: IntegerBitSize,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
+    }
+
+    fn expect_field(val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
+        todo!()
     }
 }

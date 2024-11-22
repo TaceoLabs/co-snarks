@@ -109,7 +109,16 @@ pub trait BrilligDriver<F: PrimeField> {
         self.not(gt)
     }
 
-    fn expect_int_bit_size(
+    // is this simply a2b?
+    fn to_radix(
+        &self,
+        val: Self::BrilligType,
+        radix: Self::BrilligType,
+        output_size: usize,
+        bits: bool,
+    ) -> eyre::Result<Vec<Self::BrilligType>>;
+
+    fn expect_int(
         val: Self::BrilligType,
         bit_size: IntegerBitSize,
     ) -> eyre::Result<Self::BrilligType>;
