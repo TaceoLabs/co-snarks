@@ -13,7 +13,7 @@ pub(super) mod shamir; // Does not support everything, but basic circuits can be
 pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     type Lookup: LookupTableProvider<F>;
     type ArithmeticShare: Clone;
-    /// A type representing the values encountered during Circom compilation. It should at least contain public field elements and shared values.
+    /// A type representing the values encountered during Noir compilation. It should at least contain public field elements and shared values.
     type AcvmType: Clone
         + Default
         + fmt::Debug

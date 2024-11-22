@@ -1,4 +1,7 @@
 #![warn(missing_docs)]
+//! This crate defines the [CoBrilligVM].
+//!
+//! The VM computes unconstrained functions for the ACVM witness extension.
 
 mod blackbox;
 mod brillig_vm;

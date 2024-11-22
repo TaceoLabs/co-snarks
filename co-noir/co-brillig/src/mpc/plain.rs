@@ -21,11 +21,15 @@ macro_rules! wrapping_op {
     };
 }
 
+/// A plain driver for the coBrillig-VM. This driver is mostly
+/// for testing purposes. It does NOT perform any MPC operations.
+/// Everything is locally computed on your machine.
 #[derive(Default)]
 pub struct PlainBrilligDriver<F: PrimeField> {
     phantom_data: PhantomData<F>,
 }
 impl<F: PrimeField> PlainBrilligDriver<F> {
+    /// Creates a new instance of the driver.
     pub fn new() -> Self {
         Self {
             phantom_data: Default::default(),
@@ -33,13 +37,19 @@ impl<F: PrimeField> PlainBrilligDriver<F> {
     }
 }
 
+/// The types for the coBrillig plain driver. The values
+/// can either be fields or integers.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PlainBrilligType<F: PrimeField> {
+    /// A field element
     Field(F),
+    /// An integer with the provided bit size.
     Int(u128, IntegerBitSize),
 }
 
 impl<F: PrimeField> PlainBrilligType<F> {
+    /// Consumes `self` and converts the type to the underlying
+    /// field implementation.
     pub fn into_field(self) -> F {
         match self {
             PlainBrilligType::Field(f) => f,
@@ -116,7 +126,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         }
     }
 
-    fn constant(val: F, bit_size: BitSize) -> Self::BrilligType {
+    fn public_value(val: F, bit_size: BitSize) -> Self::BrilligType {
         match bit_size {
             BitSize::Field => PlainBrilligType::Field(val),
             BitSize::Integer(bit_size) => {
@@ -257,10 +267,6 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         } else {
             eyre::bail!("IntDiv only supported on fields")
         }
-    }
-
-    fn is_zero(&mut self, _val: Self::BrilligType) {
-        todo!()
     }
 
     fn not(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {

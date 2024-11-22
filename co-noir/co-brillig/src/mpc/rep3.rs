@@ -7,23 +7,30 @@ use mpc_core::protocols::rep3_ring::{Rep3BitShare, Rep3RingShare};
 
 use super::BrilligDriver;
 
+/// A driver for the coBrillig-VM that uses replicated secret sharing.
 #[derive(Default)]
 pub struct Rep3BrilligDriver<F: PrimeField> {
     phantom_data: PhantomData<F>,
 }
 
+/// The types for the coBrillig Rep3 driver. The values
+/// can either be shared or public.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Rep3BrilligType<F: PrimeField> {
+    /// A public value
     Public(Public<F>),
+    /// A shared value
     Shared(Shared<F>),
 }
 
+/// The potential public values of the co-Brillig Rep3 driver.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Public<F: PrimeField> {
     Field(F),
-    Int(u128),
+    Int(u128, IntegerBitSize),
 }
 
+/// The potential shared values of the co-Brillig Rep3 driver.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shared<F: PrimeField> {
     Field(Rep3PrimeFieldShare<F>),
@@ -62,7 +69,7 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
         todo!()
     }
 
-    fn constant(_val: F, _bit_size: BitSize) -> Self::BrilligType {
+    fn public_value(_val: F, _bit_size: BitSize) -> Self::BrilligType {
         todo!()
     }
 
@@ -106,10 +113,6 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
         todo!()
     }
 
-    fn is_zero(&mut self, _val: Self::BrilligType) {
-        todo!()
-    }
-
     fn not(&self, _val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
         todo!()
     }
@@ -130,6 +133,15 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
         todo!()
     }
 
+    fn le(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        let gt = self.gt(lhs, rhs)?;
+        self.not(gt)
+    }
+
     fn gt(
         &self,
         _lhs: Self::BrilligType,
@@ -138,15 +150,13 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
         todo!()
     }
 
-    fn expect_int(
-        _val: Self::BrilligType,
-        _bit_size: IntegerBitSize,
+    fn ge(
+        &self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
-    }
-
-    fn expect_field(_val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let gt = self.lt(lhs, rhs)?;
+        self.not(gt)
     }
 
     fn to_radix(
@@ -159,21 +169,14 @@ impl<F: PrimeField> BrilligDriver<F> for Rep3BrilligDriver<F> {
         todo!()
     }
 
-    fn le(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
+    fn expect_int(
+        _val: Self::BrilligType,
+        _bit_size: IntegerBitSize,
     ) -> eyre::Result<Self::BrilligType> {
-        let gt = self.gt(lhs, rhs)?;
-        self.not(gt)
+        todo!()
     }
 
-    fn ge(
-        &self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        let gt = self.lt(lhs, rhs)?;
-        self.not(gt)
+    fn expect_field(_val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
+        todo!()
     }
 }
