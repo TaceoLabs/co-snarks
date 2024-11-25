@@ -351,10 +351,10 @@ where
         let aux_assignment2 = Arc::clone(&aux_assignment);
         let aux_assignment3 = Arc::clone(&aux_assignment);
         let aux_assignment4 = Arc::clone(&aux_assignment);
-        let alpha_g1 = zkey.vk.alpha_g1;
+        let alpha_g1 = zkey.alpha_g1;
         let beta_g1 = zkey.beta_g1;
-        let beta_g2 = zkey.vk.beta_g2;
-        let delta_g2 = zkey.vk.delta_g2.into_group();
+        let beta_g2 = zkey.beta_g2;
+        let delta_g2 = zkey.delta_g2.into_group();
 
         rayon::spawn(move || {
             let compute_a =
