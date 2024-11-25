@@ -287,6 +287,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         for witness in witness_values.into_iter().take(varnum) {
             builder.add_variable(witness);
         }
+
         // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
         // be "set" later on via the assert_equal mechanism.
         for _ in len..varnum {
@@ -553,6 +554,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         &mut self,
         constraint: &BlockConstraint<P::ScalarField>,
         has_valid_witness_assignments: bool,
+        driver: &mut T,
     ) {
         let mut init = Vec::with_capacity(constraint.init.len());
         for inp in constraint.init.iter() {
@@ -563,7 +565,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // Note: CallData/ReturnData not supported by Ultra; interpreted as ROM ops instead
         match constraint.type_ {
             BlockType::CallData | BlockType::ReturnData | BlockType::ROM => {
-                self.process_rom_operations(constraint, has_valid_witness_assignments, init)
+                self.process_rom_operations(constraint, has_valid_witness_assignments, init, driver)
             }
             BlockType::RAM => todo!("BLOCK RAM constraint"),
         }
@@ -706,6 +708,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             }
 
             let next_w4_wire = self.add_variable(next_w4_wire_value);
+
             constraint.last_mut().unwrap().d = next_w4_wire;
             constraint.last_mut().unwrap().d_scaling = -P::ScalarField::one();
 
@@ -800,7 +803,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         // Add block constraints
         for (i, constraint) in constraint_system.block_constraints.iter().enumerate() {
-            self.create_block_constraints(constraint, has_valid_witness_assignments);
+            self.create_block_constraints(constraint, has_valid_witness_assignments, driver);
             if collect_gates_per_opcode {
                 let avg_gates_per_opcode = gate_counter.compute_diff(self)
                     / constraint_system.original_opcode_indices.block_constraints[i].len();
@@ -1133,10 +1136,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         constraint: &BlockConstraint<P::ScalarField>,
         has_valid_witness_assignments: bool,
         init: Vec<FieldCT<P::ScalarField>>,
+        driver: &mut T,
     ) {
         let mut table = RomTable::new(init);
 
-        // TACEO TODO this is just implemented for the Plain backend
         for op in constraint.trace.iter() {
             assert_eq!(op.access_type, 0);
             let value = self.poly_to_field_ct(&op.value);
@@ -1148,13 +1151,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             // if witness are not assigned, then w will be zero and table[w] will work
             let w_value = if has_valid_witness_assignments {
                 // If witness are assigned, we use the correct value for w
-                index.get_value(self)
+                index.get_value(self, driver)
             } else {
-                P::ScalarField::zero()
+                T::AcvmType::from(P::ScalarField::zero())
             };
             let w = FieldCT::from_witness(w_value, self);
-            value.assert_equal(&table.index_field_ct(&w, self), self);
-            w.assert_equal(&index, self);
+
+            let extract = &table.index_field_ct(&w, self, driver);
+            value.assert_equal(extract, self, driver);
+            w.assert_equal(&index, self, driver);
         }
     }
 
@@ -1299,6 +1304,37 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.rom_arrays[rom_id].records.push(new_record);
     }
 
+    fn set_rom_element_pair(
+        &mut self,
+        rom_id: usize,
+        index_value: usize,
+        value_witnesses: [u32; 2],
+    ) {
+        assert!(self.rom_arrays.len() > rom_id);
+        let index_witness = if index_value == 0 {
+            self.zero_idx
+        } else {
+            self.put_constant_variable(P::ScalarField::from(index_value as u64))
+        };
+
+        assert!(self.rom_arrays[rom_id].state.len() > index_value);
+        assert!(self.rom_arrays[rom_id].state[index_value][0] == Self::UNINITIALIZED_MEMORY_RECORD);
+
+        let mut new_record = RomRecord {
+            index_witness,
+            value_column1_witness: value_witnesses[0],
+            value_column2_witness: value_witnesses[1],
+            index: index_value as u32,
+            record_witness: 0,
+            gate_index: 0,
+        };
+
+        self.rom_arrays[rom_id].state[index_value][0] = value_witnesses[0];
+        self.rom_arrays[rom_id].state[index_value][1] = value_witnesses[1];
+        self.create_rom_gate(&mut new_record);
+        self.rom_arrays[rom_id].records.push(new_record);
+    }
+
     fn create_rom_gate(&mut self, record: &mut RomRecord) {
         // Record wire value can't yet be computed
         record.record_witness = self.add_variable(T::AcvmType::from(P::ScalarField::zero()));
@@ -1330,6 +1366,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         assert!(self.rom_arrays[rom_id].state[index][0] != Self::UNINITIALIZED_MEMORY_RECORD);
         let value = self.get_variable(self.rom_arrays[rom_id].state[index][0] as usize);
         let value_witness = self.add_variable(value);
+
         let mut new_record = RomRecord {
             index_witness,
             value_column1_witness: value_witness,
@@ -1372,6 +1409,20 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 block.q_c().push(P::ScalarField::zero()); // read/write flag stored in q_c
                 block.q_arith().push(P::ScalarField::zero());
 
+                self.check_selector_length_consistency();
+            }
+            AuxSelectors::RomConsistencyCheck => {
+                // Memory read gate used with the sorted list of memory reads.
+                // Apply sorted memory read checks with the following additional check:
+                // 1. Assert that if index field across two gates does not change, the value field does not change.
+                // Used for ROM reads and RAM reads across write/read boundaries
+                block.q_1().push(P::ScalarField::one());
+                block.q_2().push(P::ScalarField::one());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                block.q_arith().push(P::ScalarField::zero());
                 self.check_selector_length_consistency();
             }
             _ => todo!("Aux selectors"),
@@ -1617,6 +1668,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         let left_witness_index = self.add_variable(T::AcvmType::from(left_witness_value));
         let right_witness_index = self.add_variable(T::AcvmType::from(right_witness_value));
+
         let dummy_accumulators = self.plookup.get_lookup_accumulators(
             MultiTableId::HonkDummyMulti,
             left_witness_value,
@@ -1951,7 +2003,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             }
 
             self.process_non_native_field_multiplications();
-            self.process_rom_arrays();
+            self.process_rom_arrays()?;
             self.process_ram_arrays();
             self.process_range_lists(driver)?;
             self.circuit_finalized = true;
@@ -1959,10 +2011,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
-    fn process_rom_arrays(&mut self) {
-        for _ in self.rom_arrays.iter() {
-            todo!("process rom array");
+    fn process_rom_arrays(&mut self) -> std::io::Result<()> {
+        for i in 0..self.rom_arrays.len() {
+            self.process_rom_array(i)?;
         }
+        Ok(())
     }
 
     fn process_ram_arrays(&mut self) {
@@ -1987,6 +2040,112 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             *des.1 = src;
         }
         Ok(())
+    }
+
+    fn process_rom_array(&mut self, rom_id: usize) -> std::io::Result<()> {
+        let read_tag = self.get_new_tag(); // current_tag + 1;
+        let sorted_list_tag = self.get_new_tag(); // current_tag + 2;
+        self.create_tag(read_tag, sorted_list_tag);
+        self.create_tag(sorted_list_tag, read_tag);
+
+        // Make sure that every cell has been initialized
+        for i in 0..self.rom_arrays[rom_id].state.len() {
+            if self.rom_arrays[rom_id].state[i][0] == Self::UNINITIALIZED_MEMORY_RECORD {
+                self.set_rom_element_pair(rom_id, i, [self.zero_idx, self.zero_idx]);
+            }
+        }
+        self.rom_arrays[rom_id].records.sort();
+        let records = self.rom_arrays[rom_id].records.clone();
+        for record in records {
+            let index = record.index;
+            let value1 = self.get_variable(record.value_column1_witness.try_into().unwrap());
+            let value2 = self.get_variable(record.value_column2_witness.try_into().unwrap());
+            let index_witness = self.add_variable(T::AcvmType::from(P::ScalarField::from(index)));
+
+            let value1_witness = self.add_variable(value1);
+
+            let value2_witness = self.add_variable(value2);
+
+            let mut sorted_record = RomRecord {
+                index_witness,
+                value_column1_witness: value1_witness,
+                value_column2_witness: value2_witness,
+                index,
+                record_witness: 0,
+                gate_index: 0,
+            };
+            self.create_sorted_rom_gate(&mut sorted_record);
+
+            self.assign_tag(record.record_witness, read_tag);
+            self.assign_tag(sorted_record.record_witness, sorted_list_tag);
+
+            // For ROM/RAM gates, the 'record' wire value (wire column 4) is a linear combination of the first 3 wire
+            // values. However...the record value uses the random challenge 'eta', generated after the first 3 wires are
+            // committed to. i.e. we can't compute the record witness here because we don't know what `eta` is! Take the
+            // gate indices of the two rom gates (original read gate + sorted gate) and store in `memory_records`. Once
+            // we
+            // generate the `eta` challenge, we'll use `memory_records` to figure out which gates need a record wire
+            // value
+            // to be computed.
+            // record (w4) = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag (0 for reads, 1 for writes)
+            // Separate containers used to store gate indices of reads and writes. Need to differentiate because of
+            // `read_write_flag` (N.B. all ROM accesses are considered reads. Writes are for RAM operations)
+            self.memory_read_records
+                .push(sorted_record.gate_index as u32);
+            self.memory_read_records.push(record.gate_index as u32);
+        }
+        // One of the checks we run on the sorted list, is to validate the difference between
+        // the index field across two gates is either 0 or 1.
+        // If we add a dummy gate at the end of the sorted list, where we force the first wire to
+        // equal `m + 1`, where `m` is the maximum allowed index in the sorted list,
+        // we have validated that all ROM reads are correctly constrained
+        let max_index_value = self.rom_arrays[rom_id].state.len() as u64;
+        let max_index: u32 =
+            self.add_variable(T::AcvmType::from(P::ScalarField::from(max_index_value)));
+
+        // TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This was formerly a single arithmetic gate. A
+        // dummy gate has been added to allow the previous gate to access the required wire data via shifts, allowing the
+        // arithmetic gate to occur out of sequence.
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.aux,
+            max_index,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+        );
+        self.create_big_add_gate(
+            &AddQuad {
+                a: max_index,
+                b: self.zero_idx,
+                c: self.zero_idx,
+                d: self.zero_idx,
+                a_scaling: P::ScalarField::one(),
+                b_scaling: P::ScalarField::zero(),
+                c_scaling: P::ScalarField::zero(),
+                d_scaling: P::ScalarField::zero(),
+                const_scaling: -P::ScalarField::from(max_index_value),
+            },
+            false,
+        );
+        // N.B. If the above check holds, we know the sorted list begins with an index value of 0,
+        // because the first cell is explicitly initialized using zero_idx as the index field.
+        Ok(())
+    }
+    fn create_sorted_rom_gate(&mut self, record: &mut RomRecord) {
+        record.record_witness = self.add_variable(T::AcvmType::from(P::ScalarField::zero()));
+
+        self.apply_aux_selectors(AuxSelectors::RomConsistencyCheck);
+        self.blocks.aux.populate_wires(
+            record.index_witness,
+            record.value_column1_witness,
+            record.value_column2_witness,
+            record.record_witness,
+        );
+
+        // Note: record the index into the block that contains the RAM/ROM gates
+        record.gate_index = self.blocks.aux.len() - 1;
+        self.num_gates += 1;
     }
 
     fn process_range_list(&mut self, list: &mut RangeList, driver: &mut T) -> std::io::Result<()> {
@@ -2048,7 +2207,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             let promoted = T::AcvmType::from(sorted_value);
             let index = self.add_variable(promoted);
             self.assign_tag(index, list.tau_tag);
-
             indices.push(index);
         }
 
@@ -2200,9 +2358,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
     fn create_new_range_constraint(&mut self, variable_index: u32, target_range: u64) {
         // We ignore this check because it is definitely more expensive in MPC, the proof will just not verify if this constraint is not given
-        // if (uint256_t(this->get_variable(variable_index)).data[0] > target_range) {
-        //     if (!this->failed()) {
-        //         this->failure(msg);
+        // if (uint256_t(self.get_variable(variable_index)).data[0] > target_range) {
+        //     if (!self.failed()) {
+        //         self.failure(msg);
         //     }
         // }
         #[expect(clippy::map_entry)] // Required due to borrowing self twice otherwise
@@ -2274,7 +2432,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // if val.msb() >= num_bits && !self.failed() {
         //     self.failure(msg);
         // }
-
         let sublimb_mask: u64 = (1u64 << target_range_bitnum) - 1;
         // /**
         //  * AZTEC TODO: Support this commented-out code!
@@ -2383,27 +2540,23 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 target_range_bitnum * (3 * i + 2),
             ];
 
-            let term0 = T::acvm_mul_with_public(
+            let mut subtrahend = T::acvm_mul_with_public(
                 driver,
                 P::ScalarField::from(BigUint::one() << shifts[0]),
                 round_sublimbs[0].clone(),
             );
-
-            let term1 = T::acvm_mul_with_public(
+            let term0 = T::acvm_mul_with_public(
                 driver,
                 P::ScalarField::from(BigUint::one() << shifts[1]),
                 round_sublimbs[1].clone(),
             );
-
-            let sub1 = T::acvm_sub(driver, term0, term1);
-
-            let term2 = T::acvm_mul_with_public(
+            let term1 = T::acvm_mul_with_public(
                 driver,
                 P::ScalarField::from(BigUint::one() << shifts[2]),
                 round_sublimbs[2].clone(),
             );
-
-            let subtrahend = T::acvm_sub(driver, sub1, term2);
+            T::add_assign(driver, &mut subtrahend, term0);
+            T::add_assign(driver, &mut subtrahend, term1);
 
             let new_accumulator = T::acvm_sub(driver, accumulator.clone(), subtrahend);
             self.create_big_add_gate(
@@ -2420,7 +2573,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 },
                 i != num_limb_triples - 1,
             );
-
             accumulator_idx = self.add_variable(new_accumulator.clone());
 
             accumulator = new_accumulator;
