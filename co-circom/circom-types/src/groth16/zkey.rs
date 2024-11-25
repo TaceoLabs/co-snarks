@@ -33,6 +33,8 @@ use ark_serialize::CanonicalDeserialize;
 
 use std::io::Read;
 
+use rayon::prelude::*;
+
 use crate::{
     binfile::{BinFile, ZKeyParserError, ZKeyParserResult},
     traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
@@ -123,11 +125,12 @@ where
         let header = HeaderGroth::<P>::read(&mut binfile.take_section(2), check)?;
         let n_vars = header.n_vars;
         let n_public = header.n_public;
-        let domain_size = header.domain_size;
+        let domain_size = usize::try_from(header.domain_size).expect("fits into usize");
 
         // parse proving key
 
         let ic_section = binfile.take_section(3);
+        let matrices_section = binfile.take_section(4);
         let a_section = binfile.take_section(5);
         let b_g1_section = binfile.take_section(6);
         let b_g2_section = binfile.take_section(7);
@@ -140,6 +143,7 @@ where
         let mut b_g2_query = None;
         let mut l_query = None;
         let mut h_query = None;
+        let mut matrices = None;
 
         tracing::debug!("parsing zkey sections with rayon...");
         rayon::scope(|s| {
@@ -149,55 +153,17 @@ where
             s.spawn(|_| b_g2_query = Some(Self::b_g2_query(n_vars, b_g2_section, check)));
             s.spawn(|_| l_query = Some(Self::l_query(n_vars - n_public - 1, l_section, check)));
             s.spawn(|_| h_query = Some(Self::h_query(domain_size as usize, h_section, check)));
+            s.spawn(|_| {
+                matrices = Some(Self::constraint_matrices(
+                    domain_size,
+                    n_public,
+                    n_vars,
+                    matrices_section,
+                ))
+            });
         });
         tracing::debug!("we are done with parsing sections!");
 
-        // parse matrices
-
-        tracing::debug!("reading matrices...");
-        let mut matrices_section = binfile.take_section(4);
-
-        // this function (an all following uses) assumes that values are encoded in little-endian
-        let num_coeffs = u32::deserialize_uncompressed(&mut matrices_section)?;
-
-        // instantiate AB
-        let mut matrices = vec![vec![vec![]; domain_size as usize]; 2];
-        let mut max_constraint_index = 0;
-        for _ in 0..num_coeffs {
-            let matrix = u32::deserialize_uncompressed(&mut matrices_section)?;
-            let constraint = u32::deserialize_uncompressed(&mut matrices_section)?;
-            let signal = u32::deserialize_uncompressed(&mut matrices_section)?;
-
-            let value = P::ScalarField::from_reader_for_groth16_zkey(&mut matrices_section)?;
-            max_constraint_index = std::cmp::max(max_constraint_index, constraint);
-            matrices[matrix as usize][constraint as usize].push((value, signal as usize));
-        }
-
-        let num_constraints = max_constraint_index as usize - n_public;
-        // Remove the public input constraints, Arkworks adds them later
-        matrices.iter_mut().for_each(|m| {
-            m.truncate(num_constraints);
-        });
-
-        // This is taken from Arkworks' to_matrices() function
-        let a = matrices[0].clone();
-        let b = matrices[1].clone();
-        let a_num_non_zero: usize = a.iter().map(|lc| lc.len()).sum();
-        let b_num_non_zero: usize = b.iter().map(|lc| lc.len()).sum();
-
-        let matrices = ConstraintMatrices {
-            num_instance_variables: n_public + 1,
-            num_witness_variables: n_vars - n_public,
-            num_constraints,
-
-            a_num_non_zero,
-            b_num_non_zero,
-            c_num_non_zero: 0,
-
-            a,
-            b,
-            c: vec![],
-        };
         // this thread automatically joins on the rayon scope, therefore we can
         // only be here if the scope finished.
         let vk = VerifyingKey {
@@ -220,7 +186,7 @@ where
             b_g2_query: b_g2_query.unwrap()?,
             h_query: h_query.unwrap()?,
             l_query: l_query.unwrap()?,
-            matrices,
+            matrices: matrices.unwrap()?,
             vk,
         })
     }
@@ -272,6 +238,56 @@ where
         check: CheckElement,
     ) -> ZKeyParserResult<Vec<P::G1Affine>> {
         Ok(P::g1_vec_from_reader(reader, n_vars, check)?)
+    }
+
+    fn constraint_matrices<R: Read>(
+        domain_size: usize,
+        n_public: usize,
+        n_vars: usize,
+        mut matrices_section: R,
+    ) -> ZKeyParserResult<ConstraintMatrices<P::ScalarField>> {
+        // this function (an all following uses) assumes that values are encoded in little-endian
+        let num_coeffs = u32::deserialize_uncompressed(&mut matrices_section)?;
+
+        // instantiate AB
+        let mut matrices = vec![vec![vec![]; domain_size]; 2];
+        let mut max_constraint_index = 0;
+        for _ in 0..num_coeffs {
+            let matrix = u32::deserialize_uncompressed(&mut matrices_section)?;
+            let constraint = u32::deserialize_uncompressed(&mut matrices_section)?;
+            let signal = u32::deserialize_uncompressed(&mut matrices_section)?;
+
+            let value = P::ScalarField::from_reader_for_groth16_zkey(&mut matrices_section)?;
+            max_constraint_index = std::cmp::max(max_constraint_index, constraint);
+            matrices[matrix as usize][constraint as usize].push((value, signal as usize));
+        }
+
+        let num_constraints = max_constraint_index as usize - n_public;
+        // Remove the public input constraints, Arkworks adds them later
+        matrices.iter_mut().for_each(|m| {
+            m.truncate(num_constraints);
+        });
+
+        // This is taken from Arkworks' to_matrices() function
+        let a = matrices[0].clone();
+        let b = matrices[1].clone();
+        let a_num_non_zero: usize = a.par_iter().map(|lc| lc.len()).sum();
+        let b_num_non_zero: usize = b.par_iter().map(|lc| lc.len()).sum();
+
+        let matrices = ConstraintMatrices {
+            num_instance_variables: n_public + 1,
+            num_witness_variables: n_vars - n_public,
+            num_constraints,
+
+            a_num_non_zero,
+            b_num_non_zero,
+            c_num_non_zero: 0,
+
+            a,
+            b,
+            c: vec![],
+        };
+        Ok(matrices)
     }
 }
 
