@@ -41,7 +41,7 @@ pub mod config;
 // TODO get this from network config
 const STREAMS_PER_CONN: usize = 8;
 
-/// Type alias for a [rustls::TcpStream] over a [TcpStream].
+/// Type alias for a [tokio_rustls::TlsStream] over a [TcpStream].
 type TlsStream = tokio_rustls::TlsStream<TcpStream>;
 
 /// A duplex TLS stream that uses one stream for sending and one for receiving.

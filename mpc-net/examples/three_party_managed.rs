@@ -51,10 +51,7 @@ async fn main() -> Result<()> {
             assert!(b.iter().all(|&x| x == my_id as u8))
         }
     }
-    // drop handles so we can shutdown
-    drop(managed_channels);
-    // wait until all send and recv taks are done
-    network.shutdown().await?;
+
     network.print_connection_stats(&mut std::io::stdout())?;
 
     Ok(())

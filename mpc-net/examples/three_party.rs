@@ -10,7 +10,6 @@ use mpc_net::{
     config::{NetworkConfig, NetworkConfigFile},
     MpcNetworkHandler,
 };
-use tokio::io::AsyncWriteExt;
 
 #[derive(Parser)]
 struct Args {
@@ -48,12 +47,6 @@ async fn main() -> Result<()> {
             println!("received {}, should be {}", b[0], my_id as u8);
             assert!(b.iter().all(|&x| x == my_id as u8))
         }
-    }
-
-    // make sure all write are done by shutting down all streams
-    for (_, channel) in channels.into_iter() {
-        let (write, _) = channel.split();
-        write.into_inner().shutdown().await?;
     }
 
     network.print_connection_stats(&mut std::io::stdout())?;
