@@ -115,8 +115,14 @@ impl<F: PrimeField> From<Rep3AcvmType<F>> for Rep3BrilligType<F> {
 }
 
 impl<F: PrimeField> From<Rep3BrilligType<F>> for Rep3AcvmType<F> {
-    fn from(_value: Rep3BrilligType<F>) -> Self {
-        todo!()
+    fn from(value: Rep3BrilligType<F>) -> Self {
+        match value {
+            Rep3BrilligType::Public(public) => Rep3AcvmType::Public(public.into_field()),
+            Rep3BrilligType::Shared(shared) => {
+                let shared = Rep3BrilligType::into_arithemtic_share(shared);
+                Rep3AcvmType::Shared(shared)
+            }
+        }
     }
 }
 
@@ -133,8 +139,8 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(Rep3BrilligDriver::with_io_context(self.io_context.fork()?))
     }
 
-    fn from_brillig_result(_brillig_result: Vec<Rep3BrilligType<F>>) -> Vec<Self::AcvmType> {
-        todo!()
+    fn from_brillig_result(brillig_result: Vec<Rep3BrilligType<F>>) -> Vec<Self::AcvmType> {
+        brillig_result.into_iter().map(Rep3AcvmType::from).collect()
     }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {
