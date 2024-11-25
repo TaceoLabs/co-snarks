@@ -29,8 +29,6 @@ pub enum A2BType {
     /// The arithmetic-to-binary conversion is done by "Arithmetic to Yao" followed by "Yao to Binary", while the binary-to-arithmetic conversion is done using "Binary to Yao" followed by "Yao to Arithmetic". This process has a low number of communication rounds with more communicated bytes.
     #[default]
     Yao,
-    /// This process is similar to `Yao`, but the garbled circuits are implemented by sending/receiving network packages as soon as they are computed/required, while Yao sends the whole circuit in one go.
-    StreamingYao,
 }
 
 /// Depending on the `A2BType` of the io_context, this function selects the appropriate implementation for the arithmetic-to-binary conversion.
@@ -41,7 +39,6 @@ pub fn a2b_selector<F: PrimeField, N: Rep3Network>(
     match io_context.a2b_type {
         A2BType::Direct => a2b(x, io_context),
         A2BType::Yao => a2y2b(x, io_context),
-        A2BType::StreamingYao => a2y2b_streaming(x, io_context),
     }
 }
 
@@ -53,7 +50,6 @@ pub fn b2a_selector<F: PrimeField, N: Rep3Network>(
     match io_context.a2b_type {
         A2BType::Direct => b2a(x, io_context),
         A2BType::Yao => b2y2a(x, io_context),
-        A2BType::StreamingYao => b2y2a_streaming(x, io_context),
     }
 }
 
