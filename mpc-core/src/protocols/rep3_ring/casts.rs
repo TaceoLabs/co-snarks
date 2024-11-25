@@ -37,10 +37,6 @@ where
     match io_context.a2b_type {
         A2BType::Direct => cast_a2b(x, io_context),
         A2BType::Yao => cast_gc(x, io_context),
-        A2BType::StreamingYao => {
-            tracing::warn!("StreamingYao not implemented for ring casts, falling back to Yao");
-            cast_gc(x, io_context)
-        }
     }
 }
 
@@ -55,12 +51,6 @@ where
     match io_context.a2b_type {
         A2BType::Direct => ring_to_field_a2b(x, io_context),
         A2BType::Yao => Ok(yao::ring_to_field_many(&[x], io_context)?[0]),
-        A2BType::StreamingYao => {
-            tracing::warn!(
-                "StreamingYao not implemented for ring_to_field casts, falling back to Yao"
-            );
-            Ok(yao::ring_to_field_many(&[x], io_context)?[0])
-        }
     }
 }
 
@@ -75,12 +65,6 @@ where
     match io_context.a2b_type {
         A2BType::Direct => field_to_ring_a2b(x, io_context),
         A2BType::Yao => Ok(yao::field_to_ring_many(&[x], io_context)?[0]),
-        A2BType::StreamingYao => {
-            tracing::warn!(
-                "StreamingYao not implemented for field_to_ring casts, falling back to Yao"
-            );
-            Ok(yao::field_to_ring_many(&[x], io_context)?[0])
-        }
     }
 }
 

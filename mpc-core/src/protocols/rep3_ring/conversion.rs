@@ -38,7 +38,6 @@ where
     match io_context.a2b_type {
         A2BType::Direct => a2b(x, io_context),
         A2BType::Yao => a2y2b(x, io_context),
-        A2BType::StreamingYao => a2y2b_streaming(x, io_context),
     }
 }
 
@@ -53,7 +52,6 @@ where
     match io_context.a2b_type {
         A2BType::Direct => b2a(x, io_context),
         A2BType::Yao => b2y2a(x, io_context),
-        A2BType::StreamingYao => b2y2a_streaming(x, io_context),
     }
 }
 
