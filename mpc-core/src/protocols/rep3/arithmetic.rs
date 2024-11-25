@@ -140,7 +140,7 @@ pub fn local_mul_vec<F: PrimeField>(
         .zip_eq(rhs.par_iter())
         .zip_eq(masking_fes.par_iter())
         .with_min_len(1024)
-        .map(|((lhs, rhs), masking)| lhs.a * rhs.a + lhs.a * rhs.b + lhs.b * rhs.a + masking)
+        .map(|((lhs, rhs), masking)| lhs * rhs + masking)
         .collect()
 }
 
@@ -175,12 +175,7 @@ pub fn mul_vec<F: PrimeField, N: Rep3Network>(
     // If you want a larger one use local_mul_vec and then io_mul_vec.
     debug_assert_eq!(lhs.len(), rhs.len());
     let local_a = izip!(lhs.iter(), rhs.iter())
-        .map(|(lhs, rhs)| {
-            lhs.a * rhs.a
-                + lhs.a * rhs.b
-                + lhs.b * rhs.a
-                + io_context.rngs.rand.masking_field_element::<F>()
-        })
+        .map(|(lhs, rhs)| lhs * rhs + io_context.rngs.rand.masking_field_element::<F>())
         .collect_vec();
     io_mul_vec(local_a, io_context)
 }
@@ -358,7 +353,7 @@ pub fn mul_open_vec<F: PrimeField, N: Rep3Network>(
 
 /// Generate a random [`FieldShare`].
 pub fn rand<F: PrimeField, N: Rep3Network>(io_context: &mut IoContext<N>) -> FieldShare<F> {
-    let (a, b) = io_context.random_fes();
+    let (a, b) = io_context.rngs.rand.random_fes();
     FieldShare::new(a, b)
 }
 
@@ -428,7 +423,6 @@ pub fn pow_public<F: PrimeField, N: Rep3Network>(
     let mut shared: FieldShare<F> = shared;
     while !public.is_zero() {
         if public.bit(0) {
-            public -= 1u64;
             res = mul(res, shared, io_context)?;
         }
         shared = mul(shared, shared, io_context)?;

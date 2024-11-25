@@ -125,6 +125,33 @@ impl GarbledCircuits {
         Ok((result, c))
     }
 
+    /// Binary addition. Returns the result and the carry.
+    fn bin_addition_no_carry<G: FancyBinary>(
+        g: &mut G,
+        xs: &[G::Item],
+        ys: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        debug_assert_eq!(xs.len(), ys.len());
+        let mut result = Vec::with_capacity(xs.len());
+
+        let (mut s, mut c) = Self::half_adder(g, &xs[0], &ys[0])?;
+        result.push(s);
+
+        for (x, y) in xs.iter().zip(ys.iter()).skip(1).take(xs.len() - 2) {
+            let res = Self::full_adder(g, x, y, &c)?;
+            s = res.0;
+            c = res.1;
+            result.push(s);
+        }
+
+        // Finally, just the xor of the full_adder
+        let z1 = g.xor(xs.last().unwrap(), ys.last().unwrap())?;
+        let s = g.xor(&z1, &c)?;
+        result.push(s);
+
+        Ok(result)
+    }
+
     /// Binary subtraction. Returns the result and whether it underflowed.
     /// I.e., calculates 2^k + x1 - x2
     #[expect(dead_code, clippy::type_complexity)]
@@ -219,7 +246,7 @@ impl GarbledCircuits {
         Ok(result)
     }
 
-    /// Adds two field shared field elements mod p. The field elements are encoded as Yao shared wires. The output is only of size outlen.
+    /// Adds two shared field elements mod p. The field elements are encoded as Yao shared wires. The output is only of size outlen.
     fn adder_mod_p_with_output_size<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -237,7 +264,7 @@ impl GarbledCircuits {
         Ok(result)
     }
 
-    /// Adds two field shared field elements mod p. The field elements are encoded as Yao shared wires
+    /// Adds two shared field elements mod p. The field elements are encoded as Yao shared wires
     pub fn adder_mod_p<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -251,6 +278,18 @@ impl GarbledCircuits {
             wires_b.wires(),
             bitlen,
         )?;
+        Ok(BinaryBundle::new(res))
+    }
+
+    /// Adds two shared ring elements mod 2^k. The ring elements are encoded as Yao shared wires
+    pub fn adder_mod_2k<G: FancyBinary>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let bitlen = wires_a.size();
+        debug_assert_eq!(bitlen, wires_b.size());
+        let res = Self::bin_addition_no_carry(g, wires_a.wires(), wires_b.wires())?;
         Ok(BinaryBundle::new(res))
     }
 

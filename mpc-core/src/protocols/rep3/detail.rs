@@ -44,16 +44,15 @@ fn kogge_stone_inner<F: PrimeField, N: Rep3Network>(
     bitlen: usize,
 ) -> IoResult<Rep3BigUintShare<F>> {
     let d = ceil_log2(bitlen);
-    let s_ = p.to_owned();
-    let mut p = p.to_owned();
+    let s_ = p;
+    let mut p = s_.to_owned();
     let mut g = g.to_owned();
     for i in 0..d {
+        // The loop looks slightly different to the one for rep3 rings to have the and gates at the LSBs of the storage
         let shift = 1 << i;
-        let mut p_ = p.to_owned();
-        let mut g_ = g.to_owned();
         let mask = (BigUint::from(1u64) << (bitlen - shift)) - BigUint::one();
-        p_ &= &mask;
-        g_ &= &mask;
+        let p_ = &p & &mask;
+        let g_ = &g & &mask;
         let p_shift = &p >> shift;
 
         // TODO: Make and more communication efficient, ATM we send the full element for each level, even though they reduce in size
@@ -63,7 +62,7 @@ fn kogge_stone_inner<F: PrimeField, N: Rep3Network>(
         g ^= &(r1 << shift);
     }
     g <<= 1;
-    g ^= &s_;
+    g ^= s_;
     Ok(g)
 }
 
@@ -148,10 +147,10 @@ fn and_twice<F: PrimeField, N: Rep3Network>(
 
     let local_a1 = (b1 & a) ^ mask1;
     let local_a2 = (a & b2) ^ mask2;
-    io_context.network.send_next(local_a1.to_owned())?;
-    io_context.network.send_next(local_a2.to_owned())?;
-    let local_b1 = io_context.network.recv_prev()?;
-    let local_b2 = io_context.network.recv_prev()?;
+    io_context
+        .network
+        .send_next([local_a1.to_owned(), local_a2.to_owned()])?;
+    let [local_b1, local_b2] = io_context.network.recv_prev()?;
 
     let r1 = Rep3BigUintShare {
         a: local_a1,

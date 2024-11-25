@@ -109,6 +109,26 @@ impl Rep3Rand {
         (a, b)
     }
 
+    /// Generate a masking element
+    pub fn masking_element<T>(&mut self) -> T
+    where
+        Standard: Distribution<T>,
+        T: std::ops::Sub<Output = T>,
+    {
+        let (a, b) = self.random_elements::<T>();
+        a - b
+    }
+
+    /// Generate two random elements
+    pub fn random_elements<T>(&mut self) -> (T, T)
+    where
+        Standard: Distribution<T>,
+    {
+        let a = self.rng1.gen();
+        let b = self.rng2.gen();
+        (a, b)
+    }
+
     // TODO do not collect the values
     /// Generate a vector of masking field elements
     pub fn masking_field_elements_vec<F: PrimeField>(&mut self, len: usize) -> Vec<F> {
@@ -129,6 +149,24 @@ impl Rep3Rand {
             .zip_eq(b.par_chunks(field_size))
             .with_min_len(512)
             .map(|(a, b)| F::from_be_bytes_mod_order(a) - F::from_be_bytes_mod_order(b))
+            .collect()
+    }
+
+    // TODO do not collect the values
+    /// Generate a vector of masking elements
+    pub fn masking_elements_vec<T>(&mut self, len: usize) -> Vec<T>
+    where
+        Standard: Distribution<T>,
+        T: Send + Sync + std::ops::Sub<Output = T>,
+    {
+        let (a, b) = rayon::join(
+            || (0..len).map(|_| self.rng1.gen()).collect::<Vec<_>>(),
+            || (0..len).map(|_| self.rng2.gen()).collect::<Vec<_>>(),
+        );
+        a.into_par_iter()
+            .zip_eq(b.into_par_iter())
+            .with_min_len(512)
+            .map(|(a, b)| a - b)
             .collect()
     }
 
@@ -168,6 +206,22 @@ impl Rep3Rand {
         let val = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
         let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
         val & &mask
+    }
+
+    /// Generate a random `T` from rng1
+    pub fn random_element_rng1<T>(&mut self) -> T
+    where
+        Standard: Distribution<T>,
+    {
+        self.rng1.gen()
+    }
+
+    /// Generate a random `T` from rng1
+    pub fn random_element_rng2<T>(&mut self) -> T
+    where
+        Standard: Distribution<T>,
+    {
+        self.rng2.gen()
     }
 
     /// Generate a seed from each rng
@@ -215,6 +269,21 @@ impl Rep3RandBitComp {
         let b = F::rand(&mut self.rng2);
         let c = if let Some(rng3) = &mut self.rng3 {
             F::rand(rng3)
+        } else {
+            unreachable!()
+        };
+        (a, b, c)
+    }
+
+    /// Generate three random field elements
+    pub fn random_elements_3keys<T>(&mut self) -> (T, T, T)
+    where
+        Standard: Distribution<T>,
+    {
+        let a = self.rng1.gen();
+        let b = self.rng2.gen();
+        let c = if let Some(rng3) = &mut self.rng3 {
+            rng3.gen()
         } else {
             unreachable!()
         };

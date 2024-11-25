@@ -1,6 +1,7 @@
 use std::{fmt, io};
 
 use ark_ff::PrimeField;
+use co_brillig::mpc::BrilligDriver;
 use mpc_core::lut::LookupTableProvider;
 
 pub(super) mod plain;
@@ -12,14 +13,23 @@ pub(super) mod shamir; // Does not support everything, but basic circuits can be
 pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     type Lookup: LookupTableProvider<F>;
     type ArithmeticShare: Clone;
-    /// A type representing the values encountered during Circom compilation. It should at least contain public field elements and shared values.
+    /// A type representing the values encountered during Noir compilation. It should at least contain public field elements and shared values.
     type AcvmType: Clone
         + Default
         + fmt::Debug
         + fmt::Display
         + From<Self::ArithmeticShare>
         + From<F>
-        + PartialEq;
+        + PartialEq
+        + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
+
+    type BrilligDriver: BrilligDriver<F>;
+
+    fn init_brillig_driver(&self) -> Self::BrilligDriver;
+
+    fn from_brillig_result(
+        brillig_result: Vec<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>,
+    ) -> Vec<Self::AcvmType>;
 
     /// Returns F::zero() as a ACVM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
     fn public_zero() -> Self::AcvmType {

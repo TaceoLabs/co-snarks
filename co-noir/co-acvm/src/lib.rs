@@ -2,7 +2,6 @@
 
 pub mod mpc;
 pub mod solver;
-
 pub use mpc::plain::PlainAcvmSolver;
 pub use mpc::rep3::{Rep3AcvmSolver, Rep3AcvmType};
 pub use mpc::shamir::{ShamirAcvmSolver, ShamirAcvmType};

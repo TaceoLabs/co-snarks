@@ -3,6 +3,7 @@ use std::io;
 use std::marker::PhantomData;
 
 use ark_ff::{One, PrimeField};
+use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
 use mpc_core::lut::{LookupTableProvider, PlainLookupTableProvider};
 use num_bigint::BigUint;
 
@@ -21,10 +22,21 @@ impl<F: PrimeField> PlainAcvmSolver<F> {
         }
     }
 }
+
 impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     type Lookup = PlainLookupTableProvider<F>;
     type ArithmeticShare = F;
     type AcvmType = F;
+
+    type BrilligDriver = PlainBrilligDriver<F>;
+
+    fn init_brillig_driver(&self) -> Self::BrilligDriver {
+        PlainBrilligDriver::default()
+    }
+
+    fn from_brillig_result(brillig_result: Vec<PlainBrilligType<F>>) -> Vec<Self::AcvmType> {
+        brillig_result.into_iter().map(|v| v.into_field()).collect()
+    }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {
         a.is_zero()
