@@ -452,18 +452,24 @@ impl<F: PrimeField> RomTable<F> {
         &mut self,
         index: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
     ) -> FieldCT<F> {
         if index.is_constant() {
-            let val: BigUint = index.get_value(builder).into();
+            let value = T::get_public(&index.get_value(builder, driver))
+                .expect("Constant should be public");
+            let val: BigUint = value.into();
             let val: usize = val.try_into().expect("Invalid index");
             return self[val].to_owned();
         }
-        self.initialize_table(builder);
+        self.initialize_table(builder, driver);
 
-        let val: BigUint = index.get_value(builder).into();
+        // TACEO TODO this is only implemented for the plain backend...
+        let value = T::get_public(&index.get_value(builder, driver))
+            .expect("TODO: Only implemented for plain");
+        let val: BigUint = value.into();
         assert!(val < BigUint::from(self.length));
 
-        let witness_index = index.normalize(builder).get_witness_index();
+        let witness_index = index.normalize(builder, driver).get_witness_index();
         let output_idx = builder
             .read_rom_array(self.rom_id, witness_index)
             .expect("Not implemented for other cases");
@@ -476,6 +482,7 @@ impl<F: PrimeField> RomTable<F> {
     >(
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
     ) {
         if self.initialized {
             return;
@@ -483,12 +490,13 @@ impl<F: PrimeField> RomTable<F> {
         // populate table. Table entries must be normalized and cannot be constants
         for entry in self.raw_entries.iter() {
             if entry.is_constant() {
-                let val = entry.get_value(builder);
+                let val = T::get_public(&entry.get_value(builder, driver))
+                    .expect("Constant should be public");
                 self.entries.push(FieldCT::from_witness_index(
                     builder.put_constant_variable(val),
                 ));
             } else {
-                self.entries.push(entry.normalize(builder));
+                self.entries.push(entry.normalize(builder, driver));
             }
         }
         self.rom_id = builder.create_rom_array(self.length);
@@ -550,14 +558,6 @@ pub(crate) struct FieldCT<F: PrimeField> {
 impl<F: PrimeField> FieldCT<F> {
     const IS_CONSTANT: u32 = u32::MAX;
 
-    pub(crate) fn from_field(value: F) -> Self {
-        Self {
-            additive_constant: value,
-            multiplicative_constant: F::one(),
-            witness_index: Self::IS_CONSTANT,
-        }
-    }
-
     pub(crate) fn from_witness_index(witness_index: u32) -> Self {
         Self {
             additive_constant: F::zero(),
@@ -566,24 +566,15 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    // TACEO TODO this is just implemented for the plain backend
     pub(crate) fn from_witness<
         P: Pairing<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
-        input: P::ScalarField,
+        input: T::AcvmType,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> Self {
-        let witness = WitnessCT::from_field(input, builder);
-        Self::from_witness_ct(witness)
-    }
-
-    pub(crate) fn from_witness_ct(value: WitnessCT<F>) -> Self {
-        Self {
-            additive_constant: F::zero(),
-            multiplicative_constant: F::one(),
-            witness_index: value.witness_index,
-        }
+        let witness = WitnessCT::from_acvm_type(input, builder);
+        Self::from(witness)
     }
 
     pub(crate) fn get_value<
@@ -592,13 +583,15 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         &self,
         builder: &GenericUltraCircuitBuilder<P, T>,
-    ) -> F {
+        driver: &mut T,
+    ) -> T::AcvmType {
         if self.witness_index != Self::IS_CONSTANT {
-            let variable = T::get_public(&builder.get_variable(self.witness_index as usize))
-                .expect("Not implemented for other cases"); // TACEO TODO this is just implemented for the Plain backend
-            self.multiplicative_constant * variable + self.additive_constant
+            let variable = builder.get_variable(self.witness_index as usize);
+            let mut res = driver.acvm_mul_with_public(self.multiplicative_constant, variable);
+            driver.acvm_add_assign_with_public(self.additive_constant, &mut res);
+            res
         } else {
-            self.additive_constant.to_owned()
+            T::AcvmType::from(self.additive_constant.to_owned())
         }
     }
 
@@ -620,20 +613,27 @@ impl<F: PrimeField> FieldCT<F> {
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
     ) {
         if self.is_constant() && other.is_constant() {
-            assert_eq!(self.get_value(builder), other.get_value(builder));
+            let left =
+                T::get_public(&self.get_value(builder, driver)).expect("Constant should be public");
+            let right = T::get_public(&other.get_value(builder, driver))
+                .expect("Constant should be public");
+            assert_eq!(left, right);
         } else if self.is_constant() {
-            let right = other.normalize(builder);
-            let left = self.get_value(builder);
+            let right = other.normalize(builder, driver);
+            let left =
+                T::get_public(&self.get_value(builder, driver)).expect("Constant should be public");
             builder.assert_equal_constant(right.witness_index as usize, left);
         } else if other.is_constant() {
-            let left = self.normalize(builder);
-            let right = other.get_value(builder);
+            let left = self.normalize(builder, driver);
+            let right = T::get_public(&other.get_value(builder, driver))
+                .expect("Constant should be public");
             builder.assert_equal_constant(left.witness_index as usize, right);
         } else {
-            let left = self.normalize(builder);
-            let right = other.normalize(builder);
+            let left = self.normalize(builder, driver);
+            let right = other.normalize(builder, driver);
             builder.assert_equal(left.witness_index as usize, right.witness_index as usize);
         }
     }
@@ -645,6 +645,7 @@ impl<F: PrimeField> FieldCT<F> {
     fn normalize<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
     ) -> Self {
         if self.is_constant()
             || ((self.multiplicative_constant == F::one()) && (self.additive_constant == F::zero()))
@@ -657,11 +658,11 @@ impl<F: PrimeField> FieldCT<F> {
         // We need a new gate to enforce that the `result` was correctly calculated from `this`.
 
         let mut result = FieldCT::default();
-        let value = T::get_public(&builder.get_variable(self.witness_index as usize))
-            .expect("Not implemented for other cases"); // TACEO TODO this is just implemented for the Plain backend
-        let out = self.multiplicative_constant * value + self.additive_constant;
+        let value = builder.get_variable(self.witness_index as usize);
+        let mut out = driver.acvm_mul_with_public(self.multiplicative_constant, value);
+        driver.acvm_add_assign_with_public(self.additive_constant, &mut out);
 
-        result.witness_index = builder.add_variable(T::AcvmType::from(out));
+        result.witness_index = builder.add_variable(out);
         result.additive_constant = F::zero();
         result.multiplicative_constant = F::one();
 
@@ -685,7 +686,26 @@ impl<F: PrimeField> FieldCT<F> {
 
 impl<F: PrimeField> From<F> for FieldCT<F> {
     fn from(value: F) -> Self {
-        Self::from_field(value)
+        Self {
+            additive_constant: value,
+            multiplicative_constant: F::one(),
+            witness_index: Self::IS_CONSTANT,
+        }
+    }
+}
+
+impl<
+        F: PrimeField,
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    > From<WitnessCT<P, T>> for FieldCT<F>
+{
+    fn from(value: WitnessCT<P, T>) -> Self {
+        Self {
+            additive_constant: F::zero(),
+            multiplicative_constant: F::one(),
+            witness_index: value.witness_index,
+        }
     }
 }
 
@@ -699,31 +719,27 @@ impl<F: PrimeField> Default for FieldCT<F> {
     }
 }
 
-// TACEO TODO this is just implemented for the Plain backend
-pub(crate) struct WitnessCT<F: PrimeField> {
-    pub(crate) witness: F,
+pub(crate) struct WitnessCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+    pub(crate) witness: T::AcvmType,
     pub(crate) witness_index: u32,
 }
 
-impl<F: PrimeField> WitnessCT<F> {
-    const IS_CONSTANT: u32 = FieldCT::<F>::IS_CONSTANT;
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P, T> {
+    const IS_CONSTANT: u32 = FieldCT::<P::ScalarField>::IS_CONSTANT;
 
-    pub(crate) fn from_field<
-        P: Pairing<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        value: P::ScalarField,
+    pub(crate) fn from_acvm_type(
+        value: T::AcvmType,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> Self {
-        builder.add_variable(T::AcvmType::from(value));
+        let witness_index = builder.add_variable(value.to_owned());
         Self {
             witness: value,
-            witness_index: Self::IS_CONSTANT,
+            witness_index,
         }
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct RomRecord {
     pub(crate) index_witness: u32,
     pub(crate) value_column1_witness: u32,
@@ -731,6 +747,47 @@ pub(crate) struct RomRecord {
     pub(crate) index: u32,
     pub(crate) record_witness: u32,
     pub(crate) gate_index: usize,
+}
+
+impl RomRecord {
+    fn less_than(&self, other: &Self) -> bool {
+        self.index < other.index
+    }
+
+    fn equal(&self, other: &Self) -> bool {
+        self.index_witness == other.index_witness
+            && self.value_column1_witness == other.value_column1_witness
+            && self.value_column2_witness == other.value_column2_witness
+            && self.index == other.index
+            && self.record_witness == other.record_witness
+            && self.gate_index == other.gate_index
+    }
+}
+
+impl PartialEq for RomRecord {
+    fn eq(&self, other: &Self) -> bool {
+        self.equal(other)
+    }
+}
+
+impl Eq for RomRecord {}
+
+impl PartialOrd for RomRecord {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RomRecord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.less_than(other) {
+            Ordering::Less
+        } else if self.equal(other) {
+            Ordering::Equal
+        } else {
+            Ordering::Greater
+        }
+    }
 }
 
 #[derive(Default)]

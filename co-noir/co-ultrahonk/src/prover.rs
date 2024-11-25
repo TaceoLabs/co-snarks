@@ -60,7 +60,7 @@ impl<
         let oink = CoOink::new(&mut self.driver);
         let oink_result = oink.prove(&proving_key, &mut transcript)?;
 
-        let cicruit_size = proving_key.circuit_size;
+        let circuit_size = proving_key.circuit_size;
         let crs = proving_key.crs;
 
         let mut memory =
@@ -69,6 +69,6 @@ impl<
             Self::generate_gate_challenges(&mut transcript);
 
         let decider = CoDecider::new(self.driver, memory);
-        decider.prove(cicruit_size, &crs, transcript)
+        decider.prove(circuit_size, &crs, transcript)
     }
 }
