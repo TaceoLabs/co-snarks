@@ -70,7 +70,8 @@ pub trait IntRing2k:
     /// Casts this type to a BigUint
     fn cast_to_biguint(&self) -> BigUint;
 
-    /// Casts a BigUint to this type
+    /// Casts a BigUint to this type, removing any excess bits
+    /// Thus if the value is larger than this type, it will be truncated
     fn cast_from_biguint(biguint: &BigUint) -> Self;
 
     /// a += b

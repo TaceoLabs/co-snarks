@@ -445,7 +445,7 @@ where
     Ok(res)
 }
 
-/// A cast of a vector of Rep3PrimeFieldShare to a vector of Rep3RingShare
+/// A cast of a vector of Rep3PrimeFieldShare to a vector of Rep3RingShare. Truncates the excess bits.
 pub fn field_to_ring_many<F: PrimeField, T: IntRing2k, N: Rep3Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     io_context: &mut IoContext<N>,

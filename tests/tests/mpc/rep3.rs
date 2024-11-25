@@ -329,7 +329,7 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -370,7 +370,7 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -521,7 +521,7 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -1341,7 +1341,7 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
 
@@ -1388,7 +1388,7 @@ mod field_share {
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
-        let is_result = rep3::combine_field_elements(result1, result2, result3);
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
 }
