@@ -696,7 +696,8 @@ impl GarbledCircuits {
         }
 
         // Finally, just the xor of the full_adder, where x is 0...
-        added.push(ys.last().unwrap().to_owned());
+        let s = g.xor(ys.last().unwrap(), &c)?;
+        added.push(s);
         Ok(added)
     }
 
