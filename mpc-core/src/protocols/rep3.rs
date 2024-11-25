@@ -505,7 +505,6 @@ pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
     [share1, share2, share3]
 }
 
-//TODO RENAME ME TO COMBINE_ARITHMETIC_SHARE
 /// Reconstructs a field element from its arithmetic replicated shares.
 pub fn combine_field_element<F: PrimeField>(
     share1: Rep3PrimeFieldShare<F>,
@@ -519,14 +518,14 @@ pub fn combine_field_element<F: PrimeField>(
 /// # Panics
 /// Panics if the provided `Vec` sizes do not match.
 pub fn combine_field_elements<F: PrimeField>(
-    share1: Vec<Rep3PrimeFieldShare<F>>,
-    share2: Vec<Rep3PrimeFieldShare<F>>,
-    share3: Vec<Rep3PrimeFieldShare<F>>,
+    share1: &[Rep3PrimeFieldShare<F>],
+    share2: &[Rep3PrimeFieldShare<F>],
+    share3: &[Rep3PrimeFieldShare<F>],
 ) -> Vec<F> {
     assert_eq!(share1.len(), share2.len());
     assert_eq!(share2.len(), share3.len());
 
-    itertools::multizip((share1.into_iter(), share2.into_iter(), share3.into_iter()))
+    itertools::multizip((share1, share2, share3))
         .map(|(x1, x2, x3)| x1.a + x2.a + x3.a)
         .collect::<Vec<_>>()
 }

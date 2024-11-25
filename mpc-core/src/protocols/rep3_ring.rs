@@ -71,7 +71,6 @@ where
     [share1, share2, share3]
 }
 
-//TODO RENAME ME TO COMBINE_ARITHMETIC_SHARE
 /// Reconstructs a ring element from its arithmetic replicated shares.
 pub fn combine_ring_element<T: IntRing2k>(
     share1: Rep3RingShare<T>,
@@ -85,19 +84,18 @@ pub fn combine_ring_element<T: IntRing2k>(
 /// # Panics
 /// Panics if the provided `Vec` sizes do not match.
 pub fn combine_ring_elements<T: IntRing2k>(
-    share1: Vec<Rep3RingShare<T>>,
-    share2: Vec<Rep3RingShare<T>>,
-    share3: Vec<Rep3RingShare<T>>,
+    share1: &[Rep3RingShare<T>],
+    share2: &[Rep3RingShare<T>],
+    share3: &[Rep3RingShare<T>],
 ) -> Vec<RingElement<T>> {
     assert_eq!(share1.len(), share2.len());
     assert_eq!(share2.len(), share3.len());
 
-    itertools::multizip((share1.into_iter(), share2.into_iter(), share3.into_iter()))
+    itertools::multizip((share1, share2, share3))
         .map(|(x1, x2, x3)| x1.a + x2.a + x3.a)
         .collect::<Vec<_>>()
 }
 
-//TODO RENAME ME TO COMBINE_BINARY_SHARE
 /// Reconstructs a ring element from its binary replicated shares.
 pub fn combine_ring_element_binary<T: IntRing2k>(
     share1: Rep3RingShare<T>,

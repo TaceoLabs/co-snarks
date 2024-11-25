@@ -46,7 +46,7 @@ fn combine_field_elements_for_vm(
         res.push(a);
     }
     res.extend(rep3::combine_field_elements(
-        a.witness, b.witness, c.witness,
+        &a.witness, &b.witness, &c.witness,
     ));
     res
 }

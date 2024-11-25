@@ -23,7 +23,7 @@ use num_traits::AsPrimitive;
 use rand::{distributions::Standard, prelude::Distribution};
 use std::any::TypeId;
 
-/// Depending on the `A2BType` of the io_context, this function selects the appropriate implementation for the ring cast.
+/// Depending on the `A2BType` of the io_context, this function selects the appropriate implementation for the ring cast. In case of a downcast, the excess bits are just truncated.
 pub fn ring_cast_selector<T, U, N>(
     x: Rep3RingShare<T>,
     io_context: &mut IoContext<N>,
@@ -84,7 +84,7 @@ where
     }
 }
 
-/// A downcast of a Rep3RingShare from a larger ring to a smaller ring
+/// A downcast of a Rep3RingShare from a larger ring to a smaller ring, truncating the excess bits.
 /// Does not require network interaction
 pub fn downcast<T, U>(share: Rep3RingShare<T>) -> Rep3RingShare<U>
 where
@@ -128,7 +128,7 @@ where
     conversion::b2a(&binary, io_context)
 }
 
-/// A cast of a Rep3RingShare from a ring to another ring
+/// A cast of a Rep3RingShare from a ring to another ring. In case of a downcast, the excess bits are just truncated.
 pub fn cast_a2b<T, U, N>(
     share: Rep3RingShare<T>,
     io_context: &mut IoContext<N>,
@@ -146,7 +146,7 @@ where
     }
 }
 
-/// A cast of a Rep3RingShare from a ring to another ring
+/// A cast of a Rep3RingShare from a ring to another ring. In case of a downcast, the excess bits are just truncated.
 pub fn cast_gc<T, U, N>(
     share: Rep3RingShare<T>,
     io_context: &mut IoContext<N>,
@@ -164,7 +164,7 @@ where
     }
 }
 
-/// A cast of a Rep3PrimeFieldShare to a Rep3RingShare
+/// A cast of a Rep3PrimeFieldShare to a Rep3RingShare. Truncates the excess bits.
 pub fn field_to_ring_a2b<F: PrimeField, T: IntRing2k, N: Rep3Network>(
     share: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
