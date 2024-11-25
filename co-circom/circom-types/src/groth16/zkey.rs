@@ -52,8 +52,6 @@ pub struct ZKey<P: Pairing> {
     pub n_public: usize,
     /// domain size
     pub pow: usize,
-    /// The underlying verification key.
-    pub vk: VerifyingKey<P>,
     /// beta
     pub beta_g1: P::G1Affine,
     /// delta
@@ -68,24 +66,14 @@ pub struct ZKey<P: Pairing> {
     pub h_query: Vec<P::G1Affine>,
     /// l_query
     pub l_query: Vec<P::G1Affine>,
+    /// alpha_g1
+    pub alpha_g1: P::G1Affine,
+    /// beta_g1
+    pub beta_g2: P::G2Affine,
+    /// delta_g1
+    pub delta_g2: P::G2Affine,
     /// The constraint matrices A, B, and C
     pub matrices: ConstraintMatrices<P::ScalarField>,
-}
-
-/// The verifying key encapsulated in the zkey. This is NOT the key used for verifying (although it has the same values).
-/// You most likely are looking for the [`JsonVerificationKey`](crate::groth16::verification_key::JsonVerificationKey).
-#[derive(Default, Clone, Debug)]
-pub struct VerifyingKey<P: Pairing> {
-    /// alpha
-    pub alpha_g1: P::G1Affine,
-    /// beta
-    pub beta_g2: P::G2Affine,
-    /// gamma
-    pub gamma_g2: P::G2Affine,
-    /// delta
-    pub delta_g2: P::G2Affine,
-    /// delta
-    pub gamma_abc_g1: Vec<P::G1Affine>,
 }
 
 #[derive(Clone, Debug)]
@@ -97,7 +85,6 @@ struct HeaderGroth<P: Pairing> {
     alpha_g1: P::G1Affine,
     beta_g1: P::G1Affine,
     beta_g2: P::G2Affine,
-    gamma_g2: P::G2Affine,
     delta_g1: P::G1Affine,
     delta_g2: P::G2Affine,
 }
@@ -129,7 +116,6 @@ where
 
         // parse proving key
 
-        let ic_section = binfile.take_section(3);
         let matrices_section = binfile.take_section(4);
         let a_section = binfile.take_section(5);
         let b_g1_section = binfile.take_section(6);
@@ -137,7 +123,6 @@ where
         let l_section = binfile.take_section(8);
         let h_section = binfile.take_section(9);
 
-        let mut ic = None;
         let mut a_query = None;
         let mut b_g1_query = None;
         let mut b_g2_query = None;
@@ -147,7 +132,6 @@ where
 
         tracing::debug!("parsing zkey sections with rayon...");
         rayon::scope(|s| {
-            s.spawn(|_| ic = Some(Self::ic(n_public, ic_section, check)));
             s.spawn(|_| a_query = Some(Self::a_query(n_vars, a_section, check)));
             s.spawn(|_| b_g1_query = Some(Self::b_g1_query(n_vars, b_g1_section, check)));
             s.spawn(|_| b_g2_query = Some(Self::b_g2_query(n_vars, b_g2_section, check)));
@@ -166,14 +150,14 @@ where
 
         // this thread automatically joins on the rayon scope, therefore we can
         // only be here if the scope finished.
-        let vk = VerifyingKey {
-            alpha_g1: header.alpha_g1,
-            beta_g2: header.beta_g2,
-            gamma_g2: header.gamma_g2,
-            delta_g2: header.delta_g2,
-            // unwrap is fine, because we are guaranteed to have a Some value (rayon scope)
-            gamma_abc_g1: ic.unwrap()?,
-        };
+        //let vk = VerifyingKey {
+        //    alpha_g1: header.alpha_g1,
+        //    beta_g2: header.beta_g2,
+        //    gamma_g2: header.gamma_g2,
+        //    delta_g2: header.delta_g2,
+        //    // unwrap is fine, because we are guaranteed to have a Some value (rayon scope)
+        //    gamma_abc_g1: ic.unwrap()?,
+        //};
         tracing::debug!("groth16 zkey parsing done!");
         Ok(ZKey {
             n_public: header.n_public,
@@ -186,18 +170,11 @@ where
             b_g2_query: b_g2_query.unwrap()?,
             h_query: h_query.unwrap()?,
             l_query: l_query.unwrap()?,
+            alpha_g1: header.alpha_g1,
+            beta_g2: header.beta_g2,
+            delta_g2: header.delta_g2,
             matrices: matrices.unwrap()?,
-            vk,
         })
-    }
-
-    fn ic<R: Read>(
-        n_public: usize,
-        reader: R,
-        check: CheckElement,
-    ) -> ZKeyParserResult<Vec<P::G1Affine>> {
-        // the range is non-inclusive so we do +1 to get all inputs
-        Ok(P::g1_vec_from_reader(reader, n_public + 1, check)?)
     }
 
     fn a_query<R: Read>(
@@ -332,7 +309,8 @@ where
             let alpha_g1 = P::g1_from_reader(&mut reader, check)?;
             let beta_g1 = P::g1_from_reader(&mut reader, check)?;
             let beta_g2 = P::g2_from_reader(&mut reader, check)?;
-            let gamma_g2 = P::g2_from_reader(&mut reader, check)?;
+            // we don't need this element but we need to read it anyways
+            let _ = P::g2_from_reader(&mut reader, check)?;
             let delta_g1 = P::g1_from_reader(&mut reader, check)?;
             let delta_g2 = P::g2_from_reader(&mut reader, check)?;
             tracing::debug!("read header done!");
@@ -344,7 +322,6 @@ where
                 alpha_g1,
                 beta_g1,
                 beta_g2,
-                gamma_g2,
                 delta_g1,
                 delta_g2,
             })
@@ -457,7 +434,6 @@ mod tests {
             assert_eq!(b_g2_query, *pk.b_g2_query);
             assert_eq!(h_query, pk.h_query);
             assert_eq!(l_query, pk.l_query);
-            let vk = pk.vk;
             let alpha_g1 = test_utils::to_g1_bls12_381!(
             "573513743870798705896078935465463988747193691665514373553428213826028808426481266659437596949247877550493216010640",
             "3195692015363680281472407569911592878057544540747596023043039898101401350267601241530895953964131482377769738361054"
@@ -485,11 +461,9 @@ mod tests {
                 "1374573688907712469603830822734104311026384172354584262904362700919219617284680686401889337872942140366529825919103"
             ),
         ];
-            assert_eq!(alpha_g1, vk.alpha_g1);
-            assert_eq!(beta_g2, vk.beta_g2);
-            assert_eq!(gamma_g2, vk.gamma_g2);
-            assert_eq!(delta_g2, vk.delta_g2);
-            assert_eq!(gamma_abc_g1, vk.gamma_abc_g1);
+            assert_eq!(alpha_g1, pk.alpha_g1);
+            assert_eq!(beta_g2, pk.beta_g2);
+            assert_eq!(delta_g2, pk.delta_g2);
         }
     }
 
@@ -577,7 +551,6 @@ mod tests {
             assert_eq!(b_g2_query, *pk.b_g2_query);
             assert_eq!(h_query, pk.h_query);
             assert_eq!(l_query, pk.l_query);
-            let vk = pk.vk;
 
             let alpha_g1 = test_utils::to_g1_bn254!(
                 "16899422092493380665487369855810985762968608626455123789954325961085508316984",
@@ -606,11 +579,9 @@ mod tests {
                     "10737415594461993507153866894812637432840367562913937920244709428556226500845"
                 ),
             ];
-            assert_eq!(alpha_g1, vk.alpha_g1);
-            assert_eq!(beta_g2, vk.beta_g2);
-            assert_eq!(gamma_g2, vk.gamma_g2);
-            assert_eq!(delta_g2, vk.delta_g2);
-            assert_eq!(gamma_abc_g1, vk.gamma_abc_g1);
+            assert_eq!(alpha_g1, pk.alpha_g1);
+            assert_eq!(beta_g2, pk.beta_g2);
+            assert_eq!(delta_g2, pk.delta_g2);
 
             let a = vec![vec![(
                 ark_bn254::Fr::from_str(
