@@ -5,6 +5,8 @@ use ark_ff::PrimeField;
 use brillig::{BitSize, IntegerBitSize};
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use mpc_core::protocols::rep3::{self, Rep3PrimeFieldShare};
+use mpc_core::protocols::rep3_ring::ring::bit::Bit;
+use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
 use mpc_core::protocols::rep3_ring::{self, Rep3BitShare, Rep3RingShare};
 
 use super::{BrilligDriver, PlainBrilligDriver};
@@ -87,26 +89,32 @@ impl<F: PrimeField> Rep3BrilligType<F> {
         Self::Shared(Shared::Field(share))
     }
 
+    /// Creates a new shared u128 element from the provided share
     pub fn shared_u128(share: Rep3RingShare<u128>) -> Self {
         Self::Shared(Shared::Ring128(share))
     }
 
+    /// Creates a new shared u64 element from the provided share
     pub fn shared_u64(share: Rep3RingShare<u64>) -> Self {
         Self::Shared(Shared::Ring64(share))
     }
 
+    /// Creates a new shared u32 element from the provided share
     pub fn shared_u32(share: Rep3RingShare<u32>) -> Self {
         Self::Shared(Shared::Ring32(share))
     }
 
+    /// Creates a new shared u16 element from the provided share
     pub fn shared_u16(share: Rep3RingShare<u16>) -> Self {
         Self::Shared(Shared::Ring16(share))
     }
 
+    /// Creates a new shared u8 element from the provided share
     pub fn shared_u8(share: Rep3RingShare<u8>) -> Self {
         Self::Shared(Shared::Ring8(share))
     }
 
+    /// Creates a new shared u1 element from the provided share
     pub fn shared_u1(share: Rep3BitShare) -> Self {
         Self::Shared(Shared::Ring1(share))
     }
@@ -203,36 +211,279 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                         ))
                     }
                     (Shared::Ring1(secret), Public::Int(public, IntegerBitSize::U1)) => {
-                        todo!()
-                        //   let bit = u8::try_from(public).expect("must be zero or one");
-                        //   Rep3BrilligType::shared_u1(rep3_ring::arithmetic::add_public(
-                        //       secret,
-                        //       bit.try_into().expect("must be zero or one"),
-                        //       self.io_context.id,
-                        //   ))
+                        let u8 = u8::try_from(public).expect("must be u8");
+                        assert!(u8 == 0 || u8 == 1);
+                        let bit = RingElement(Bit::new(u8 == 1));
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::add_public(
+                            secret,
+                            bit,
+                            self.io_context.id,
+                        ))
                     }
                     _ => panic!("type mismatch. Can only add matching values"),
                 }
             }
-            (Rep3BrilligType::Shared(_), Rep3BrilligType::Shared(_)) => todo!(),
+            (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
+                (Shared::Field(s1), Shared::Field(s2)) => {
+                    Rep3BrilligType::shared_field(rep3::arithmetic::add(s1, s2))
+                }
+                (Shared::Ring128(s1), Shared::Ring128(s2)) => {
+                    Rep3BrilligType::shared_u128(rep3_ring::arithmetic::add(s1, s2))
+                }
+                (Shared::Ring64(s1), Shared::Ring64(s2)) => {
+                    Rep3BrilligType::shared_u64(rep3_ring::arithmetic::add(s1, s2))
+                }
+                (Shared::Ring32(s1), Shared::Ring32(s2)) => {
+                    Rep3BrilligType::shared_u32(rep3_ring::arithmetic::add(s1, s2))
+                }
+                (Shared::Ring16(s1), Shared::Ring16(s2)) => {
+                    Rep3BrilligType::shared_u16(rep3_ring::arithmetic::add(s1, s2))
+                }
+                (Shared::Ring8(s1), Shared::Ring8(s2)) => {
+                    Rep3BrilligType::shared_u8(rep3_ring::arithmetic::add(s1, s2))
+                }
+                (Shared::Ring1(s1), Shared::Ring1(s2)) => {
+                    Rep3BrilligType::shared_u1(rep3_ring::arithmetic::add(s1, s2))
+                }
+                _ => panic!("type mismatch. Can only add matching values"),
+            },
         };
         Ok(result)
     }
 
     fn sub(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (Rep3BrilligType::Public(lhs), Rep3BrilligType::Public(rhs)) => {
+                Rep3BrilligType::Public(self.plain_driver.sub(lhs, rhs)?)
+            }
+            // (Rep3BrilligType::Public(public), Rep3BrilligType::Shared(secret))
+            // |
+            (Rep3BrilligType::Shared(secret), Rep3BrilligType::Public(public)) => {
+                match (secret, public) {
+                    (Shared::Field(secret), Public::Field(public)) => {
+                        Rep3BrilligType::shared_field(rep3::arithmetic::sub_shared_by_public(
+                            secret,
+                            public,
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring128(secret), Public::Int(public, IntegerBitSize::U128)) => {
+                        Rep3BrilligType::shared_u128(rep3_ring::arithmetic::sub_shared_by_public(
+                            secret,
+                            public.into(),
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring64(secret), Public::Int(public, IntegerBitSize::U64)) => {
+                        Rep3BrilligType::shared_u64(rep3_ring::arithmetic::sub_shared_by_public(
+                            secret,
+                            u64::try_from(public).expect("must be u64").into(),
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring32(secret), Public::Int(public, IntegerBitSize::U32)) => {
+                        Rep3BrilligType::shared_u32(rep3_ring::arithmetic::sub_shared_by_public(
+                            secret,
+                            u32::try_from(public).expect("must be u32").into(),
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring16(secret), Public::Int(public, IntegerBitSize::U16)) => {
+                        Rep3BrilligType::shared_u16(rep3_ring::arithmetic::sub_shared_by_public(
+                            secret,
+                            u16::try_from(public).expect("must be u16").into(),
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring8(secret), Public::Int(public, IntegerBitSize::U8)) => {
+                        Rep3BrilligType::shared_u8(rep3_ring::arithmetic::sub_shared_by_public(
+                            secret,
+                            u8::try_from(public).expect("must be u8").into(),
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring1(secret), Public::Int(public, IntegerBitSize::U1)) => {
+                        let u8 = u8::try_from(public).expect("must be u8");
+                        assert!(u8 == 0 || u8 == 1);
+                        let bit = RingElement(Bit::new(u8 == 1));
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::sub_shared_by_public(
+                            secret,
+                            bit,
+                            self.io_context.id,
+                        ))
+                    }
+                    _ => panic!("type mismatch. Can only sub matching values"),
+                }
+            }
+            (Rep3BrilligType::Public(public), Rep3BrilligType::Shared(secret)) => {
+                match (secret, public) {
+                    (Shared::Field(secret), Public::Field(public)) => {
+                        Rep3BrilligType::shared_field(rep3::arithmetic::sub_public_by_shared(
+                            public,
+                            secret,
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring128(secret), Public::Int(public, IntegerBitSize::U128)) => {
+                        Rep3BrilligType::shared_u128(rep3_ring::arithmetic::sub_public_by_shared(
+                            public.into(),
+                            secret,
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring64(secret), Public::Int(public, IntegerBitSize::U64)) => {
+                        Rep3BrilligType::shared_u64(rep3_ring::arithmetic::sub_public_by_shared(
+                            u64::try_from(public).expect("must be u64").into(),
+                            secret,
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring32(secret), Public::Int(public, IntegerBitSize::U32)) => {
+                        Rep3BrilligType::shared_u32(rep3_ring::arithmetic::sub_public_by_shared(
+                            u32::try_from(public).expect("must be u32").into(),
+                            secret,
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring16(secret), Public::Int(public, IntegerBitSize::U16)) => {
+                        Rep3BrilligType::shared_u16(rep3_ring::arithmetic::sub_public_by_shared(
+                            u16::try_from(public).expect("must be u16").into(),
+                            secret,
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring8(secret), Public::Int(public, IntegerBitSize::U8)) => {
+                        Rep3BrilligType::shared_u8(rep3_ring::arithmetic::sub_public_by_shared(
+                            u8::try_from(public).expect("must be u8").into(),
+                            secret,
+                            self.io_context.id,
+                        ))
+                    }
+                    (Shared::Ring1(secret), Public::Int(public, IntegerBitSize::U1)) => {
+                        let u8 = u8::try_from(public).expect("must be u8");
+                        assert!(u8 == 0 || u8 == 1);
+                        let bit = RingElement(Bit::new(u8 == 1));
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::sub_public_by_shared(
+                            bit,
+                            secret,
+                            self.io_context.id,
+                        ))
+                    }
+                    _ => panic!("type mismatch. Can only sub matching values"),
+                }
+            }
+            (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
+                (Shared::Field(s1), Shared::Field(s2)) => {
+                    Rep3BrilligType::shared_field(rep3::arithmetic::sub(s1, s2))
+                }
+                (Shared::Ring128(s1), Shared::Ring128(s2)) => {
+                    Rep3BrilligType::shared_u128(rep3_ring::arithmetic::sub(s1, s2))
+                }
+                (Shared::Ring64(s1), Shared::Ring64(s2)) => {
+                    Rep3BrilligType::shared_u64(rep3_ring::arithmetic::sub(s1, s2))
+                }
+                (Shared::Ring32(s1), Shared::Ring32(s2)) => {
+                    Rep3BrilligType::shared_u32(rep3_ring::arithmetic::sub(s1, s2))
+                }
+                (Shared::Ring16(s1), Shared::Ring16(s2)) => {
+                    Rep3BrilligType::shared_u16(rep3_ring::arithmetic::sub(s1, s2))
+                }
+                (Shared::Ring8(s1), Shared::Ring8(s2)) => {
+                    Rep3BrilligType::shared_u8(rep3_ring::arithmetic::sub(s1, s2))
+                }
+                (Shared::Ring1(s1), Shared::Ring1(s2)) => {
+                    Rep3BrilligType::shared_u1(rep3_ring::arithmetic::sub(s1, s2))
+                }
+                _ => panic!("type mismatch. Can only sub matching values"),
+            },
+        };
+        Ok(result)
     }
 
     fn mul(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (Rep3BrilligType::Public(lhs), Rep3BrilligType::Public(rhs)) => {
+                Rep3BrilligType::Public(self.plain_driver.mul(lhs, rhs)?)
+            }
+            (Rep3BrilligType::Public(public), Rep3BrilligType::Shared(secret))
+            | (Rep3BrilligType::Shared(secret), Rep3BrilligType::Public(public)) => {
+                match (secret, public) {
+                    (Shared::Field(secret), Public::Field(public)) => {
+                        Rep3BrilligType::shared_field(rep3::arithmetic::mul_public(secret, public))
+                    }
+                    (Shared::Ring128(secret), Public::Int(public, IntegerBitSize::U128)) => {
+                        Rep3BrilligType::shared_u128(rep3_ring::arithmetic::mul_public(
+                            secret,
+                            public.into(),
+                        ))
+                    }
+                    (Shared::Ring64(secret), Public::Int(public, IntegerBitSize::U64)) => {
+                        Rep3BrilligType::shared_u64(rep3_ring::arithmetic::mul_public(
+                            secret,
+                            u64::try_from(public).expect("must be u64").into(),
+                        ))
+                    }
+                    (Shared::Ring32(secret), Public::Int(public, IntegerBitSize::U32)) => {
+                        Rep3BrilligType::shared_u32(rep3_ring::arithmetic::mul_public(
+                            secret,
+                            u32::try_from(public).expect("must be u32").into(),
+                        ))
+                    }
+                    (Shared::Ring16(secret), Public::Int(public, IntegerBitSize::U16)) => {
+                        Rep3BrilligType::shared_u16(rep3_ring::arithmetic::mul_public(
+                            secret,
+                            u16::try_from(public).expect("must be u16").into(),
+                        ))
+                    }
+                    (Shared::Ring8(secret), Public::Int(public, IntegerBitSize::U8)) => {
+                        Rep3BrilligType::shared_u8(rep3_ring::arithmetic::mul_public(
+                            secret,
+                            u8::try_from(public).expect("must be u8").into(),
+                        ))
+                    }
+                    (Shared::Ring1(secret), Public::Int(public, IntegerBitSize::U1)) => {
+                        let u8 = u8::try_from(public).expect("must be u8");
+                        assert!(u8 == 0 || u8 == 1);
+                        let bit = RingElement(Bit::new(u8 == 1));
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::mul_public(secret, bit))
+                    }
+                    _ => panic!("type mismatch. Can only mul matching values"),
+                }
+            }
+            (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
+                (Shared::Field(s1), Shared::Field(s2)) => Rep3BrilligType::shared_field(
+                    rep3::arithmetic::mul(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring128(s1), Shared::Ring128(s2)) => Rep3BrilligType::shared_u128(
+                    rep3_ring::arithmetic::mul(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring64(s1), Shared::Ring64(s2)) => Rep3BrilligType::shared_u64(
+                    rep3_ring::arithmetic::mul(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring32(s1), Shared::Ring32(s2)) => Rep3BrilligType::shared_u32(
+                    rep3_ring::arithmetic::mul(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring16(s1), Shared::Ring16(s2)) => Rep3BrilligType::shared_u16(
+                    rep3_ring::arithmetic::mul(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring8(s1), Shared::Ring8(s2)) => Rep3BrilligType::shared_u8(
+                    rep3_ring::arithmetic::mul(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring1(s1), Shared::Ring1(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::mul(s1, s2, &mut self.io_context)?,
+                ),
+                _ => panic!("type mismatch. Can only mul matching values"),
+            },
+        };
+        Ok(result)
     }
 
     fn div(
