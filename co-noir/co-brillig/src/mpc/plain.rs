@@ -154,7 +154,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 PlainBrilligType::Int(rhs, IntegerBitSize::U128),
             ) => {
                 let result = lhs.wrapping_add(rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U128))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
@@ -185,7 +185,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 PlainBrilligType::Int(rhs, IntegerBitSize::U128),
             ) => {
                 let result = lhs.wrapping_sub(rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U128))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
@@ -215,7 +215,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 PlainBrilligType::Int(rhs, IntegerBitSize::U128),
             ) => {
                 let result = lhs.wrapping_mul(rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U128))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
@@ -244,7 +244,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 PlainBrilligType::Int(rhs, IntegerBitSize::U128),
             ) => {
                 let result = lhs.wrapping_div(rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U128))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
