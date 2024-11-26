@@ -28,12 +28,9 @@
 //! Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/zkey.rs>
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use ark_relations::r1cs::ConstraintMatrices;
 use ark_serialize::CanonicalDeserialize;
 
 use std::io::Read;
-
-use rayon::prelude::*;
 
 use crate::{
     binfile::{BinFile, ZKeyParserError, ZKeyParserResult},
@@ -52,6 +49,8 @@ pub struct ZKey<P: Pairing> {
     pub n_public: usize,
     /// domain size
     pub pow: usize,
+    /// the amount of constraints
+    pub num_constraints: usize,
     /// beta
     pub beta_g1: P::G1Affine,
     /// delta
@@ -72,9 +71,15 @@ pub struct ZKey<P: Pairing> {
     pub beta_g2: P::G2Affine,
     /// delta_g1
     pub delta_g2: P::G2Affine,
-    /// The constraint matrices A, B, and C
-    pub matrices: ConstraintMatrices<P::ScalarField>,
+    /// The constraint matrices A
+    pub a_matrix: ConstraintMatrix<P::ScalarField>,
+    /// The constraint matrices B
+    pub b_matrix: ConstraintMatrix<P::ScalarField>,
 }
+
+/// A constraint matrix used in Groth16.
+pub type ConstraintMatrix<F> = Vec<Vec<(F, usize)>>;
+type ConstraintMatrixAB<F> = (usize, ConstraintMatrix<F>, ConstraintMatrix<F>);
 
 #[derive(Clone, Debug)]
 struct HeaderGroth<P: Pairing> {
@@ -136,32 +141,24 @@ where
             s.spawn(|_| b_g1_query = Some(Self::b_g1_query(n_vars, b_g1_section, check)));
             s.spawn(|_| b_g2_query = Some(Self::b_g2_query(n_vars, b_g2_section, check)));
             s.spawn(|_| l_query = Some(Self::l_query(n_vars - n_public - 1, l_section, check)));
-            s.spawn(|_| h_query = Some(Self::h_query(domain_size as usize, h_section, check)));
+            s.spawn(|_| h_query = Some(Self::h_query(domain_size, h_section, check)));
             s.spawn(|_| {
                 matrices = Some(Self::constraint_matrices(
                     domain_size,
                     n_public,
-                    n_vars,
                     matrices_section,
                 ))
             });
         });
-        tracing::debug!("we are done with parsing sections!");
+        let (num_constraints, a_matrix, b_matrix) = matrices.unwrap()?;
 
         // this thread automatically joins on the rayon scope, therefore we can
         // only be here if the scope finished.
-        //let vk = VerifyingKey {
-        //    alpha_g1: header.alpha_g1,
-        //    beta_g2: header.beta_g2,
-        //    gamma_g2: header.gamma_g2,
-        //    delta_g2: header.delta_g2,
-        //    // unwrap is fine, because we are guaranteed to have a Some value (rayon scope)
-        //    gamma_abc_g1: ic.unwrap()?,
-        //};
         tracing::debug!("groth16 zkey parsing done!");
         Ok(ZKey {
             n_public: header.n_public,
             pow: u32_to_usize!(header.pow),
+            num_constraints,
             beta_g1: header.beta_g1,
             delta_g1: header.delta_g1,
             // unwrap is fine, because we are guaranteed to have a Some value (rayon scope)
@@ -173,7 +170,8 @@ where
             alpha_g1: header.alpha_g1,
             beta_g2: header.beta_g2,
             delta_g2: header.delta_g2,
-            matrices: matrices.unwrap()?,
+            a_matrix,
+            b_matrix,
         })
     }
 
@@ -220,14 +218,15 @@ where
     fn constraint_matrices<R: Read>(
         domain_size: usize,
         n_public: usize,
-        n_vars: usize,
         mut matrices_section: R,
-    ) -> ZKeyParserResult<ConstraintMatrices<P::ScalarField>> {
+    ) -> ZKeyParserResult<ConstraintMatrixAB<P::ScalarField>> {
         // this function (an all following uses) assumes that values are encoded in little-endian
         let num_coeffs = u32::deserialize_uncompressed(&mut matrices_section)?;
 
         // instantiate AB
-        let mut matrices = vec![vec![vec![]; domain_size]; 2];
+        let a = vec![vec![]; domain_size];
+        let b = vec![vec![]; domain_size];
+        let mut matrices = [a, b];
         let mut max_constraint_index = 0;
         for _ in 0..num_coeffs {
             let matrix = u32::deserialize_uncompressed(&mut matrices_section)?;
@@ -245,26 +244,8 @@ where
             m.truncate(num_constraints);
         });
 
-        // This is taken from Arkworks' to_matrices() function
-        let a = matrices[0].clone();
-        let b = matrices[1].clone();
-        let a_num_non_zero: usize = a.par_iter().map(|lc| lc.len()).sum();
-        let b_num_non_zero: usize = b.par_iter().map(|lc| lc.len()).sum();
-
-        let matrices = ConstraintMatrices {
-            num_instance_variables: n_public + 1,
-            num_witness_variables: n_vars - n_public,
-            num_constraints,
-
-            a_num_non_zero,
-            b_num_non_zero,
-            c_num_non_zero: 0,
-
-            a,
-            b,
-            c: vec![],
-        };
-        Ok(matrices)
+        let [a, b] = matrices;
+        Ok((num_constraints, a, b))
     }
 }
 
@@ -443,24 +424,10 @@ mod tests {
                 { "1213509159032791114787919253810063723698125343911375817823407964507894154588429618034348468252648939670896208579873", "1573371412929811557753878280884507253544333246060733954030366147593600651713802914366664802456680232238300886611563"},
                 { "227372997676533734391726211114649274508389438640619116602997243907961458158899171192162581346407208971296972028627", "3173649281634920042594077931157174670855523098488107297282865037955359011267273317056899941445467620214571651786849"}
             );
-            let gamma_g2 = test_utils::to_g2_bls12_381!(
-                { "352701069587466618187139116011060144890029952792775240219908644239793785735715026873347600343865175952761926303160", "3059144344244213709971259814753781636986470325476647558659373206291635324768958432433509563104347017837885763365758"},
-                { "1985150602287291935568054521177171638300868978215655730859378665066344726373823718423869104263333984641494340347905", "927553665492332455747201965776037880757740193453592970025027978793976877002675564980949289727957565575433344219582"}
-            );
             let delta_g2 = test_utils::to_g2_bls12_381!(
                 { "1225439548733361287866553883695456824469134186836570397762131498241583159823035296217074111710636342557133382852358", "2605368487020759648403319793196297851010839805929073625099854787778388904778675959353258883417612421791844637077008"},
                 { "1154742119857928659368603772369477002539216605293799365584478673152507602473688973931247635774944414206241097299617", "3083613843092389681361977317882198510817133309742782178582263450336527557948727917944434768179612190551923309894740"}
             );
-            let gamma_abc_g1 = vec![
-            test_utils::to_g1_bls12_381!(
-                "1496325678302426440401133733502043551289869837205655668080008848699551523921245028359850882036392240986058622892606",
-                "1817947725837285375871533104780166089829860102882637736910105269739240593327578312097322455849119517519139026844600"
-            ),
-            test_utils::to_g1_bls12_381!(
-                "1718008724910268123339696488143341961797261917931626884153637247409759465219924679458496161324559634841879674394994",
-                "1374573688907712469603830822734104311026384172354584262904362700919219617284680686401889337872942140366529825919103"
-            ),
-        ];
             assert_eq!(alpha_g1, pk.alpha_g1);
             assert_eq!(beta_g2, pk.beta_g2);
             assert_eq!(delta_g2, pk.delta_g2);
@@ -561,24 +528,10 @@ mod tests {
                 { "10507543441632391771444308193378912964353702039245296649929512844719350719061", "18201322790656668038537601329094316169506292175603805191741014817443184049262"},
                 { "5970405197328671009015216309153477729292937823545171027250144292199028398006", "207690659672174295265842461226025308763643182574816306177651013602294932409"}
             );
-            let gamma_g2 = test_utils::to_g2_bn254!(
-                { "10857046999023057135944570762232829481370756359578518086990519993285655852781", "11559732032986387107991004021392285783925812861821192530917403151452391805634"},
-                { "8495653923123431417604973247489272438418190587263600148770280649306958101930", "4082367875863433681332203403145435568316851327593401208105741076214120093531"}
-            );
             let delta_g2 = test_utils::to_g2_bn254!(
                 { "16155635570759079539128338844496116072647798864000233687303657902717776158999", "146722472349298011683444548694315820674090918095096001856936731325601586110"},
                 { "7220557679759413200896918190625936046017159618724594116959480938714251928850", "3740741795440491235944811815904112252316619638122978144672498770442910025884"}
             );
-            let gamma_abc_g1 = vec![
-                test_utils::to_g1_bn254!(
-                    "17064056514210178269621297150176790945669784643731237949186503569701111845663",
-                    "5160771857172547017310246971961987180872028348077571247747329170768684330052"
-                ),
-                test_utils::to_g1_bn254!(
-                    "19547536507588365344778723326587455846790642159887261127893730469532513538882",
-                    "10737415594461993507153866894812637432840367562913937920244709428556226500845"
-                ),
-            ];
             assert_eq!(alpha_g1, pk.alpha_g1);
             assert_eq!(beta_g2, pk.beta_g2);
             assert_eq!(delta_g2, pk.delta_g2);
@@ -591,15 +544,9 @@ mod tests {
                 2,
             )]];
             let b = vec![vec![(ark_bn254::Fr::from_str("1").unwrap(), 3)]];
-            assert_eq!(2, pk.matrices.num_instance_variables);
-            assert_eq!(3, pk.matrices.num_witness_variables);
-            assert_eq!(1, pk.matrices.num_constraints);
-            assert_eq!(1, pk.matrices.a_num_non_zero);
-            assert_eq!(1, pk.matrices.b_num_non_zero);
-            assert_eq!(0, pk.matrices.c_num_non_zero);
-            assert_eq!(a, pk.matrices.a);
-            assert_eq!(b, pk.matrices.b);
-            assert!(pk.matrices.c.is_empty());
+            assert_eq!(1, pk.num_constraints);
+            assert_eq!(a, pk.a_matrix);
+            assert_eq!(b, pk.b_matrix);
         }
     }
     fn fq_from_str(s: &str) -> Fq {

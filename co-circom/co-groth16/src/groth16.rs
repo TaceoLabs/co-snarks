@@ -4,8 +4,7 @@ use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, PrimeField};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use ark_relations::r1cs::{ConstraintMatrices, Matrix, SynthesisError};
-use circom_types::groth16::{Groth16Proof, ZKey};
+use circom_types::groth16::{ConstraintMatrix, Groth16Proof, ZKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use co_circom_snarks::SharedWitness;
 use eyre::Result;
@@ -116,19 +115,9 @@ where
         let id = self.driver.get_party_id();
         tracing::info!("Party {}: starting proof generation..", id);
         let start = Instant::now();
-        let matrices = &zkey.matrices;
-        let num_inputs = matrices.num_instance_variables;
-        let num_constraints = matrices.num_constraints;
         let public_inputs = Arc::new(private_witness.public_inputs);
         let private_witness = Arc::new(private_witness.witness);
-        let h = self.witness_map_from_matrices(
-            zkey.pow,
-            matrices,
-            num_constraints,
-            num_inputs,
-            &public_inputs,
-            &private_witness,
-        )?;
+        let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness)?;
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
 
         let proof = self.create_proof_with_assignment(
@@ -148,7 +137,7 @@ where
     fn evaluate_constraint(
         party_id: T::PartyID,
         domain_size: usize,
-        matrix: &Matrix<P::ScalarField>,
+        matrix: &ConstraintMatrix<P::ScalarField>,
         public_inputs: &[P::ScalarField],
         private_witness: &[T::ArithmeticShare],
     ) -> Vec<T::ArithmeticShare> {
@@ -164,16 +153,16 @@ where
     #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
     fn witness_map_from_matrices(
         &mut self,
-        power: usize,
-        matrices: &ConstraintMatrices<P::ScalarField>,
-        num_constraints: usize,
-        num_inputs: usize,
+        zkey: &ZKey<P>,
         public_inputs: &[P::ScalarField],
         private_witness: &[T::ArithmeticShare],
     ) -> Result<Vec<P::ScalarField>> {
+        let num_constraints = zkey.num_constraints;
+        let num_inputs = zkey.n_public + 1;
+        let power = zkey.pow;
         let mut domain =
             GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
-                .ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+                .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
         let domain_size = domain.size();
         let party_id = self.driver.get_party_id();
         let eval_constraint_span =
@@ -198,7 +187,7 @@ where
                 let mut result = Self::evaluate_constraint(
                     party_id,
                     domain_size,
-                    &matrices.a,
+                    &zkey.a_matrix,
                     public_inputs,
                     private_witness,
                 );
@@ -214,7 +203,7 @@ where
                 let result = Self::evaluate_constraint(
                     party_id,
                     domain_size,
-                    &matrices.b,
+                    &zkey.b_matrix,
                     public_inputs,
                     private_witness,
                 );

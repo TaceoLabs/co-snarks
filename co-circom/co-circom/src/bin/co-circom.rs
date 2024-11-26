@@ -31,13 +31,13 @@ use co_circom::VerifyCli;
 use co_circom::VerifyConfig;
 use co_circom::{file_utils, MPCCurve, MPCProtocol, ProofSystem, SeedRng};
 use co_circom_snarks::{
-    SerializeableSharedRep3Input, SerializeableSharedRep3Witness, SharedWitness,
+    SerializeableSharedRep3Input, SerializeableSharedRep3Witness, SharedWitness, VerificationError,
 };
 use co_groth16::Groth16;
 use co_groth16::{Rep3CoGroth16, ShamirCoGroth16};
 use co_plonk::Rep3CoPlonk;
 use co_plonk::{Plonk, ShamirCoPlonk};
-use color_eyre::eyre::{eyre, Context, ContextCompat};
+use color_eyre::eyre::{self, eyre, Context, ContextCompat};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
     rep3::network::Rep3MpcNet,
@@ -659,8 +659,7 @@ where
 
             // The actual verifier
             let start = Instant::now();
-            let res = Groth16::<P>::verify(&vk, &proof, &public_inputs)
-                .context("while verifying proof")?;
+            let res = Groth16::<P>::verify(&vk, &proof, &public_inputs);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Proof verification took {} ms", duration_ms);
             res
@@ -674,20 +673,23 @@ where
 
             // The actual verifier
             let start = Instant::now();
-            let res =
-                Plonk::<P>::verify(&vk, &proof, &public_inputs).context("while verifying proof")?;
+            let res = Plonk::<P>::verify(&vk, &proof, &public_inputs);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Proof verification took {} ms", duration_ms);
             res
         }
     };
 
-    if res {
-        tracing::info!("Proof verified successfully");
-        Ok(ExitCode::SUCCESS)
-    } else {
-        tracing::error!("Proof verification failed");
-        Ok(ExitCode::FAILURE)
+    match res {
+        Ok(_) => {
+            tracing::info!("Proof verified successfully");
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(VerificationError::InvalidProof) => {
+            tracing::error!("Proof verification failed");
+            Ok(ExitCode::FAILURE)
+        }
+        Err(VerificationError::Malformed(err)) => eyre::bail!(err),
     }
 }
 

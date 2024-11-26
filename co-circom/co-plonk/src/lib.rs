@@ -299,8 +299,7 @@ pub mod tests {
             .unwrap();
 
             let proof = Plonk::<Bn254>::plain_prove(zkey, witness).unwrap();
-            let result = Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
-            assert!(result);
+            Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
         }
         Ok(())
     }
@@ -337,8 +336,7 @@ pub mod tests {
             let mut proof_bytes = vec![];
             serde_json::to_writer(&mut proof_bytes, &proof).unwrap();
             let proof = serde_json::from_reader(proof_bytes.as_slice()).unwrap();
-            let result = Plonk::<Bn254>::verify(&vk, &proof, &public_inputs.values).unwrap();
-            assert!(result)
+            Plonk::<Bn254>::verify(&vk, &proof, &public_inputs.values).unwrap();
         }
     }
 }
