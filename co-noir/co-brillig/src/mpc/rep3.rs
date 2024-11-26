@@ -1658,16 +1658,6 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
             }
         };
         Ok(result)
-
-        // if let (Rep3BrilligType::Public(val), Rep3BrilligType::Public(radix)) = (val, radix) {
-        //     let result = self.plain_driver.to_radix(val, radix, output_size, bits)?;
-        //     Ok(result
-        //         .into_iter()
-        //         .map(|val| Rep3BrilligType::Public(val))
-        //         .collect())
-        // } else {
-        //     todo!("Implement to_radix")
-        // }
     }
 
     fn expect_int(
