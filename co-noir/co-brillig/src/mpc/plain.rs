@@ -367,12 +367,8 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
             // https://github.com/noir-lang/noir/blob/7216f0829dcece948d3243471e6d57380522e997/acvm-repo/brillig_vm/src/black_box.rs#L323
             // and modified for our implementation
 
-            let mut bytes = Vec::new();
-            val.serialize_uncompressed(&mut bytes).unwrap();
-            bytes.reverse();
-
-            let mut input = BigUint::from_bytes_be(&bytes);
-            let radix = BigUint::from_bytes_be(&radix.to_be_bytes());
+            let mut input: BigUint = val.into();
+            let radix = BigUint::from(radix);
 
             let mut limbs = vec![PlainBrilligType::default(); output_size];
 
@@ -384,7 +380,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 } else {
                     let limb: u128 = limb
                         .try_into()
-                        .expect("fits into u128 radix is at most 256");
+                        .expect("fits into u128 since radix is at most 256");
                     limbs[i] = PlainBrilligType::Int(limb, IntegerBitSize::U8);
                 };
                 input /= &radix;
