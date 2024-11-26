@@ -12,6 +12,7 @@ use mpc_core::protocols::{
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::error::Error;
 
 /// This type represents the serialized version of a Rep3 witness. Its share can be either additive or replicated, and in both cases also compressed.
 #[derive(Debug, Serialize, Deserialize)]
@@ -449,6 +450,44 @@ impl<F: PrimeField> SharedWitness<F, ShamirPrimeFieldShare<F>> {
                 witness: share,
             })
             .collect()
+    }
+}
+
+/// The error type for the verification of a Circom proof.
+///
+/// If the verification failed because the proof is Invalid, the method
+/// will return the [VerificationError::InvalidProof] variant. If the
+/// underlying implementation encounters an error, the method
+/// will wrap that error in the [VerificationError::Malformed] variant.
+#[derive(Debug)]
+pub enum VerificationError {
+    /// Indicates that the proof verification failed
+    InvalidProof,
+    /// Wraps an underlying error (e.g., malformed verification key)
+    Malformed(eyre::Report),
+}
+
+impl From<eyre::Report> for VerificationError {
+    fn from(error: eyre::Report) -> Self {
+        VerificationError::Malformed(error)
+    }
+}
+
+impl std::error::Error for VerificationError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            VerificationError::Malformed(source) => Some(source.as_ref()),
+            VerificationError::InvalidProof => None,
+        }
+    }
+}
+
+impl std::fmt::Display for VerificationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VerificationError::InvalidProof => writeln!(f, "proof is invalid"),
+            VerificationError::Malformed(error) => writeln!(f, "cannot verify proof: {error}"),
+        }
     }
 }
 

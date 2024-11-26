@@ -52,9 +52,7 @@ mod tests {
                 Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
-            let verified =
-                Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
-            assert!(verified);
+            Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         }
     }
 
@@ -73,9 +71,8 @@ mod tests {
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bn254::Fr>>(public_string).unwrap();
         let proof = serde_json::from_str::<Groth16Proof<Bn254>>(&proof_string).unwrap();
-        let verified =
-            Groth16::<Bn254>::verify(&vk, &proof, &public_input.values).expect("can verify");
-        assert!(verified)
+
+        Groth16::<Bn254>::verify(&vk, &proof, &public_input.values).expect("can verify");
     }
 
     #[test]
@@ -100,9 +97,7 @@ mod tests {
                 Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
-            let verified =
-                Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
-            assert!(verified);
+            Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         }
     }
 
@@ -121,8 +116,7 @@ mod tests {
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bn254::Fr>>(public_string).unwrap();
         let proof = serde_json::from_str::<Groth16Proof<Bn254>>(&proof_string).unwrap();
-        let verified = Groth16::verify(&vk, &proof, &public_input.values).expect("can verify");
-        assert!(verified)
+        Groth16::verify(&vk, &proof, &public_input.values).expect("can verify");
     }
 
     #[test]
@@ -140,9 +134,7 @@ mod tests {
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bls12_381::Fr>>(public_string).unwrap();
         let proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&proof_string).unwrap();
-        let verified =
-            Groth16::<Bls12_381>::verify(&vk, &proof, &public_input.values).expect("can verify");
-        assert!(verified)
+        Groth16::<Bls12_381>::verify(&vk, &proof, &public_input.values).expect("can verify");
     }
 
     #[test]
@@ -169,14 +161,10 @@ mod tests {
 
             let proof =
                 Groth16::<Bls12_381>::plain_prove(zkey, witness).expect("proof generation works");
-            let verified =
-                Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
-            assert!(verified);
+            Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&ser_proof).unwrap();
-            let verified = Groth16::<Bls12_381>::verify(&vk, &der_proof, &public_input[1..])
-                .expect("can verify");
-            assert!(verified)
+            Groth16::<Bls12_381>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         }
     }
 
@@ -201,14 +189,10 @@ mod tests {
 
             let proof =
                 Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
-            let verified =
-                Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
-            assert!(verified);
+            Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
-            let verified =
-                Groth16::<Bn254>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
-            assert!(verified)
+            Groth16::<Bn254>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         }
     }
 }

@@ -11,6 +11,7 @@ use circom_types::groth16::{Groth16Proof, JsonVerificationKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 
 use ark_groth16::Groth16 as ArkworksGroth16;
+use co_circom_snarks::VerificationError;
 
 impl<P: Pairing> Groth16<P>
 where
@@ -24,7 +25,7 @@ where
         vk: &JsonVerificationKey<P>,
         proof: &Groth16Proof<P>,
         public_inputs: &[P::ScalarField],
-    ) -> Result<bool, ark_relations::r1cs::SynthesisError> {
+    ) -> Result<(), VerificationError> {
         let vk = VerifyingKey::<P> {
             alpha_g1: vk.alpha_1,
             beta_g2: vk.beta_2,
@@ -39,6 +40,12 @@ where
         };
 
         let vk = ark_groth16::prepare_verifying_key(&vk);
-        ArkworksGroth16::<P>::verify_proof(&vk, &proof, public_inputs)
+        let proof_valid = ArkworksGroth16::<P>::verify_proof(&vk, &proof, public_inputs)
+            .map_err(eyre::Report::from)?;
+        if proof_valid {
+            Ok(())
+        } else {
+            Err(VerificationError::InvalidProof)
+        }
     }
 }

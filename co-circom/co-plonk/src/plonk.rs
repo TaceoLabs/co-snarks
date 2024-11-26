@@ -13,7 +13,7 @@ use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof, ZKey},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
-use co_circom_snarks::SharedWitness;
+use co_circom_snarks::{SharedWitness, VerificationError};
 use num_traits::One;
 use num_traits::Zero;
 
@@ -136,7 +136,7 @@ where
         vk: &JsonVerificationKey<P>,
         proof: &PlonkProof<P>,
         public_inputs: &[P::ScalarField],
-    ) -> Result<bool, eyre::Report>
+    ) -> Result<(), VerificationError>
     where
         P: Pairing,
         P: CircomArkworksPairingBridge,
@@ -144,11 +144,13 @@ where
         P::ScalarField: CircomArkworksPrimeFieldBridge,
     {
         if vk.n_public != public_inputs.len() {
-            return Err(eyre::eyre!("Invalid number of public inputs"));
+            return Err(VerificationError::Malformed(eyre::eyre!(
+                "Invalid number of public inputs"
+            )));
         }
 
         let challenges = VerifierChallenges::<P>::new(vk, proof, public_inputs);
-        let domains = Domains::<P::ScalarField>::new(1 << vk.power)?;
+        let domains = Domains::<P::ScalarField>::new(1 << vk.power).map_err(eyre::Report::from)?;
 
         let (l, xin) = plonk_utils::calculate_lagrange_evaluations::<P>(
             vk.power,
@@ -161,15 +163,13 @@ where
 
         let e = Plonk::<P>::calculate_e(proof, &challenges, r0);
         let f = Plonk::<P>::calculate_f(vk, proof, &challenges, d);
+        let valid = Plonk::<P>::valid_pairing(vk, proof, &challenges, e, f, &domains);
 
-        Ok(Plonk::<P>::valid_pairing(
-            vk,
-            proof,
-            &challenges,
-            e,
-            f,
-            &domains,
-        ))
+        if valid {
+            Ok(())
+        } else {
+            Err(VerificationError::InvalidProof)
+        }
     }
 
     pub(crate) fn calculate_r0_d(
@@ -386,7 +386,7 @@ pub mod tests {
             File::open("../../test_vectors/Plonk/bn254/multiplier2/public.json").unwrap(),
         )
         .unwrap();
-        assert!(Plonk::verify(&vk, &proof, &public_inputs.values).unwrap());
+        Plonk::verify(&vk, &proof, &public_inputs.values).unwrap();
     }
 
     #[test]
@@ -403,6 +403,6 @@ pub mod tests {
             File::open("../../test_vectors/Plonk/bn254/poseidon/public.json").unwrap(),
         )
         .unwrap();
-        assert!(Plonk::verify(&vk, &proof, &public_inputs.values).unwrap());
+        Plonk::verify(&vk, &proof, &public_inputs.values).unwrap();
     }
 }

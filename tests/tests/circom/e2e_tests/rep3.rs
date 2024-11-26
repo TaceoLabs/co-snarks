@@ -82,9 +82,7 @@ macro_rules! add_test_impl {
                 )
                 .unwrap();
                 assert_eq!(der_proof, result2);
-                let verified =
                     $proof_system::<$curve>::verify(&vk, &der_proof, &public_input).expect("can verify");
-                assert!(verified);
             }
 
             #[test]
@@ -101,9 +99,7 @@ macro_rules! add_test_impl {
                 .unwrap();
                 let public_input: JsonPublicInput::<[< ark_ $curve:lower >]::Fr> = serde_json::from_reader(public_input_file).unwrap();
                 let snarkjs_proof: [< $proof_system Proof >]<$curve> = serde_json::from_reader(&snarkjs_proof_file).unwrap();
-                let verified =
                     $proof_system::<$curve>::verify(&vk, &snarkjs_proof, &public_input.values).expect("can verify");
-                assert!(verified);
             }
         }
     };
