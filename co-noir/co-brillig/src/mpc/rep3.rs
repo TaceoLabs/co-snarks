@@ -1634,7 +1634,17 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                     let radix = u32::try_from(radix).expect("must be u32");
                     assert!(radix <= 256, "radix is at most 256");
                     if radix.is_power_of_two() {
-                        todo!("Implement to_radix for shared value and public radix for power-of-two radix")
+                        let bits = radix.ilog2();
+                        let result = rep3_ring::yao::decompose_field_to_rings::<_, u8, _>(
+                            val,
+                            &mut self.io_context,
+                            output_size,
+                            bits as usize,
+                        )?;
+                        result
+                            .into_iter()
+                            .map(|val| Rep3BrilligType::Shared(Shared::Ring8(val)))
+                            .collect()
                     } else {
                         todo!("Implement to_radix for shared value and public radix for non-power-of-two radix")
                     }

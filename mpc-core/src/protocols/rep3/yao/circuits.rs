@@ -355,6 +355,7 @@ impl GarbledCircuits {
         wires_c: &[G::Item],
         num_decomps_per_field: usize,
         decompose_bitlen: usize,
+        output_bitlen: usize,
     ) -> Result<Vec<G::Item>, G::Error> {
         let total_output_bitlen = decompose_bitlen * num_decomps_per_field;
         debug_assert_eq!(wires_a.len(), wires_b.len());
@@ -362,7 +363,8 @@ impl GarbledCircuits {
         debug_assert_eq!(input_bitlen, F::MODULUS_BIT_SIZE as usize);
         debug_assert!(input_bitlen >= total_output_bitlen);
         debug_assert!(decompose_bitlen <= total_output_bitlen);
-        debug_assert_eq!(wires_c.len(), total_output_bitlen);
+        debug_assert_eq!(wires_c.len(), output_bitlen);
+        debug_assert!(output_bitlen >= decompose_bitlen);
 
         let input_bits =
             Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, total_output_bitlen)?;
@@ -371,23 +373,46 @@ impl GarbledCircuits {
 
         for (xs, ys) in izip!(
             input_bits.chunks(decompose_bitlen),
-            wires_c.chunks(decompose_bitlen),
+            wires_c.chunks(output_bitlen),
         ) {
-            let result = Self::bin_addition_no_carry(g, xs, ys)?;
-            results.extend(result);
+            // compose chunk_bits again
+            // For the bin addition, our input is not of size decompose_bitlen, thus we can optimize a little bit
+
+            let mut added = Vec::with_capacity(output_bitlen);
+
+            let (mut s, mut c) = Self::half_adder(g, &xs[0], &ys[0])?;
+            added.push(s);
+
+            for (x, y) in xs.iter().zip(ys.iter()).skip(1) {
+                let res = Self::full_adder(g, x, y, &c)?;
+                s = res.0;
+                c = res.1;
+                added.push(s);
+            }
+            for y in ys.iter().take(ys.len() - 1).skip(xs.len()) {
+                let res = Self::full_adder_const(g, y, false, &c)?;
+                s = res.0;
+                c = res.1;
+                added.push(s);
+            }
+
+            // Finally, just the xor of the full_adder, where x is 0...
+            added.push(ys.last().unwrap().to_owned());
+            results.extend(added);
         }
 
         Ok(results)
     }
 
     /// Decomposes a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition ring elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
-    pub(crate) fn decompose_field_element_to_ringst_many<G: FancyBinary, F: PrimeField>(
+    pub(crate) fn decompose_field_element_to_rings_many<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         num_decomps_per_field: usize,
         decompose_bitlen: usize,
+        output_bitlen: usize,
     ) -> Result<BinaryBundle<G::Item>, G::Error> {
         debug_assert_eq!(wires_a.size(), wires_b.size());
         let input_size = wires_a.size();
@@ -400,14 +425,17 @@ impl GarbledCircuits {
         debug_assert_eq!(input_size % input_bitlen, 0);
         debug_assert!(input_bitlen >= total_output_bitlen_per_field);
         debug_assert!(decompose_bitlen <= total_output_bitlen_per_field);
-        debug_assert_eq!(wires_c.size(), decompose_bitlen * total_output_elements);
+        debug_assert!(output_bitlen >= decompose_bitlen);
+        debug_assert_eq!(wires_c.size(), output_bitlen * total_output_elements);
 
         let mut results = Vec::with_capacity(wires_c.size());
 
         for (chunk_a, chunk_b, chunk_c) in izip!(
             wires_a.wires().chunks(input_bitlen),
             wires_b.wires().chunks(input_bitlen),
-            wires_c.wires().chunks(total_output_bitlen_per_field)
+            wires_c
+                .wires()
+                .chunks(output_bitlen * total_output_elements)
         ) {
             let decomposed = Self::decompose_field_element_to_rings::<_, F>(
                 g,
@@ -416,6 +444,7 @@ impl GarbledCircuits {
                 chunk_c,
                 num_decomps_per_field,
                 decompose_bitlen,
+                output_bitlen,
             )?;
             results.extend(decomposed);
         }

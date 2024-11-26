@@ -688,3 +688,157 @@ where
         (T::K, U::K)
     )
 }
+
+/// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, ther will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
+pub fn decompose_field_to_rings_many<F: PrimeField, T: IntRing2k, N: Rep3Network>(
+    inputs: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    num_decomps_per_field: usize,
+    decompose_bitlen: usize,
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let num_inputs = inputs.len();
+    let delta = io_context.rngs.generate_random_garbler_delta(io_context.id);
+
+    let [x01, x2] = rep3::yao::joint_input_arithmetic_added_many(inputs, delta, io_context)?;
+
+    let mut res = vec![Rep3RingShare::zero_share(); num_inputs];
+
+    match io_context.id {
+        PartyID::ID0 => {
+            for res in res.iter_mut() {
+                let k3 = io_context
+                    .rngs
+                    .bitcomp2
+                    .random_elements_3keys::<RingElement<T>>();
+                res.b = (k3.0 + k3.1 + k3.2).neg();
+            }
+
+            // TODO this can be parallelized with joint_input_arithmetic_added_many
+            let x23 = input_ring_id2_many::<T, _>(None, None, num_inputs, io_context)?;
+
+            let mut evaluator = Rep3Evaluator::new(io_context);
+            evaluator.receive_circuit()?;
+
+            let x1 = GarbledCircuits::decompose_field_element_to_rings_many::<_, F>(
+                &mut evaluator,
+                &x01,
+                &x2,
+                &x23,
+                num_decomps_per_field,
+                decompose_bitlen,
+                T::K,
+            );
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
+
+            // Compose the bits
+            for (res, x1) in izip!(res.iter_mut(), x1.chunks(T::K)) {
+                res.a = GCUtils::bits_to_ring(x1)?;
+            }
+        }
+        PartyID::ID1 => {
+            for res in res.iter_mut() {
+                let k2 = io_context
+                    .rngs
+                    .bitcomp1
+                    .random_elements_3keys::<RingElement<T>>();
+                res.a = (k2.0 + k2.1 + k2.2).neg();
+            }
+
+            // TODO this can be parallelized with joint_input_arithmetic_added_many
+            let x23 = input_ring_id2_many::<T, _>(None, None, num_inputs, io_context)?;
+
+            let mut garbler =
+                Rep3Garbler::new_with_delta(io_context, delta.expect("Delta not provided"));
+
+            let x1 = GarbledCircuits::decompose_field_element_to_rings_many::<_, F>(
+                &mut garbler,
+                &x01,
+                &x2,
+                &x23,
+                num_decomps_per_field,
+                decompose_bitlen,
+                T::K,
+            );
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+            let x1 = match x1 {
+                Some(x1) => x1,
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "No output received",
+                ))?,
+            };
+
+            // Compose the bits
+            for (res, x1) in izip!(res.iter_mut(), x1.chunks(T::K)) {
+                res.b = GCUtils::bits_to_ring(x1)?;
+            }
+        }
+        PartyID::ID2 => {
+            let mut x23 = Vec::with_capacity(num_inputs);
+            for res in res.iter_mut() {
+                let k2 = io_context
+                    .rngs
+                    .bitcomp1
+                    .random_elements_3keys::<RingElement<T>>();
+                let k3 = io_context
+                    .rngs
+                    .bitcomp2
+                    .random_elements_3keys::<RingElement<T>>();
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                let k3_comp = k3.0 + k3.1 + k3.2;
+                x23.push(k2_comp + k3_comp);
+                res.a = k3_comp.neg();
+                res.b = k2_comp.neg();
+            }
+
+            // TODO this can be parallelized with joint_input_arithmetic_added_many
+            let x23 = input_ring_id2_many(Some(x23), delta, num_inputs, io_context)?;
+
+            let mut garbler =
+                Rep3Garbler::new_with_delta(io_context, delta.expect("Delta not provided"));
+
+            let x1 = GarbledCircuits::decompose_field_element_to_rings_many::<_, F>(
+                &mut garbler,
+                &x01,
+                &x2,
+                &x23,
+                num_decomps_per_field,
+                decompose_bitlen,
+                T::K,
+            );
+            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+            if x1.is_some() {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Unexpected output received",
+                ))?;
+            }
+        }
+    }
+
+    Ok(res)
+}
+
+/// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, ther will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
+pub fn decompose_field_to_rings<F: PrimeField, T: IntRing2k, N: Rep3Network>(
+    inputs: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+    num_decomps_per_field: usize,
+    decompose_bitlen: usize,
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    decompose_field_to_rings_many(
+        &[inputs],
+        io_context,
+        num_decomps_per_field,
+        decompose_bitlen,
+    )
+}
