@@ -775,7 +775,6 @@ macro_rules! decompose_circuit_compose_blueprint {
 }
 pub(crate) use decompose_circuit_compose_blueprint;
 
-// TODO implement with streaming Garbler/Evaluator as well
 // TODO implement with a2b/b2a as well
 
 /// Decomposes a vector of shared field element into chunks, which are also represented as shared field elements. Per field element, the total bit size of the shared chunks is given by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can be smaller) decompose_bit_size bits.

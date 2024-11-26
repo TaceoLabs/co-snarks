@@ -1627,6 +1627,10 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
             (Rep3BrilligType::Shared(val), Rep3BrilligType::Public(radix)) => {
                 if let (Shared::Field(val), Public::Int(radix, IntegerBitSize::U32)) = (val, radix)
                 {
+                    if bits {
+                        todo!("Implement to_radix for shared value and public radix for bits=true")
+                    }
+
                     let radix = u32::try_from(radix).expect("must be u32");
                     assert!(radix <= 256, "radix is at most 256");
                     if radix.is_power_of_two() {

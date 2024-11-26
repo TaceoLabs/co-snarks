@@ -347,7 +347,83 @@ impl GarbledCircuits {
         Self::sub_p_and_mux_with_output_size::<_, F>(g, &added, c, F::MODULUS_BIT_SIZE as usize)
     }
 
-    /// Decomposes a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
+    /// Decomposes a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition ring elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
+    fn decompose_field_element_to_rings<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &[G::Item],
+        wires_b: &[G::Item],
+        wires_c: &[G::Item],
+        num_decomps_per_field: usize,
+        decompose_bitlen: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let total_output_bitlen = decompose_bitlen * num_decomps_per_field;
+        debug_assert_eq!(wires_a.len(), wires_b.len());
+        let input_bitlen = wires_a.len();
+        debug_assert_eq!(input_bitlen, F::MODULUS_BIT_SIZE as usize);
+        debug_assert!(input_bitlen >= total_output_bitlen);
+        debug_assert!(decompose_bitlen <= total_output_bitlen);
+        debug_assert_eq!(wires_c.len(), total_output_bitlen);
+
+        let input_bits =
+            Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, total_output_bitlen)?;
+
+        let mut results = Vec::with_capacity(wires_c.len());
+
+        for (xs, ys) in izip!(
+            input_bits.chunks(decompose_bitlen),
+            wires_c.chunks(decompose_bitlen),
+        ) {
+            let result = Self::bin_addition_no_carry(g, xs, ys)?;
+            results.extend(result);
+        }
+
+        Ok(results)
+    }
+
+    /// Decomposes a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition ring elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
+    pub(crate) fn decompose_field_element_to_ringst_many<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        num_decomps_per_field: usize,
+        decompose_bitlen: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        debug_assert_eq!(wires_a.size(), wires_b.size());
+        let input_size = wires_a.size();
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let num_inputs = input_size / input_bitlen;
+
+        let total_output_bitlen_per_field = decompose_bitlen * num_decomps_per_field;
+        let total_output_elements = num_decomps_per_field * num_inputs;
+
+        debug_assert_eq!(input_size % input_bitlen, 0);
+        debug_assert!(input_bitlen >= total_output_bitlen_per_field);
+        debug_assert!(decompose_bitlen <= total_output_bitlen_per_field);
+        debug_assert_eq!(wires_c.size(), decompose_bitlen * total_output_elements);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_a, chunk_b, chunk_c) in izip!(
+            wires_a.wires().chunks(input_bitlen),
+            wires_b.wires().chunks(input_bitlen),
+            wires_c.wires().chunks(total_output_bitlen_per_field)
+        ) {
+            let decomposed = Self::decompose_field_element_to_rings::<_, F>(
+                g,
+                chunk_a,
+                chunk_b,
+                chunk_c,
+                num_decomps_per_field,
+                decompose_bitlen,
+            )?;
+            results.extend(decomposed);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Decomposes a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition field elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
     fn decompose_field_element<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -380,7 +456,7 @@ impl GarbledCircuits {
         Ok(results)
     }
 
-    /// Decomposes a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
+    /// Decomposes a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition field elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
     pub(crate) fn decompose_field_element_many<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
