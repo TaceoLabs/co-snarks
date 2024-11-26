@@ -160,7 +160,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, lhs_bit_size))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
@@ -191,7 +191,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, lhs_bit_size))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
@@ -221,7 +221,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, lhs_bit_size))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
@@ -250,7 +250,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, lhs_bit_size))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
@@ -298,7 +298,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
@@ -321,7 +321,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
@@ -344,7 +344,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }

@@ -577,10 +577,10 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        match (lhs, rhs) {
+        let result = match (lhs, rhs) {
             (Rep3BrilligType::Public(lhs), Rep3BrilligType::Public(rhs)) => {
                 let result = self.plain_driver.lt(lhs, rhs)?;
-                Ok(Rep3BrilligType::Public(result))
+                Rep3BrilligType::Public(result)
             }
             (Rep3BrilligType::Public(_), Rep3BrilligType::Shared(_)) => todo!(),
             (Rep3BrilligType::Shared(_), Rep3BrilligType::Public(_)) => todo!(),
@@ -591,11 +591,32 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                         Bit::cast_from_biguint(&ge.a),
                         Bit::cast_from_biguint(&ge.b),
                     );
-                    Ok(Rep3BrilligType::shared_u1(result))
+                    Rep3BrilligType::shared_u1(result)
                 }
-                _ => todo!(),
+                (Shared::Ring128(s1), Shared::Ring128(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::lt(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring64(s1), Shared::Ring64(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::lt(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring32(s1), Shared::Ring32(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::lt(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring16(s1), Shared::Ring16(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::lt(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring8(s1), Shared::Ring8(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::lt(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring1(s1), Shared::Ring1(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::lt(s1, s2, &mut self.io_context)?,
+                ),
+                x => eyre::bail!(
+                    "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
+                ),
             },
-        }
+        };
+        Ok(result)
     }
 
     fn le(
