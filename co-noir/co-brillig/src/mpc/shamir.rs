@@ -113,24 +113,45 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
         todo!()
     }
 
-    fn not(&self, _val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
-        todo!()
+    fn not(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
+        let result = match val {
+            ShamirBrilligType::Public(val) => {
+                let result = self.plain_driver.not(val)?;
+                ShamirBrilligType::Public(result)
+            }
+            _ => eyre::bail!("Cannot use NOT on shared values with Shamir"),
+        };
+        Ok(result)
     }
 
     fn eq(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
+                let result = self.plain_driver.eq(lhs, rhs)?;
+                ShamirBrilligType::Public(result)
+            }
+            _ => eyre::bail!("Cannot compare shared values with Shamir"),
+        };
+        Ok(result)
     }
 
     fn lt(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
+                let result = self.plain_driver.lt(lhs, rhs)?;
+                ShamirBrilligType::Public(result)
+            }
+            _ => eyre::bail!("Cannot compare shared values with Shamir"),
+        };
+        Ok(result)
     }
 
     fn le(
@@ -138,16 +159,29 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        let gt = self.gt(lhs, rhs)?;
-        self.not(gt)
+        let result = match (lhs, rhs) {
+            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
+                let result = self.plain_driver.le(lhs, rhs)?;
+                ShamirBrilligType::Public(result)
+            }
+            _ => eyre::bail!("Cannot compare shared values with Shamir"),
+        };
+        Ok(result)
     }
 
     fn gt(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
+                let result = self.plain_driver.gt(lhs, rhs)?;
+                ShamirBrilligType::Public(result)
+            }
+            _ => eyre::bail!("Cannot compare shared values with Shamir"),
+        };
+        Ok(result)
     }
 
     fn ge(
@@ -155,8 +189,14 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        let gt = self.lt(lhs, rhs)?;
-        self.not(gt)
+        let result = match (lhs, rhs) {
+            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
+                let result = self.plain_driver.ge(lhs, rhs)?;
+                ShamirBrilligType::Public(result)
+            }
+            _ => eyre::bail!("Cannot compare shared values with Shamir"),
+        };
+        Ok(result)
     }
 
     fn to_radix(
