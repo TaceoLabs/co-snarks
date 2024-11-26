@@ -1,16 +1,14 @@
-use core::panic;
-use std::marker::PhantomData;
-
+use super::{BrilligDriver, PlainBrilligDriver};
 use ark_ff::PrimeField;
 use brillig::{BitSize, IntegerBitSize};
+use core::panic;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use mpc_core::protocols::rep3::{self, Rep3PrimeFieldShare};
 use mpc_core::protocols::rep3_ring::ring::bit::Bit;
 use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
 use mpc_core::protocols::rep3_ring::{self, Rep3BitShare, Rep3RingShare};
-
-use super::{BrilligDriver, PlainBrilligDriver};
+use std::marker::PhantomData;
 
 use super::PlainBrilligType as Public;
 
@@ -570,10 +568,52 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
 
     fn eq(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (Rep3BrilligType::Public(lhs), Rep3BrilligType::Public(rhs)) => {
+                let result = self.plain_driver.eq(lhs, rhs)?;
+                Rep3BrilligType::Public(result)
+            }
+            (Rep3BrilligType::Public(public), Rep3BrilligType::Shared(secret))
+            | (Rep3BrilligType::Shared(secret), Rep3BrilligType::Public(public)) => {
+                todo!()
+            }
+            (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
+                (Shared::Field(s1), Shared::Field(s2)) => {
+                    let eq = rep3::arithmetic::eq_bit(s1, s2, &mut self.io_context)?;
+                    let result = Rep3RingShare::new(
+                        Bit::cast_from_biguint(&eq.a),
+                        Bit::cast_from_biguint(&eq.b),
+                    );
+                    Rep3BrilligType::shared_u1(result)
+                }
+
+                (Shared::Ring128(s1), Shared::Ring128(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::eq(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring64(s1), Shared::Ring64(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::eq(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring32(s1), Shared::Ring32(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::eq(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring16(s1), Shared::Ring16(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::eq(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring8(s1), Shared::Ring8(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::eq(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring1(s1), Shared::Ring1(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::eq(s1, s2, &mut self.io_context)?,
+                ),
+                x => eyre::bail!(
+                    "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
+                ),
+            },
+        };
+        Ok(result)
     }
 
     fn lt(
@@ -1219,7 +1259,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
         _output_size: usize,
         _bits: bool,
     ) -> eyre::Result<Vec<Self::BrilligType>> {
-        todo!()
+        todo!("Implement to_radix")
     }
 
     fn expect_int(
