@@ -155,18 +155,51 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
 
     fn div(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
+                ShamirBrilligType::Public(self.plain_driver.div(lhs, rhs)?)
+            }
+            (ShamirBrilligType::Public(public), ShamirBrilligType::Shared(secret)) => {
+                if let Public::Field(public) = public {
+                    ShamirBrilligType::Shared(shamir::arithmetic::div_shared_by_public(
+                        secret, public,
+                    )?)
+                } else {
+                    panic!("type mismatch. Can only div matching values")
+                }
+            }
+            (ShamirBrilligType::Shared(secret), ShamirBrilligType::Public(public)) => {
+                if let Public::Field(public) = public {
+                    ShamirBrilligType::Shared(shamir::arithmetic::div_public_by_shared(
+                        public,
+                        secret,
+                        &mut self.protocol,
+                    )?)
+                } else {
+                    panic!("type mismatch. Can only div matching values")
+                }
+            }
+            (ShamirBrilligType::Shared(s1), ShamirBrilligType::Shared(s2)) => {
+                ShamirBrilligType::Shared(shamir::arithmetic::div(s1, s2, &mut self.protocol)?)
+            }
+        };
+        Ok(result)
     }
 
     fn int_div(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        if let (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) = (lhs, rhs) {
+            let result = self.plain_driver.int_div(lhs, rhs)?;
+            Ok(ShamirBrilligType::Public(result))
+        } else {
+            eyre::bail!("Cannot use int_div with Shamir shares")
+        }
     }
 
     fn not(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
