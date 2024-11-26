@@ -86,14 +86,20 @@ impl<F: PrimeField> From<ShamirPrimeFieldShare<F>> for ShamirAcvmType<F> {
 }
 
 impl<F: PrimeField> From<ShamirAcvmType<F>> for ShamirBrilligType<F> {
-    fn from(_val: ShamirAcvmType<F>) -> Self {
-        todo!()
+    fn from(val: ShamirAcvmType<F>) -> Self {
+        match val {
+            ShamirAcvmType::Public(public) => ShamirBrilligType::from(public),
+            ShamirAcvmType::Shared(share) => ShamirBrilligType::Shared(share),
+        }
     }
 }
 
 impl<F: PrimeField> From<ShamirBrilligType<F>> for ShamirAcvmType<F> {
-    fn from(_value: ShamirBrilligType<F>) -> Self {
-        todo!()
+    fn from(value: ShamirBrilligType<F>) -> Self {
+        match value {
+            ShamirBrilligType::Public(public) => ShamirAcvmType::Public(public.into_field()),
+            ShamirBrilligType::Shared(shared) => ShamirAcvmType::Shared(shared),
+        }
     }
 }
 
@@ -104,7 +110,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
 
     type AcvmType = ShamirAcvmType<F>;
 
-    type BrilligDriver = ShamirBrilligDriver<F>;
+    type BrilligDriver = ShamirBrilligDriver<F, N>;
 
     fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver> {
         todo!()
@@ -114,8 +120,11 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         Self::AcvmType::default()
     }
 
-    fn from_brillig_result(_brillig_result: Vec<ShamirBrilligType<F>>) -> Vec<Self::AcvmType> {
-        todo!()
+    fn from_brillig_result(brillig_result: Vec<ShamirBrilligType<F>>) -> Vec<Self::AcvmType> {
+        brillig_result
+            .into_iter()
+            .map(ShamirAcvmType::from)
+            .collect()
     }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {
