@@ -689,6 +689,44 @@ where
     )
 }
 
+/// Divides a vector of ring elements by a power of 2.
+pub fn ring_div_power_2_many<T: IntRing2k, N: Rep3Network>(
+    inputs: &[Rep3RingShare<T>],
+    io_context: &mut IoContext<N>,
+    divisor_bit: usize,
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let num_inputs = inputs.len();
+
+    if divisor_bit >= T::K {
+        return Ok(vec![Rep3RingShare::zero_share(); num_inputs]);
+    }
+
+    decompose_circuit_compose_blueprint!(
+        inputs,
+        io_context,
+        num_inputs,
+        T,
+        GarbledCircuits::ring_div_power_2_many,
+        (T::K, divisor_bit)
+    )
+}
+
+/// Divides a ring element by a power of 2.
+pub fn ring_div_power_2<T: IntRing2k, N: Rep3Network>(
+    inputs: Rep3RingShare<T>,
+    io_context: &mut IoContext<N>,
+    divisor_bit: usize,
+) -> IoResult<Rep3RingShare<T>>
+where
+    Standard: Distribution<T>,
+{
+    let res = ring_div_power_2_many(&[inputs], io_context, divisor_bit)?;
+    Ok(res[0])
+}
+
 /// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, ther will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
 pub fn decompose_field_to_rings_many<F: PrimeField, T: IntRing2k, N: Rep3Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
