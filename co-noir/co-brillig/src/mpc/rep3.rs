@@ -740,8 +740,158 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        let gt = self.gt(lhs, rhs)?;
-        self.not(gt)
+        let result = match (lhs, rhs) {
+            (Rep3BrilligType::Public(lhs), Rep3BrilligType::Public(rhs)) => {
+                let result = self.plain_driver.le(lhs, rhs)?;
+                Rep3BrilligType::Public(result)
+            }
+            (Rep3BrilligType::Public(public), Rep3BrilligType::Shared(shared)) => {
+                match (shared, public) {
+                    (Shared::Field(rhs), Public::Field(lhs)) => {
+                        let ge = rep3::arithmetic::ge_public_bit(rhs, lhs, &mut self.io_context)?;
+                        let result = Rep3RingShare::new(
+                            Bit::cast_from_biguint(&ge.a),
+                            Bit::cast_from_biguint(&ge.b),
+                        );
+                        Rep3BrilligType::shared_u1(result)
+                    }
+                    (Shared::Ring128(rhs), Public::Int(lhs, IntegerBitSize::U128)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::ge_public(
+                            rhs,
+                            lhs.into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring64(rhs), Public::Int(lhs, IntegerBitSize::U64)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::ge_public(
+                            rhs,
+                            u64::try_from(lhs).expect("must be u64").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring32(rhs), Public::Int(lhs, IntegerBitSize::U32)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::ge_public(
+                            rhs,
+                            u32::try_from(lhs).expect("must be u32").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring16(rhs), Public::Int(lhs, IntegerBitSize::U16)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::ge_public(
+                            rhs,
+                            u16::try_from(lhs).expect("must be u16").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring8(rhs), Public::Int(lhs, IntegerBitSize::U8)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::ge_public(
+                            rhs,
+                            u8::try_from(lhs).expect("must be u8").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring1(rhs), Public::Int(lhs, IntegerBitSize::U1)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::ge_public(
+                            rhs,
+                            bit_from_u128!(lhs),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    x => eyre::bail!(
+                        "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
+                    ),
+                }
+            }
+            (Rep3BrilligType::Shared(shared), Rep3BrilligType::Public(public)) => {
+                match (shared, public) {
+                    (Shared::Field(lhs), Public::Field(rhs)) => {
+                        let ge = rep3::arithmetic::le_public_bit(lhs, rhs, &mut self.io_context)?;
+                        let result = Rep3RingShare::new(
+                            Bit::cast_from_biguint(&ge.a),
+                            Bit::cast_from_biguint(&ge.b),
+                        );
+                        Rep3BrilligType::shared_u1(result)
+                    }
+                    (Shared::Ring128(lhs), Public::Int(rhs, IntegerBitSize::U128)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::le_public(
+                            lhs,
+                            rhs.into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring64(lhs), Public::Int(rhs, IntegerBitSize::U64)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::le_public(
+                            lhs,
+                            u64::try_from(rhs).expect("must be u64").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring32(lhs), Public::Int(rhs, IntegerBitSize::U32)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::le_public(
+                            lhs,
+                            u32::try_from(rhs).expect("must be u32").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring16(lhs), Public::Int(rhs, IntegerBitSize::U16)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::le_public(
+                            lhs,
+                            u16::try_from(rhs).expect("must be u16").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring8(lhs), Public::Int(rhs, IntegerBitSize::U8)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::le_public(
+                            lhs,
+                            u8::try_from(rhs).expect("must be u8").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring1(lhs), Public::Int(rhs, IntegerBitSize::U1)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::le_public(
+                            lhs,
+                            bit_from_u128!(rhs),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    x => eyre::bail!(
+                        "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
+                    ),
+                }
+            }
+            (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
+                (Shared::Field(s1), Shared::Field(s2)) => {
+                    let ge = rep3::arithmetic::ge_bit(s2, s1, &mut self.io_context)?;
+                    let result = Rep3RingShare::new(
+                        Bit::cast_from_biguint(&ge.a),
+                        Bit::cast_from_biguint(&ge.b),
+                    );
+                    Rep3BrilligType::shared_u1(result)
+                }
+                (Shared::Ring128(s1), Shared::Ring128(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::le(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring64(s1), Shared::Ring64(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::le(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring32(s1), Shared::Ring32(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::le(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring16(s1), Shared::Ring16(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::le(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring8(s1), Shared::Ring8(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::le(s1, s2, &mut self.io_context)?,
+                ),
+                (Shared::Ring1(s1), Shared::Ring1(s2)) => Rep3BrilligType::shared_u1(
+                    rep3_ring::arithmetic::le(s1, s2, &mut self.io_context)?,
+                ),
+                x => eyre::bail!(
+                    "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
+                ),
+            },
+        };
+        Ok(result)
     }
 
     fn gt(
