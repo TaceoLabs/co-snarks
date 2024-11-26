@@ -51,7 +51,11 @@ pub trait BrilligDriver<F: PrimeField> {
     /// Casts the provided value to the provided bit size. This includes upcasts
     /// and downcasts between integer types, but also between fields to integers
     /// and vice verca.
-    fn cast(&self, src: Self::BrilligType, bit_size: BitSize) -> eyre::Result<Self::BrilligType>;
+    fn cast(
+        &mut self,
+        src: Self::BrilligType,
+        bit_size: BitSize,
+    ) -> eyre::Result<Self::BrilligType>;
 
     /// Tries to convert the provided value to a `usize`. Returns an error
     /// if it is not possible (e.g., is a shared value).

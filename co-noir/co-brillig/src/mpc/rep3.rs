@@ -2,8 +2,10 @@ use super::{BrilligDriver, PlainBrilligDriver};
 use ark_ff::PrimeField;
 use brillig::{BitSize, IntegerBitSize};
 use core::panic;
+use eyre::Ok;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use mpc_core::protocols::rep3::{self, Rep3PrimeFieldShare};
+use mpc_core::protocols::rep3_ring::casts::{cast_a2b, field_to_ring_a2b};
 use mpc_core::protocols::rep3_ring::ring::bit::Bit;
 use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
@@ -71,15 +73,31 @@ impl<F: PrimeField> Rep3BrilligType<F> {
         Self::Public(Public::Field(val))
     }
 
-    pub fn into_arithemtic_share(shared: Shared<F>) -> Rep3PrimeFieldShare<F> {
+    /// Converts a Rep3BrilligType into a Rep3PrimeFieldShare
+    pub fn into_arithmetic_share<N: Rep3Network>(
+        io_context: &mut IoContext<N>,
+        shared: Shared<F>,
+    ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
         match shared {
-            Shared::Field(share) => share,
-            Shared::Ring128(share) => todo!(),
-            Shared::Ring64(_) => todo!(),
-            Shared::Ring32(_) => todo!(),
-            Shared::Ring16(_) => todo!(),
-            Shared::Ring8(_) => todo!(),
-            Shared::Ring1(_) => todo!(),
+            Shared::Field(share) => Ok(share),
+            Shared::Ring128(share) => {
+                Ok(rep3_ring::casts::ring_to_field_selector(share, io_context)?)
+            }
+            Shared::Ring64(share) => {
+                Ok(rep3_ring::casts::ring_to_field_selector(share, io_context)?)
+            }
+            Shared::Ring32(share) => {
+                Ok(rep3_ring::casts::ring_to_field_selector(share, io_context)?)
+            }
+            Shared::Ring16(share) => {
+                Ok(rep3_ring::casts::ring_to_field_selector(share, io_context)?)
+            }
+            Shared::Ring8(share) => {
+                Ok(rep3_ring::casts::ring_to_field_selector(share, io_context)?)
+            }
+            Shared::Ring1(share) => {
+                Ok(rep3_ring::casts::ring_to_field_selector(share, io_context)?)
+            }
         }
     }
 
@@ -130,12 +148,182 @@ macro_rules! bit_from_u128 {
 impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N> {
     type BrilligType = Rep3BrilligType<F>;
 
-    fn cast(&self, val: Self::BrilligType, bit_size: BitSize) -> eyre::Result<Self::BrilligType> {
-        if let Rep3BrilligType::Public(public) = val {
-            let casted = self.plain_driver.cast(public, bit_size)?;
-            Ok(Rep3BrilligType::Public(casted))
-        } else {
-            todo!("wait for romans cast impl")
+    fn cast(
+        &mut self,
+        val: Self::BrilligType,
+        bit_size: BitSize,
+    ) -> eyre::Result<Self::BrilligType> {
+        match (val, bit_size) {
+            (Rep3BrilligType::Shared(shared), BitSize::Field) => {
+                Ok(Rep3BrilligType::Shared(shared))
+            }
+            (Rep3BrilligType::Shared(shared), BitSize::Integer(integer_bit_size)) => {
+                match shared {
+                    Shared::Field(rep3_prime_field_share) => match integer_bit_size {
+                        IntegerBitSize::U1 => Ok(Rep3BrilligType::Shared(Shared::Ring1(
+                            field_to_ring_a2b(rep3_prime_field_share, &mut self.io_context)?,
+                        ))),
+                        IntegerBitSize::U8 => Ok(Rep3BrilligType::Shared(Shared::Ring8(
+                            field_to_ring_a2b(rep3_prime_field_share, &mut self.io_context)?,
+                        ))),
+
+                        IntegerBitSize::U16 => Ok(Rep3BrilligType::Shared(Shared::Ring16(
+                            field_to_ring_a2b(rep3_prime_field_share, &mut self.io_context)?,
+                        ))),
+                        IntegerBitSize::U32 => Ok(Rep3BrilligType::Shared(Shared::Ring32(
+                            field_to_ring_a2b(rep3_prime_field_share, &mut self.io_context)?,
+                        ))),
+                        IntegerBitSize::U64 => Ok(Rep3BrilligType::Shared(Shared::Ring64(
+                            field_to_ring_a2b(rep3_prime_field_share, &mut self.io_context)?,
+                        ))),
+                        IntegerBitSize::U128 => Ok(Rep3BrilligType::Shared(Shared::Ring128(
+                            field_to_ring_a2b(rep3_prime_field_share, &mut self.io_context)?,
+                        ))),
+                    },
+                    Shared::Ring128(rep3_ring_share) => {
+                        match integer_bit_size {
+                            IntegerBitSize::U1 => Ok(Rep3BrilligType::Shared(Shared::Ring1(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U8 => Ok(Rep3BrilligType::Shared(Shared::Ring8(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U16 => Ok(Rep3BrilligType::Shared(Shared::Ring16(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U32 => Ok(Rep3BrilligType::Shared(Shared::Ring32(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U64 => Ok(Rep3BrilligType::Shared(Shared::Ring64(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U128 => Ok(Rep3BrilligType::Shared(Shared::Ring128(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                        }
+                    }
+                    Shared::Ring64(rep3_ring_share) => {
+                        match integer_bit_size {
+                            IntegerBitSize::U1 => Ok(Rep3BrilligType::Shared(Shared::Ring1(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U8 => Ok(Rep3BrilligType::Shared(Shared::Ring8(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U16 => Ok(Rep3BrilligType::Shared(Shared::Ring16(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U32 => Ok(Rep3BrilligType::Shared(Shared::Ring32(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U64 => Ok(Rep3BrilligType::Shared(Shared::Ring64(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U128 => Ok(Rep3BrilligType::Shared(Shared::Ring128(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                        }
+                    }
+                    Shared::Ring32(rep3_ring_share) => {
+                        match integer_bit_size {
+                            IntegerBitSize::U1 => Ok(Rep3BrilligType::Shared(Shared::Ring1(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U8 => Ok(Rep3BrilligType::Shared(Shared::Ring8(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U16 => Ok(Rep3BrilligType::Shared(Shared::Ring16(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U32 => Ok(Rep3BrilligType::Shared(Shared::Ring32(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U64 => Ok(Rep3BrilligType::Shared(Shared::Ring64(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U128 => Ok(Rep3BrilligType::Shared(Shared::Ring128(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                        }
+                    }
+                    Shared::Ring16(rep3_ring_share) => {
+                        match integer_bit_size {
+                            IntegerBitSize::U1 => Ok(Rep3BrilligType::Shared(Shared::Ring1(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U8 => Ok(Rep3BrilligType::Shared(Shared::Ring8(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U16 => Ok(Rep3BrilligType::Shared(Shared::Ring16(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U32 => Ok(Rep3BrilligType::Shared(Shared::Ring32(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U64 => Ok(Rep3BrilligType::Shared(Shared::Ring64(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U128 => Ok(Rep3BrilligType::Shared(Shared::Ring128(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                        }
+                    }
+                    Shared::Ring8(rep3_ring_share) => {
+                        match integer_bit_size {
+                            IntegerBitSize::U1 => Ok(Rep3BrilligType::Shared(Shared::Ring1(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U8 => Ok(Rep3BrilligType::Shared(Shared::Ring8(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U16 => Ok(Rep3BrilligType::Shared(Shared::Ring16(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U32 => Ok(Rep3BrilligType::Shared(Shared::Ring32(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U64 => Ok(Rep3BrilligType::Shared(Shared::Ring64(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U128 => Ok(Rep3BrilligType::Shared(Shared::Ring128(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                        }
+                    }
+                    Shared::Ring1(rep3_ring_share) => {
+                        match integer_bit_size {
+                            IntegerBitSize::U1 => Ok(Rep3BrilligType::Shared(Shared::Ring1(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U8 => Ok(Rep3BrilligType::Shared(Shared::Ring8(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U16 => Ok(Rep3BrilligType::Shared(Shared::Ring16(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U32 => Ok(Rep3BrilligType::Shared(Shared::Ring32(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U64 => Ok(Rep3BrilligType::Shared(Shared::Ring64(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                            IntegerBitSize::U128 => Ok(Rep3BrilligType::Shared(Shared::Ring128(
+                                cast_a2b(rep3_ring_share, &mut self.io_context)?,
+                            ))),
+                        }
+                    }
+                }
+            }
+            (Rep3BrilligType::Public(public), BitSize::Field) => {
+                let casted = self.plain_driver.cast(public, bit_size)?;
+                Ok(Rep3BrilligType::Public(casted))
+            }
+            (Rep3BrilligType::Public(public), BitSize::Integer(integer_bit_size)) => {
+                let casted = self
+                    .plain_driver
+                    .cast(public, BitSize::Integer(integer_bit_size))?;
+                Ok(Rep3BrilligType::Public(casted))
+            }
         }
     }
 

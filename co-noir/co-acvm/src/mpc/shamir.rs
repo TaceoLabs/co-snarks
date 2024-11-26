@@ -122,7 +122,10 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         Self::AcvmType::default()
     }
 
-    fn from_brillig_result(brillig_result: Vec<ShamirBrilligType<F>>) -> Vec<Self::AcvmType> {
+    fn from_brillig_result(
+        &mut self,
+        brillig_result: Vec<ShamirBrilligType<F>>,
+    ) -> Vec<Self::AcvmType> {
         brillig_result
             .into_iter()
             .map(ShamirAcvmType::from)

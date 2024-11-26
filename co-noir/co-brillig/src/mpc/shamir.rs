@@ -54,7 +54,11 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirBrilligDriver<F, N> {
 impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F, N> {
     type BrilligType = ShamirBrilligType<F>;
 
-    fn cast(&self, val: Self::BrilligType, bit_size: BitSize) -> eyre::Result<Self::BrilligType> {
+    fn cast(
+        &mut self,
+        val: Self::BrilligType,
+        bit_size: BitSize,
+    ) -> eyre::Result<Self::BrilligType> {
         if let ShamirBrilligType::Public(public) = val {
             let casted = self.plain_driver.cast(public, bit_size)?;
             Ok(ShamirBrilligType::Public(casted))

@@ -73,7 +73,11 @@ impl<F: PrimeField> Default for PlainBrilligType<F> {
 impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
     type BrilligType = PlainBrilligType<F>;
 
-    fn cast(&self, src: Self::BrilligType, bit_size: BitSize) -> eyre::Result<Self::BrilligType> {
+    fn cast(
+        &mut self,
+        src: Self::BrilligType,
+        bit_size: BitSize,
+    ) -> eyre::Result<Self::BrilligType> {
         let casted = match (src, bit_size) {
             // no-op
             (PlainBrilligType::Field(f), BitSize::Field) => PlainBrilligType::Field(f),

@@ -63,7 +63,8 @@ where
                 BrilligInputs::MemoryArray(_) => todo!("memory array calldata TODO"),
             }
         }
-        let brillig_result = T::from_brillig_result(self.brillig.run(id, calldata)?);
+        let brillig_result =
+            T::from_brillig_result(&mut self.driver, self.brillig.run(id, calldata)?);
         self.fill_output(brillig_result, outputs);
         Ok(())
     }

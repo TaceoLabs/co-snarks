@@ -34,7 +34,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(PlainBrilligDriver::default())
     }
 
-    fn from_brillig_result(brillig_result: Vec<PlainBrilligType<F>>) -> Vec<Self::AcvmType> {
+    fn from_brillig_result(
+        &mut self,
+        brillig_result: Vec<PlainBrilligType<F>>,
+    ) -> Vec<Self::AcvmType> {
         brillig_result.into_iter().map(|v| v.into_field()).collect()
     }
 
