@@ -6,8 +6,10 @@ use brillig::{BitSize, IntegerBitSize};
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use mpc_core::protocols::rep3::{self, Rep3PrimeFieldShare};
 use mpc_core::protocols::rep3_ring::ring::bit::Bit;
+use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
 use mpc_core::protocols::rep3_ring::{self, Rep3BitShare, Rep3RingShare};
+use rayon::result;
 
 use super::{BrilligDriver, PlainBrilligDriver};
 
@@ -571,7 +573,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
     }
 
     fn lt(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -582,12 +584,22 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
             }
             (Rep3BrilligType::Public(_), Rep3BrilligType::Shared(_)) => todo!(),
             (Rep3BrilligType::Shared(_), Rep3BrilligType::Public(_)) => todo!(),
-            (Rep3BrilligType::Shared(_), Rep3BrilligType::Shared(_)) => todo!(),
+            (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
+                (Shared::Field(s1), Shared::Field(s2)) => {
+                    let ge = rep3::arithmetic::ge_bit(s1, s2, &mut self.io_context)?;
+                    let result = !Rep3RingShare::new(
+                        Bit::cast_from_biguint(&ge.a),
+                        Bit::cast_from_biguint(&ge.b),
+                    );
+                    Ok(Rep3BrilligType::shared_u1(result))
+                }
+                _ => todo!(),
+            },
         }
     }
 
     fn le(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -596,7 +608,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
     }
 
     fn gt(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -612,7 +624,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
     }
 
     fn ge(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -621,7 +633,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
     }
 
     fn to_radix(
-        &self,
+        &mut self,
         _val: Self::BrilligType,
         _radix: Self::BrilligType,
         _output_size: usize,

@@ -501,8 +501,17 @@ pub fn ge<F: PrimeField, N: Rep3Network>(
     rhs: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let res = detail::unsigned_ge(lhs, rhs, io_context)?;
+    let res = ge_bit(lhs, rhs, io_context)?;
     conversion::bit_inject(&res, io_context)
+}
+
+/// Same as ge but without using bit_inject on the result. Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
+pub fn ge_bit<F: PrimeField, N: Rep3Network>(
+    lhs: FieldShare<F>,
+    rhs: FieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    detail::unsigned_ge(lhs, rhs, io_context)
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.

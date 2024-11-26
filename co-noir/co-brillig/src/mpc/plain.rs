@@ -304,7 +304,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
     }
 
     fn lt(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -327,7 +327,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
     }
 
     fn gt(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -350,7 +350,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
     }
 
     fn to_radix(
-        &self,
+        &mut self,
         val: Self::BrilligType,
         radix: Self::BrilligType,
         output_size: usize,
