@@ -116,6 +116,14 @@ where
         tracing::info!("Party {}: starting proof generation..", id);
         let start = Instant::now();
         let public_inputs = Arc::new(private_witness.public_inputs);
+        if public_inputs.len() != zkey.n_public + 1 {
+            eyre::bail!(
+                "amount of public inputs do not match with provided zkey! Expected {}, but got {}",
+                zkey.n_public + 1,
+                public_inputs.len()
+            )
+        }
+
         let private_witness = Arc::new(private_witness.witness);
         let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness)?;
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
