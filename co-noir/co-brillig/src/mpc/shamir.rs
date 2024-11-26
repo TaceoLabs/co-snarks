@@ -39,6 +39,18 @@ impl<F: PrimeField> Default for ShamirBrilligType<F> {
     }
 }
 
+impl<F: PrimeField, N: ShamirNetwork> ShamirBrilligDriver<F, N> {
+    /// Creates a new instance of the Shamir driver with the provided
+    /// protocol.
+    pub fn with_protocol(protocol: ShamirProtocol<F, N>) -> Self {
+        Self {
+            protocol,
+            plain_driver: PlainBrilligDriver::default(),
+            phantom_data: PhantomData,
+        }
+    }
+}
+
 impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F, N> {
     type BrilligType = ShamirBrilligType<F>;
 

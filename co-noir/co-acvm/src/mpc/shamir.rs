@@ -113,7 +113,9 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     type BrilligDriver = ShamirBrilligDriver<F, N>;
 
     fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver> {
-        todo!()
+        Ok(ShamirBrilligDriver::with_protocol(
+            self.protocol.fork_with_pairs(0)?, // TODO maybe have some pairs here
+        ))
     }
 
     fn public_zero() -> Self::AcvmType {
