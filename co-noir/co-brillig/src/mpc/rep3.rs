@@ -1616,15 +1616,48 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
         output_size: usize,
         bits: bool,
     ) -> eyre::Result<Vec<Self::BrilligType>> {
-        if let (Rep3BrilligType::Public(val), Rep3BrilligType::Public(radix)) = (val, radix) {
-            let result = self.plain_driver.to_radix(val, radix, output_size, bits)?;
-            Ok(result
-                .into_iter()
-                .map(|val| Rep3BrilligType::Public(val))
-                .collect())
-        } else {
-            todo!("Implement to_radix")
-        }
+        let result = match (val, radix) {
+            (Rep3BrilligType::Public(val), Rep3BrilligType::Public(radix)) => {
+                let result = self.plain_driver.to_radix(val, radix, output_size, bits)?;
+                result
+                    .into_iter()
+                    .map(|val| Rep3BrilligType::Public(val))
+                    .collect()
+            }
+            (Rep3BrilligType::Shared(val), Rep3BrilligType::Public(radix)) => {
+                if let (Shared::Field(val), Public::Int(radix, IntegerBitSize::U32)) = (val, radix)
+                {
+                    todo!("Implement to_radix for shared value and public radix")
+                } else {
+                    eyre::bail!("can only ToRadix on field and radix must be Int32")
+                }
+            }
+            (Rep3BrilligType::Public(val), Rep3BrilligType::Shared(radix)) => {
+                if let (Public::Field(_val), Shared::Ring32(_radix)) = (val, radix) {
+                    todo!("Implement to_radix for public value and shared radix")
+                } else {
+                    eyre::bail!("can only ToRadix on field and radix must be Int32")
+                }
+            }
+            (Rep3BrilligType::Shared(val), Rep3BrilligType::Shared(radix)) => {
+                if let (Shared::Field(_val), Shared::Ring32(_radix)) = (val, radix) {
+                    todo!("Implement to_radix for shared value and shared radix")
+                } else {
+                    eyre::bail!("can only ToRadix on field and radix must be Int32")
+                }
+            }
+        };
+        Ok(result)
+
+        // if let (Rep3BrilligType::Public(val), Rep3BrilligType::Public(radix)) = (val, radix) {
+        //     let result = self.plain_driver.to_radix(val, radix, output_size, bits)?;
+        //     Ok(result
+        //         .into_iter()
+        //         .map(|val| Rep3BrilligType::Public(val))
+        //         .collect())
+        // } else {
+        //     todo!("Implement to_radix")
+        // }
     }
 
     fn expect_int(
