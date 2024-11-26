@@ -125,11 +125,11 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     fn from_brillig_result(
         &mut self,
         brillig_result: Vec<ShamirBrilligType<F>>,
-    ) -> Vec<Self::AcvmType> {
-        brillig_result
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        Ok(brillig_result
             .into_iter()
             .map(ShamirAcvmType::from)
-            .collect()
+            .collect())
     }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {

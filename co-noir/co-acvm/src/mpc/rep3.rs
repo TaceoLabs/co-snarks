@@ -118,11 +118,11 @@ impl<F: PrimeField> Rep3AcvmType<F> {
     fn from_brillig_type<N: Rep3Network>(
         value: Rep3BrilligType<F>,
         io_context: &mut IoContext<N>,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         match value {
             Rep3BrilligType::Public(public) => Ok(Rep3AcvmType::Public(public.into_field())),
             Rep3BrilligType::Shared(shared) => {
-                let shared = Rep3BrilligType::into_arithmetic_share(io_context, shared).unwrap(); //TACEO TODO remove unwrap
+                let shared = Rep3BrilligType::into_arithmetic_share(io_context, shared)?;
                 Ok(Rep3AcvmType::Shared(shared))
             }
         }
@@ -145,10 +145,10 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn from_brillig_result(
         &mut self,
         brillig_result: Vec<Rep3BrilligType<F>>,
-    ) -> Vec<Self::AcvmType> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         brillig_result
             .into_iter()
-            .map(|value| Rep3AcvmType::from_brillig_type(value, &mut self.io_context).unwrap()) //TACEO TODO remove unwrap
+            .map(|value| Rep3AcvmType::from_brillig_type(value, &mut self.io_context))
             .collect()
     }
 

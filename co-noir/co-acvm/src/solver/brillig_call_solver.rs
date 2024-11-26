@@ -64,7 +64,7 @@ where
             }
         }
         let brillig_result =
-            T::from_brillig_result(&mut self.driver, self.brillig.run(id, calldata)?);
+            T::from_brillig_result(&mut self.driver, self.brillig.run(id, calldata)?)?;
         self.fill_output(brillig_result, outputs);
         Ok(())
     }

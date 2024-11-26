@@ -37,8 +37,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn from_brillig_result(
         &mut self,
         brillig_result: Vec<PlainBrilligType<F>>,
-    ) -> Vec<Self::AcvmType> {
-        brillig_result.into_iter().map(|v| v.into_field()).collect()
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        Ok(brillig_result.into_iter().map(|v| v.into_field()).collect())
     }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {
