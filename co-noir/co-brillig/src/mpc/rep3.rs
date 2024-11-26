@@ -558,12 +558,16 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
     }
 
     fn not(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
-        if let Rep3BrilligType::Public(public) = val {
-            let result = self.plain_driver.not(public)?;
-            Ok(Rep3BrilligType::Public(result))
-        } else {
-            todo!()
-        }
+        let result = match val {
+            Rep3BrilligType::Public(public) => {
+                Rep3BrilligType::Public(self.plain_driver.not(public)?)
+            }
+            Rep3BrilligType::Shared(shared) => match shared {
+                Shared::Ring1(secret) => Rep3BrilligType::shared_u1(!secret),
+                _ => eyre::bail!("NOT only supported on u1 values"),
+            },
+        };
+        Ok(result)
     }
 
     fn eq(

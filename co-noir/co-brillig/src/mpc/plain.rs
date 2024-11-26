@@ -276,7 +276,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 IntegerBitSize::U1,
             ))
         } else {
-            eyre::bail!("")
+            eyre::bail!("NOT only supported on U1")
         }
     }
 
