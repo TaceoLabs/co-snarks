@@ -260,8 +260,6 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
             (Rep3BrilligType::Public(lhs), Rep3BrilligType::Public(rhs)) => {
                 Rep3BrilligType::Public(self.plain_driver.sub(lhs, rhs)?)
             }
-            // (Rep3BrilligType::Public(public), Rep3BrilligType::Shared(secret))
-            // |
             (Rep3BrilligType::Shared(secret), Rep3BrilligType::Public(public)) => {
                 match (secret, public) {
                     (Shared::Field(secret), Public::Field(public)) => {
@@ -488,18 +486,71 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
 
     fn div(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (Rep3BrilligType::Public(lhs), Rep3BrilligType::Public(rhs)) => {
+                Rep3BrilligType::Public(self.plain_driver.div(lhs, rhs)?)
+            }
+            (Rep3BrilligType::Public(public), Rep3BrilligType::Shared(shared)) => {
+                match (public, shared) {
+                    (Public::Field(lhs), Shared::Field(rhs)) => Rep3BrilligType::shared_field(
+                        rep3::arithmetic::div_public_by_shared(lhs, rhs, &mut self.io_context)?,
+                    ),
+                    _ => todo!("Implement division for public/shared"),
+                }
+            }
+            (Rep3BrilligType::Shared(shared), Rep3BrilligType::Public(public)) => {
+                match (public, shared) {
+                    (Public::Field(rhs), Shared::Field(lhs)) => Rep3BrilligType::shared_field(
+                        rep3::arithmetic::div_shared_by_public(lhs, rhs)?,
+                    ),
+                    _ => todo!("Implement division for shared/public"),
+                }
+            }
+            (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
+                (Shared::Field(lhs), Shared::Field(rhs)) => Rep3BrilligType::shared_field(
+                    rep3::arithmetic::div(lhs, rhs, &mut self.io_context)?,
+                ),
+                _ => todo!("Implement division for shared/shared"),
+            },
+        };
+        Ok(result)
     }
 
     fn int_div(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (Rep3BrilligType::Public(lhs), Rep3BrilligType::Public(rhs)) => {
+                Rep3BrilligType::Public(self.plain_driver.int_div(lhs, rhs)?)
+            }
+            (Rep3BrilligType::Public(public), Rep3BrilligType::Shared(shared)) => {
+                if let (Public::Field(_), Shared::Field(_)) = (public, shared) {
+                    todo!("Implement IntDiv for public/shared")
+                } else {
+                    eyre::bail!("IntDiv only supported on fields")
+                }
+            }
+            (Rep3BrilligType::Shared(shared), Rep3BrilligType::Public(public)) => {
+                if let (Public::Field(_), Shared::Field(_)) = (public, shared) {
+                    todo!("Implement IntDiv for shared/public")
+                } else {
+                    eyre::bail!("IntDiv only supported on fields")
+                }
+            }
+            (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => {
+                if let (Shared::Field(_), Shared::Field(_)) = (s1, s2) {
+                    todo!("Implement IntDiv for shared/shared")
+                } else {
+                    eyre::bail!("IntDiv only supported on fields")
+                }
+            }
+        };
+        Ok(result)
     }
 
     fn not(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
