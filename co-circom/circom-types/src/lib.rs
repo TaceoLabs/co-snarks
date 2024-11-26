@@ -13,6 +13,8 @@ pub use r1cs::R1CS;
 pub use witness::Witness;
 pub use witness::WitnessParserError;
 
+pub use binfile::ZKeyParserError;
+
 pub(crate) mod reader_utils {
 
     use ark_serialize::Read;
