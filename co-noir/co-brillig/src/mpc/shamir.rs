@@ -131,10 +131,26 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
 
     fn mul(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
+                ShamirBrilligType::Public(self.plain_driver.mul(lhs, rhs)?)
+            }
+            (ShamirBrilligType::Public(public), ShamirBrilligType::Shared(secret))
+            | (ShamirBrilligType::Shared(secret), ShamirBrilligType::Public(public)) => {
+                if let Public::Field(public) = public {
+                    ShamirBrilligType::Shared(shamir::arithmetic::mul_public(secret, public))
+                } else {
+                    panic!("type mismatch. Can only mul matching values")
+                }
+            }
+            (ShamirBrilligType::Shared(s1), ShamirBrilligType::Shared(s2)) => {
+                ShamirBrilligType::Shared(shamir::arithmetic::mul(s1, s2, &mut self.protocol)?)
+            }
+        };
+        Ok(result)
     }
 
     fn div(
