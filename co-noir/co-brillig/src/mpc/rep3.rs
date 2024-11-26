@@ -153,9 +153,47 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
         bit_size: BitSize,
     ) -> eyre::Result<Self::BrilligType> {
         match (val, bit_size) {
-            (Rep3BrilligType::Shared(shared), BitSize::Field) => {
-                Ok(Rep3BrilligType::Shared(shared))
-            }
+            (Rep3BrilligType::Shared(shared), BitSize::Field) => match shared {
+                Shared::Field(rep3_prime_field_share) => Ok(Rep3BrilligType::Shared(
+                    Shared::Field(rep3_prime_field_share),
+                )),
+                Shared::Ring128(rep3_ring_share) => Ok(Rep3BrilligType::Shared(Shared::Field(
+                    rep3_ring::casts::ring_to_field_selector(
+                        rep3_ring_share,
+                        &mut self.io_context,
+                    )?,
+                ))),
+                Shared::Ring64(rep3_ring_share) => Ok(Rep3BrilligType::Shared(Shared::Field(
+                    rep3_ring::casts::ring_to_field_selector(
+                        rep3_ring_share,
+                        &mut self.io_context,
+                    )?,
+                ))),
+                Shared::Ring32(rep3_ring_share) => Ok(Rep3BrilligType::Shared(Shared::Field(
+                    rep3_ring::casts::ring_to_field_selector(
+                        rep3_ring_share,
+                        &mut self.io_context,
+                    )?,
+                ))),
+                Shared::Ring16(rep3_ring_share) => Ok(Rep3BrilligType::Shared(Shared::Field(
+                    rep3_ring::casts::ring_to_field_selector(
+                        rep3_ring_share,
+                        &mut self.io_context,
+                    )?,
+                ))),
+                Shared::Ring8(rep3_ring_share) => Ok(Rep3BrilligType::Shared(Shared::Field(
+                    rep3_ring::casts::ring_to_field_selector(
+                        rep3_ring_share,
+                        &mut self.io_context,
+                    )?,
+                ))),
+                Shared::Ring1(rep3_ring_share) => Ok(Rep3BrilligType::Shared(Shared::Field(
+                    rep3_ring::casts::ring_to_field_selector(
+                        rep3_ring_share,
+                        &mut self.io_context,
+                    )?,
+                ))),
+            },
             (Rep3BrilligType::Shared(shared), BitSize::Integer(integer_bit_size)) => match shared {
                 Shared::Field(rep3_prime_field_share) => match integer_bit_size {
                     IntegerBitSize::U1 => Ok(Rep3BrilligType::Shared(Shared::Ring1(
