@@ -1611,12 +1611,20 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
 
     fn to_radix(
         &mut self,
-        _val: Self::BrilligType,
-        _radix: Self::BrilligType,
-        _output_size: usize,
-        _bits: bool,
+        val: Self::BrilligType,
+        radix: Self::BrilligType,
+        output_size: usize,
+        bits: bool,
     ) -> eyre::Result<Vec<Self::BrilligType>> {
-        todo!("Implement to_radix")
+        if let (Rep3BrilligType::Public(val), Rep3BrilligType::Public(radix)) = (val, radix) {
+            let result = self.plain_driver.to_radix(val, radix, output_size, bits)?;
+            Ok(result
+                .into_iter()
+                .map(|val| Rep3BrilligType::Public(val))
+                .collect())
+        } else {
+            todo!("Implement to_radix")
+        }
     }
 
     fn expect_int(
