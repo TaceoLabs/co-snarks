@@ -1,7 +1,9 @@
 use super::{BrilligDriver, PlainBrilligDriver};
 use ark_ff::PrimeField;
 use brillig::{BitSize, IntegerBitSize};
-use mpc_core::protocols::shamir::{network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol};
+use mpc_core::protocols::shamir::{
+    self, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol,
+};
 use std::marker::PhantomData;
 
 use super::PlainBrilligType as Public;
@@ -75,10 +77,29 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
 
     fn add(
         &self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
+                ShamirBrilligType::Public(self.plain_driver.add(lhs, rhs)?)
+            }
+            (ShamirBrilligType::Public(public), ShamirBrilligType::Shared(secret))
+            | (ShamirBrilligType::Shared(secret), ShamirBrilligType::Public(public)) => {
+                if let Public::Field(public) = public {
+                    ShamirBrilligType::Shared(shamir::arithmetic::add_public(
+                        secret,
+                        public,
+                    ))
+                } else {
+                    panic!("type mismatch. Can only add matching values"),
+                }
+            }
+            (ShamirBrilligType::Shared(s1), ShamirBrilligType::Shared(s2)) => {
+                ShamirBrilligType::Shared(shamir::arithmetic::add(s1, s2))
+            }
+        };
+        Ok(result)
     }
 
     fn sub(
