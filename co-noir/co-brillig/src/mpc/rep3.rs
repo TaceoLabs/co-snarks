@@ -578,7 +578,62 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
             }
             (Rep3BrilligType::Public(public), Rep3BrilligType::Shared(secret))
             | (Rep3BrilligType::Shared(secret), Rep3BrilligType::Public(public)) => {
-                todo!()
+                match (secret, public) {
+                    (Shared::Field(secret), Public::Field(public)) => {
+                        let eq =
+                            rep3::arithmetic::eq_bit_public(secret, public, &mut self.io_context)?;
+                        let result = Rep3RingShare::new(
+                            Bit::cast_from_biguint(&eq.a),
+                            Bit::cast_from_biguint(&eq.b),
+                        );
+                        Rep3BrilligType::shared_u1(result)
+                    }
+                    (Shared::Ring128(secret), Public::Int(public, IntegerBitSize::U128)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::eq_public(
+                            secret,
+                            public.into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring64(secret), Public::Int(public, IntegerBitSize::U64)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::eq_public(
+                            secret,
+                            u64::try_from(public).expect("must be u64").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring32(secret), Public::Int(public, IntegerBitSize::U32)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::eq_public(
+                            secret,
+                            u32::try_from(public).expect("must be u32").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring16(secret), Public::Int(public, IntegerBitSize::U16)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::eq_public(
+                            secret,
+                            u16::try_from(public).expect("must be u16").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring8(secret), Public::Int(public, IntegerBitSize::U8)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::eq_public(
+                            secret,
+                            u8::try_from(public).expect("must be u8").into(),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    (Shared::Ring1(secret), Public::Int(public, IntegerBitSize::U1)) => {
+                        Rep3BrilligType::shared_u1(rep3_ring::arithmetic::eq_public(
+                            secret,
+                            bit_from_u128!(public),
+                            &mut self.io_context,
+                        )?)
+                    }
+                    x => eyre::bail!(
+                        "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
+                    ),
+                }
             }
             (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
                 (Shared::Field(s1), Shared::Field(s2)) => {
@@ -589,7 +644,6 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                     );
                     Rep3BrilligType::shared_u1(result)
                 }
-
                 (Shared::Ring128(s1), Shared::Ring128(s2)) => Rep3BrilligType::shared_u1(
                     rep3_ring::arithmetic::eq(s1, s2, &mut self.io_context)?,
                 ),

@@ -556,8 +556,7 @@ pub fn eq<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let is_zero = eq_bit(a, b, io_context)?;
-    let res = conversion::bit_inject(&is_zero, io_context)?;
-    Ok(res)
+    conversion::bit_inject(&is_zero, io_context)
 }
 
 /// Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
@@ -566,8 +565,18 @@ pub fn eq_public<F: PrimeField, N: Rep3Network>(
     public: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
+    let is_zero = eq_bit_public(shared, public, io_context)?;
+    conversion::bit_inject(&is_zero, io_context)
+}
+
+/// Same as eq_bit but without using bit_inject on the result. Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
+pub fn eq_bit_public<F: PrimeField, N: Rep3Network>(
+    shared: FieldShare<F>,
+    public: F,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
     let public = promote_to_trivial_share(io_context.id, public);
-    eq(shared, public, io_context)
+    eq_bit(shared, public, io_context)
 }
 
 /// Same as eq but without using bit_inject on the result. Checks whether two prime field shares are equal and return a binary share of 0 or 1. 1 means they are equal.
