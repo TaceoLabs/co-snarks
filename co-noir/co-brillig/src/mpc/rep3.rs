@@ -454,7 +454,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
         if let Rep3BrilligType::Public(public) = val {
             PlainBrilligDriver::try_into_bool(public)
         } else {
-            eyre::bail!("cannot convert shared value to usize")
+            eyre::bail!("cannot convert shared value to bool")
         }
     }
 
