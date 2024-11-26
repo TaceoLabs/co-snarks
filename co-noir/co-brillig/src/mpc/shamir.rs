@@ -87,12 +87,9 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
             (ShamirBrilligType::Public(public), ShamirBrilligType::Shared(secret))
             | (ShamirBrilligType::Shared(secret), ShamirBrilligType::Public(public)) => {
                 if let Public::Field(public) = public {
-                    ShamirBrilligType::Shared(shamir::arithmetic::add_public(
-                        secret,
-                        public,
-                    ))
+                    ShamirBrilligType::Shared(shamir::arithmetic::add_public(secret, public))
                 } else {
-                    panic!("type mismatch. Can only add matching values"),
+                    panic!("type mismatch. Can only add matching values")
                 }
             }
             (ShamirBrilligType::Shared(s1), ShamirBrilligType::Shared(s2)) => {
@@ -104,10 +101,32 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
 
     fn sub(
         &mut self,
-        _lhs: Self::BrilligType,
-        _rhs: Self::BrilligType,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        let result = match (lhs, rhs) {
+            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
+                ShamirBrilligType::Public(self.plain_driver.sub(lhs, rhs)?)
+            }
+            (ShamirBrilligType::Public(public), ShamirBrilligType::Shared(secret)) => {
+                if let Public::Field(public) = public {
+                    ShamirBrilligType::Shared(shamir::arithmetic::add_public(-secret, public))
+                } else {
+                    panic!("type mismatch. Can only sub matching values")
+                }
+            }
+            (ShamirBrilligType::Shared(secret), ShamirBrilligType::Public(public)) => {
+                if let Public::Field(public) = public {
+                    ShamirBrilligType::Shared(shamir::arithmetic::add_public(secret, -public))
+                } else {
+                    panic!("type mismatch. Can only sub matching values")
+                }
+            }
+            (ShamirBrilligType::Shared(s1), ShamirBrilligType::Shared(s2)) => {
+                ShamirBrilligType::Shared(shamir::arithmetic::sub(s1, s2))
+            }
+        };
+        Ok(result)
     }
 
     fn mul(
