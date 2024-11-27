@@ -30,12 +30,15 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     type BrilligDriver = PlainBrilligDriver<F>;
 
-    fn init_brillig_driver(&self) -> Self::BrilligDriver {
-        PlainBrilligDriver::default()
+    fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver> {
+        Ok(PlainBrilligDriver::default())
     }
 
-    fn from_brillig_result(brillig_result: Vec<PlainBrilligType<F>>) -> Vec<Self::AcvmType> {
-        brillig_result.into_iter().map(|v| v.into_field()).collect()
+    fn parse_brillig_result(
+        &mut self,
+        brillig_result: Vec<PlainBrilligType<F>>,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        Ok(brillig_result.into_iter().map(|v| v.into_field()).collect())
     }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {

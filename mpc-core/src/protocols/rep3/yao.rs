@@ -674,6 +674,39 @@ pub fn decompose_arithmetic<F: PrimeField, N: Rep3Network>(
         decompose_bit_size,
     )
 }
+/// Divides a vector of field elements by a power of 2, roudning down.
+pub fn field_int_div_power_2_many<F: PrimeField, N: Rep3Network>(
+    inputs: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    divisor_bit: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = inputs.len();
+
+    if divisor_bit == 0 {
+        return Ok(inputs.to_owned());
+    }
+    if divisor_bit >= F::MODULUS_BIT_SIZE as usize {
+        return Ok(vec![Rep3PrimeFieldShare::zero_share(); num_inputs]);
+    }
+
+    decompose_circuit_compose_blueprint!(
+        inputs,
+        io_context,
+        num_inputs,
+        GarbledCircuits::field_int_div_power_2_many::<_, F>,
+        (divisor_bit)
+    )
+}
+
+/// Divides a field element by a power of 2, rounding down.
+pub fn field_int_div_power_2<F: PrimeField, N: Rep3Network>(
+    inputs: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+    divisor_bit: usize,
+) -> IoResult<Rep3PrimeFieldShare<F>> {
+    let res = field_int_div_power_2_many(&[inputs], io_context, divisor_bit)?;
+    Ok(res[0])
+}
 
 macro_rules! decompose_circuit_compose_blueprint {
     ($inputs:expr, $io_context:expr, $output_size:expr, $circuit:expr, ($( $args:expr ),*)) => {{
@@ -775,7 +808,6 @@ macro_rules! decompose_circuit_compose_blueprint {
 }
 pub(crate) use decompose_circuit_compose_blueprint;
 
-// TODO implement with streaming Garbler/Evaluator as well
 // TODO implement with a2b/b2a as well
 
 /// Decomposes a vector of shared field element into chunks, which are also represented as shared field elements. Per field element, the total bit size of the shared chunks is given by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can be smaller) decompose_bit_size bits.

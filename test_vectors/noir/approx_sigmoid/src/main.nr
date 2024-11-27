@@ -21,16 +21,16 @@ fn approx_sigmoid(x: u64) -> u64 {
         65529, //0.9999 / 2^-16 = 65529.4464
     ];
 
-    let mut index = 4; // Default to the last index in case x is above all cuts
     // Determine the correct interval index by checking against each cut
     if x <= cuts[0] {
-        index = 0;
+        outputs[0]
     } else if x <= cuts[1] {
-        index = 1;
+        outputs[1]
     } else if x <= cuts[2] {
-        index = 2;
+        outputs[2]
     } else if x <= cuts[3] {
-        index = 3;
+        outputs[3]
+    } else {
+        outputs[4]
     }
-    outputs[index]
 }

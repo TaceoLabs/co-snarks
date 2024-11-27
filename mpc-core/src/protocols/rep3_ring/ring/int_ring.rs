@@ -5,14 +5,11 @@
 use super::bit::Bit;
 use crate::protocols::rep3::IoResult;
 use num_bigint::BigUint;
-use num_traits::{
-    AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingShl, WrappingShr, WrappingSub,
-    Zero,
-};
+use num_traits::{AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,
-    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Neg, Not},
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Neg, Not, Shl, Shr},
 };
 
 /// Types implementing this trait can be used as elements of a ring Z_{2^k}
@@ -24,8 +21,8 @@ pub trait IntRing2k:
     + WrappingSub
     + WrappingMul
     + WrappingNeg
-    + WrappingShl
-    + WrappingShr
+    + Shl<usize, Output = Self>
+    + Shr<usize, Output = Self>
     + Not<Output = Self>
     + BitXor<Output = Self>
     + BitAnd<Output = Self>
@@ -96,18 +93,6 @@ pub trait IntRing2k:
     #[inline(always)]
     fn wrapping_mul_assign(&mut self, rhs: &Self) {
         *self = self.wrapping_mul(rhs);
-    }
-
-    /// a <<= b
-    #[inline(always)]
-    fn wrapping_shl_assign(&mut self, rhs: u32) {
-        *self = self.wrapping_shl(rhs);
-    }
-
-    /// a >>= b
-    #[inline(always)]
-    fn wrapping_shr_assign(&mut self, rhs: u32) {
-        *self = self.wrapping_shr(rhs);
     }
 }
 

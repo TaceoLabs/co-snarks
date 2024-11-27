@@ -543,7 +543,7 @@ pub fn pow_2_public<T: IntRing2k>(shared: RingShare<T>, public: RingElement<T>) 
                 shift
             );
         } else {
-            mul_public(shared, RingElement::one() << shift.try_into().unwrap())
+            mul_public(shared, RingElement::one() << shift)
         }
     }
 }

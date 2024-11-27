@@ -51,7 +51,11 @@ pub trait BrilligDriver<F: PrimeField> {
     /// Casts the provided value to the provided bit size. This includes upcasts
     /// and downcasts between integer types, but also between fields to integers
     /// and vice verca.
-    fn cast(&self, src: Self::BrilligType, bit_size: BitSize) -> eyre::Result<Self::BrilligType>;
+    fn cast(
+        &mut self,
+        src: Self::BrilligType,
+        bit_size: BitSize,
+    ) -> eyre::Result<Self::BrilligType>;
 
     /// Tries to convert the provided value to a `usize`. Returns an error
     /// if it is not possible (e.g., is a shared value).
@@ -80,7 +84,7 @@ pub trait BrilligDriver<F: PrimeField> {
     /// This operation returns an error if the provided inputs
     /// are not the same type.
     fn sub(
-        &mut self,
+        &self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType>;
@@ -140,8 +144,11 @@ pub trait BrilligDriver<F: PrimeField> {
     ///
     /// Similar to Noir's brillig-VM, this method compares fields
     /// by casting them `to u128` and compares the integer values.
-    fn lt(&self, lhs: Self::BrilligType, rhs: Self::BrilligType)
-        -> eyre::Result<Self::BrilligType>;
+    fn lt(
+        &mut self,
+        lhs: Self::BrilligType,
+        rhs: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType>;
 
     /// Checks whether `lhs <= rhs`. The result
     /// is a brillig integer type with bit size 1 (BitSize = U1).
@@ -152,7 +159,7 @@ pub trait BrilligDriver<F: PrimeField> {
     /// Similar to Noir's brillig-VM, this method compares fields
     /// by casting them `to u128` and compares the integer values.
     fn le(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -169,7 +176,7 @@ pub trait BrilligDriver<F: PrimeField> {
     /// Similar to Noir's brillig-VM, this method compares fields
     /// by casting them `to u128` and compares the integer values.
     fn gt(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -186,7 +193,7 @@ pub trait BrilligDriver<F: PrimeField> {
     /// Similar to Noir's brillig-VM, this method compares fields
     /// by casting them `to u128` and compares the integer values.
     fn ge(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -209,7 +216,7 @@ pub trait BrilligDriver<F: PrimeField> {
     /// Similar to Noir's brillig-VM, this method compares fields
     /// by casting them to `u128` and compares the integer values.
     fn to_radix(
-        &self,
+        &mut self,
         val: Self::BrilligType,
         radix: Self::BrilligType,
         output_size: usize,

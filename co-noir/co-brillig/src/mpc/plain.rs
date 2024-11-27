@@ -73,7 +73,11 @@ impl<F: PrimeField> Default for PlainBrilligType<F> {
 impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
     type BrilligType = PlainBrilligType<F>;
 
-    fn cast(&self, src: Self::BrilligType, bit_size: BitSize) -> eyre::Result<Self::BrilligType> {
+    fn cast(
+        &mut self,
+        src: Self::BrilligType,
+        bit_size: BitSize,
+    ) -> eyre::Result<Self::BrilligType> {
         let casted = match (src, bit_size) {
             // no-op
             (PlainBrilligType::Field(f), BitSize::Field) => PlainBrilligType::Field(f),
@@ -150,7 +154,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 PlainBrilligType::Int(rhs, IntegerBitSize::U128),
             ) => {
                 let result = lhs.wrapping_add(rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U128))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
@@ -160,14 +164,13 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, lhs_bit_size))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
 
-    // just copied this from you franco(?)
     fn sub(
-        &mut self,
+        &self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -181,7 +184,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 PlainBrilligType::Int(rhs, IntegerBitSize::U128),
             ) => {
                 let result = lhs.wrapping_sub(rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U128))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
@@ -191,7 +194,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, lhs_bit_size))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
@@ -211,7 +214,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 PlainBrilligType::Int(rhs, IntegerBitSize::U128),
             ) => {
                 let result = lhs.wrapping_mul(rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U128))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
@@ -221,7 +224,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, lhs_bit_size))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
@@ -240,7 +243,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 PlainBrilligType::Int(rhs, IntegerBitSize::U128),
             ) => {
                 let result = lhs.wrapping_div(rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
+                Ok(PlainBrilligType::Int(result, IntegerBitSize::U128))
             }
             (
                 PlainBrilligType::Int(lhs, lhs_bit_size),
@@ -250,7 +253,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, lhs_bit_size))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
@@ -276,7 +279,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 IntegerBitSize::U1,
             ))
         } else {
-            eyre::bail!("")
+            eyre::bail!("NOT only supported on U1")
         }
     }
 
@@ -298,13 +301,13 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
 
     fn lt(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -321,13 +324,13 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
 
     fn gt(
-        &self,
+        &mut self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
@@ -344,13 +347,13 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
             }
             x => eyre::bail!(
-                "type mismatch! Can only to bin ops on same types, but tried with {x:?}"
+                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
             ),
         }
     }
 
     fn to_radix(
-        &self,
+        &mut self,
         val: Self::BrilligType,
         radix: Self::BrilligType,
         output_size: usize,
@@ -363,12 +366,8 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
             // https://github.com/noir-lang/noir/blob/7216f0829dcece948d3243471e6d57380522e997/acvm-repo/brillig_vm/src/black_box.rs#L323
             // and modified for our implementation
 
-            let mut bytes = Vec::new();
-            val.serialize_uncompressed(&mut bytes).unwrap();
-            bytes.reverse();
-
-            let mut input = BigUint::from_bytes_be(&bytes);
-            let radix = BigUint::from_bytes_be(&radix.to_be_bytes());
+            let mut input: BigUint = val.into();
+            let radix = BigUint::from(radix);
 
             let mut limbs = vec![PlainBrilligType::default(); output_size];
 
@@ -380,7 +379,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 } else {
                     let limb: u128 = limb
                         .try_into()
-                        .expect("fits into u128 radix is at most 256");
+                        .expect("fits into u128 since radix is at most 256");
                     limbs[i] = PlainBrilligType::Int(limb, IntegerBitSize::U8);
                 };
                 input /= &radix;

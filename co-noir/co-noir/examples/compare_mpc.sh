@@ -36,7 +36,7 @@ echo "Using nargo version $NARGO_VERSION"
 echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
-test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized")
+test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field")
 
 run_proof_verification() {
   local name=$1
@@ -101,26 +101,27 @@ for f in "${test_cases[@]}"; do
   failed=0
 
   # compile witnesses and bytecode with specified nargo version
-  echo "computing witnesses with nargo"
+  echo "compiling circuits with nargo"
   bash -c "(cd test_vectors/${f} && nargo execute) $PIPE"
 
+  echo "computing witnesses, proofs and verification with co-noir"
   # -e to exit on first error
   # split input into shares
   bash -c "cargo run --release --bin co-noir -- split-input --circuit test_vectors/${f}/target/${f}.json --input test_vectors/${f}/Prover.toml --protocol REP3 --out-dir test_vectors/${f} $PIPE"  || failed=1
   # run witness extension in MPC
-  cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.0.shared --circuit test_vectors/${f}/target/${f}.json --protocol REP3 --config configs/party1.toml --out test_vectors/${f}/${f}.gz.0.shared &
-  cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.1.shared --circuit test_vectors/${f}/target/${f}.json --protocol REP3 --config configs/party2.toml --out test_vectors/${f}/${f}.gz.1.shared &
-  cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.2.shared --circuit test_vectors/${f}/target/${f}.json --protocol REP3 --config configs/party3.toml --out test_vectors/${f}/${f}.gz.2.shared 
+  bash -c "cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.0.shared --circuit test_vectors/${f}/target/${f}.json --protocol REP3 --config configs/party1.toml --out test_vectors/${f}/${f}.gz.0.shared $PIPE"  || failed=1 &
+  bash -c "cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.1.shared --circuit test_vectors/${f}/target/${f}.json --protocol REP3 --config configs/party2.toml --out test_vectors/${f}/${f}.gz.1.shared $PIPE"  || failed=1 &
+  bash -c "cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.2.shared --circuit test_vectors/${f}/target/${f}.json --protocol REP3 --config configs/party3.toml --out test_vectors/${f}/${f}.gz.2.shared $PIPE"  || failed=1 &
  wait $(jobs -p)
     # run proving in MPC
-  cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.0.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher POSEIDON --config configs/party1.toml --out test_vectors/${f}/proof --public-input public_input.json &
-  cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.1.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher POSEIDON --config configs/party2.toml --out test_vectors/${f}/proof.1.proof  &
-  cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.2.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher POSEIDON --config configs/party3.toml --out test_vectors/${f}/proof.2.proof 
+  bash -c "cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.0.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher POSEIDON --config configs/party1.toml --out test_vectors/${f}/proof --public-input public_input.json $PIPE"  || failed=1&
+  bash -c "cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.1.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher POSEIDON --config configs/party2.toml --out test_vectors/${f}/proof.1.proof  $PIPE"  || failed=1&
+  bash -c "cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.2.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher POSEIDON --config configs/party3.toml --out test_vectors/${f}/proof.2.proof $PIPE"  || failed=1
   wait $(jobs -p)
    # Create verification key
-  bash -c "cargo run --release --bin co-noir -- create-vk --circuit test_vectors/${f}/${f}.json --crs test_vectors/bn254_g1.dat --hasher POSEIDON --vk test_vectors/${f}/vk "  
+  bash -c "cargo run --release --bin co-noir -- create-vk --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --hasher POSEIDON --vk test_vectors/${f}/vk $PIPE"  || failed=1
   # verify proof
-  bash -c "cargo run --release --bin co-noir -- verify --proof proof.0.proof --vk test_vectors/${f}/vk --hasher POSEIDON --crs test_vectors/bn254_g2.dat"  
+  bash -c "cargo run --release --bin co-noir -- verify --proof test_vectors/${f}/proof --vk test_vectors/${f}/vk --hasher POSEIDON --crs test_vectors/bn254_g2.dat$PIPE"  || failed=1
 
   # if [ "$failed" -ne 0 ]
   # then
@@ -131,21 +132,21 @@ for f in "${test_cases[@]}"; do
   bash cleanup.sh
 
   # split input into shares
-  bash -c "cargo run --release --bin co-noir -- split-input --circuit test_vectors/${f}/${f}.json --input test_vectors/${f}/Prover.toml --protocol REP3 --out-dir test_vectors/${f} $PIPE"  || failed=1
+  bash -c "cargo run --release --bin co-noir -- split-input --circuit test_vectors/${f}/target/${f}.json --input test_vectors/${f}/Prover.toml --protocol REP3 --out-dir test_vectors/${f} $PIPE"  || failed=1
   # run witness extension in MPC
-cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.0.shared --circuit test_vectors/${f}/${f}.json --protocol REP3 --config configs/party1.toml --out test_vectors/${f}/${f}.gz.0.shared &
-cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.1.shared --circuit test_vectors/${f}/${f}.json --protocol REP3 --config configs/party2.toml --out test_vectors/${f}/${f}.gz.1.shared &
-cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.2.shared --circuit test_vectors/${f}/${f}.json --protocol REP3 --config configs/party3.toml --out test_vectors/${f}/${f}.gz.2.shared
+bash -c "cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.0.shared --circuit test_vectors/${f}/target/${f}.json --protocol REP3 --config configs/party1.toml --out test_vectors/${f}/${f}.gz.0.shared $PIPE"  || failed=1&
+bash -c "cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.1.shared --circuit test_vectors/${f}/target/${f}.json --protocol REP3 --config configs/party2.toml --out test_vectors/${f}/${f}.gz.1.shared $PIPE"  || failed=1&
+bash -c "cargo run --release --bin co-noir -- generate-witness --input test_vectors/${f}/Prover.toml.2.shared --circuit test_vectors/${f}/target/${f}.json --protocol REP3 --config configs/party3.toml --out test_vectors/${f}/${f}.gz.2.shared $PIPE"  || failed=1
  wait $(jobs -p)
   # run proving in MPC
-cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.0.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher KECCAK --config configs/party1.toml --out test_vectors/${f}/proof --public-input public_input.json&
-cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.1.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher KECCAK --config configs/party2.toml --out test_vectors/${f}/proof.1.proof  &
-cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.2.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher KECCAK --config configs/party3.toml --out test_vectors/${f}/proof.2.proof
+bash -c "cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.0.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher KECCAK --config configs/party1.toml --out test_vectors/${f}/proof --public-input public_input.json$PIPE"  || failed=1&
+bash -c "cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.1.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher KECCAK --config configs/party2.toml --out test_vectors/${f}/proof.1.proof  $PIPE"  || failed=1&
+bash -c "cargo run --release --bin co-noir -- build-and-generate-proof --witness test_vectors/${f}/${f}.gz.2.shared --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --protocol REP3 --hasher KECCAK --config configs/party3.toml --out test_vectors/${f}/proof.2.proof $PIPE"  || failed=1
  wait $(jobs -p)
   # Create verification key
-  bash -c "cargo run --release --bin co-noir -- create-vk --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --hasher KECCAK --vk test_vectors/${f}/vk" 
+  bash -c "cargo run --release --bin co-noir -- create-vk --circuit test_vectors/${f}/target/${f}.json --crs test_vectors/bn254_g1.dat --hasher KECCAK --vk test_vectors/${f}/vk $PIPE"  || failed=1
   # verify proof
-  bash -c "cargo run --release --bin co-noir -- verify --proof test_vectors/${f}/proof --vk test_vectors/${f}/vk --hasher KECCAK --crs test_vectors/bn254_g2.dat "  
+  bash -c "cargo run --release --bin co-noir -- verify --proof test_vectors/${f}/proof --vk test_vectors/${f}/vk --hasher KECCAK --crs test_vectors/bn254_g2.dat $PIPE"  || failed=1
 
   # if [ "$failed" -ne 0 ]
   # then

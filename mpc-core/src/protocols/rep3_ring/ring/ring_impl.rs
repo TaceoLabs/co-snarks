@@ -319,31 +319,39 @@ impl<T: IntRing2k> BitAndAssign<&Self> for RingElement<T> {
     }
 }
 
-impl<T: IntRing2k> Shl<u32> for RingElement<T> {
+impl<T: IntRing2k> Shl<usize> for RingElement<T> {
     type Output = Self;
 
-    fn shl(self, rhs: u32) -> Self::Output {
-        RingElement(self.0.wrapping_shl(rhs))
+    fn shl(self, rhs: usize) -> Self::Output {
+        if rhs >= T::K {
+            RingElement(T::zero())
+        } else {
+            RingElement(self.0 << rhs)
+        }
     }
 }
 
-impl<T: IntRing2k> ShlAssign<u32> for RingElement<T> {
-    fn shl_assign(&mut self, rhs: u32) {
-        self.0.wrapping_shl_assign(rhs)
+impl<T: IntRing2k> ShlAssign<usize> for RingElement<T> {
+    fn shl_assign(&mut self, rhs: usize) {
+        *self = *self << rhs
     }
 }
 
-impl<T: IntRing2k> Shr<u32> for RingElement<T> {
+impl<T: IntRing2k> Shr<usize> for RingElement<T> {
     type Output = Self;
 
-    fn shr(self, rhs: u32) -> Self::Output {
-        RingElement(self.0.wrapping_shr(rhs))
+    fn shr(self, rhs: usize) -> Self::Output {
+        if rhs >= T::K {
+            RingElement(T::zero())
+        } else {
+            RingElement(self.0 >> rhs)
+        }
     }
 }
 
-impl<T: IntRing2k> ShrAssign<u32> for RingElement<T> {
-    fn shr_assign(&mut self, rhs: u32) {
-        self.0.wrapping_shr_assign(rhs)
+impl<T: IntRing2k> ShrAssign<usize> for RingElement<T> {
+    fn shr_assign(&mut self, rhs: usize) {
+        *self = *self >> rhs
     }
 }
 

@@ -469,8 +469,17 @@ pub fn le_public<F: PrimeField, N: Rep3Network>(
     rhs: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let res = detail::unsigned_ge_const_lhs(rhs, lhs, io_context)?;
+    let res = le_public_bit(lhs, rhs, io_context)?;
     conversion::bit_inject(&res, io_context)
+}
+
+/// Same as le_public but without using bit_inject on the result. Returns 1 if lhs <= rhs and 0 otherwise. Checks if a shared value is less than or equal to a public value. The result is a shared value that has value 1 if the shared value is less than or equal to the public value and 0 otherwise.
+pub fn le_public_bit<F: PrimeField, N: Rep3Network>(
+    lhs: FieldShare<F>,
+    rhs: F,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    detail::unsigned_ge_const_lhs(rhs, lhs, io_context)
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if one shared value is greater than another shared value. The result is a shared value that has value 1 if the first shared value is greater than the second shared value and 0 otherwise.
@@ -501,8 +510,17 @@ pub fn ge<F: PrimeField, N: Rep3Network>(
     rhs: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let res = detail::unsigned_ge(lhs, rhs, io_context)?;
+    let res = ge_bit(lhs, rhs, io_context)?;
     conversion::bit_inject(&res, io_context)
+}
+
+/// Same as ge but without using bit_inject on the result. Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
+pub fn ge_bit<F: PrimeField, N: Rep3Network>(
+    lhs: FieldShare<F>,
+    rhs: FieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    detail::unsigned_ge(lhs, rhs, io_context)
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.
@@ -511,8 +529,17 @@ pub fn ge_public<F: PrimeField, N: Rep3Network>(
     rhs: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let res = detail::unsigned_ge_const_rhs(lhs, rhs, io_context)?;
+    let res = ge_public_bit(lhs, rhs, io_context)?;
     conversion::bit_inject(&res, io_context)
+}
+
+/// Same as ge_public but without using bit_inject on the result. Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.
+pub fn ge_public_bit<F: PrimeField, N: Rep3Network>(
+    lhs: FieldShare<F>,
+    rhs: F,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
+    detail::unsigned_ge_const_rhs(lhs, rhs, io_context)
 }
 
 //TODO FN REMARK - I think we can skip the bit_inject.
@@ -529,8 +556,7 @@ pub fn eq<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
     let is_zero = eq_bit(a, b, io_context)?;
-    let res = conversion::bit_inject(&is_zero, io_context)?;
-    Ok(res)
+    conversion::bit_inject(&is_zero, io_context)
 }
 
 /// Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
@@ -539,8 +565,18 @@ pub fn eq_public<F: PrimeField, N: Rep3Network>(
     public: F,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
+    let is_zero = eq_bit_public(shared, public, io_context)?;
+    conversion::bit_inject(&is_zero, io_context)
+}
+
+/// Same as eq_bit but without using bit_inject on the result. Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
+pub fn eq_bit_public<F: PrimeField, N: Rep3Network>(
+    shared: FieldShare<F>,
+    public: F,
+    io_context: &mut IoContext<N>,
+) -> IoResult<BinaryShare<F>> {
     let public = promote_to_trivial_share(io_context.id, public);
-    eq(shared, public, io_context)
+    eq_bit(shared, public, io_context)
 }
 
 /// Same as eq but without using bit_inject on the result. Checks whether two prime field shares are equal and return a binary share of 0 or 1. 1 means they are equal.

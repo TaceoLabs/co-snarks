@@ -106,14 +106,26 @@ impl<F: PrimeField> From<ArithmeticShare<F>> for Rep3AcvmType<F> {
 }
 
 impl<F: PrimeField> From<Rep3AcvmType<F>> for Rep3BrilligType<F> {
-    fn from(_val: Rep3AcvmType<F>) -> Self {
-        todo!()
+    fn from(val: Rep3AcvmType<F>) -> Self {
+        match val {
+            Rep3AcvmType::Public(public) => Rep3BrilligType::public_field(public),
+            Rep3AcvmType::Shared(share) => Rep3BrilligType::shared_field(share),
+        }
     }
 }
 
-impl<F: PrimeField> From<Rep3BrilligType<F>> for Rep3AcvmType<F> {
-    fn from(_value: Rep3BrilligType<F>) -> Self {
-        todo!()
+impl<F: PrimeField> Rep3AcvmType<F> {
+    fn from_brillig_type<N: Rep3Network>(
+        value: Rep3BrilligType<F>,
+        io_context: &mut IoContext<N>,
+    ) -> eyre::Result<Self> {
+        match value {
+            Rep3BrilligType::Public(public) => Ok(Rep3AcvmType::Public(public.into_field())),
+            Rep3BrilligType::Shared(shared) => {
+                let shared = Rep3BrilligType::into_arithmetic_share(io_context, shared)?;
+                Ok(Rep3AcvmType::Shared(shared))
+            }
+        }
     }
 }
 
@@ -124,14 +136,20 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     type AcvmType = Rep3AcvmType<F>;
 
-    type BrilligDriver = Rep3BrilligDriver<F>;
+    type BrilligDriver = Rep3BrilligDriver<F, N>;
 
-    fn init_brillig_driver(&self) -> Self::BrilligDriver {
-        Rep3BrilligDriver::default()
+    fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver> {
+        Ok(Rep3BrilligDriver::with_io_context(self.io_context.fork()?))
     }
 
-    fn from_brillig_result(_brillig_result: Vec<Rep3BrilligType<F>>) -> Vec<Self::AcvmType> {
-        todo!()
+    fn parse_brillig_result(
+        &mut self,
+        brillig_result: Vec<Rep3BrilligType<F>>,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        brillig_result
+            .into_iter()
+            .map(|value| Rep3AcvmType::from_brillig_type(value, &mut self.io_context))
+            .collect()
     }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {

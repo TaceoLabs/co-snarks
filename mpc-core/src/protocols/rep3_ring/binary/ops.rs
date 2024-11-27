@@ -127,17 +127,17 @@ impl<T: IntRing2k> std::ops::BitAndAssign<RingElement<T>> for Rep3RingShare<T> {
     }
 }
 
-impl<T: IntRing2k> std::ops::ShlAssign<u32> for Rep3RingShare<T> {
-    fn shl_assign(&mut self, rhs: u32) {
+impl<T: IntRing2k> std::ops::ShlAssign<usize> for Rep3RingShare<T> {
+    fn shl_assign(&mut self, rhs: usize) {
         self.a <<= rhs;
         self.b <<= rhs;
     }
 }
 
-impl<T: IntRing2k> std::ops::Shl<u32> for Rep3RingShare<T> {
+impl<T: IntRing2k> std::ops::Shl<usize> for Rep3RingShare<T> {
     type Output = Self;
 
-    fn shl(self, rhs: u32) -> Self::Output {
+    fn shl(self, rhs: usize) -> Self::Output {
         Rep3RingShare {
             a: self.a << rhs,
             b: self.b << rhs,
@@ -145,10 +145,10 @@ impl<T: IntRing2k> std::ops::Shl<u32> for Rep3RingShare<T> {
     }
 }
 
-impl<T: IntRing2k> std::ops::Shl<u32> for &Rep3RingShare<T> {
+impl<T: IntRing2k> std::ops::Shl<usize> for &Rep3RingShare<T> {
     type Output = Rep3RingShare<T>;
 
-    fn shl(self, rhs: u32) -> Self::Output {
+    fn shl(self, rhs: usize) -> Self::Output {
         Rep3RingShare {
             a: self.a << rhs,
             b: self.b << rhs,
@@ -156,10 +156,10 @@ impl<T: IntRing2k> std::ops::Shl<u32> for &Rep3RingShare<T> {
     }
 }
 
-impl<T: IntRing2k> std::ops::Shr<u32> for Rep3RingShare<T> {
+impl<T: IntRing2k> std::ops::Shr<usize> for Rep3RingShare<T> {
     type Output = Rep3RingShare<T>;
 
-    fn shr(self, rhs: u32) -> Self::Output {
+    fn shr(self, rhs: usize) -> Self::Output {
         Rep3RingShare {
             a: self.a >> rhs,
             b: self.b >> rhs,
@@ -167,10 +167,10 @@ impl<T: IntRing2k> std::ops::Shr<u32> for Rep3RingShare<T> {
     }
 }
 
-impl<T: IntRing2k> std::ops::Shr<u32> for &Rep3RingShare<T> {
+impl<T: IntRing2k> std::ops::Shr<usize> for &Rep3RingShare<T> {
     type Output = Rep3RingShare<T>;
 
-    fn shr(self, rhs: u32) -> Self::Output {
+    fn shr(self, rhs: usize) -> Self::Output {
         Rep3RingShare {
             a: self.a >> rhs,
             b: self.b >> rhs,

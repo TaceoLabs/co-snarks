@@ -36,7 +36,7 @@ echo "Using nargo version $NARGO_VERSION"
 echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
-test_cases=("add3" "add3_assert" "add3u64" "mul3u64" "poseidon" "poseidon_input2")
+test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field")
 
 run_proof_verification() {
   local name=$1
