@@ -382,6 +382,11 @@ impl GarbledCircuits {
             let (mut s, mut c) = Self::half_adder(g, &xs[0], &ys[0])?;
             added.push(s);
 
+            if ys.len() == 1 {
+                results.extend(added);
+                continue;
+            }
+
             for (x, y) in xs.iter().zip(ys.iter()).take(ys.len() - 1).skip(1) {
                 let res = Self::full_adder(g, x, y, &c)?;
                 s = res.0;
@@ -439,7 +444,7 @@ impl GarbledCircuits {
             wires_b.wires().chunks(input_bitlen),
             wires_c
                 .wires()
-                .chunks(output_bitlen * total_output_elements)
+                .chunks(output_bitlen * num_decomps_per_field)
         ) {
             let decomposed = Self::decompose_field_element_to_rings::<_, F>(
                 g,

@@ -1,6 +1,8 @@
 mod ring_share {
+    use ark_ff::PrimeField;
     use ark_std::UniformRand;
     use itertools::izip;
+    use itertools::Itertools;
     use mpc_core::protocols::rep3;
     use mpc_core::protocols::rep3::id::PartyID;
     use mpc_core::protocols::rep3::network::IoContext;
@@ -1621,6 +1623,64 @@ mod ring_share {
         apply_to_all2!(
             rep3_ring_cast_gc_t,
             [Bit, u8, u16, u32, u64, u128],
+            [Bit, u8, u16, u32, u64, u128]
+        );
+    }
+
+    fn rep3_decompose_shared_field_many_via_yao_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        const VEC_SIZE: usize = 10;
+        let num_chunks = (ark_bn254::Fr::MODULUS_BIT_SIZE as usize).div_ceil(T::K);
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect_vec();
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+
+        let mut should_result = Vec::with_capacity(VEC_SIZE * num_chunks);
+        let mask = (BigUint::from(1u64) << T::K) - BigUint::one();
+        for x in x.into_iter() {
+            let mut x: BigUint = x.into();
+            for _ in 0..num_chunks {
+                let chunk = &x & &mask;
+                x >>= T::K;
+                should_result.push(RingElement(T::cast_from_biguint(&chunk)));
+            }
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let decomposed =
+                    yao::decompose_field_to_rings_many(&x, &mut rep3, num_chunks, T::K).unwrap();
+                tx.send(decomposed)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_decompose_shared_field_many_via_yao() {
+        apply_to_all!(
+            rep3_decompose_shared_field_many_via_yao_t,
             [Bit, u8, u16, u32, u64, u128]
         );
     }
