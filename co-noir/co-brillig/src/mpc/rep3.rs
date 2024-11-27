@@ -960,8 +960,13 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                     let divisor: BigUint = public.into();
                     if divisor.count_ones() <= 1 {
                         // is power-of-2
-                        let divisor_bits = divisor.bits();
-                        todo!("Continue with the impl")
+                        let divisor_bit = divisor.bits() as usize;
+                        let divided = rep3::yao::field_int_div_power_2(
+                            shared,
+                            &mut self.io_context,
+                            divisor_bit,
+                        )?;
+                        Rep3BrilligType::shared_field(divided)
                     } else {
                         todo!("Implement IntDiv for shared/public with divisor not being a power-of-2")
                     }

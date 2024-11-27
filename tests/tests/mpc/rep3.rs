@@ -1393,7 +1393,7 @@ mod field_share {
     }
 
     #[test]
-    fn rep3_div_power_2_via_yao_f() {
+    fn rep3_int_div_power_2_via_yao() {
         const VEC_SIZE: usize = 10;
 
         let test_network = Rep3TestNetwork::default();
@@ -1424,7 +1424,8 @@ mod field_share {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
 
-                let decomposed = yao::field_div_power_2_many(&x, &mut rep3, divisor_bit).unwrap();
+                let decomposed =
+                    yao::field_int_div_power_2_many(&x, &mut rep3, divisor_bit).unwrap();
                 tx.send(decomposed)
             });
         }

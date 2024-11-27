@@ -674,14 +674,17 @@ pub fn decompose_arithmetic<F: PrimeField, N: Rep3Network>(
         decompose_bit_size,
     )
 }
-/// Divides a vector of field elements by a power of 2.
-pub fn field_div_power_2_many<F: PrimeField, N: Rep3Network>(
+/// Divides a vector of field elements by a power of 2, roudning down.
+pub fn field_int_div_power_2_many<F: PrimeField, N: Rep3Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     io_context: &mut IoContext<N>,
     divisor_bit: usize,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
     let num_inputs = inputs.len();
 
+    if divisor_bit == 0 {
+        return Ok(inputs.to_owned());
+    }
     if divisor_bit >= F::MODULUS_BIT_SIZE as usize {
         return Ok(vec![Rep3PrimeFieldShare::zero_share(); num_inputs]);
     }
@@ -690,18 +693,18 @@ pub fn field_div_power_2_many<F: PrimeField, N: Rep3Network>(
         inputs,
         io_context,
         num_inputs,
-        GarbledCircuits::field_div_power_2_many::<_, F>,
-        (F::MODULUS_BIT_SIZE as usize, divisor_bit)
+        GarbledCircuits::field_int_div_power_2_many::<_, F>,
+        (divisor_bit)
     )
 }
 
-/// Divides a field element by a power of 2.
-pub fn field_div_power_2<F: PrimeField, N: Rep3Network>(
+/// Divides a field element by a power of 2, rounding down.
+pub fn field_int_div_power_2<F: PrimeField, N: Rep3Network>(
     inputs: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
     divisor_bit: usize,
 ) -> IoResult<Rep3PrimeFieldShare<F>> {
-    let res = field_div_power_2_many(&[inputs], io_context, divisor_bit)?;
+    let res = field_int_div_power_2_many(&[inputs], io_context, divisor_bit)?;
     Ok(res[0])
 }
 
