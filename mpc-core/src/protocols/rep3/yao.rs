@@ -674,7 +674,7 @@ pub fn decompose_arithmetic<F: PrimeField, N: Rep3Network>(
         decompose_bit_size,
     )
 }
-/// Divides a vector of ring elements by a power of 2.
+/// Divides a vector of field elements by a power of 2.
 pub fn field_div_power_2_many<F: PrimeField, N: Rep3Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     io_context: &mut IoContext<N>,
@@ -695,7 +695,7 @@ pub fn field_div_power_2_many<F: PrimeField, N: Rep3Network>(
     )
 }
 
-/// Divides a ring element by a power of 2.
+/// Divides a field element by a power of 2.
 pub fn field_div_power_2<F: PrimeField, N: Rep3Network>(
     inputs: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
