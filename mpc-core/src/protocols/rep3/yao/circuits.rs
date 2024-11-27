@@ -375,14 +375,14 @@ impl GarbledCircuits {
             wires_c.chunks(output_bitlen),
         ) {
             // compose chunk_bits again
-            // For the bin addition, our input is not of size output_bitlen, thus we can optimize a little bit
+            // For the bin addition, our input is not guaranteed to be of size output_bitlen, thus we can optimize a little bit in some cases
 
             let mut added = Vec::with_capacity(output_bitlen);
 
             let (mut s, mut c) = Self::half_adder(g, &xs[0], &ys[0])?;
             added.push(s);
 
-            for (x, y) in xs.iter().zip(ys.iter()).skip(1) {
+            for (x, y) in xs.iter().zip(ys.iter()).take(ys.len() - 1).skip(1) {
                 let res = Self::full_adder(g, x, y, &c)?;
                 s = res.0;
                 c = res.1;
@@ -396,7 +396,13 @@ impl GarbledCircuits {
             }
 
             // Finally, just the xor of the full_adder, where x is 0...
-            added.push(ys.last().unwrap().to_owned());
+            if xs.len() == ys.len() {
+                let z1 = g.xor(xs.last().unwrap(), ys.last().unwrap())?;
+                let s = g.xor(&z1, &c)?;
+                added.push(s);
+            } else {
+                added.push(g.xor(ys.last().unwrap(), &c)?);
+            }
             results.extend(added);
         }
 
