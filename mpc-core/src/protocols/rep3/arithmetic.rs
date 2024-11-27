@@ -473,7 +473,7 @@ pub fn le_public<F: PrimeField, N: Rep3Network>(
     conversion::bit_inject(&res, io_context)
 }
 
-/// Same as ge_public but without using bit_inject on the result. Returns 1 if lhs <= rhs and 0 otherwise. Checks if a shared value is less than or equal to a public value. The result is a shared value that has value 1 if the shared value is less than or equal to the public value and 0 otherwise.
+/// Same as le_public but without using bit_inject on the result. Returns 1 if lhs <= rhs and 0 otherwise. Checks if a shared value is less than or equal to a public value. The result is a shared value that has value 1 if the shared value is less than or equal to the public value and 0 otherwise.
 pub fn le_public_bit<F: PrimeField, N: Rep3Network>(
     lhs: FieldShare<F>,
     rhs: F,
