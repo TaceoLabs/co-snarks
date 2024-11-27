@@ -327,7 +327,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
             match inst {
                 op_codes::MpcOpCode::PushConstant(index) => {
                     let constant = ctx.constant_table[*index].clone();
-                    tracing::debug!("pushing constant {}", constant);
+                    tracing::trace!("pushing constant {}", constant);
                     self.push_field(constant);
                 }
                 op_codes::MpcOpCode::PushIndex(index) => self.push_index(*index),
@@ -338,7 +338,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         .iter()
                         .cloned()
                         .for_each(|signal| {
-                            tracing::debug!("pushing signal {signal}");
+                            tracing::trace!("pushing signal {signal}");
                             self.push_field(signal);
                         });
                 }
@@ -477,7 +477,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     let mut input_signals = vec![C::VmType::default(); *amount];
                     for i in 0..*amount {
                         input_signals[*amount - i - 1] = self.pop_field();
-                        tracing::debug!("popping {}", input_signals.last().unwrap());
+                        tracing::trace!("popping {}", input_signals.last().unwrap());
                     }
 
                     let component = &mut self.sub_components[sub_comp_index];
@@ -602,10 +602,22 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     let lhs = self.pop_field();
                     self.push_field(protocol.ge(lhs, rhs)?);
                 }
-                op_codes::MpcOpCode::Eq => {
-                    let rhs = self.pop_field();
-                    let lhs = self.pop_field();
-                    self.push_field(protocol.eq(lhs, rhs)?);
+                op_codes::MpcOpCode::Eq(size) => {
+                    let size = *size;
+                    let mut lhs = Vec::with_capacity(size);
+                    let mut rhs = Vec::with_capacity(size);
+                    for _ in 0..size {
+                        rhs.push(self.pop_field());
+                    }
+                    for _ in 0..size {
+                        lhs.push(self.pop_field());
+                    }
+                    let mut result = protocol.public_one();
+                    for (lhs, rhs) in izip!(lhs, rhs) {
+                        let cmp = protocol.eq(lhs, rhs)?;
+                        result = protocol.bool_and(cmp, result)?;
+                    }
+                    self.push_field(result);
                 }
                 op_codes::MpcOpCode::Neq => {
                     let rhs = self.pop_field();

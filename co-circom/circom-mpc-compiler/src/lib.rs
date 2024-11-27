@@ -332,8 +332,8 @@ where
             OperatorType::Lesser => self.emit_opcode(MpcOpCode::Lt),
             OperatorType::Greater => self.emit_opcode(MpcOpCode::Gt),
             OperatorType::Eq(size) => {
-                assert_ne!(size, 0);
-                self.emit_opcode(MpcOpCode::Eq);
+                assert_ne!(size, 0, "size must be > 0");
+                self.emit_opcode(MpcOpCode::Eq(size));
             }
             OperatorType::NotEq => self.emit_opcode(MpcOpCode::Neq),
             OperatorType::BoolOr => self.emit_opcode(MpcOpCode::BoolOr),
