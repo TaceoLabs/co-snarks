@@ -9,6 +9,7 @@ use mpc_core::protocols::rep3_ring::ring::bit::Bit;
 use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
 use mpc_core::protocols::rep3_ring::{self, Rep3BitShare, Rep3RingShare};
+use num_bigint::BigUint;
 use std::marker::PhantomData;
 
 use super::PlainBrilligType as Public;
@@ -955,8 +956,15 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                 }
             }
             (Rep3BrilligType::Shared(shared), Rep3BrilligType::Public(public)) => {
-                if let (Public::Field(_), Shared::Field(_)) = (public, shared) {
-                    todo!("Implement IntDiv for shared/public")
+                if let (Public::Field(public), Shared::Field(shared)) = (public, shared) {
+                    let divisor: BigUint = public.into();
+                    if divisor.count_ones() <= 1 {
+                        // is power-of-2
+                        let divisor_bits = divisor.bits();
+                        todo!("Continue with the impl")
+                    } else {
+                        todo!("Implement IntDiv for shared/public with divisor not being a power-of-2")
+                    }
                 } else {
                     eyre::bail!("IntDiv only supported on fields")
                 }
