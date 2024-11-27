@@ -361,9 +361,8 @@ impl GarbledCircuits {
         debug_assert_eq!(wires_a.len(), wires_b.len());
         let input_bitlen = wires_a.len();
         debug_assert_eq!(input_bitlen, F::MODULUS_BIT_SIZE as usize);
-        debug_assert!(input_bitlen >= total_output_bitlen);
         debug_assert!(decompose_bitlen <= total_output_bitlen);
-        debug_assert_eq!(wires_c.len(), output_bitlen);
+        debug_assert_eq!(wires_c.len(), output_bitlen * num_decomps_per_field);
         debug_assert!(output_bitlen >= decompose_bitlen);
 
         let input_bits =
@@ -376,7 +375,7 @@ impl GarbledCircuits {
             wires_c.chunks(output_bitlen),
         ) {
             // compose chunk_bits again
-            // For the bin addition, our input is not of size decompose_bitlen, thus we can optimize a little bit
+            // For the bin addition, our input is not of size output_bitlen, thus we can optimize a little bit
 
             let mut added = Vec::with_capacity(output_bitlen);
 
@@ -423,7 +422,6 @@ impl GarbledCircuits {
         let total_output_elements = num_decomps_per_field * num_inputs;
 
         debug_assert_eq!(input_size % input_bitlen, 0);
-        debug_assert!(input_bitlen >= total_output_bitlen_per_field);
         debug_assert!(decompose_bitlen <= total_output_bitlen_per_field);
         debug_assert!(output_bitlen >= decompose_bitlen);
         debug_assert_eq!(wires_c.size(), output_bitlen * total_output_elements);

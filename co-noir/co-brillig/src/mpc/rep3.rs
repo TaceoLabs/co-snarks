@@ -1681,6 +1681,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                         )?;
                         result
                             .into_iter()
+                            .rev()
                             .map(|val| Rep3BrilligType::Shared(Shared::Ring8(val)))
                             .collect()
                     } else {

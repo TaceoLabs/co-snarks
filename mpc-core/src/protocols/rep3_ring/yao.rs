@@ -738,11 +738,12 @@ where
     Standard: Distribution<T>,
 {
     let num_inputs = inputs.len();
+    let total_output_elements = num_decomps_per_field * num_inputs;
     let delta = io_context.rngs.generate_random_garbler_delta(io_context.id);
 
     let [x01, x2] = rep3::yao::joint_input_arithmetic_added_many(inputs, delta, io_context)?;
 
-    let mut res = vec![Rep3RingShare::zero_share(); num_inputs];
+    let mut res = vec![Rep3RingShare::zero_share(); total_output_elements];
 
     match io_context.id {
         PartyID::ID0 => {
@@ -755,7 +756,7 @@ where
             }
 
             // TODO this can be parallelized with joint_input_arithmetic_added_many
-            let x23 = input_ring_id2_many::<T, _>(None, None, num_inputs, io_context)?;
+            let x23 = input_ring_id2_many::<T, _>(None, None, total_output_elements, io_context)?;
 
             let mut evaluator = Rep3Evaluator::new(io_context);
             evaluator.receive_circuit()?;
@@ -787,7 +788,7 @@ where
             }
 
             // TODO this can be parallelized with joint_input_arithmetic_added_many
-            let x23 = input_ring_id2_many::<T, _>(None, None, num_inputs, io_context)?;
+            let x23 = input_ring_id2_many::<T, _>(None, None, total_output_elements, io_context)?;
 
             let mut garbler =
                 Rep3Garbler::new_with_delta(io_context, delta.expect("Delta not provided"));
@@ -817,7 +818,7 @@ where
             }
         }
         PartyID::ID2 => {
-            let mut x23 = Vec::with_capacity(num_inputs);
+            let mut x23 = Vec::with_capacity(total_output_elements);
             for res in res.iter_mut() {
                 let k2 = io_context
                     .rngs
@@ -835,7 +836,7 @@ where
             }
 
             // TODO this can be parallelized with joint_input_arithmetic_added_many
-            let x23 = input_ring_id2_many(Some(x23), delta, num_inputs, io_context)?;
+            let x23 = input_ring_id2_many(Some(x23), delta, total_output_elements, io_context)?;
 
             let mut garbler =
                 Rep3Garbler::new_with_delta(io_context, delta.expect("Delta not provided"));
