@@ -852,6 +852,7 @@ impl GarbledCircuits {
         debug_assert!(divisor_bit < input_bitlen);
 
         // Add wires_a and wires_b to get the input bits as Yao wires
+        // TODO we do some XORs too much since we do not need the s-values for the first divisor_bit bits. However, this does not effect communication
         let input_bits = Self::bin_addition_no_carry(g, wires_a, wires_b)?;
 
         // compose chunk_bits again
