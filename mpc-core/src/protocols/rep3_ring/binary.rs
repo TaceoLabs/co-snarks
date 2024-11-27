@@ -100,7 +100,7 @@ pub fn shift_r_public<T: IntRing2k>(shared: &RingShare<T>, public: RingElement<T
         .0
         .try_into()
         .expect("can cast shift operand to usize");
-    shared >> shift as u32
+    shared >> shift
 }
 
 /// Shifts a share by a public value `F` to the left.
@@ -117,7 +117,7 @@ pub fn shift_l_public<T: IntRing2k>(shared: &RingShare<T>, public: RingElement<T
         .0
         .try_into()
         .expect("can cast shift operand to usize");
-    shared << shift as u32
+    shared << shift
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
@@ -210,7 +210,7 @@ where
 
     // do ands in a tree
     // TODO: Make and tree more communication efficient, ATM we send the full element for each level, even though they halve in size
-    let mut len = T::K as u32;
+    let mut len = T::K;
     debug_assert!(len.is_power_of_two());
     while len > 1 {
         // if len % 2 == 1 // Does not happen, we are in a ring with 2^k

@@ -859,6 +859,7 @@ impl GarbledCircuits {
         debug_assert_eq!(input_bitlen, wires_b.len());
         debug_assert_eq!(input_bitlen, wires_c.len());
         debug_assert!(divisor_bit < input_bitlen);
+        debug_assert!(divisor_bit > 0);
 
         // Add wires_a and wires_b to get the input bits as Yao wires
         // TODO we do some XORs too much since we do not need the s-values for the first divisor_bit bits. However, this does not effect communication
@@ -910,6 +911,7 @@ impl GarbledCircuits {
 
         debug_assert_eq!(input_size % input_bitlen, 0);
         debug_assert!(divisor_bit < input_bitlen);
+        debug_assert!(divisor_bit > 0);
         debug_assert_eq!(wires_c.size(), input_size);
 
         let mut results = Vec::with_capacity(wires_c.size());
@@ -924,7 +926,7 @@ impl GarbledCircuits {
                 chunk_a,
                 chunk_b,
                 chunk_c,
-                input_bitlen,
+                divisor_bit,
             )?);
         }
 

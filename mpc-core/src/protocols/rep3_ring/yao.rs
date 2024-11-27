@@ -700,6 +700,9 @@ where
 {
     let num_inputs = inputs.len();
 
+    if divisor_bit == 0 {
+        return Ok(inputs.to_owned());
+    }
     if divisor_bit >= T::K {
         return Ok(vec![Rep3RingShare::zero_share(); num_inputs]);
     }

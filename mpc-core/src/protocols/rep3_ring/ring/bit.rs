@@ -2,10 +2,7 @@
 //!
 //! Contains an implementation of a Bit type that can be used with the Ring traits of this crate
 
-use num_traits::{
-    AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingShl, WrappingShr, WrappingSub,
-    Zero,
-};
+use num_traits::{AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero};
 use rand::{distributions::Standard, prelude::Distribution, Rng};
 use serde::{Deserialize, Serialize};
 use std::ops::{
@@ -356,13 +353,6 @@ impl Shl<usize> for Bit {
     }
 }
 
-impl WrappingShl for Bit {
-    #[inline(always)]
-    fn wrapping_shl(&self, rhs: u32) -> Self {
-        *self << rhs as usize
-    }
-}
-
 impl Shr<usize> for Bit {
     type Output = Self;
 
@@ -372,13 +362,6 @@ impl Shr<usize> for Bit {
         } else {
             Self(false)
         }
-    }
-}
-
-impl WrappingShr for Bit {
-    #[inline(always)]
-    fn wrapping_shr(&self, rhs: u32) -> Self {
-        *self >> rhs as usize
     }
 }
 
