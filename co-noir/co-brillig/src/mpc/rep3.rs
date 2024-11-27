@@ -847,6 +847,84 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                     (Public::Field(rhs), Shared::Field(lhs)) => Rep3BrilligType::shared_field(
                         rep3::arithmetic::div_shared_by_public(lhs, rhs)?,
                     ),
+                    (Public::Int(public, IntegerBitSize::U128), Shared::Ring128(shared)) => {
+                        if public.is_power_of_two() {
+                            let divisor_bits = public.ilog2() as usize;
+                            let divided = rep3_ring::yao::ring_div_power_2(
+                                shared,
+                                &mut self.io_context,
+                                divisor_bits,
+                            )?;
+                            Rep3BrilligType::shared_u128(divided)
+                        } else {
+                            todo!("Implement division for shared/public with divisor not being a power-of-2")
+                        }
+                    }
+                    (Public::Int(public, IntegerBitSize::U64), Shared::Ring64(shared)) => {
+                        if public.is_power_of_two() {
+                            let divisor_bits = public.ilog2() as usize;
+                            let divided = rep3_ring::yao::ring_div_power_2(
+                                shared,
+                                &mut self.io_context,
+                                divisor_bits,
+                            )?;
+                            Rep3BrilligType::shared_u64(divided)
+                        } else {
+                            todo!("Implement division for shared/public with divisor not being a power-of-2")
+                        }
+                    }
+                    (Public::Int(public, IntegerBitSize::U32), Shared::Ring32(shared)) => {
+                        if public.is_power_of_two() {
+                            let divisor_bits = public.ilog2() as usize;
+                            let divided = rep3_ring::yao::ring_div_power_2(
+                                shared,
+                                &mut self.io_context,
+                                divisor_bits,
+                            )?;
+                            Rep3BrilligType::shared_u32(divided)
+                        } else {
+                            todo!("Implement division for shared/public with divisor not being a power-of-2")
+                        }
+                    }
+                    (Public::Int(public, IntegerBitSize::U16), Shared::Ring16(shared)) => {
+                        if public.is_power_of_two() {
+                            let divisor_bits = public.ilog2() as usize;
+                            let divided = rep3_ring::yao::ring_div_power_2(
+                                shared,
+                                &mut self.io_context,
+                                divisor_bits,
+                            )?;
+                            Rep3BrilligType::shared_u16(divided)
+                        } else {
+                            todo!("Implement division for shared/public with divisor not being a power-of-2")
+                        }
+                    }
+                    (Public::Int(public, IntegerBitSize::U8), Shared::Ring8(shared)) => {
+                        if public.is_power_of_two() {
+                            let divisor_bits = public.ilog2() as usize;
+                            let divided = rep3_ring::yao::ring_div_power_2(
+                                shared,
+                                &mut self.io_context,
+                                divisor_bits,
+                            )?;
+                            Rep3BrilligType::shared_u8(divided)
+                        } else {
+                            todo!("Implement division for shared/public with divisor not being a power-of-2")
+                        }
+                    }
+                    (Public::Int(public, IntegerBitSize::U1), Shared::Ring1(shared)) => {
+                        if public.is_power_of_two() {
+                            let divisor_bits = public.ilog2() as usize;
+                            let divided = rep3_ring::yao::ring_div_power_2(
+                                shared,
+                                &mut self.io_context,
+                                divisor_bits,
+                            )?;
+                            Rep3BrilligType::shared_u1(divided)
+                        } else {
+                            todo!("Implement division for shared/public with divisor not being a power-of-2")
+                        }
+                    }
                     _ => todo!("Implement division for shared/public"),
                 }
             }
