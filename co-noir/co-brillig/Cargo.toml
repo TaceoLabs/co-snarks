@@ -23,6 +23,7 @@ noirc-abi.workspace = true
 noirc-artifacts.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
+rand.workspace = true
 rayon.workspace = true
 serde.workspace = true
 thiserror.workspace = true
