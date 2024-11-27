@@ -288,7 +288,11 @@ pub struct GenerateWitnessCli {
     /// The path to the circuit file
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub circuit: Option<String>,
+    pub circuit: Option<PathBuf>,
+    /// The path to the circuit file
+    #[arg(long, short = 'l')]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub link_library: Option<Vec<PathBuf>>,
     /// The MPC protocol to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -520,8 +524,9 @@ impl_config!(VerifyCli, VerifyConfig);
 // manual one since this is a bit more complex
 impl GenerateWitnessConfig {
     /// Parse config from file, env, cli
-    pub fn parse(cli: GenerateWitnessCli) -> Result<Self, ConfigError> {
+    pub fn parse(mut cli: GenerateWitnessCli) -> Result<Self, ConfigError> {
         let simplification_level = cli.simplification_level;
+        let link_library = cli.link_library.take().unwrap_or_default();
         let mut config: GenerateWitnessConfig = if let Some(path) = &cli.config {
             Figment::new()
                 .merge(Toml::file(path))
@@ -540,6 +545,7 @@ impl GenerateWitnessConfig {
             2 => config.compiler.simplification = SimplificationLevel::O2(usize::MAX),
             _ => {}
         }
+        config.compiler.link_library.extend(link_library);
         Ok(config)
     }
 }
