@@ -1697,8 +1697,7 @@ mod ring_share {
             .map(|_| rng.gen::<RingElement<T>>())
             .collect_vec();
         let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
-        // let divisor_bit: usize = rng.gen_range(0..=T::K);
-        let divisor_bit: usize = T::K;
+        let divisor_bit: usize = rng.gen_range(0..=T::K);
 
         let mut should_result = Vec::with_capacity(VEC_SIZE);
         for x in x.into_iter() {
