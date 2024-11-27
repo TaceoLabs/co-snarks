@@ -204,12 +204,13 @@ impl GarbledCircuits {
         Ok(c)
     }
 
-    fn sub_p_and_mux_with_output_size<G: FancyBinary, F: PrimeField>(
+    /// subtracts p from wires (with carry) and returns the result and the overflow bit
+    #[expect(clippy::type_complexity)]
+    fn sub_p<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires: &[G::Item],
         carry: G::Item,
-        outlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<(Vec<G::Item>, G::Item), G::Error> {
         let bitlen = wires.len();
         debug_assert_eq!(bitlen, F::MODULUS_BIT_SIZE as usize);
 
@@ -238,6 +239,17 @@ impl GarbledCircuits {
             carry
         };
         let ov = g.xor(&z, &c)?;
+
+        Ok((subtracted, ov))
+    }
+
+    fn sub_p_and_mux_with_output_size<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires: &[G::Item],
+        carry: G::Item,
+        outlen: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let (subtracted, ov) = Self::sub_p::<_, F>(g, wires, carry)?;
 
         // multiplex for result
         let mut result = Vec::with_capacity(outlen);
@@ -911,11 +923,19 @@ impl GarbledCircuits {
         debug_assert!(divisor_bit > 0);
 
         // Add wires_a and wires_b to get the input bits as Yao wires
-        // TODO we do some XORs too much since we do not need the s-values for the first divisor_bit bits. However, this does not effect communication
-        let input_bits = Self::adder_mod_p_with_output_size::<G, F>(g, wires_a, wires_b, n_bits)?;
+        let (added, carry_add) = Self::bin_addition(g, wires_a, wires_b)?;
+        let (subtracted, ov) = Self::sub_p::<_, F>(g, &added, carry_add)?;
+
+        // multiplex for result
+        let mut input_bits = Vec::with_capacity(input_bitlen - divisor_bit);
+        for (s, a) in subtracted.iter().zip(added.iter()).skip(divisor_bit) {
+            // CMUX
+            let r = g.mux(&ov, s, a)?;
+            input_bits.push(r);
+        }
 
         // compose chunk_bits again
-        let result = Self::compose_field_element::<G, F>(g, &input_bits[divisor_bit..], wires_c)?;
+        let result = Self::compose_field_element::<G, F>(g, &input_bits, wires_c)?;
 
         Ok(result)
     }
