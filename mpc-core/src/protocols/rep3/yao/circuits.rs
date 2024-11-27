@@ -847,7 +847,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whearas wires_c are the same size as wires_a and wires_b
+    /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b
     fn ring_div_power_2<G: FancyBinary>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -894,7 +894,54 @@ impl GarbledCircuits {
         Ok(added)
     }
 
-    /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whearas wires_c are the same size as wires_a and wires_b
+    /// Divides a field element by a power of 2. ...
+    fn field_div_power_2<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &[G::Item],
+        wires_b: &[G::Item],
+        wires_c: &[G::Item],
+        divisor_bit: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bitlen = wires_a.len();
+        let n_bits = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(input_bitlen, wires_b.len());
+        debug_assert_eq!(input_bitlen, wires_c.len());
+        debug_assert!(divisor_bit < input_bitlen);
+
+        // Add wires_a and wires_b to get the input bits as Yao wires
+        // TODO we do some XORs too much since we do not need the s-values for the first divisor_bit bits. However, this does not effect communication
+        let input_bits = Self::adder_mod_p_with_output_size::<G, F>(g, wires_a, wires_b, n_bits)?;
+
+        // compose chunk_bits again
+        // For the bin addition, our input is not of size input_bitlen, thus we can optimize a little bit
+
+        // let mut added = Vec::with_capacity(input_bitlen);
+        let result = Self::compose_field_element::<G, F>(g, &input_bits[divisor_bit..], wires_c)?;
+        // let xs = &input_bits[divisor_bit..];
+        // let ys = wires_c;
+        // let (mut s, mut c) = Self::half_adder(g, &xs[0], &ys[0])?;
+        // added.push(s);
+
+        // for (x, y) in xs.iter().zip(ys.iter()).skip(1) {
+        //     let res = Self::full_adder(g, x, y, &c)?;
+        //     s = res.0;
+        //     c = res.1;
+        //     added.push(s);
+        // }
+        // for y in ys.iter().take(ys.len() - 1).skip(xs.len()) {
+        //     let res = Self::full_adder_const(g, y, false, &c)?;
+        //     s = res.0;
+        //     c = res.1;
+        //     added.push(s);
+        // }
+
+        // // Finally, just the xor of the full_adder, where x is 0...
+        // let s = g.xor(ys.last().unwrap(), &c)?;
+        // added.push(s);
+        Ok(result)
+    }
+
+    /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b
     pub(crate) fn ring_div_power_2_many<G: FancyBinary>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -922,6 +969,44 @@ impl GarbledCircuits {
             wires_c.wires().chunks(input_bitlen),
         ) {
             results.extend(Self::ring_div_power_2(
+                g,
+                chunk_a,
+                chunk_b,
+                chunk_c,
+                divisor_bit,
+            )?);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Divides a field element by a power of 2. ...
+    pub(crate) fn field_div_power_2_many<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        input_bitlen: usize,
+        divisor_bit: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    where
+        G::Item: Default,
+    {
+        debug_assert_eq!(wires_a.size(), wires_b.size());
+        let input_size = wires_a.size();
+
+        debug_assert_eq!(input_size % input_bitlen, 0);
+        debug_assert!(divisor_bit < input_bitlen);
+        debug_assert_eq!(wires_c.size(), input_size);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_a, chunk_b, chunk_c) in izip!(
+            wires_a.wires().chunks(input_bitlen),
+            wires_b.wires().chunks(input_bitlen),
+            wires_c.wires().chunks(input_bitlen),
+        ) {
+            results.extend(Self::field_div_power_2::<G, F>(
                 g,
                 chunk_a,
                 chunk_b,
@@ -1013,7 +1098,7 @@ mod test {
 
         let mut evaluator = Evaluator::<_, WireMod2>::new(channel_rcv);
 
-        // This is wihout OT, just a simulation
+        // This is without OT, just a simulation
         let n_bits = F::MODULUS_BIT_SIZE as usize;
         let mut a = Vec::with_capacity(n_bits);
         let mut b = Vec::with_capacity(n_bits);
