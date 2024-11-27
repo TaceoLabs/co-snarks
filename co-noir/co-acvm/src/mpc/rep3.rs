@@ -142,7 +142,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(Rep3BrilligDriver::with_io_context(self.io_context.fork()?))
     }
 
-    fn from_brillig_result(
+    fn parse_brillig_result(
         &mut self,
         brillig_result: Vec<Rep3BrilligType<F>>,
     ) -> eyre::Result<Vec<Self::AcvmType>> {

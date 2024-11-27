@@ -27,8 +27,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver>;
 
-    #[expect(clippy::wrong_self_convention)]
-    fn from_brillig_result(
+    fn parse_brillig_result(
         &mut self,
         brillig_result: Vec<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>,
     ) -> eyre::Result<Vec<Self::AcvmType>>;
