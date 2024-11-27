@@ -395,7 +395,7 @@ impl GarbledCircuits {
                 added.push(s);
             }
 
-            // Finally, just the xor of the full_adder, where x is 0...
+            // Finally, just the xor of the full_adder
             if xs.len() == ys.len() {
                 let z1 = g.xor(xs.last().unwrap(), ys.last().unwrap())?;
                 let s = g.xor(&z1, &c)?;
