@@ -169,7 +169,6 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         }
     }
 
-    // just copied this from you franco(?)
     fn sub(
         &mut self,
         lhs: Self::BrilligType,
