@@ -108,6 +108,7 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
 }
 
 witness_extension_test_plain!(aliascheck_test);
+witness_extension_test_plain!(array_equals);
 witness_extension_test_plain!(babyadd_tester);
 witness_extension_test_plain!(babycheck_test);
 witness_extension_test_plain!(babypbk_test);

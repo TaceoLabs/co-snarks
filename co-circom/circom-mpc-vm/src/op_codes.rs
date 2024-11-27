@@ -95,8 +95,8 @@ pub enum MpcOpCode {
     Gt,
     /// Pops two elements from the field stack, compares if the first popped value is greater than or equal to the second, and pushes a boolean result onto the stack.
     Ge,
-    /// Pops two elements from the field stack, compares if the first popped value is equal to the second, and pushes a boolean result onto the stack.
-    Eq,
+    /// Pops the provided amount of elements time 2 from the field stack and compares if the first n popped values are equal to the second set, and pushes a boolean result onto the stack.
+    Eq(usize),
     /// Pops two elements from the field stack, compares if the first popped value is not equal to the second, and pushes a boolean result onto the stack.
     Neq,
     /// Pops two boolean values from the field stack, computes their boolean OR, and pushes the result onto the stack.
@@ -171,7 +171,7 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::Le => "LESS_EQ_OP".to_owned(),
             MpcOpCode::Gt => "GREATER_THAN_OP".to_owned(),
             MpcOpCode::Ge => "GREATER_EQ_OP".to_owned(),
-            MpcOpCode::Eq => "IS_EQUAL_OP".to_owned(),
+            MpcOpCode::Eq(size) => format!("IS_EQUAL_OP {size}"),
             MpcOpCode::Neq => "NOT_EQUAL_OP".to_owned(),
             MpcOpCode::BoolOr => "BOOL_OR_OP".to_owned(),
             MpcOpCode::BoolAnd => "BOOL_AND_OP".to_owned(),

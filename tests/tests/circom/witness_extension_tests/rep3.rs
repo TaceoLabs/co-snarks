@@ -199,6 +199,7 @@ macro_rules! witness_extension_test_rep3_ignored {
 }
 
 witness_extension_test_rep3!(aliascheck_test);
+witness_extension_test_rep3!(array_equals);
 witness_extension_test_rep3!(babyadd_tester);
 witness_extension_test_rep3!(babycheck_test);
 witness_extension_test_rep3!(babypbk_test);
