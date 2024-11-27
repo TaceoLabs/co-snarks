@@ -170,7 +170,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
     }
 
     fn sub(
-        &mut self,
+        &self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {

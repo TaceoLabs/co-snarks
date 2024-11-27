@@ -84,7 +84,7 @@ pub trait BrilligDriver<F: PrimeField> {
     /// This operation returns an error if the provided inputs
     /// are not the same type.
     fn sub(
-        &mut self,
+        &self,
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType>;
