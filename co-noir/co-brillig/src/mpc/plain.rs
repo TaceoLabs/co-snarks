@@ -329,29 +329,6 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         }
     }
 
-    fn gt(
-        &mut self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        match (lhs, rhs) {
-            (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) => {
-                let result = u128::from(lhs > rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
-            }
-            (
-                PlainBrilligType::Int(lhs, lhs_bit_size),
-                PlainBrilligType::Int(rhs, rhs_bit_size),
-            ) if lhs_bit_size == rhs_bit_size => {
-                let result = u128::from(lhs > rhs);
-                Ok(PlainBrilligType::Int(result, IntegerBitSize::U1))
-            }
-            x => eyre::bail!(
-                "type mismatch! Can only do bin ops on same types, but tried with {x:?}"
-            ),
-        }
-    }
-
     fn to_radix(
         &mut self,
         val: Self::BrilligType,

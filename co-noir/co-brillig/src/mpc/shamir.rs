@@ -274,36 +274,6 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
         Ok(result)
     }
 
-    fn gt(
-        &mut self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        let result = match (lhs, rhs) {
-            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
-                let result = self.plain_driver.gt(lhs, rhs)?;
-                ShamirBrilligType::Public(result)
-            }
-            _ => eyre::bail!("Cannot compare shared values with Shamir"),
-        };
-        Ok(result)
-    }
-
-    fn ge(
-        &mut self,
-        lhs: Self::BrilligType,
-        rhs: Self::BrilligType,
-    ) -> eyre::Result<Self::BrilligType> {
-        let result = match (lhs, rhs) {
-            (ShamirBrilligType::Public(lhs), ShamirBrilligType::Public(rhs)) => {
-                let result = self.plain_driver.ge(lhs, rhs)?;
-                ShamirBrilligType::Public(result)
-            }
-            _ => eyre::bail!("Cannot compare shared values with Shamir"),
-        };
-        Ok(result)
-    }
-
     fn to_radix(
         &mut self,
         val: Self::BrilligType,

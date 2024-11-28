@@ -180,8 +180,7 @@ pub trait BrilligDriver<F: PrimeField> {
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        let gt = self.lt(lhs, rhs)?;
-        self.not(gt)
+        self.lt(rhs, lhs)
     }
 
     /// Checks whether `lhs >= rhs`. The result
@@ -197,8 +196,7 @@ pub trait BrilligDriver<F: PrimeField> {
         lhs: Self::BrilligType,
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        let gt = self.lt(lhs, rhs)?;
-        self.not(gt)
+        self.le(rhs, lhs)
     }
 
     /// Converts the provided value to a binary representation, depending
