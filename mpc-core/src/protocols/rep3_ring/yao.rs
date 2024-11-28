@@ -719,14 +719,54 @@ where
 
 /// Divides a ring element by a power of 2.
 pub fn ring_div_power_2<T: IntRing2k, N: Rep3Network>(
-    inputs: Rep3RingShare<T>,
+    input: Rep3RingShare<T>,
     io_context: &mut IoContext<N>,
     divisor_bit: usize,
 ) -> IoResult<Rep3RingShare<T>>
 where
     Standard: Distribution<T>,
 {
-    let res = ring_div_power_2_many(&[inputs], io_context, divisor_bit)?;
+    let res = ring_div_power_2_many(&[input], io_context, divisor_bit)?;
+    Ok(res[0])
+}
+
+/// Divides a vector of ring elements by another.
+pub fn ring_bin_div_many<T: IntRing2k, N: Rep3Network>(
+    input1: &[Rep3RingShare<T>],
+    input2: &[Rep3RingShare<T>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let num_inputs = input1.len();
+    assert_eq!(input1.len(), input2.len());
+
+    let mut combined_inputs = Vec::with_capacity(input1.len() + input2.len());
+    combined_inputs.extend_from_slice(input1);
+    combined_inputs.extend_from_slice(input2);
+
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        num_inputs,
+        T,
+        GarbledCircuits::bin_div_many,
+        (T::K)
+    )
+}
+
+/// Divides a ring element by another.
+pub fn ring_bin_div<T: IntRing2k, N: Rep3Network>(
+    input1: Rep3RingShare<T>,
+    input2: Rep3RingShare<T>,
+
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3RingShare<T>>
+where
+    Standard: Distribution<T>,
+{
+    let res = ring_bin_div_many(&[input1], &[input2], io_context)?;
     Ok(res[0])
 }
 
@@ -884,3 +924,109 @@ where
         decompose_bitlen,
     )
 }
+
+// Don't know if we need this at some point?
+#[expect(unused_macros)]
+macro_rules! decompose_circuit_compose_blueprint_2 {
+    ($input1:expr,$input2:expr, $io_context:expr, $output_size:expr, $t:ty, $circuit:expr, ($( $args:expr ),*))  => {{
+        use $crate::protocols::rep3::id::PartyID;
+        use itertools::izip;
+        use $crate::protocols::rep3_ring::yao;
+        use $crate::protocols::rep3_ring::Rep3RingShare;
+
+        let delta = $io_context
+            .rngs
+            .generate_random_garbler_delta($io_context.id);
+
+        let [x01, x2] = yao::joint_input_arithmetic_added_many($input1, delta, $io_context)?;
+        let [y01, y2] = yao::joint_input_arithmetic_added_many($input2, delta, $io_context)?;
+
+        let mut res = vec![Rep3RingShare::zero_share(); $output_size];
+
+        match $io_context.id {
+            PartyID::ID0 => {
+                for res in res.iter_mut() {
+                    let k3 = $io_context.rngs.bitcomp2.random_elements_3keys::<RingElement<$t>>();
+                    res.b = (k3.0 + k3.1 + k3.2).neg();
+                }
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_ring_id2_many::<$t, _>(None, None, $output_size, $io_context)?;
+
+                let mut evaluator = rep3::yao::evaluator::Rep3Evaluator::new($io_context);
+                evaluator.receive_circuit()?;
+
+                let x1 = $circuit(&mut evaluator, &x01, &x2,&y01, &y2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = evaluator.output_to_id0_and_id1(x1.wires())?; //here
+                // Compose the bits
+                for (res, x1) in izip!(res.iter_mut(), x1.chunks(<$t>::K)) {
+                    res.a = yao::GCUtils::bits_to_ring(x1)?;
+                }
+            }
+            PartyID::ID1 => {
+                for res in res.iter_mut() {
+                    let k2 = $io_context.rngs.bitcomp1.random_elements_3keys::<RingElement<$t>>();
+                    res.a = (k2.0 + k2.1 + k2.2).neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_ring_id2_many::<$t, _>(None, None, $output_size, $io_context)?;
+
+                let mut garbler =
+                    rep3::yao::garbler::Rep3Garbler::new_with_delta($io_context, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler,  &x01, &x2,&y01, &y2, &x23, $($args),*);
+
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+
+                let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+
+                let x1 = match x1 {
+                    Some(x1) => x1,
+                    None => Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "No output received",
+                    ))?,
+                };
+
+                // Compose the bits
+                for (res, x1) in izip!(res.iter_mut(), x1.chunks(<$t>::K)) {
+                   res.b = yao::GCUtils::bits_to_ring(x1)?;
+                }
+            }
+            PartyID::ID2 => {
+                let mut x23 = Vec::with_capacity($output_size);
+                for res in res.iter_mut() {
+                    let k2 = $io_context.rngs.bitcomp1.random_elements_3keys::<RingElement<$t>>();
+                    let k3 = $io_context.rngs.bitcomp2.random_elements_3keys::<RingElement<$t>>();
+                    let k2_comp = k2.0 + k2.1 + k2.2;
+                    let k3_comp = k3.0 + k3.1 + k3.2;
+                    x23.push(k2_comp + k3_comp);
+                    res.a = k3_comp.neg();
+                    res.b = k2_comp.neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_ring_id2_many(Some(x23), delta, $output_size, $io_context)?;
+
+                let mut garbler =
+                   rep3::yao::garbler::Rep3Garbler::new_with_delta($io_context, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2,&y01, &y2, &x23, $($args),*);
+
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+                if x1.is_some() {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Unexpected output received",
+                    ))?;
+                }
+            }
+        }
+
+        Ok(res)
+    }};
+}
+#[expect(unused_imports)]
+pub(crate) use decompose_circuit_compose_blueprint_2;
