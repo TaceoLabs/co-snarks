@@ -25,7 +25,6 @@ co-groth16 = { version = "0.6.0", path = "../co-circom/co-groth16", features = [
 co-noir = { version = "0.3.0", path= "../co-noir/co-noir" }
 co-plonk = { version = "0.4.0", path = "../co-circom/co-plonk" }
 co-ultrahonk = { version = "0.2.0", path = "../co-noir/co-ultrahonk" }
-criterion = { workspace = true }
 itertools = { workspace = true }
 mpc-core = { version = "0.6.0", path = "../mpc-core" }
 num-traits = { workspace = true }
