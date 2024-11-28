@@ -19,6 +19,7 @@ add_plain_acvm_test!("poseidon_stdlib");
 add_plain_acvm_test!("quantized");
 add_plain_acvm_test!("random_access");
 add_plain_acvm_test!("slice");
+add_plain_acvm_test!("to_radix32");
 add_plain_acvm_test!("unconstrained_fn");
 add_plain_acvm_test!("unconstrained_fn_field");
 add_plain_acvm_test!("write_access");
