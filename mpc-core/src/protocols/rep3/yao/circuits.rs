@@ -183,6 +183,39 @@ impl GarbledCircuits {
         Ok((result, c))
     }
 
+    /// Needed for subtraction where xs is a constant 0 bundle (conceptually) with only some values set
+    #[expect(clippy::type_complexity)]
+    fn bin_subtraction_with_partial_constant<G: FancyBinary>(
+        g: &mut G,
+        xs: &[G::Item],
+        ys: &[G::Item],
+    ) -> Result<(Vec<G::Item>, G::Item), G::Error> {
+        // debug_assert_eq!(xs.len(), ys.len());
+        let mut result = Vec::with_capacity(xs.len());
+        // Twos complement is negation + 1, we implement by having cin in adder = 1, so only negation is required
+        let length = xs.len();
+        let y0 = g.negate(&ys[0])?;
+        let (mut s, mut c) = Self::full_adder_cin_set(g, &xs[0], &y0)?;
+        result.push(s);
+        if xs.len() > 1 {
+            for (x, y) in xs.iter().zip(ys.iter().take(xs.len())).skip(1) {
+                let y = g.negate(y)?;
+                let res = Self::full_adder(g, x, &y, &c)?;
+                s = res.0;
+                c = res.1;
+                result.push(s);
+            }
+        }
+        for y in ys[length..].iter() {
+            let y = g.negate(y)?;
+            // FULL ADDER with a=0 (x=0)
+            s = g.xor(&y, &c)?;
+            c = g.and(&y, &c)?;
+            // (s, c) = Self::full_adder_const(g, &y, false, &c)?;
+            result.push(s);
+        }
+        Ok((result, c))
+    }
     /// Binary subtraction. Returns whether it underflowed.
     /// I.e., calculates the msb of 2^k + x1 - x2
     fn bin_subtraction_get_carry_only<G: FancyBinary>(
@@ -202,6 +235,101 @@ impl GarbledCircuits {
         }
 
         Ok(c)
+    }
+
+    // From swanky:
+    /// Binary division
+    fn bin_div<G: FancyBinary>(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        y1s: &[G::Item],
+        y2s: &[G::Item],
+        c_wire: &[G::Item],
+        input_bitlen: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let dividend = Self::bin_addition_no_carry(g, x1s, x2s)?;
+        let divisor = Self::bin_addition_no_carry(g, y1s, y2s)?;
+        let mut acc: Vec<G::Item> = Vec::with_capacity(dividend.len());
+        let mut qs: Vec<G::Item> = vec![];
+        for x in dividend.iter().rev() {
+            if acc.len() == dividend.len() {
+                acc.pop();
+            }
+            acc.insert(0, x.clone());
+
+            let (res, cout) = Self::bin_subtraction_with_partial_constant(g, &acc, &divisor)?;
+
+            acc = Self::bin_multiplex(g, &cout, &acc, &res)?;
+            qs.push(cout);
+        }
+        qs.reverse(); // Switch back to little-endian
+        let mut added = Vec::with_capacity(input_bitlen);
+        let ys = c_wire;
+        let (mut s, mut c) = Self::half_adder(g, &qs[0], &ys[0])?;
+        added.push(s);
+
+        for (x, y) in qs.iter().zip(ys.iter()).skip(1) {
+            let res = Self::full_adder(g, x, y, &c)?;
+            s = res.0;
+            c = res.1;
+            added.push(s);
+        }
+        for y in ys.iter().take(ys.len() - 1).skip(qs.len()) {
+            let res = Self::full_adder_const(g, y, false, &c)?;
+            s = res.0;
+            c = res.1;
+            added.push(s);
+        }
+        Ok(added)
+    }
+
+    /// Binary division for two vecs of inputs
+    pub fn bin_div_many<G: FancyBinary>(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        input_bitlen: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+        debug_assert_eq!(length / 2, input_bitlen);
+        debug_assert_eq!(length / 2 % input_bitlen, 0);
+        debug_assert_eq!(wires_c.size(), length / 2);
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
+            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x1.wires()[length / 2..].chunks(input_bitlen),
+            wires_x2.wires()[length / 2..].chunks(input_bitlen),
+            wires_c.wires().chunks(input_bitlen),
+        ) {
+            results.extend(Self::bin_div(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_y1,
+                chunk_y2,
+                chunk_c,
+                input_bitlen,
+            )?);
+        }
+        Ok(BinaryBundle::new(results))
+    }
+    /// Multiplex gadget for binary bundles
+    fn bin_multiplex<G: FancyBinary>(
+        g: &mut G,
+        b: &G::Item,
+        x: &[G::Item],
+        y: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        x.iter()
+            .zip(y.iter())
+            .map(|(xwire, ywire)| g.mux(b, xwire, ywire))
+            .collect::<Result<Vec<G::Item>, G::Error>>()
     }
 
     /// subtracts p from wires (with carry) and returns the result and the overflow bit
@@ -975,7 +1103,6 @@ impl GarbledCircuits {
                 divisor_bit,
             )?);
         }
-
         Ok(BinaryBundle::new(results))
     }
 
@@ -1023,6 +1150,7 @@ impl GarbledCircuits {
 mod test {
     use super::*;
     use crate::protocols::rep3::yao::GCInputs;
+    use fancy_garbling::BinaryGadgets;
     use fancy_garbling::{Evaluator, Fancy, Garbler, WireMod2};
     use rand::{thread_rng, CryptoRng, Rng, SeedableRng};
     use rand_chacha::ChaCha12Rng;
@@ -1032,7 +1160,7 @@ mod test {
         os::unix::net::UnixStream,
     };
 
-    const TESTRUNS: usize = 5;
+    const TESTRUNS: usize = 50;
 
     // This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
     fn encode_field<F: PrimeField, C: AbstractChannel, R: Rng + CryptoRng>(
@@ -1124,6 +1252,75 @@ mod test {
     fn gc_test_bn254() {
         for _ in 0..TESTRUNS {
             gc_test::<ark_bn254::Fr>();
+        }
+    }
+    fn gc_test_div_int<F: PrimeField>()
+    where
+        num_bigint::BigUint: std::convert::From<F>,
+    {
+        let mut rng = thread_rng();
+
+        let a = F::rand(&mut rng);
+        let b = F::rand(&mut rng);
+        let is_result = F::from(BigUint::from(a) / BigUint::from(b));
+        let (sender, receiver) = UnixStream::pair().unwrap();
+
+        std::thread::spawn(move || {
+            let rng = ChaCha12Rng::from_entropy();
+            let reader = BufReader::new(sender.try_clone().unwrap());
+            let writer = BufWriter::new(sender);
+            let channel_sender = Channel::new(reader, writer);
+
+            let mut garbler = Garbler::<_, _, WireMod2>::new(channel_sender, rng);
+
+            // This is without OT, just a simulation
+            let a = encode_field(a, &mut garbler);
+            let b = encode_field(b, &mut garbler);
+            for a in a.evaluator_wires.wires().iter() {
+                garbler.send_wire(a).unwrap();
+            }
+            for b in b.evaluator_wires.wires().iter() {
+                garbler.send_wire(b).unwrap();
+            }
+
+            let garble_result =
+                BinaryGadgets::bin_div(&mut garbler, &a.garbler_wires, &b.garbler_wires).unwrap();
+
+            // Output
+            garbler.outputs(garble_result.wires()).unwrap();
+        });
+
+        let reader = BufReader::new(receiver.try_clone().unwrap());
+        let writer = BufWriter::new(receiver);
+        let channel_rcv = Channel::new(reader, writer);
+
+        let mut evaluator = Evaluator::<_, WireMod2>::new(channel_rcv);
+
+        // This is without OT, just a simulation
+        let n_bits = F::MODULUS_BIT_SIZE as usize;
+        let mut a = Vec::with_capacity(n_bits);
+        let mut b = Vec::with_capacity(n_bits);
+        for _ in 0..n_bits {
+            let a_ = evaluator.read_wire(2).unwrap();
+            a.push(a_);
+        }
+        for _ in 0..n_bits {
+            let b_ = evaluator.read_wire(2).unwrap();
+            b.push(b_);
+        }
+        let a = BinaryBundle::new(a);
+        let b = BinaryBundle::new(b);
+
+        let eval_result = BinaryGadgets::bin_div(&mut evaluator, &a, &b).unwrap();
+
+        let result = evaluator.outputs(eval_result.wires()).unwrap().unwrap();
+        let result = GCUtils::u16_bits_to_field::<F>(result).unwrap();
+        assert_eq!(result, is_result);
+    }
+    #[test]
+    fn gc_test_bn254_div_int() {
+        for _ in 0..1 {
+            gc_test_div_int::<ark_bn254::Fr>();
         }
     }
 }
