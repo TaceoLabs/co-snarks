@@ -1,8 +1,7 @@
 use super::{BrilligDriver, PlainBrilligDriver};
-use ark_ff::PrimeField;
+use ark_ff::{One as _, PrimeField};
 use brillig::{BitSize, IntegerBitSize};
 use core::panic;
-use eyre::Ok;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use mpc_core::protocols::rep3::{self, Rep3PrimeFieldShare};
 use mpc_core::protocols::rep3_ring::ring::bit::Bit;
@@ -13,6 +12,7 @@ use num_bigint::BigUint;
 use num_traits::AsPrimitive;
 use rand::distributions::{Distribution, Standard};
 use std::marker::PhantomData;
+use std::u128;
 
 use super::PlainBrilligType as Public;
 
@@ -187,6 +187,22 @@ where
 impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N> {
     type BrilligType = Rep3BrilligType<F>;
 
+    fn fork(&mut self) -> eyre::Result<(Self, Self)> {
+        let network1 = self.io_context.fork()?;
+        let network2 = self.io_context.fork()?;
+        let fork1 = Self {
+            io_context: network1,
+            plain_driver: PlainBrilligDriver::default(),
+            phantom_data: PhantomData,
+        };
+        let fork2 = Self {
+            io_context: network2,
+            plain_driver: PlainBrilligDriver::default(),
+            phantom_data: PhantomData,
+        };
+        Ok((fork1, fork2))
+    }
+
     fn cast(
         &mut self,
         val: Self::BrilligType,
@@ -310,18 +326,55 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
         }
     }
 
-    fn try_into_bool(val: Self::BrilligType) -> eyre::Result<bool> {
-        // for now we only support casting public values to bools
-        // we return an error if we call this on a shared value
-        if let Rep3BrilligType::Public(public) = val {
-            PlainBrilligDriver::try_into_bool(public)
-        } else {
-            eyre::bail!("cannot convert shared value to bool")
+    fn try_into_bool(val: Self::BrilligType) -> Result<bool, Self::BrilligType> {
+        match val {
+            Rep3BrilligType::Public(Public::Int(val, IntegerBitSize::U1)) => Ok(val != 0),
+            x => Err(x),
         }
     }
 
     fn public_value(val: F, bit_size: BitSize) -> Self::BrilligType {
         Rep3BrilligType::Public(PlainBrilligDriver::public_value(val, bit_size))
+    }
+
+    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
+        match other {
+            Rep3BrilligType::Public(other) => {
+                Rep3BrilligType::Public(self.plain_driver.random(other))
+            }
+            Rep3BrilligType::Shared(Shared::Field(_)) => {
+                let (a, b) = self.io_context.random_fes();
+                Rep3BrilligType::shared_field(Rep3PrimeFieldShare::new(a, b))
+            }
+            Rep3BrilligType::Shared(Shared::Ring128(_)) => {
+                let (a, b) = self.io_context.random_elements();
+                Rep3BrilligType::shared_u128(Rep3RingShare::new(a, b))
+            }
+            Rep3BrilligType::Shared(Shared::Ring64(_)) => {
+                let (a, b) = self.io_context.random_elements();
+                Rep3BrilligType::shared_u64(Rep3RingShare::new(a, b))
+            }
+            Rep3BrilligType::Shared(Shared::Ring32(_)) => {
+                let (a, b) = self.io_context.random_elements();
+                Rep3BrilligType::shared_u32(Rep3RingShare::new(a, b))
+            }
+            Rep3BrilligType::Shared(Shared::Ring16(_)) => {
+                let (a, b) = self.io_context.random_elements();
+                Rep3BrilligType::shared_u16(Rep3RingShare::new(a, b))
+            }
+            Rep3BrilligType::Shared(Shared::Ring8(_)) => {
+                let (a, b) = self.io_context.random_elements();
+                Rep3BrilligType::shared_u8(Rep3RingShare::new(a, b))
+            }
+            Rep3BrilligType::Shared(Shared::Ring1(_)) => {
+                let (a, b) = self.io_context.random_elements();
+                Rep3BrilligType::shared_u1(Rep3RingShare::new(a, b))
+            }
+        }
+    }
+
+    fn is_public(val: Self::BrilligType) -> bool {
+        matches!(val, Rep3BrilligType::Public(_))
     }
 
     fn add(
@@ -1303,6 +1356,80 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
             }
         };
         Ok(result)
+    }
+
+    fn cmux(
+        &mut self,
+        cond: Self::BrilligType,
+        truthy: Self::BrilligType,
+        falsy: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        match cond {
+            Rep3BrilligType::Public(Public::Int(cond, IntegerBitSize::U1)) => {
+                if cond.is_one() {
+                    Ok(truthy)
+                } else {
+                    Ok(falsy)
+                }
+            }
+            Rep3BrilligType::Shared(Shared::Ring1(cond)) => {
+                let casted_condition = match truthy {
+                    Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U128))
+                    | Rep3BrilligType::Shared(Shared::Ring128(_)) => {
+                        let cast = rep3_ring::casts::ring_cast_selector::<_, u128, _>(
+                            cond,
+                            &mut self.io_context,
+                        )?;
+                        Rep3BrilligType::shared_u128(cast)
+                    }
+
+                    Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U64))
+                    | Rep3BrilligType::Shared(Shared::Ring64(_)) => {
+                        let cast = rep3_ring::casts::ring_cast_selector::<_, u64, _>(
+                            cond,
+                            &mut self.io_context,
+                        )?;
+                        Rep3BrilligType::shared_u64(cast)
+                    }
+                    Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U32))
+                    | Rep3BrilligType::Shared(Shared::Ring32(_)) => {
+                        let cast = rep3_ring::casts::ring_cast_selector::<_, u32, _>(
+                            cond,
+                            &mut self.io_context,
+                        )?;
+                        Rep3BrilligType::shared_u32(cast)
+                    }
+                    Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U16))
+                    | Rep3BrilligType::Shared(Shared::Ring16(_)) => {
+                        let cast = rep3_ring::casts::ring_cast_selector::<_, u16, _>(
+                            cond,
+                            &mut self.io_context,
+                        )?;
+                        Rep3BrilligType::shared_u16(cast)
+                    }
+                    Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U8))
+                    | Rep3BrilligType::Shared(Shared::Ring8(_)) => {
+                        let cast = rep3_ring::casts::ring_cast_selector::<_, u8, _>(
+                            cond,
+                            &mut self.io_context,
+                        )?;
+                        Rep3BrilligType::shared_u8(cast)
+                    }
+                    Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U1))
+                    | Rep3BrilligType::Shared(Shared::Ring1(_)) => Rep3BrilligType::shared_u1(cond),
+                    Rep3BrilligType::Public(Public::Field(_))
+                    | Rep3BrilligType::Shared(Shared::Field(_)) => {
+                        let cast =
+                            rep3_ring::casts::ring_to_field_selector(cond, &mut self.io_context)?;
+                        Rep3BrilligType::shared_field(cast)
+                    }
+                };
+                let b_min_a = self.sub(truthy, falsy.clone())?;
+                let d = self.mul(casted_condition, b_min_a)?;
+                self.add(d, falsy)
+            }
+            _ => eyre::bail!("cmux where cond is a non bool value"),
+        }
     }
 
     fn expect_int(

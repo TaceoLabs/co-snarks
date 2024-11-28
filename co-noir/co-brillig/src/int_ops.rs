@@ -37,7 +37,16 @@ where
             BinaryIntOp::Add => self.driver.add(lhs, rhs),
             BinaryIntOp::Sub => todo!(),
             BinaryIntOp::Mul => todo!(),
-            BinaryIntOp::Div => todo!(),
+            BinaryIntOp::Div => {
+                if let Some(_) = self.shared_ctx.as_ref() {
+                    tracing::debug!(
+                        "we are in shared context and and maybe need to prevent from div by zero"
+                    );
+                    //rhs = self.driver.cmux(cond.clone(), rhs, T::public_one())?;
+                    todo!("cmux with the correct int type")
+                }
+                self.driver.div(lhs, rhs)
+            }
             BinaryIntOp::Equals => self.driver.eq(lhs, rhs),
             BinaryIntOp::LessThan => self.driver.lt(lhs, rhs),
             BinaryIntOp::LessThanEquals => self.driver.le(lhs, rhs),

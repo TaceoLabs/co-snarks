@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use std::io;
 use std::marker::PhantomData;
+use std::{collections::HashMap, usize};
 
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
@@ -41,6 +41,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(brillig_result.into_iter().map(|v| v.into_field()).collect())
     }
 
+    fn shared_zeros(&mut self, len: usize) -> io::Result<Vec<Self::AcvmType>> {
+        Ok(vec![F::default(); len])
+    }
+
     fn is_public_zero(a: &Self::AcvmType) -> bool {
         a.is_zero()
     }
@@ -49,12 +53,42 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         a.is_one()
     }
 
+    fn cmux(
+        &mut self,
+        cond: Self::AcvmType,
+        truthy: Self::AcvmType,
+        falsy: Self::AcvmType,
+    ) -> io::Result<Self::AcvmType> {
+        assert!(cond.is_one() || cond.is_zero());
+        if cond.is_one() {
+            Ok(truthy)
+        } else {
+            Ok(falsy)
+        }
+    }
+
     fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
         *secret += public;
     }
 
+    fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType {
+        lhs + rhs
+    }
+
+    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+        share_1 - share_2
+    }
+
     fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
         secret * public
+    }
+
+    fn acvm_mul(
+        &mut self,
+        secret_1: Self::AcvmType,
+        secret_2: Self::AcvmType,
+    ) -> io::Result<Self::AcvmType> {
+        Ok(secret_1 * secret_2)
     }
 
     fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType) {
@@ -127,6 +161,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(a.to_vec())
     }
 
+    fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
+        public_value
+    }
+
+    fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
+        public_values.to_vec()
+    }
+
     fn decompose_arithmetic(
         &mut self,
         input: Self::ArithmeticShare,
@@ -146,10 +188,6 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(result)
     }
 
-    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
-        share_1 - share_2
-    }
-
     fn sort(
         &mut self,
         inputs: &[Self::ArithmeticShare],
@@ -164,21 +202,5 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         }
         result.sort();
         Ok(result)
-    }
-
-    fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
-        public_value
-    }
-
-    fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
-        public_values.to_vec()
-    }
-
-    fn acvm_mul(
-        &mut self,
-        secret_1: Self::AcvmType,
-        secret_2: Self::AcvmType,
-    ) -> io::Result<Self::AcvmType> {
-        Ok(secret_1 * secret_2)
     }
 }

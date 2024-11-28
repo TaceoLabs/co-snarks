@@ -1,11 +1,13 @@
-use crate::mpc::NoirWitnessExtensionProtocol;
+use crate::{mpc::NoirWitnessExtensionProtocol, solver::CoAcvmError};
 use acir::{
     acir_field::GenericFieldElement,
     circuit::brillig::{BrilligFunctionId, BrilligInputs, BrilligOutputs},
     native_types::Expression,
 };
 use ark_ff::PrimeField;
+use co_brillig::CoBrilligResult;
 use eyre::Context;
+use itertools::izip;
 
 use super::{CoAcvmResult, CoSolver};
 
@@ -17,6 +19,37 @@ fn get_output_size(outputs: &[BrilligOutputs]) -> usize {
             BrilligOutputs::Array(arr) => arr.len(),
         })
         .sum()
+}
+
+enum BrilligMask<T, F>
+where
+    T: NoirWitnessExtensionProtocol<F>,
+    F: PrimeField,
+{
+    NoMask,
+    Mask(T::AcvmType),
+}
+
+impl<T, F> BrilligMask<T, F>
+where
+    T: NoirWitnessExtensionProtocol<F>,
+    F: PrimeField,
+{
+    fn mask(self, result: Vec<T::AcvmType>, driver: &mut T) -> CoAcvmResult<Vec<T::AcvmType>> {
+        match self {
+            // we don't need any masking
+            BrilligMask::NoMask => Ok(result),
+            // we need to mask it
+            BrilligMask::Mask(cond) => {
+                let masking_zeros = driver.shared_zeros(result.len())?;
+                let mut masked_result = Vec::with_capacity(result.len());
+                for (correct, mask) in izip!(result, masking_zeros) {
+                    masked_result.push(driver.cmux(cond.clone(), correct, mask)?);
+                }
+                Ok(masked_result)
+            }
+        }
+    }
 }
 
 impl<T, F> CoSolver<T, F>
@@ -31,7 +64,7 @@ where
         outputs: &[BrilligOutputs],
         predicate: &Option<Expression<GenericFieldElement<F>>>,
     ) -> CoAcvmResult<()> {
-        if let Some(expr) = predicate {
+        let brillig_mask = if let Some(expr) = predicate {
             let predicate = self.evaluate_expression(expr)?;
             // we skip if predicate is zero
             if T::is_public_zero(&predicate) {
@@ -40,8 +73,13 @@ where
                 let zeroes_result = vec![T::public_zero(); get_output_size(outputs)];
                 self.fill_output(zeroes_result, outputs);
                 return Ok(());
+            } else {
+                // we need to cmux the result with random zeros
+                BrilligMask::Mask(predicate)
             }
-        }
+        } else {
+            BrilligMask::NoMask
+        };
         tracing::debug!("solving brillig call: {}", id);
         let mut calldata = vec![];
         for input in inputs {
@@ -50,6 +88,7 @@ where
                     let param = self
                         .evaluate_expression(expr)
                         .context("during call data init for brillig")?;
+                    tracing::info!("calldata is {param}");
                     calldata.push(param.into());
                 }
                 BrilligInputs::Array(array) => {
@@ -63,10 +102,15 @@ where
                 BrilligInputs::MemoryArray(_) => todo!("memory array calldata TODO"),
             }
         }
-        let brillig_result =
-            T::parse_brillig_result(&mut self.driver, self.brillig.run(id, calldata)?)?;
-        self.fill_output(brillig_result, outputs);
-        Ok(())
+        let brillig_result = self.brillig.run(id, calldata)?;
+        if let CoBrilligResult::Success(brillig_result) = brillig_result {
+            let brillig_result = self.driver.parse_brillig_result(brillig_result)?;
+            let brillig_result = brillig_mask.mask(brillig_result, &mut self.driver)?;
+            self.fill_output(brillig_result, outputs);
+            Ok(())
+        } else {
+            Err(CoAcvmError::BrilligVmFailed)
+        }
     }
 
     fn fill_output(&mut self, brillig_result: Vec<T::AcvmType>, outputs: &[BrilligOutputs]) {

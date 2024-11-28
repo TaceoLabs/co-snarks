@@ -54,6 +54,10 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirBrilligDriver<F, N> {
 impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F, N> {
     type BrilligType = ShamirBrilligType<F>;
 
+    fn fork(&mut self) -> eyre::Result<(Self, Self)> {
+        todo!()
+    }
+
     fn cast(
         &mut self,
         val: Self::BrilligType,
@@ -77,18 +81,23 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
         }
     }
 
-    fn try_into_bool(val: Self::BrilligType) -> eyre::Result<bool> {
-        // for now we only support casting public values to bools
-        // we return an error if we call this on a shared value
-        if let ShamirBrilligType::Public(public) = val {
-            PlainBrilligDriver::try_into_bool(public)
-        } else {
-            eyre::bail!("cannot convert shared value to usize")
+    fn try_into_bool(val: Self::BrilligType) -> Result<bool, Self::BrilligType> {
+        match val {
+            ShamirBrilligType::Public(Public::Int(val, IntegerBitSize::U1)) => Ok(val != 1),
+            x => Err(x),
         }
     }
 
     fn public_value(val: F, bit_size: BitSize) -> Self::BrilligType {
         ShamirBrilligType::Public(PlainBrilligDriver::public_value(val, bit_size))
+    }
+
+    fn random(&mut self, _other: &Self::BrilligType) -> Self::BrilligType {
+        todo!()
+    }
+
+    fn is_public(val: Self::BrilligType) -> bool {
+        matches!(val, ShamirBrilligType::Public(_))
     }
 
     fn add(
@@ -290,6 +299,15 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
         } else {
             eyre::bail!("Cannot use to_radix with Shamir shares")
         }
+    }
+
+    fn cmux(
+        &mut self,
+        _cond: Self::BrilligType,
+        _truthy: Self::BrilligType,
+        _falsy: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        todo!()
     }
 
     fn expect_int(

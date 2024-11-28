@@ -30,6 +30,15 @@ where
         Self { inner: vec![] }
     }
 
+    pub fn fork(&mut self) -> (Self, Self) {
+        // we can take my memory
+        let cloned = self.inner.clone();
+        let mine = std::mem::take(&mut self.inner);
+        let mem1 = Self { inner: cloned };
+        let mem2 = Self { inner: mine };
+        (mem1, mem2)
+    }
+
     fn get_stack_pointer(&self) -> eyre::Result<usize> {
         self.try_read_usize(MemoryAddress::Direct(0))
     }

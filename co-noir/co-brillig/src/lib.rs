@@ -10,4 +10,5 @@ mod int_ops;
 pub(crate) mod memory;
 pub mod mpc;
 
+pub use brillig_vm::CoBrilligResult;
 pub use brillig_vm::CoBrilligVM;

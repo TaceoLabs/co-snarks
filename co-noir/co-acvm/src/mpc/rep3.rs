@@ -152,6 +152,40 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .collect()
     }
 
+    fn cmux(
+        &mut self,
+        cond: Self::AcvmType,
+        truthy: Self::AcvmType,
+        falsy: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        match (cond, truthy, falsy) {
+            (Rep3AcvmType::Public(cond), truthy, falsy) => {
+                assert!(cond.is_one() || cond.is_zero());
+                if cond.is_one() {
+                    Ok(truthy)
+                } else {
+                    Ok(falsy)
+                }
+            }
+            (Rep3AcvmType::Shared(cond), truthy, falsy) => {
+                let b_min_a = self.acvm_sub(truthy, falsy.clone());
+                let d = self.acvm_mul(cond.into(), b_min_a)?;
+                Ok(self.add(falsy, d))
+            }
+        }
+    }
+
+    fn shared_zeros(&mut self, len: usize) -> std::io::Result<Vec<Self::AcvmType>> {
+        let a = (0..len)
+            .map(|_| self.io_context.masking_field_element())
+            .collect::<Vec<_>>();
+        let b = self.io_context.network.reshare_many(&a)?;
+        let result = izip!(a, b)
+            .map(|(a, b)| Rep3AcvmType::Shared(Rep3PrimeFieldShare::new(a, b)))
+            .collect();
+        Ok(result)
+    }
+
     fn is_public_zero(a: &Self::AcvmType) -> bool {
         if let Rep3AcvmType::Public(x) = a {
             x.is_zero()
@@ -179,11 +213,70 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         *target = result;
     }
 
+    fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType {
+        let id = self.io_context.id;
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                Rep3AcvmType::Public(lhs + rhs)
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Rep3AcvmType::Shared(arithmetic::add_public(shared, public, id))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                let result = arithmetic::add(lhs, rhs);
+                Rep3AcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+        let id = self.io_context.id;
+
+        match (share_1, share_2) {
+            (Rep3AcvmType::Public(share_1), Rep3AcvmType::Public(share_2)) => {
+                Rep3AcvmType::Public(share_1 - share_2)
+            }
+            (Rep3AcvmType::Public(share_1), Rep3AcvmType::Shared(share_2)) => {
+                Rep3AcvmType::Shared(arithmetic::sub_public_by_shared(share_1, share_2, id))
+            }
+            (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Public(share_2)) => {
+                Rep3AcvmType::Shared(arithmetic::sub_shared_by_public(share_1, share_2, id))
+            }
+            (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Shared(share_2)) => {
+                let result = arithmetic::sub(share_1, share_2);
+                Rep3AcvmType::Shared(result)
+            }
+        }
+    }
+
     fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
         match secret {
             Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public * secret),
             Rep3AcvmType::Shared(secret) => {
                 Rep3AcvmType::Shared(arithmetic::mul_public(secret, public))
+            }
+        }
+    }
+
+    fn acvm_mul(
+        &mut self,
+        secret_1: Self::AcvmType,
+        secret_2: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        match (secret_1, secret_2) {
+            (Rep3AcvmType::Public(secret_1), Rep3AcvmType::Public(secret_2)) => {
+                Ok(Rep3AcvmType::Public(secret_1 * secret_2))
+            }
+            (Rep3AcvmType::Public(secret_1), Rep3AcvmType::Shared(secret_2)) => Ok(
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret_2, secret_1)),
+            ),
+            (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Public(secret_2)) => Ok(
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret_1, secret_2)),
+            ),
+            (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Shared(secret_2)) => {
+                let result = arithmetic::mul(secret_1, secret_2, &mut self.io_context)?;
+                Ok(Rep3AcvmType::Shared(result))
             }
         }
     }
@@ -352,7 +445,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             _ => None,
         }
     }
-
     fn get_public(a: &Self::AcvmType) -> Option<F> {
         match a {
             Rep3AcvmType::Public(public) => Some(*public),
@@ -369,47 +461,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         Ok(cs)
     }
-    fn decompose_arithmetic(
-        &mut self,
-        input: Self::ArithmeticShare,
-        total_bit_size_per_field: usize,
-        decompose_bit_size: usize,
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        yao::decompose_arithmetic(
-            input,
-            &mut self.io_context,
-            total_bit_size_per_field,
-            decompose_bit_size,
-        )
-    }
-
-    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
-        let id = self.io_context.id;
-
-        match (share_1, share_2) {
-            (Rep3AcvmType::Public(share_1), Rep3AcvmType::Public(share_2)) => {
-                Rep3AcvmType::Public(share_1 - share_2)
-            }
-            (Rep3AcvmType::Public(share_1), Rep3AcvmType::Shared(share_2)) => {
-                Rep3AcvmType::Shared(arithmetic::sub_public_by_shared(share_1, share_2, id))
-            }
-            (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Public(share_2)) => {
-                Rep3AcvmType::Shared(arithmetic::sub_shared_by_public(share_1, share_2, id))
-            }
-            (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Shared(share_2)) => {
-                let result = arithmetic::sub(share_1, share_2);
-                Rep3AcvmType::Shared(result)
-            }
-        }
-    }
-
-    fn sort(
-        &mut self,
-        inputs: &[Self::ArithmeticShare],
-        bitsize: usize,
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        batcher_odd_even_merge_sort_yao(inputs, &mut self.io_context, bitsize)
-    }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
         let id = self.io_context.id;
@@ -425,25 +476,25 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .collect()
     }
 
-    fn acvm_mul(
+    fn decompose_arithmetic(
         &mut self,
-        secret_1: Self::AcvmType,
-        secret_2: Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmType> {
-        match (secret_1, secret_2) {
-            (Rep3AcvmType::Public(secret_1), Rep3AcvmType::Public(secret_2)) => {
-                Ok(Rep3AcvmType::Public(secret_1 * secret_2))
-            }
-            (Rep3AcvmType::Public(secret_1), Rep3AcvmType::Shared(secret_2)) => Ok(
-                Rep3AcvmType::Shared(arithmetic::mul_public(secret_2, secret_1)),
-            ),
-            (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Public(secret_2)) => Ok(
-                Rep3AcvmType::Shared(arithmetic::mul_public(secret_1, secret_2)),
-            ),
-            (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Shared(secret_2)) => {
-                let result = arithmetic::mul(secret_1, secret_2, &mut self.io_context)?;
-                Ok(Rep3AcvmType::Shared(result))
-            }
-        }
+        input: Self::ArithmeticShare,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        yao::decompose_arithmetic(
+            input,
+            &mut self.io_context,
+            total_bit_size_per_field,
+            decompose_bit_size,
+        )
+    }
+
+    fn sort(
+        &mut self,
+        inputs: &[Self::ArithmeticShare],
+        bitsize: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        batcher_odd_even_merge_sort_yao(inputs, &mut self.io_context, bitsize)
     }
 }
