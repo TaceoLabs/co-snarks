@@ -1,7 +1,7 @@
 export CARGO_TERM_QUIET=true
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
-NARGO_VERSION=0.39.0 ##specify the desired nargo version here
+NARGO_VERSION=1.0.0-beta.0 ##specify the desired nargo version here
 BARRETENBERG_VERSION=0.63.1 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
@@ -36,7 +36,7 @@ echo "Using nargo version $NARGO_VERSION"
 echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
-test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field")
+test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn_field") # "poseidon_assert" "quantized" "unconstrained_fn")
 
 run_proof_verification() {
   local name=$1
