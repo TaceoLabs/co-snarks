@@ -340,7 +340,8 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
             | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
-                Rep3AcvmType::Shared(arithmetic::mul_public(shared, public))
+                let mul = arithmetic::mul_public(shared, public);
+                Rep3AcvmType::Shared(arithmetic::mul_public(mul, c))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
                 let shared_mul = arithmetic::mul(lhs, rhs, &mut self.io_context)?;
