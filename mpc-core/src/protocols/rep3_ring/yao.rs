@@ -719,14 +719,56 @@ where
 
 /// Divides a ring element by a power of 2.
 pub fn ring_div_power_2<T: IntRing2k, N: Rep3Network>(
-    inputs: Rep3RingShare<T>,
+    input: Rep3RingShare<T>,
     io_context: &mut IoContext<N>,
     divisor_bit: usize,
 ) -> IoResult<Rep3RingShare<T>>
 where
     Standard: Distribution<T>,
 {
-    let res = ring_div_power_2_many(&[inputs], io_context, divisor_bit)?;
+    let res = ring_div_power_2_many(&[input], io_context, divisor_bit)?;
+    Ok(res[0])
+}
+/// Divides a vector of ring elements by a power of 2.
+pub fn ring_bin_div_many<T: IntRing2k, N: Rep3Network>(
+    input1: &[Rep3RingShare<T>],
+    input2: &[T],
+
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let num_inputs = input1.len() + input2.len();
+
+    // if divisor_bit == 0 {
+    //     return Ok(inputs.to_owned());
+    // }
+    // if divisor_bit >= T::K {
+    //     return Ok(vec![Rep3RingShare::zero_share(); num_inputs]);
+    // }
+    let testvector = BinaryBundle::new(input2.to_vec());
+    decompose_circuit_compose_blueprint!(
+        input1,
+        io_context,
+        num_inputs,
+        T,
+        GarbledCircuits::bin_div_many,
+        (T::K, newinput2)
+    )
+}
+
+/// Divides a ring element by a power of 2.
+pub fn ring_bin_div<T: IntRing2k, N: Rep3Network>(
+    input1: Rep3RingShare<T>,
+    input2: T,
+
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3RingShare<T>>
+where
+    Standard: Distribution<T>,
+{
+    let res = ring_bin_div_many(&[input1], &[input2], io_context)?;
     Ok(res[0])
 }
 

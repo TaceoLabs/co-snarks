@@ -4,7 +4,7 @@
 
 use crate::protocols::rep3::yao::GCUtils;
 use ark_ff::PrimeField;
-use fancy_garbling::{BinaryBundle, FancyBinary};
+use fancy_garbling::{BinaryBundle, Fancy, FancyBinary};
 use itertools::izip;
 use num_bigint::BigUint;
 
@@ -202,6 +202,101 @@ impl GarbledCircuits {
         }
 
         Ok(c)
+    }
+    fn bin_constant_bundle<G: FancyBinary>(
+        g: &mut G,
+        val: u128,
+        nbits: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        Self::constant_bundle::<G>(
+            g,
+            &fancy_garbling::util::u128_to_bits(val, nbits),
+            &vec![2; nbits],
+        )
+    }
+
+    fn constant_bundle<G: FancyBinary>(
+        g: &mut G,
+        xs: &[u16],
+        ps: &[u16],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        xs.iter()
+            .zip(ps.iter())
+            .map(|(&x, &p)| G::constant(g, x, p))
+            .collect::<Result<Vec<G::Item>, G::Error>>()
+    }
+
+    // From swanky:
+    /// Divider
+    fn bin_div<G: FancyBinary>(
+        g: &mut G,
+        xs: &[G::Item],
+        ys: &[G::Item],
+        c: &[G::Item],
+        divisor: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bits = Self::bin_addition_no_carry(g, xs, ys)?;
+        // debug_assert_eq!(xs.moduli(), ys.moduli());
+        let ys_neg = Self::bin_twos_complement(g, divisor)?;
+        let mut acc = Self::bin_constant_bundle(g, 0, input_bits.len())?;
+        let mut qs: Vec<G::Item> = vec![];
+        for x in input_bits.iter().rev() {
+            acc.pop();
+            acc.insert(0, x.clone());
+            let (res, cout) = Self::bin_addition(g, &acc, &ys_neg)?;
+            acc = Self::bin_multiplex(g, &cout, &acc, &res)?;
+            qs.push(cout);
+        }
+        qs.reverse(); // Switch back to little-endian
+        Ok(qs)
+    }
+    // From swanky:
+    /// Divider
+    pub fn bin_div_many<G: FancyBinary>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        input_bitlen: usize,
+        divisor: &BinaryBundle<G::Item>,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_a, chunk_b, chunk_c, chunk_d) in izip!(
+            wires_a.wires().chunks(input_bitlen),
+            wires_b.wires().chunks(input_bitlen),
+            wires_c.wires().chunks(input_bitlen),
+            divisor.wires().chunks(input_bitlen),
+        ) {
+            results.extend(Self::bin_div(g, chunk_a, chunk_b, chunk_c, chunk_d)?);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Compute the twos complement of the input bundle (which must be base 2).
+    fn bin_twos_complement<G: FancyBinary>(
+        g: &mut G,
+        xs: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let not_xs = xs
+            .iter()
+            .map(|x| g.negate(x))
+            .collect::<Result<Vec<G::Item>, G::Error>>()?;
+        let one = Self::bin_constant_bundle(g, 1, xs.len())?;
+        Self::bin_addition_no_carry(g, &not_xs, &one)
+    }
+    /// Multiplex gadget for binary bundles
+    fn bin_multiplex<G: FancyBinary>(
+        g: &mut G,
+        b: &G::Item,
+        x: &[G::Item],
+        y: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        x.iter()
+            .zip(y.iter())
+            .map(|(xwire, ywire)| g.mux(b, xwire, ywire))
+            .collect::<Result<Vec<G::Item>, G::Error>>()
     }
 
     /// subtracts p from wires (with carry) and returns the result and the overflow bit

@@ -1727,6 +1727,52 @@ mod ring_share {
         let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
+    fn rep3_bin_div_via_yao_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        const VEC_SIZE: usize = 10;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| rng.gen::<RingElement<T>>())
+            .collect_vec();
+        let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
+        let y = (0..VEC_SIZE)
+            .map(|_| rng.gen::<RingElement<T>>())
+            .collect_vec();
+        let y_shares = rep3_ring::share_ring_elements(&x, &mut rng);
+
+        let mut should_result: Vec<u128> = Vec::with_capacity(VEC_SIZE);
+        for x in x.into_iter() {
+            should_result.push(x.into() / y.into());
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let decomposed = yao::ring_div_power_2_many(&x, &mut rep3, divisor_bit).unwrap();
+                tx.send(decomposed)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
+
+        assert_eq!(is_result.into(), should_result);
+    }
 
     #[test]
     fn rep3_div_power_2_via_yao() {
