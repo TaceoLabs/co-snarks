@@ -2,7 +2,7 @@
 name = "poseidon_assert"
 type = "bin"
 authors = [""]
-compiler_version = ">=0.39.0"
+compiler_version = ">=1.0.0"
 
 
 [dependencies]
