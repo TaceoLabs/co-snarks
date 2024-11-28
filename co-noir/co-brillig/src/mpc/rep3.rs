@@ -12,7 +12,6 @@ use num_bigint::BigUint;
 use num_traits::AsPrimitive;
 use rand::distributions::{Distribution, Standard};
 use std::marker::PhantomData;
-use std::u128;
 
 use super::PlainBrilligType as Public;
 

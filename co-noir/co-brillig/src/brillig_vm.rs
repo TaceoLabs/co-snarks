@@ -70,7 +70,8 @@ where
 
     fn run_inner(&mut self, id: &BrilligFunctionId) -> eyre::Result<CoBrilligResult<T, F>> {
         let opcodes = self.unconstrained_functions[id.as_usize()].bytecode.clone();
-        let result = loop {
+
+        loop {
             let opcode = &opcodes[self.ip];
             tracing::debug!("running opcode: {:?}", opcode);
             match opcode {
@@ -162,8 +163,7 @@ where
                     break self.handle_stop(*return_data);
                 }
             }
-        };
-        result
+        }
     }
 
     /// Creates a new instance of the coBrillig-VM from the provided
