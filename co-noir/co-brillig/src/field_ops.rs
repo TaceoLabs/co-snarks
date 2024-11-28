@@ -37,13 +37,21 @@ where
         //     }
         // };
         let lhs = self.memory.try_read_field(lhs)?;
-        let rhs = self.memory.try_read_field(rhs)?;
+        let mut rhs = self.memory.try_read_field(rhs)?;
         let result = match op {
             // Perform addition, subtraction, multiplication, and division based on the BinaryOp variant.
             BinaryFieldOp::Add => self.driver.add(lhs, rhs),
             BinaryFieldOp::Sub => self.driver.sub(lhs, rhs),
             BinaryFieldOp::Mul => self.driver.mul(lhs, rhs),
-            BinaryFieldOp::Div => self.driver.div(lhs, rhs),
+            BinaryFieldOp::Div => {
+                if let Some(cond) = self.shared_ctx.as_ref() {
+                    tracing::debug!(
+                        "we are in shared context and and maybe need to prevent from div by zero"
+                    );
+                    rhs = self.driver.cmux(cond.clone(), rhs, T::public_one())?;
+                }
+                self.driver.div(lhs, rhs)
+            }
             BinaryFieldOp::IntegerDiv => self.driver.int_div(lhs, rhs),
             BinaryFieldOp::Equals => self.driver.eq(lhs, rhs), // (a == b).into(),
             BinaryFieldOp::LessThan => self.driver.lt(lhs, rhs),

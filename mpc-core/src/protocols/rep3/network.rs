@@ -5,6 +5,7 @@
 use std::sync::Arc;
 
 use crate::RngType;
+use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
 use eyre::{bail, eyre, Report};
@@ -18,7 +19,7 @@ use super::{
     rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp},
     IoResult,
 };
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, SeedableRng};
 
 // this will be moved later
 /// This struct handles networking and rng
@@ -113,6 +114,25 @@ impl<N: Rep3Network> IoContext<N> {
             rng,
             a2b_type,
         })
+    }
+
+    /// Generate two random elements
+    pub fn random_elements<T>(&mut self) -> (T, T)
+    where
+        Standard: Distribution<T>,
+    {
+        self.rngs.rand.random_elements()
+    }
+
+    /// Generate two random field elements
+    pub fn random_fes<F: PrimeField>(&mut self) -> (F, F) {
+        self.rngs.rand.random_fes()
+    }
+
+    /// Generate a masking field element
+    pub fn masking_field_element<F: PrimeField>(&mut self) -> F {
+        let (a, b) = self.random_fes::<F>();
+        a - b
     }
 }
 

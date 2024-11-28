@@ -37,8 +37,9 @@ macro_rules! add_rep3_acvm_test {
         paste::item! {
             #[test]
             fn [< test_rep3_ $name >]() {
+                let root = std::env!("CARGO_MANIFEST_DIR");
                 let program = std::fs::read_to_string(format!(
-                    "../test_vectors/noir/{}/kat/{}.json",
+                    "{root}/../test_vectors/noir/{}/kat/{}.json",
                     $name, $name
                 ))
                 .unwrap();
@@ -46,25 +47,39 @@ macro_rules! add_rep3_acvm_test {
                     .expect("failed to parse program artifact");
 
                 let should_witness =
-                    std::fs::read(format!("../test_vectors/noir/{}/kat/{}.gz", $name, $name)).unwrap();
+                    std::fs::read(format!("{root}/../test_vectors/noir/{}/kat/{}.gz", $name, $name)).unwrap();
 
                 let should_witness =
                     WitnessStack::<FieldElement>::try_from(should_witness.as_slice()).unwrap();
-                let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", $name);
+                let input = PathBuf::from(format!(
+                    "{root}/../test_vectors/noir/{}/Prover.toml",
+                    $name
+                ));
+                // read the input file
+                let inputs = Rep3CoSolver::<_, PartyTestNetwork>::partially_read_abi_bn254_fieldelement(
+                    &input,
+                    &program_artifact.abi,
+                    &program_artifact.bytecode,
+                ).expect("can share field elements for noir witness extension");
+
+                // create input shares
+                let mut rng = rand::thread_rng();
+                let shares = co_noir::share_input_rep3::<Bn254, PartyTestNetwork,_>(inputs, &mut rng);
                 let test_network = Rep3TestNetwork::default();
                 let mut threads = vec![];
-                for (net, program_artifact, prover_toml) in izip!(
+                for (net, program_artifact, share) in izip!(
                     test_network.get_party_networks(),
                     [
                         program_artifact.clone(),
                         program_artifact.clone(),
                         program_artifact
                     ],
-                    [prover_toml.clone(), prover_toml.clone(), prover_toml]
+                    shares
                 ) {
                     threads.push(thread::spawn(move || {
+                        let input_share = co_noir::translate_witness_share_rep3(share, &program_artifact.abi).expect("can translate witness for noir witness extension");
                         let solver =
-                            Rep3CoSolver::from_network(net, program_artifact, prover_toml).unwrap();
+                            Rep3CoSolver::from_network_with_witness(net, program_artifact, input_share).unwrap();
                         solver.solve()
                     }));
                 }

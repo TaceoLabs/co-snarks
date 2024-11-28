@@ -61,6 +61,8 @@ pub(crate) mod solver_utils {
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoAcvmError {
+    #[error("Got failed from Brillig-VM")]
+    BrilligVmFailed,
     #[error(transparent)]
     IOError(#[from] io::Error),
     #[error(transparent)]

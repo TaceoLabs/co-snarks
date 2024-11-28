@@ -118,10 +118,6 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         ))
     }
 
-    fn public_zero() -> Self::AcvmType {
-        Self::AcvmType::default()
-    }
-
     fn parse_brillig_result(
         &mut self,
         brillig_result: Vec<ShamirBrilligType<F>>,
@@ -130,6 +126,14 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
             .into_iter()
             .map(ShamirAcvmType::from)
             .collect())
+    }
+
+    fn public_zero() -> Self::AcvmType {
+        Self::AcvmType::default()
+    }
+
+    fn shared_zeros(&mut self, _len: usize) -> std::io::Result<Vec<Self::AcvmType>> {
+        todo!()
     }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {
@@ -148,6 +152,15 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
+    fn cmux(
+        &mut self,
+        _cond: Self::AcvmType,
+        _truthy: Self::AcvmType,
+        _falsy: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        todo!()
+    }
+
     fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType) {
         let result = match target.to_owned() {
             ShamirAcvmType::Public(secret) => ShamirAcvmType::Public(public + secret),
@@ -156,6 +169,10 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
             }
         };
         *target = result;
+    }
+
+    fn add(&self, _lhs: Self::AcvmType, _rhs: Self::AcvmType) -> Self::AcvmType {
+        todo!()
     }
 
     fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {

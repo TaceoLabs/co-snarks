@@ -32,10 +32,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         brillig_result: Vec<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>,
     ) -> eyre::Result<Vec<Self::AcvmType>>;
 
-    /// Returns F::zero() as a ACVM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
+    /// Returns F::zero() as am ACVM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
     fn public_zero() -> Self::AcvmType {
         Self::AcvmType::default()
     }
+
+    /// Returns the provided amount of secret-shared zeros as ACVM-types. These elements
+    /// are masking element squeezed from the shared randomness, and not trivial shares.
+    fn shared_zeros(&mut self, len: usize) -> io::Result<Vec<Self::AcvmType>>;
 
     /// Checks whether an ACVM-type is public zero.
     fn is_public_zero(a: &Self::AcvmType) -> bool;
@@ -43,8 +47,18 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Checks whether an ACVM-type is public one.
     fn is_public_one(a: &Self::AcvmType) -> bool;
 
+    fn cmux(
+        &mut self,
+        cond: Self::AcvmType,
+        truthy: Self::AcvmType,
+        falsy: Self::AcvmType,
+    ) -> io::Result<Self::AcvmType>;
+
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
+
+    /// Adds to acvm types. Both can either be public or shared
+    fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType;
 
     /// Subtracts two ACVM-type values: secret - secret
     fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType;

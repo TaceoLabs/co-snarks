@@ -1,10 +1,11 @@
 use std::marker::PhantomData;
 
 use acvm::brillig_vm::MEMORY_ADDRESSING_BIT_SIZE;
-use ark_ff::PrimeField;
+use ark_ff::{One as _, PrimeField};
 use brillig::{BitSize, IntegerBitSize};
 use num_bigint::BigUint;
 use num_traits::Zero;
+use rand::Rng;
 
 use super::{acir_field_utils, BrilligDriver};
 
@@ -73,6 +74,10 @@ impl<F: PrimeField> Default for PlainBrilligType<F> {
 impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
     type BrilligType = PlainBrilligType<F>;
 
+    fn fork(&mut self) -> eyre::Result<(Self, Self)> {
+        Ok((Self::default(), Self::default()))
+    }
+
     fn cast(
         &mut self,
         src: Self::BrilligType,
@@ -123,10 +128,11 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         }
     }
 
-    fn try_into_bool(val: Self::BrilligType) -> eyre::Result<bool> {
+    fn try_into_bool(val: Self::BrilligType) -> Result<bool, Self::BrilligType> {
+        //Err(val)
         match val {
             PlainBrilligType::Int(val, IntegerBitSize::U1) => Ok(val != 0),
-            x => eyre::bail!("cannot cast {x:?} to bool"),
+            x => Err(x),
         }
     }
 
@@ -137,6 +143,35 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 PlainBrilligType::Int(acir_field_utils::to_u128(val), bit_size)
             }
         }
+    }
+
+    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
+        let mut rng = rand::thread_rng();
+        match other {
+            PlainBrilligType::Field(_) => PlainBrilligType::Field(F::rand(&mut rng)),
+            PlainBrilligType::Int(_, IntegerBitSize::U128) => {
+                PlainBrilligType::Int(rng.gen(), IntegerBitSize::U128)
+            }
+            PlainBrilligType::Int(_, IntegerBitSize::U64) => {
+                PlainBrilligType::Int(rng.gen::<u64>().into(), IntegerBitSize::U64)
+            }
+            PlainBrilligType::Int(_, IntegerBitSize::U32) => {
+                PlainBrilligType::Int(rng.gen::<u32>().into(), IntegerBitSize::U32)
+            }
+            PlainBrilligType::Int(_, IntegerBitSize::U16) => {
+                PlainBrilligType::Int(rng.gen::<u16>().into(), IntegerBitSize::U16)
+            }
+            PlainBrilligType::Int(_, IntegerBitSize::U8) => {
+                PlainBrilligType::Int(rng.gen::<u8>().into(), IntegerBitSize::U8)
+            }
+            PlainBrilligType::Int(_, IntegerBitSize::U1) => {
+                PlainBrilligType::Int(rng.gen::<bool>().into(), IntegerBitSize::U1)
+            }
+        }
+    }
+
+    fn is_public(_: Self::BrilligType) -> bool {
+        true
     }
 
     fn add(
@@ -361,9 +396,29 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 };
                 input /= &radix;
             }
+            for limb in limbs.iter() {
+                tracing::debug!("{limb:?}");
+            }
             Ok(limbs)
         } else {
             eyre::bail!("can only ToRadix on field and radix must be Int32")
+        }
+    }
+
+    fn cmux(
+        &mut self,
+        cond: Self::BrilligType,
+        truthy: Self::BrilligType,
+        falsy: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType> {
+        if let PlainBrilligType::Int(cond, IntegerBitSize::U1) = cond {
+            if cond.is_one() {
+                Ok(truthy)
+            } else {
+                Ok(falsy)
+            }
+        } else {
+            eyre::bail!("cmux where cond is a non bool value")
         }
     }
 

@@ -40,13 +40,17 @@ pub(super) mod acir_field_utils {
 
 /// A trait representing the MPC operations required for running the coBrillig-VM.
 /// The operations are generic over public and private (i.e., secret-shared) inputs.
-pub trait BrilligDriver<F: PrimeField> {
+pub trait BrilligDriver<F: PrimeField>: Sized {
     /// A type representing the values encountered during a run of
     /// the coBrillig-VM.
     ///
     /// It should at least contain public and shared values, as well
     /// as integer and field implementations.
     type BrilligType: Clone + Default + fmt::Debug + From<F> + PartialEq;
+
+    /// Creates two identical copies of Self. This includes network
+    /// communication.
+    fn fork(&mut self) -> eyre::Result<(Self, Self)>;
 
     /// Casts the provided value to the provided bit size. This includes upcasts
     /// and downcasts between integer types, but also between fields to integers
@@ -61,13 +65,35 @@ pub trait BrilligDriver<F: PrimeField> {
     /// if it is not possible (e.g., is a shared value).
     fn try_into_usize(val: Self::BrilligType) -> eyre::Result<usize>;
 
-    /// Tries to convert the provided value to a `bool`. Returns an error
-    /// if it is not possible (e.g., is a shared value).
-    fn try_into_bool(val: Self::BrilligType) -> eyre::Result<bool>;
+    /// Tries to convert the provided value to a `bool`. Returns the value
+    /// again, if it is not possible (e.g., is a shared value).
+    fn try_into_bool(val: Self::BrilligType) -> Result<bool, Self::BrilligType>;
 
     /// Creates a new public value from the provided value. The type
     /// of the new value is determined by the provided `bit_size`.
     fn public_value(val: F, bit_size: BitSize) -> Self::BrilligType;
+
+    /// Creates a new public value set to one. Is of type field, as
+    /// downcasting from Field is trivial for all other types.
+    fn public_one() -> Self::BrilligType {
+        Self::public_value(F::one(), BitSize::Field)
+    }
+
+    /// Creates a new public `true` value.
+    fn public_true() -> Self::BrilligType {
+        Self::public_value(F::one(), BitSize::Integer(IntegerBitSize::U1))
+    }
+
+    /// Creates a new public `false` value.
+    fn public_false() -> Self::BrilligType {
+        Self::public_value(F::zero(), BitSize::Integer(IntegerBitSize::U1))
+    }
+
+    /// Creates a new random element with the same type other
+    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType;
+
+    /// Returns `true` if the provided value is public. `False` otherwise.
+    fn is_public(val: Self::BrilligType) -> bool;
 
     /// Adds two brillig types.
     ///
@@ -220,6 +246,14 @@ pub trait BrilligDriver<F: PrimeField> {
         output_size: usize,
         bits: bool,
     ) -> eyre::Result<Vec<Self::BrilligType>>;
+
+    /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
+    fn cmux(
+        &mut self,
+        cond: Self::BrilligType,
+        truthy: Self::BrilligType,
+        falsy: Self::BrilligType,
+    ) -> eyre::Result<Self::BrilligType>;
 
     /// Checks whether the provided value is an integer type matching the
     /// provided bit size. Returns an error otherwise.
