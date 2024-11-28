@@ -1,6 +1,6 @@
+use std::collections::HashMap;
 use std::io;
 use std::marker::PhantomData;
-use std::{collections::HashMap, usize};
 
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};

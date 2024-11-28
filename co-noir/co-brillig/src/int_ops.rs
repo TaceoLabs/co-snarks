@@ -38,7 +38,7 @@ where
             BinaryIntOp::Sub => todo!(),
             BinaryIntOp::Mul => todo!(),
             BinaryIntOp::Div => {
-                if let Some(_) = self.shared_ctx.as_ref() {
+                if self.shared_ctx.as_ref().is_some() {
                     tracing::debug!(
                         "we are in shared context and and maybe need to prevent from div by zero"
                     );
