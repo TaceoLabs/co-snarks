@@ -132,8 +132,11 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         Self::AcvmType::default()
     }
 
-    fn shared_zeros(&mut self, _len: usize) -> std::io::Result<Vec<Self::AcvmType>> {
-        todo!()
+    fn shared_zeros(&mut self, len: usize) -> std::io::Result<Vec<Self::AcvmType>> {
+        // TODO: This is not the best implementaiton for shared zeros
+        let trivial_zeros = vec![F::zero(); len];
+        let res = self.protocol.degree_reduce_vec(trivial_zeros)?;
+        Ok(res.into_iter().map(ShamirAcvmType::from).collect())
     }
 
     fn is_public_zero(a: &Self::AcvmType) -> bool {
@@ -154,11 +157,25 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
 
     fn cmux(
         &mut self,
-        _cond: Self::AcvmType,
-        _truthy: Self::AcvmType,
-        _falsy: Self::AcvmType,
+        cond: Self::AcvmType,
+        truthy: Self::AcvmType,
+        falsy: Self::AcvmType,
     ) -> std::io::Result<Self::AcvmType> {
-        todo!()
+        match (cond, truthy, falsy) {
+            (ShamirAcvmType::Public(cond), truthy, falsy) => {
+                assert!(cond.is_one() || cond.is_zero());
+                if cond.is_one() {
+                    Ok(truthy)
+                } else {
+                    Ok(falsy)
+                }
+            }
+            (ShamirAcvmType::Shared(cond), truthy, falsy) => {
+                let b_min_a = self.acvm_sub(truthy, falsy.clone());
+                let d = self.acvm_mul(cond.into(), b_min_a)?;
+                Ok(self.add(falsy, d))
+            }
+        }
     }
 
     fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType) {
@@ -171,8 +188,20 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         *target = result;
     }
 
-    fn add(&self, _lhs: Self::AcvmType, _rhs: Self::AcvmType) -> Self::AcvmType {
-        todo!()
+    fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType {
+        match (lhs, rhs) {
+            (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
+                ShamirAcvmType::Public(lhs + rhs)
+            }
+            (ShamirAcvmType::Public(public), ShamirAcvmType::Shared(shared))
+            | (ShamirAcvmType::Shared(shared), ShamirAcvmType::Public(public)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(shared, public))
+            }
+            (ShamirAcvmType::Shared(lhs), ShamirAcvmType::Shared(rhs)) => {
+                let result = arithmetic::add(lhs, rhs);
+                ShamirAcvmType::Shared(result)
+            }
+        }
     }
 
     fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {

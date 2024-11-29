@@ -88,7 +88,6 @@ where
                     let param = self
                         .evaluate_expression(expr)
                         .context("during call data init for brillig")?;
-                    tracing::info!("calldata is {param}");
                     calldata.push(param.into());
                 }
                 BrilligInputs::Array(array) => {
