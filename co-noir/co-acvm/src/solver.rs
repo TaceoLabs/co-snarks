@@ -25,7 +25,7 @@ use crate::mpc::{
 };
 
 /// The default expression width defined used by the ACVM.
-pub(crate) const CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounded { width: 4 };
+pub(crate) const _CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounded { width: 4 };
 
 mod assert_zero_solver;
 mod blackbox_solver;
@@ -178,7 +178,7 @@ where
                 .functions
                 .into_iter()
                 // ignore the transformation mapping for now
-                .map(|function| acvm::compiler::transform(function, CO_EXPRESSION_WIDTH).0)
+                //.map(|function| acvm::compiler::transform(function, CO_EXPRESSION_WIDTH).0)
                 .collect::<Vec<_>>(),
             witness_map,
             function_index: Self::DEFAULT_FUNCTION_INDEX,
@@ -208,7 +208,7 @@ where
                 .functions
                 .into_iter()
                 // ignore the transformation mapping for now
-                .map(|function| acvm::compiler::transform(function, CO_EXPRESSION_WIDTH).0)
+                //.map(|function| acvm::compiler::transform(function, CO_EXPRESSION_WIDTH).0)
                 .collect::<Vec<_>>(),
             witness_map,
             function_index: Self::DEFAULT_FUNCTION_INDEX,
