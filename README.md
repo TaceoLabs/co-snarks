@@ -1,4 +1,4 @@
-# coCircom
+# coSNARKs
 
 [![X (formerly Twitter) Follow](https://img.shields.io/badge/X-%23000000.svg?style=for-the-badge&logo=X&logoColor=white)](https://twitter.com/TACEO_IO)
 [![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/collaborativeSNARK)
@@ -8,10 +8,10 @@
 
 <!--[![crates.io](https://img.shields.io/badge/crates.io-v0.1.0-blue)](https://crates.io/)-->
 
-**coCircom** is a tool for building **coSNARKs**, a new technology that enables
+**coCircom** and **coNoir** are tools for building **coSNARKs**, a new technology that enables
 multiple distrusting parties to collaboratively compute a **zero-knowledge
-proof** (ZKP). It leverages the existing domain-specific language
-[circom](https://github.com/iden3/circom) to define arithmetic circuits. With
+proof** (ZKP). They leverage the existing domain-specific languages
+[circom](https://github.com/iden3/circom) and [Noir](https://github.com/noir-lang/noir) to define arithmetic circuits. With
 coCircom, all existing circom circuits can be promoted to coSNARKs without any
 modification to the original circuit.
 
