@@ -587,8 +587,8 @@ impl<F: PrimeField> FieldCT<F> {
     ) -> T::AcvmType {
         if self.witness_index != Self::IS_CONSTANT {
             let variable = builder.get_variable(self.witness_index as usize);
-            let mut res = driver.acvm_mul_with_public(self.multiplicative_constant, variable);
-            driver.acvm_add_assign_with_public(self.additive_constant, &mut res);
+            let mut res = driver.mul_with_public(self.multiplicative_constant, variable);
+            driver.add_assign_with_public(self.additive_constant, &mut res);
             res
         } else {
             T::AcvmType::from(self.additive_constant.to_owned())
@@ -659,8 +659,8 @@ impl<F: PrimeField> FieldCT<F> {
 
         let mut result = FieldCT::default();
         let value = builder.get_variable(self.witness_index as usize);
-        let mut out = driver.acvm_mul_with_public(self.multiplicative_constant, value);
-        driver.acvm_add_assign_with_public(self.additive_constant, &mut out);
+        let mut out = driver.mul_with_public(self.multiplicative_constant, value);
+        driver.add_assign_with_public(self.additive_constant, &mut out);
 
         result.witness_index = builder.add_variable(out);
         result.additive_constant = F::zero();

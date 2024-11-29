@@ -168,8 +168,8 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 }
             }
             (Rep3AcvmType::Shared(cond), truthy, falsy) => {
-                let b_min_a = self.acvm_sub(truthy, falsy.clone());
-                let d = self.acvm_mul(cond.into(), b_min_a)?;
+                let b_min_a = self.sub(truthy, falsy.clone());
+                let d = self.mul(cond.into(), b_min_a)?;
                 Ok(self.add(falsy, d))
             }
         }
@@ -202,7 +202,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType) {
+    fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType) {
         let id = self.io_context.id;
         let result = match target.to_owned() {
             Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public + secret),
@@ -230,7 +230,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         let id = self.io_context.id;
 
         match (share_1, share_2) {
@@ -250,7 +250,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
+    fn mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
         match secret {
             Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public * secret),
             Rep3AcvmType::Shared(secret) => {
@@ -259,7 +259,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn acvm_mul(
+    fn mul(
         &mut self,
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
@@ -281,7 +281,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType) {
+    fn negate_inplace(&mut self, a: &mut Self::AcvmType) {
         match a {
             Rep3AcvmType::Public(public) => {
                 public.neg_in_place();

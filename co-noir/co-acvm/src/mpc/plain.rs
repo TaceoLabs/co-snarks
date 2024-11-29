@@ -67,23 +67,23 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         }
     }
 
-    fn acvm_add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
-        *secret += public;
-    }
-
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType {
         lhs + rhs
     }
 
-    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+    fn add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
+        *secret += public;
+    }
+
+    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         share_1 - share_2
     }
 
-    fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
+    fn mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
         secret * public
     }
 
-    fn acvm_mul(
+    fn mul(
         &mut self,
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
@@ -91,7 +91,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(secret_1 * secret_2)
     }
 
-    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType) {
+    fn negate_inplace(&mut self, a: &mut Self::AcvmType) {
         a.neg_in_place();
     }
 

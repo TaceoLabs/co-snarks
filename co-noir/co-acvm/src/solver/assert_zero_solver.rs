@@ -40,14 +40,12 @@ where
                         }
                         (Some(lhs), None) => {
                             tracing::trace!("partially solving mul term...");
-                            let partly_solved =
-                                self.driver.acvm_mul_with_public(c.into_repr(), lhs);
+                            let partly_solved = self.driver.mul_with_public(c.into_repr(), lhs);
                             acc.linear_combinations.push((partly_solved, *rhs));
                         }
                         (None, Some(rhs)) => {
                             tracing::trace!("partially solving mul term...");
-                            let partly_solved =
-                                self.driver.acvm_mul_with_public(c.into_repr(), rhs);
+                            let partly_solved = self.driver.mul_with_public(c.into_repr(), rhs);
                             acc.linear_combinations.push((partly_solved, *lhs));
                         }
                         (None, None) => Err(eyre::eyre!(
@@ -99,7 +97,7 @@ where
         self.evaluate_linear_terms(expr, &mut simplified);
         // add constants
         self.driver
-            .acvm_add_assign_with_public(expr.q_c.into_repr(), &mut simplified.q_c);
+            .add_assign_with_public(expr.q_c.into_repr(), &mut simplified.q_c);
 
         Ok(simplified)
     }

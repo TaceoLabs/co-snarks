@@ -690,13 +690,12 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 let var_b = self.get_variable(small_constraint.b.try_into().unwrap());
                 let var_c = self.get_variable(small_constraint.c.try_into().unwrap());
 
-                let term1 = driver.acvm_mul(var_a.to_owned(), var_b.to_owned())?;
-                let term1 = driver.acvm_mul_with_public(small_constraint.mul_scaling, term1);
-                let term2 = driver.acvm_mul_with_public(small_constraint.a_scaling, var_a);
-                let term3 = driver.acvm_mul_with_public(small_constraint.b_scaling, var_b);
-                let term4 = driver.acvm_mul_with_public(small_constraint.c_scaling, var_c);
-                let term5 =
-                    driver.acvm_mul_with_public(small_constraint.d_scaling, next_w4_wire_value);
+                let term1 = driver.mul(var_a.to_owned(), var_b.to_owned())?;
+                let term1 = driver.mul_with_public(small_constraint.mul_scaling, term1);
+                let term2 = driver.mul_with_public(small_constraint.a_scaling, var_a);
+                let term3 = driver.mul_with_public(small_constraint.b_scaling, var_b);
+                let term4 = driver.mul_with_public(small_constraint.c_scaling, var_c);
+                let term5 = driver.mul_with_public(small_constraint.d_scaling, next_w4_wire_value);
                 next_w4_wire_value = small_constraint.const_scaling.into();
                 driver.add_assign(&mut next_w4_wire_value, term1);
                 driver.add_assign(&mut next_w4_wire_value, term2);
@@ -704,7 +703,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 driver.add_assign(&mut next_w4_wire_value, term4);
                 driver.add_assign(&mut next_w4_wire_value, term5);
 
-                driver.acvm_negate_inplace(&mut next_w4_wire_value);
+                driver.negate_inplace(&mut next_w4_wire_value);
             }
 
             let next_w4_wire = self.add_variable(next_w4_wire_value);
@@ -2540,17 +2539,17 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 target_range_bitnum * (3 * i + 2),
             ];
 
-            let mut subtrahend = T::acvm_mul_with_public(
+            let mut subtrahend = T::mul_with_public(
                 driver,
                 P::ScalarField::from(BigUint::one() << shifts[0]),
                 round_sublimbs[0].clone(),
             );
-            let term0 = T::acvm_mul_with_public(
+            let term0 = T::mul_with_public(
                 driver,
                 P::ScalarField::from(BigUint::one() << shifts[1]),
                 round_sublimbs[1].clone(),
             );
-            let term1 = T::acvm_mul_with_public(
+            let term1 = T::mul_with_public(
                 driver,
                 P::ScalarField::from(BigUint::one() << shifts[2]),
                 round_sublimbs[2].clone(),
@@ -2558,7 +2557,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             T::add_assign(driver, &mut subtrahend, term0);
             T::add_assign(driver, &mut subtrahend, term1);
 
-            let new_accumulator = T::acvm_sub(driver, accumulator.clone(), subtrahend);
+            let new_accumulator = T::sub(driver, accumulator.clone(), subtrahend);
             self.create_big_add_gate(
                 &AddQuad {
                     a: new_limbs[0],
