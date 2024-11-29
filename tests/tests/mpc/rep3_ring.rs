@@ -342,6 +342,60 @@ mod ring_share {
         apply_to_all!(rep3_mul_vec_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
+    fn rep3_cmux_vec_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        const VEC_SIZE: usize = 10;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+
+        let x = (0..VEC_SIZE)
+            .map(|_| rng.gen::<RingElement<T>>())
+            .collect::<Vec<_>>();
+        let y = (0..VEC_SIZE)
+            .map(|_| rng.gen::<RingElement<T>>())
+            .collect::<Vec<_>>();
+        let cond = RingElement(T::from(rng.gen::<bool>()));
+
+        let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
+        let y_shares = rep3_ring::share_ring_elements(&y, &mut rng);
+        let cond_share = rep3_ring::share_ring_element(cond, &mut rng);
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y, cond) in izip!(
+            test_network.get_party_networks(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter(),
+            cond_share.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                let res = arithmetic::cmux_vec(cond, &x, &y, &mut rep3).unwrap();
+                tx.send(res)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
+        if cond.is_zero() {
+            assert_eq!(is_result, y);
+        } else {
+            assert_eq!(is_result, x);
+        }
+    }
+
+    #[test]
+    fn rep3_cmux_vec() {
+        apply_to_all!(rep3_cmux_vec_t, [Bit, u8, u16, u32, u64, u128]);
+    }
+
     fn rep3_neg_t<T: IntRing2k>()
     where
         Standard: Distribution<T>,

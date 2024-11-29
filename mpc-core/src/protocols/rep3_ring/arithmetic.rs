@@ -250,6 +250,35 @@ where
     Ok(add(falsy, d))
 }
 
+/// Computes a CMUX on a vector: If cond is 1, returns truthy, otherwise returns falsy.
+/// Implementations should not overwrite this method.
+pub fn cmux_vec<T: IntRing2k, N: Rep3Network>(
+    cond: RingShare<T>,
+    truthy: &[RingShare<T>],
+    falsy: &[RingShare<T>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    debug_assert_eq!(truthy.len(), falsy.len());
+    // Sub many
+    let b_min_a = izip!(truthy.iter().cloned(), falsy.iter().cloned())
+        .map(|(t, f)| sub(t, f))
+        .collect_vec();
+
+    // The multiplication
+    let local_mul = b_min_a
+        .iter()
+        .map(|rhs| &cond * rhs + io_context.rngs.rand.masking_element::<RingElement<T>>())
+        .collect_vec();
+    let mut d = io_mul_vec(local_mul, io_context)?;
+
+    // The addition
+    add_vec_assign(&mut d, falsy);
+    Ok(d)
+}
+
 /// Convenience method for \[a\] + \[b\] * c
 pub fn add_mul_public<T: IntRing2k>(
     a: RingShare<T>,

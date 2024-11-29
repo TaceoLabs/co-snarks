@@ -204,14 +204,6 @@ pub fn open_vec<F: PrimeField, N: ShamirNetwork>(
     Ok(res)
 }
 
-/*
-fn neg_vec_in_place(vec: &mut ShamirShare<F>Vec) {
-    for a in vec.a.iter_mut() {
-        a.neg_in_place();
-    }
-}
-*/
-
 /// Promotes a public value to a trivial share.
 pub fn promote_to_trivial_share<F: PrimeField>(public_value: F) -> ShamirShare<F> {
     ShamirShare::<F>::new(public_value)
@@ -221,22 +213,6 @@ pub fn promote_to_trivial_share<F: PrimeField>(public_value: F) -> ShamirShare<F
 pub fn promote_to_trivial_shares<F: PrimeField>(public_values: &[F]) -> Vec<ShamirShare<F>> {
     ShamirShare::convert_vec_rev(public_values.to_owned())
 }
-
-/*
-fn clone_from_slice(
-    &self,
-    dst: &mut ShamirShare<F>Vec,
-    src: &ShamirShare<F>Vec,
-    dst_offset: usize,
-    src_offset: usize,
-    len: usize,
-) {
-    assert!(dst.a.len() >= dst_offset + len);
-    assert!(src.a.len() >= src_offset + len);
-    assert!(len > 0);
-    dst.a[dst_offset..dst_offset + len].clone_from_slice(&src.a[src_offset..src_offset + len]);
-}
-*/
 
 /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
 fn mul_open<F: PrimeField, N: ShamirNetwork>(
