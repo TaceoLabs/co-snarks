@@ -171,14 +171,14 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
                 }
             }
             (ShamirAcvmType::Shared(cond), truthy, falsy) => {
-                let b_min_a = self.acvm_sub(truthy, falsy.clone());
-                let d = self.acvm_mul(cond.into(), b_min_a)?;
+                let b_min_a = self.sub(truthy, falsy.clone());
+                let d = self.mul(cond.into(), b_min_a)?;
                 Ok(self.add(falsy, d))
             }
         }
     }
 
-    fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType) {
+    fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType) {
         let result = match target.to_owned() {
             ShamirAcvmType::Public(secret) => ShamirAcvmType::Public(public + secret),
             ShamirAcvmType::Shared(secret) => {
@@ -204,7 +204,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
-    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         match (share_1, share_2) {
             (ShamirAcvmType::Public(share_1), ShamirAcvmType::Public(share_2)) => {
                 ShamirAcvmType::Public(share_1 - share_2)
@@ -222,7 +222,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
-    fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
+    fn mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType {
         match secret {
             ShamirAcvmType::Public(secret) => ShamirAcvmType::Public(public * secret),
             ShamirAcvmType::Shared(secret) => {
@@ -231,7 +231,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
-    fn acvm_mul(
+    fn mul(
         &mut self,
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
@@ -253,7 +253,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
-    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType) {
+    fn negate_inplace(&mut self, a: &mut Self::AcvmType) {
         match a {
             ShamirAcvmType::Public(public) => {
                 public.neg_in_place();

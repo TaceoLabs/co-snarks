@@ -55,26 +55,26 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     ) -> io::Result<Self::AcvmType>;
 
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
-    fn acvm_add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
+    fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
 
     /// Adds to acvm types. Both can either be public or shared
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType;
 
     /// Subtracts two ACVM-type values: secret - secret
-    fn acvm_sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType;
+    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType;
 
     /// Multiply an ACVM-types with a public value: \[c\] = public * \[secret\].
-    fn acvm_mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType;
+    fn mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType;
 
     /// Multiply two ACVM-types: \[c\] = \[secret_1\] * \[secret_2\].
-    fn acvm_mul(
+    fn mul(
         &mut self,
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
     ) -> io::Result<Self::AcvmType>;
 
     /// Negates an ACVM-type inplace: \[a\] = -\[a\].
-    fn acvm_negate_inplace(&mut self, a: &mut Self::AcvmType);
+    fn negate_inplace(&mut self, a: &mut Self::AcvmType);
 
     /// Multiply an ACVM-types with a public value and add_assign with result: \[result\] += q_l * \[w_l\].
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, result: &mut Self::AcvmType);
