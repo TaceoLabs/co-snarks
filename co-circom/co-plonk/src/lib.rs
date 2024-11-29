@@ -261,7 +261,7 @@ impl<P: Pairing> ShamirCoPlonk<P> {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use ark_bn254::Bn254;
     use circom_types::groth16::JsonPublicInput;
     use circom_types::plonk::{JsonVerificationKey, ZKey};

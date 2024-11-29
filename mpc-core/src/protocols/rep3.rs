@@ -86,7 +86,6 @@ pub enum MaybeRep3ShareVecType<F: PrimeField> {
 /// A type that represents a compressed additive share. It can either be a seed (with length) or the actual share.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
-
 pub enum SeededType<
     T: Clone + CanonicalSerialize + CanonicalDeserialize,
     U: Rng + SeedableRng + CryptoRng,

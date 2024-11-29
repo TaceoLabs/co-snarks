@@ -366,7 +366,6 @@ macro_rules! y2a_impl_p2 {
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end. These adaptions need to be encoded into a garbled circuit.
-
 pub fn y2a<F: PrimeField, N: Rep3Network>(
     x: BinaryBundle<WireMod2>,
     delta: Option<WireMod2>,
@@ -402,7 +401,6 @@ pub fn y2a<F: PrimeField, N: Rep3Network>(
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end. These adaptions need to be encoded into a garbled circuit.
-
 pub fn y2a_streaming<F: PrimeField, N: Rep3Network>(
     x: BinaryBundle<WireMod2>,
     delta: Option<WireMod2>,

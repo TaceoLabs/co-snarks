@@ -17,7 +17,7 @@ pub(crate) struct PolyGShift<'a, T: Default> {
     pub(crate) wires: &'a ShiftedWitnessEntities<T>,
 }
 
-impl<'a, T: Default> PolyF<'a, T> {
+impl<T: Default> PolyF<'_, T> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed.iter().chain(self.witness.iter())
     }
@@ -27,7 +27,7 @@ impl<'a, T: Default> PolyF<'a, T> {
     }
 }
 
-impl<'a, T: Default> PolyG<'a, T> {
+impl<T: Default> PolyG<'_, T> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.tables.iter().chain(self.wires)
     }
@@ -37,7 +37,7 @@ impl<'a, T: Default> PolyG<'a, T> {
     }
 }
 
-impl<'a, T: Default> PolyGShift<'a, T> {
+impl<T: Default> PolyGShift<'_, T> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.tables.iter().chain(self.wires.iter())
     }

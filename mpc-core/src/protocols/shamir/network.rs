@@ -126,24 +126,6 @@ impl ShamirMpcNet {
         })
     }
 
-    /// Shuts down the network interface.
-    // pub fn shutdown(self) {
-    //     let Self {
-    //         id: _,
-    //         num_parties: _,
-    //         net_handler,
-    //         channels,
-    //     } = self;
-    //     for chan in channels.into_iter() {
-    //         drop(chan);
-    //     }
-    //     if let Some(net_handler) = Arc::into_inner(net_handler) {
-    //         runtime.block_on(async {
-    //             net_handler.shutdown().await;
-    //         });
-    //     }
-    // }
-
     /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: usize, data: Bytes) -> std::io::Result<()> {
         if let Some(chan) = self.channels.get_mut(&target) {

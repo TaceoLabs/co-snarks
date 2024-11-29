@@ -231,7 +231,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 }
 
-impl<'a, N: Rep3Network> Fancy for Rep3Garbler<'a, N> {
+impl<N: Rep3Network> Fancy for Rep3Garbler<'_, N> {
     type Item = WireMod2;
     type Error = GarblerError;
 
@@ -253,7 +253,7 @@ impl<'a, N: Rep3Network> Fancy for Rep3Garbler<'a, N> {
     }
 }
 
-impl<'a, N: Rep3Network> FancyBinary for Rep3Garbler<'a, N> {
+impl<N: Rep3Network> FancyBinary for Rep3Garbler<'_, N> {
     fn and(&mut self, a: &Self::Item, b: &Self::Item) -> Result<Self::Item, Self::Error> {
         let (gate0, gate1, c) = self.garble_and_gate(a, b);
         self.add_block_to_circuit(&gate0);

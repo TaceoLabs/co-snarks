@@ -32,7 +32,10 @@ where
     N: 'static,
 {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
-    type PointShare<C> = Rep3PointShare<C> where C: CurveGroup;
+    type PointShare<C>
+        = Rep3PointShare<C>
+    where
+        C: CurveGroup;
 
     type PartyID = PartyID;
 
