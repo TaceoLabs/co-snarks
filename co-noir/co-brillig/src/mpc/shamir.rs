@@ -1,5 +1,5 @@
 use super::{BrilligDriver, PlainBrilligDriver};
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use brillig::{BitSize, IntegerBitSize};
 use mpc_core::protocols::shamir::{
     self, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol,
@@ -55,7 +55,19 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
     type BrilligType = ShamirBrilligType<F>;
 
     fn fork(&mut self) -> eyre::Result<(Self, Self)> {
-        todo!()
+        let protocol1 = self.protocol.fork_with_pairs(0)?; // TODO 0 for now...
+        let protocol2 = self.protocol.fork_with_pairs(0)?; // TODO 0 for now...
+        let fork1 = Self {
+            protocol: protocol1,
+            plain_driver: PlainBrilligDriver::default(),
+            phantom_data: PhantomData,
+        };
+        let fork2 = Self {
+            protocol: protocol2,
+            plain_driver: PlainBrilligDriver::default(),
+            phantom_data: PhantomData,
+        };
+        Ok((fork1, fork2))
     }
 
     fn cast(
@@ -92,8 +104,17 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
         ShamirBrilligType::Public(PlainBrilligDriver::public_value(val, bit_size))
     }
 
-    fn random(&mut self, _other: &Self::BrilligType) -> Self::BrilligType {
-        todo!()
+    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
+        match other {
+            ShamirBrilligType::Public(other) => {
+                ShamirBrilligType::Public(self.plain_driver.random(other))
+            }
+            ShamirBrilligType::Shared(_) => ShamirBrilligType::Shared(
+                self.protocol
+                    .rand()
+                    .expect("TODO: replace with error handling"),
+            ),
+        }
     }
 
     fn is_public(val: Self::BrilligType) -> bool {
@@ -303,11 +324,22 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
 
     fn cmux(
         &mut self,
-        _cond: Self::BrilligType,
-        _truthy: Self::BrilligType,
-        _falsy: Self::BrilligType,
+        cond: Self::BrilligType,
+        truthy: Self::BrilligType,
+        falsy: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
-        todo!()
+        match cond {
+            ShamirBrilligType::Public(Public::Int(cond, IntegerBitSize::U1)) => {
+                if cond.is_one() {
+                    Ok(truthy)
+                } else {
+                    Ok(falsy)
+                }
+            }
+            _ => {
+                eyre::bail!("cmux where cond is a non bool value: SHAMIR has no bool values atm...")
+            }
+        }
     }
 
     fn expect_int(

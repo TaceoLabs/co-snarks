@@ -32,7 +32,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         brillig_result: Vec<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>,
     ) -> eyre::Result<Vec<Self::AcvmType>>;
 
-    /// Returns F::zero() as am ACVM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
+    /// Returns F::zero() as an ACVM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
     fn public_zero() -> Self::AcvmType {
         Self::AcvmType::default()
     }
