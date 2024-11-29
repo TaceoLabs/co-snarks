@@ -290,22 +290,6 @@ impl Rep3MpcNet {
         })
     }
 
-    /// Shuts down the network interface.
-    // pub fn shutdown(self) {
-    //     let Self {
-    //         id: _,
-    //         runtime,
-    //         net_handler,
-    //         chan_next,
-    //         chan_prev,
-    //     } = self;
-    //     drop(chan_next);
-    //     drop(chan_prev);
-    //     if let Some(net_handler) = Arc::into_inner(net_handler) {
-    //         runtime.block_on(net_handler.shutdown());
-    //     }
-    // }
-
     /// Sends bytes over the network to the target party.
     pub fn send_bytes(&mut self, target: PartyID, data: Bytes) -> std::io::Result<()> {
         if target == self.id.next_id() {

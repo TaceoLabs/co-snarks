@@ -29,7 +29,10 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     for ShamirGroth16Driver<P::ScalarField, N>
 {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
-    type PointShare<C> = ShamirPointShare<C> where C: CurveGroup;
+    type PointShare<C>
+        = ShamirPointShare<C>
+    where
+        C: CurveGroup;
 
     type PartyID = usize;
 

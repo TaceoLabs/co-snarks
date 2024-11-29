@@ -19,7 +19,7 @@ pub(crate) struct PolyGShift<'a, T: Default> {
     pub(crate) wires: &'a ShiftedWitnessEntities<T>,
 }
 
-impl<'a, Shared: Default, Public: Default> PolyG<'a, Shared, Public> {
+impl<Shared: Default, Public: Default> PolyG<'_, Shared, Public> {
     pub(crate) fn public_iter(&self) -> impl Iterator<Item = &Public> {
         self.tables.into_iter()
     }
@@ -30,7 +30,7 @@ impl<'a, Shared: Default, Public: Default> PolyG<'a, Shared, Public> {
 }
 // apparently not necessary for Shplemini anymore, lets leave them here for now
 #[expect(dead_code)]
-impl<'a, T: Default> PolyGShift<'a, T> {
+impl<T: Default> PolyGShift<'_, T> {
     pub(crate) fn tables_iter(&self) -> impl Iterator<Item = &T> {
         self.tables.iter()
     }

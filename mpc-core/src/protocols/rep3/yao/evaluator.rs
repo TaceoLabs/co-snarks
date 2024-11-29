@@ -214,7 +214,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 }
 
-impl<'a, N: Rep3Network> Fancy for Rep3Evaluator<'a, N> {
+impl<N: Rep3Network> Fancy for Rep3Evaluator<'_, N> {
     type Item = WireMod2;
     type Error = EvaluatorError;
 
@@ -247,7 +247,7 @@ impl<'a, N: Rep3Network> Fancy for Rep3Evaluator<'a, N> {
     }
 }
 
-impl<'a, N: Rep3Network> FancyBinary for Rep3Evaluator<'a, N> {
+impl<N: Rep3Network> FancyBinary for Rep3Evaluator<'_, N> {
     /// Negate is a noop for the evaluator
     fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, Self::Error> {
         Ok(*x)

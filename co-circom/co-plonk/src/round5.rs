@@ -74,7 +74,7 @@ where
 }
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round5<'a, P, T>
+impl<P: Pairing, T: CircomPlonkProver<P>> Round5<'_, P, T>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,

@@ -4,9 +4,7 @@ use ark_ff::PrimeField;
 pub struct Barycentric {}
 
 impl Barycentric {
-    /**
-     * Methods for computing arrays of precomputable data used for barycentric extension and evaluation
-     */
+    // Methods for computing arrays of precomputable data used for barycentric extension and evaluation
 
     // build big_domain, currently the set of x_i in {domain_start, ..., big_domain_end - 1 }
     pub fn construct_big_domain<F: PrimeField>(domain_size: usize, num_evals: usize) -> Vec<F> {

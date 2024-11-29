@@ -28,7 +28,7 @@ pub struct ShiftedPoly<'a, F> {
     zero: F, // TACEO TODO is there are better solution
 }
 
-impl<'a, F: Clone> ShiftedPoly<'a, F> {
+impl<F: Clone> ShiftedPoly<'_, F> {
     pub fn to_vec(&self) -> Vec<F> {
         let mut res = Vec::with_capacity(self.coefficients.len() + 1);
         for c in self.coefficients.iter().cloned() {
@@ -43,7 +43,7 @@ impl<'a, F: Clone> ShiftedPoly<'a, F> {
     }
 }
 
-impl<'a, F: Clone> Index<usize> for ShiftedPoly<'a, F> {
+impl<F: Clone> Index<usize> for ShiftedPoly<'_, F> {
     type Output = F;
 
     fn index(&self, index: usize) -> &Self::Output {

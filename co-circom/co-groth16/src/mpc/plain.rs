@@ -13,7 +13,10 @@ pub struct PlainGroth16Driver;
 impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     type ArithmeticShare = P::ScalarField;
 
-    type PointShare<C> = C where C: CurveGroup;
+    type PointShare<C>
+        = C
+    where
+        C: CurveGroup;
 
     type PartyID = usize;
 

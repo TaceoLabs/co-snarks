@@ -369,7 +369,7 @@ where
     }
 }
 
-impl<'de, P: Pairing + CircomArkworksPairingBridge> de::Visitor<'de> for FrVisitor<P>
+impl<P: Pairing + CircomArkworksPairingBridge> de::Visitor<'_> for FrVisitor<P>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
