@@ -309,12 +309,10 @@ where
                 if truthy_result.len() != falsy_result.len() {
                     eyre::bail!("results from different universes have different length")
                 }
-                // TODO we maybe need cmux many
-                let mut final_result = Vec::with_capacity(falsy_result.len());
-                for (truthy, falsy) in itertools::izip!(truthy_result, falsy_result) {
-                    let result = self.driver.cmux(condition.clone(), truthy, falsy)?;
-                    final_result.push(result);
-                }
+
+                let final_result =
+                    self.driver
+                        .cmux_many(condition, &truthy_result, &falsy_result)?;
                 Ok(Some(CoBrilligResult::Success(final_result)))
             }
         }

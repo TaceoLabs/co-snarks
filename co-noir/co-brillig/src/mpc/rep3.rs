@@ -1372,7 +1372,9 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                 }
             }
             Rep3BrilligType::Shared(Shared::Ring1(cond)) => {
-                let casted_condition = match truthy {
+                let b_min_a = self.sub(truthy, falsy.clone())?;
+
+                let casted_condition = match b_min_a {
                     Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U128))
                     | Rep3BrilligType::Shared(Shared::Ring128(_)) => {
                         let cast = rep3_ring::casts::ring_cast_selector::<_, u128, _>(
@@ -1423,10 +1425,173 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                         Rep3BrilligType::shared_field(cast)
                     }
                 };
-                let b_min_a = self.sub(truthy, falsy.clone())?;
                 let d = self.mul(casted_condition, b_min_a)?;
                 self.add(d, falsy)
             }
+            _ => eyre::bail!("cmux where cond is a non bool value"),
+        }
+    }
+
+    fn cmux_many(
+        &mut self,
+        cond: Self::BrilligType,
+        truthy: &[Self::BrilligType],
+        falsy: &[Self::BrilligType],
+    ) -> eyre::Result<Vec<Self::BrilligType>> {
+        let len = truthy.len();
+        debug_assert_eq!(len, falsy.len());
+        match cond {
+            Rep3BrilligType::Public(Public::Int(cond, IntegerBitSize::U1)) => {
+                // Everything is without communication anyway
+                let mut result = Vec::with_capacity(len);
+                for (truthy, falsy) in truthy.iter().zip(falsy.iter()) {
+                    if cond.is_one() {
+                        result.push(truthy.to_owned())
+                    } else {
+                        result.push(falsy.to_owned())
+                    }
+                }
+                Ok(result)
+            }
+            Rep3BrilligType::Shared(Shared::Ring1(cond)) => {
+                // We only want to bitinject once for fields and once for rings. So we first search for the biggest ring and inject the condition into that ring since downcasts do not require communication.
+
+                let mut b_min_a = Vec::with_capacity(len);
+
+                let mut biggest_ring = 0;
+
+                for (truthy, falsy) in truthy.iter().zip(falsy.iter()) {
+                    let res = self.sub(truthy.to_owned(), falsy.to_owned())?;
+                    match &res {
+                        Rep3BrilligType::Public(Public::Int(_, bits)) => {
+                            let bits = u32::from(*bits);
+                            if bits > biggest_ring {
+                                biggest_ring = bits;
+                            }
+                        }
+                        Rep3BrilligType::Shared(shared) => {
+                            let bits = match shared {
+                                Shared::Ring1(_) => 1,
+                                Shared::Ring8(_) => 8,
+                                Shared::Ring16(_) => 16,
+                                Shared::Ring32(_) => 32,
+                                Shared::Ring64(_) => 64,
+                                Shared::Ring128(_) => 128,
+                                Shared::Field(_) => 0,
+                            };
+                            if bits > biggest_ring {
+                                biggest_ring = bits;
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    b_min_a.push(res);
+                }
+
+                let mut injected_field: Option<Rep3BrilligType<F>> = None;
+                let mut injected_ring = None;
+
+                if biggest_ring > 1 {
+                    match biggest_ring {
+                        8 => {
+                            injected_ring = Some(Rep3BrilligType::Shared(Shared::Ring8(
+                                rep3_ring::conversion::bit_inject_from_bit(
+                                    &cond,
+                                    &mut self.io_context,
+                                )?,
+                            )));
+                        }
+                        16 => {
+                            injected_ring = Some(Rep3BrilligType::Shared(Shared::Ring16(
+                                rep3_ring::conversion::bit_inject_from_bit(
+                                    &cond,
+                                    &mut self.io_context,
+                                )?,
+                            )));
+                        }
+                        32 => {
+                            injected_ring = Some(Rep3BrilligType::Shared(Shared::Ring32(
+                                rep3_ring::conversion::bit_inject_from_bit(
+                                    &cond,
+                                    &mut self.io_context,
+                                )?,
+                            )));
+                        }
+                        64 => {
+                            injected_ring = Some(Rep3BrilligType::Shared(Shared::Ring64(
+                                rep3_ring::conversion::bit_inject_from_bit(
+                                    &cond,
+                                    &mut self.io_context,
+                                )?,
+                            )));
+                        }
+                        128 => {
+                            injected_ring = Some(Rep3BrilligType::Shared(Shared::Ring128(
+                                rep3_ring::conversion::bit_inject_from_bit(
+                                    &cond,
+                                    &mut self.io_context,
+                                )?,
+                            )));
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+
+                // TODO maybe parallelize this as well
+                for (val, falsy) in b_min_a.iter_mut().zip(falsy) {
+                    let casted_condition = match val {
+                        Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U128))
+                        | Rep3BrilligType::Shared(Shared::Ring128(_)) => self.cast(
+                            injected_ring.to_owned().expect("We casted"),
+                            BitSize::Integer(IntegerBitSize::U128),
+                        )?,
+
+                        Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U64))
+                        | Rep3BrilligType::Shared(Shared::Ring64(_)) => self.cast(
+                            injected_ring.to_owned().expect("We casted"),
+                            BitSize::Integer(IntegerBitSize::U64),
+                        )?,
+                        Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U32))
+                        | Rep3BrilligType::Shared(Shared::Ring32(_)) => self.cast(
+                            injected_ring.to_owned().expect("We casted"),
+                            BitSize::Integer(IntegerBitSize::U32),
+                        )?,
+                        Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U16))
+                        | Rep3BrilligType::Shared(Shared::Ring16(_)) => self.cast(
+                            injected_ring.to_owned().expect("We casted"),
+                            BitSize::Integer(IntegerBitSize::U16),
+                        )?,
+                        Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U8))
+                        | Rep3BrilligType::Shared(Shared::Ring8(_)) => self.cast(
+                            injected_ring.to_owned().expect("We casted"),
+                            BitSize::Integer(IntegerBitSize::U8),
+                        )?,
+                        Rep3BrilligType::Public(Public::Int(_, IntegerBitSize::U1))
+                        | Rep3BrilligType::Shared(Shared::Ring1(_)) => {
+                            Rep3BrilligType::shared_u1(cond)
+                        }
+                        Rep3BrilligType::Public(Public::Field(_))
+                        | Rep3BrilligType::Shared(Shared::Field(_)) => {
+                            if let Some(val) = &injected_field {
+                                val.to_owned()
+                            } else {
+                                let cast = rep3_ring::casts::ring_to_field_selector(
+                                    cond,
+                                    &mut self.io_context,
+                                )?;
+                                let val = Rep3BrilligType::shared_field(cast);
+                                injected_field = Some(val.to_owned());
+                                val
+                            }
+                        }
+                    };
+                    let d = self.mul(casted_condition, val.to_owned())?;
+                    *val = self.add(d, falsy.to_owned())?;
+                }
+                Ok(b_min_a)
+            }
+
             _ => eyre::bail!("cmux where cond is a non bool value"),
         }
     }

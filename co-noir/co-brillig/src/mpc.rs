@@ -255,6 +255,21 @@ pub trait BrilligDriver<F: PrimeField>: Sized {
         falsy: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType>;
 
+    /// Computes a CMUX for multiple values. If cond is 1, returns truthy,
+    fn cmux_many(
+        &mut self,
+        cond: Self::BrilligType,
+        truthy: &[Self::BrilligType],
+        falsy: &[Self::BrilligType],
+    ) -> eyre::Result<Vec<Self::BrilligType>> {
+        debug_assert_eq!(truthy.len(), falsy.len());
+        let mut result = Vec::with_capacity(truthy.len());
+        for (t, f) in truthy.iter().zip(falsy.iter()) {
+            result.push(self.cmux(cond.clone(), t.clone(), f.clone())?);
+        }
+        Ok(result)
+    }
+
     /// Checks whether the provided value is an integer type matching the
     /// provided bit size. Returns an error otherwise.
     fn expect_int(
