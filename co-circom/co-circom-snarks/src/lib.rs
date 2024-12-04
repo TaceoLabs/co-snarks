@@ -81,6 +81,11 @@ where
     /// A map from variable names to the public field elements.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub public_inputs: BTreeMap<String, Vec<F>>,
+    #[serde(
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
+    )]
+    pub maybe_public_inputs: BTreeMap<String, Vec<Option<F>>>,
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub shared_inputs: BTreeMap<String, Rep3ShareVecType<F, U>>,
@@ -97,6 +102,7 @@ where
     fn default() -> Self {
         Self {
             public_inputs: BTreeMap::new(),
+            maybe_public_inputs: BTreeMap::new(),
             shared_inputs: BTreeMap::new(),
             maybe_shared_inputs: BTreeMap::new(),
         }
@@ -175,6 +181,7 @@ where
         let mut shared_inputs = self.shared_inputs;
         let maybe_shared_inputs = self.maybe_shared_inputs;
         let public_inputs = self.public_inputs;
+        let maybe_public_inputs = self.maybe_public_inputs;
 
         for (key, value) in other.public_inputs.iter() {
             if !public_inputs.contains_key(key) {
@@ -183,6 +190,28 @@ where
             if public_inputs.get(key).expect("is there we checked") != value {
                 eyre::bail!("Public input \"{key}\" must be same in all files");
             }
+        }
+
+        let mut maybe_merged_public_inputs = BTreeMap::new();
+        for key in other.maybe_public_inputs.keys() {
+            if public_inputs.contains_key(key) {
+                eyre::bail!("{key} is present in public inputs and maybe public inputs");
+            }
+            if !maybe_public_inputs.contains_key(key) {
+                eyre::bail!("{key} is must be present in both maybe public inputs");
+            }
+            let mine = maybe_public_inputs.get(key).expect("we checked");
+            let theirs = other.maybe_public_inputs.get(key).expect("we checked");
+            let mut merged = Vec::with_capacity(maybe_public_inputs.len());
+            for (mine, their) in mine.into_iter().zip(theirs.into_iter()) {
+                match (mine, their) {
+                    (Some(_), Some(_)) => eyre::bail!("Same index for maybe shared public inputs"),
+                    (Some(mine), None) => merged.push(Some(mine.clone())),
+                    (None, Some(their)) => merged.push(Some(their.clone())),
+                    (None, None) => continue,
+                }
+            }
+            maybe_merged_public_inputs.insert(key.to_string(), merged);
         }
 
         for (key, value) in other.shared_inputs {
@@ -258,6 +287,7 @@ where
 
         Ok(Self {
             public_inputs,
+            maybe_public_inputs: maybe_merged_public_inputs,
             shared_inputs,
             maybe_shared_inputs: merged_maybe_shared_inputs,
         })
@@ -321,6 +351,138 @@ where
             public_inputs: BTreeMap::new(),
             shared_inputs: BTreeMap::new(),
         }
+    }
+}
+
+impl<F: PrimeField> SharedInput<F, Rep3PrimeFieldShare<F>> {
+    pub fn build_from_sources<U>(
+        sources: Vec<SerializeableSharedRep3Input<F, U>>,
+    ) -> eyre::Result<Self>
+    where
+        U: Rng + SeedableRng + CryptoRng,
+        U::Seed: Serialize + for<'a> Deserialize<'a> + Clone + std::fmt::Debug,
+    {
+        let mut shared_input = Self::default();
+        let mut maybe_publics: BTreeMap<String, Vec<Option<F>>> = BTreeMap::new();
+        let mut maybe_shared = BTreeMap::new();
+        for source in sources {
+            for (k, v) in source.public_inputs {
+                if let Some(old) = shared_input.public_inputs.insert(k, v.clone()) {
+                    if old != v {
+                        eyre::bail!("public inputs must match from sources");
+                    }
+                }
+            }
+
+            for (k, v) in source.shared_inputs {
+                match v {
+                    Rep3ShareVecType::Replicated(rep3) => {
+                        if shared_input.shared_inputs.insert(k, rep3).is_some() {
+                            eyre::bail!("cannot provide multiple shared inputs with same key")
+                        }
+                    }
+                    Rep3ShareVecType::SeededReplicated(_) => todo!(),
+                    Rep3ShareVecType::Additive(_) => todo!(),
+                    Rep3ShareVecType::SeededAdditive(_) => todo!(),
+                }
+            }
+
+            for (k, v) in source.maybe_public_inputs {
+                // is there already a maybe public?
+                if let Some(mine) = maybe_publics.remove(&k) {
+                    let mut merged = Vec::with_capacity(mine.len());
+                    if mine.len() != v.len() {
+                        eyre::bail!("maybe public inputs must be same length");
+                    }
+                    for (mine, their) in mine.into_iter().zip(v) {
+                        match (mine, their) {
+                            (Some(m), Some(t)) => {
+                                if m != t {
+                                    eyre::bail!("maybe public inputs must be same!");
+                                }
+                                merged.push(Some(m));
+                            }
+                            (None, Some(f)) | (Some(f), None) => merged.push(Some(f)),
+                            (None, None) => merged.push(None),
+                        }
+                    }
+                    maybe_publics.insert(k, merged);
+                } else {
+                    // does not exist, just add it
+                    maybe_publics.insert(k, v);
+                }
+            }
+
+            for (k, theirs) in source.maybe_shared_inputs {
+                // is there already a maybe shared?
+                if let Some(mine) = maybe_shared.remove(&k) {
+                    let mut merged = vec![];
+                    match (mine, theirs) {
+                        (
+                            MaybeRep3ShareVecType::Replicated(mine),
+                            MaybeRep3ShareVecType::Replicated(theirs),
+                        ) => {
+                            for (mine, their) in mine.into_iter().zip(theirs) {
+                                match (mine, their) {
+                                    (Some(m), Some(t)) => {
+                                        if m != t {
+                                            eyre::bail!("maybe public inputs must be same!");
+                                        }
+                                        merged.push(Some(m));
+                                    }
+                                    (None, Some(f)) | (Some(f), None) => merged.push(Some(f)),
+                                    (None, None) => merged.push(None),
+                                }
+                            }
+                        }
+                        (
+                            MaybeRep3ShareVecType::Replicated(_),
+                            MaybeRep3ShareVecType::Additive(_),
+                        ) => todo!(),
+                        (
+                            MaybeRep3ShareVecType::Additive(_),
+                            MaybeRep3ShareVecType::Replicated(_),
+                        ) => todo!(),
+                        (
+                            MaybeRep3ShareVecType::Additive(_),
+                            MaybeRep3ShareVecType::Additive(_),
+                        ) => todo!(),
+                    }
+                    maybe_shared.insert(k, MaybeRep3ShareVecType::Replicated(merged));
+                } else {
+                    // does not exist, just add it
+                    maybe_shared.insert(k, theirs);
+                }
+            }
+        }
+        // now check if all is present
+        for (k, v) in maybe_publics {
+            if shared_input.public_inputs.contains_key(&k) {
+                eyre::bail!("key present \"{k}\"in maybe shared and in public input");
+            }
+            let not_maybe = v
+                .into_iter()
+                .map(|v| v.ok_or(eyre::eyre!("Still unmerged public input")))
+                .collect::<eyre::Result<Vec<_>>>()?;
+            shared_input.public_inputs.insert(k, not_maybe);
+        }
+
+        for (k, v) in maybe_shared {
+            if shared_input.shared_inputs.contains_key(&k) {
+                eyre::bail!("key present \"{k}\"in maybe shared and in shared input");
+            }
+            match v {
+                MaybeRep3ShareVecType::Replicated(rep3) => {
+                    let not_maybe = rep3
+                        .into_iter()
+                        .map(|v| v.ok_or(eyre::eyre!("Still unmerged public input")))
+                        .collect::<eyre::Result<Vec<_>>>()?;
+                    shared_input.shared_inputs.insert(k, not_maybe);
+                }
+                MaybeRep3ShareVecType::Additive(_) => todo!(),
+            }
+        }
+        Ok(shared_input)
     }
 }
 
