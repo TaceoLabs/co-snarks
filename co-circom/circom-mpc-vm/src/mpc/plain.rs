@@ -125,8 +125,8 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
 
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         tracing::debug!("trying to divide {a}/{b}");
-        let lhs = to_u128!(a);
-        let rhs = to_u128!(b);
+        let lhs = to_bigint!(a);
+        let rhs = to_bigint!(b);
         Ok(F::from(lhs / rhs))
     }
 
