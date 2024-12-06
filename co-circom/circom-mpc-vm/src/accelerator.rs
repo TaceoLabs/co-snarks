@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use ark_ff::PrimeField;
 use eyre::bail;
+use mpc_core::protocols;
 
 use crate::mpc::VmCircomWitnessExtension;
 
@@ -122,6 +123,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
 
     pub fn from_config(config: MpcAcceleratorConfig) -> Self {
         let mut accelerator = Self::empty();
+        accelerator.register_builtin_open();
         if config.sqrt {
             accelerator.register_sqrt();
         }
@@ -156,7 +158,8 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
     }
 
     pub(crate) fn has_fn_accelerator(&self, name: &str) -> bool {
-        self.registered_functions.contains_key(name)
+        self.registered_functions
+            .contains_key(remove_trailing_index(name))
     }
 
     pub(crate) fn has_cmp_accelerator(&self, name: &str) -> bool {
@@ -170,6 +173,17 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
                 bail!("Calling SQRT accelerator with more than one argument!");
             }
             Ok(vec![protocol.sqrt(args[0].to_owned())?])
+        });
+    }
+
+    fn register_builtin_open(&mut self) {
+        self.register_function("__builtinCoCircomOpen".to_owned(), |protocol, args| {
+            tracing::debug!("calling __builtinCoCircomOpen");
+            let mut result = Vec::with_capacity(args.len());
+            for ele in args {
+                result.push(C::VmType::from(protocol.open(ele.to_owned())?));
+            }
+            Ok(result)
         });
     }
 
@@ -243,8 +257,16 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
     ) -> eyre::Result<Vec<C::VmType>> {
         let fun = self
             .registered_functions
-            .get(name)
+            .get(remove_trailing_index(name))
             .ok_or(eyre::eyre!("cannot find accelerator {name}"))?;
         fun(protocol, args)
+    }
+}
+
+fn remove_trailing_index<'a>(name: &'a str) -> &'a str {
+    if let Some(cut_off_index) = name.rfind('_') {
+        &name[..cut_off_index]
+    } else {
+        name
     }
 }
