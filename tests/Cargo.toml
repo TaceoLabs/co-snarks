@@ -18,6 +18,7 @@ circom-mpc-compiler = { version = "0.7.0", path = "../co-circom/circom-mpc-compi
 circom-mpc-vm = { version = "0.5.0", path = "../co-circom/circom-mpc-vm" }
 circom-types = { version = "0.6.0", path = "../co-circom/circom-types" }
 co-acvm = { version = "0.3.0", path = "../co-noir/co-acvm" }
+co-circom = { version = "0.6.0", path = "../co-circom/co-circom" }
 co-circom-snarks = { version = "0.2.0", path = "../co-circom/co-circom-snarks" }
 co-groth16 = { version = "0.6.0", path = "../co-circom/co-groth16", features = [
     "verifier",
