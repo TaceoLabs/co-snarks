@@ -14,7 +14,7 @@ use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
 use sha3::digest::typenum::bit;
 
-type SortRing = u8;
+type PermRing = u32;
 
 /// Sorts the inputs using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results also only have bitsize bits each.
 pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
@@ -23,7 +23,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     bitsize: usize,
 ) -> IoResult<Vec<FieldShare<F>>> {
     let m = inputs.len();
-    if m.ilog2() + !m.is_power_of_two() as u32 > SortRing::MAX as u32 {
+    if m.ilog2() + !m.is_power_of_two() as u32 > PermRing::MAX as u32 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "Permutation size is too small",
@@ -45,7 +45,7 @@ fn gen_perm<F: PrimeField, N: Rep3Network>(
     inputs: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
     bitsize: usize,
-) -> IoResult<Vec<Rep3RingShare<SortRing>>> {
+) -> IoResult<Vec<Rep3RingShare<PermRing>>> {
     let mask = (BigUint::one() << bitsize) - BigUint::one();
 
     // Decompose
@@ -77,21 +77,21 @@ fn inject_bit<N: Rep3Network>(
     inputs: &[Rep3RingShare<u64>],
     io_context: &mut IoContext<N>,
     bit: usize,
-) -> IoResult<Vec<Rep3RingShare<SortRing>>> {
+) -> IoResult<Vec<Rep3RingShare<PermRing>>> {
     let len = inputs.len();
     let mut bits = Vec::with_capacity(len);
     for inp in inputs {
-        let a = inp.a.get_bit(bit).0 as SortRing;
-        let b = inp.b.get_bit(bit).0 as SortRing;
+        let a = inp.a.get_bit(bit).0 as PermRing;
+        let b = inp.b.get_bit(bit).0 as PermRing;
         bits.push(Rep3RingShare::new_ring(a.into(), b.into()));
     }
     conversion::bit_inject_many(&bits, io_context)
 }
 
 fn gen_bit_perm<N: Rep3Network>(
-    bits: Vec<Rep3RingShare<SortRing>>,
+    bits: Vec<Rep3RingShare<PermRing>>,
     io_context: &mut IoContext<N>,
-) -> IoResult<Vec<Rep3RingShare<SortRing>>> {
+) -> IoResult<Vec<Rep3RingShare<PermRing>>> {
     let len = bits.len();
     let mut f0 = Vec::with_capacity(len);
     let mut f1 = Vec::with_capacity(len);
@@ -124,4 +124,24 @@ fn gen_bit_perm<N: Rep3Network>(
         .collect();
 
     Ok(perm)
+}
+
+fn compose<N: Rep3Network>(
+    sigma: Vec<Rep3RingShare<PermRing>>,
+    pi: Vec<Rep3RingShare<PermRing>>,
+    io_context: &mut IoContext<N>,
+) -> Vec<Rep3RingShare<PermRing>> {
+    let len = sigma.len();
+    debug_assert_eq!(len, pi.len());
+
+    let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
+    todo!()
+}
+
+fn shuffle<T: IntRing2k, N: Rep3Network>(
+    pi: Vec<Rep3RingShare<PermRing>>,
+    input: Vec<Rep3RingShare<T>>,
+    io_context: &mut IoContext<N>,
+) {
+    todo!()
 }

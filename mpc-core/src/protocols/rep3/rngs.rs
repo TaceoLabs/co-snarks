@@ -8,7 +8,9 @@ use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use fancy_garbling::WireMod2;
 use num_bigint::BigUint;
-use rand::{distributions::Standard, prelude::Distribution, Rng, RngCore, SeedableRng};
+use rand::{
+    distributions::Standard, prelude::Distribution, seq::SliceRandom, Rng, RngCore, SeedableRng,
+};
 use rayon::prelude::*;
 
 #[derive(Debug)]
@@ -229,6 +231,15 @@ impl Rep3Rand {
         let seed1 = self.rng1.gen();
         let seed2 = self.rng2.gen();
         (seed1, seed2)
+    }
+
+    // Generate a random shared permutation of size `limit`
+    pub(crate) fn gen_perm<T: Clone>(&mut self, input: Vec<T>) -> (Vec<T>, Vec<T>) {
+        let mut a = input.to_owned();
+        let mut b = input;
+        a.shuffle(&mut self.rng1);
+        b.shuffle(&mut self.rng2);
+        (a, b)
     }
 }
 
