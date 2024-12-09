@@ -224,8 +224,13 @@ impl MpcNetworkHandler {
     pub async fn get_byte_channels(
         &self,
     ) -> std::io::Result<HashMap<usize, BytesChannel<RecvStream, SendStream>>> {
-        let mut codec = LengthDelimitedCodec::new();
-        codec.set_max_frame_length(1_000_000_000);
+        // set max frame length to 1Tb and length_field_length to 5 bytes
+        const NUM_BYTES: usize = 5;
+        let codec = LengthDelimitedCodec::builder()
+            .length_field_type::<u64>() // u64 because this is the type the length is decoded into, and u32 doesnt fit 5 bytes
+            .length_field_length(NUM_BYTES)
+            .max_frame_length(1usize << (NUM_BYTES * 8))
+            .new_codec();
         self.get_custom_channels(codec).await
     }
 
