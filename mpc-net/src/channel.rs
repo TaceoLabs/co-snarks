@@ -188,13 +188,16 @@ where
         });
         tokio::spawn(async move {
             while let Some(write_job) = write_recv.recv().await {
-                let write_result = write.send(write_job.data).await;
-                // we don't really care if the receiver for a write job is gone, as this is a common case
-                // therefore we only emit a trace message
-                match write_job.ret.send(write_result) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        tracing::trace!("Debug: Write Job finished but receiver is gone!");
+                match write.send(write_job.data).await {
+                    Ok(_) => {
+                        // we don't really care if the receiver for a write job is gone, as this is a common case
+                        // therefore we only emit a trace message
+                        if write_job.ret.send(Ok(())).is_err() {
+                            tracing::trace!("Debug: Write Job finished but receiver is gone!");
+                        }
+                    }
+                    Err(err) => {
+                        tracing::error!("Write job failed: {err}");
                     }
                 }
             }
