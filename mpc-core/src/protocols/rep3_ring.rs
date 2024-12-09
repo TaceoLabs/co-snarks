@@ -10,6 +10,7 @@ pub mod binary;
 pub mod casts;
 pub mod conversion;
 mod detail;
+pub mod gadgets;
 pub mod ring;
 pub mod yao;
 
