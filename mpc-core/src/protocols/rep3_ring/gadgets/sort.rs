@@ -63,16 +63,16 @@ fn gen_perm<F: PrimeField, N: Rep3Network>(
     }
 
     let bit_0 = inject_bit(&bits, io_context, 0)?;
-    let perm = gen_bit_perm(bit_0, io_context)?;
+    let mut perm = gen_bit_perm(bit_0, io_context)?;
 
     for i in 1..bitsize {
-        todo!("apply inverse perm");
+        // todo!("apply inverse perm");
         let bit_i = inject_bit(&bits, io_context, i)?;
         let perm_i = gen_bit_perm(bit_i, io_context)?;
-        todo!("compose perms")
+        perm = compose(perm, perm_i, io_context)?;
     }
 
-    todo!()
+    Ok(perm)
 }
 
 fn inject_bit<N: Rep3Network>(
@@ -136,6 +136,7 @@ fn compose<N: Rep3Network>(
     let len = sigma.len();
     debug_assert_eq!(len, phi.len());
 
+    // TODO combine shuffle with reveal
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
     let (perm_a, perm_b) = io_context.rngs.rand.random_perm(unshuffled);
     let perm: Vec<_> = perm_a
