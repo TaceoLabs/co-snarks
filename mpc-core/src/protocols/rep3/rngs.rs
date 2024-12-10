@@ -210,6 +210,16 @@ impl Rep3Rand {
         val & &mask
     }
 
+    /// Generate a random field_element from rng1
+    pub fn random_field_element_rng1<F: PrimeField>(&mut self) -> F {
+        F::rand(&mut self.rng1)
+    }
+
+    /// Generate a random field_element from rng2
+    pub fn random_field_element_rng2<F: PrimeField>(&mut self) -> F {
+        F::rand(&mut self.rng2)
+    }
+
     /// Generate a random `T` from rng1
     pub fn random_element_rng1<T>(&mut self) -> T
     where
