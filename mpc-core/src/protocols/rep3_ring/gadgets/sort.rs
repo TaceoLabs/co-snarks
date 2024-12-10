@@ -263,3 +263,130 @@ where
     };
     Ok(result)
 }
+
+fn unshuffle<T: IntRing2k, N: Rep3Network>(
+    pi: Vec<Rep3RingShare<PermRing>>,
+    input: Vec<Rep3RingShare<T>>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let len = pi.len();
+    debug_assert_eq!(len, input.len());
+    let result = match io_context.id {
+        rep3::id::PartyID::ID0 => {
+            // has p1, p3
+            let mut alpha_3 = Vec::with_capacity(len);
+            for _ in 0..len {
+                let (_, alpha_3_) = io_context.random_elements::<RingElement<T>>();
+                alpha_3.push(alpha_3_);
+            }
+            let gamma: Vec<RingElement<T>> = io_context.network.recv_many(PartyID::ID1)?;
+            // first shuffle
+            let mut shuffled_3 = vec![RingElement::zero(); len];
+            for (pi, (alpha, gamma)) in pi.iter().zip(alpha_3.iter().zip(gamma)) {
+                let pi_3 = pi.b.0 as usize;
+                shuffled_3[pi_3] = gamma + alpha;
+            }
+            // second shuffle
+            let mut beta_1_prime = alpha_3;
+            for (src, pi) in shuffled_3.into_iter().zip(pi) {
+                let pi_1 = pi.a.0 as usize;
+                beta_1_prime[pi_1] = src;
+            }
+
+            // Opt Reshare
+            let mut result = Vec::with_capacity(len);
+            let mut rand = Vec::with_capacity(len);
+            for beta in beta_1_prime {
+                let b = io_context.rngs.rand.random_element_rng2::<RingElement<T>>();
+                rand.push(beta - b);
+                result.push(Rep3RingShare::new_ring(RingElement::zero(), b));
+            }
+            io_context.network.send_next_many(&rand)?;
+            let rcv: Vec<RingElement<T>> = io_context.network.recv_many(PartyID::ID1)?;
+            for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
+                res.a = r1 + r2;
+            }
+            result
+        }
+        rep3::id::PartyID::ID1 => {
+            // has p2, p1
+            let mut alpha_2 = Vec::with_capacity(len);
+            let mut alpha_1 = Vec::with_capacity(len);
+            for _ in 0..len {
+                let (alpha_2_, alpha_1_) = io_context.random_elements::<RingElement<T>>();
+                alpha_2.push(alpha_2_);
+                alpha_1.push(alpha_1_);
+            }
+            // first shuffle
+            let beta_2 = alpha_1;
+            let mut shuffled_3 = vec![RingElement::zero(); len];
+            for (pi, (alpha, beta_2)) in pi.iter().zip(alpha_2.into_iter().zip(beta_2.iter())) {
+                let pi_2 = pi.a.0 as usize;
+                shuffled_3[pi_2] = alpha + beta_2;
+            }
+            io_context.network.send_many(PartyID::ID0, &shuffled_3)?;
+            let delta = io_context.network.recv_many(PartyID::ID2)?;
+            // second shuffle
+            let mut beta_2_prime = beta_2;
+            for (src, pi) in delta.into_iter().zip(pi) {
+                let pi_1 = pi.b.0 as usize;
+                beta_2_prime[pi_1] = src;
+            }
+
+            // Opt Reshare
+            let mut result = Vec::with_capacity(len);
+            let mut rand = Vec::with_capacity(len);
+            for beta in beta_2_prime {
+                let a = io_context.rngs.rand.random_element_rng1::<RingElement<T>>();
+                rand.push(beta - a);
+                result.push(Rep3RingShare::new_ring(a, RingElement::zero()));
+            }
+            io_context.network.send_many(PartyID::ID0, &rand)?;
+            let rcv: Vec<RingElement<T>> = io_context.network.recv_prev_many()?;
+            for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
+                res.b = r1 + r2;
+            }
+            result
+        }
+        rep3::id::PartyID::ID2 => {
+            // has p3, p2
+            let mut alpha_3 = Vec::with_capacity(len);
+            let mut alpha_2 = Vec::with_capacity(len);
+            let mut beta_3 = Vec::with_capacity(len);
+            for _ in 0..len {
+                let (alpha_3_, alpha_2_) = io_context.random_elements::<RingElement<T>>();
+                alpha_3.push(alpha_3_);
+                alpha_2.push(alpha_2_);
+                beta_3.push(alpha_3_ + alpha_2_);
+            }
+            // first shuffle
+            let mut shuffled_3 = vec![RingElement::zero(); len];
+            for (pi, (alpha, beta_3)) in pi.iter().zip(alpha_2.iter().zip(beta_3)) {
+                let pi_2 = pi.b.0 as usize;
+                shuffled_3[pi_2] = beta_3 - alpha;
+            }
+            // second shuffle
+            let mut shuffled_2 = alpha_2;
+            for (src, (pi, alpha)) in shuffled_3.into_iter().zip(pi.iter().zip(alpha_3)) {
+                let pi_3 = pi.a.0 as usize;
+                shuffled_2[pi_3] = src - alpha;
+            }
+            io_context.network.send_many(PartyID::ID1, &shuffled_2)?;
+
+            // Opt Reshare
+            let mut result = Vec::with_capacity(len);
+            for _ in 0..len {
+                let (a, b) = io_context.random_elements::<RingElement<T>>();
+                result.push(Rep3RingShare::new_ring(a, b));
+            }
+            result
+        }
+    };
+    Ok(result)
+
+    // des[i] = src[p[i]]
+    // des[p[i]] = src[i]
+}
