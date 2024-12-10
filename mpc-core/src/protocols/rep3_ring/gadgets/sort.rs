@@ -136,6 +136,7 @@ fn apply_inv<N: Rep3Network>(
     let len = rho.len();
     debug_assert_eq!(len, rho.len());
 
+    // TODO combine shuffle with reveal
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
     let (perm_a, perm_b) = io_context.rngs.rand.random_perm(unshuffled);
     let perm: Vec<_> = perm_a
