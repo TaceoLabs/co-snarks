@@ -1,3 +1,4 @@
+use crate::protocols::rep3::id::PartyID;
 use crate::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use crate::protocols::rep3_ring::ring::ring_impl::RingElement;
 use crate::protocols::rep3_ring::{arithmetic, conversion};
@@ -10,7 +11,7 @@ use crate::protocols::{
     },
     rep3_ring::Rep3RingShare,
 };
-use ark_ff::{One, PrimeField};
+use ark_ff::{One, PrimeField, Zero};
 use num_bigint::BigUint;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
@@ -149,7 +150,7 @@ where
 {
     let len = pi.len();
     debug_assert_eq!(len, input.len());
-    match io_context.id {
+    let result = match io_context.id {
         rep3::id::PartyID::ID0 => {
             // has p1, p3
             let mut alpha_1 = Vec::with_capacity(len);
@@ -174,7 +175,14 @@ where
                 *des = shuffled_1[pi_3] - alpha;
             }
             io_context.network.send_next_many(&shuffled_3)?;
-            todo!("Optreshare")
+
+            // Opt Reshare
+            let mut result = Vec::with_capacity(len);
+            for _ in 0..len {
+                let (a, b) = io_context.random_elements::<RingElement<T>>();
+                result.push(Rep3RingShare::new_ring(a, b));
+            }
+            result
         }
         rep3::id::PartyID::ID1 => {
             // has p2, p1
@@ -200,7 +208,21 @@ where
                 let pi_2 = pi.a.0 as usize;
                 *des = delta[pi_2];
             }
-            todo!("Optreshare")
+
+            // Opt Reshare
+            let mut result = Vec::with_capacity(len);
+            let mut rand = Vec::with_capacity(len);
+            for beta in beta_2_prime {
+                let b = io_context.rngs.rand.random_element_rng2::<RingElement<T>>();
+                rand.push(beta - b);
+                result.push(Rep3RingShare::new_ring(RingElement::zero(), b));
+            }
+            io_context.network.send_next_many(&rand)?;
+            let rcv: Vec<RingElement<T>> = io_context.network.recv_many(PartyID::ID2)?;
+            for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
+                res.a = r1 + r2;
+            }
+            result
         }
         rep3::id::PartyID::ID2 => {
             // has p3, p2
@@ -222,10 +244,22 @@ where
                 let pi_2 = pi.b.0 as usize;
                 *des = shuffled_1[pi_2];
             }
-            todo!("Optreshare")
-        }
-    }
 
-    todo!()
-    // des[i] = src[pi[i]];
+            // Opt Reshare
+            let mut result = Vec::with_capacity(len);
+            let mut rand = Vec::with_capacity(len);
+            for beta in beta_3_prime {
+                let a = io_context.rngs.rand.random_element_rng1::<RingElement<T>>();
+                rand.push(beta - a);
+                result.push(Rep3RingShare::new_ring(a, RingElement::zero()));
+            }
+            io_context.network.send_many(PartyID::ID1, &rand)?;
+            let rcv: Vec<RingElement<T>> = io_context.network.recv_prev_many()?;
+            for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
+                res.b = r1 + r2;
+            }
+            result
+        }
+    };
+    Ok(result)
 }
