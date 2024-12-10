@@ -126,7 +126,6 @@ where
     let len = rho.len();
     debug_assert_eq!(len, rho.len());
 
-    // TODO combine shuffle with reveal
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
     let (perm_a, perm_b) = io_context.rngs.rand.random_perm(unshuffled);
     let perm: Vec<_> = perm_a
@@ -134,9 +133,8 @@ where
         .zip(perm_b)
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
-    let shuffled = shuffle::<PermRing, _>(&perm, rho, io_context)?;
-    let opened = arithmetic::open_vec(&shuffled, io_context)?;
 
+    let opened = shuffle_reveal::<PermRing, _>(&perm, rho, io_context)?;
     let bits_shuffled = shuffle(&perm, bits, io_context)?;
     let mut result = vec![Rep3RingShare::zero_share(); len];
     for (p, b) in opened.into_iter().zip(bits_shuffled) {
@@ -153,7 +151,6 @@ fn apply_inv_field<F: PrimeField, N: Rep3Network>(
     let len = rho.len();
     debug_assert_eq!(len, rho.len());
 
-    // TODO combine shuffle with reveal
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
     let (perm_a, perm_b) = io_context.rngs.rand.random_perm(unshuffled);
     let perm: Vec<_> = perm_a
@@ -161,9 +158,8 @@ fn apply_inv_field<F: PrimeField, N: Rep3Network>(
         .zip(perm_b)
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
-    let shuffled = shuffle(&perm, rho, io_context)?;
-    let opened = arithmetic::open_vec(&shuffled, io_context)?;
 
+    let opened = shuffle_reveal(&perm, rho, io_context)?;
     let bits_shuffled = shuffle_field(&perm, bits, io_context)?;
     let mut result = vec![Rep3PrimeFieldShare::zero_share(); len];
     for (p, b) in opened.into_iter().zip(bits_shuffled) {
@@ -180,7 +176,6 @@ fn compose<N: Rep3Network>(
     let len = sigma.len();
     debug_assert_eq!(len, phi.len());
 
-    // TODO combine shuffle with reveal
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
     let (perm_a, perm_b) = io_context.rngs.rand.random_perm(unshuffled);
     let perm: Vec<_> = perm_a
@@ -188,8 +183,8 @@ fn compose<N: Rep3Network>(
         .zip(perm_b)
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
-    let shuffled = shuffle(&perm, &sigma, io_context)?;
-    let opened = arithmetic::open_vec(&shuffled, io_context)?;
+
+    let opened = shuffle_reveal(&perm, &sigma, io_context)?;
     let mut shuffled = Vec::with_capacity(len);
     for p in opened {
         shuffled.push(phi[p.0 as usize - 1]);
