@@ -440,6 +440,71 @@ fn shuffle_field<F: PrimeField, N: Rep3Network>(
     Ok(result)
 }
 
+fn shuffle_reveal<T: IntRing2k, N: Rep3Network>(
+    pi: &[Rep3RingShare<PermRing>],
+    input: &[Rep3RingShare<T>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<RingElement<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let len = pi.len();
+    debug_assert_eq!(len, input.len());
+    let result = match io_context.id {
+        PartyID::ID0 => {
+            // has p1, p3
+            let mut alpha_1 = Vec::with_capacity(len);
+            let mut beta_1 = Vec::with_capacity(len);
+            for a in input {
+                let alpha_1_ = io_context.rngs.rand.random_element_rng1::<RingElement<T>>();
+                alpha_1.push(alpha_1_);
+                beta_1.push(a.a + a.b);
+            }
+            // shuffle
+            let mut shuffled = Vec::with_capacity(len);
+            for (pi, alpha) in pi.iter().zip(alpha_1.iter()) {
+                let pi_1 = pi.a.0 as usize;
+                shuffled.push(beta_1[pi_1] - alpha);
+            }
+            io_context.network.send_many(PartyID::ID2, &shuffled)?;
+            io_context.network.recv_many(PartyID::ID2)?
+        }
+        PartyID::ID1 => {
+            // has p2, p1
+            let mut alpha_1 = Vec::with_capacity(len);
+            let mut beta_2 = Vec::with_capacity(len);
+            for a in input {
+                let alpha_1_ = io_context.rngs.rand.random_element_rng2::<RingElement<T>>();
+                alpha_1.push(alpha_1_);
+                beta_2.push(a.a);
+            }
+            // shuffle
+            let mut shuffled = Vec::with_capacity(len);
+            for (pi, alpha) in pi.iter().zip(alpha_1) {
+                let pi_1 = pi.b.0 as usize;
+                shuffled.push(beta_2[pi_1] + alpha);
+            }
+            io_context.network.send_next_many(&shuffled)?;
+            io_context.network.recv_many(PartyID::ID2)?
+        }
+        PartyID::ID2 => {
+            let delta: Vec<RingElement<T>> = io_context.network.recv_many(PartyID::ID0)?;
+            let gamma: Vec<RingElement<T>> = io_context.network.recv_prev_many()?;
+            // shuffle
+            let mut shuffled = Vec::with_capacity(len);
+            for p in pi {
+                let pi_2 = p.b.0 as usize;
+                let index = pi[pi_2].a.0 as usize;
+                shuffled.push(gamma[index] + delta[index]);
+            }
+            io_context.network.send_many(PartyID::ID0, &shuffled)?;
+            io_context.network.send_many(PartyID::ID1, &shuffled)?;
+            shuffled
+        }
+    };
+    Ok(result)
+}
+
 fn unshuffle<T: IntRing2k, N: Rep3Network>(
     pi: &[Rep3RingShare<PermRing>],
 
