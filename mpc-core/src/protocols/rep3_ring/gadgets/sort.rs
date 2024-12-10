@@ -1,3 +1,7 @@
+//! Sort
+//!
+//! This module contains some oblivious sorting algorithms for the Rep3 protocol.
+
 use crate::protocols::rep3::id::PartyID;
 use crate::protocols::rep3::Rep3PrimeFieldShare;
 use crate::protocols::rep3_ring::ring::int_ring::IntRing2k;
@@ -143,7 +147,7 @@ where
     let shuffled = shuffle::<PermRing, _>(&perm, rho, io_context)?;
     let opened = arithmetic::open_vec(&shuffled, io_context)?;
 
-    let bits_shuffled = shuffle(&perm, &bits, io_context)?;
+    let bits_shuffled = shuffle(&perm, bits, io_context)?;
     let mut result = vec![Rep3RingShare::zero_share(); len];
     for (p, b) in opened.into_iter().zip(bits_shuffled) {
         result[p.0 as usize] = b;
@@ -170,7 +174,7 @@ fn apply_inv_field<F: PrimeField, N: Rep3Network>(
     let shuffled = shuffle(&perm, rho, io_context)?;
     let opened = arithmetic::open_vec(&shuffled, io_context)?;
 
-    let bits_shuffled = shuffle_field(&perm, &bits, io_context)?;
+    let bits_shuffled = shuffle_field(&perm, bits, io_context)?;
     let mut result = vec![Rep3PrimeFieldShare::zero_share(); len];
     for (p, b) in opened.into_iter().zip(bits_shuffled) {
         result[p.0 as usize] = b;
