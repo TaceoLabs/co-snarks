@@ -130,18 +130,30 @@ fn gen_bit_perm<N: Rep3Network>(
 
 fn compose<N: Rep3Network>(
     sigma: Vec<Rep3RingShare<PermRing>>,
-    pi: Vec<Rep3RingShare<PermRing>>,
+    phi: Vec<Rep3RingShare<PermRing>>,
     io_context: &mut IoContext<N>,
-) -> Vec<Rep3RingShare<PermRing>> {
+) -> IoResult<Vec<Rep3RingShare<PermRing>>> {
     let len = sigma.len();
-    debug_assert_eq!(len, pi.len());
+    debug_assert_eq!(len, phi.len());
 
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
-    todo!()
+    let (perm_a, perm_b) = io_context.rngs.rand.random_perm(unshuffled);
+    let perm: Vec<_> = perm_a
+        .into_iter()
+        .zip(perm_b)
+        .map(|(a, b)| Rep3RingShare::new(a, b))
+        .collect();
+    let shuffled = shuffle(&perm, sigma, io_context)?;
+    let opened = arithmetic::open_vec(&shuffled, io_context)?;
+    let mut shuffled = Vec::with_capacity(len);
+    for p in opened {
+        shuffled.push(phi[p.0 as usize]);
+    }
+    unshuffle(&perm, shuffled, io_context)
 }
 
 fn shuffle<T: IntRing2k, N: Rep3Network>(
-    pi: Vec<Rep3RingShare<PermRing>>,
+    pi: &[Rep3RingShare<PermRing>],
     input: Vec<Rep3RingShare<T>>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3RingShare<T>>>
@@ -156,11 +168,11 @@ where
             let mut alpha_1 = Vec::with_capacity(len);
             let mut alpha_3 = Vec::with_capacity(len);
             let mut beta_1 = Vec::with_capacity(len);
-            for _ in 0..len {
+            for a in input {
                 let (alpha_1_, alpha_3_) = io_context.random_elements::<RingElement<T>>();
                 alpha_1.push(alpha_1_);
                 alpha_3.push(alpha_3_);
-                beta_1.push(alpha_1_ + alpha_3_);
+                beta_1.push(a.a + a.b);
             }
             // first shuffle
             let mut shuffled_1 = Vec::with_capacity(len);
@@ -186,15 +198,14 @@ where
         }
         rep3::id::PartyID::ID1 => {
             // has p2, p1
-            let mut alpha_2 = Vec::with_capacity(len);
             let mut alpha_1 = Vec::with_capacity(len);
-            for _ in 0..len {
-                let (alpha_2_, alpha_1_) = io_context.random_elements::<RingElement<T>>();
-                alpha_2.push(alpha_2_);
+            let mut beta_2 = Vec::with_capacity(len);
+            for a in input {
+                let alpha_1_ = io_context.rngs.rand.random_element_rng2::<RingElement<T>>();
                 alpha_1.push(alpha_1_);
+                beta_2.push(a.a);
             }
             // first shuffle
-            let beta_2 = alpha_2;
             let mut shuffled_1 = Vec::with_capacity(len);
             for (pi, alpha) in pi.iter().zip(alpha_1) {
                 let pi_1 = pi.b.0 as usize;
@@ -228,7 +239,7 @@ where
             // has p3, p2
             let mut alpha_3 = Vec::with_capacity(len);
             for _ in 0..len {
-                let (alpha_3_, _) = io_context.random_elements::<RingElement<T>>();
+                let alpha_3_ = io_context.rngs.rand.random_element_rng1::<RingElement<T>>();
                 alpha_3.push(alpha_3_);
             }
             let gamma: Vec<RingElement<T>> = io_context.network.recv_prev_many()?;
@@ -265,7 +276,7 @@ where
 }
 
 fn unshuffle<T: IntRing2k, N: Rep3Network>(
-    pi: Vec<Rep3RingShare<PermRing>>,
+    pi: &[Rep3RingShare<PermRing>],
     input: Vec<Rep3RingShare<T>>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3RingShare<T>>>
@@ -279,7 +290,7 @@ where
             // has p1, p3
             let mut alpha_3 = Vec::with_capacity(len);
             for _ in 0..len {
-                let (_, alpha_3_) = io_context.random_elements::<RingElement<T>>();
+                let alpha_3_ = io_context.rngs.rand.random_element_rng2::<RingElement<T>>();
                 alpha_3.push(alpha_3_);
             }
             let gamma: Vec<RingElement<T>> = io_context.network.recv_many(PartyID::ID1)?;
@@ -314,14 +325,13 @@ where
         rep3::id::PartyID::ID1 => {
             // has p2, p1
             let mut alpha_2 = Vec::with_capacity(len);
-            let mut alpha_1 = Vec::with_capacity(len);
-            for _ in 0..len {
-                let (alpha_2_, alpha_1_) = io_context.random_elements::<RingElement<T>>();
+            let mut beta_2 = Vec::with_capacity(len);
+            for a in input {
+                let alpha_2_ = io_context.rngs.rand.random_element_rng1::<RingElement<T>>();
                 alpha_2.push(alpha_2_);
-                alpha_1.push(alpha_1_);
+                beta_2.push(a.b);
             }
             // first shuffle
-            let beta_2 = alpha_1;
             let mut shuffled_3 = vec![RingElement::zero(); len];
             for (pi, (alpha, beta_2)) in pi.iter().zip(alpha_2.into_iter().zip(beta_2.iter())) {
                 let pi_2 = pi.a.0 as usize;
@@ -356,11 +366,11 @@ where
             let mut alpha_3 = Vec::with_capacity(len);
             let mut alpha_2 = Vec::with_capacity(len);
             let mut beta_3 = Vec::with_capacity(len);
-            for _ in 0..len {
+            for a in input {
                 let (alpha_3_, alpha_2_) = io_context.random_elements::<RingElement<T>>();
                 alpha_3.push(alpha_3_);
                 alpha_2.push(alpha_2_);
-                beta_3.push(alpha_3_ + alpha_2_);
+                beta_3.push(a.a + a.b);
             }
             // first shuffle
             let mut shuffled_3 = vec![RingElement::zero(); len];
