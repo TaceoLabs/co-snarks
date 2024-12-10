@@ -3,7 +3,7 @@
 //! This module contains some oblivious sorting algorithms for the Rep3 protocol.
 
 use crate::protocols::rep3::id::PartyID;
-use crate::protocols::rep3::Rep3PrimeFieldShare;
+use crate::protocols::rep3::{Rep3BigUintShare, Rep3PrimeFieldShare};
 use crate::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use crate::protocols::rep3_ring::ring::ring_impl::RingElement;
 use crate::protocols::rep3_ring::{arithmetic, conversion};
@@ -29,13 +29,6 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
     bitsize: usize,
 ) -> IoResult<Vec<FieldShare<F>>> {
-    if bitsize > 64 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Bit size is larger than 64",
-        ));
-    }
-
     let perm = gen_perm(inputs, io_context, bitsize)?;
     apply_inv_field(&perm, inputs, io_context)
 }
@@ -48,15 +41,12 @@ fn gen_perm<F: PrimeField, N: Rep3Network>(
     let mask = (BigUint::one() << bitsize) - BigUint::one();
 
     // Decompose
-    // TODO: This step could be optimized
+    // TODO: This step could be optimized (I: Pack the a2b's, II: only reconstruct bitsize bits)
     let mut bits = Vec::with_capacity(bitsize);
     for inp in inputs.iter().cloned() {
         let mut binary = rep3::conversion::a2b_selector(inp, io_context)?;
         binary &= &mask;
-        bits.push(Rep3RingShare::<u64>::new(
-            u64::cast_from_biguint(&binary.a),
-            u64::cast_from_biguint(&binary.b),
-        ));
+        bits.push(binary)
     }
 
     let bit_0 = inject_bit(&bits, io_context, 0)?;
@@ -72,16 +62,16 @@ fn gen_perm<F: PrimeField, N: Rep3Network>(
     Ok(perm)
 }
 
-fn inject_bit<N: Rep3Network>(
-    inputs: &[Rep3RingShare<u64>],
+fn inject_bit<F: PrimeField, N: Rep3Network>(
+    inputs: &[Rep3BigUintShare<F>],
     io_context: &mut IoContext<N>,
     bit: usize,
 ) -> IoResult<Vec<Rep3RingShare<PermRing>>> {
     let len = inputs.len();
     let mut bits = Vec::with_capacity(len);
     for inp in inputs {
-        let a = inp.a.get_bit(bit).0 as PermRing;
-        let b = inp.b.get_bit(bit).0 as PermRing;
+        let a = inp.a.bit(bit as u64) as PermRing;
+        let b = inp.b.bit(bit as u64) as PermRing;
         bits.push(Rep3RingShare::new_ring(a.into(), b.into()));
     }
     conversion::bit_inject_many(&bits, io_context)
