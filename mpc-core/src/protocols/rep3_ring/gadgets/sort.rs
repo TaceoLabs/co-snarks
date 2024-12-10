@@ -66,8 +66,8 @@ fn gen_perm<F: PrimeField, N: Rep3Network>(
     let mut perm = gen_bit_perm(bit_0, io_context)?;
 
     for i in 1..bitsize {
-        // todo!("apply inverse perm");
         let bit_i = inject_bit(&bits, io_context, i)?;
+        let bit_i = apply_inv(&perm, bit_i, io_context)?;
         let perm_i = gen_bit_perm(bit_i, io_context)?;
         perm = compose(perm, perm_i, io_context)?;
     }
@@ -128,6 +128,32 @@ fn gen_bit_perm<N: Rep3Network>(
     Ok(perm)
 }
 
+fn apply_inv<N: Rep3Network>(
+    rho: &[Rep3RingShare<PermRing>],
+    bits: Vec<Rep3RingShare<PermRing>>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<PermRing>>> {
+    let len = rho.len();
+    debug_assert_eq!(len, rho.len());
+
+    let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
+    let (perm_a, perm_b) = io_context.rngs.rand.random_perm(unshuffled);
+    let perm: Vec<_> = perm_a
+        .into_iter()
+        .zip(perm_b)
+        .map(|(a, b)| Rep3RingShare::new(a, b))
+        .collect();
+    let shuffled = shuffle(&perm, rho, io_context)?;
+    let opened = arithmetic::open_vec(&shuffled, io_context)?;
+
+    let bits_shuffled = shuffle(&perm, &bits, io_context)?;
+    let mut result = vec![Rep3RingShare::zero_share(); len];
+    for (p, b) in opened.into_iter().zip(bits_shuffled) {
+        result[p.0 as usize] = b;
+    }
+    Ok(result)
+}
+
 fn compose<N: Rep3Network>(
     sigma: Vec<Rep3RingShare<PermRing>>,
     phi: Vec<Rep3RingShare<PermRing>>,
@@ -144,18 +170,18 @@ fn compose<N: Rep3Network>(
         .zip(perm_b)
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
-    let shuffled = shuffle(&perm, sigma, io_context)?;
+    let shuffled = shuffle(&perm, &sigma, io_context)?;
     let opened = arithmetic::open_vec(&shuffled, io_context)?;
     let mut shuffled = Vec::with_capacity(len);
     for p in opened {
         shuffled.push(phi[p.0 as usize]);
     }
-    unshuffle(&perm, shuffled, io_context)
+    unshuffle(&perm, &shuffled, io_context)
 }
 
 fn shuffle<T: IntRing2k, N: Rep3Network>(
     pi: &[Rep3RingShare<PermRing>],
-    input: Vec<Rep3RingShare<T>>,
+    input: &[Rep3RingShare<T>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3RingShare<T>>>
 where
@@ -278,7 +304,8 @@ where
 
 fn unshuffle<T: IntRing2k, N: Rep3Network>(
     pi: &[Rep3RingShare<PermRing>],
-    input: Vec<Rep3RingShare<T>>,
+
+    input: &[Rep3RingShare<T>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3RingShare<T>>>
 where
