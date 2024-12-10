@@ -16,6 +16,7 @@ mod field_share {
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
     use mpc_core::protocols::rep3::{self, arithmetic, network::IoContext};
+    use mpc_core::protocols::rep3_ring;
     use num_bigint::BigUint;
     use rand::thread_rng;
     use rand::Rng;
@@ -1381,6 +1382,52 @@ mod field_share {
                 let decomposed =
                     gadgets::sort::batcher_odd_even_merge_sort_yao(&x, &mut rep3, CHUNK_SIZE)
                         .unwrap();
+                tx.send(decomposed)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_radix_sort() {
+        const VEC_SIZE: usize = 10;
+        const CHUNK_SIZE: usize = 14;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect_vec();
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+
+        let mut should_result = Vec::with_capacity(VEC_SIZE);
+        let mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
+        for x in x.into_iter() {
+            let mut x: BigUint = x.into();
+            x &= &mask;
+            should_result.push(ark_bn254::Fr::from(x));
+        }
+        should_result.sort();
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let decomposed =
+                    rep3_ring::gadgets::sort::radix_sort_fields(&x, &mut rep3, CHUNK_SIZE).unwrap();
                 tx.send(decomposed)
             });
         }
