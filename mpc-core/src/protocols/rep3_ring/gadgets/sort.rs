@@ -23,7 +23,7 @@ use rand::prelude::Distribution;
 
 type PermRing = u32;
 
-/// Sorts the inputs using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results also only have bitsize bits each.
+/// Sorts the inputs using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize.
 pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     inputs: &[FieldShare<F>],
     io_context: &mut IoContext<N>,

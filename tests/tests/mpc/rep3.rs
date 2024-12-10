@@ -1405,14 +1405,19 @@ mod field_share {
             .collect_vec();
         let x_shares = rep3::share_field_elements(&x, &mut rng);
 
-        let mut should_result = Vec::with_capacity(VEC_SIZE);
+        // Only sort by the first CHUNK_SIZE bits
+        let mut shortened = Vec::with_capacity(VEC_SIZE);
         let mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
-        for x in x.into_iter() {
+        for (i, x) in x.iter().cloned().enumerate() {
             let mut x: BigUint = x.into();
             x &= &mask;
-            should_result.push(ark_bn254::Fr::from(x));
+            shortened.push((i, ark_bn254::Fr::from(x)));
         }
-        should_result.sort();
+        shortened.sort_by(|a, b| a.1.cmp(&b.1));
+        let mut should_result = Vec::with_capacity(VEC_SIZE);
+        for (i, _) in shortened.into_iter() {
+            should_result.push(x[i]);
+        }
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
