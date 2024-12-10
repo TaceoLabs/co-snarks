@@ -386,7 +386,4 @@ where
         }
     };
     Ok(result)
-
-    // des[i] = src[p[i]]
-    // des[p[i]] = src[i]
 }
