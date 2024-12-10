@@ -150,7 +150,7 @@ where
     let bits_shuffled = shuffle(&perm, bits, io_context)?;
     let mut result = vec![Rep3RingShare::zero_share(); len];
     for (p, b) in opened.into_iter().zip(bits_shuffled) {
-        result[p.0 as usize] = b;
+        result[p.0 as usize - 1] = b;
     }
     Ok(result)
 }
@@ -177,7 +177,7 @@ fn apply_inv_field<F: PrimeField, N: Rep3Network>(
     let bits_shuffled = shuffle_field(&perm, bits, io_context)?;
     let mut result = vec![Rep3PrimeFieldShare::zero_share(); len];
     for (p, b) in opened.into_iter().zip(bits_shuffled) {
-        result[p.0 as usize] = b;
+        result[p.0 as usize - 1] = b;
     }
     Ok(result)
 }
@@ -202,7 +202,7 @@ fn compose<N: Rep3Network>(
     let opened = arithmetic::open_vec(&shuffled, io_context)?;
     let mut shuffled = Vec::with_capacity(len);
     for p in opened {
-        shuffled.push(phi[p.0 as usize]);
+        shuffled.push(phi[p.0 as usize - 1]);
     }
     unshuffle(&perm, &shuffled, io_context)
 }
