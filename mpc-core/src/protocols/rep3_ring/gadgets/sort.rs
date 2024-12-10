@@ -12,7 +12,8 @@ use crate::protocols::{
 };
 use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
-use sha3::digest::typenum::bit;
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
 
 type PermRing = u32;
 
@@ -142,6 +143,89 @@ fn shuffle<T: IntRing2k, N: Rep3Network>(
     pi: Vec<Rep3RingShare<PermRing>>,
     input: Vec<Rep3RingShare<T>>,
     io_context: &mut IoContext<N>,
-) {
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let len = pi.len();
+    debug_assert_eq!(len, input.len());
+    match io_context.id {
+        rep3::id::PartyID::ID0 => {
+            // has p1, p3
+            let mut alpha_1 = Vec::with_capacity(len);
+            let mut alpha_3 = Vec::with_capacity(len);
+            let mut beta_1 = Vec::with_capacity(len);
+            for _ in 0..len {
+                let (alpha_1_, alpha_3_) = io_context.random_elements::<RingElement<T>>();
+                alpha_1.push(alpha_1_);
+                alpha_3.push(alpha_3_);
+                beta_1.push(alpha_1_ + alpha_3_);
+            }
+            // first shuffle
+            let mut shuffled_1 = Vec::with_capacity(len);
+            for (pi, alpha) in pi.iter().zip(alpha_1.iter()) {
+                let pi_1 = pi.a.0 as usize;
+                shuffled_1.push(beta_1[pi_1] - alpha);
+            }
+            // second shuffle
+            let mut shuffled_3 = alpha_1;
+            for (des, (pi, alpha)) in shuffled_3.iter_mut().zip(pi.iter().zip(alpha_3)) {
+                let pi_3 = pi.b.0 as usize;
+                *des = shuffled_1[pi_3] - alpha;
+            }
+            io_context.network.send_next_many(&shuffled_3)?;
+            todo!("Optreshare")
+        }
+        rep3::id::PartyID::ID1 => {
+            // has p2, p1
+            let mut alpha_2 = Vec::with_capacity(len);
+            let mut alpha_1 = Vec::with_capacity(len);
+            for _ in 0..len {
+                let (alpha_2_, alpha_1_) = io_context.random_elements::<RingElement<T>>();
+                alpha_2.push(alpha_2_);
+                alpha_1.push(alpha_1_);
+            }
+            // first shuffle
+            let beta_2 = alpha_2;
+            let mut shuffled_1 = Vec::with_capacity(len);
+            for (pi, alpha) in pi.iter().zip(alpha_1) {
+                let pi_1 = pi.b.0 as usize;
+                shuffled_1.push(beta_2[pi_1] + alpha);
+            }
+            io_context.network.send_next_many(&shuffled_1)?;
+            let delta = io_context.network.recv_prev_many()?;
+            // second shuffle
+            let mut beta_2_prime = beta_2;
+            for (des, pi) in beta_2_prime.iter_mut().zip(pi) {
+                let pi_2 = pi.a.0 as usize;
+                *des = delta[pi_2];
+            }
+            todo!("Optreshare")
+        }
+        rep3::id::PartyID::ID2 => {
+            // has p3, p2
+            let mut alpha_3 = Vec::with_capacity(len);
+            for _ in 0..len {
+                let (alpha_3_, _) = io_context.random_elements::<RingElement<T>>();
+                alpha_3.push(alpha_3_);
+            }
+            let gamma: Vec<RingElement<T>> = io_context.network.recv_prev_many()?;
+            // first shuffle
+            let mut shuffled_1 = Vec::with_capacity(len);
+            for (pi, alpha) in pi.iter().zip(alpha_3.iter()) {
+                let pi_3 = pi.a.0 as usize;
+                shuffled_1.push(gamma[pi_3] + alpha);
+            }
+            // second shuffle
+            let mut beta_3_prime = alpha_3;
+            for (des, pi) in beta_3_prime.iter_mut().zip(pi) {
+                let pi_2 = pi.b.0 as usize;
+                *des = shuffled_1[pi_2];
+            }
+            todo!("Optreshare")
+        }
+    }
+
     todo!()
+    // des[i] = src[pi[i]];
 }
