@@ -24,6 +24,16 @@ use rand::prelude::Distribution;
 // u32 allows to sort 4*10^9 elements. Inputs of this size require 32*4*10^9*2 bytes, i.e., 256 GB of RAM
 type PermRing = u32;
 
+macro_rules! join {
+    ($t1: expr, $t2: expr) => {{
+        std::thread::scope(|s| {
+            let t1 = s.spawn(|| $t1);
+            let t2 = $t2;
+            (t1.join().expect("can join"), t2)
+        })
+    }};
+}
+
 /// Sorts the inputs using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
@@ -42,34 +52,66 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
             "Too many inputs for radix sort. Use a larger PermRing.",
         ));
     }
-    let perm = gen_perm(inputs, io_context, bitsize)?;
-    apply_inv_field(&perm, inputs, io_context)
+    let mut forked_io_context = io_context.fork()?; // TODO maybe at some future point we have a second one as input to the function
+
+    let perm = gen_perm(inputs, bitsize, io_context, &mut forked_io_context)?;
+    apply_inv_field(&perm, inputs, io_context, &mut forked_io_context)
 }
 
 fn gen_perm<F: PrimeField, N: Rep3Network>(
     inputs: &[FieldShare<F>],
-    io_context: &mut IoContext<N>,
     bitsize: usize,
+    io_context0: &mut IoContext<N>,
+    io_context1: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3RingShare<PermRing>>> {
     let mask = (BigUint::one() << bitsize) - BigUint::one();
 
     // Decompose
+    let mut bits = vec![Rep3BigUintShare::zero_share(); inputs.len()];
+    let (split1, split2) = bits.split_at_mut(inputs.len() / 2);
+    let mut result1 = None;
+    let mut result2 = None;
+
     // TODO: This step could be optimized (I: Pack the a2b's, II: only reconstruct bitsize bits)
-    let mut bits = Vec::with_capacity(bitsize);
-    for inp in inputs.iter().cloned() {
-        let mut binary = rep3::conversion::a2b_selector(inp, io_context)?;
-        binary &= &mask;
-        bits.push(binary)
+    join!(
+        for (i, inp) in inputs.iter().take(inputs.len() / 2).enumerate() {
+            let binary = rep3::conversion::a2b_selector(inp.to_owned(), io_context0);
+            if let Err(err) = binary {
+                result1 = Some(err);
+                break;
+            }
+            let mut binary = binary.unwrap();
+            binary &= &mask;
+            split1[i] = binary;
+        },
+        (
+            for (i, inp) in inputs.iter().skip(inputs.len() / 2).enumerate() {
+                let binary = rep3::conversion::a2b_selector(inp.to_owned(), io_context1);
+                if let Err(err) = binary {
+                    result2 = Some(err);
+                    break;
+                }
+                let mut binary = binary.unwrap();
+                binary &= &mask;
+                split2[i] = binary;
+            },
+        )
+    );
+    if let Some(err) = result1 {
+        return Err(err);
+    }
+    if let Some(err) = result2 {
+        return Err(err);
     }
 
-    let bit_0 = inject_bit(&bits, io_context, 0)?;
-    let mut perm = gen_bit_perm(bit_0, io_context)?;
+    let bit_0 = inject_bit(&bits, io_context0, 0)?;
+    let mut perm = gen_bit_perm(bit_0, io_context0)?;
 
     for i in 1..bitsize {
-        let bit_i = inject_bit(&bits, io_context, i)?;
-        let bit_i = apply_inv(&perm, &bit_i, io_context)?;
-        let perm_i = gen_bit_perm(bit_i, io_context)?;
-        perm = compose(perm, perm_i, io_context)?;
+        let bit_i = inject_bit(&bits, io_context0, i)?;
+        let bit_i = apply_inv(&perm, &bit_i, io_context0, io_context1)?;
+        let perm_i = gen_bit_perm(bit_i, io_context0)?;
+        perm = compose(perm, perm_i, io_context0)?;
     }
 
     Ok(perm)
@@ -129,7 +171,8 @@ fn gen_bit_perm<N: Rep3Network>(
 fn apply_inv<T: IntRing2k, N: Rep3Network>(
     rho: &[Rep3RingShare<PermRing>],
     bits: &[Rep3RingShare<T>],
-    io_context: &mut IoContext<N>,
+    io_context0: &mut IoContext<N>,
+    io_context1: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3RingShare<T>>>
 where
     Standard: Distribution<T>,
@@ -138,17 +181,19 @@ where
     debug_assert_eq!(len, rho.len());
 
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
-    let (perm_a, perm_b) = io_context.rngs.rand.random_perm(unshuffled);
+    let (perm_a, perm_b) = io_context0.rngs.rand.random_perm(unshuffled);
     let perm: Vec<_> = perm_a
         .into_iter()
         .zip(perm_b)
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
 
-    let opened = shuffle_reveal::<PermRing, _>(&perm, rho, io_context)?;
-    let bits_shuffled = shuffle(&perm, bits, io_context)?;
+    let (opened, bits_shuffled) = join!(
+        shuffle_reveal::<PermRing, _>(&perm, rho, io_context0),
+        shuffle(&perm, bits, io_context1)
+    );
     let mut result = vec![Rep3RingShare::zero_share(); len];
-    for (p, b) in opened.into_iter().zip(bits_shuffled) {
+    for (p, b) in opened?.into_iter().zip(bits_shuffled?) {
         result[p.0 as usize - 1] = b;
     }
     Ok(result)
@@ -157,23 +202,26 @@ where
 fn apply_inv_field<F: PrimeField, N: Rep3Network>(
     rho: &[Rep3RingShare<PermRing>],
     bits: &[Rep3PrimeFieldShare<F>],
-    io_context: &mut IoContext<N>,
+    io_context0: &mut IoContext<N>,
+    io_context1: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
     let len = rho.len();
     debug_assert_eq!(len, rho.len());
 
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
-    let (perm_a, perm_b) = io_context.rngs.rand.random_perm(unshuffled);
+    let (perm_a, perm_b) = io_context0.rngs.rand.random_perm(unshuffled);
     let perm: Vec<_> = perm_a
         .into_iter()
         .zip(perm_b)
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
 
-    let opened = shuffle_reveal(&perm, rho, io_context)?;
-    let bits_shuffled = shuffle_field(&perm, bits, io_context)?;
+    let (opened, bits_shuffled) = join!(
+        shuffle_reveal(&perm, rho, io_context0),
+        shuffle_field(&perm, bits, io_context1)
+    );
     let mut result = vec![Rep3PrimeFieldShare::zero_share(); len];
-    for (p, b) in opened.into_iter().zip(bits_shuffled) {
+    for (p, b) in opened?.into_iter().zip(bits_shuffled?) {
         result[p.0 as usize - 1] = b;
     }
     Ok(result)
