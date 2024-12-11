@@ -262,8 +262,7 @@ where
                 let pi_1 = pi.b.0 as usize;
                 shuffled_1.push(beta_2[pi_1] + alpha);
             }
-            io_context.network.send_next_many(&shuffled_1)?;
-            let delta = io_context.network.recv_prev_many()?;
+            let delta = io_context.network.reshare_many(&shuffled_1)?;
             // second shuffle
             let mut beta_2_prime = beta_2;
             for (des, pi) in beta_2_prime.iter_mut().zip(pi) {
@@ -382,8 +381,7 @@ fn shuffle_field<F: PrimeField, N: Rep3Network>(
                 let pi_1 = pi.b.0 as usize;
                 shuffled_1.push(beta_2[pi_1] + alpha);
             }
-            io_context.network.send_next_many(&shuffled_1)?;
-            let delta = io_context.network.recv_prev_many()?;
+            let delta = io_context.network.reshare_many(&shuffled_1)?;
             // second shuffle
             let mut beta_2_prime = beta_2;
             for (des, pi) in beta_2_prime.iter_mut().zip(pi) {
