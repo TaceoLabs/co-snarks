@@ -116,13 +116,11 @@ fn gen_bit_perm<N: Rep3Network>(
         s = arithmetic::add(s, *f);
         s1.push(s);
     }
-    let mul1 = arithmetic::mul_vec(&f0, &s0, io_context)?;
-    let mul2 = arithmetic::mul_vec(&f1, &s1, io_context)?;
-    let perm = mul1
-        .into_iter()
-        .zip(mul2)
-        .map(|(a, b)| arithmetic::add(a, b))
-        .collect();
+
+    let mul1 = arithmetic::local_mul_vec(&f0, &s0, &mut io_context.rngs);
+    let mul2 = arithmetic::local_mul_vec(&f1, &s1, &mut io_context.rngs);
+    let perm_a = mul1.into_iter().zip(mul2).map(|(a, b)| a + b).collect();
+    let perm = arithmetic::io_mul_vec(perm_a, io_context)?;
 
     Ok(perm)
 }
