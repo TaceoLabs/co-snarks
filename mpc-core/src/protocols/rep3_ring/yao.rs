@@ -731,7 +731,7 @@ where
 }
 
 /// Divides a vector of ring elements by another.
-pub fn ring_bin_div_many<T: IntRing2k, N: Rep3Network>(
+pub fn ring_div_many<T: IntRing2k, N: Rep3Network>(
     input1: &[Rep3RingShare<T>],
     input2: &[Rep3RingShare<T>],
     io_context: &mut IoContext<N>,
@@ -751,13 +751,13 @@ where
         io_context,
         num_inputs,
         T,
-        GarbledCircuits::bin_div_many,
+        GarbledCircuits::ring_div_many,
         (T::K)
     )
 }
 
 /// Divides a ring element by another.
-pub fn ring_bin_div<T: IntRing2k, N: Rep3Network>(
+pub fn ring_div<T: IntRing2k, N: Rep3Network>(
     input1: Rep3RingShare<T>,
     input2: Rep3RingShare<T>,
 
@@ -766,7 +766,7 @@ pub fn ring_bin_div<T: IntRing2k, N: Rep3Network>(
 where
     Standard: Distribution<T>,
 {
-    let res = ring_bin_div_many(&[input1], &[input2], io_context)?;
+    let res = ring_div_many(&[input1], &[input2], io_context)?;
     Ok(res[0])
 }
 

@@ -183,7 +183,7 @@ impl GarbledCircuits {
         Ok((result, c))
     }
 
-    /// Needed for subtraction where xs is a constant 0 bundle (conceptually) with only some values set
+    /// Needed for subtraction in binary division where xs is (conceptually) a constant 0 bundle with only some values set
     #[expect(clippy::type_complexity)]
     fn bin_subtraction_with_partial_constant<G: FancyBinary>(
         g: &mut G,
@@ -241,15 +241,9 @@ impl GarbledCircuits {
     /// Binary division
     fn bin_div<G: FancyBinary>(
         g: &mut G,
-        x1s: &[G::Item],
-        x2s: &[G::Item],
-        y1s: &[G::Item],
-        y2s: &[G::Item],
-        c_wire: &[G::Item],
-        input_bitlen: usize,
+        dividend: &[G::Item],
+        divisor: &[G::Item],
     ) -> Result<Vec<G::Item>, G::Error> {
-        let dividend = Self::bin_addition_no_carry(g, x1s, x2s)?;
-        let divisor = Self::bin_addition_no_carry(g, y1s, y2s)?;
         let mut acc: Vec<G::Item> = Vec::with_capacity(dividend.len());
         let mut qs: Vec<G::Item> = vec![];
         for x in dividend.iter().rev() {
@@ -258,67 +252,15 @@ impl GarbledCircuits {
             }
             acc.insert(0, x.clone());
 
-            let (res, cout) = Self::bin_subtraction_with_partial_constant(g, &acc, &divisor)?;
+            let (res, cout) = Self::bin_subtraction_with_partial_constant(g, &acc, divisor)?;
 
             acc = Self::bin_multiplex(g, &cout, &acc, &res)?;
             qs.push(cout);
         }
         qs.reverse(); // Switch back to little-endian
-        let mut added = Vec::with_capacity(input_bitlen);
-        let ys = c_wire;
-        let (mut s, mut c) = Self::half_adder(g, &qs[0], &ys[0])?;
-        added.push(s);
-
-        for (x, y) in qs.iter().zip(ys.iter()).skip(1) {
-            let res = Self::full_adder(g, x, y, &c)?;
-            s = res.0;
-            c = res.1;
-            added.push(s);
-        }
-        for y in ys.iter().take(ys.len() - 1).skip(qs.len()) {
-            let res = Self::full_adder_const(g, y, false, &c)?;
-            s = res.0;
-            c = res.1;
-            added.push(s);
-        }
-        Ok(added)
+        Ok(qs)
     }
 
-    /// Binary division for two vecs of inputs
-    pub fn bin_div_many<G: FancyBinary>(
-        g: &mut G,
-        wires_x1: &BinaryBundle<G::Item>,
-        wires_x2: &BinaryBundle<G::Item>,
-        wires_c: &BinaryBundle<G::Item>,
-        input_bitlen: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
-        debug_assert_eq!(wires_x1.size(), wires_x2.size());
-        let length = wires_x1.size();
-        debug_assert_eq!(length % 2, 0);
-        debug_assert_eq!(length / 2, input_bitlen);
-        debug_assert_eq!(length / 2 % input_bitlen, 0);
-        debug_assert_eq!(wires_c.size(), length / 2);
-        let mut results = Vec::with_capacity(wires_c.size());
-
-        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
-            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
-            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
-            wires_x1.wires()[length / 2..].chunks(input_bitlen),
-            wires_x2.wires()[length / 2..].chunks(input_bitlen),
-            wires_c.wires().chunks(input_bitlen),
-        ) {
-            results.extend(Self::bin_div(
-                g,
-                chunk_x1,
-                chunk_x2,
-                chunk_y1,
-                chunk_y2,
-                chunk_c,
-                input_bitlen,
-            )?);
-        }
-        Ok(BinaryBundle::new(results))
-    }
     /// Multiplex gadget for binary bundles
     fn bin_multiplex<G: FancyBinary>(
         g: &mut G,
@@ -1067,6 +1009,71 @@ impl GarbledCircuits {
 
         Ok(result)
     }
+    /// Divides a ring element by another. The ring elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
+    fn ring_div<G: FancyBinary>(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        y1s: &[G::Item],
+        y2s: &[G::Item],
+        wires_c: &[G::Item],
+        input_bitlen: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let dividend = Self::bin_addition_no_carry(g, x1s, x2s)?;
+        let divisor = Self::bin_addition_no_carry(g, y1s, y2s)?;
+
+        debug_assert_eq!(dividend.len(), input_bitlen);
+        debug_assert_eq!(dividend.len(), divisor.len());
+        let quotient = Self::bin_div(g, &dividend, &divisor)?;
+
+        let mut added = Vec::with_capacity(input_bitlen);
+        let ys = wires_c;
+        let (mut s, mut c) = Self::half_adder(g, &quotient[0], &ys[0])?;
+        added.push(s);
+
+        for (x, y) in quotient.iter().zip(ys.iter()).skip(1) {
+            let res = Self::full_adder(g, x, y, &c)?;
+            s = res.0;
+            c = res.1;
+            added.push(s);
+        }
+        for y in ys.iter().take(ys.len() - 1).skip(quotient.len()) {
+            let res = Self::full_adder_const(g, y, false, &c)?;
+            s = res.0;
+            c = res.1;
+            added.push(s);
+        }
+        Ok(added)
+    }
+    /// Divides a field element by another. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
+    fn field_int_div<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        y1s: &[G::Item],
+        y2s: &[G::Item],
+        wires_c: &[G::Item],
+        input_bitlen: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let n_bits = F::MODULUS_BIT_SIZE as usize;
+        assert_eq!(input_bitlen, n_bits);
+        debug_assert_eq!(input_bitlen, x1s.len());
+        debug_assert_eq!(input_bitlen, wires_c.len());
+
+        // Add x1s and x2s to get the first input bits as Yao wires
+        let added1 = Self::adder_mod_p_with_output_size::<_, F>(g, x1s, x2s, x1s.len())?;
+
+        // Add y1s and y2s to get the second input bits as Yao wires
+        let added2 = Self::adder_mod_p_with_output_size::<_, F>(g, y1s, y2s, x1s.len())?;
+
+        // compute the division
+        let quotient = Self::bin_div(g, &added1, &added2)?;
+
+        // compose chunk_bits again
+        let result = Self::compose_field_element::<G, F>(g, &quotient, wires_c)?;
+
+        Ok(result)
+    }
 
     /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b
     pub(crate) fn ring_div_power_2_many<G: FancyBinary>(
@@ -1142,6 +1149,80 @@ impl GarbledCircuits {
             )?);
         }
 
+        Ok(BinaryBundle::new(results))
+    }
+    /// Binary division for two vecs of inputs
+    pub fn ring_div_many<G: FancyBinary>(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        input_bitlen: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+
+        debug_assert_eq!(length / 2 % input_bitlen, 0);
+        debug_assert_eq!(wires_c.size(), length / 2);
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
+            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x1.wires()[length / 2..].chunks(input_bitlen),
+            wires_x2.wires()[length / 2..].chunks(input_bitlen),
+            wires_c.wires().chunks(input_bitlen),
+        ) {
+            results.extend(Self::ring_div(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_y1,
+                chunk_y2,
+                chunk_c,
+                input_bitlen,
+            )?);
+        }
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Divides a field element by another. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b
+    pub(crate) fn field_int_div_many<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    where
+        G::Item: Default,
+    {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+
+        debug_assert_eq!(length / 2 % input_bitlen, 0);
+        debug_assert_eq!(wires_c.size(), length / 2);
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
+            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x1.wires()[length / 2..].chunks(input_bitlen),
+            wires_x2.wires()[length / 2..].chunks(input_bitlen),
+            wires_c.wires().chunks(input_bitlen),
+        ) {
+            results.extend(Self::field_int_div::<G, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_y1,
+                chunk_y2,
+                chunk_c,
+                input_bitlen,
+            )?);
+        }
         Ok(BinaryBundle::new(results))
     }
 }
