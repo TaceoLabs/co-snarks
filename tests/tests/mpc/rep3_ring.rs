@@ -1774,10 +1774,61 @@ mod ring_share {
         let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
+    fn rep3_bin_div_by_public_via_yao_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        const VEC_SIZE: usize = 10;
 
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| rng.gen::<RingElement<T>>())
+            .collect_vec();
+        let y = (0..VEC_SIZE)
+            .map(|_| rng.gen::<RingElement<T>>())
+            .collect_vec();
+        let y_1 = y.clone();
+        let y_2 = y.clone();
+        let y_3 = y.clone();
+        let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
+        let mut should_result: Vec<RingElement<T>> = Vec::with_capacity(VEC_SIZE);
+        for (x, y) in x.into_iter().zip(y.into_iter()) {
+            should_result.push(RingElement(T::cast_from_biguint(
+                &(x.0.cast_to_biguint() / y.0.cast_to_biguint()),
+            )));
+        }
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y_c) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            [y_1, y_2, y_3]
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let div = yao::ring_div_by_public_many(&x, &y_c, &mut rep3).unwrap();
+                tx.send(div)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
+        assert_eq!(is_result, should_result);
+    }
+    #[test]
+    fn rep3_bin_div_by_public_via_yao() {
+        apply_to_all!(rep3_bin_div_by_public_via_yao_t, [u8, u16, u32, u64, u128]);
+    }
     #[test]
     fn rep3_bin_div_via_yao() {
-        apply_to_all!(rep3_bin_div_via_yao_t, [Bit]);
+        apply_to_all!(rep3_bin_div_via_yao_t, [u8, u16, u32, u64, u128]);
     }
 
     #[test]
