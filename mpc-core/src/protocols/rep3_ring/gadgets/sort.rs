@@ -21,10 +21,11 @@ use num_bigint::BigUint;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
 
+// u32 allows to sort 4*10^9 elements. Inputs of this size require 32*4*10^9*2 bytes, i.e., 256 GB of RAM
 type PermRing = u32;
 
 /// Sorts the inputs using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize.
-/// We use the algorithm described in https://eprint.iacr.org/2019/695.pdf.
+/// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     inputs: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
