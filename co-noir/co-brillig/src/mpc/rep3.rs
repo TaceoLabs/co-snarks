@@ -808,7 +808,28 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                 (Shared::Field(lhs), Shared::Field(rhs)) => Rep3BrilligType::shared_field(
                     rep3::arithmetic::div(lhs, rhs, &mut self.io_context)?,
                 ),
-                _ => todo!("Implement division for shared/shared"),
+
+                (Shared::Ring128(lhs), Shared::Ring128(rhs)) => {
+                    let divided = rep3_ring::yao::ring_div(lhs, rhs, &mut self.io_context)?;
+                    Rep3BrilligType::shared_u128(divided)
+                }
+                (Shared::Ring64(lhs), Shared::Ring64(rhs)) => {
+                    let divided = rep3_ring::yao::ring_div(lhs, rhs, &mut self.io_context)?;
+                    Rep3BrilligType::shared_u64(divided)
+                }
+                (Shared::Ring32(lhs), Shared::Ring32(rhs)) => {
+                    let divided = rep3_ring::yao::ring_div(lhs, rhs, &mut self.io_context)?;
+                    Rep3BrilligType::shared_u32(divided)
+                }
+                (Shared::Ring16(lhs), Shared::Ring16(rhs)) => {
+                    let divided = rep3_ring::yao::ring_div(lhs, rhs, &mut self.io_context)?;
+                    Rep3BrilligType::shared_u16(divided)
+                }
+                (Shared::Ring8(lhs), Shared::Ring8(rhs)) => {
+                    let divided = rep3_ring::yao::ring_div(lhs, rhs, &mut self.io_context)?;
+                    Rep3BrilligType::shared_u8(divided)
+                }
+                _ => panic!("type mismatch. Can only mul matching values"),
             },
         };
         Ok(result)
@@ -850,8 +871,9 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                 }
             }
             (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => {
-                if let (Shared::Field(_), Shared::Field(_)) = (s1, s2) {
-                    todo!("Implement IntDiv for shared/shared")
+                if let (Shared::Field(s1), Shared::Field(s2)) = (s1, s2) {
+                    let divided = rep3::yao::field_int_div(s1, s2, &mut self.io_context)?;
+                    Rep3BrilligType::shared_field(divided)
                 } else {
                     eyre::bail!("IntDiv only supported on fields")
                 }

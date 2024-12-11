@@ -1763,7 +1763,7 @@ mod ring_share {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
 
-                let div = yao::ring_bin_div_many(&x, &y, &mut rep3).unwrap();
+                let div = yao::ring_div_many(&x, &y, &mut rep3).unwrap();
                 tx.send(div)
             });
         }
@@ -1772,13 +1772,12 @@ mod ring_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
-
         assert_eq!(is_result, should_result);
     }
 
     #[test]
     fn rep3_bin_div_via_yao() {
-        apply_to_all!(rep3_bin_div_via_yao_t, [u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_bin_div_via_yao_t, [Bit]);
     }
 
     #[test]
