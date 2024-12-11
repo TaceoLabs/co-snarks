@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use ark_ff::PrimeField;
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
-use mpc_core::protocols::rep3::gadgets::sort::batcher_odd_even_merge_sort_yao;
 use mpc_core::protocols::rep3::{arithmetic, yao};
+use mpc_core::protocols::rep3_ring::gadgets::sort::radix_sort_fields;
 use mpc_core::{
     lut::LookupTableProvider,
     protocols::rep3::{
@@ -496,6 +496,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         inputs: &[Self::ArithmeticShare],
         bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        batcher_odd_even_merge_sort_yao(inputs, &mut self.io_context, bitsize)
+        radix_sort_fields(inputs, &mut self.io_context, bitsize)
     }
 }
