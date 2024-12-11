@@ -24,11 +24,23 @@ use rand::prelude::Distribution;
 type PermRing = u32;
 
 /// Sorts the inputs using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize.
+/// We use the algorithm described in https://eprint.iacr.org/2019/695.pdf.
 pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     inputs: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
     bitsize: usize,
 ) -> IoResult<Vec<FieldShare<F>>> {
+    let len = inputs.len();
+    if len
+        > PermRing::MAX
+            .try_into()
+            .expect("transformation of PermRing::MAX into usize failed")
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Too many inputs for radix sort. Use a larger PermRing.",
+        ));
+    }
     let perm = gen_perm(inputs, io_context, bitsize)?;
     apply_inv_field(&perm, inputs, io_context)
 }
