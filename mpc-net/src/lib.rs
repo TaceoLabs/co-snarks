@@ -3,27 +3,25 @@
 use std::{
     collections::{BTreeMap, HashMap},
     io,
-    net::ToSocketAddrs,
-    pin::Pin,
+    net::{SocketAddr, ToSocketAddrs},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    task::{Context, Poll},
     time::Duration,
 };
 
-use channel::{BincodeChannel, BytesChannel, Channel, ChannelHandle, ChannelTasks};
+use bytes::{Bytes, BytesMut};
+use channel::{BincodeChannel, BytesChannel, Channel, ChannelHandle};
 use codecs::BincodeCodec;
-use color_eyre::eyre::{bail, Context as Ctx, ContextCompat, Report};
+use color_eyre::eyre::{bail, Context, ContextCompat, Report};
 use config::NetworkConfig;
-use futures::{Sink, Stream};
+use queue::{ChannelQueue, CreateJob, QueueJob};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    runtime::Handle,
-    task::JoinError,
+    sync::mpsc::{self},
 };
 use tokio_rustls::{
     rustls::{
@@ -32,14 +30,14 @@ use tokio_rustls::{
     },
     TlsAcceptor, TlsConnector,
 };
-use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
+use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
+use tracking_rw::{TrackingAsyncReader, TrackingAsyncWriter};
 
 pub mod channel;
 pub mod codecs;
 pub mod config;
-
-// TODO get this from network config
-const STREAMS_PER_CONN: usize = 8;
+pub mod queue;
+mod tracking_rw;
 
 /// Type alias for a [tokio_rustls::TlsStream] over a [TcpStream].
 type TlsStream = tokio_rustls::TlsStream<TcpStream>;
@@ -47,7 +45,7 @@ type TlsStream = tokio_rustls::TlsStream<TcpStream>;
 /// A duplex TLS stream that uses one stream for sending and one for receiving.
 /// Splitting a single stream would add unwanted syncronization primitives.
 #[derive(Debug)]
-struct DuplexTlsStream {
+pub(crate) struct DuplexTlsStream {
     send: TlsStream,
     recv: TlsStream,
 }
@@ -62,26 +60,38 @@ impl DuplexTlsStream {
     }
 }
 
-/// A connection with a pool of streams and total sent/recv stats.
-#[derive(Debug, Default)]
-struct Connection {
-    streams: Vec<DuplexTlsStream>,
+#[derive(Debug)]
+struct ConnectionInfo {
+    party_hostname: String,
+    party_addr: SocketAddr,
     sent: Arc<AtomicUsize>,
     recv: Arc<AtomicUsize>,
 }
 
+impl ConnectionInfo {
+    pub fn new(party_hostname: String, party_addr: SocketAddr) -> Self {
+        Self {
+            party_hostname,
+            party_addr,
+            sent: Arc::default(),
+            recv: Arc::default(),
+        }
+    }
+}
+
 /// A network handler for MPC protocols.
-#[derive(Debug)]
 pub struct MpcNetworkHandler {
     // this is a btreemap because we rely on iteration order
-    connections: BTreeMap<usize, Connection>,
-    tasks: ChannelTasks,
+    conn_infos: BTreeMap<usize, ConnectionInfo>,
     my_id: usize,
+    listener: TcpListener,
+    acceptor: TlsAcceptor,
+    connector: TlsConnector,
 }
 
 impl MpcNetworkHandler {
-    /// Tries to establish a connection to other parties in the network based on the provided [NetworkConfig].
-    pub async fn establish(config: NetworkConfig) -> Result<Self, Report> {
+    /// Initialize the [MpcNetworkHandler] based on the provided [NetworkConfig].
+    pub async fn init(config: NetworkConfig) -> Result<Self, Report> {
         config.check_config()?;
         let certs: HashMap<usize, CertificateDer> = config
             .parties
@@ -111,154 +121,148 @@ impl MpcNetworkHandler {
 
         tracing::trace!("Party {}: listening on {our_socket_addr}", config.my_id);
 
-        let mut connections: BTreeMap<usize, Connection> = BTreeMap::new();
+        let mut conn_infos = BTreeMap::new();
 
-        let mut accpected_streams = BTreeMap::new();
-
-        let num_parties = config.parties.len();
-
-        for party in config.parties {
+        for party in config.parties.iter() {
             if party.id == config.my_id {
                 // skip self
                 continue;
             }
-            if party.id < config.my_id {
-                // connect to party, we are client
-                let party_addr = party
-                    .dns_name
-                    .to_socket_addrs()
-                    .with_context(|| format!("while resolving DNS name for {}", party.dns_name))?
-                    .next()
-                    .with_context(|| format!("could not resolve DNS name {}", party.dns_name))?;
+            let party_addr = party
+                .dns_name
+                .to_socket_addrs()
+                .with_context(|| format!("while resolving DNS name for {}", party.dns_name))?
+                .next()
+                .with_context(|| format!("could not resolve DNS name {}", party.dns_name))?;
+            let party_hostname = party.dns_name.hostname.clone();
 
-                let domain = ServerName::try_from(party.dns_name.hostname.clone())
+            for _ in 0..config.conn_queue_size {
+                let conn = ConnectionInfo::new(party_hostname.clone(), party_addr);
+                conn_infos.insert(party.id, conn);
+            }
+        }
+
+        Ok(MpcNetworkHandler {
+            conn_infos,
+            my_id: config.my_id,
+            listener,
+            acceptor,
+            connector,
+        })
+    }
+
+    /// Tries to establish a connection to other parties in the network.
+    pub(crate) async fn establish(&self) -> Result<HashMap<usize, DuplexTlsStream>, Report> {
+        let mut streams = HashMap::new();
+        let mut unordered_strames = HashMap::new();
+        for (id, conn_info) in self.conn_infos.iter() {
+            if *id < self.my_id {
+                // connect to party, we are client
+                let domain = ServerName::try_from(conn_info.party_hostname.as_str())
                     .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?
                     .to_owned();
 
-                // create all streams for this connection
-                for stream_id in 0..STREAMS_PER_CONN {
-                    let mut send = None;
-                    let mut recv = None;
-                    // create 2 streams per stream to get full duplex with tls streams
-                    for split in [DuplexTlsStream::SPLIT0, DuplexTlsStream::SPLIT1] {
-                        let stream = loop {
-                            if let Ok(stream) = TcpStream::connect(party_addr).await {
-                                break stream;
-                            }
-                            std::thread::sleep(Duration::from_millis(100));
-                        };
-                        // this removes buffering of tcp packets, very important for latency of small packets
-                        stream.set_nodelay(true)?;
-                        let mut stream = connector.connect(domain.clone(), stream).await?;
-                        stream.write_u64(config.my_id as u64).await?;
-                        stream.write_u64(stream_id as u64).await?;
-                        stream.write_u8(split).await?;
-                        if split == DuplexTlsStream::SPLIT0 {
-                            send = Some(stream);
-                        } else {
-                            recv = Some(stream);
+                let mut send = None;
+                let mut recv = None;
+                // create 2 streams per stream to get full duplex with tls streams
+                for split in [DuplexTlsStream::SPLIT0, DuplexTlsStream::SPLIT1] {
+                    let stream = loop {
+                        if let Ok(stream) = TcpStream::connect(conn_info.party_addr).await {
+                            break stream;
                         }
-                    }
-
-                    tracing::trace!(
-                        "Party {}: connected stream {stream_id} to party {}",
-                        party.id,
-                        config.my_id
-                    );
-
-                    let send = send.expect("not none after connect was succesful");
-                    let recv = recv.expect("not none after connect was succesful");
-
-                    if let Some(conn) = connections.get_mut(&party.id) {
-                        conn.streams
-                            .push(DuplexTlsStream::new(send.into(), recv.into()));
-                    } else {
-                        let mut conn = Connection::default();
-                        conn.streams
-                            .push(DuplexTlsStream::new(send.into(), recv.into()));
-                        connections.insert(party.id, conn);
-                    }
-                }
-            } else {
-                // we are the server, accept connections
-                // accept all 2 splits for n streams and store them with (party_id, stream_id, split) so we know were they belong
-                for _ in 0..STREAMS_PER_CONN * 2 {
-                    let (stream, _peer_addr) = listener.accept().await?;
+                        std::thread::sleep(Duration::from_millis(100));
+                    };
                     // this removes buffering of tcp packets, very important for latency of small packets
                     stream.set_nodelay(true)?;
-                    let mut stream = acceptor.accept(stream).await?;
+                    let mut stream = self.connector.connect(domain.clone(), stream).await?;
+                    stream.write_u64(self.my_id as u64).await?;
+                    stream.write_u8(split).await?;
+                    if split == DuplexTlsStream::SPLIT0 {
+                        send = Some(stream);
+                    } else {
+                        recv = Some(stream);
+                    }
+                }
+
+                tracing::trace!("Party {}: connected stream to party {}", id, self.my_id);
+
+                let send = send.expect("not none after connect was succesful");
+                let recv = recv.expect("not none after connect was succesful");
+
+                assert!(streams
+                    .insert(*id, DuplexTlsStream::new(send.into(), recv.into()))
+                    .is_none());
+            } else {
+                // we are the server, accept connections
+                // accept 2 splits and store them with (party_id, split) so we know were they belong
+                for _ in 0..2 {
+                    let (stream, _peer_addr) = self.listener.accept().await?;
+                    // this removes buffering of tcp packets, very important for latency of small packets
+                    stream.set_nodelay(true)?;
+                    let mut stream = self.acceptor.accept(stream).await?;
                     let party_id = stream.read_u64().await? as usize;
-                    let stream_id = stream.read_u64().await? as usize;
                     let split = stream.read_u8().await?;
-                    assert!(accpected_streams
-                        .insert((party_id, stream_id, split), stream)
+                    assert!(unordered_strames
+                        .insert((party_id, split), stream)
                         .is_none());
                 }
             }
         }
 
-        // assign streams to the right party, stream and duplex half
+        // assign streams to the right party and duplex half
         // we accepted streams for all parties with id > my_id, so we can iter from my_id + 1..num_parties
-        for party_id in config.my_id + 1..num_parties {
-            for stream_id in 0..STREAMS_PER_CONN {
-                // send and recv is swapped here compared to above
-                let recv = accpected_streams
-                    .remove(&(party_id, stream_id, DuplexTlsStream::SPLIT0))
-                    .context(format!("get recv for stream {stream_id} party {party_id}"))?;
-                let send = accpected_streams
-                    .remove(&(party_id, stream_id, DuplexTlsStream::SPLIT1))
-                    .context(format!("get send for stream {stream_id} party {party_id}"))?;
-                if let Some(conn) = connections.get_mut(&party_id) {
-                    conn.streams
-                        .push(DuplexTlsStream::new(send.into(), recv.into()));
-                } else {
-                    let mut conn = Connection::default();
-                    conn.streams
-                        .push(DuplexTlsStream::new(send.into(), recv.into()));
-                    connections.insert(party_id, conn);
-                }
-            }
+        for id in self.my_id + 1..self.conn_infos.len() + 1 {
+            // send and recv is swapped here compared to above
+            let recv = unordered_strames
+                .remove(&(id, DuplexTlsStream::SPLIT0))
+                .context(format!("get recv for party {}", id))
+                .unwrap();
+            let send = unordered_strames
+                .remove(&(id, DuplexTlsStream::SPLIT1))
+                .context(format!("get send for party {}", id))
+                .unwrap();
+            assert!(streams
+                .insert(id, DuplexTlsStream::new(send.into(), recv.into()))
+                .is_none());
         }
 
-        if !accpected_streams.is_empty() {
-            bail!("not accepted connections should remain");
+        if !unordered_strames.is_empty() {
+            bail!("no stream should remain");
         }
 
-        tracing::trace!("Party {}: established network handler", config.my_id);
-
-        Ok(MpcNetworkHandler {
-            connections,
-            tasks: ChannelTasks::new(Handle::current()),
-            my_id: config.my_id,
-        })
+        Ok(streams)
     }
 
-    /// Create a new [`ChannelHandle`] from a [`Channel`]. This spawns a new tokio task that handles the read and write jobs so they can happen concurrently.
-    pub fn spawn<MSend, MRecv, R, W, C>(
-        &mut self,
-        chan: Channel<R, W, C>,
-    ) -> ChannelHandle<MSend, MRecv>
-    where
-        C: 'static,
-        R: AsyncRead + Unpin + 'static,
-        W: AsyncWrite + Unpin + std::marker::Send + 'static,
-        FramedRead<R, C>: Stream<Item = Result<MRecv, io::Error>> + Send,
-        FramedWrite<W, C>: Sink<MSend, Error = io::Error> + Send,
-        MRecv: Send + std::fmt::Debug + 'static,
-        MSend: Send + std::fmt::Debug + 'static,
-    {
-        self.tasks.spawn(chan)
-    }
+    /// Create a [ChannelQueue] that holds `size` number of [ChannelHandle]s per party.
+    /// This queue can be used to quickly get existing connections and create new ones in the background.
+    pub async fn queue(net_handler: Self, size: usize) -> eyre::Result<ChannelQueue> {
+        let mut init_queue = Vec::new();
+        for _ in 0..size {
+            init_queue.push(net_handler.get_byte_channels_managed().await?);
+        }
 
-    /// Shutdown the network, waiting until all read and write tasks are completed. This happens automatically, when the network handler is dropped.
-    pub async fn shutdown(&mut self) -> Result<(), JoinError> {
-        self.tasks.shutdown().await
+        let (queue_sender, queue_receiver) = mpsc::channel::<QueueJob>(size);
+        let (create_sender, create_receiver) = mpsc::channel::<CreateJob>(size);
+
+        tokio::spawn(queue::create_channel_actor(
+            net_handler,
+            create_receiver,
+            queue_sender.clone(),
+        ));
+
+        tokio::spawn(queue::get_channel_actor(
+            init_queue,
+            create_sender,
+            queue_receiver,
+        ));
+
+        Ok(ChannelQueue::new(queue_sender))
     }
 
     /// Returns the number of sent and received bytes.
     pub fn get_send_receive(&self, i: usize) -> std::io::Result<(usize, usize)> {
         let conn = self
-            .connections
+            .conn_infos
             .get(&i)
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such connection"))?;
         Ok((
@@ -269,7 +273,7 @@ impl MpcNetworkHandler {
 
     /// Prints the connection statistics.
     pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
-        for (i, conn) in &self.connections {
+        for (i, conn) in &self.conn_infos {
             writeln!(
                 out,
                 "Connection {} stats:\n\tSENT: {} bytes\n\tRECV: {} bytes",
@@ -281,27 +285,8 @@ impl MpcNetworkHandler {
         Ok(())
     }
 
-    /// Get a [Channel] to party with `id`. This pops a stream from the pool.
-    pub fn get_byte_channel(
-        &mut self,
-        id: &usize,
-    ) -> Option<BytesChannel<impl AsyncRead, impl AsyncWrite>> {
-        let mut codec = LengthDelimitedCodec::new();
-        codec.set_max_frame_length(1_000_000_000);
-        self.get_custom_channel(id, codec)
-    }
-
-    /// Get a [Channel] to party with `id`. This pops a stream from the pool.
-    pub fn get_serde_bincode_channel<M: Serialize + DeserializeOwned + 'static>(
-        &mut self,
-        id: &usize,
-    ) -> Option<Channel<impl AsyncRead, impl AsyncWrite, BincodeCodec<M>>> {
-        let bincodec = BincodeCodec::<M>::new();
-        self.get_custom_channel(id, bincodec)
-    }
-
-    /// Get a [Channel] to party with `id` using the provided codec. This pops a stream from the pool.
-    pub fn get_custom_channel<
+    /// Get a [Channel] to each party. This establishes a new Connection with each party.
+    pub async fn get_custom_channels<
         MSend,
         MRecv,
         C: Encoder<MSend, Error = io::Error>
@@ -309,151 +294,77 @@ impl MpcNetworkHandler {
             + 'static
             + Clone,
     >(
-        &mut self,
-        id: &usize,
+        &self,
         codec: C,
-    ) -> Option<Channel<impl AsyncRead, impl AsyncWrite, C>> {
-        debug_assert!(*id != self.my_id);
-        if let Some(conn) = self.connections.get_mut(id) {
-            if let Some(stream) = conn.streams.pop() {
-                let recv = TrackingAsyncReader::new(stream.recv, conn.recv.clone());
-                let send = TrackingAsyncWriter::new(stream.send, conn.sent.clone());
-                return Some(Channel::new(recv, send, codec));
-            }
-        }
-        None
+    ) -> eyre::Result<HashMap<usize, Channel<impl AsyncRead, impl AsyncWrite, C>>> {
+        self.establish()
+            .await?
+            .into_iter()
+            .map(|(id, stream)| {
+                let conn_info = self.conn_infos.get(&id).context("while get conn info")?;
+                let recv = TrackingAsyncReader::new(stream.recv, conn_info.recv.clone());
+                let send = TrackingAsyncWriter::new(stream.send, conn_info.sent.clone());
+                Ok((id, Channel::new(recv, send, codec.clone())))
+            })
+            .collect()
     }
 
-    /// Get a [Channel] to each party using the provided codec. This pops a stream from each pool.
-    pub fn get_custom_channels<
-        MSend,
-        MRecv,
+    /// Get a [Channel] to each party. This establishes a new Connection with each party.
+    pub async fn get_byte_channels(
+        &self,
+    ) -> eyre::Result<HashMap<usize, BytesChannel<impl AsyncRead, impl AsyncWrite>>> {
+        // set max frame length to 1Tb and length_field_length to 5 bytes
+        const NUM_BYTES: usize = 5;
+        let codec = LengthDelimitedCodec::builder()
+            .length_field_type::<u64>() // u64 because this is the type the length is decoded into, and u32 doesnt fit 5 bytes
+            .length_field_length(NUM_BYTES)
+            .max_frame_length(1usize << (NUM_BYTES * 8))
+            .new_codec();
+        self.get_custom_channels(codec).await
+    }
+
+    /// Get a [Channel] to each party. This establishes a new Connection with each party.
+    pub async fn get_serde_bincode_channels<M: Serialize + DeserializeOwned + 'static>(
+        &self,
+    ) -> eyre::Result<HashMap<usize, BincodeChannel<impl AsyncRead, impl AsyncWrite, M>>> {
+        let bincodec = BincodeCodec::<M>::new();
+        self.get_custom_channels(bincodec).await
+    }
+
+    /// Get a [ChannelHandle] to each party. This establishes a new Connection with each party.
+    /// Reads and writes are handled in tokio tasks. On drop, these tasks are awaited.
+    pub async fn get_custom_channels_managed<
+        MSend: std::fmt::Debug + std::marker::Send + 'static,
+        MRecv: std::fmt::Debug + std::marker::Send + 'static,
         C: Encoder<MSend, Error = io::Error>
             + Decoder<Item = MRecv, Error = io::Error>
             + 'static
-            + Clone,
+            + Clone
+            + std::marker::Send,
     >(
-        &mut self,
+        &self,
         codec: C,
-    ) -> Option<HashMap<usize, Channel<impl AsyncRead, impl AsyncWrite, C>>> {
-        let mut channels = HashMap::new();
-        let party_ids: Vec<_> = self.connections.keys().cloned().collect();
-        for id in party_ids {
-            let chan = self.get_custom_channel(&id, codec.clone())?;
-            channels.insert(id, chan);
-        }
-        Some(channels)
+    ) -> eyre::Result<HashMap<usize, ChannelHandle<MSend, MRecv>>> {
+        Ok(self
+            .get_custom_channels(codec)
+            .await?
+            .into_iter()
+            .map(|(id, chan)| (id, ChannelHandle::spawn(chan)))
+            .collect())
     }
 
-    /// Get a [Channel] to each party. This pops a stream from each pool.
-    pub fn get_byte_channels(
-        &mut self,
-    ) -> Option<HashMap<usize, BytesChannel<impl AsyncRead, impl AsyncWrite>>> {
-        let mut codec = LengthDelimitedCodec::new();
-        codec.set_max_frame_length(1_000_000_000);
-        self.get_custom_channels(codec)
-    }
-
-    /// Get a [Channel] to each party. This pops a stream from each pool.
-    pub fn get_serde_bincode_channels<M: Serialize + DeserializeOwned + 'static>(
-        &mut self,
-    ) -> Option<HashMap<usize, BincodeChannel<impl AsyncRead, impl AsyncWrite, M>>> {
-        let bincodec = BincodeCodec::<M>::new();
-        self.get_custom_channels(bincodec)
-    }
-}
-
-/// A wrapper around [`AsyncRead`] types that keeps track of the number of read bytes
-struct TrackingAsyncReader<R> {
-    inner: R,
-    bytes_read: Arc<AtomicUsize>,
-}
-
-impl<R> TrackingAsyncReader<R> {
-    fn new(inner: R, bytes_read: Arc<AtomicUsize>) -> Self {
-        Self { inner, bytes_read }
-    }
-}
-
-impl<R: AsyncRead + Unpin> AsyncRead for TrackingAsyncReader<R> {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        let inner = Pin::new(&mut self.inner);
-        let initial_len = buf.filled().len();
-        let res = inner.poll_read(cx, buf);
-
-        // if the read was ok, update bytes_read
-        if let Poll::Ready(Ok(())) = &res {
-            self.bytes_read
-                .fetch_add(buf.filled().len() - initial_len, Ordering::SeqCst);
-        }
-
-        res
-    }
-}
-
-/// A wrapper around [`AsyncWrite`] types that keeps track of the number of written bytes
-struct TrackingAsyncWriter<W> {
-    inner: W,
-    bytes_written: Arc<AtomicUsize>,
-}
-
-impl<R> TrackingAsyncWriter<R> {
-    fn new(inner: R, bytes_written: Arc<AtomicUsize>) -> Self {
-        Self {
-            inner,
-            bytes_written,
-        }
-    }
-}
-
-impl<W: AsyncWrite + Unpin> AsyncWrite for TrackingAsyncWriter<W> {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        let inner = Pin::new(&mut self.inner);
-        let res = inner.poll_write(cx, buf);
-
-        // if the write was ok, update bytes_written
-        if let Poll::Ready(Ok(bytes_written)) = &res {
-            self.bytes_written
-                .fetch_add(*bytes_written, Ordering::SeqCst);
-        }
-
-        res
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
-
-    fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &[io::IoSlice<'_>],
-    ) -> Poll<Result<usize, io::Error>> {
-        let inner = Pin::new(&mut self.inner);
-        let res = inner.poll_write_vectored(cx, bufs);
-
-        // if the write was ok, update bytes_written
-        if let Poll::Ready(Ok(bytes_written)) = &res {
-            self.bytes_written
-                .fetch_add(*bytes_written, Ordering::SeqCst);
-        }
-
-        res
-    }
-
-    fn is_write_vectored(&self) -> bool {
-        self.inner.is_write_vectored()
+    /// Get a [ChannelHandle] to each party. This establishes a new Connection with each party.
+    /// Reads and writes are handled in tokio tasks. On drop, these tasks are awaited.
+    pub async fn get_byte_channels_managed(
+        &self,
+    ) -> eyre::Result<HashMap<usize, ChannelHandle<Bytes, BytesMut>>> {
+        // set max frame length to 1Tb and length_field_length to 5 bytes
+        const NUM_BYTES: usize = 5;
+        let codec = LengthDelimitedCodec::builder()
+            .length_field_type::<u64>() // u64 because this is the type the length is decoded into, and u32 doesnt fit 5 bytes
+            .length_field_length(NUM_BYTES)
+            .max_frame_length(1usize << (NUM_BYTES * 8))
+            .new_codec();
+        self.get_custom_channels_managed(codec).await
     }
 }

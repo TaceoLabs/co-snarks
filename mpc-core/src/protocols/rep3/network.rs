@@ -2,14 +2,16 @@
 //!
 //! This module contains implementation of the rep3 mpc network
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::RngType;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
-use eyre::{bail, eyre, Report};
-use mpc_net::{channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler};
+use eyre::{bail, ContextCompat};
+use mpc_net::{
+    channel::ChannelHandle, config::NetworkConfig, queue::ChannelQueue, MpcNetworkHandler,
+};
 use tokio::runtime::Runtime;
 
 use super::{
@@ -244,46 +246,44 @@ pub trait Rep3Network: Send {
         Self: Sized;
 }
 
-// TODO make generic over codec?
 /// This struct can be used to facilitate network communication for the REP3 MPC protocol.
 #[derive(Debug)]
 pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
     pub(crate) chan_next: ChannelHandle<Bytes, BytesMut>,
     pub(crate) chan_prev: ChannelHandle<Bytes, BytesMut>,
-    // TODO we should be able to get rid of this mutex once we dont remove streams from the pool anymore
-    pub(crate) net_handler: Arc<Mutex<MpcNetworkHandler>>,
-    // order is important, runtime MUST be dropped after network handler
+    pub(crate) queue: ChannelQueue,
+    // order is important, runtime MUST be dropped last
     pub(crate) runtime: Arc<Runtime>,
 }
 
 impl Rep3MpcNet {
     /// Takes a [NetworkConfig] struct and constructs the network interface. The network needs to contain exactly 3 parties with ids 0, 1, and 2.
-    pub fn new(config: NetworkConfig) -> Result<Self, Report> {
+    pub fn new(config: NetworkConfig) -> eyre::Result<Self> {
         if config.parties.len() != 3 {
             bail!("REP3 protocol requires exactly 3 parties")
         }
+        let queue_size = config.conn_queue_size;
         let id = PartyID::try_from(config.my_id)?;
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        let mut net_handler = runtime.block_on(MpcNetworkHandler::establish(config))?;
+        let net_handler = runtime.block_on(MpcNetworkHandler::init(config))?;
+        let queue = runtime.block_on(MpcNetworkHandler::queue(net_handler, queue_size))?;
 
-        let chan_next = net_handler
-            .get_byte_channel(&id.next_id().into())
-            .ok_or(eyre!("no next channel found"))?;
-        let chan_prev = net_handler
-            .get_byte_channel(&id.prev_id().into())
-            .ok_or(eyre!("no prev channel found"))?;
-
-        let chan_next = net_handler.spawn(chan_next);
-        let chan_prev = net_handler.spawn(chan_prev);
+        let mut channels = queue.get_channels()?;
+        let chan_next = channels
+            .remove(&id.next_id().into())
+            .context("while removing channel")?;
+        let chan_prev = channels
+            .remove(&id.prev_id().into())
+            .context("while removing channel")?;
 
         Ok(Self {
             id,
-            net_handler: Arc::new(Mutex::new(net_handler)),
             chan_next,
             chan_prev,
+            queue,
             runtime: Arc::new(runtime),
         })
     }
@@ -369,22 +369,24 @@ impl Rep3Network for Rep3MpcNet {
     }
 
     fn fork(&mut self) -> std::io::Result<Self> {
-        let id = self.id;
-        let mut net_handler = self.net_handler.lock().unwrap();
-        let chan_next = net_handler
-            .get_byte_channel(&id.next_id().into())
-            .expect("no next channel found");
-        let chan_prev = net_handler
-            .get_byte_channel(&id.prev_id().into())
-            .expect("no prev channel found");
-        let chan_next = net_handler.spawn(chan_next);
-        let chan_prev = net_handler.spawn(chan_prev);
+        let mut channels = self.queue.get_channels().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "could not get channels from queue, channel died",
+            )
+        })?;
+        let chan_next = channels
+            .remove(&self.id.next_id().into())
+            .expect("to find next channel");
+        let chan_prev = channels
+            .remove(&self.id.prev_id().into())
+            .expect("to find prev channel");
 
         Ok(Self {
-            id,
-            net_handler: self.net_handler.clone(),
+            id: self.id,
             chan_next,
             chan_prev,
+            queue: self.queue.clone(),
             runtime: self.runtime.clone(),
         })
     }

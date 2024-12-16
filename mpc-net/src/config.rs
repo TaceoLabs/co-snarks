@@ -114,6 +114,10 @@ impl TryFrom<NetworkPartyConfig> for NetworkParty {
     }
 }
 
+fn default_conn_queue_size() -> usize {
+    3
+}
+
 /// The network configuration file.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct NetworkConfigFile {
@@ -125,6 +129,9 @@ pub struct NetworkConfigFile {
     pub bind_addr: SocketAddr,
     /// The path to our private key file.
     pub key_path: PathBuf,
+    /// The inital size of the connection queue.
+    #[serde(default = "default_conn_queue_size")]
+    pub conn_queue_size: usize,
 }
 
 /// The network configuration.
@@ -138,6 +145,8 @@ pub struct NetworkConfig {
     pub bind_addr: SocketAddr,
     /// The private key.
     pub key: PrivateKeyDer<'static>,
+    /// The inital size of the connection queue.
+    pub conn_queue_size: usize,
 }
 
 impl TryFrom<NetworkConfigFile> for NetworkConfig {
@@ -155,6 +164,7 @@ impl TryFrom<NetworkConfigFile> for NetworkConfig {
             my_id: value.my_id,
             bind_addr: value.bind_addr,
             key,
+            conn_queue_size: value.conn_queue_size,
         })
     }
 }
@@ -166,6 +176,7 @@ impl Clone for NetworkConfig {
             my_id: self.my_id,
             bind_addr: self.bind_addr,
             key: self.key.clone_key(),
+            conn_queue_size: self.conn_queue_size,
         }
     }
 }

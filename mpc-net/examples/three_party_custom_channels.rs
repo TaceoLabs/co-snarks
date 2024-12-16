@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use bytes::{Buf, BufMut};
 use clap::Parser;
 use color_eyre::{
-    eyre::{eyre, Context, ContextCompat},
+    eyre::{eyre, Context},
     Result,
 };
 use futures::{SinkExt, StreamExt};
@@ -33,10 +33,10 @@ async fn main() -> Result<()> {
     let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
 
-    let mut network = MpcNetworkHandler::establish(config).await?;
+    let network = MpcNetworkHandler::init(config).await?;
 
     let codec = MessageCodec;
-    let mut channels = network.get_custom_channels(codec).context("get channels")?;
+    let mut channels = network.get_custom_channels(codec).await?;
 
     // send to all channels
     for (&i, channel) in channels.iter_mut() {

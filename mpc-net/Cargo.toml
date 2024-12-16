@@ -17,6 +17,7 @@ bincode = { workspace = true }
 bytes = { workspace = true }
 clap = { workspace = true }
 color-eyre = { workspace = true }
+eyre = { workspace = true }
 futures = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }

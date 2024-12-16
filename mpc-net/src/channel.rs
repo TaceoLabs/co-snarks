@@ -5,9 +5,12 @@ use tokio::{
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
     runtime::Handle,
     sync::{mpsc, oneshot},
-    task::{JoinError, JoinHandle},
+    task::JoinHandle,
 };
-use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
+use tokio_util::{
+    codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec},
+    sync::CancellationToken,
+};
 
 use crate::codecs::BincodeCodec;
 
@@ -152,8 +155,11 @@ struct ReadJob<MRecv> {
 /// A handle to a channel that allows sending and receiving messages.
 #[derive(Debug)]
 pub struct ChannelHandle<MSend, MRecv> {
-    write_job_queue: mpsc::Sender<WriteJob<MSend>>,
-    read_job_queue: mpsc::Sender<ReadJob<MRecv>>,
+    write_job_queue: Option<mpsc::Sender<WriteJob<MSend>>>,
+    read_job_queue: Option<mpsc::Sender<ReadJob<MRecv>>>,
+    tasks: Vec<JoinHandle<()>>,
+    handle: Handle,
+    token: CancellationToken,
 }
 
 impl<MSend, MRecv> ChannelHandle<MSend, MRecv>
@@ -161,11 +167,89 @@ where
     MRecv: Send + std::fmt::Debug + 'static,
     MSend: Send + std::fmt::Debug + 'static,
 {
+    /// Create a new [`ChannelHandle`] from a [`Channel`]. This spawns a new tokio task that handles the read and write jobs so they can happen concurrently.
+    pub fn spawn<R, W, C>(chan: Channel<R, W, C>) -> ChannelHandle<MSend, MRecv>
+    where
+        C: 'static,
+        R: AsyncRead + Unpin + 'static,
+        W: AsyncWrite + Unpin + std::marker::Send + 'static,
+        FramedRead<R, C>: Stream<Item = Result<MRecv, io::Error>> + Send,
+        FramedWrite<W, C>: Sink<MSend, Error = io::Error> + Send,
+    {
+        let handle = Handle::current();
+        let (write_send, mut write_recv) = mpsc::channel::<WriteJob<MSend>>(1024);
+        let (read_send, mut read_recv) = mpsc::channel::<ReadJob<MRecv>>(1024);
+
+        let (mut write, mut read) = chan.split();
+        let token = CancellationToken::new();
+        let token_ = token.clone();
+
+        let mut tasks = Vec::new();
+        // terminates if received None (other side of network termianted first and closed channel) or in drop via cancelation token
+        tasks.push(handle.spawn(async move {
+            loop {
+                tokio::select! {
+                    frame = read.next() => {
+                        if let Some(frame) = frame {
+                            let job = read_recv.recv().await;
+                            match job {
+                                Some(job) => {
+                                    if job.ret.send(frame).is_err() {
+                                        tracing::warn!("Warning: Read Job finished but receiver is gone!");
+                                    }
+                                }
+                                None => {
+                                    if frame.is_ok() {
+                                        tracing::warn!("Warning: received Ok frame but receiver is gone!");
+                                    }
+                                    break;
+                                }
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    _ = token_.cancelled() => break,
+                }
+            }
+        }));
+        // terminates once we drop the corresponding sender in drop
+        tasks.push(handle.spawn(async move {
+            while let Some(write_job) = write_recv.recv().await {
+                match write.send(write_job.data).await {
+                    Ok(_) => {
+                        // we don't really care if the receiver for a write job is gone, as this is a common case
+                        // therefore we only emit a trace message
+                        if write_job.ret.send(Ok(())).is_err() {
+                            tracing::trace!("Debug: Write Job finished but receiver is gone!");
+                        }
+                    }
+                    Err(err) => {
+                        tracing::error!("Write job failed: {err}");
+                    }
+                }
+            }
+            // make sure all data is sent
+            if write.into_inner().shutdown().await.is_err() {
+                tracing::warn!("Warning: shutdown of stream failed!");
+            }
+        }));
+
+        ChannelHandle {
+            write_job_queue: Some(write_send),
+            read_job_queue: Some(read_send),
+            tasks,
+            handle,
+            token,
+        }
+    }
+
     /// Instructs the channel to send a message. Returns a [oneshot::Receiver] that will return the result of the send operation.
     pub async fn send(&mut self, data: MSend) -> oneshot::Receiver<Result<(), io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = WriteJob { data, ret };
-        match self.write_job_queue.send(job).await {
+        // unwrap is fine because the value is only set to None in drop
+        match self.write_job_queue.as_mut().unwrap().send(job).await {
             Ok(_) => {}
             Err(job) => job
                 .0
@@ -183,7 +267,8 @@ where
     pub async fn recv(&mut self) -> oneshot::Receiver<Result<MRecv, io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = ReadJob { ret };
-        match self.read_job_queue.send(job).await {
+        // unwrap is fine because the value is only set to None in drop
+        match self.read_job_queue.as_mut().unwrap().send(job).await {
             Ok(_) => {}
             Err(job) => job
                 .0
@@ -201,7 +286,8 @@ where
     pub fn blocking_send(&mut self, data: MSend) -> oneshot::Receiver<Result<(), io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = WriteJob { data, ret };
-        match self.write_job_queue.blocking_send(job) {
+        // unwrap is fine because the value is only set to None in drop
+        match self.write_job_queue.as_mut().unwrap().blocking_send(job) {
             Ok(_) => {}
             Err(job) => job
                 .0
@@ -219,7 +305,8 @@ where
     pub fn blocking_recv(&mut self) -> oneshot::Receiver<Result<MRecv, io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = ReadJob { ret };
-        match self.read_job_queue.blocking_send(job) {
+        // unwrap is fine because the value is only set to None in drop
+        match self.read_job_queue.as_mut().unwrap().blocking_send(job) {
             Ok(_) => {}
             Err(job) => job
                 .0
@@ -234,99 +321,17 @@ where
     }
 }
 
-/// Handles spawing and shutdown of channels. On drop, joins all [`JoinHandle`]s. The [`Handle`] musst be valid for the entire lifetime of this type.
-#[derive(Debug)]
-pub(crate) struct ChannelTasks {
-    tasks: Vec<JoinHandle<()>>,
-    handle: Handle,
-}
-
-impl ChannelTasks {
-    /// Create a new [`ChannelTasks`] instance.
-    pub fn new(handle: Handle) -> Self {
-        Self {
-            tasks: Vec::new(),
-            handle,
-        }
-    }
-
-    /// Create a new [`ChannelHandle`] from a [`Channel`]. This spawns a new tokio task that handles the read and write jobs so they can happen concurrently.
-    pub(crate) fn spawn<MSend, MRecv, R, W, C>(
-        &mut self,
-        chan: Channel<R, W, C>,
-    ) -> ChannelHandle<MSend, MRecv>
-    where
-        C: 'static,
-        R: AsyncRead + Unpin + 'static,
-        W: AsyncWrite + Unpin + std::marker::Send + 'static,
-        FramedRead<R, C>: Stream<Item = Result<MRecv, io::Error>> + Send,
-        FramedWrite<W, C>: Sink<MSend, Error = io::Error> + Send,
-        MRecv: Send + std::fmt::Debug + 'static,
-        MSend: Send + std::fmt::Debug + 'static,
-    {
-        let (write_send, mut write_recv) = mpsc::channel::<WriteJob<MSend>>(1024);
-        let (read_send, mut read_recv) = mpsc::channel::<ReadJob<MRecv>>(1024);
-
-        let (mut write, mut read) = chan.split();
-
-        self.tasks.push(self.handle.spawn(async move {
-            while let Some(frame) = read.next().await {
-                let job = read_recv.recv().await;
-                match job {
-                    Some(job) => {
-                        if job.ret.send(frame).is_err() {
-                            tracing::warn!("Warning: Read Job finished but receiver is gone!");
-                        }
-                    }
-                    None => {
-                        if frame.is_ok() {
-                            tracing::warn!("Warning: received Ok frame but receiver is gone!");
-                        }
-                        break;
-                    }
-                }
-            }
-        }));
-        self.tasks.push(self.handle.spawn(async move {
-            while let Some(write_job) = write_recv.recv().await {
-                let write_result = write.send(write_job.data).await;
-                // we don't really care if the receiver for a write job is gone, as this is a common case
-                // therefore we only emit a trace message
-                match write_job.ret.send(write_result) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        tracing::trace!("Debug: Write Job finished but receiver is gone!");
-                    }
-                }
-            }
-            // make sure all data is sent
-            if write.into_inner().shutdown().await.is_err() {
-                tracing::warn!("Warning: shutdown of stream failed!");
-            }
-        }));
-
-        ChannelHandle {
-            write_job_queue: write_send,
-            read_job_queue: read_send,
-        }
-    }
-
-    /// Join all [`JoinHandle`]s and remove them.
-    pub(crate) async fn shutdown(&mut self) -> Result<(), JoinError> {
-        futures::future::try_join_all(std::mem::take(&mut self.tasks))
-            .await
-            .map(|_| ())
-    }
-}
-
-impl Drop for ChannelTasks {
+impl<A, B> Drop for ChannelHandle<A, B> {
     fn drop(&mut self) {
+        // drop sender to let write task finish
+        std::mem::drop(self.write_job_queue.take());
+        std::mem::drop(self.read_job_queue.take());
+        // cancel read task, we are in drop of ChannelHandle, so no one can read anymore
+        self.token.cancel();
+        // ignore results, the queue eagerly creates new taks after a channel was taken joining these can fail
         tokio::task::block_in_place(move || {
             self.handle
-                .block_on(futures::future::try_join_all(std::mem::take(
-                    &mut self.tasks,
-                )))
-                .expect("can join all tasks");
+                .block_on(futures::future::join_all(std::mem::take(&mut self.tasks)));
         });
     }
 }
