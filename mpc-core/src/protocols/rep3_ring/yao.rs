@@ -808,6 +808,44 @@ where
     let res = ring_div_by_public_many(&[input], &[divisor], io_context)?;
     Ok(res[0])
 }
+/// Divides a vector of ring elements by another public.
+pub fn ring_div_by_shared_many<T: IntRing2k, N: Rep3Network>(
+    input: &[RingElement<T>],
+    divisors: &[Rep3RingShare<T>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let num_inputs = input.len();
+    assert_eq!(input.len(), divisors.len());
+    let mut input_as_bits = Vec::with_capacity(T::K * num_inputs);
+    input
+        .iter()
+        .for_each(|y| input_as_bits.extend(GCUtils::ring_to_bits_as_u16::<T>(*y)));
+    let input_as_bits = input_as_bits.iter().map(|&x| x != 0).collect(); // ring_to_bits_as_u16 returns a 0-1 vec
+    decompose_circuit_compose_blueprint!(
+        &divisors,
+        io_context,
+        num_inputs,
+        T,
+        GarbledCircuits::ring_div_by_shared_many,
+        (T::K, input_as_bits)
+    )
+}
+
+/// Divides a ring element by another public.
+pub fn ring_div_by_shared<T: IntRing2k, N: Rep3Network>(
+    input: RingElement<T>,
+    divisor: Rep3RingShare<T>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3RingShare<T>>
+where
+    Standard: Distribution<T>,
+{
+    let res = ring_div_by_shared_many(&[input], &[divisor], io_context)?;
+    Ok(res[0])
+}
 
 /// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, there will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
 pub fn decompose_field_to_rings_many<F: PrimeField, T: IntRing2k, N: Rep3Network>(
