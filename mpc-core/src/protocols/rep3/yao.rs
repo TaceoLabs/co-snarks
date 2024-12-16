@@ -674,7 +674,7 @@ pub fn decompose_arithmetic<F: PrimeField, N: Rep3Network>(
         decompose_bit_size,
     )
 }
-/// Divides a vector of field elements by a power of 2, roudning down.
+/// Divides a vector of field elements by a power of 2, rounding down.
 pub fn field_int_div_power_2_many<F: PrimeField, N: Rep3Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     io_context: &mut IoContext<N>,
@@ -705,6 +705,116 @@ pub fn field_int_div_power_2<F: PrimeField, N: Rep3Network>(
     divisor_bit: usize,
 ) -> IoResult<Rep3PrimeFieldShare<F>> {
     let res = field_int_div_power_2_many(&[inputs], io_context, divisor_bit)?;
+    Ok(res[0])
+}
+
+/// Divides a vector of field elements by another, rounding down.
+pub fn field_int_div_many<F: PrimeField, N: Rep3Network>(
+    input1: &[Rep3PrimeFieldShare<F>],
+    input2: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = input1.len();
+
+    // if divisor_bit == 0 {
+    //     return Ok(inputs.to_owned());
+    // }
+    // if divisor_bit >= F::MODULUS_BIT_SIZE as usize {
+    //     return Ok(vec![Rep3PrimeFieldShare::zero_share(); num_inputs]);
+    // }
+    let mut combined_inputs = Vec::with_capacity(input1.len() + input2.len());
+    combined_inputs.extend_from_slice(input1);
+    combined_inputs.extend_from_slice(input2);
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        num_inputs,
+        GarbledCircuits::field_int_div_many::<_, F>,
+        ()
+    )
+}
+
+/// Divides a field element by a power of 2, rounding down.
+pub fn field_int_div<F: PrimeField, N: Rep3Network>(
+    input1: Rep3PrimeFieldShare<F>,
+    input2: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3PrimeFieldShare<F>> {
+    let res = field_int_div_many(&[input1], &[input2], io_context)?;
+    Ok(res[0])
+}
+/// Divides a vector of field elements by another, rounding down.
+pub fn field_int_div_by_public_many<F: PrimeField, N: Rep3Network>(
+    input: &[Rep3PrimeFieldShare<F>],
+    divisors: &[F],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = input.len();
+
+    // if divisor_bit == 0 {
+    //     return Ok(inputs.to_owned());
+    // }
+    // if divisor_bit >= F::MODULUS_BIT_SIZE as usize {
+    //     return Ok(vec![Rep3PrimeFieldShare::zero_share(); num_inputs]);
+    // } field_to_bits_as_u16
+    let mut divisors_as_bits = Vec::with_capacity(F::MODULUS_BIT_SIZE as usize * num_inputs);
+    divisors
+        .iter()
+        .for_each(|y| divisors_as_bits.extend(GCUtils::field_to_bits_as_u16::<F>(*y)));
+    let divisors_as_bits = divisors_as_bits.iter().map(|&x| x != 0).collect(); // rfield_to_bits_as_u16 returns a 0-1 vec
+    decompose_circuit_compose_blueprint!(
+        &input,
+        io_context,
+        num_inputs,
+        GarbledCircuits::field_int_div_by_public_many::<_, F>,
+        (divisors_as_bits)
+    )
+}
+
+/// Divides a field element by a power of 2, rounding down.
+pub fn field_int_div_by_public<F: PrimeField, N: Rep3Network>(
+    input: Rep3PrimeFieldShare<F>,
+    divisor: F,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3PrimeFieldShare<F>> {
+    let res = field_int_div_by_public_many(&[input], &[divisor], io_context)?;
+    Ok(res[0])
+}
+/// Divides a vector of field elements by another, rounding down.
+pub fn field_int_div_by_shared_many<F: PrimeField, N: Rep3Network>(
+    input: &[F],
+    divisors: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = input.len();
+
+    // if divisor_bit == 0 {
+    //     return Ok(inputs.to_owned());
+    // }
+    // if divisor_bit >= F::MODULUS_BIT_SIZE as usize {
+    //     return Ok(vec![Rep3PrimeFieldShare::zero_share(); num_inputs]);
+    // } field_to_bits_as_u16
+    let mut inputs_as_bits = Vec::with_capacity(F::MODULUS_BIT_SIZE as usize * num_inputs);
+    input
+        .iter()
+        .for_each(|y| inputs_as_bits.extend(GCUtils::field_to_bits_as_u16::<F>(*y)));
+    let divisors_as_bits = inputs_as_bits.iter().map(|&x| x != 0).collect(); // rfield_to_bits_as_u16 returns a 0-1 vec
+    decompose_circuit_compose_blueprint!(
+        &divisors,
+        io_context,
+        num_inputs,
+        GarbledCircuits::field_int_div_by_shared_many::<_, F>,
+        (divisors_as_bits)
+    )
+}
+
+/// Divides a field element by a power of 2, rounding down.
+pub fn field_int_div_by_shared<F: PrimeField, N: Rep3Network>(
+    input: F,
+    divisor: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3PrimeFieldShare<F>> {
+    let res = field_int_div_by_shared_many(&[input], &[divisor], io_context)?;
     Ok(res[0])
 }
 

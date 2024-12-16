@@ -28,6 +28,7 @@ where
 {
     let a = rng.gen::<RingElement<T>>();
     let b = rng.gen::<RingElement<T>>();
+
     let c = val - a - b;
     let share1 = Rep3RingShare::new_ring(a, c);
     let share2 = Rep3RingShare::new_ring(b, a);
