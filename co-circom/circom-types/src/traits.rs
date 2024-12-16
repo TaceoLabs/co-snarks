@@ -42,7 +42,6 @@ mod $mod_name {
     use $curve::{$config, Fq, Fq2, Fr};
     use ark_ff::BigInt;
     use ark_serialize::{CanonicalDeserialize, SerializationError};
-    use serde::ser::SerializeSeq;
 
     use super::*;
         impl CircomArkworksPrimeFieldBridge for Fr {
@@ -232,18 +231,12 @@ mod $mod_name {
                 Ok(p)
             }
 
-            fn serialize_g2<S: Serializer>(p: &Self::G2Affine, ser: S) -> Result<S::Ok, S::Error> {
+            fn g2_to_strings_projective(p: &Self::G2Affine) -> Vec<Vec<String>> {
                 let (x, y) = p.xy().unwrap();
-                let mut x_seq = ser.serialize_seq(Some(3))?;
-                x_seq.serialize_element(&vec![x.c0.to_string(), x.c1.to_string()])?;
-                x_seq.serialize_element(&vec![y.c0.to_string(), y.c1.to_string()])?;
-                x_seq.serialize_element(&vec!["1", "0"])?;
-                x_seq.end()
+                vec![vec![x.c0.to_string(), x.c1.to_string()], vec![y.c0.to_string(), y.c1.to_string()], vec!["1".to_owned(), "0".to_owned()]]
             }
-            fn serialize_gt<S: Serializer>(
-                p: &Self::TargetField,
-                ser: S,
-            ) -> Result<S::Ok, S::Error> {
+
+            fn gt_to_strings(p: &Self::TargetField) -> Vec<Vec<Vec<String>>> {
                 let a = p.c0;
                 let b = p.c1;
                 let aa = a.c0;
@@ -262,14 +255,12 @@ mod $mod_name {
                     vec![bb.c0.to_string(), bb.c1.to_string()],
                     vec![bc.c0.to_string(), bc.c1.to_string()],
                 ];
-                let mut seq = ser.serialize_seq(Some(2))?;
-                seq.serialize_element(&a)?;
-                seq.serialize_element(&b)?;
-                seq.end()
+                vec![a, b]
             }
+
             fn serialize_fr<S: Serializer>(p: &Self::ScalarField, ser: S) -> Result<S::Ok, S::Error> {
                 ser.serialize_str(&p.to_string())
-                }
+            }
 
             fn deserialize_gt_element<'de, D>(
                 deserializer: D,
@@ -649,10 +640,28 @@ where
     }
     /// Serializes element of G1 into a vec of strings
     fn g1_to_strings_projective(p: &Self::G1Affine) -> Vec<String>;
+    /// Serializes element of G2 into a vec of of vec of strings
+    fn g2_to_strings_projective(p: &Self::G2Affine) -> Vec<Vec<String>>;
+    /// Serializes element of TargetFIeld into a vec of of vec of vec of strings
+    fn gt_to_strings(p: &Self::TargetField) -> Vec<Vec<Vec<String>>>;
     /// Serializes element of G2 using serializer
-    fn serialize_g2<S: Serializer>(p: &Self::G2Affine, ser: S) -> Result<S::Ok, S::Error>;
+    fn serialize_g2<S: Serializer>(p: &Self::G2Affine, ser: S) -> Result<S::Ok, S::Error> {
+        let strings = Self::g2_to_strings_projective(p);
+        let mut seq = ser.serialize_seq(Some(strings.len())).unwrap();
+        for ele in strings {
+            seq.serialize_element(&ele)?;
+        }
+        seq.end()
+    }
     /// Serializes element of Gt using serializer
-    fn serialize_gt<S: Serializer>(p: &Self::TargetField, ser: S) -> Result<S::Ok, S::Error>;
+    fn serialize_gt<S: Serializer>(p: &Self::TargetField, ser: S) -> Result<S::Ok, S::Error> {
+        let strings = Self::gt_to_strings(p);
+        let mut seq = ser.serialize_seq(Some(strings.len())).unwrap();
+        for ele in strings {
+            seq.serialize_element(&ele)?;
+        }
+        seq.end()
+    }
     /// Serializes (single) element of Scalarfield using serializer
     fn serialize_fr<S: Serializer>(p: &Self::ScalarField, ser: S) -> Result<S::Ok, S::Error>;
 }
