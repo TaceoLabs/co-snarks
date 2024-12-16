@@ -715,7 +715,50 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                     (Public::Field(lhs), Shared::Field(rhs)) => Rep3BrilligType::shared_field(
                         rep3::arithmetic::div_public_by_shared(lhs, rhs, &mut self.io_context)?,
                     ),
-                    _ => todo!("Implement division for public/shared"),
+                    (Public::Int(public, IntegerBitSize::U128), Shared::Ring128(shared)) => {
+                        let divided = rep3_ring::yao::ring_div_by_shared(
+                            public.into(),
+                            shared,
+                            &mut self.io_context,
+                        )?;
+                        Rep3BrilligType::shared_u128(divided)
+                    }
+                    (Public::Int(public, IntegerBitSize::U64), Shared::Ring64(shared)) => {
+                        let divided = rep3_ring::yao::ring_div_by_shared(
+                            u64::try_from(public).expect("must be u64").into(),
+                            shared,
+                            &mut self.io_context,
+                        )?;
+                        Rep3BrilligType::shared_u64(divided)
+                    }
+                    (Public::Int(public, IntegerBitSize::U32), Shared::Ring32(shared)) => {
+                        let divided = rep3_ring::yao::ring_div_by_shared(
+                            u32::try_from(public).expect("must be u32").into(),
+                            shared,
+                            &mut self.io_context,
+                        )?;
+                        Rep3BrilligType::shared_u32(divided)
+                    }
+                    (Public::Int(public, IntegerBitSize::U16), Shared::Ring16(shared)) => {
+                        let divided = rep3_ring::yao::ring_div_by_shared(
+                            u16::try_from(public).expect("must be u16").into(),
+                            shared,
+                            &mut self.io_context,
+                        )?;
+                        Rep3BrilligType::shared_u16(divided)
+                    }
+                    (Public::Int(public, IntegerBitSize::U8), Shared::Ring8(shared)) => {
+                        let divided = rep3_ring::yao::ring_div_by_shared(
+                            u8::try_from(public).expect("must be u8").into(),
+                            shared,
+                            &mut self.io_context,
+                        )?;
+                        Rep3BrilligType::shared_u8(divided)
+                    }
+                    (Public::Int(_, IntegerBitSize::U1), Shared::Ring1(_)) => {
+                        todo!("do we need this?")
+                    }
+                    _ => panic!("type mismatch. Can only div matching values"),
                 }
             }
             (Rep3BrilligType::Shared(shared), Rep3BrilligType::Public(public)) => {
@@ -873,8 +916,10 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                 Rep3BrilligType::Public(self.plain_driver.int_div(lhs, rhs)?)
             }
             (Rep3BrilligType::Public(public), Rep3BrilligType::Shared(shared)) => {
-                if let (Public::Field(_), Shared::Field(_)) = (public, shared) {
-                    todo!("Implement IntDiv for public/shared")
+                if let (Public::Field(public), Shared::Field(shared)) = (public, shared) {
+                    let divided =
+                        rep3::yao::field_int_div_by_shared(public, shared, &mut self.io_context)?;
+                    Rep3BrilligType::shared_field(divided)
                 } else {
                     eyre::bail!("IntDiv only supported on fields")
                 }
