@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-ultrahonk-v0.2.0...co-ultrahonk-v0.3.0) (2024-12-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* Align to upstream bb behavior of calculating the grand product argument only over the relevant trace size, which leads to a different proof being output.
+* Bump Noir to v0.38.0, implement range checks, and allow nargo-asserts
+
+### Features
+
+* Add process ROM gate stuff for co-noir and some fixes ([9f0a9fa](https://github.com/TaceoLabs/co-snarks/commit/9f0a9fa905684afc9eaeee4ce6f2e7b0ce5e6769))
+* Bump Noir to v0.38.0, implement range checks, and allow nargo-asserts ([d1a5d83](https://github.com/TaceoLabs/co-snarks/commit/d1a5d83d4b17f1e1a5ad2ffcb6e2dba40733a0c9))
+* Bump versions to Nargo v0.39.0 and Barretenberg v0.63.1 ([#275](https://github.com/TaceoLabs/co-snarks/issues/275)) ([db255e6](https://github.com/TaceoLabs/co-snarks/commit/db255e63ef8ea64176b86f7c258c4f7a1bec7160))
+* implement tool to compare output of upstream BB with our implementation ([8af8540](https://github.com/TaceoLabs/co-snarks/commit/8af8540e40749f61aa7a6a08be05a2e836467948))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.3.0 to 0.4.0
+    * co-builder bumped from 0.1.0 to 0.2.0
+    * mpc-core bumped from 0.6.0 to 0.7.0
+    * ultrahonk bumped from 0.2.0 to 0.3.0
+
 ## [0.2.0](https://github.com/TaceoLabs/co-snarks/compare/co-ultrahonk-v0.1.0...co-ultrahonk-v0.2.0) (2024-11-12)
 
 

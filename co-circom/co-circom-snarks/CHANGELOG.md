@@ -9,6 +9,31 @@
   * dependencies
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-snarks-v0.2.0...co-circom-snarks-v0.3.0) (2024-12-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* Now the verify impls from groth16/plonk circom return an error indicating whether it was a success or not
+
+### Bug Fixes
+
+* added a check during groth16 prover for public inputs ([76466eb](https://github.com/TaceoLabs/co-snarks/commit/76466eb2d662efa4d5061e53e09470740763c77f))
+* default maybe_shared_inputs field while deserializing ([#276](https://github.com/TaceoLabs/co-snarks/issues/276)) ([b029f37](https://github.com/TaceoLabs/co-snarks/commit/b029f3778cf3d0be7ef00c51dbcffbb59e61a305))
+
+
+### Code Refactoring
+
+* Removed ark_relations deps. Also changed verify impls to not return bool but a common error ([b4f4bf1](https://github.com/TaceoLabs/co-snarks/commit/b4f4bf16beaa83108bc2ae6c6f972ab4e4da4473))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.6.0 to 0.7.0
+    * mpc-core bumped from 0.6.0 to 0.7.0
+
 ## [0.2.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-snarks-v0.1.2...co-circom-snarks-v0.2.0) (2024-11-12)
 
 
