@@ -683,3 +683,69 @@ pub(crate) fn arithmetic_xor_many<F: PrimeField, N: Rep3Network>(
         .collect();
     Ok(res)
 }
+
+/// Reshares the shared valuse from two parties to one other
+/// Assumes seeds are set up correctly already
+pub fn reshare_from_2_to_3_parties<F: PrimeField, N: Rep3Network>(
+    input: Option<Vec<Rep3PrimeFieldShare<F>>>,
+    len: usize,
+    recipient: PartyID,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    if io_context.id == recipient {
+        let mut result = Vec::with_capacity(len);
+        for _ in 0..len {
+            let (a, b) = io_context.random_fes::<F>();
+            result.push(Rep3PrimeFieldShare::new(a, b));
+        }
+        return Ok(result);
+    }
+
+    if input.is_none() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "During execution of reshare_from_2_to_3_parties in MPC: input is None",
+        ));
+    }
+
+    let input = input.unwrap();
+    if input.len() != len {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "During execution of reshare_from_2_to_3_parties in MPC: input length does not match",
+        ));
+    }
+
+    let mut rand = Vec::with_capacity(len);
+    let mut result = Vec::with_capacity(len);
+    if io_context.id == recipient.next_id() {
+        for inp in input {
+            let beta = inp.a + inp.b;
+            let b = io_context.rngs.rand.random_field_element_rng2();
+            let r = beta - b;
+            rand.push(r);
+            result.push(Rep3PrimeFieldShare::new(r, b));
+        }
+        let comm_id = io_context.id.next_id();
+        io_context.network.send_many(comm_id, &rand)?;
+        let rcv = io_context.network.recv_many::<F>(comm_id)?;
+        for (res, r) in result.iter_mut().zip(rcv) {
+            res.a += r;
+        }
+    } else {
+        for inp in input {
+            let beta = inp.a;
+            let a = io_context.rngs.rand.random_field_element_rng1();
+            let r = beta - a;
+            rand.push(r);
+            result.push(Rep3PrimeFieldShare::new(a, r));
+        }
+        let comm_id = io_context.id.prev_id();
+        io_context.network.send_many(comm_id, &rand)?;
+        let rcv = io_context.network.recv_many::<F>(comm_id)?;
+        for (res, r) in result.iter_mut().zip(rcv) {
+            res.b += r;
+        }
+    }
+    Ok(result)
+}
