@@ -1418,6 +1418,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                     }
 
                     let radix = u32::try_from(radix).expect("must be u32");
+                    let mut input = val;
                     assert!(radix <= 256, "radix is at most 256");
                     if radix.is_power_of_two() {
                         let bits = radix.ilog2();
@@ -1433,7 +1434,24 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                             .map(|val| Rep3BrilligType::Shared(Shared::Ring8(val)))
                             .collect()
                     } else {
-                        todo!("Implement to_radix for shared value and public radix for non-power-of-two radix")
+                        let mut limbs:Vec<Rep3BrilligType<_>> = vec![Rep3BrilligType::default(); output_size];
+                        for i in (0..output_size).rev() {
+                            let div = rep3::yao::field_int_div_by_public(
+                                input,
+                                radix.into(),
+                                &mut self.io_context,
+                            )?;
+                            let limb = input - rep3::arithmetic::mul_public(div, radix.into());
+                          
+                                let limb = rep3_ring::yao::field_to_ring_many::<_, u8, _>(
+                                    &[limb],
+                                    &mut self.io_context,
+                                )?; //radix is at most 256, so should fit into u8, but is this necessary?
+                                limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
+                            
+                            input = div;
+                        }
+                        limbs
                     }
                 } else {
                     eyre::bail!("can only ToRadix on field and radix must be Int32")
