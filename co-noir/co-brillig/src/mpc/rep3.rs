@@ -1434,7 +1434,8 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                             .map(|val| Rep3BrilligType::Shared(Shared::Ring8(val)))
                             .collect()
                     } else {
-                        let mut limbs:Vec<Rep3BrilligType<_>> = vec![Rep3BrilligType::default(); output_size];
+                        let mut limbs: Vec<Rep3BrilligType<_>> =
+                            vec![Rep3BrilligType::default(); output_size];
                         for i in (0..output_size).rev() {
                             let div = rep3::yao::field_int_div_by_public(
                                 input,
@@ -1442,13 +1443,13 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                                 &mut self.io_context,
                             )?;
                             let limb = input - rep3::arithmetic::mul_public(div, radix.into());
-                          
-                                let limb = rep3_ring::yao::field_to_ring_many::<_, u8, _>(
-                                    &[limb],
-                                    &mut self.io_context,
-                                )?; //radix is at most 256, so should fit into u8, but is this necessary?
-                                limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
-                            
+
+                            let limb = rep3_ring::yao::field_to_ring_many::<_, u8, _>(
+                                &[limb],
+                                &mut self.io_context,
+                            )?; //radix is at most 256, so should fit into u8, but is this necessary?
+                            limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
+
                             input = div;
                         }
                         limbs
@@ -1458,8 +1459,52 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                 }
             }
             (Rep3BrilligType::Public(val), Rep3BrilligType::Shared(radix)) => {
-                if let (Public::Field(_val), Shared::Ring32(_radix)) = (val, radix) {
-                    todo!("Implement to_radix for public value and shared radix")
+                if let (Public::Field(val), Shared::Ring32(radix)) = (val, radix) {
+                    if bits {
+                        todo!("Implement to_radix for public value and shared radix for bits=true")
+                    }
+                    // //todo: do we want to do checks for radix <= 256?
+                    let mut limbs: Vec<Rep3BrilligType<_>> =
+                        vec![Rep3BrilligType::default(); output_size];
+                    let radix_as_field =
+                        rep3_ring::yao::ring_to_field_many(&[radix], &mut self.io_context)?;
+                    let my_id = self.io_context.network.get_id();
+                    let div = rep3::yao::field_int_div_by_shared(
+                        val,
+                        radix_as_field[0],
+                        &mut self.io_context,
+                    )?;
+                    let limb = rep3::arithmetic::sub_public_by_shared(
+                        val,
+                        rep3::arithmetic::mul(div, radix_as_field[0], &mut self.io_context)?,
+                        my_id,
+                    ); // this feels very stupid?
+
+                    let limb = rep3_ring::yao::field_to_ring_many::<_, u8, _>(
+                        &[limb],
+                        &mut self.io_context,
+                    )?; //radix is at most 256, so should fit into u8
+                    limbs[output_size - 1] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
+                    let mut input = div;
+                    for i in (0..output_size).rev().skip(1) {
+                        let div = rep3::yao::field_int_div(
+                            input,
+                            radix_as_field[0],
+                            &mut self.io_context,
+                        )?;
+                        let limb = rep3::arithmetic::sub(
+                            input,
+                            rep3::arithmetic::mul(div, radix_as_field[0], &mut self.io_context)?,
+                        ); // this feels very stupid?
+
+                        let limb = rep3_ring::yao::field_to_ring_many::<_, u8, _>(
+                            &[limb],
+                            &mut self.io_context,
+                        )?; //radix is at most 256, so should fit into u8
+                        limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
+                        input = div;
+                    }
+                    limbs
                 } else {
                     eyre::bail!("can only ToRadix on field and radix must be Int32")
                 }

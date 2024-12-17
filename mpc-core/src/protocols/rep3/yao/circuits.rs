@@ -145,7 +145,7 @@ impl GarbledCircuits {
         Ok((result, c))
     }
 
-    /// Binary addition. Returns the result and the carry.
+    /// Binary addition. Returns just the result.
     fn bin_addition_no_carry<G: FancyBinary>(
         g: &mut G,
         xs: &[G::Item],
