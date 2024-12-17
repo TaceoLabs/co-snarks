@@ -986,7 +986,7 @@ where
 
 /// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, ther will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
 pub fn decompose_field_to_rings<F: PrimeField, T: IntRing2k, N: Rep3Network>(
-    inputs: Rep3PrimeFieldShare<F>,
+    input: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
     num_decomps_per_field: usize,
     decompose_bitlen: usize,
@@ -995,7 +995,7 @@ where
     Standard: Distribution<T>,
 {
     decompose_field_to_rings_many(
-        &[inputs],
+        &[input],
         io_context,
         num_decomps_per_field,
         decompose_bitlen,
