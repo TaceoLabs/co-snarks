@@ -5,6 +5,45 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-plonk-v0.4.0...co-plonk-v0.5.0) (2024-12-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* Now the verify impls from groth16/plonk circom return an error indicating whether it was a success or not
+* changed the traits for circom bridge. Also modified the from_reader impl for the two Zkeys
+* Removes the zkey in the said function signature. We needed it earlier because we had to know domain size, which we now no longer need.
+* the prover for Groth16/Plonk now expects an Arc<ZKey>. Cleaner than having multiple Arcs in ZKey
+* now uses new mpc-core and forked networking but NO rayon
+
+### Features
+
+* now can specify whether we want curve checks during zkey deser ([e1c03f3](https://github.com/TaceoLabs/co-snarks/commit/e1c03f3ba979bface5ea79062d95ffc088fdfda0))
+* prepare functions for compressed rep3 sharing ([55bef10](https://github.com/TaceoLabs/co-snarks/commit/55bef10313378e8ca14f2f22f312c84462a92a7e))
+* refactor to use new mpc-core ([43da344](https://github.com/TaceoLabs/co-snarks/commit/43da344be00f00a46849508cea1d279cf29a95b2))
+
+
+### Bug Fixes
+
+* added a check during groth16 prover for public inputs ([76466eb](https://github.com/TaceoLabs/co-snarks/commit/76466eb2d662efa4d5061e53e09470740763c77f))
+
+
+### Code Refactoring
+
+* prove for circom now expect Arc&lt;ZKey&gt; ([c2ac465](https://github.com/TaceoLabs/co-snarks/commit/c2ac465ebf6f3a28b902d9f0489e3f57c0843d7f))
+* Removed ark_relations deps. Also changed verify impls to not return bool but a common error ([b4f4bf1](https://github.com/TaceoLabs/co-snarks/commit/b4f4bf16beaa83108bc2ae6c6f972ab4e4da4473))
+* with_network_config for ShamirGroth16 doesn't need zkey anymore ([2052d89](https://github.com/TaceoLabs/co-snarks/commit/2052d89cc4abb531702886daf70c47ee3b1ecf1a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.6.0 to 0.7.0
+    * co-circom-snarks bumped from 0.2.0 to 0.3.0
+    * mpc-net bumped from 0.2.0 to 0.2.1
+    * mpc-core bumped from 0.6.0 to 0.7.0
+
 ## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-plonk-v0.3.1...co-plonk-v0.4.0) (2024-11-12)
 
 

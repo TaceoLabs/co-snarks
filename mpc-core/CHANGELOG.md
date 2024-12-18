@@ -2,6 +2,46 @@
 
 
 
+## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.6.0...mpc-core-v0.7.0) (2024-12-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **!:** Added functionality to traits of brillig/acvm
+* Added docs for brillig. Also updated the trait to better match the functionallity
+* modified traits for ACVM
+* Start adding replicated secret sharing for rings
+
+### Features
+
+* **!:** first version of shared if by forking brillig ([a25e4a5](https://github.com/TaceoLabs/co-snarks/commit/a25e4a5cb5cdc912197871803c5872c08777b8a7))
+* Add casts bestween different ring-shares, and cast between rings ([e680da6](https://github.com/TaceoLabs/co-snarks/commit/e680da667434a03721bd0da3a50fce2a1aa52d78))
+* Add functionality to reshare a vector of fieldshares from two parties to a 3rd ([#292](https://github.com/TaceoLabs/co-snarks/issues/292)) ([65f5be1](https://github.com/TaceoLabs/co-snarks/commit/65f5be1ae201e312e9b942e4edc1c5285be64d76))
+* Add remaing rep3 ring implementations. Untested so far ([b8c9a12](https://github.com/TaceoLabs/co-snarks/commit/b8c9a1296fff697c7afaa43cea452ad8e061e2c4))
+* Add tests for the REP3 ring implementation and fix minor bugs" ([ae3408a](https://github.com/TaceoLabs/co-snarks/commit/ae3408ab7d43ff1b40e31a846d0bda3c5edc5475))
+* Allow on-the-fly preprocessing for Shamir ([699ea14](https://github.com/TaceoLabs/co-snarks/commit/699ea14d7b0e4366e10c43c6c7e758755a8ba3be))
+* first plain unconstrained fn working ([56e1c80](https://github.com/TaceoLabs/co-snarks/commit/56e1c801e6d51c8e35f1f1b1b2b007d80f050999))
+* implement a radix sort in MPC and use it for range checks in co-noir ([#290](https://github.com/TaceoLabs/co-snarks/issues/290)) ([bc8c458](https://github.com/TaceoLabs/co-snarks/commit/bc8c45859f02932666c5306c00d2666011311505))
+* implement many featuers for the co-brillig rep3 backend ([#284](https://github.com/TaceoLabs/co-snarks/issues/284)) ([11e0b03](https://github.com/TaceoLabs/co-snarks/commit/11e0b03b8ca437e48e0ac80e2cff870f530c58c0))
+* Start adding replicated secret sharing for rings ([f4dca00](https://github.com/TaceoLabs/co-snarks/commit/f4dca000f4c9e978c69af8684d69375d85641417))
+
+
+### Bug Fixes
+
+* Fix the GC for the ring-to-ring upcast ([b5bf8b1](https://github.com/TaceoLabs/co-snarks/commit/b5bf8b113fd493750766496f83e80fa643114317))
+
+
+### Documentation
+
+* Added docs for brillig. Also updated the trait to better match the functionallity ([a2df63a](https://github.com/TaceoLabs/co-snarks/commit/a2df63aa1048364e484bde31013a1c5bbe4a9da3))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-net bumped from 0.2.0 to 0.2.1
+
 ## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.5.0...mpc-core-v0.6.0) (2024-11-12)
 
 

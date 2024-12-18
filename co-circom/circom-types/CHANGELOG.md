@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.6.0...circom-types-v0.7.0) (2024-12-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* Now the verify impls from groth16/plonk circom return an error indicating whether it was a success or not
+* Removed unnecessary parts of the zkey
+* changed the traits for circom bridge. Also modified the from_reader impl for the two Zkeys
+
+### Features
+
+* now can specify whether we want curve checks during zkey deser ([e1c03f3](https://github.com/TaceoLabs/co-snarks/commit/e1c03f3ba979bface5ea79062d95ffc088fdfda0))
+
+
+### Bug Fixes
+
+* added a check during groth16 prover for public inputs ([76466eb](https://github.com/TaceoLabs/co-snarks/commit/76466eb2d662efa4d5061e53e09470740763c77f))
+
+
+### Code Refactoring
+
+* Removed ark_relations deps. Also changed verify impls to not return bool but a common error ([b4f4bf1](https://github.com/TaceoLabs/co-snarks/commit/b4f4bf16beaa83108bc2ae6c6f972ab4e4da4473))
+* Removed unnecessary parts of the zkey ([0713260](https://github.com/TaceoLabs/co-snarks/commit/071326056a8d47aca9d72e8848773981a3cbbc89))
+
 ## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.5.0...circom-types-v0.6.0) (2024-11-12)
 
 

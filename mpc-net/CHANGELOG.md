@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.2.0...mpc-net-v0.2.1) (2024-12-16)
+
+
+### Bug Fixes
+
+* dont ignore network write errors in tokio taks, log them instead ([0823a5c](https://github.com/TaceoLabs/co-snarks/commit/0823a5ca0e851e609753b6c5134477ad530d0f3f))
+* increase max frame length to 1Tb ([f50ab33](https://github.com/TaceoLabs/co-snarks/commit/f50ab33033b7a030345dadf32b6879fc74e2d53a))
+
 ## [0.2.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.1.2...mpc-net-v0.2.0) (2024-11-12)
 
 

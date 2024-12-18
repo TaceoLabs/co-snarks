@@ -10,6 +10,32 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.5.0...circom-mpc-vm-v0.6.0) (2024-12-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* Opcode:Eq now holds the number of elements to compare.
+
+### Features
+
+* implement new accelerators for IsZero and AddBits ([bbccad1](https://github.com/TaceoLabs/co-snarks/commit/bbccad18e2382a8141286189c7c7349423788f85))
+* make the application of MPC accelerators configurable ([9f67c9a](https://github.com/TaceoLabs/co-snarks/commit/9f67c9accc4ca52c9c270ea48ca8bb28d724af5a))
+
+
+### Bug Fixes
+
+* fixed a bug where eq checks for array did not work properly ([#283](https://github.com/TaceoLabs/co-snarks/issues/283)) ([3193574](https://github.com/TaceoLabs/co-snarks/commit/319357417be28cbe4da82b3dc4d2903b4183afb1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-snarks bumped from 0.2.0 to 0.3.0
+    * mpc-core bumped from 0.6.0 to 0.7.0
+    * mpc-net bumped from 0.2.0 to 0.2.1
+
 ## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.4.2...circom-mpc-vm-v0.5.0) (2024-11-12)
 
 
