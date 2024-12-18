@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
     let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
 
-    let network = MpcNetworkHandler::establish(config).await?;
+    let network = MpcNetworkHandler::init(config).await?;
 
     let codec = MessageCodec;
     let mut channels = network.get_custom_channels(codec).await?;
@@ -66,6 +66,7 @@ async fn main() -> Result<()> {
             panic!("could not receive message");
         }
     }
+
     network.print_connection_stats(&mut std::io::stdout())?;
 
     Ok(())

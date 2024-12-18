@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
     let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
 
-    let network = MpcNetworkHandler::establish(config).await?;
+    let network = MpcNetworkHandler::init(config).await?;
 
     let mut channels = network.get_byte_channels().await?;
 
@@ -48,6 +48,7 @@ async fn main() -> Result<()> {
             assert!(b.iter().all(|&x| x == my_id as u8))
         }
     }
+
     network.print_connection_stats(&mut std::io::stdout())?;
 
     Ok(())

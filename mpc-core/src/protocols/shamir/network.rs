@@ -4,11 +4,12 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
-use eyre::{bail, eyre, Report};
+use eyre::bail;
 use mpc_net::{
-    channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler, MpcNetworkHandlerWrapper,
+    channel::ChannelHandle, config::NetworkConfig, queue::ChannelQueue, MpcNetworkHandler,
 };
 use std::{collections::HashMap, sync::Arc};
+use tokio::runtime::Runtime;
 
 /// This trait defines the network interface for the Shamir protocol.
 pub trait ShamirNetwork: Send {
@@ -74,17 +75,21 @@ pub trait ShamirNetwork: Send {
 }
 
 /// This struct can be used to facilitate network communication for the Shamir MPC protocol.
+#[derive(Debug)]
 pub struct ShamirMpcNet {
     pub(crate) id: usize, // 0 <= id < num_parties
     pub(crate) num_parties: usize,
     pub(crate) channels: HashMap<usize, ChannelHandle<Bytes, BytesMut>>,
-    pub(crate) net_handler: Arc<MpcNetworkHandlerWrapper>,
+    pub(crate) queue: ChannelQueue,
+    // order is important, runtime MUST be dropped last
+    pub(crate) runtime: Arc<Runtime>,
 }
 
 impl ShamirMpcNet {
     /// Takes a [NetworkConfig] struct and constructs the network interface. The network needs to contain at least 3 parties and all ids need to be in the range of 0 <= id < num_parties.
-    pub fn new(config: NetworkConfig) -> Result<Self, Report> {
+    pub fn new(config: NetworkConfig) -> eyre::Result<Self> {
         let num_parties = config.parties.len();
+        let queue_size = config.conn_queue_size;
 
         if config.parties.len() <= 2 {
             bail!("Shamir protocol requires at least 3 parties")
@@ -97,32 +102,17 @@ impl ShamirMpcNet {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        let (net_handler, channels) = runtime.block_on(async {
-            let net_handler = MpcNetworkHandler::establish(config).await?;
-            let mut channels = net_handler.get_byte_channels().await?;
+        let net_handler = runtime.block_on(MpcNetworkHandler::init(config))?;
+        let queue = runtime.block_on(MpcNetworkHandler::queue(net_handler, queue_size))?;
 
-            let mut channels_ = HashMap::with_capacity(num_parties - 1);
+        let channels = queue.get_channels()?;
 
-            for other_id in 0..num_parties {
-                if other_id != id {
-                    let chan = channels
-                        .remove(&other_id)
-                        .ok_or_else(|| eyre!("no channel found for party id={}", other_id))?;
-                    channels_.insert(other_id, ChannelHandle::manage(chan));
-                }
-            }
-
-            if !channels.is_empty() {
-                bail!("unexpected channels found")
-            }
-
-            Ok((net_handler, channels_))
-        })?;
         Ok(Self {
             id,
             num_parties,
-            net_handler: Arc::new(MpcNetworkHandlerWrapper::new(runtime, net_handler)),
             channels,
+            queue,
+            runtime: Arc::new(runtime),
         })
     }
 
@@ -262,33 +252,19 @@ impl ShamirNetwork for ShamirMpcNet {
     }
 
     fn fork(&mut self) -> std::io::Result<Self> {
-        let id = self.id;
-        let num_parties = self.num_parties;
-        let net_handler = Arc::clone(&self.net_handler);
-        let channels = net_handler.runtime.block_on(async {
-            let mut channels = net_handler.inner.get_byte_channels().await?;
-
-            let mut channels_ = HashMap::with_capacity(num_parties - 1);
-
-            for other_id in 0..num_parties {
-                if other_id != id {
-                    let chan = channels.remove(&other_id).expect("to find channel");
-                    channels_.insert(other_id, ChannelHandle::manage(chan));
-                }
-            }
-
-            if !channels.is_empty() {
-                panic!("unexpected channels found")
-            }
-
-            Ok::<_, std::io::Error>(channels_)
+        let channels = self.queue.get_channels().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "could not get channels from queue, channel died",
+            )
         })?;
 
         Ok(Self {
-            id,
-            num_parties,
-            net_handler,
+            id: self.id,
+            num_parties: self.num_parties,
             channels,
+            queue: self.queue.clone(),
+            runtime: self.runtime.clone(),
         })
     }
 

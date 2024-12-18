@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use clap::Parser;
 use color_eyre::{
@@ -6,7 +6,6 @@ use color_eyre::{
     Result,
 };
 use mpc_net::{
-    channel::ChannelHandle,
     config::{NetworkConfig, NetworkConfigFile},
     MpcNetworkHandler,
 };
@@ -31,13 +30,9 @@ async fn main() -> Result<()> {
     let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
 
-    let network = MpcNetworkHandler::establish(config).await?;
+    let network = MpcNetworkHandler::init(config).await?;
 
-    let channels = network.get_byte_channels().await?;
-    let mut managed_channels = channels
-        .into_iter()
-        .map(|(i, c)| (i, ChannelHandle::manage(c)))
-        .collect::<HashMap<_, _>>();
+    let mut managed_channels = network.get_byte_channels_managed().await?;
 
     // send to all channels
     for (&i, channel) in managed_channels.iter_mut() {
@@ -52,6 +47,7 @@ async fn main() -> Result<()> {
             assert!(b.iter().all(|&x| x == my_id as u8))
         }
     }
+
     network.print_connection_stats(&mut std::io::stdout())?;
 
     Ok(())
