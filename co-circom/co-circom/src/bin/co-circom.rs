@@ -458,6 +458,11 @@ where
     let out = config.out;
     let public_input_filename = config.public_input;
     let t = config.threshold;
+    let check = if config.check_zkey {
+        CheckElement::Yes
+    } else {
+        CheckElement::No
+    };
 
     file_utils::check_file_exists(&witness)?;
     file_utils::check_file_exists(&zkey)?;
@@ -477,10 +482,8 @@ where
 
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
-            let zkey = Arc::new(
-                Groth16ZKey::<P>::from_reader(zkey_file, CheckElement::Yes)
-                    .context("reading zkey")?,
-            );
+            let zkey =
+                Arc::new(Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?);
 
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
@@ -528,8 +531,7 @@ where
         }
         ProofSystem::Plonk => {
             let zkey = Arc::new(
-                PlonkZKey::<P>::from_reader(zkey_file, CheckElement::Yes)
-                    .context("while parsing zkey")?,
+                PlonkZKey::<P>::from_reader(zkey_file, check).context("while parsing zkey")?,
             );
 
             let (proof, public_input) = match protocol {
