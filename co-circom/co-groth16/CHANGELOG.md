@@ -11,6 +11,40 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.8.0](https://github.com/TaceoLabs/co-snarks/compare/co-groth16-v0.7.0...co-groth16-v0.8.0) (2024-12-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* Now the verify impls from groth16/plonk circom return an error indicating whether it was a success or not
+* Removed unnecessary parts of the zkey
+* changed the traits for circom bridge. Also modified the from_reader impl for the two Zkeys
+* Removes the zkey in the said function signature. We needed it earlier because we had to know domain size, which we now no longer need.
+* the prover for Groth16/Plonk now expects an Arc<ZKey>. Cleaner than having multiple Arcs in ZKey
+* the public interface of the Groth16MPCProver trait has changed.
+* refactors everything that all groth16 specific functionallity is not in MPC-core anymore.
+
+### Features
+
+* added plain prover shorthand function ([b365fcd](https://github.com/TaceoLabs/co-snarks/commit/b365fcd89390dad585933f39a2db32473081d060))
+* now can specify whether we want curve checks during zkey deser ([e1c03f3](https://github.com/TaceoLabs/co-snarks/commit/e1c03f3ba979bface5ea79062d95ffc088fdfda0))
+* prepare functions for compressed rep3 sharing ([55bef10](https://github.com/TaceoLabs/co-snarks/commit/55bef10313378e8ca14f2f22f312c84462a92a7e))
+* refactors all according to MPC-core + Rayon ([44a5d2d](https://github.com/TaceoLabs/co-snarks/commit/44a5d2d4f1e406331f127cd89de369a66d41b105))
+
+
+### Bug Fixes
+
+* added a check during groth16 prover for public inputs ([76466eb](https://github.com/TaceoLabs/co-snarks/commit/76466eb2d662efa4d5061e53e09470740763c77f))
+
+
+### Code Refactoring
+
+* make pointshare in Groth16 MPC trait generic over the curve ([dc5acd2](https://github.com/TaceoLabs/co-snarks/commit/dc5acd28db03920982de623f51dd4df236ff7381))
+* prove for circom now expect Arc&lt;ZKey&gt; ([c2ac465](https://github.com/TaceoLabs/co-snarks/commit/c2ac465ebf6f3a28b902d9f0489e3f57c0843d7f))
+* Removed ark_relations deps. Also changed verify impls to not return bool but a common error ([b4f4bf1](https://github.com/TaceoLabs/co-snarks/commit/b4f4bf16beaa83108bc2ae6c6f972ab4e4da4473))
+* Removed unnecessary parts of the zkey ([0713260](https://github.com/TaceoLabs/co-snarks/commit/071326056a8d47aca9d72e8848773981a3cbbc89))
+* with_network_config for ShamirGroth16 doesn't need zkey anymore ([2052d89](https://github.com/TaceoLabs/co-snarks/commit/2052d89cc4abb531702886daf70c47ee3b1ecf1a))
+
 ## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/co-groth16-v0.6.0...co-groth16-v0.7.0) (2024-12-16)
 
 

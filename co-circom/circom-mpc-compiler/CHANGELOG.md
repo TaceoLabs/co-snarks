@@ -7,6 +7,10 @@
     * co-groth16 bumped from 0.5.0 to 0.5.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+* The following workspace dependencies were updated
+  * dev-dependencies
+    * co-groth16 bumped from 0.7.0 to 0.8.0
+
 ## [0.8.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-compiler-v0.7.0...circom-mpc-compiler-v0.8.0) (2024-12-16)
 
 

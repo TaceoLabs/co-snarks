@@ -1,5 +1,9 @@
 # Changelog
 
+* The following workspace dependencies were updated
+  * dependencies
+    * ultrahonk bumped from 0.3.0 to 0.4.0
+
 ## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-ultrahonk-v0.2.0...co-ultrahonk-v0.3.0) (2024-12-16)
 
 

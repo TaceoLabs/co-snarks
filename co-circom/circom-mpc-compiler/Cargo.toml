@@ -1,6 +1,6 @@
 [package]
 name = "circom-mpc-compiler"
-version = "0.8.0"
+version = "0.8.1"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -29,6 +29,6 @@ tracing.workspace = true
 
 [dev-dependencies]
 ark-bn254.workspace = true
-co-groth16 = { version = "0.7.0", path = "../co-groth16" }
+co-groth16 = { version = "0.8.0", path = "../co-groth16" }
 mpc-core = { version = "0.7.0", path = "../../mpc-core" }
 tracing.workspace = true
