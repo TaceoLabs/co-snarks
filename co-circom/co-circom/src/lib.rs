@@ -1,7 +1,6 @@
 #![warn(missing_docs)]
 //! This crate provides a binary and associated helper library for running collaborative SNARK proofs.
 use std::{
-    collections::BTreeMap,
     fs::File,
     io::{BufReader, Read},
     path::PathBuf,
@@ -635,9 +634,7 @@ pub fn split_input<P>(
     input: PathBuf,
     circuit_path: PathBuf,
     config: CompilerConfig,
-    seeded: bool,
-    additive: bool,
-) -> color_eyre::Result<[SerializeableSharedRep3Input<P::ScalarField, SeedRng>; 3]>
+) -> color_eyre::Result<[SerializeableSharedRep3Input<P::ScalarField>; 3]>
 where
     P: Pairing + CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -655,9 +652,9 @@ where
 
     // create input shares
     let mut shares = [
-        SerializeableSharedRep3Input::<P::ScalarField, SeedRng>::default(),
-        SerializeableSharedRep3Input::<P::ScalarField, SeedRng>::default(),
-        SerializeableSharedRep3Input::<P::ScalarField, SeedRng>::default(),
+        SerializeableSharedRep3Input::<P::ScalarField>::default(),
+        SerializeableSharedRep3Input::<P::ScalarField>::default(),
+        SerializeableSharedRep3Input::<P::ScalarField>::default(),
     ];
 
     let mut rng = rand::thread_rng();
@@ -689,22 +686,14 @@ where
                     .into_iter()
                     .collect::<Option<Vec<_>>>()
                     .expect("all are Some");
-                let [share0, share1, share2] = SerializeableSharedRep3Input::share_rep3(
-                    &parsed_vals,
-                    &mut rng,
-                    seeded,
-                    additive,
-                );
+                let [share0, share1, share2] =
+                    SerializeableSharedRep3Input::share_rep3(&parsed_vals, &mut rng);
                 shares[0].shared_inputs.insert(name.clone(), share0);
                 shares[1].shared_inputs.insert(name.clone(), share1);
                 shares[2].shared_inputs.insert(name.clone(), share2);
             } else {
                 let [share0, share1, share2] =
-                    SerializeableSharedRep3Input::<_, SeedRng>::maybe_share_rep3(
-                        &parsed_vals,
-                        &mut rng,
-                        additive,
-                    );
+                    SerializeableSharedRep3Input::maybe_share_rep3(&parsed_vals, &mut rng);
                 shares[0].maybe_shared_inputs.insert(name.clone(), share0);
                 shares[1].maybe_shared_inputs.insert(name.clone(), share1);
                 shares[2].maybe_shared_inputs.insert(name.clone(), share2);
@@ -715,11 +704,10 @@ where
 }
 
 /// Try to parse a [SharedInput] from a [Read]er.
-pub fn parse_shared_input<R: Read, F: PrimeField, N: Rep3Network>(
+pub fn parse_shared_input<R: Read, F: PrimeField>(
     reader: R,
-    mpc_net: &mut N,
 ) -> color_eyre::Result<SharedInput<F, Rep3PrimeFieldShare<F>>> {
-    let deserialized: SerializeableSharedRep3Input<F, SeedRng> =
+    let deserialized: SerializeableSharedRep3Input<F> =
         bincode::deserialize_from(reader).context("trying to parse input share file")?;
 
     if !deserialized.maybe_shared_inputs.is_empty() {
@@ -727,41 +715,7 @@ pub fn parse_shared_input<R: Read, F: PrimeField, N: Rep3Network>(
     }
 
     let public_inputs = deserialized.public_inputs;
-    let shared_inputs_ = deserialized.shared_inputs;
-
-    let mut shared_inputs = BTreeMap::new();
-
-    let mut to_reshare = Vec::new();
-
-    for (_, share) in shared_inputs_.iter() {
-        match share {
-            Rep3ShareVecType::Replicated(_) => {}
-            Rep3ShareVecType::SeededReplicated(_) => {}
-            Rep3ShareVecType::Additive(vec) => to_reshare.extend_from_slice(vec),
-            Rep3ShareVecType::SeededAdditive(seeded_type) => {
-                to_reshare.extend_from_slice(&(seeded_type.to_owned().expand_vec()))
-            }
-        }
-    }
-
-    let mut reshared = reshare_vec(to_reshare, mpc_net)?;
-
-    for (name, share) in shared_inputs_ {
-        match share {
-            Rep3ShareVecType::Replicated(vec) => {
-                shared_inputs.insert(name, vec);
-            }
-            Rep3ShareVecType::SeededReplicated(replicated_seed_type) => {
-                shared_inputs.insert(name, replicated_seed_type.expand_vec()?);
-            }
-            Rep3ShareVecType::Additive(vec) => {
-                shared_inputs.insert(name, reshared.drain(..vec.len()).collect());
-            }
-            Rep3ShareVecType::SeededAdditive(seeded_type) => {
-                shared_inputs.insert(name, reshared.drain(..seeded_type.length()).collect());
-            }
-        }
-    }
+    let shared_inputs = deserialized.shared_inputs;
 
     Ok(SharedInput {
         public_inputs,

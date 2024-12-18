@@ -6,7 +6,7 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_types::Witness;
 use mpc_core::protocols::{
-    rep3::{self, MaybeRep3ShareVecType, Rep3PrimeFieldShare, Rep3ShareVecType},
+    rep3::{self, Rep3PrimeFieldShare, Rep3ShareVecType},
     shamir::{self, ShamirPrimeFieldShare},
 };
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, SeedableRng};
@@ -45,7 +45,6 @@ where
     }
 }
 
-//TODO THE SECRETSHARED TRAIT IS REALLY BAD. WE DO WANT SOMETHING ELSE!
 /// A shared witness in the circom ecosystem.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SharedWitness<F: PrimeField, S>
@@ -70,10 +69,7 @@ where
 /// This type represents the serialized version of a Rep3 witness. Its share can be either additive or replicated, and in both cases also compressed.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct SerializeableSharedRep3Input<F: PrimeField, U: Rng + SeedableRng + CryptoRng>
-where
-    U::Seed: Serialize + for<'a> Deserialize<'a> + Clone + std::fmt::Debug,
-{
+pub struct SerializeableSharedRep3Input<F: PrimeField> {
     #[serde(
         serialize_with = "mpc_core::ark_se",
         deserialize_with = "mpc_core::ark_de"
@@ -83,17 +79,13 @@ where
     pub public_inputs: BTreeMap<String, Vec<F>>,
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub shared_inputs: BTreeMap<String, Rep3ShareVecType<F, U>>,
+    pub shared_inputs: BTreeMap<String, Vec<Rep3PrimeFieldShare<F>>>,
     /// A map from variable names to vecs with maybe unknown elements that need to be merged.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    #[serde(default)]
-    pub maybe_shared_inputs: BTreeMap<String, MaybeRep3ShareVecType<F>>,
+    pub maybe_shared_inputs: BTreeMap<String, Vec<Option<Rep3PrimeFieldShare<F>>>>,
 }
 
-impl<F: PrimeField, U: Rng + SeedableRng + CryptoRng> Default for SerializeableSharedRep3Input<F, U>
-where
-    U::Seed: Serialize + for<'a> Deserialize<'a> + Clone + std::fmt::Debug,
-{
+impl<F: PrimeField> Default for SerializeableSharedRep3Input<F> {
     fn default() -> Self {
         Self {
             public_inputs: BTreeMap::new(),
@@ -103,74 +95,24 @@ where
     }
 }
 
-impl<F: PrimeField, U: Rng + SeedableRng + CryptoRng> SerializeableSharedRep3Input<F, U>
-where
-    U::Seed: Serialize + for<'a> Deserialize<'a> + Clone + std::fmt::Debug,
-    Standard: Distribution<U::Seed>,
-{
-    /// Shares a given input into a [Rep3ShareVecType] type.
+impl<F: PrimeField> SerializeableSharedRep3Input<F> {
+    /// Shares a given input
     pub fn share_rep3<R: Rng + CryptoRng>(
         input: &[F],
         rng: &mut R,
-        seeded: bool,
-        additive: bool,
-    ) -> [Rep3ShareVecType<F, U>; 3] {
-        match (seeded, additive) {
-            (true, true) => {
-                let [share1, share2, share3] =
-                    rep3::share_field_elements_additive_seeded::<_, _, U>(input, rng);
-                let share1 = Rep3ShareVecType::SeededAdditive(share1);
-                let share2 = Rep3ShareVecType::SeededAdditive(share2);
-                let share3 = Rep3ShareVecType::SeededAdditive(share3);
-                [share1, share2, share3]
-            }
-            (true, false) => {
-                let [share1, share2, share3] =
-                    rep3::share_field_elements_seeded::<_, _, U>(input, rng);
-                let share1 = Rep3ShareVecType::SeededReplicated(share1);
-                let share2 = Rep3ShareVecType::SeededReplicated(share2);
-                let share3 = Rep3ShareVecType::SeededReplicated(share3);
-                [share1, share2, share3]
-            }
-            (false, true) => {
-                let [share1, share2, share3] = rep3::share_field_elements_additive(input, rng);
-                let share1 = Rep3ShareVecType::Additive(share1);
-                let share2 = Rep3ShareVecType::Additive(share2);
-                let share3 = Rep3ShareVecType::Additive(share3);
-                [share1, share2, share3]
-            }
-            (false, false) => {
-                let [share1, share2, share3] = rep3::share_field_elements(input, rng);
-                let share1 = Rep3ShareVecType::Replicated(share1);
-                let share2 = Rep3ShareVecType::Replicated(share2);
-                let share3 = Rep3ShareVecType::Replicated(share3);
-                [share1, share2, share3]
-            }
-        }
+    ) -> [Vec<Rep3PrimeFieldShare<F>>; 3] {
+        rep3::share_field_elements(input, rng)
     }
 
-    /// Shares a given input with unknown elements into a [MaybeRep3ShareVecType] type.
+    /// Shares a given input with unknown elements
     pub fn maybe_share_rep3<R: Rng + CryptoRng>(
         input: &[Option<F>],
         rng: &mut R,
-        additive: bool,
-    ) -> [MaybeRep3ShareVecType<F>; 3] {
-        if additive {
-            let [share1, share2, share3] = rep3::share_maybe_field_elements_additive(input, rng);
-            let share1 = MaybeRep3ShareVecType::Additive(share1);
-            let share2 = MaybeRep3ShareVecType::Additive(share2);
-            let share3 = MaybeRep3ShareVecType::Additive(share3);
-            [share1, share2, share3]
-        } else {
-            let [share1, share2, share3] = rep3::share_maybe_field_elements(input, rng);
-            let share1 = MaybeRep3ShareVecType::Replicated(share1);
-            let share2 = MaybeRep3ShareVecType::Replicated(share2);
-            let share3 = MaybeRep3ShareVecType::Replicated(share3);
-            [share1, share2, share3]
-        }
+    ) -> [Vec<Option<Rep3PrimeFieldShare<F>>>; 3] {
+        rep3::share_maybe_field_elements(input, rng)
     }
 
-    /// Merges two [SerializeableSharedRep3Input]s into one, performing basic sanity checks.
+    /// Merges two [SharedRep3Input]s into one, performing basic sanity checks.
     pub fn merge(self, other: Self) -> eyre::Result<Self> {
         let mut shared_inputs = self.shared_inputs;
         let maybe_shared_inputs = self.maybe_shared_inputs;
@@ -209,50 +151,19 @@ where
                 eyre::bail!("Both inputs must have the same keys for unmerged elements");
             }
 
-            match (v1, v2) {
-                (
-                    MaybeRep3ShareVecType::Replicated(shares),
-                    MaybeRep3ShareVecType::Replicated(other_shares),
-                ) => {
-                    let merged = shares
-                        .into_iter()
-                        .zip(other_shares.into_iter())
-                        .map(|(a, b)| match (a, b) {
-                            (None, None) => Ok(None),
-                            (a @ Some(_), None) | (None, a @ Some(_)) => Ok(a),
-                            _ => Err(eyre::eyre!("Input {} present in both unmerged inputs", k1)),
-                        })
-                        .collect::<Result<Vec<_>, eyre::Report>>()?;
-                    if let Some(merged) = merged.iter().cloned().collect::<Option<Vec<_>>>() {
-                        shared_inputs.insert(k1.clone(), Rep3ShareVecType::Replicated(merged));
-                    } else {
-                        merged_maybe_shared_inputs
-                            .insert(k1.clone(), MaybeRep3ShareVecType::Replicated(merged));
-                    }
-                }
-                (
-                    MaybeRep3ShareVecType::Additive(shares),
-                    MaybeRep3ShareVecType::Additive(other_shares),
-                ) => {
-                    let merged = shares
-                        .into_iter()
-                        .zip(other_shares.into_iter())
-                        .map(|(a, b)| match (a, b) {
-                            (None, None) => Ok(None),
-                            (a @ Some(_), None) | (None, a @ Some(_)) => Ok(a),
-                            _ => Err(eyre::eyre!("Input {} present in both unmerged inputs", k1)),
-                        })
-                        .collect::<Result<Vec<_>, eyre::Report>>()?;
-                    if let Some(merged) = merged.iter().cloned().collect::<Option<Vec<_>>>() {
-                        shared_inputs.insert(k1.clone(), Rep3ShareVecType::Additive(merged));
-                    } else {
-                        merged_maybe_shared_inputs
-                            .insert(k1.clone(), MaybeRep3ShareVecType::Additive(merged));
-                    }
-                }
-                _ => {
-                    eyre::bail!("Input {} cannot be merged, the share type is different", k1);
-                }
+            let merged = v1
+                .into_iter()
+                .zip(v2.into_iter())
+                .map(|(a, b)| match (a, b) {
+                    (None, None) => Ok(None),
+                    (a @ Some(_), None) | (None, a @ Some(_)) => Ok(a),
+                    _ => Err(eyre::eyre!("Input {} present in both unmerged inputs", k1)),
+                })
+                .collect::<Result<Vec<_>, eyre::Report>>()?;
+            if let Some(merged) = merged.iter().cloned().collect::<Option<Vec<_>>>() {
+                shared_inputs.insert(k1.clone(), merged);
+            } else {
+                merged_maybe_shared_inputs.insert(k1.clone(), merged);
             }
         }
 
@@ -386,8 +297,38 @@ where
         let public_inputs = &witness.values[..num_pub_inputs];
         let witness = &witness.values[num_pub_inputs..];
 
-        let [share1, share2, share3] =
-            SerializeableSharedRep3Input::share_rep3(witness, rng, seeded, additive);
+        let [share1, share2, share3] = match (seeded, additive) {
+            (true, true) => {
+                let [share1, share2, share3] =
+                    rep3::share_field_elements_additive_seeded::<_, _, U>(witness, rng);
+                let share1 = Rep3ShareVecType::SeededAdditive(share1);
+                let share2 = Rep3ShareVecType::SeededAdditive(share2);
+                let share3 = Rep3ShareVecType::SeededAdditive(share3);
+                [share1, share2, share3]
+            }
+            (true, false) => {
+                let [share1, share2, share3] =
+                    rep3::share_field_elements_seeded::<_, _, U>(witness, rng);
+                let share1 = Rep3ShareVecType::SeededReplicated(share1);
+                let share2 = Rep3ShareVecType::SeededReplicated(share2);
+                let share3 = Rep3ShareVecType::SeededReplicated(share3);
+                [share1, share2, share3]
+            }
+            (false, true) => {
+                let [share1, share2, share3] = rep3::share_field_elements_additive(witness, rng);
+                let share1 = Rep3ShareVecType::Additive(share1);
+                let share2 = Rep3ShareVecType::Additive(share2);
+                let share3 = Rep3ShareVecType::Additive(share3);
+                [share1, share2, share3]
+            }
+            (false, false) => {
+                let [share1, share2, share3] = rep3::share_field_elements(witness, rng);
+                let share1 = Rep3ShareVecType::Replicated(share1);
+                let share2 = Rep3ShareVecType::Replicated(share2);
+                let share3 = Rep3ShareVecType::Replicated(share3);
+                [share1, share2, share3]
+            }
+        };
 
         let witness1 = Self {
             public_inputs: public_inputs.to_vec(),
