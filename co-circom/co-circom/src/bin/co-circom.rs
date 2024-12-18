@@ -281,13 +281,7 @@ where
     file_utils::check_dir_exists(&out_dir)?;
 
     let start = Instant::now();
-    let shares = co_circom::split_input::<P>(
-        input.clone(),
-        circuit_path,
-        config.compiler,
-        config.seeded,
-        config.additive,
-    )?;
+    let shares = co_circom::split_input::<P>(input.clone(), circuit_path, config.compiler)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Sharing took {} ms", duration_ms);
 
@@ -365,13 +359,13 @@ where
         .to_owned()
         .try_into()
         .context("while converting network config")?;
-    let mut mpc_net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
+    let mpc_net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
 
     // parse input shares
     let input_share_file =
         BufReader::new(File::open(&input).context("while opening input share file")?);
-    let input_share = co_circom::parse_shared_input(input_share_file, &mut mpc_net)
-        .context("while parsing input")?;
+    let input_share =
+        co_circom::parse_shared_input(input_share_file).context("while parsing input")?;
 
     // Extend the witness
     let result_witness_share =
@@ -702,7 +696,7 @@ fn merge_input_shares<F: PrimeField>(inputs: Vec<PathBuf>, out: PathBuf) -> colo
         .map(|input| {
             let input_share_file =
                 BufReader::new(File::open(input).context("while opening input share file")?);
-            let input_share: SerializeableSharedRep3Input<F, SeedRng> =
+            let input_share: SerializeableSharedRep3Input<F> =
                 bincode::deserialize_from(input_share_file)
                     .context("trying to parse input share file")?;
             color_eyre::Result::<_>::Ok(input_share)

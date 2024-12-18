@@ -60,28 +60,6 @@ where
     SeededAdditive(SeededType<Vec<F>, U>),
 }
 
-/// A type representing the different states a unmerged share can have. Either full replicated share, only an additive share, or both variants in compressed form.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(bound = "")]
-pub enum MaybeRep3ShareVecType<F: PrimeField> {
-    /// A fully expanded replicated share with unkown elements that need to be merged.
-    Replicated(
-        #[serde(
-            serialize_with = "super::serde_compat::ark_se",
-            deserialize_with = "super::serde_compat::ark_de"
-        )]
-        Vec<Option<Rep3PrimeFieldShare<F>>>,
-    ),
-    /// A fully expanded additive share with unkown elements that need to be merged.
-    Additive(
-        #[serde(
-            serialize_with = "super::serde_compat::ark_se",
-            deserialize_with = "super::serde_compat::ark_de"
-        )]
-        Vec<Option<F>>,
-    ),
-}
-
 /// A type that represents a compressed additive share. It can either be a seed (with length) or the actual share.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
