@@ -632,6 +632,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
     }
 
+    fn prepare_for_range_decompose(
+        &mut self,
+        driver: &mut T,
+        mut constraint_system: AcirFormat<P::ScalarField>,
+    ) -> std::io::Result<(Vec<(bool, usize)>, Vec<Vec<T::ArithmeticShare>>)> {
+        todo!()
+    }
+
     fn build_constraints(
         &mut self,
         driver: &mut T,
@@ -719,8 +727,46 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //     todo!("Logic gates");
         // }
 
+        let mut to_decompose: Vec<T::ArithmeticShare> = vec![];
+        let mut decompose_indices: Vec<(bool, usize)> = vec![];
+        let mut num_bits = 0;
+        for constraint in constraint_system.range_constraints.iter() {
+            let val = &self.get_variable(constraint.witness as usize);
+            if !(constraint.num_bits == 1
+                && constraint.num_bits <= Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32)
+                && T::is_shared(val)
+            {
+                if num_bits == 0 {
+                    num_bits = constraint.num_bits;
+                }
+                if num_bits != constraint.num_bits {
+                    todo!("constraint with different num_bits")
+                }
+                to_decompose.push(T::get_shared(val).expect("Already checked it is shared"));
+                decompose_indices.push((true, to_decompose.len() - 1));
+            } else {
+                decompose_indices.push((false, 0));
+            }
+        }
+
+        let decomposed = T::decompose_arithmetic_many(
+            driver,
+            &to_decompose,
+            num_bits as usize,
+            Self::DEFAULT_PLOOKUP_RANGE_BITNUM,
+        )?;
         for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
-            self.create_range_constraint(driver, constraint.witness, constraint.num_bits)?;
+            if decompose_indices[i].0 {
+                self.decompose_into_default_range(
+                    driver,
+                    constraint.witness,
+                    constraint.num_bits as u64,
+                    Some(&decomposed[decompose_indices[i].1]),
+                    Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
+                )?;
+            } else {
+                self.create_range_constraint(driver, constraint.witness, constraint.num_bits)?;
+            }
             gate_counter.track_diff(
                 self,
                 &mut constraint_system.gates_per_opcode,
@@ -2349,6 +2395,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 driver,
                 variable_index,
                 num_bits as u64,
+                None,
                 Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
             )?;
         }
@@ -2420,6 +2467,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         driver: &mut T,
         variable_index: u32,
         num_bits: u64,
+        decompose: Option<&[T::ArithmeticShare]>,
         target_range_bitnum: u64,
     ) -> std::io::Result<Vec<u32>> {
         assert!(self.is_valid_variable(variable_index as usize));
@@ -2451,28 +2499,25 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let last_limb_range = (1u64 << last_limb_size) - 1;
 
         let mut sublimb_indices: Vec<u32> = Vec::with_capacity(num_limbs as usize);
-        let sublimbs = if T::is_shared(&val) {
-            let decomp = T::decompose_arithmetic(
-                driver,
-                T::get_shared(&val).expect("Already checked it is shared"),
-                num_bits as usize,
-                target_range_bitnum as usize,
-            )?;
-            decomp.into_iter().map(T::AcvmType::from).collect()
-        } else {
-            let mut sublimbs = Vec::with_capacity(num_limbs as usize);
-            let mut accumulator: BigUint = T::get_public(&val)
-                .expect("Already checked it is public")
-                .into();
-            for _ in 0..num_limbs {
-                let sublimb_value = P::ScalarField::from(&accumulator & &sublimb_mask.into());
-                sublimbs.push(T::AcvmType::from(sublimb_value));
-                accumulator >>= target_range_bitnum;
+        let sublimbs: Vec<T::AcvmType> = match decompose {
+            Some(decomposed) => decomposed
+                .iter()
+                .map(|item| T::AcvmType::from(item.clone()))
+                .collect(),
+            None => {
+                let mut accumulator: BigUint = T::get_public(&val)
+                    .expect("Already checked it is public")
+                    .into();
+                let sublimb_mask: BigUint = sublimb_mask.into();
+                (0..num_limbs)
+                    .map(|_| {
+                        let sublimb_value = P::ScalarField::from(&accumulator & &sublimb_mask);
+                        accumulator >>= target_range_bitnum;
+                        T::AcvmType::from(sublimb_value)
+                    })
+                    .collect()
             }
-
-            sublimbs
         };
-
         for (i, sublimb) in sublimbs.iter().enumerate() {
             let limb_idx = self.add_variable(sublimb.clone());
 

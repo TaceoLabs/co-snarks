@@ -498,4 +498,25 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
         radix_sort_fields(inputs, &mut self.io_context, bitsize)
     }
+
+    fn decompose_arithmetic_many(
+        &mut self,
+        input: &[Self::ArithmeticShare],
+        // io_context: &mut IoContext<N>,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+        let num_decomps_per_field = total_bit_size_per_field.div_ceil(decompose_bit_size);
+        let result = yao::decompose_arithmetic_many(
+            input,
+            &mut self.io_context,
+            total_bit_size_per_field,
+            decompose_bit_size,
+        )?;
+        let results = result
+            .chunks(num_decomps_per_field)
+            .map(|chunk| chunk.to_vec())
+            .collect();
+        Ok(results)
+    }
 }
