@@ -415,4 +415,14 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
         panic!("functionality sort not feasible for Shamir")
     }
+
+    fn decompose_arithmetic_many(
+        &mut self,
+        _input: &[Self::ArithmeticShare],
+        // io_context: &mut IoContext<N>,
+        _total_bit_size_per_field: usize,
+        _decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+        panic!("functionality decompose_arithmetic_many not feasible for Shamir")
+    }
 }
