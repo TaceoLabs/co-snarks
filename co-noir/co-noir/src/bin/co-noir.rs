@@ -63,7 +63,38 @@ fn install_tracing() {
         .with(fmt_layer)
         .init();
 }
+pub fn download_g1_crs(num_points: usize, crs_path: &PathBuf) -> color_eyre::Result<()> {
+    tracing::info!("Downloading larger CRS since current one is too small for circuit size");
+    let g1_end = (num_points + 1) * 64 - 1;
 
+    let url = "https://aztec-ignition.s3.amazonaws.com/MAIN%20IGNITION/flat/g1.dat";
+    let command = format!("curl -s -H \"Range: bytes=0-{}\" '{}'", g1_end, url);
+    let output = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&command)
+        .output()
+        .wrap_err("Failed to execute curl command")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(eyre!("Could not download larger CRS: {}", stderr));
+    }
+
+    let data = output.stdout;
+    let mut file = File::create(crs_path).wrap_err("Failed to create CRS file")?;
+    file.write_all(&data)
+        .wrap_err("Failed to write data to CRS file")?;
+
+    if data.len() < (g1_end + 1) {
+        return Err(eyre!(
+            "Downloaded CRS is incomplete: expected {} bytes, got {} bytes",
+            g1_end + 1,
+            data.len()
+        ));
+    }
+
+    Ok(())
+}
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -726,7 +757,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
-            let builder = Rep3CoBuilder::<Bn254, Rep3MpcNet>::create_circuit(
+            let mut builder = Rep3CoBuilder::<Bn254, Rep3MpcNet>::create_circuit(
                 constraint_system,
                 false, // We don't support recursive atm
                 0,
@@ -735,6 +766,13 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 false,
                 &mut circuit_driver,
             )?;
+
+            builder.finalize_circuit(true, &mut circuit_driver)?;
+            let dyadic_circuit_size = builder.compute_dyadic_size();
+            if std::fs::metadata(&crs_path)?.len() < (dyadic_circuit_size * 64).try_into().unwrap()
+            {
+                download_g1_crs(dyadic_circuit_size, &crs_path)?;
+            }
 
             // parse the crs
             let prover_crs = ProvingKey::<Rep3UltraHonkDriver<Rep3MpcNet>, _>::get_prover_crs(
@@ -772,7 +810,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
-            let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
+            let mut builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
                 constraint_system,
                 false, // We don't support recursive atm
                 0,
@@ -781,6 +819,13 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 false,
                 &mut circuit_driver,
             )?;
+
+            builder.finalize_circuit(true, &mut circuit_driver)?;
+            let dyadic_circuit_size = builder.compute_dyadic_size();
+            if std::fs::metadata(&crs_path)?.len() < (dyadic_circuit_size * 64).try_into().unwrap()
+            {
+                download_g1_crs(dyadic_circuit_size, &crs_path)?;
+            }
 
             // parse the crs
             let prover_crs =
@@ -1008,7 +1053,7 @@ fn run_build_and_generate_proof(
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
-            let builder = Rep3CoBuilder::<Bn254, Rep3MpcNet>::create_circuit(
+            let mut builder = Rep3CoBuilder::<Bn254, Rep3MpcNet>::create_circuit(
                 constraint_system,
                 false, // We don't support recursive atm
                 0,
@@ -1017,6 +1062,12 @@ fn run_build_and_generate_proof(
                 false,
                 &mut circuit_driver,
             )?;
+            builder.finalize_circuit(true, &mut circuit_driver)?; //necessary to get circuit size (I think)
+            let dyadic_circuit_size = builder.compute_dyadic_size();
+            if std::fs::metadata(&crs_path)?.len() < (dyadic_circuit_size * 64).try_into().unwrap()
+            {
+                download_g1_crs(dyadic_circuit_size, &crs_path)?;
+            }
 
             // parse the crs
             let prover_crs = ProvingKey::<Rep3UltraHonkDriver<Rep3MpcNet>, _>::get_prover_crs(
@@ -1085,7 +1136,7 @@ fn run_build_and_generate_proof(
             // Create the circuit
             tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
-            let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
+            let mut builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
                 constraint_system,
                 false, // We don't support recursive atm
                 0,
@@ -1094,7 +1145,12 @@ fn run_build_and_generate_proof(
                 false,
                 &mut circuit_driver,
             )?;
-
+            builder.finalize_circuit(true, &mut circuit_driver)?;
+            let dyadic_circuit_size = builder.compute_dyadic_size();
+            if std::fs::metadata(&crs_path)?.len() < (dyadic_circuit_size * 64).try_into().unwrap()
+            {
+                download_g1_crs(dyadic_circuit_size, &crs_path)?;
+            }
             // parse the crs
             let prover_crs =
                 ProvingKey::<ShamirUltraHonkDriver<_, ShamirMpcNet>, _>::get_prover_crs(

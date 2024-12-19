@@ -149,7 +149,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     one_idx: u32,
     pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
     num_gates: usize,
-    circuit_finalized: bool,
+    pub circuit_finalized: bool,
     pub contains_recursive_proof: bool,
     pub recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
     rom_arrays: Vec<RomTranscript>,
