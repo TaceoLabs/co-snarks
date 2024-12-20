@@ -291,7 +291,8 @@ where
             driver: PlainPlonkDriver,
             phantom_data: PhantomData,
         };
-        Ok(prover.prove(zkey, private_witness)?)
+        let (proof, _) = prover.prove_inner(zkey, private_witness)?;
+        Ok(proof)
     }
 }
 

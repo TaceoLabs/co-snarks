@@ -23,6 +23,11 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirGroth16Driver<F, N> {
             protocol1,
         }
     }
+
+    /// Get the underlying network
+    pub fn get_network(self) -> N {
+        self.protocol0.network
+    }
 }
 
 impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>

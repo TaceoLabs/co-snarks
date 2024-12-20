@@ -286,7 +286,7 @@ where
     }
 
     // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-    pub(super) fn round5(self) -> PlonkProofResult<PlonkProof<P>> {
+    pub(super) fn round5(self) -> PlonkProofResult<(PlonkProof<P>, T)> {
         let Self {
             mut driver,
             domains,
@@ -341,7 +341,7 @@ where
             commit_wxi.into_affine(),
             commit_wxiw.into_affine()
         );
-        Ok(proof.into_final_proof(commit_wxi, commit_wxiw))
+        Ok((proof.into_final_proof(commit_wxi, commit_wxiw), driver))
     }
 }
 

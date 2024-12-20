@@ -76,6 +76,7 @@ impl<F: PrimeField, N: Rep3Network> CircomRep3VmWitnessExtension<F, N> {
         })
     }
 
+    /// Get the underlying network
     pub fn get_network(self) -> N {
         self.io_context0.network
     }

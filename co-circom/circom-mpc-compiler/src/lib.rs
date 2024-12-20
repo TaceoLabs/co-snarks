@@ -659,6 +659,7 @@ where
     fn parse_inner(mut self) -> Result<CoCircomCompilerParsed<P::ScalarField>> {
         tracing::debug!("compiler starts parsing..");
         let program_archive = self.get_program_archive()?;
+        let public_inputs = program_archive.public_inputs.clone();
         let (circuit, output_mapping) = self.build_circuit(program_archive)?;
         tracing::debug!("output mapping: {output_mapping:?}");
         let constant_table = circuit
@@ -740,6 +741,7 @@ where
                 .map(|x| (x.name, x.start, x.size))
                 .collect(),
             output_mapping,
+            public_inputs,
         ))
     }
 }

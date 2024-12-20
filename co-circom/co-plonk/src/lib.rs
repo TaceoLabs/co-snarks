@@ -6,15 +6,17 @@ use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
+use co_circom_snarks::Rep3SharedWitness;
+use co_circom_snarks::ShamirSharedWitness;
 use co_circom_snarks::SharedWitness;
 use mpc::rep3::Rep3PlonkDriver;
 use mpc::shamir::ShamirPlonkDriver;
 use mpc::CircomPlonkProver;
 use mpc_core::protocols::rep3::network::IoContext;
-use mpc_core::protocols::rep3::network::Rep3MpcNet;
+use mpc_core::protocols::rep3::network::Rep3Network;
+use mpc_core::protocols::shamir::network::ShamirNetwork;
 use mpc_core::protocols::shamir::ShamirPreprocessing;
-use mpc_core::protocols::shamir::{network::ShamirMpcNet, ShamirProtocol};
-use mpc_net::config::NetworkConfig;
+use mpc_core::protocols::shamir::ShamirProtocol;
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
@@ -36,10 +38,9 @@ pub use plonk::Plonk;
 type PlonkProofResult<T> = std::result::Result<T, PlonkProofError>;
 
 /// A type alias for a [CoPlonk] protocol using replicated secret sharing.
-pub type Rep3CoPlonk<P> = CoPlonk<P, Rep3PlonkDriver<Rep3MpcNet>>;
+pub type Rep3CoPlonk<P, N> = CoPlonk<P, Rep3PlonkDriver<N>>;
 /// A type alias for a [CoPlonk] protocol using shamir secret sharing.
-pub type ShamirCoPlonk<P> =
-    CoPlonk<P, ShamirPlonkDriver<<P as Pairing>::ScalarField, ShamirMpcNet>>;
+pub type ShamirCoPlonk<P, N> = CoPlonk<P, ShamirPlonkDriver<<P as Pairing>::ScalarField, N>>;
 
 /// The errors that may arise during the computation of a co-PLONK proof.
 #[derive(Debug, thiserror::Error)]
@@ -80,11 +81,11 @@ where
     }
 
     /// Execute the PLONK prover using the internal MPC driver.
-    pub fn prove(
+    fn prove_inner(
         self,
         zkey: Arc<ZKey<P>>,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
-    ) -> PlonkProofResult<PlonkProof<P>> {
+    ) -> PlonkProofResult<(PlonkProof<P>, T)> {
         let id = self.driver.get_party_id();
         tracing::info!("Party {}: starting proof generation..", id);
         let start = Instant::now();
@@ -218,45 +219,61 @@ mod plonk_utils {
     }
 }
 
-impl<P: Pairing> Rep3CoPlonk<P> {
-    /// Create a new [Rep3CoPlonk] protocol with a given network.
-    pub fn with_network(mpc_net: Rep3MpcNet) -> eyre::Result<Self> {
-        let mut io_context0 = IoContext::init(mpc_net)?;
+impl<P: Pairing, N: Rep3Network> Rep3CoPlonk<P, N> {
+    /// Create a [`PlonkProof`]
+    #[tracing::instrument(name = "time_prove", skip_all)]
+    pub fn prove(
+        net: N,
+        zkey: Arc<ZKey<P>>,
+        witness: Rep3SharedWitness<P::ScalarField>,
+    ) -> eyre::Result<(PlonkProof<P>, N)>
+    where
+        P: Pairing + CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
+        let mut io_context0 = IoContext::init(net)?;
         let io_context1 = io_context0.fork()?;
         let driver = Rep3PlonkDriver::new(io_context0, io_context1);
-        Ok(CoPlonk {
+        let prover = CoPlonk {
             driver,
             phantom_data: PhantomData,
-        })
-    }
-
-    /// Create a new [Rep3CoPlonk] protocol with a given network configuration.
-    pub fn with_network_config(config: NetworkConfig) -> eyre::Result<Self> {
-        let mpc_net = Rep3MpcNet::new(config)?;
-        Self::with_network(mpc_net)
+        };
+        // execute prover in MPC
+        let (proof, driver) = prover.prove_inner(zkey, witness)?;
+        Ok((proof, driver.get_network()))
     }
 }
 
-impl<P: Pairing> ShamirCoPlonk<P> {
-    /// Create a new [ShamirCoPlonk] protocol with a given network configuration.
-    pub fn with_network_config(
+impl<P: Pairing, N: ShamirNetwork> ShamirCoPlonk<P, N> {
+    /// Create a [`PlonkProof`]
+    #[tracing::instrument(name = "time_prove", skip_all)]
+    pub fn prove(
+        net: N,
         threshold: usize,
-        config: NetworkConfig,
-        zkey: &ZKey<P>,
-    ) -> eyre::Result<Self> {
+        zkey: Arc<ZKey<P>>,
+        witness: ShamirSharedWitness<P::ScalarField>,
+    ) -> eyre::Result<(PlonkProof<P>, N)>
+    where
+        P: Pairing + CircomArkworksPairingBridge,
+        P::BaseField: CircomArkworksPrimeFieldBridge,
+        P::ScalarField: CircomArkworksPrimeFieldBridge,
+    {
         let domain_size = zkey.domain_size;
         // TODO check and explain numbers
         let num_pairs = domain_size * 222 + 15;
-        let mpc_net = ShamirMpcNet::new(config)?;
-        let preprocessing = ShamirPreprocessing::new(threshold, mpc_net, num_pairs)?;
+        let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs)?;
         let mut protocol0 = ShamirProtocol::from(preprocessing);
         // TODO check and explain numbers
         let protocol1 = protocol0.fork_with_pairs(domain_size * 7 + 2)?;
         let driver = ShamirPlonkDriver::new(protocol0, protocol1);
-        Ok(CoPlonk {
+        let prover = CoPlonk {
             driver,
             phantom_data: PhantomData,
-        })
+        };
+        // execute prover in MPC
+        let (proof, driver) = prover.prove_inner(zkey, witness)?;
+        Ok((proof, driver.get_network()))
     }
 }
 
