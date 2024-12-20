@@ -23,7 +23,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
 use num_bigint::BigUint;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
@@ -632,13 +632,36 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
     }
 
-    fn prepare_for_range_decompose(
-        &mut self,
-        driver: &mut T,
-        mut constraint_system: AcirFormat<P::ScalarField>,
-    ) -> std::io::Result<(Vec<(bool, usize)>, Vec<Vec<T::ArithmeticShare>>)> {
-        todo!()
-    }
+    // fn prepare_for_range_decompose(
+    //     &mut self,
+    //     driver: &mut T,
+    //     mut constraint_system: AcirFormat<P::ScalarField>,
+    // ) -> std::io::Result<BTreeMap<usize, Vec<T::ArithmeticShare>>> {
+    //     // let map: BTreeMap<usize, Vec<T::ArithmeticShare>> = BTreeMap::new();
+    //     // let mut decompose_indices: Vec<Vec<(bool, usize)>> = vec![];
+    //     // let mut to_decompose: Vec<T::ArithmeticShare> = vec![];
+    //     // let mut num_bits = 0;
+    //     // for constraint in constraint_system.range_constraints.iter() {
+    //     //     let val = &self.get_variable(constraint.witness as usize);
+    //     //     if !(constraint.num_bits == 1
+    //     //         && constraint.num_bits <= Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32)
+    //     //         && T::is_shared(val)
+    //     //     {
+    //     //         if num_bits == 0 {
+    //     //             num_bits = constraint.num_bits;
+    //     //         }
+    //     //         if num_bits != constraint.num_bits {
+    //     //             todo!("constraint with different num_bits")
+    //     //         }
+    //     //         to_decompose.push(T::get_shared(val).expect("Already checked it is shared"));
+    //     //         decompose_indices.push((true, to_decompose.len() - 1));
+    //     //     } else {
+    //     //         decompose_indices.push((false, 0));
+    //     //     }
+    //     // }
+
+    //     todo!()
+    // }
 
     fn build_constraints(
         &mut self,
@@ -727,46 +750,68 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //     todo!("Logic gates");
         // }
 
-        let mut to_decompose: Vec<T::ArithmeticShare> = vec![];
+        let mut to_decompose: Vec<Vec<T::ArithmeticShare>> = vec![];
         let mut decompose_indices: Vec<(bool, usize)> = vec![];
-        let mut num_bits = 0;
+        let mut bitsloc: HashMap<u32, usize> = HashMap::new();
+
         for constraint in constraint_system.range_constraints.iter() {
             let val = &self.get_variable(constraint.witness as usize);
-            if !(constraint.num_bits == 1
-                && constraint.num_bits <= Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32)
-                && T::is_shared(val)
+
+            if constraint.num_bits > Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32 && T::is_shared(val)
             {
-                if num_bits == 0 {
-                    num_bits = constraint.num_bits;
+                let num_bits = constraint.num_bits;
+
+                if let Some(&idx) = bitsloc.get(&num_bits) {
+                    to_decompose[idx]
+                        .push(T::get_shared(val).expect("Already checked it is shared"));
+                    decompose_indices.push((true, to_decompose[idx].len() - 1));
+                } else {
+                    let new_idx = to_decompose.len();
+                    to_decompose.push(vec![
+                        T::get_shared(val).expect("Already checked it is shared")
+                    ]);
+                    decompose_indices.push((true, 0));
+                    bitsloc.insert(num_bits, new_idx);
                 }
-                if num_bits != constraint.num_bits {
-                    todo!("constraint with different num_bits")
-                }
-                to_decompose.push(T::get_shared(val).expect("Already checked it is shared"));
-                decompose_indices.push((true, to_decompose.len() - 1));
             } else {
                 decompose_indices.push((false, 0));
             }
         }
 
-        let decomposed = T::decompose_arithmetic_many(
-            driver,
-            &to_decompose,
-            num_bits as usize,
-            Self::DEFAULT_PLOOKUP_RANGE_BITNUM,
-        )?;
+        let mut decomposed: Vec<Vec<Vec<_>>> = Vec::with_capacity(to_decompose.len());
+
+        for (i, inp) in to_decompose.iter().enumerate() {
+            let num_bits = bitsloc
+                .iter()
+                .find(|&(_, &idx)| idx == i)
+                .map(|(&num_bits, _)| num_bits)
+                .expect("Index not found in bitsloc");
+
+            decomposed.push(T::decompose_arithmetic_many(
+                driver,
+                inp,
+                num_bits as usize,
+                Self::DEFAULT_PLOOKUP_RANGE_BITNUM,
+            )?);
+        }
+
         for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
-            if decompose_indices[i].0 {
-                self.decompose_into_default_range(
-                    driver,
-                    constraint.witness,
-                    constraint.num_bits as u64,
-                    Some(&decomposed[decompose_indices[i].1]),
-                    Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
-                )?;
+            if let Some(&idx) = bitsloc.get(&constraint.num_bits) {
+                if decompose_indices[i].0 {
+                    self.decompose_into_default_range(
+                        driver,
+                        constraint.witness,
+                        constraint.num_bits as u64,
+                        Some(&decomposed[idx][decompose_indices[i].1]),
+                        Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
+                    )?;
+                } else {
+                    self.create_range_constraint(driver, constraint.witness, constraint.num_bits)?;
+                }
             } else {
                 self.create_range_constraint(driver, constraint.witness, constraint.num_bits)?;
             }
+
             gate_counter.track_diff(
                 self,
                 &mut constraint_system.gates_per_opcode,
@@ -2474,6 +2519,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         assert!(num_bits > 0);
         let val = self.get_variable(variable_index as usize);
+
         // We cannot check that easily in MPC:
         // If the value is out of range, set the composer error to the given msg.
         // if val.msb() >= num_bits && !self.failed() {
