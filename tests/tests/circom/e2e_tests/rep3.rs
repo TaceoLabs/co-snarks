@@ -7,17 +7,14 @@ use circom_types::{
     plonk::{JsonVerificationKey as PlonkVK, ZKey as PlonkZK},
     R1CS,
 };
-use mpc_core::protocols::rep3::network::IoContext;
 use std::sync::Arc;
 
 use circom_types::traits::CheckElement;
 use co_circom_snarks::SharedWitness;
-use co_groth16::mpc::Rep3Groth16Driver;
-use co_groth16::CoGroth16;
 use co_groth16::Groth16;
-use co_plonk::mpc::Rep3PlonkDriver;
-use co_plonk::CoPlonk;
+use co_groth16::Rep3CoGroth16;
 use co_plonk::Plonk;
+use co_plonk::Rep3CoPlonk;
 use itertools::izip;
 use rand::thread_rng;
 use std::{fs::File, thread};
@@ -61,13 +58,7 @@ macro_rules! add_test_impl {
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
                     threads.push(thread::spawn(move || {
-                        let mut io_context0 = IoContext::init(net).unwrap();
-                        let io_context1 = io_context0.fork().unwrap();
-                        let rep3 = [< Rep3 $proof_system Driver>]::new(io_context0, io_context1);
-                        let  prover = [< Co $proof_system>]::<
-                            $curve, [< Rep3 $proof_system Driver>]<PartyTestNetwork>
-                        >::new(rep3);
-                        prover.prove(zkey, x).unwrap()
+                        [< Rep3Co $proof_system>]::<$curve, PartyTestNetwork>::prove(net, zkey, x).unwrap().0
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();

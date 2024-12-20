@@ -5,7 +5,7 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use itertools::izip;
-use network::ShamirNetwork;
+use network::{ShamirMpcNet, ShamirNetwork};
 use rngs::ShamirRng;
 use std::time::Instant;
 
@@ -533,5 +533,12 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         };
 
         Ok(ShamirPointShare::new(my_share - r_t))
+    }
+}
+
+impl<F: PrimeField> ShamirProtocol<F, ShamirMpcNet> {
+    /// Get the underlying network
+    pub fn get_network(self) -> ShamirMpcNet {
+        self.network
     }
 }

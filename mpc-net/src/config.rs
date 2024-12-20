@@ -19,6 +19,13 @@ pub struct Address {
     pub port: u16,
 }
 
+impl Address {
+    /// Construct a new [`Address`] type.
+    pub fn new(hostname: String, port: u16) -> Self {
+        Self { hostname, port }
+    }
+}
+
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}", self.hostname, self.port)
@@ -102,6 +109,17 @@ pub struct NetworkParty {
     pub cert: CertificateDer<'static>,
 }
 
+impl NetworkParty {
+    /// Construct a new [`NetworkParty`] type.
+    pub fn new(id: usize, address: Address, cert: CertificateDer<'static>) -> Self {
+        Self {
+            id,
+            dns_name: address,
+            cert,
+        }
+    }
+}
+
 impl TryFrom<NetworkPartyConfig> for NetworkParty {
     type Error = std::io::Error;
     fn try_from(value: NetworkPartyConfig) -> Result<Self, Self::Error> {
@@ -138,6 +156,23 @@ pub struct NetworkConfig {
     pub bind_addr: SocketAddr,
     /// The private key.
     pub key: PrivateKeyDer<'static>,
+}
+
+impl NetworkConfig {
+    /// Construct a new [`NetworkConfig`] type.
+    pub fn new(
+        id: usize,
+        bind_addr: SocketAddr,
+        key: PrivateKeyDer<'static>,
+        parties: Vec<NetworkParty>,
+    ) -> Self {
+        Self {
+            parties,
+            my_id: id,
+            bind_addr,
+            key,
+        }
+    }
 }
 
 impl TryFrom<NetworkConfigFile> for NetworkConfig {

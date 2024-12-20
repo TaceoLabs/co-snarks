@@ -6,12 +6,11 @@ use ark_ff::{FftField, PrimeField};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use circom_types::groth16::{ConstraintMatrix, Groth16Proof, ZKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
-use co_circom_snarks::SharedWitness;
+use co_circom_snarks::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
-use mpc_core::protocols::rep3::network::{IoContext, Rep3MpcNet};
-use mpc_core::protocols::shamir::network::ShamirMpcNet;
+use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
+use mpc_core::protocols::shamir::network::ShamirNetwork;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
-use mpc_net::config::NetworkConfig;
 use num_traits::identities::One;
 use num_traits::ToPrimitive;
 use rayon::prelude::*;
@@ -107,11 +106,11 @@ where
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
-    pub fn prove(
+    fn prove_inner(
         mut self,
         zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
-    ) -> Result<Groth16Proof<P>> {
+    ) -> Result<(Groth16Proof<P>, T)> {
         let id = self.driver.get_party_id();
         tracing::info!("Party {}: starting proof generation..", id);
         let start = Instant::now();
@@ -128,7 +127,7 @@ where
         let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness)?;
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
 
-        let proof = self.create_proof_with_assignment(
+        let (proof, driver) = self.create_proof_with_assignment(
             Arc::clone(&zkey),
             r,
             s,
@@ -139,7 +138,7 @@ where
 
         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
         tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
-        Ok(proof)
+        Ok((proof, driver))
     }
 
     fn evaluate_constraint(
@@ -327,7 +326,7 @@ where
         h: Vec<P::ScalarField>,
         input_assignment: Arc<Vec<P::ScalarField>>,
         aux_assignment: Arc<Vec<T::ArithmeticShare>>,
-    ) -> Result<Groth16Proof<P>> {
+    ) -> Result<(Groth16Proof<P>, T)> {
         let delta_g1 = zkey.delta_g1.into_group();
         let (l_acc_tx, l_acc_rx) = oneshot::channel();
         let (h_acc_tx, h_acc_rx) = oneshot::channel();
@@ -450,62 +449,75 @@ where
         let (g_c_opened, g2_b_opened) = self.driver.open_two_points(g_c, g2_b)?;
         last_round.exit();
 
-        Ok(Groth16Proof {
-            pi_a: g_a_opened.into_affine(),
-            pi_b: g2_b_opened.into_affine(),
-            pi_c: g_c_opened.into_affine(),
-            protocol: "groth16".to_owned(),
-            curve: P::get_circom_name(),
-        })
+        Ok((
+            Groth16Proof {
+                pi_a: g_a_opened.into_affine(),
+                pi_b: g2_b_opened.into_affine(),
+                pi_c: g_c_opened.into_affine(),
+                protocol: "groth16".to_owned(),
+                curve: P::get_circom_name(),
+            },
+            self.driver,
+        ))
     }
 }
 
-impl<P: Pairing> Rep3CoGroth16<P, Rep3MpcNet>
+impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    /// Create a new [Rep3CoGroth16] protocol with a given network.
-    pub fn with_network(mpc_net: Rep3MpcNet) -> Result<Self> {
-        let mut io_context0 = IoContext::init(mpc_net)?;
+    /// Create a [`Groth16Proof`].
+    #[tracing::instrument(name = "time_prove", skip_all)]
+    pub fn prove(
+        net: N,
+        zkey: Arc<ZKey<P>>,
+        witness: Rep3SharedWitness<P::ScalarField>,
+    ) -> Result<(Groth16Proof<P>, N)> {
+        let mut io_context0 = IoContext::init(net)?;
         let io_context1 = io_context0.fork()?;
         let driver = Rep3Groth16Driver::new(io_context0, io_context1);
-        Ok(CoGroth16 {
+        let prover = CoGroth16 {
             driver,
             phantom_data: PhantomData,
-        })
-    }
-
-    /// Create a new [Rep3CoGroth16] protocol with a given network configuration.
-    pub fn with_network_config(config: NetworkConfig) -> Result<Self> {
-        let mpc_net = Rep3MpcNet::new(config)?;
-        Self::with_network(mpc_net)
+        };
+        // execute prover in MPC
+        let (proof, driver) = prover.prove_inner(zkey, witness)?;
+        Ok((proof, driver.get_network()))
     }
 }
 
-impl<P: Pairing> ShamirCoGroth16<P, ShamirMpcNet>
+impl<P: Pairing, N: ShamirNetwork> ShamirCoGroth16<P, N>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    /// Create a new [ShamirCoGroth16] protocol with a given network configuration.
-    pub fn with_network_config(threshold: usize, config: NetworkConfig) -> Result<Self> {
+    /// Create a [`Groth16Proof`].
+    #[tracing::instrument(name = "time_prove", skip_all)]
+    pub fn prove(
+        net: N,
+        threshold: usize,
+        zkey: Arc<ZKey<P>>,
+        witness: ShamirSharedWitness<P::ScalarField>,
+    ) -> Result<(Groth16Proof<P>, N)> {
         // we need 2 + 1 number of corr rand pairs. We need the values r/s (1 pair) and 2 muls (2
         // pairs)
         let num_pairs = 3;
-        let mpc_net = ShamirMpcNet::new(config)?;
-        let preprocessing = ShamirPreprocessing::new(threshold, mpc_net, num_pairs)?;
+        let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs)?;
         let mut protocol0 = ShamirProtocol::from(preprocessing);
         // the protocol1 is only used for scalar_mul and a field_mul which need 1 pair each (ergo 2
         // pairs)
         let protocol1 = protocol0.fork_with_pairs(2)?;
         let driver = ShamirGroth16Driver::new(protocol0, protocol1);
-        Ok(CoGroth16 {
+        let prover = CoGroth16 {
             driver,
             phantom_data: PhantomData,
-        })
+        };
+        // execute prover in MPC
+        let (proof, driver) = prover.prove_inner(zkey, witness)?;
+        Ok((proof, driver.get_network()))
     }
 }
 
@@ -527,6 +539,7 @@ where
             driver: PlainGroth16Driver,
             phantom_data: PhantomData,
         };
-        prover.prove(zkey, private_witness)
+        let (proof, _) = prover.prove_inner(zkey, private_witness)?;
+        Ok(proof)
     }
 }

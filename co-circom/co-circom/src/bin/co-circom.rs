@@ -1,55 +1,28 @@
-use ark_bls12_381::Bls12_381;
-use ark_bn254::Bn254;
-use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
-use circom_types::R1CS;
-use num_traits::Zero;
-use std::sync::Arc;
-
-use circom_types::{
-    groth16::{
-        Groth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, ZKey as Groth16ZKey,
-    },
-    plonk::{JsonVerificationKey as PlonkJsonVerificationKey, PlonkProof, ZKey as PlonkZKey},
-    traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
-    Witness,
+use circom_types::traits::CheckElement;
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use co_circom::{
+    Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
+    CoCircomCompiler, CompilerConfig, Compression, Groth16, Groth16JsonVerificationKey,
+    Groth16Proof, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof, PlonkZKey,
+    Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk,
+    ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
 };
-use clap::{Parser, Subcommand};
-use co_circom::GenerateProofCli;
-use co_circom::GenerateProofConfig;
-use co_circom::GenerateWitnessCli;
-use co_circom::GenerateWitnessConfig;
-use co_circom::MergeInputSharesCli;
-use co_circom::MergeInputSharesConfig;
-use co_circom::SplitInputCli;
-use co_circom::SplitInputConfig;
-use co_circom::SplitWitnessCli;
-use co_circom::SplitWitnessConfig;
-use co_circom::TranslateWitnessCli;
-use co_circom::TranslateWitnessConfig;
-use co_circom::VerifyCli;
-use co_circom::VerifyConfig;
-use co_circom::{file_utils, MPCCurve, MPCProtocol, ProofSystem, SeedRng};
-use co_circom_snarks::{
-    SerializeableSharedRep3Input, SerializeableSharedRep3Witness, SharedWitness, VerificationError,
-};
-use co_groth16::Groth16;
-use co_groth16::{Rep3CoGroth16, ShamirCoGroth16};
-use co_plonk::Rep3CoPlonk;
-use co_plonk::{Plonk, ShamirCoPlonk};
+use co_circom_snarks::{CompressedRep3SharedWitness, VerificationError};
 use color_eyre::eyre::{self, eyre, Context, ContextCompat};
-use mpc_core::protocols::{
-    bridges::network::RepToShamirNetwork,
-    rep3::network::Rep3MpcNet,
-    shamir::{ShamirPreprocessing, ShamirProtocol},
+use figment::{
+    providers::{Env, Format, Serialized, Toml},
+    Figment,
 };
-use mpc_core::protocols::{rep3::network::Rep3Network, shamir::ShamirPrimeFieldShare};
-use std::time::Instant;
+use mpc_net::config::NetworkConfigFile;
+use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{BufReader, BufWriter},
+    path::Path,
     path::PathBuf,
     process::ExitCode,
+    sync::Arc,
 };
 use tracing::instrument;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -70,6 +43,490 @@ fn install_tracing() {
         .with(filter_layer)
         .with(fmt_layer)
         .init();
+}
+
+/// An enum representing the ZK proof system to use.
+#[derive(Debug, Clone, ValueEnum, Serialize, Deserialize)]
+#[clap(rename_all = "lower")]
+pub enum ProofSystem {
+    /// The Groth16 proof system.
+    Groth16,
+    /// The Plonk proof system.
+    Plonk,
+}
+
+impl std::fmt::Display for ProofSystem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProofSystem::Groth16 => write!(f, "Plonk"),
+            ProofSystem::Plonk => write!(f, "Groth16"),
+        }
+    }
+}
+
+/// An enum representing the MPC protocol to use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MPCCurve {
+    /// The BN254 curve (called BN128 in circom).
+    BN254,
+    /// The BLS12_381 curve.
+    BLS12_381,
+}
+
+impl ValueEnum for MPCCurve {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[MPCCurve::BN254, MPCCurve::BLS12_381]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        match self {
+            MPCCurve::BN254 => Some(clap::builder::PossibleValue::new("BN254")),
+            MPCCurve::BLS12_381 => Some(clap::builder::PossibleValue::new("BLS12-381")),
+        }
+    }
+}
+
+impl std::fmt::Display for MPCCurve {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MPCCurve::BN254 => write!(f, "BN254"),
+            MPCCurve::BLS12_381 => write!(f, "BLS12-381"),
+        }
+    }
+}
+
+/// An enum representing the MPC protocol to use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[clap(rename_all = "UPPER")]
+pub enum MPCProtocol {
+    /// A protocol based on the Replicated Secret Sharing Scheme for 3 parties.
+    /// For more information see <https://eprint.iacr.org/2018/403.pdf>.
+    REP3,
+    /// A protocol based on Shamir Secret Sharing Scheme for n parties.
+    /// For more information see <https://iacr.org/archive/crypto2007/46220565/46220565.pdf>.
+    SHAMIR,
+}
+
+impl std::fmt::Display for MPCProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MPCProtocol::REP3 => write!(f, "REP3"),
+            MPCProtocol::SHAMIR => write!(f, "SHAMIR"),
+        }
+    }
+}
+
+/// Cli arguments for `split_witness`
+#[derive(Debug, Default, Serialize, Args)]
+pub struct SplitWitnessCli {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the input witness file generated by Circom
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub witness: Option<PathBuf>,
+    /// The path to the r1cs file, generated by Circom compiler
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub r1cs: Option<PathBuf>,
+    /// The MPC protocol to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub protocol: Option<MPCProtocol>,
+    /// The pairing friendly curve to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub curve: Option<MPCCurve>,
+    /// The path to the (existing) output directory
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub out_dir: Option<PathBuf>,
+    /// The threshold of tolerated colluding parties
+    #[arg(short, long, default_value_t = 1)]
+    pub threshold: usize,
+    /// The number of parties
+    #[arg(short, long, default_value_t = 3)]
+    pub num_parties: usize,
+}
+
+/// Config for `split_witness`
+#[derive(Debug, Deserialize)]
+pub struct SplitWitnessConfig {
+    /// The path to the input witness file generated by Circom
+    pub witness: PathBuf,
+    /// The path to the r1cs file, generated by Circom compiler
+    pub r1cs: PathBuf,
+    /// The MPC protocol to be used
+    pub protocol: MPCProtocol,
+    /// The pairing friendly curve to be used
+    pub curve: MPCCurve,
+    /// The path to the (existing) output directory
+    pub out_dir: PathBuf,
+    /// The threshold of tolerated colluding parties
+    pub threshold: usize,
+    /// The number of parties
+    pub num_parties: usize,
+}
+
+/// Cli arguments for `split_input`
+#[derive(Debug, Default, Clone, Serialize, Args)]
+pub struct SplitInputCli {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the input JSON file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub input: Option<PathBuf>,
+    /// The path to the circuit file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub circuit: Option<String>,
+    /// The MPC protocol to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub protocol: Option<MPCProtocol>,
+    /// The pairing friendly curve to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub curve: Option<MPCCurve>,
+    /// The path to the (existing) output directory
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub out_dir: Option<PathBuf>,
+}
+
+/// Config for `split_input`
+#[derive(Debug, Clone, Deserialize)]
+pub struct SplitInputConfig {
+    /// The path to the input JSON file
+    pub input: PathBuf,
+    /// The path to the circuit file
+    pub circuit: String,
+    /// The MPC protocol to be used
+    pub protocol: MPCProtocol,
+    /// The pairing friendly curve to be used
+    pub curve: MPCCurve,
+    /// The path to the (existing) output directory
+    pub out_dir: PathBuf,
+    /// MPC compiler config
+    #[serde(default)]
+    pub compiler: CompilerConfig,
+}
+
+/// Cli arguments for `merge_input_shares`
+#[derive(Debug, Default, Serialize, Args)]
+pub struct MergeInputSharesCli {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the input JSON file
+    #[arg(long)]
+    pub inputs: Vec<PathBuf>,
+    /// The MPC protocol to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub protocol: Option<MPCProtocol>,
+    /// The pairing friendly curve to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub curve: Option<MPCCurve>,
+    /// The output file where the merged input share is written to
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub out: Option<PathBuf>,
+}
+
+/// Config for `merge_input_shares`
+#[derive(Debug, Deserialize)]
+pub struct MergeInputSharesConfig {
+    /// The path to the input JSON file
+    pub inputs: Vec<PathBuf>,
+    /// The MPC protocol to be used
+    pub protocol: MPCProtocol,
+    /// The pairing friendly curve to be used
+    pub curve: MPCCurve,
+    /// The output file where the merged input share is written to
+    pub out: PathBuf,
+}
+
+/// Cli arguments for `generate_witness`
+#[derive(Debug, Default, Serialize, Args)]
+pub struct GenerateWitnessCli {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the input share file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub input: Option<PathBuf>,
+    /// The path to the circuit file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub circuit: Option<String>,
+    /// The MPC protocol to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub protocol: Option<MPCProtocol>,
+    /// The pairing friendly curve to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub curve: Option<MPCCurve>,
+    /// The output file where the final witness share is written to
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub out: Option<PathBuf>,
+    /// The simplification level passed to the circom compiler (0-2)
+    #[arg(short = 'O', default_value_t = 1, value_parser = clap::value_parser!(u8).range(0..3))]
+    pub simplification_level: u8,
+}
+
+/// Config for `generate_witness`
+#[derive(Debug, Deserialize)]
+pub struct GenerateWitnessConfig {
+    /// The path to the input share file
+    pub input: PathBuf,
+    /// The path to the circuit file
+    pub circuit: String,
+    /// The MPC protocol to be used
+    pub protocol: MPCProtocol,
+    /// The pairing friendly curve to be used
+    pub curve: MPCCurve,
+    /// The output file where the final witness share is written to
+    pub out: PathBuf,
+    /// MPC compiler config
+    #[serde(default)]
+    pub compiler: CompilerConfig,
+    /// MPC VM config
+    #[serde(default)]
+    pub vm: VMConfig,
+    /// Network config
+    pub network: NetworkConfigFile,
+}
+
+/// Cli arguments for `transalte_witness`
+#[derive(Debug, Serialize, Args)]
+pub struct TranslateWitnessCli {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the witness share file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub witness: Option<PathBuf>,
+    /// The MPC protocol that was used for the witness generation
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub src_protocol: Option<MPCProtocol>,
+    /// The MPC protocol to be used for the proof generation
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub target_protocol: Option<MPCProtocol>,
+    /// The pairing friendly curve to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub curve: Option<MPCCurve>,
+    /// The output file where the final witness share is written to
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub out: Option<PathBuf>,
+}
+
+/// Config for `transalte_witness`
+#[derive(Debug, Deserialize)]
+pub struct TranslateWitnessConfig {
+    /// The path to the witness share file
+    pub witness: PathBuf,
+    /// The MPC protocol that was used for the witness generation
+    pub src_protocol: MPCProtocol,
+    /// The MPC protocol to be used for the proof generation
+    pub target_protocol: MPCProtocol,
+    /// The pairing friendly curve to be used
+    pub curve: MPCCurve,
+    /// The output file where the final witness share is written to
+    pub out: PathBuf,
+    /// Network config
+    pub network: NetworkConfigFile,
+}
+
+/// Cli arguments for `generate_proof`
+#[derive(Debug, Serialize, Args)]
+pub struct GenerateProofCli {
+    /// The proof system to be used
+    #[arg(value_enum)]
+    pub proof_system: ProofSystem,
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the witness share file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub witness: Option<PathBuf>,
+    /// The path to the proving key (.zkey) file, generated by snarkjs setup phase
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub zkey: Option<PathBuf>,
+    /// Perform checks on the zkey elements (can take a long time)
+    #[arg(long)]
+    pub check_zkey: bool,
+    /// The MPC protocol to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub protocol: Option<MPCProtocol>,
+    /// The pairing friendly curve to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub curve: Option<MPCCurve>,
+    /// The output file where the final proof is written to. If not passed, this party will not write the proof to a file.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub out: Option<PathBuf>,
+    /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub public_input: Option<PathBuf>,
+    /// The threshold of tolerated colluding parties
+    #[arg(short, long, default_value_t = 1)]
+    pub threshold: usize,
+}
+
+/// Config for `generate_proof`
+#[derive(Debug, Deserialize)]
+pub struct GenerateProofConfig {
+    /// The proof system to be used
+    pub proof_system: ProofSystem,
+    /// The path to the witness share file
+    pub witness: PathBuf,
+    /// The path to the proving key (.zkey) file, generated by snarkjs setup phase
+    pub zkey: PathBuf,
+    /// Perform checks on the zkey elements (can take a long time)
+    pub check_zkey: bool,
+    /// The MPC protocol to be used
+    pub protocol: MPCProtocol,
+    /// The pairing friendly curve to be used
+    pub curve: MPCCurve,
+    /// The output file where the final proof is written to. If not passed, this party will not write the proof to a file.
+    pub out: Option<PathBuf>,
+    /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
+    pub public_input: Option<PathBuf>,
+    /// The threshold of tolerated colluding parties
+    pub threshold: usize,
+    /// Network config
+    pub network: NetworkConfigFile,
+}
+
+/// Cli arguments for `verify`
+#[derive(Debug, Serialize, Args)]
+pub struct VerifyCli {
+    /// The proof system to be used
+    #[arg(value_enum)]
+    pub proof_system: ProofSystem,
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the proof file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub proof: Option<PathBuf>,
+    /// The pairing friendly curve to be used
+    #[arg(long, value_enum)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub curve: Option<MPCCurve>,
+    /// The path to the verification key file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub vk: Option<PathBuf>,
+    /// The path to the public input JSON file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub public_input: Option<PathBuf>,
+}
+
+/// Config for `verify`
+#[derive(Debug, Deserialize)]
+pub struct VerifyConfig {
+    /// The proof system to be used
+    pub proof_system: ProofSystem,
+    /// The path to the proof file
+    pub proof: PathBuf,
+    /// The pairing friendly curve to be used
+    pub curve: MPCCurve,
+    /// The path to the verification key file
+    pub vk: PathBuf,
+    /// The path to the public input JSON file
+    pub public_input: PathBuf,
+}
+
+/// Prefix for config env variables
+pub const CONFIG_ENV_PREFIX: &str = "COCIRCOM_";
+
+/// Error type for config parsing and merging
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct ConfigError(#[from] figment::error::Error);
+
+macro_rules! impl_config {
+    ($cli: ty, $config: ty) => {
+        impl $config {
+            /// Parse config from file, env, cli
+            pub fn parse(cli: $cli) -> Result<Self, ConfigError> {
+                if let Some(path) = &cli.config {
+                    Ok(Figment::new()
+                        .merge(Toml::file(path))
+                        .merge(Env::prefixed(CONFIG_ENV_PREFIX))
+                        .merge(Serialized::defaults(cli))
+                        .extract()?)
+                } else {
+                    Ok(Figment::new()
+                        .merge(Env::prefixed(CONFIG_ENV_PREFIX))
+                        .merge(Serialized::defaults(cli))
+                        .extract()?)
+                }
+            }
+        }
+    };
+}
+
+impl_config!(SplitInputCli, SplitInputConfig);
+impl_config!(SplitWitnessCli, SplitWitnessConfig);
+impl_config!(MergeInputSharesCli, MergeInputSharesConfig);
+impl_config!(TranslateWitnessCli, TranslateWitnessConfig);
+impl_config!(GenerateProofCli, GenerateProofConfig);
+impl_config!(VerifyCli, VerifyConfig);
+
+// manual one since this is a bit more complex
+impl GenerateWitnessConfig {
+    /// Parse config from file, env, cli
+    pub fn parse(cli: GenerateWitnessCli) -> Result<Self, ConfigError> {
+        let simplification_level = cli.simplification_level;
+        let mut config: GenerateWitnessConfig = if let Some(path) = &cli.config {
+            Figment::new()
+                .merge(Toml::file(path))
+                .merge(Env::prefixed(CONFIG_ENV_PREFIX))
+                .merge(Serialized::defaults(cli))
+                .extract()?
+        } else {
+            Figment::new()
+                .merge(Env::prefixed(CONFIG_ENV_PREFIX))
+                .merge(Serialized::defaults(cli))
+                .extract()?
+        };
+        match simplification_level {
+            0 => config.compiler.simplification = SimplificationLevel::O0,
+            1 => config.compiler.simplification = SimplificationLevel::O1,
+            2 => config.compiler.simplification = SimplificationLevel::O2(usize::MAX),
+            _ => {}
+        }
+        Ok(config)
+    }
 }
 
 #[derive(Parser)]
@@ -95,6 +552,32 @@ enum Commands {
     GenerateProof(GenerateProofCli),
     /// Verification of a circom proof.
     Verify(VerifyCli),
+}
+
+/// Check if a file exists at the given path, and is actually a file.
+fn check_file_exists(file_path: &Path) -> color_eyre::Result<()> {
+    if !file_path.exists() {
+        return Err(eyre!("File not found: {file_path:?}"));
+    }
+    if !file_path.is_file() {
+        return Err(eyre!(
+            "Expected {file_path:?} to be a file, but it is a directory."
+        ));
+    }
+    Ok(())
+}
+
+/// Check if a directory exists at the given path, and is actually a directory.
+fn check_dir_exists(dir_path: &Path) -> color_eyre::Result<()> {
+    if !dir_path.exists() {
+        return Err(eyre!("Dir not found: {dir_path:?}"));
+    }
+    if !dir_path.is_dir() {
+        return Err(eyre!(
+            "Expected {dir_path:?} to be a directory, but it is a file."
+        ));
+    }
+    Ok(())
 }
 
 fn main() -> color_eyre::Result<ExitCode> {
@@ -172,9 +655,9 @@ where
     let t = config.threshold;
     let n = config.num_parties;
 
-    file_utils::check_file_exists(&witness_path)?;
-    file_utils::check_file_exists(&r1cs)?;
-    file_utils::check_dir_exists(&out_dir)?;
+    check_file_exists(&witness_path)?;
+    check_file_exists(&r1cs)?;
+    check_dir_exists(&out_dir)?;
 
     // read the circom witness file
     let witness_file =
@@ -197,16 +680,12 @@ where
                 return Err(eyre!("REP3 only allows the number of parties to be 3"));
             }
             // create witness shares
-            let start = Instant::now();
-            let shares = SerializeableSharedRep3Witness::<_, SeedRng>::share_rep3(
+            let shares = CompressedRep3SharedWitness::share_rep3(
                 witness,
                 r1cs.num_inputs,
                 &mut rng,
-                config.seeded,
-                config.additive,
+                Compression::SeededHalfShares,
             );
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Sharing took {} ms", duration_ms);
 
             // write out the shares to the output directory
             let base_name = witness_path
@@ -225,17 +704,8 @@ where
         }
         MPCProtocol::SHAMIR => {
             // create witness shares
-            let start = Instant::now();
             let shares =
-                SharedWitness::<P::ScalarField, ShamirPrimeFieldShare<P::ScalarField>>::share_shamir(
-                    witness,
-                    r1cs.num_inputs,
-                    t,
-                    n,
-                    &mut rng,
-                );
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Sharing took {} ms", duration_ms);
+                ShamirSharedWitness::share_shamir(witness, r1cs.num_inputs, t, n, &mut rng);
 
             // write out the shares to the output directory
             let base_name = witness_path
@@ -275,15 +745,19 @@ where
             "Only REP3 protocol is supported for splitting inputs"
         ));
     }
-    file_utils::check_file_exists(&input)?;
+    check_file_exists(&input)?;
     let circuit_path = PathBuf::from(&circuit);
-    file_utils::check_file_exists(&circuit_path)?;
-    file_utils::check_dir_exists(&out_dir)?;
+    check_file_exists(&circuit_path)?;
+    check_dir_exists(&out_dir)?;
 
-    let start = Instant::now();
-    let shares = co_circom::split_input::<P>(input.clone(), circuit_path, config.compiler)?;
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Sharing took {} ms", duration_ms);
+    //get the public inputs if any from parser
+    let public_inputs = CoCircomCompiler::<P>::get_public_inputs(circuit_path, config.compiler)
+        .context("while reading public inputs from circuit")?;
+
+    // read the input file
+    let input_file = BufReader::new(File::open(&input).context("while opening input file")?);
+
+    let shares = co_circom::split_input::<P>(input_file, &public_inputs)?;
 
     // write out the shares to the output directory
     let base_name = input
@@ -323,10 +797,24 @@ where
         return Err(eyre!("Need at least two input shares to merge"));
     }
     for input in &inputs {
-        file_utils::check_file_exists(input)?;
+        check_file_exists(input)?;
     }
 
-    merge_input_shares::<P::ScalarField>(inputs, out)?;
+    let input_shares = inputs
+        .iter()
+        .map(|input| {
+            let input_share_file =
+                BufReader::new(File::open(input).context("while opening input share file")?);
+            let input_share: Rep3SharedInput<P::ScalarField> =
+                bincode::deserialize_from(input_share_file)
+                    .context("trying to parse input share file")?;
+            color_eyre::Result::<_>::Ok(input_share)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let merged = co_circom::merge_input_shares(input_shares)?;
+    let out_file = BufWriter::new(File::create(&out).context("while creating output file")?);
+    bincode::serialize_into(out_file, &merged).context("while serializing witness share")?;
+    tracing::info!("Wrote merged input share to file {}", out.display());
 
     Ok(ExitCode::SUCCESS)
 }
@@ -349,9 +837,9 @@ where
             "Only REP3 protocol is supported for merging input shares"
         ));
     }
-    file_utils::check_file_exists(&input)?;
+    check_file_exists(&input)?;
     let circuit_path = PathBuf::from(&circuit);
-    file_utils::check_file_exists(&circuit_path)?;
+    check_file_exists(&circuit_path)?;
 
     // connect to network
     let network_config = config
@@ -364,16 +852,23 @@ where
     // parse input shares
     let input_share_file =
         BufReader::new(File::open(&input).context("while opening input share file")?);
-    let input_share =
-        co_circom::parse_shared_input(input_share_file).context("while parsing input")?;
+    let input_share: Rep3SharedInput<P::ScalarField> =
+        bincode::deserialize_from(input_share_file).context("trying to parse input share file")?;
+
+    // parse circuit file & put through our compiler
+    let circuit = CoCircomCompiler::<P>::parse(circuit, config.compiler)
+        .context("while parsing circuit file")?;
 
     // Extend the witness
-    let result_witness_share =
-        co_circom::generate_witness_rep3::<P, SeedRng>(circuit, input_share, mpc_net, config)?;
+    let (result_witness_share, _) =
+        co_circom::generate_witness_rep3::<P>(circuit, input_share, mpc_net, config.vm)?;
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
-    bincode::serialize_into(out_file, &result_witness_share)?;
+    bincode::serialize_into(
+        out_file,
+        &CompressedRep3SharedWitness::from(result_witness_share),
+    )?;
     tracing::info!("Witness successfully written to {}", out.display());
     Ok(ExitCode::SUCCESS)
 }
@@ -394,13 +889,13 @@ where
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
         return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
     }
-    file_utils::check_file_exists(&witness)?;
+    check_file_exists(&witness)?;
 
     // parse witness shares
     let witness_file =
         BufReader::new(File::open(witness).context("trying to open witness share file")?);
-    let witness_share: SharedWitness<P::ScalarField, P::ScalarField> =
-        co_circom::parse_witness_share_rep3_as_additive(witness_file)?;
+    let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
+        bincode::deserialize_from(witness_file)?;
 
     // connect to network
     let network_config = config
@@ -409,26 +904,9 @@ where
         .try_into()
         .context("while converting network config")?;
     let net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
-    let id = usize::from(net.get_id());
 
-    // init MPC protocol
-    let threshold = 1;
-    let num_pairs = witness_share.witness.len();
-    let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
-        .context("while shamir preprocessing")?;
-    let mut protocol = ShamirProtocol::from(preprocessing);
     // Translate witness to shamir shares
-    let start = Instant::now();
-    let translated_witness = protocol
-        .translate_primefield_addshare_vec(witness_share.witness)
-        .context("while translating witness")?;
-    let shamir_witness_share: SharedWitness<P::ScalarField, ShamirPrimeFieldShare<P::ScalarField>> =
-        SharedWitness {
-            public_inputs: witness_share.public_inputs,
-            witness: translated_witness,
-        };
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Party {}: Translating witness took {} ms", id, duration_ms);
+    let (shamir_witness_share, _) = co_circom::translate_witness::<P>(witness_share, net)?;
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -458,8 +936,8 @@ where
         CheckElement::No
     };
 
-    file_utils::check_file_exists(&witness)?;
-    file_utils::check_file_exists(&zkey)?;
+    check_file_exists(&witness)?;
+    check_file_exists(&zkey)?;
 
     // parse witness shares
     let witness_file =
@@ -486,27 +964,19 @@ where
                     }
 
                     let mut mpc_net = Rep3MpcNet::new(network_config)?;
-                    let witness_share =
-                        co_circom::parse_witness_share_rep3(witness_file, &mut mpc_net)?;
+                    let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
+                        bincode::deserialize_from(witness_file)?;
+                    let witness_share = witness_share.uncompress(&mut mpc_net)?;
                     let public_input = witness_share.public_inputs.clone();
-                    // connect to network
-                    let prover =
-                        Rep3CoGroth16::with_network(mpc_net).context("while building prover")?;
-
-                    // execute prover in MPC
-                    let proof = prover.prove(zkey, witness_share)?;
+                    let (proof, _) = Rep3CoGroth16::prove(mpc_net, zkey, witness_share)?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    let witness_share = co_circom::parse_witness_share_shamir(witness_file)?;
+                    let mpc_net = ShamirMpcNet::new(network_config)?;
+                    let witness_share: ShamirSharedWitness<P::ScalarField> =
+                        bincode::deserialize_from(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
-
-                    // connect to network
-                    let prover = ShamirCoGroth16::with_network_config(t, network_config)
-                        .context("while building prover")?;
-
-                    // execute prover in MPC
-                    let proof = prover.prove(zkey, witness_share)?;
+                    let (proof, _) = ShamirCoGroth16::prove(mpc_net, t, zkey, witness_share)?;
                     (proof, public_input)
                 }
             };
@@ -535,29 +1005,19 @@ where
                     }
 
                     let mut mpc_net = Rep3MpcNet::new(network_config)?;
-                    let witness_share =
-                        co_circom::parse_witness_share_rep3(witness_file, &mut mpc_net)?;
-
+                    let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
+                        bincode::deserialize_from(witness_file)?;
+                    let witness_share = witness_share.uncompress(&mut mpc_net)?;
                     let public_input = witness_share.public_inputs.clone();
-
-                    //init prover
-                    let prover =
-                        Rep3CoPlonk::with_network(mpc_net).context("while building prover")?;
-
-                    // execute prover in MPC
-                    let proof = prover.prove(zkey, witness_share)?;
+                    let (proof, _) = Rep3CoPlonk::prove(mpc_net, zkey, witness_share)?;
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    let witness_share = co_circom::parse_witness_share_shamir(witness_file)?;
+                    let mpc_net = ShamirMpcNet::new(network_config)?;
+                    let witness_share: ShamirSharedWitness<P::ScalarField> =
+                        bincode::deserialize_from(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
-
-                    //init prover
-                    let prover = ShamirCoPlonk::with_network_config(t, network_config, &zkey)
-                        .context("while building prover")?;
-
-                    // execute prover in MPC
-                    let proof = prover.prove(zkey, witness_share)?;
+                    let (proof, _) = ShamirCoPlonk::prove(mpc_net, t, zkey, witness_share)?;
                     (proof, public_input)
                 }
             };
@@ -617,9 +1077,9 @@ where
     let vk = config.vk;
     let public_input = config.public_input;
 
-    file_utils::check_file_exists(&proof)?;
-    file_utils::check_file_exists(&vk)?;
-    file_utils::check_file_exists(&public_input)?;
+    check_file_exists(&proof)?;
+    check_file_exists(&vk)?;
+    check_file_exists(&public_input)?;
 
     // parse circom proof file
     let proof_file = BufReader::new(File::open(&proof).context("while opening proof file")?);
@@ -653,12 +1113,7 @@ where
             let vk: Groth16JsonVerificationKey<P> = serde_json::from_reader(vk_file)
                 .context("while deserializing verification key from file")?;
 
-            // The actual verifier
-            let start = Instant::now();
-            let res = Groth16::<P>::verify(&vk, &proof, &public_inputs);
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Proof verification took {} ms", duration_ms);
-            res
+            Groth16::<P>::verify(&vk, &proof, &public_inputs)
         }
         ProofSystem::Plonk => {
             let proof: PlonkProof<P> = serde_json::from_reader(proof_file)
@@ -667,12 +1122,7 @@ where
             let vk: PlonkJsonVerificationKey<P> = serde_json::from_reader(vk_file)
                 .context("while deserializing verification key from file")?;
 
-            // The actual verifier
-            let start = Instant::now();
-            let res = Plonk::<P>::verify(&vk, &proof, &public_inputs);
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Proof verification took {} ms", duration_ms);
-            res
+            Plonk::<P>::verify(&vk, &proof, &public_inputs)
         }
     };
 
@@ -687,30 +1137,4 @@ where
         }
         Err(VerificationError::Malformed(err)) => eyre::bail!(err),
     }
-}
-
-fn merge_input_shares<F: PrimeField>(inputs: Vec<PathBuf>, out: PathBuf) -> color_eyre::Result<()> {
-    let start = Instant::now();
-    let mut input_shares = inputs
-        .iter()
-        .map(|input| {
-            let input_share_file =
-                BufReader::new(File::open(input).context("while opening input share file")?);
-            let input_share: SerializeableSharedRep3Input<F> =
-                bincode::deserialize_from(input_share_file)
-                    .context("trying to parse input share file")?;
-            color_eyre::Result::<_>::Ok(input_share)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let start_item = input_shares.pop().expect("we have at least two inputs");
-    let merged = input_shares.into_iter().try_fold(start_item, |a, b| {
-        a.merge(b).context("while merging input shares")
-    })?;
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Merging took {} ms", duration_ms);
-
-    let out_file = BufWriter::new(File::create(&out).context("while creating output file")?);
-    bincode::serialize_into(out_file, &merged).context("while serializing witness share")?;
-    tracing::info!("Wrote merged input share to file {}", out.display());
-    Ok(())
 }

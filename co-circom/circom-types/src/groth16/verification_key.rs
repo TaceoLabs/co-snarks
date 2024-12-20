@@ -1,4 +1,5 @@
 //! This module defines the [`JsonVerificationKey`] struct that implements de/serialization using [`serde`].
+use std::io::Read;
 use std::marker::PhantomData;
 
 use ark_ec::pairing::Pairing;
@@ -52,6 +53,17 @@ where
     #[serde(serialize_with = "serialize_g1_sequence::<_,P>")]
     #[serde(deserialize_with = "deserialize_g1_sequence::<_,P>")]
     pub ic: Vec<P::G1Affine>,
+}
+
+impl<P: Pairing + CircomArkworksPairingBridge> JsonVerificationKey<P>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    /// Deserializes a [`JsonVerificationKey`] from a reader.
+    pub fn from_reader<R: Read>(rdr: R) -> Result<Self, serde_json::Error> {
+        serde_json::from_reader(rdr)
+    }
 }
 
 fn serialize_g1_sequence<S: Serializer, P: Pairing + CircomArkworksPairingBridge>(

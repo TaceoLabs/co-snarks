@@ -25,6 +25,11 @@ impl<N: Rep3Network> Rep3PlonkDriver<N> {
             io_context1,
         }
     }
+
+    /// Get the underlying network
+    pub fn get_network(self) -> N {
+        self.io_context0.network
+    }
 }
 
 impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {

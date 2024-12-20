@@ -30,14 +30,13 @@ use serde::{Deserialize, Serialize};
 
 pub(crate) type IoResult<T> = std::io::Result<T>;
 
+/// The Rng used for expanding compressed Shares
+pub type SeedRng = rand_chacha::ChaCha12Rng;
+
 /// A type representing the different states a share can have. Either full replicated share, only an additive share, or both variants in compressed form.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
-pub enum Rep3ShareVecType<F: PrimeField, U>
-where
-    U: Rng + SeedableRng + CryptoRng,
-    U::Seed: Serialize + for<'a> Deserialize<'a> + Clone + std::fmt::Debug,
-{
+pub enum Rep3ShareVecType<F: PrimeField> {
     /// A fully expanded replicated share.
     Replicated(
         #[serde(
@@ -47,7 +46,7 @@ where
         Vec<Rep3PrimeFieldShare<F>>,
     ),
     /// A compressed replicated share.
-    SeededReplicated(ReplicatedSeedType<Vec<F>, U>),
+    SeededReplicated(ReplicatedSeedType<Vec<F>, SeedRng>),
     /// A fully expanded additive share.
     Additive(
         #[serde(
@@ -57,7 +56,7 @@ where
         Vec<F>,
     ),
     /// A compressed additive share.
-    SeededAdditive(SeededType<Vec<F>, U>),
+    SeededAdditive(SeededType<Vec<F>, SeedRng>),
 }
 
 /// A type that represents a compressed additive share. It can either be a seed (with length) or the actual share.
