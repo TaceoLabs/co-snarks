@@ -25,12 +25,14 @@ impl<N: Rep3Network> Rep3Groth16Driver<N> {
             io_context1,
         }
     }
+
+    /// Get the underlying network
+    pub fn get_network(self) -> N {
+        self.io_context0.network
+    }
 }
 
-impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
-where
-    N: 'static,
-{
+impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N> {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShare<C>
         = Rep3PointShare<C>

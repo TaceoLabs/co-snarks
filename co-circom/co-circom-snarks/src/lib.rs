@@ -6,21 +6,45 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_types::Witness;
 use mpc_core::protocols::{
-    rep3::{self, Rep3PrimeFieldShare, Rep3ShareVecType},
+    rep3::{
+        self,
+        network::{Rep3MpcNet, Rep3Network},
+        Rep3PrimeFieldShare, Rep3ShareVecType,
+    },
     shamir::{self, ShamirPrimeFieldShare},
 };
-use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, SeedableRng};
+use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::error::Error;
 
+/// A REP3 shared input type
+pub type Rep3SharedInput<F> = SharedInput<F, Rep3PrimeFieldShare<F>>;
+
+/// A REP3 shared witness type
+pub type Rep3SharedWitness<F> = SharedWitness<F, Rep3PrimeFieldShare<F>>;
+
+/// A shamir shared witness type
+pub type ShamirSharedWitness<F> = SharedWitness<F, ShamirPrimeFieldShare<F>>;
+
+/// Compression levels for [`CompressedRep3SharedWitness`] shares.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Compression {
+    #[default]
+    /// No compression
+    None,
+    /// Additive half shares, only half the size but need to be replicated before proof generation.
+    HalfShares,
+    /// Only share as seeds, need to be expanded before use.
+    SeededShares,
+    /// Combination of additive and seeded shares
+    SeededHalfShares,
+}
+
 /// This type represents the serialized version of a Rep3 witness. Its share can be either additive or replicated, and in both cases also compressed.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct SerializeableSharedRep3Witness<F: PrimeField, U: Rng + SeedableRng + CryptoRng>
-where
-    U::Seed: Serialize + for<'a> Deserialize<'a> + Clone + std::fmt::Debug,
-{
+pub struct CompressedRep3SharedWitness<F: PrimeField> {
     /// The public inputs (which are the outputs of the circom circuit).
     /// This also includes the constant 1 at position 0.
     #[serde(
@@ -29,24 +53,83 @@ where
     )]
     pub public_inputs: Vec<F>,
     /// The secret-shared witness elements.
-    pub witness: Rep3ShareVecType<F, U>,
+    pub witness: Rep3ShareVecType<F>,
 }
 
-impl<F: PrimeField, U: Rng + SeedableRng + CryptoRng> SerializeableSharedRep3Witness<F, U>
-where
-    U::Seed: Serialize + for<'a> Deserialize<'a> + Clone + std::fmt::Debug,
-{
-    /// Transforms a shared witness into a serializable version.
-    pub fn from_shared_witness(inp: SharedWitness<F, Rep3PrimeFieldShare<F>>) -> Self {
+impl<F: PrimeField> From<Rep3SharedWitness<F>> for CompressedRep3SharedWitness<F> {
+    fn from(value: Rep3SharedWitness<F>) -> Self {
         Self {
-            public_inputs: inp.public_inputs,
-            witness: Rep3ShareVecType::Replicated(inp.witness),
+            public_inputs: value.public_inputs,
+            witness: Rep3ShareVecType::Replicated(value.witness),
         }
     }
 }
 
+impl<F: PrimeField> From<CompressedRep3SharedWitness<F>> for SharedWitness<F, F> {
+    fn from(value: CompressedRep3SharedWitness<F>) -> Self {
+        let public_inputs = value.public_inputs;
+        let witness = value.witness;
+        let witness = match witness {
+            Rep3ShareVecType::Replicated(vec) => vec.into_iter().map(|x| x.a).collect::<Vec<_>>(),
+            Rep3ShareVecType::SeededReplicated(replicated_seed_type) => {
+                replicated_seed_type.a.expand_vec()
+            }
+            Rep3ShareVecType::Additive(vec) => vec,
+            Rep3ShareVecType::SeededAdditive(seeded_type) => seeded_type.expand_vec(),
+        };
+
+        SharedWitness {
+            public_inputs,
+            witness,
+        }
+    }
+}
+
+fn reshare_vec<F: PrimeField>(
+    vec: Vec<F>,
+    mpc_net: &mut Rep3MpcNet,
+) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
+    mpc_net.send_next_many(&vec)?;
+    let b: Vec<F> = mpc_net.recv_prev_many()?;
+
+    if vec.len() != b.len() {
+        return Err(eyre::eyre!("reshare_vec: vec and b have different lengths"));
+    }
+
+    let shares = vec
+        .into_iter()
+        .zip(b)
+        .map(|(a, b)| Rep3PrimeFieldShare { a, b })
+        .collect();
+
+    Ok(shares)
+}
+
+impl<F: PrimeField> CompressedRep3SharedWitness<F> {
+    /// Uncompress into [`Rep3SharedWitness`].
+    pub fn uncompress(self, mpc_net: &mut Rep3MpcNet) -> eyre::Result<Rep3SharedWitness<F>> {
+        let public_inputs = self.public_inputs;
+        let witness = self.witness;
+        let witness = match witness {
+            Rep3ShareVecType::Replicated(vec) => vec,
+            Rep3ShareVecType::SeededReplicated(replicated_seed_type) => {
+                replicated_seed_type.expand_vec()?
+            }
+            Rep3ShareVecType::Additive(vec) => reshare_vec(vec, mpc_net)?,
+            Rep3ShareVecType::SeededAdditive(seeded_type) => {
+                reshare_vec(seeded_type.expand_vec(), mpc_net)?
+            }
+        };
+
+        Ok(SharedWitness {
+            public_inputs,
+            witness,
+        })
+    }
+}
+
 /// A shared witness in the circom ecosystem.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedWitness<F: PrimeField, S>
 where
     S: CanonicalSerialize + CanonicalDeserialize + Clone,
@@ -66,10 +149,12 @@ where
     pub witness: Vec<S>,
 }
 
-/// This type represents the serialized version of a Rep3 witness. Its share can be either additive or replicated, and in both cases also compressed.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(bound = "")]
-pub struct SerializeableSharedRep3Input<F: PrimeField> {
+/// A shared input for a collaborative circom witness extension.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SharedInput<F: PrimeField, S>
+where
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
     #[serde(
         serialize_with = "mpc_core::ark_se",
         deserialize_with = "mpc_core::ark_de"
@@ -77,55 +162,37 @@ pub struct SerializeableSharedRep3Input<F: PrimeField> {
     /// A map from variable names to the public field elements.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub public_inputs: BTreeMap<String, Vec<F>>,
+    #[serde(
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
+    )]
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub shared_inputs: BTreeMap<String, Vec<Rep3PrimeFieldShare<F>>>,
+    pub shared_inputs: BTreeMap<String, Vec<S>>,
     /// A map from variable names to vecs with maybe unknown elements that need to be merged.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub maybe_shared_inputs: BTreeMap<String, Vec<Option<Rep3PrimeFieldShare<F>>>>,
+    pub maybe_shared_inputs: BTreeMap<String, Vec<Option<S>>>,
 }
 
-impl<F: PrimeField> Default for SerializeableSharedRep3Input<F> {
-    fn default() -> Self {
-        Self {
-            public_inputs: BTreeMap::new(),
-            shared_inputs: BTreeMap::new(),
-            maybe_shared_inputs: BTreeMap::new(),
-        }
-    }
-}
-
-impl<F: PrimeField> SerializeableSharedRep3Input<F> {
-    /// Shares a given input
-    pub fn share_rep3<R: Rng + CryptoRng>(
-        input: &[F],
-        rng: &mut R,
-    ) -> [Vec<Rep3PrimeFieldShare<F>>; 3] {
-        rep3::share_field_elements(input, rng)
+impl<F: PrimeField, S> SharedInput<F, S>
+where
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
+    /// Adds a public input with a given name to the [SharedInput].
+    pub fn add_public_input(&mut self, key: String, elements: Vec<F>) {
+        self.public_inputs.insert(key, elements);
     }
 
-    /// Shares a given input with unknown elements
-    pub fn maybe_share_rep3<R: Rng + CryptoRng>(
-        input: &[Option<F>],
-        rng: &mut R,
-    ) -> [Vec<Option<Rep3PrimeFieldShare<F>>>; 3] {
-        rep3::share_maybe_field_elements(input, rng)
+    /// Adds a shared input with a given name to the [SharedInput].
+    pub fn add_shared_input(&mut self, key: String, elements: Vec<S>) {
+        self.shared_inputs.insert(key, elements);
     }
 
-    /// Merges two [SharedRep3Input]s into one, performing basic sanity checks.
+    /// Merges two [SharedInput]s into one, performing basic sanity checks.
     pub fn merge(self, other: Self) -> eyre::Result<Self> {
         let mut shared_inputs = self.shared_inputs;
-        let maybe_shared_inputs = self.maybe_shared_inputs;
         let public_inputs = self.public_inputs;
-
-        for (key, value) in other.public_inputs.iter() {
-            if !public_inputs.contains_key(key) {
-                eyre::bail!("Public input \"{key}\" must be present in all files");
-            }
-            if public_inputs.get(key).expect("is there we checked") != value {
-                eyre::bail!("Public input \"{key}\" must be same in all files");
-            }
-        }
+        let maybe_shared_inputs = self.maybe_shared_inputs;
 
         for (key, value) in other.shared_inputs {
             if shared_inputs.contains_key(&key) {
@@ -137,6 +204,14 @@ impl<F: PrimeField> SerializeableSharedRep3Input<F> {
                 );
             }
             shared_inputs.insert(key, value);
+        }
+        for (key, value) in other.public_inputs {
+            if !public_inputs.contains_key(&key) {
+                eyre::bail!("Public input \"{key}\" must be present in all files");
+            }
+            if public_inputs.get(&key).expect("is there we checked") != &value {
+                eyre::bail!("Public input \"{key}\" must be same in all files");
+            }
         }
 
         let mut merged_maybe_shared_inputs = BTreeMap::new();
@@ -168,160 +243,66 @@ impl<F: PrimeField> SerializeableSharedRep3Input<F> {
         }
 
         Ok(Self {
-            public_inputs,
             shared_inputs,
+            public_inputs,
             maybe_shared_inputs: merged_maybe_shared_inputs,
         })
     }
 }
 
-/// A shared input for a collaborative circom witness extension.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SharedInput<F: PrimeField, S>
-where
-    S: CanonicalSerialize + CanonicalDeserialize + Clone,
-{
-    #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
-    )]
-    /// A map from variable names to the public field elements.
-    /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub public_inputs: BTreeMap<String, Vec<F>>,
-    #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
-    )]
-    /// A map from variable names to the share of the field element.
-    /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub shared_inputs: BTreeMap<String, Vec<S>>,
-}
+impl<F: PrimeField> SharedInput<F, Rep3PrimeFieldShare<F>> {
+    /// Shares a given input.
+    pub fn share_rep3<R: Rng + CryptoRng>(
+        input: &[F],
+        rng: &mut R,
+    ) -> [Vec<Rep3PrimeFieldShare<F>>; 3] {
+        rep3::share_field_elements(input, rng)
+    }
 
-/// We manually implement Clone here since it was not derived correctly and it added bounds on T, P which are not needed
-impl<F: PrimeField, S> Clone for SharedWitness<F, S>
-where
-    S: CanonicalSerialize + CanonicalDeserialize + Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            public_inputs: self.public_inputs.clone(),
-            witness: self.witness.clone(),
-        }
+    /// Shares a given input with unknown elements
+    pub fn maybe_share_rep3<R: Rng + CryptoRng>(
+        input: &[Option<F>],
+        rng: &mut R,
+    ) -> [Vec<Option<Rep3PrimeFieldShare<F>>>; 3] {
+        rep3::share_maybe_field_elements(input, rng)
     }
 }
 
-/// We manually implement Clone here since it was not derived correctly and it added bounds on T, P which are not needed
-impl<F: PrimeField, S> Clone for SharedInput<F, S>
-where
-    S: CanonicalSerialize + CanonicalDeserialize + Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            public_inputs: self.public_inputs.clone(),
-            shared_inputs: self.shared_inputs.clone(),
-        }
-    }
-}
-
-impl<F: PrimeField, S> Default for SharedInput<F, S>
-where
-    S: CanonicalSerialize + CanonicalDeserialize + Clone,
-{
-    fn default() -> Self {
-        Self {
-            public_inputs: BTreeMap::new(),
-            shared_inputs: BTreeMap::new(),
-        }
-    }
-}
-
-impl<F: PrimeField, S> SharedInput<F, S>
-where
-    S: CanonicalSerialize + CanonicalDeserialize + Clone,
-{
-    /// Adds a public input with a given name to the [SharedInput].
-    pub fn add_public_input(&mut self, key: String, elements: Vec<F>) {
-        self.public_inputs.insert(key, elements);
-    }
-
-    /// Adds a shared input with a given name to the [SharedInput].
-    pub fn add_shared_input(&mut self, key: String, elements: Vec<S>) {
-        self.shared_inputs.insert(key, elements);
-    }
-
-    /// Merges two [SharedInput]s into one, performing basic sanity checks.
-    pub fn merge(self, other: Self) -> eyre::Result<Self> {
-        let mut shared_inputs = self.shared_inputs;
-        let public_inputs = self.public_inputs;
-        for (key, value) in other.shared_inputs {
-            if shared_inputs.contains_key(&key) {
-                eyre::bail!("Input with name {} present in multiple input shares", key);
-            }
-            if public_inputs.contains_key(&key) || other.public_inputs.contains_key(&key) {
-                eyre::bail!(
-                    "Input name is once in shared inputs and once in public inputs: \"{key}\""
-                );
-            }
-            shared_inputs.insert(key, value);
-        }
-        for (key, value) in other.public_inputs {
-            if !public_inputs.contains_key(&key) {
-                eyre::bail!("Public input \"{key}\" must be present in all files");
-            }
-            if public_inputs.get(&key).expect("is there we checked") != &value {
-                eyre::bail!("Public input \"{key}\" must be same in all files");
-            }
-        }
-
-        Ok(Self {
-            shared_inputs,
-            public_inputs,
-        })
-    }
-}
-
-impl<F: PrimeField, U: Rng + SeedableRng + CryptoRng> SerializeableSharedRep3Witness<F, U>
-where
-    U::Seed: Serialize + for<'a> Deserialize<'a> + Clone + std::fmt::Debug,
-
-    Standard: Distribution<U::Seed>,
-{
+impl<F: PrimeField> CompressedRep3SharedWitness<F> {
     /// Shares a given witness and public input vector using the Rep3 protocol.
     pub fn share_rep3<R: Rng + CryptoRng>(
         witness: Witness<F>,
         num_pub_inputs: usize,
         rng: &mut R,
-        seeded: bool,
-        additive: bool,
+        compression: Compression,
     ) -> [Self; 3] {
         let public_inputs = &witness.values[..num_pub_inputs];
         let witness = &witness.values[num_pub_inputs..];
 
-        let [share1, share2, share3] = match (seeded, additive) {
-            (true, true) => {
+        let [share1, share2, share3] = match compression {
+            Compression::SeededHalfShares => {
                 let [share1, share2, share3] =
-                    rep3::share_field_elements_additive_seeded::<_, _, U>(witness, rng);
+                    rep3::share_field_elements_additive_seeded(witness, rng);
                 let share1 = Rep3ShareVecType::SeededAdditive(share1);
                 let share2 = Rep3ShareVecType::SeededAdditive(share2);
                 let share3 = Rep3ShareVecType::SeededAdditive(share3);
                 [share1, share2, share3]
             }
-            (true, false) => {
-                let [share1, share2, share3] =
-                    rep3::share_field_elements_seeded::<_, _, U>(witness, rng);
+            Compression::SeededShares => {
+                let [share1, share2, share3] = rep3::share_field_elements_seeded(witness, rng);
                 let share1 = Rep3ShareVecType::SeededReplicated(share1);
                 let share2 = Rep3ShareVecType::SeededReplicated(share2);
                 let share3 = Rep3ShareVecType::SeededReplicated(share3);
                 [share1, share2, share3]
             }
-            (false, true) => {
+            Compression::HalfShares => {
                 let [share1, share2, share3] = rep3::share_field_elements_additive(witness, rng);
                 let share1 = Rep3ShareVecType::Additive(share1);
                 let share2 = Rep3ShareVecType::Additive(share2);
                 let share3 = Rep3ShareVecType::Additive(share3);
                 [share1, share2, share3]
             }
-            (false, false) => {
+            Compression::None => {
                 let [share1, share2, share3] = rep3::share_field_elements(witness, rng);
                 let share1 = Rep3ShareVecType::Replicated(share1);
                 let share2 = Rep3ShareVecType::Replicated(share2);

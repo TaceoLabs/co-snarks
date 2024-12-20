@@ -108,6 +108,7 @@ pub struct CoCircomCompilerParsed<F: PrimeField> {
     pub(crate) main_outputs: usize,
     pub(crate) main_input_list: InputList,
     pub(crate) output_mapping: OutputMapping,
+    pub(crate) public_inputs: Vec<String>,
 }
 
 impl<F: PrimeField> CoCircomCompilerParsed<F> {
@@ -126,6 +127,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         main_outputs: usize,
         main_input_list: InputList,
         output_mapping: OutputMapping,
+        public_inputs: Vec<String>,
     ) -> Self {
         Self {
             main,
@@ -139,6 +141,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
             main_outputs,
             main_input_list,
             output_mapping,
+            public_inputs,
         }
     }
 }
@@ -200,5 +203,10 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
             MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             vm_config,
         )
+    }
+
+    /// Get public input names.
+    pub fn public_inputs(&self) -> &[String] {
+        &self.public_inputs
     }
 }
