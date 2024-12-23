@@ -628,13 +628,6 @@ impl<F: PrimeField> AcirFormat<F> {
                 inputs: _,
                 outputs: _,
             } => todo!("BlackBoxFuncCall::Blake3"),
-            BlackBoxFuncCall::SchnorrVerify {
-                public_key_x: _,
-                public_key_y: _,
-                signature: _,
-                message: _,
-                output: _,
-            } => todo!("BlackBoxFuncCall::SchnorrVerify"),
             BlackBoxFuncCall::EcdsaSecp256k1 {
                 public_key_x: _,
                 public_key_y: _,

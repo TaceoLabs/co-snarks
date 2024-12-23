@@ -1,5 +1,6 @@
 fn main(x: Field) -> pub [u8; 32] {
     unsafe {
+        //@safety: blablabla
         get_bytes(x)
     }
 }
