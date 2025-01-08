@@ -483,7 +483,7 @@ impl GarbledCircuits {
         // Prepare p for subtraction
         let new_bitlen = bitlen + 1;
         let p_ = (BigUint::from(1u64) << new_bitlen) - F::MODULUS.into();
-        let p_bits = GCUtils::biguint_to_bits(p_, new_bitlen);
+        let p_bits = GCUtils::biguint_to_bits(&p_, new_bitlen);
 
         // manual_rca:
         let mut subtracted = Vec::with_capacity(bitlen);

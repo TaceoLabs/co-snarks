@@ -491,32 +491,37 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         )
     }
 
+    fn decompose_arithmetic_many(
+        &mut self,
+        input: &[Self::ArithmeticShare],
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+        // Defines an upper bound on the size of the input vector to keep the GC at a reasonable size (for RAM)
+        const BATCH_SIZE: usize = 512; // TODO adapt this if it requires too much RAM
+
+        let num_decomps_per_field = total_bit_size_per_field.div_ceil(decompose_bit_size);
+        let mut results = Vec::with_capacity(input.len());
+
+        for inp_chunk in input.chunks(BATCH_SIZE) {
+            let result = yao::decompose_arithmetic_many(
+                inp_chunk,
+                &mut self.io_context,
+                total_bit_size_per_field,
+                decompose_bit_size,
+            )?;
+            for chunk in result.chunks(num_decomps_per_field) {
+                results.push(chunk.to_vec());
+            }
+        }
+        Ok(results)
+    }
+
     fn sort(
         &mut self,
         inputs: &[Self::ArithmeticShare],
         bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
         radix_sort_fields(inputs, &mut self.io_context, bitsize)
-    }
-
-    fn decompose_arithmetic_many(
-        &mut self,
-        input: &[Self::ArithmeticShare],
-        // io_context: &mut IoContext<N>,
-        total_bit_size_per_field: usize,
-        decompose_bit_size: usize,
-    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
-        let num_decomps_per_field = total_bit_size_per_field.div_ceil(decompose_bit_size);
-        let result = yao::decompose_arithmetic_many(
-            input,
-            &mut self.io_context,
-            total_bit_size_per_field,
-            decompose_bit_size,
-        )?;
-        let results = result
-            .chunks(num_decomps_per_field)
-            .map(|chunk| chunk.to_vec())
-            .collect();
-        Ok(results)
     }
 }

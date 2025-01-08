@@ -188,6 +188,20 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(result)
     }
 
+    fn decompose_arithmetic_many(
+        &mut self,
+        input: &[Self::ArithmeticShare],
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+        input
+            .iter()
+            .map(|&inp| {
+                Self::decompose_arithmetic(self, inp, total_bit_size_per_field, decompose_bit_size)
+            })
+            .collect()
+    }
+
     fn sort(
         &mut self,
         inputs: &[Self::ArithmeticShare],
@@ -202,20 +216,5 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         }
         result.sort();
         Ok(result)
-    }
-
-    fn decompose_arithmetic_many(
-        &mut self,
-        input: &[Self::ArithmeticShare],
-        // io_context: &mut IoContext<N>,
-        total_bit_size_per_field: usize,
-        decompose_bit_size: usize,
-    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
-        input
-            .iter()
-            .map(|&inp| {
-                Self::decompose_arithmetic(self, inp, total_bit_size_per_field, decompose_bit_size)
-            })
-            .collect()
     }
 }

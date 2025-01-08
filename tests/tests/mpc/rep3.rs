@@ -1550,12 +1550,8 @@ mod field_share {
         let y = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
             .collect_vec();
-        let y_1 = y.clone();
-        let y_2 = y.clone();
-        let y_3 = y.clone();
-        let ys = [y_1, y_2, y_3];
         let mut should_result = Vec::with_capacity(VEC_SIZE);
-        for (x, y) in x.into_iter().zip(y.into_iter()) {
+        for (x, y) in x.into_iter().zip(y.iter().cloned()) {
             let x: BigUint = x.into();
             let y: BigUint = y.into();
 
@@ -1566,16 +1562,15 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x, y_c) in izip!(
+        for (net, tx, x) in izip!(
             test_network.get_party_networks().into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
-            ys.into_iter()
         ) {
+            let y_ = y.to_owned();
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
-                let decomposed =
-                    yao::field_int_div_by_public_many(&x, y_c.as_ref(), &mut rep3).unwrap();
+                let decomposed = yao::field_int_div_by_public_many(&x, &y_, &mut rep3).unwrap();
                 tx.send(decomposed)
             });
         }
@@ -1600,11 +1595,9 @@ mod field_share {
             .map(|_| ark_bn254::Fr::rand(&mut rng))
             .collect_vec();
         let y_shares = rep3::share_field_elements(&y, &mut rng);
-        let x_1 = x.clone();
-        let x_2 = x.clone();
-        let x_3 = x.clone();
+
         let mut should_result = Vec::with_capacity(VEC_SIZE);
-        for (x, y) in x.into_iter().zip(y.into_iter()) {
+        for (x, y) in x.iter().cloned().zip(y.into_iter()) {
             let x: BigUint = x.into();
             let y: BigUint = y.into();
 
@@ -1615,16 +1608,16 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, y_c, x_c) in izip!(
+        for (net, tx, y_c) in izip!(
             test_network.get_party_networks().into_iter(),
             [tx1, tx2, tx3],
             y_shares.into_iter(),
-            [x_1, x_2, x_3]
         ) {
+            let x_ = x.to_owned();
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
 
-                let div = yao::field_int_div_by_shared_many(x_c.as_ref(), &y_c, &mut rep3).unwrap();
+                let div = yao::field_int_div_by_shared_many(&x_, &y_c, &mut rep3).unwrap();
                 tx.send(div)
             });
         }

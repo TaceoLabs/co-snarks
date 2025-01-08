@@ -235,7 +235,7 @@ impl GCUtils {
         Ok(F::from(res))
     }
 
-    fn biguint_to_bits(input: BigUint, n_bits: usize) -> Vec<bool> {
+    fn biguint_to_bits(input: &BigUint, n_bits: usize) -> Vec<bool> {
         let mut res = Vec::with_capacity(n_bits);
         let mut bits = 0;
         for mut el in input.to_u64_digits() {
@@ -250,6 +250,13 @@ impl GCUtils {
         }
         res.resize(n_bits, false);
         res
+    }
+
+    fn field_to_bits<F: PrimeField>(field: F) -> Vec<bool> {
+        let n_bits = F::MODULUS_BIT_SIZE as usize;
+        let bigint: BigUint = field.into();
+
+        Self::biguint_to_bits(&bigint, n_bits)
     }
 
     fn field_to_bits_as_u16<F: PrimeField>(field: F) -> Vec<u16> {
@@ -674,6 +681,7 @@ pub fn decompose_arithmetic<F: PrimeField, N: Rep3Network>(
         decompose_bit_size,
     )
 }
+
 /// Divides a vector of field elements by a power of 2, rounding down.
 pub fn field_int_div_power_2_many<F: PrimeField, N: Rep3Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
@@ -715,13 +723,8 @@ pub fn field_int_div_many<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
     let num_inputs = input1.len();
+    debug_assert_eq!(input1.len(), input2.len());
 
-    // if divisor_bit == 0 {
-    //     return Ok(inputs.to_owned());
-    // }
-    // if divisor_bit >= F::MODULUS_BIT_SIZE as usize {
-    //     return Ok(vec![Rep3PrimeFieldShare::zero_share(); num_inputs]);
-    // }
     let mut combined_inputs = Vec::with_capacity(input1.len() + input2.len());
     combined_inputs.extend_from_slice(input1);
     combined_inputs.extend_from_slice(input2);
@@ -734,7 +737,7 @@ pub fn field_int_div_many<F: PrimeField, N: Rep3Network>(
     )
 }
 
-/// Divides a field element by a power of 2, rounding down.
+/// Divides a field element by another, rounding down.
 pub fn field_int_div<F: PrimeField, N: Rep3Network>(
     input1: Rep3PrimeFieldShare<F>,
     input2: Rep3PrimeFieldShare<F>,
@@ -743,6 +746,7 @@ pub fn field_int_div<F: PrimeField, N: Rep3Network>(
     let res = field_int_div_many(&[input1], &[input2], io_context)?;
     Ok(res[0])
 }
+
 /// Divides a vector of field elements by another, rounding down.
 pub fn field_int_div_by_public_many<F: PrimeField, N: Rep3Network>(
     input: &[Rep3PrimeFieldShare<F>],
@@ -750,18 +754,13 @@ pub fn field_int_div_by_public_many<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
     let num_inputs = input.len();
+    debug_assert_eq!(input.len(), divisors.len());
 
-    // if divisor_bit == 0 {
-    //     return Ok(inputs.to_owned());
-    // }
-    // if divisor_bit >= F::MODULUS_BIT_SIZE as usize {
-    //     return Ok(vec![Rep3PrimeFieldShare::zero_share(); num_inputs]);
-    // } field_to_bits_as_u16
     let mut divisors_as_bits = Vec::with_capacity(F::MODULUS_BIT_SIZE as usize * num_inputs);
     divisors
         .iter()
-        .for_each(|y| divisors_as_bits.extend(GCUtils::field_to_bits_as_u16::<F>(*y)));
-    let divisors_as_bits = divisors_as_bits.iter().map(|&x| x != 0).collect(); // rfield_to_bits_as_u16 returns a 0-1 vec
+        .for_each(|y| divisors_as_bits.extend(GCUtils::field_to_bits::<F>(*y)));
+
     decompose_circuit_compose_blueprint!(
         &input,
         io_context,
@@ -771,7 +770,7 @@ pub fn field_int_div_by_public_many<F: PrimeField, N: Rep3Network>(
     )
 }
 
-/// Divides a field element by a power of 2, rounding down.
+/// Divides a field element by another, rounding down.
 pub fn field_int_div_by_public<F: PrimeField, N: Rep3Network>(
     input: Rep3PrimeFieldShare<F>,
     divisor: F,
@@ -780,6 +779,7 @@ pub fn field_int_div_by_public<F: PrimeField, N: Rep3Network>(
     let res = field_int_div_by_public_many(&[input], &[divisor], io_context)?;
     Ok(res[0])
 }
+
 /// Divides a vector of field elements by another, rounding down.
 pub fn field_int_div_by_shared_many<F: PrimeField, N: Rep3Network>(
     input: &[F],
@@ -787,28 +787,23 @@ pub fn field_int_div_by_shared_many<F: PrimeField, N: Rep3Network>(
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
     let num_inputs = input.len();
+    debug_assert_eq!(input.len(), divisors.len());
 
-    // if divisor_bit == 0 {
-    //     return Ok(inputs.to_owned());
-    // }
-    // if divisor_bit >= F::MODULUS_BIT_SIZE as usize {
-    //     return Ok(vec![Rep3PrimeFieldShare::zero_share(); num_inputs]);
-    // } field_to_bits_as_u16
     let mut inputs_as_bits = Vec::with_capacity(F::MODULUS_BIT_SIZE as usize * num_inputs);
     input
         .iter()
-        .for_each(|y| inputs_as_bits.extend(GCUtils::field_to_bits_as_u16::<F>(*y)));
-    let divisors_as_bits = inputs_as_bits.iter().map(|&x| x != 0).collect(); // rfield_to_bits_as_u16 returns a 0-1 vec
+        .for_each(|y| inputs_as_bits.extend(GCUtils::field_to_bits::<F>(*y)));
+
     decompose_circuit_compose_blueprint!(
         &divisors,
         io_context,
         num_inputs,
         GarbledCircuits::field_int_div_by_shared_many::<_, F>,
-        (divisors_as_bits)
+        (inputs_as_bits)
     )
 }
 
-/// Divides a field element by a power of 2, rounding down.
+/// Divides a field element by another, rounding down.
 pub fn field_int_div_by_shared<F: PrimeField, N: Rep3Network>(
     input: F,
     divisor: Rep3PrimeFieldShare<F>,
