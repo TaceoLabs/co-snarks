@@ -51,6 +51,18 @@ mod ring_share {
         };
     }
 
+    fn gen_non_zero<T: IntRing2k, R: Rng>(rng: &mut R) -> RingElement<T>
+    where
+        Standard: Distribution<T>,
+    {
+        loop {
+            let el = rng.gen::<RingElement<T>>();
+            if !el.is_zero() {
+                return el;
+            }
+        }
+    }
+
     // TODO we dont need channels, we can just join
 
     fn rep3_add_t<T: IntRing2k>()
@@ -60,7 +72,6 @@ mod ring_share {
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let y = rng.gen::<RingElement<T>>();
-        println!("x {x} y {x}");
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
         let y_shares = rep3_ring::share_ring_element(y, &mut rng);
         let should_result = x + y;
@@ -1728,6 +1739,12 @@ mod ring_share {
         let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
+
+    #[test]
+    fn rep3_div_power_2_via_yao() {
+        apply_to_all!(rep3_div_power_2_via_yao_t, [Bit, u8, u16, u32, u64, u128]);
+    }
+
     fn rep3_bin_div_via_yao_t<T: IntRing2k>()
     where
         Standard: Distribution<T>,
@@ -1740,7 +1757,7 @@ mod ring_share {
             .map(|_| rng.gen::<RingElement<T>>())
             .collect_vec();
         let y = (0..VEC_SIZE)
-            .map(|_| rng.gen::<RingElement<T>>())
+            .map(|_| gen_non_zero::<T, _>(&mut rng))
             .collect_vec();
         let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
         let y_shares = rep3_ring::share_ring_elements(&y, &mut rng);
@@ -1774,6 +1791,12 @@ mod ring_share {
         let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
+
+    #[test]
+    fn rep3_bin_div_via_yao() {
+        apply_to_all!(rep3_bin_div_via_yao_t, [u8, u16, u32, u64, u128]);
+    }
+
     fn rep3_bin_div_by_public_via_yao_t<T: IntRing2k>()
     where
         Standard: Distribution<T>,
@@ -1786,14 +1809,11 @@ mod ring_share {
             .map(|_| rng.gen::<RingElement<T>>())
             .collect_vec();
         let y = (0..VEC_SIZE)
-            .map(|_| rng.gen::<RingElement<T>>())
+            .map(|_| gen_non_zero::<T, _>(&mut rng))
             .collect_vec();
-        let y_1 = y.clone();
-        let y_2 = y.clone();
-        let y_3 = y.clone();
         let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
         let mut should_result: Vec<RingElement<T>> = Vec::with_capacity(VEC_SIZE);
-        for (x, y) in x.into_iter().zip(y.into_iter()) {
+        for (x, y) in x.into_iter().zip(y.iter()) {
             should_result.push(RingElement(T::cast_from_biguint(
                 &(x.0.cast_to_biguint() / y.0.cast_to_biguint()),
             )));
@@ -1802,16 +1822,16 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x, y_c) in izip!(
+        for (net, tx, x) in izip!(
             test_network.get_party_networks().into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
-            [y_1, y_2, y_3]
         ) {
+            let y_ = y.to_owned();
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
 
-                let div = yao::ring_div_by_public_many(&x, &y_c, &mut rep3).unwrap();
+                let div = yao::ring_div_by_public_many(&x, &y_, &mut rep3).unwrap();
                 tx.send(div)
             });
         }
@@ -1822,6 +1842,12 @@ mod ring_share {
         let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
+
+    #[test]
+    fn rep3_bin_div_by_public_via_yao() {
+        apply_to_all!(rep3_bin_div_by_public_via_yao_t, [u8, u16, u32, u64, u128]);
+    }
+
     fn rep3_bin_div_by_shared_via_yao_t<T: IntRing2k>()
     where
         Standard: Distribution<T>,
@@ -1834,14 +1860,11 @@ mod ring_share {
             .map(|_| rng.gen::<RingElement<T>>())
             .collect_vec();
         let y = (0..VEC_SIZE)
-            .map(|_| rng.gen::<RingElement<T>>())
+            .map(|_| gen_non_zero::<T, _>(&mut rng))
             .collect_vec();
-        let x_1 = x.clone();
-        let x_2 = x.clone();
-        let x_3 = x.clone();
         let y_shares = rep3_ring::share_ring_elements(&y, &mut rng);
         let mut should_result: Vec<RingElement<T>> = Vec::with_capacity(VEC_SIZE);
-        for (x, y) in x.into_iter().zip(y.into_iter()) {
+        for (x, y) in x.iter().zip(y.into_iter()) {
             should_result.push(RingElement(T::cast_from_biguint(
                 &(x.0.cast_to_biguint() / y.0.cast_to_biguint()),
             )));
@@ -1850,16 +1873,16 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, y_c, x_c) in izip!(
+        for (net, tx, y_c) in izip!(
             test_network.get_party_networks().into_iter(),
             [tx1, tx2, tx3],
             y_shares.into_iter(),
-            [x_1, x_2, x_3]
         ) {
+            let x_ = x.to_owned();
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
 
-                let div = yao::ring_div_by_shared_many(&x_c, &y_c, &mut rep3).unwrap();
+                let div = yao::ring_div_by_shared_many(&x_, &y_c, &mut rep3).unwrap();
                 tx.send(div)
             });
         }
@@ -1870,21 +1893,9 @@ mod ring_share {
         let is_result = rep3_ring::combine_ring_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
     }
+
     #[test]
     fn rep3_bin_div_by_shared_via_yao() {
         apply_to_all!(rep3_bin_div_by_shared_via_yao_t, [u8, u16, u32, u64, u128]);
-    }
-    #[test]
-    fn rep3_bin_div_by_public_via_yao() {
-        apply_to_all!(rep3_bin_div_by_public_via_yao_t, [u8, u16, u32, u64, u128]);
-    }
-    #[test]
-    fn rep3_bin_div_via_yao() {
-        apply_to_all!(rep3_bin_div_via_yao_t, [u8, u16, u32, u64, u128]);
-    }
-
-    #[test]
-    fn rep3_div_power_2_via_yao() {
-        apply_to_all!(rep3_div_power_2_via_yao_t, [Bit, u8, u16, u32, u64, u128]);
     }
 }

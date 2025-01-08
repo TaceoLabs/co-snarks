@@ -142,15 +142,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn decompose_arithmetic(
         &mut self,
         input: Self::ArithmeticShare,
-        // io_context: &mut IoContext<N>,
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
-     /// Decompose a shared value into a vector of shared values: \[a\] = a_1 + a_2 + ... + a_n. Each value a_i has at most decompose_bit_size bits, whereas the total bit size of the shares is total_bit_size_per_field. Thus, a_n, might have a smaller bitsize than the other chunks
-     fn decompose_arithmetic_many(
+
+    /// Decompose a shared value into a vector of shared values: \[a\] = a_1 + a_2 + ... + a_n. Each value a_i has at most decompose_bit_size bits, whereas the total bit size of the shares is total_bit_size_per_field. Thus, a_n, might have a smaller bitsize than the other chunks
+    fn decompose_arithmetic_many(
         &mut self,
         input: &[Self::ArithmeticShare],
-        // io_context: &mut IoContext<N>,
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>>;

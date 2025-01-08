@@ -1,10 +1,10 @@
 use super::{BrilligDriver, PlainBrilligDriver};
 use ark_ff::{One as _, PrimeField};
 use brillig::{BitSize, IntegerBitSize};
-use mpc_core::protocols::rep3_ring::conversion::a2b;
 use core::panic;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use mpc_core::protocols::rep3::{self, Rep3PrimeFieldShare};
+use mpc_core::protocols::rep3_ring::conversion::a2b;
 use mpc_core::protocols::rep3_ring::ring::bit::Bit;
 use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
@@ -1414,8 +1414,6 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
             (Rep3BrilligType::Shared(val), Rep3BrilligType::Public(radix)) => {
                 if let (Shared::Field(val), Public::Int(radix, IntegerBitSize::U32)) = (val, radix)
                 {
-                    
-
                     let radix = u32::try_from(radix).expect("must be u32");
                     let mut input = val;
                     assert!(radix <= 256, "radix is at most 256");
@@ -1447,14 +1445,15 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                                 &mut self.io_context,
                             )?; //radix is at most 256, so should fit into u8, but is this necessary?
                             if bits {
-                            let limb_2b = a2b(limb[0], &mut self.io_context)?;
-                            let limb_bit = rep3_ring::conversion::bit_inject(&limb_2b, &mut self.io_context)?;
-                            limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb_bit));
-                            }
-                            else {
-
-                            limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
-                        };
+                                let limb_2b = a2b(limb[0], &mut self.io_context)?;
+                                let limb_bit = rep3_ring::conversion::bit_inject(
+                                    &limb_2b,
+                                    &mut self.io_context,
+                                )?;
+                                limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb_bit));
+                            } else {
+                                limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
+                            };
                             input = div;
                         }
                         limbs

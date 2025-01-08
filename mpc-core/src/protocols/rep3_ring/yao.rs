@@ -63,6 +63,16 @@ impl GCUtils {
         res
     }
 
+    fn ring_to_bits<T: IntRing2k>(input: RingElement<T>) -> Vec<bool> {
+        let mut res = Vec::with_capacity(T::K);
+        let mut el = input;
+        for _ in 0..T::K {
+            res.push((el & RingElement::one()) == RingElement::one());
+            el >>= 1;
+        }
+        res
+    }
+
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
     pub fn encode_ring<T: IntRing2k, R: Rng + CryptoRng>(
         ring: RingElement<T>,
@@ -740,7 +750,7 @@ where
     Standard: Distribution<T>,
 {
     let num_inputs = input1.len();
-    assert_eq!(input1.len(), input2.len());
+    debug_assert_eq!(input1.len(), input2.len());
 
     let mut combined_inputs = Vec::with_capacity(input1.len() + input2.len());
     combined_inputs.extend_from_slice(input1);
@@ -769,6 +779,7 @@ where
     let res = ring_div_many(&[input1], &[input2], io_context)?;
     Ok(res[0])
 }
+
 /// Divides a vector of ring elements by another public.
 pub fn ring_div_by_public_many<T: IntRing2k, N: Rep3Network>(
     input: &[Rep3RingShare<T>],
@@ -779,12 +790,11 @@ where
     Standard: Distribution<T>,
 {
     let num_inputs = input.len();
-    assert_eq!(input.len(), divisors.len());
+    debug_assert_eq!(input.len(), divisors.len());
     let mut divisors_as_bits = Vec::with_capacity(T::K * num_inputs);
     divisors
         .iter()
-        .for_each(|y| divisors_as_bits.extend(GCUtils::ring_to_bits_as_u16::<T>(*y)));
-    let divisors_as_bits = divisors_as_bits.iter().map(|&x| x != 0).collect(); // ring_to_bits_as_u16 returns a 0-1 vec
+        .for_each(|y| divisors_as_bits.extend(GCUtils::ring_to_bits::<T>(*y)));
     decompose_circuit_compose_blueprint!(
         &input,
         io_context,
@@ -808,7 +818,8 @@ where
     let res = ring_div_by_public_many(&[input], &[divisor], io_context)?;
     Ok(res[0])
 }
-/// Divides a vector of ring elements by another public.
+
+/// Divides a public vector of ring elements by another.
 pub fn ring_div_by_shared_many<T: IntRing2k, N: Rep3Network>(
     input: &[RingElement<T>],
     divisors: &[Rep3RingShare<T>],
@@ -822,8 +833,7 @@ where
     let mut input_as_bits = Vec::with_capacity(T::K * num_inputs);
     input
         .iter()
-        .for_each(|y| input_as_bits.extend(GCUtils::ring_to_bits_as_u16::<T>(*y)));
-    let input_as_bits = input_as_bits.iter().map(|&x| x != 0).collect(); // ring_to_bits_as_u16 returns a 0-1 vec
+        .for_each(|y| input_as_bits.extend(GCUtils::ring_to_bits::<T>(*y)));
     decompose_circuit_compose_blueprint!(
         &divisors,
         io_context,
@@ -834,7 +844,7 @@ where
     )
 }
 
-/// Divides a ring element by another public.
+/// Divides a public ring element by another.
 pub fn ring_div_by_shared<T: IntRing2k, N: Rep3Network>(
     input: RingElement<T>,
     divisor: Rep3RingShare<T>,

@@ -631,6 +631,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             }
         }
     }
+
     // decomposes the shared values in batches, separated into the corresponding number of bits the values have
     #[expect(clippy::type_complexity)]
     fn prepare_for_range_decompose(
@@ -649,19 +650,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         for constraint in range_constraints.iter() {
             let val = &self.get_variable(constraint.witness as usize);
 
-            if constraint.num_bits > Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32 && T::is_shared(val)
-            {
-                let num_bits = constraint.num_bits;
-
+            let num_bits = constraint.num_bits;
+            if num_bits > Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32 && T::is_shared(val) {
+                let share_val = T::get_shared(val).expect("Already checked it is shared");
                 if let Some(&idx) = bits_locations.get(&num_bits) {
-                    to_decompose[idx]
-                        .push(T::get_shared(val).expect("Already checked it is shared"));
+                    to_decompose[idx].push(share_val);
                     decompose_indices.push((true, to_decompose[idx].len() - 1));
                 } else {
                     let new_idx = to_decompose.len();
-                    to_decompose.push(vec![
-                        T::get_shared(val).expect("Already checked it is shared")
-                    ]);
+                    to_decompose.push(vec![share_val]);
                     decompose_indices.push((true, 0));
                     bits_locations.insert(num_bits, new_idx);
                 }
@@ -670,9 +667,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             }
         }
 
-        let mut decomposed: Vec<Vec<Vec<_>>> = Vec::with_capacity(to_decompose.len());
+        let mut decomposed = Vec::with_capacity(to_decompose.len());
 
-        for (i, inp) in to_decompose.iter().enumerate() {
+        for (i, inp) in to_decompose.into_iter().enumerate() {
             let num_bits = bits_locations
                 .iter()
                 .find_map(|(&key, &value)| if value == i { Some(key) } else { None })
@@ -680,7 +677,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
             decomposed.push(T::decompose_arithmetic_many(
                 driver,
-                inp,
+                &inp,
                 num_bits as usize,
                 Self::DEFAULT_PLOOKUP_RANGE_BITNUM,
             )?);
@@ -775,23 +772,24 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //     todo!("Logic gates");
         // }
 
+        // We want to decompose all shared elements in parallel
         let (bits_locations, decomposed, decompose_indices) =
             self.prepare_for_range_decompose(driver, &constraint_system.range_constraints)?;
 
         for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
-            if let Some(&idx) = bits_locations.get(&constraint.num_bits) {
-                if decompose_indices[i].0 {
-                    self.decompose_into_default_range(
-                        driver,
-                        constraint.witness,
-                        constraint.num_bits as u64,
-                        Some(&decomposed[idx][decompose_indices[i].1]),
-                        Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
-                    )?;
-                } else {
-                    self.create_range_constraint(driver, constraint.witness, constraint.num_bits)?;
-                }
+            let idx_option = bits_locations.get(&constraint.num_bits);
+            if idx_option.is_some() && decompose_indices[i].0 {
+                // Already decomposed
+                let idx = idx_option.unwrap().to_owned();
+                self.decompose_into_default_range(
+                    driver,
+                    constraint.witness,
+                    constraint.num_bits as u64,
+                    Some(&decomposed[idx][decompose_indices[i].1]),
+                    Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
+                )?;
             } else {
+                // Either we do not have to decompose or the value is public
                 self.create_range_constraint(driver, constraint.witness, constraint.num_bits)?;
             }
 
@@ -2419,6 +2417,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
             self.create_new_range_constraint(variable_index, (1u64 << num_bits) - 1);
         } else {
+            // The value must be public, otherwise it would have been batch decomposed already
             self.decompose_into_default_range(
                 driver,
                 variable_index,
@@ -2529,11 +2528,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         let mut sublimb_indices: Vec<u32> = Vec::with_capacity(num_limbs as usize);
         let sublimbs: Vec<T::AcvmType> = match decompose {
+            // Already decomposed, i.e., we just take the values
             Some(decomposed) => decomposed
                 .iter()
                 .map(|item| T::AcvmType::from(item.clone()))
                 .collect(),
             None => {
+                // Not yet decomposed, i.e., it was a public value
                 let mut accumulator: BigUint = T::get_public(&val)
                     .expect("Already checked it is public")
                     .into();
