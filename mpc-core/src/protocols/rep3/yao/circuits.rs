@@ -2,13 +2,12 @@
 //!
 //! This module contains some garbled circuit implementations.
 
-use std::ops::Not;
-
 use crate::protocols::rep3::yao::GCUtils;
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, FancyBinary};
 use itertools::izip;
 use num_bigint::BigUint;
+use std::ops::Not;
 
 /// This struct contains some predefined garbled circuits.
 pub struct GarbledCircuits {}
@@ -97,13 +96,9 @@ impl GarbledCircuits {
         b: bool,
     ) -> Result<(G::Item, G::Item), G::Error> {
         let (s, c) = if b {
-            let z1 = g.negate(a)?;
-            let z4 = &z1;
-            let c = g.xor(z4, a)?;
-            (a.clone(), c)
+            (a.clone(), g.constant(1, 2)?)
         } else {
-            let z1 = a;
-            let s = g.negate(z1)?;
+            let s = g.negate(a)?;
             (s, a.clone())
         };
         Ok((s, c))
