@@ -237,7 +237,7 @@ impl<N: Rep3Network> Fancy for Rep3Garbler<'_, N> {
 
     fn constant(&mut self, x: u16, q: u16) -> Result<WireMod2, GarblerError> {
         let zero = WireMod2::rand(&mut self.rng, q);
-        let wire = zero.plus(self.delta.cmul_eq(x));
+        let wire = zero.plus(&self.delta.cmul(x));
         self.add_wire_to_circuit(&wire);
         Ok(zero)
     }

@@ -215,7 +215,7 @@ impl<N: Rep3Network> Fancy for StreamingRep3Garbler<'_, N> {
 
     fn constant(&mut self, x: u16, q: u16) -> Result<WireMod2, GarblerError> {
         let zero = WireMod2::rand(&mut self.rng, q);
-        let wire = zero.plus(self.delta.cmul_eq(x));
+        let wire = zero.plus(&self.delta.cmul(x));
         self.send_wire(&wire)?;
         Ok(zero)
     }
