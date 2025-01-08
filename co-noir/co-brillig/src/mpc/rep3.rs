@@ -4,7 +4,6 @@ use brillig::{BitSize, IntegerBitSize};
 use core::panic;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use mpc_core::protocols::rep3::{self, Rep3PrimeFieldShare};
-use mpc_core::protocols::rep3_ring::conversion::a2b;
 use mpc_core::protocols::rep3_ring::ring::bit::Bit;
 use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
@@ -757,7 +756,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                         Rep3BrilligType::shared_u8(divided)
                     }
                     (Public::Int(_, IntegerBitSize::U1), Shared::Ring1(_)) => {
-                        todo!("do we need this?")
+                        panic!("We do not implement division for a bit")
                     }
                     _ => panic!("type mismatch. Can only div matching values"),
                 }
@@ -867,10 +866,10 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                             )?;
                             Rep3BrilligType::shared_u1(divided)
                         } else {
-                            todo!("do we need this?")
+                            unreachable!("Bit is 0")
                         }
                     }
-                    _ => todo!("Implement division for shared/public"),
+                    _ => panic!("type mismatch. Can only div matching values"),
                 }
             }
             (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
@@ -899,7 +898,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                     Rep3BrilligType::shared_u8(divided)
                 }
                 (Shared::Ring1(_), Shared::Ring1(_)) => {
-                    todo!("do we want this?")
+                    panic!("We do not implement division for a bit")
                 }
                 _ => panic!("type mismatch. Can only div matching values"),
             },
@@ -1443,14 +1442,11 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                             let limb = rep3_ring::yao::field_to_ring_many::<_, u8, _>(
                                 &[limb],
                                 &mut self.io_context,
-                            )?; //radix is at most 256, so should fit into u8, but is this necessary?
+                            )?; //radix is at most 256, so should fit into u8
                             if bits {
-                                let limb_2b = a2b(limb[0], &mut self.io_context)?;
-                                let limb_bit = rep3_ring::conversion::bit_inject(
-                                    &limb_2b,
-                                    &mut self.io_context,
-                                )?;
-                                limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb_bit));
+                                let limb_bit =
+                                    rep3_ring::binary::is_zero(&limb[0], &mut self.io_context)?;
+                                limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring1(limb_bit));
                             } else {
                                 limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
                             };
@@ -1464,9 +1460,6 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
             }
             (Rep3BrilligType::Public(val), Rep3BrilligType::Shared(radix)) => {
                 if let (Public::Field(val), Shared::Ring32(radix)) = (val, radix) {
-                    if bits {
-                        todo!("Implement to_radix for public value and shared radix for bits=true")
-                    }
                     //todo: do we want to do checks for radix <= 256?
                     let mut limbs: Vec<Rep3BrilligType<_>> =
                         vec![Rep3BrilligType::default(); output_size];
@@ -1481,8 +1474,7 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                         val,
                         rep3::arithmetic::mul(div, radix_as_field[0], &mut self.io_context)?,
                         self.io_context.network.get_id(),
-                    ); // this feels very stupid?
-
+                    );
                     let limb = rep3_ring::yao::field_to_ring_many::<_, u8, _>(
                         &[limb],
                         &mut self.io_context,
@@ -1498,13 +1490,19 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                         let limb = rep3::arithmetic::sub(
                             input,
                             rep3::arithmetic::mul(div, radix_as_field[0], &mut self.io_context)?,
-                        ); // this feels very stupid?
+                        );
 
                         let limb = rep3_ring::yao::field_to_ring_many::<_, u8, _>(
                             &[limb],
                             &mut self.io_context,
                         )?; //radix is at most 256, so should fit into u8
-                        limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
+                        if bits {
+                            let limb_bit =
+                                rep3_ring::binary::is_zero(&limb[0], &mut self.io_context)?;
+                            limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring1(limb_bit));
+                        } else {
+                            limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
+                        }
                         input = div;
                     }
                     limbs
@@ -1514,10 +1512,6 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
             }
             (Rep3BrilligType::Shared(val), Rep3BrilligType::Shared(radix)) => {
                 if let (Shared::Field(val), Shared::Ring32(radix)) = (val, radix) {
-                    if bits {
-                        todo!("Implement to_radix for shared value and shared radix for bits=true")
-                    }
-                    //todo: do we want to do checks for radix <= 256?
                     let mut limbs: Vec<Rep3BrilligType<_>> =
                         vec![Rep3BrilligType::default(); output_size];
                     let radix_as_field =
@@ -1532,13 +1526,18 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
                         let limb = rep3::arithmetic::sub(
                             input,
                             rep3::arithmetic::mul(div, radix_as_field[0], &mut self.io_context)?,
-                        ); // this feels very stupid?
-
+                        );
                         let limb = rep3_ring::yao::field_to_ring_many::<_, u8, _>(
                             &[limb],
                             &mut self.io_context,
                         )?; //radix is at most 256, so should fit into u8
-                        limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
+                        if bits {
+                            let limb_bit =
+                                rep3_ring::binary::is_zero(&limb[0], &mut self.io_context)?;
+                            limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring1(limb_bit));
+                        } else {
+                            limbs[i] = Rep3BrilligType::Shared(Shared::<F>::Ring8(limb[0]));
+                        }
                         input = div;
                     }
                     limbs
