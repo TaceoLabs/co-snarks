@@ -616,6 +616,31 @@ pub struct VerifyConfig {
     pub crs: PathBuf,
 }
 
+/// Cli arguments for `verify`
+#[derive(Debug, Serialize, Args)]
+pub struct DownloadCrsCLi {
+    /// The path to the config file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub config: Option<PathBuf>,
+    /// The path to the prover crs file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub crs: Option<PathBuf>,
+    /// The number of points to download
+    #[arg(short, long, default_value_t = 1)]
+    pub num_points: usize,
+}
+
+/// Config for `verify`
+#[derive(Debug, Deserialize)]
+pub struct DownloadCrsConfig {
+    /// The path to the prover crs file
+    pub crs: PathBuf,
+    /// The number of points to download
+    pub num_points: usize,
+}
+
 /// Prefix for config env variables
 pub const CONFIG_ENV_PREFIX: &str = "CONOIR_";
 
@@ -658,6 +683,7 @@ impl_config!(GenerateProofCli, GenerateProofConfig);
 impl_config!(BuildAndGenerateProofCli, BuildAndGenerateProofConfig);
 impl_config!(CreateVKCli, CreateVKConfig);
 impl_config!(VerifyCli, VerifyConfig);
+impl_config!(DownloadCrsCLi, DownloadCrsConfig);
 
 pub fn share_rep3<F: PrimeField, R: Rng + CryptoRng>(
     witness: Vec<PubShared<F>>,
