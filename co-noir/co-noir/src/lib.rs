@@ -10,6 +10,7 @@ use co_acvm::{
     solver::{partial_abi::PublicMarker, Rep3CoSolver},
     Rep3AcvmType, ShamirAcvmType,
 };
+use color_eyre::eyre::{eyre, Context};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
@@ -25,7 +26,7 @@ use mpc_net::config::NetworkConfigFile;
 use noirc_abi::Abi;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-use std::{array, collections::BTreeMap, path::PathBuf};
+use std::{array, collections::BTreeMap, fs::File, io::Write, path::PathBuf};
 
 #[derive(Clone, Debug)]
 pub enum PubShared<F: Clone> {
@@ -763,4 +764,39 @@ pub fn convert_witness_to_vec_rep3<F: PrimeField>(
         index += 1;
     }
     wv
+}
+
+// This funciton is basically copied from Barretenberg
+/// Downloads the CRS with num_points points to the crs_path.
+pub fn download_g1_crs(num_points: usize, crs_path: &PathBuf) -> color_eyre::Result<()> {
+    tracing::info!("Downloading CRS with {} points", num_points);
+    let g1_end = (num_points + 1) * 64 - 1;
+
+    let url = "https://aztec-ignition.s3.amazonaws.com/MAIN%20IGNITION/flat/g1.dat";
+    let command = format!("curl -s -H \"Range: bytes=0-{}\" '{}'", g1_end, url);
+    let output = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&command)
+        .output()
+        .wrap_err("Failed to execute curl command")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(eyre!("Could not download CRS: {}", stderr));
+    }
+
+    let data = output.stdout;
+    let mut file = File::create(crs_path).wrap_err("Failed to create CRS file")?;
+    file.write_all(&data)
+        .wrap_err("Failed to write data to CRS file")?;
+
+    if data.len() < (g1_end + 1) {
+        return Err(eyre!(
+            "Downloaded CRS is incomplete: expected {} bytes, got {} bytes",
+            g1_end + 1,
+            data.len()
+        ));
+    }
+
+    Ok(())
 }

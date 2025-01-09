@@ -59,10 +59,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         driver: &mut U,
     ) -> HonkProofResult<Self> {
         tracing::trace!("ProvingKey create");
-        // TODO: is this a problem?
-        if !circuit.circuit_finalized {
-            circuit.finalize_circuit(true, driver)?;
-        }
+        circuit.finalize_circuit(true, driver)?;
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
 
