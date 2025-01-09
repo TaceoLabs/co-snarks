@@ -4,7 +4,7 @@ use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
 use co_ultrahonk::prelude::{
-    CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey,
+    CoUltraHonk, CrsParser, PlainCoBuilder, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey,
     TranscriptFieldType, TranscriptHasher, UltraHonk, Utils,
 };
 use sha3::Keccak256;
@@ -44,24 +44,21 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
 
     let mut driver = PlainAcvmSolver::new();
     let builder = PlainCoBuilder::<Bn254>::create_circuit(
-        constraint_system,
+        &constraint_system,
         false, // We don't support recursive atm
         0,
         witness,
         true,
-        false,
         &mut driver,
     )
     .unwrap();
 
-    let crs = ProvingKey::<PlainUltraHonkDriver, _>::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2)
-        .expect("failed to get crs");
+    let crs_size = builder.compute_dyadic_size();
+    let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size).expect("failed to get crs");
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, crs, &mut driver).unwrap();
 
-    let driver = PlainUltraHonkDriver;
-    let prover = CoUltraHonk::<_, _, H>::new(driver);
-    let proof = prover.prove(proving_key).unwrap();
+    let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);
@@ -76,30 +73,26 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
 
     let solver = PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
-    let witness = solver.solve().unwrap();
+    let witness = solver.solve().unwrap().0;
     let witness = convert_witness_plain(witness);
 
     let mut driver = PlainAcvmSolver::new();
     let builder = PlainCoBuilder::<Bn254>::create_circuit(
-        constraint_system,
+        &constraint_system,
         false, // We don't support recursive atm
         0,
         witness,
         true,
-        false,
         &mut driver,
     )
     .unwrap();
 
-    let crs = ProvingKey::<PlainUltraHonkDriver, _>::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2)
-        .expect("failed to get crs");
+    let crs_size = builder.compute_dyadic_size();
+    let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size).expect("failed to get crs");
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, crs, &mut driver).unwrap();
 
-    let driver = PlainUltraHonkDriver;
-
-    let prover = CoUltraHonk::<_, _, H>::new(driver);
-    let proof = prover.prove(proving_key).unwrap();
+    let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);

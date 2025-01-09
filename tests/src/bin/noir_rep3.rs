@@ -85,13 +85,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             let solver =
                 Rep3CoSolver::from_network_with_witness(net, program_artifact, input_share)
                     .unwrap();
-            solver.solve()
+            solver.solve().unwrap().0
         }));
     }
 
-    let result3 = threads.pop().unwrap().join().unwrap().unwrap();
-    let result2 = threads.pop().unwrap().join().unwrap().unwrap();
-    let result1 = threads.pop().unwrap().join().unwrap().unwrap();
+    let result3 = threads.pop().unwrap().join().unwrap();
+    let result2 = threads.pop().unwrap().join().unwrap();
+    let result1 = threads.pop().unwrap().join().unwrap();
     let is_witness = combine_field_elements_for_acvm(result1, result2, result3);
     let is_witness = PlainCoSolver::convert_to_plain_acvm_witness(is_witness);
     assert_eq!(should_witness, is_witness);

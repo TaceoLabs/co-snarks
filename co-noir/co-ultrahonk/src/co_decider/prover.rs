@@ -93,7 +93,7 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
-    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, T)> {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
@@ -103,6 +103,6 @@ impl<
         // Execute Zeromorph multilinear PCS
         self.execute_pcs_rounds(&mut transcript, circuit_size, crs, sumcheck_output)?;
 
-        Ok(transcript.get_proof())
+        Ok((transcript.get_proof(), self.driver))
     }
 }

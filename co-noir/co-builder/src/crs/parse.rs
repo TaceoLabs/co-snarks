@@ -22,22 +22,26 @@ pub struct NewFileStructure<P: Pairing> {
 }
 
 impl<P: Pairing> NewFileStructure<P> {
-    pub fn get_crs(path_g1: &str, path_g2: &str, crs_size: usize) -> Result<Crs<P>> {
-        let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size + 2];
+    pub fn get_crs(
+        path_g1: impl AsRef<Path>,
+        path_g2: impl AsRef<Path>,
+        crs_size: usize,
+    ) -> Result<Crs<P>> {
+        let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size];
         let mut g2_x = P::G2Affine::default();
         Self::read_transcript(&mut monomials, &mut g2_x, crs_size, path_g1, path_g2)?;
 
         Ok(Crs { monomials, g2_x })
     }
 
-    pub fn get_crs_g1(path_g1: &str, crs_size: usize) -> Result<ProverCrs<P>> {
-        let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size + 2];
+    pub fn get_crs_g1(path_g1: impl AsRef<Path>, crs_size: usize) -> Result<ProverCrs<P>> {
+        let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size];
         Self::read_transcript_g1(&mut monomials, crs_size, path_g1)?;
 
         Ok(ProverCrs { monomials })
     }
 
-    pub fn get_crs_g2(path_g2: &str) -> Result<P::G2Affine> {
+    pub fn get_crs_g2(path_g2: impl AsRef<Path>) -> Result<P::G2Affine> {
         let mut g2_x = P::G2Affine::default();
         Self::read_transcript_g2(&mut g2_x, path_g2)?;
 
@@ -45,20 +49,24 @@ impl<P: Pairing> NewFileStructure<P> {
     }
 }
 
-fn get_file_size(filename: &str) -> std::io::Result<u64> {
+fn get_file_size(filename: impl AsRef<Path>) -> std::io::Result<u64> {
     let metadata = std::fs::metadata(filename)?;
     Ok(metadata.len())
 }
 
 trait FileProcessor<P: Pairing> {
-    fn read_transcript_g1(monomials: &mut [P::G1Affine], degree: usize, dir: &str) -> Result<()>;
-    fn read_transcript_g2(g2_x: &mut P::G2Affine, dir: &str) -> Result<()>;
+    fn read_transcript_g1(
+        monomials: &mut [P::G1Affine],
+        degree: usize,
+        path: impl AsRef<Path>,
+    ) -> Result<()>;
+    fn read_transcript_g2(g2_x: &mut P::G2Affine, path: impl AsRef<Path>) -> Result<()>;
     fn read_transcript(
         monomials: &mut [<P as Pairing>::G1Affine],
         g2_x: &mut <P as Pairing>::G2Affine,
         degree: usize,
-        path_g1: &str,
-        path_g2: &str,
+        path_g1: impl AsRef<Path>,
+        path_g2: impl AsRef<Path>,
     ) -> Result<()> {
         Self::read_transcript_g1(monomials, degree, path_g1)?;
         Self::read_transcript_g2(g2_x, path_g2)?;
@@ -81,9 +89,9 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
     fn read_transcript_g1(
         monomials: &mut [<P as Pairing>::G1Affine],
         degree: usize,
-        path: &str,
+        path: impl AsRef<Path>,
     ) -> Result<()> {
-        let g1_file_size = get_file_size(path)? as usize;
+        let g1_file_size = get_file_size(&path)? as usize;
         assert!(g1_file_size % 64 == 0); //g1_file_size >= num_points * 64 &&
         let num_to_read = degree; //g1_file_size / 64;
         let g1_buffer_size =
@@ -92,7 +100,6 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
 
         let file = File::open(path)?;
         let mut file = file.take(g1_buffer_size as u64);
-        assert!(Path::new(&path).exists());
         let res = file.read_exact(&mut buffer[..]);
         if res.is_err() {
             tracing::error!(
@@ -111,7 +118,7 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
         Ok(())
     }
 
-    fn read_transcript_g2(g2_x: &mut P::G2Affine, path: &str) -> Result<()> {
+    fn read_transcript_g2(g2_x: &mut P::G2Affine, path: impl AsRef<Path>) -> Result<()> {
         let g2_size = std::mem::size_of::<<P::G2 as CurveGroup>::BaseField>() * 2;
 
         assert!(std::mem::size_of::<P::G2Affine>() >= g2_size);

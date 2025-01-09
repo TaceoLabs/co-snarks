@@ -395,7 +395,7 @@ pub mod tests {
             let round3 = round2.round2().unwrap();
             let round4 = round3.round3().unwrap();
             let round5 = round4.round4().unwrap();
-            let proof = round5.round5().unwrap();
+            let (proof, _) = round5.round5().unwrap();
             assert_eq!(
                 proof.wxi,
                 g1_from_xy!(

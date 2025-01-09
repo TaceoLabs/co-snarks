@@ -21,7 +21,7 @@ fn main() -> Result<()> {
 
     // connect to network
     let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(
-        dir.join("key1.der"),
+        dir.join("key2.der"),
     )?))
     .clone_key();
     let parties = vec![
@@ -42,17 +42,18 @@ fn main() -> Result<()> {
         ),
     ];
     let network_config =
-        NetworkConfig::new(PartyID::ID1.into(), "0.0.0.0:10001".parse()?, key, parties);
+        NetworkConfig::new(PartyID::ID2.into(), "0.0.0.0:10002".parse()?, key, parties);
     let mut net = Rep3MpcNet::new(network_config)?;
+
+    let dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/groth16/test_vectors/multiplier2");
 
     // recv share from party 0
     let share: Rep3SharedInput<_> = bincode::deserialize(&net.recv_bytes(PartyID::ID0)?)?;
 
     // parse circuit file & put through our compiler
-    let circuit = CoCircomCompiler::<Bn254>::parse(
-        dir.join("multiplier2.circom"),
-        CompilerConfig::default(),
-    )?;
+    let circuit =
+        CoCircomCompiler::<Bn254>::parse(dir.join("circuit.circom"), CompilerConfig::default())?;
 
     // generate witness
     let (witness, net) =

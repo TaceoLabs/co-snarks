@@ -1,6 +1,7 @@
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
+use co_builder::prelude::CrsParser;
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, ProvingKey};
 use sha3::Keccak256;
 use ultrahonk::{
@@ -28,24 +29,21 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     let witness = promote_public_witness_vector::<_, PlainAcvmSolver<ark_bn254::Fr>>(witness);
     let mut driver = PlainAcvmSolver::new();
     let builder = PlainCoBuilder::<Bn254>::create_circuit(
-        constraint_system,
+        &constraint_system,
         false, // We don't support recursive atm
         0,
         witness,
         true,
-        false,
         &mut driver,
     )
     .unwrap();
 
-    let crs =
-        ProvingKey::<PlainUltraHonkDriver, _>::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
+    let crs_size = builder.compute_dyadic_size();
+    let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size).unwrap();
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, crs, &mut driver).unwrap();
 
-    let driver = PlainUltraHonkDriver;
-    let prover = CoUltraHonk::<_, _, H>::new(driver);
-    let proof = prover.prove(proving_key).unwrap();
+    let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key).unwrap();
 
     let proof_u8 = proof.to_buffer();
     let read_proof_u8 = std::fs::read(proof_file).unwrap();

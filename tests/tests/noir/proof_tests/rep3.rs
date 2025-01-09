@@ -2,14 +2,14 @@ use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
-use co_acvm::{solver::Rep3CoSolver, PlainAcvmSolver, Rep3AcvmSolver, Rep3AcvmType};
+use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
 use co_ultrahonk::prelude::{
-    CoUltraHonk, Poseidon2Sponge, ProvingKey, Rep3CoBuilder, Rep3UltraHonkDriver,
-    TranscriptFieldType, TranscriptHasher, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
+    CrsParser, Poseidon2Sponge, Rep3CoUltraHonk, TranscriptFieldType, TranscriptHasher, UltraHonk,
+    Utils,
 };
 use sha3::Keccak256;
-use std::thread;
-use tests::rep3_network::{PartyTestNetwork, Rep3TestNetwork};
+use std::{sync::Arc, thread};
+use tests::rep3_network::Rep3TestNetwork;
 
 fn witness_map_to_witness_vector<F: PrimeField>(
     witness_map: WitnessMap<Rep3AcvmType<F>>,
@@ -57,38 +57,25 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
 
     let test_network = Rep3TestNetwork::default();
     let mut threads = Vec::with_capacity(3);
+    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
+    let prover_crs = Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size).unwrap());
     for net in test_network.get_party_networks() {
-        let artifact = program_artifact.clone();
         let witness = witness.clone();
+        let prover_crs = prover_crs.clone();
+        let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
         threads.push(thread::spawn(move || {
-            let constraint_system = Utils::get_constraint_system_from_artifact(&artifact, true);
-
-            let id = net.id;
-            let mut driver = Rep3AcvmSolver::new(net);
-            let builder = Rep3CoBuilder::<Bn254, PartyTestNetwork>::create_circuit(
-                constraint_system,
-                false, // We don't support recursive atm
-                0,
+            // generate proving key and vk
+            let (pk, net) = co_noir::generate_proving_key_rep3(
+                net,
+                &constraint_system,
                 witness,
-                true,
+                prover_crs,
                 false,
-                &mut driver,
             )
             .unwrap();
-
-            let crs = ProvingKey::<Rep3UltraHonkDriver<PartyTestNetwork>, _>::get_prover_crs(
-                &builder,
-                CRS_PATH_G1,
-            )
-            .expect("failed to get prover crs");
-
-            let proving_key = ProvingKey::create(id, builder, crs, &mut driver).unwrap();
-
-            let (io_context0, io_context1) = driver.into_io_contexts();
-            let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
-
-            let prover = CoUltraHonk::<_, _, H>::new(driver);
-            prover.prove(proving_key).unwrap()
+            let (proof, _) = Rep3CoUltraHonk::<_, _, H>::prove(net, pk).unwrap();
+            proof
         }));
     }
 
@@ -102,22 +89,10 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     }
 
     // Get vk
-    let mut driver = PlainAcvmSolver::new();
-    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-    let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
-        constraint_system,
-        false, // We don't support recursive atm
-        0,
-        vec![],
-        true,
-        false,
-        &mut driver,
-    )
-    .unwrap();
-    let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
-    let verifying_key = VerifyingKey::create(builder, crs, &mut driver).unwrap();
+    let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
+    let vk = co_noir::generate_vk(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, vk).unwrap();
     assert!(is_valid);
 }
 
@@ -128,48 +103,31 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
 
-    let test_network1 = Rep3TestNetwork::default();
-    let test_network2 = Rep3TestNetwork::default();
+    let test_network = Rep3TestNetwork::default();
     let mut threads = Vec::with_capacity(3);
-    for (net1, net2) in test_network1
-        .get_party_networks()
-        .into_iter()
-        .zip(test_network2.get_party_networks())
-    {
+    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
+    let prover_crs = Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size).unwrap());
+    for net in test_network.get_party_networks() {
+        let prover_crs = prover_crs.clone();
+        let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
         let artifact = program_artifact.clone();
         let prover_toml = prover_toml.clone();
         threads.push(thread::spawn(move || {
-            let constraint_system = Utils::get_constraint_system_from_artifact(&artifact, true);
-            let solver = Rep3CoSolver::from_network(net1, artifact, prover_toml).unwrap();
-            let witness = solver.solve().unwrap();
+            let solver = Rep3CoSolver::from_network(net, artifact, prover_toml).unwrap();
+            let (witness, driver) = solver.solve().unwrap();
             let witness = convert_witness_rep3(witness);
-
-            let id = net2.id;
-            let mut driver = Rep3AcvmSolver::new(net2);
-            let builder = Rep3CoBuilder::<Bn254, PartyTestNetwork>::create_circuit(
-                constraint_system,
-                false, // We don't support recursive atm
-                0,
+            // generate proving key and vk
+            let (pk, net) = co_noir::generate_proving_key_rep3(
+                driver.into_network(),
+                &constraint_system,
                 witness,
-                true,
+                prover_crs,
                 false,
-                &mut driver,
             )
             .unwrap();
-
-            let prover_crs =
-                ProvingKey::<Rep3UltraHonkDriver<PartyTestNetwork>, _>::get_prover_crs(
-                    &builder,
-                    CRS_PATH_G1,
-                )
-                .expect("failed to get prover crs");
-
-            let proving_key = ProvingKey::create(id, builder, prover_crs, &mut driver).unwrap();
-
-            let (io_context0, io_context1) = driver.into_io_contexts();
-            let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
-            let prover = CoUltraHonk::<_, _, H>::new(driver);
-            prover.prove(proving_key).unwrap()
+            let (proof, _) = Rep3CoUltraHonk::<_, _, H>::prove(net, pk).unwrap();
+            proof
         }));
     }
 
@@ -183,22 +141,10 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     }
 
     // Get vk
-    let mut driver = PlainAcvmSolver::new();
-    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-    let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
-        constraint_system,
-        false, // We don't support recursive atm
-        0,
-        vec![],
-        true,
-        false,
-        &mut driver,
-    )
-    .unwrap();
-    let crs = VerifyingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
-    let verifying_key = VerifyingKey::create(builder, crs, &mut driver).unwrap();
+    let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
+    let vk = co_noir::generate_vk(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, vk).unwrap();
     assert!(is_valid);
 }
 

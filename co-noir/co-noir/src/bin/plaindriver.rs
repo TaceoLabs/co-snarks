@@ -1,17 +1,16 @@
 use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
-use co_noir::{file_utils, ConfigError, TranscriptHash};
 use co_ultrahonk::{
     prelude::{
-        CoUltraHonk, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey, UltraHonk, Utils,
-        VerifyingKey,
+        CoUltraHonk, CrsParser, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey, UltraHonk,
+        Utils, VerifyingKey,
     },
     PlainCoBuilder,
 };
-use color_eyre::eyre::{Context, ContextCompat};
+use color_eyre::eyre::{eyre, Context};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
@@ -20,9 +19,24 @@ use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
     io::{BufWriter, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::ExitCode,
 };
+
+/// Error type for config parsing and merging
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct ConfigError(#[from] figment::error::Error);
+
+/// An enum representing the transcript hasher to use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[clap(rename_all = "UPPER")]
+pub enum TranscriptHash {
+    /// The Poseidon2 sponge hash function
+    POSEIDON,
+    // The Keccak256 hash function
+    KECCAK,
+}
 
 /// Cli arguments
 #[derive(Parser, Debug, Default, Serialize)]
@@ -138,6 +152,32 @@ fn convert_witness<F: PrimeField>(mut witness_stack: WitnessStack<F>) -> Vec<F> 
     witness_map_to_witness_vector(witness_map)
 }
 
+/// Check if a file exists at the given path, and is actually a file.
+fn check_file_exists(file_path: &Path) -> color_eyre::Result<()> {
+    if !file_path.exists() {
+        return Err(eyre!("File not found: {file_path:?}"));
+    }
+    if !file_path.is_file() {
+        return Err(eyre!(
+            "Expected {file_path:?} to be a file, but it is a directory."
+        ));
+    }
+    Ok(())
+}
+
+/// Check if a directory exists at the given path, and is actually a directory.
+fn check_dir_exists(dir_path: &Path) -> color_eyre::Result<()> {
+    if !dir_path.exists() {
+        return Err(eyre!("Dir not found: {dir_path:?}"));
+    }
+    if !dir_path.is_dir() {
+        return Err(eyre!(
+            "Expected {dir_path:?} to be a directory, but it is a file."
+        ));
+    }
+    Ok(())
+}
+
 fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
 
@@ -151,11 +191,11 @@ fn main() -> color_eyre::Result<ExitCode> {
     let hasher = config.hasher;
     let out_dir = config.out_dir;
 
-    file_utils::check_file_exists(&prover_crs_path)?;
-    file_utils::check_file_exists(&verifier_crs_path)?;
-    file_utils::check_file_exists(&input_path)?;
-    file_utils::check_file_exists(&circuit_path)?;
-    file_utils::check_dir_exists(&out_dir)?;
+    check_file_exists(&prover_crs_path)?;
+    check_file_exists(&verifier_crs_path)?;
+    check_file_exists(&input_path)?;
+    check_file_exists(&circuit_path)?;
+    check_dir_exists(&out_dir)?;
 
     // Read circuit
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_path)
@@ -165,37 +205,29 @@ fn main() -> color_eyre::Result<ExitCode> {
     // Create witness
     let solver = PlainCoSolver::init_plain_driver(program_artifact, input_path)
         .context("while initializing plain driver")?;
-    let witness = solver.solve().context("while solving")?;
+    let (witness, _) = solver.solve().context("while solving")?;
     let witness = convert_witness(witness);
 
     // Build the circuit
     let mut driver = PlainAcvmSolver::new();
     let builder = PlainCoBuilder::<Bn254>::create_circuit(
-        constraint_system,
+        &constraint_system,
         false, // We don't support recursive atm
         0,
         witness,
         true,
-        false,
         &mut driver,
     )
     .context("while creating the circuit")?;
 
     // Read the Crs
-    let crs = ProvingKey::<PlainUltraHonkDriver, _>::get_crs(
-        &builder,
-        prover_crs_path
-            .to_str()
-            .context("while opening prover crs file")?,
-        verifier_crs_path
-            .to_str()
-            .context("while opening verifier crs file")?,
-    )?;
+    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false)?;
+    let crs = CrsParser::get_crs(&prover_crs_path, &verifier_crs_path, crs_size)?;
     let (prover_crs, verifier_crs) = crs.split();
 
     // Create the proving key and the barretenberg-compatible verifying key
     let (proving_key, vk_barretenberg) =
-        ProvingKey::create_keys_barretenberg(0, builder, prover_crs, &mut driver)
+        ProvingKey::create_keys_barretenberg(0, builder, prover_crs.into(), &mut driver)
             .context("While creating keys")?;
 
     // Write the vk to a file
@@ -213,15 +245,14 @@ fn main() -> color_eyre::Result<ExitCode> {
     tracing::info!("Wrote vk to file {}", out_path.display());
 
     // Create the proof
-    let driver = PlainUltraHonkDriver;
     let proof = match hasher {
         TranscriptHash::POSEIDON => {
-            let prover = CoUltraHonk::<_, _, Poseidon2Sponge>::new(driver);
-            prover.prove(proving_key).context("While creating proof")?
+            CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove(proving_key)
+                .context("While creating proof")?
         }
         TranscriptHash::KECCAK => {
-            let prover = CoUltraHonk::<_, _, Keccak256>::new(driver);
-            prover.prove(proving_key).context("While creating proof")?
+            CoUltraHonk::<PlainUltraHonkDriver, _, Keccak256>::prove(proving_key)
+                .context("While creating proof")?
         }
     };
 

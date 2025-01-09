@@ -1,6 +1,5 @@
 use ark_ff::PrimeField;
 use clap::Parser;
-use co_circom::{ConfigError, CONFIG_ENV_PREFIX};
 use color_eyre::eyre::{eyre, Context};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
@@ -77,6 +76,14 @@ pub struct Config {
     /// Network config
     pub network: NetworkConfigFile,
 }
+
+/// Prefix for config env variables
+pub const CONFIG_ENV_PREFIX: &str = "COCIRCOM_";
+
+/// Error type for config parsing and merging
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct ConfigError(#[from] figment::error::Error);
 
 impl Config {
     /// Parse config from file, env, cli

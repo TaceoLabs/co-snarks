@@ -25,6 +25,10 @@ impl<N: Rep3Network> Rep3UltraHonkDriver<N> {
             _io_context1: io_context1,
         }
     }
+
+    pub fn into_network(self) -> N {
+        self.io_context0.network
+    }
 }
 
 impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<N> {

@@ -1,14 +1,17 @@
-pub use crate::key::proving_key::ProvingKey;
+pub use crate::key::proving_key::{ProvingKey, Rep3ProvingKey, ShamirProvingKey};
 pub use crate::mpc::plain::PlainUltraHonkDriver;
 pub use crate::mpc::rep3::Rep3UltraHonkDriver;
 pub use crate::mpc::shamir::ShamirUltraHonkDriver;
 pub use crate::mpc::NoirUltraHonkProver;
-pub use crate::prover::CoUltraHonk;
+// Re-exporting the following types from `ultrahonk` and `co_builder` crates:
+pub use crate::prover::{CoUltraHonk, Rep3CoUltraHonk, ShamirCoUltraHonk};
 pub use crate::types::Polynomials;
 pub use crate::{PlainCoBuilder, Rep3CoBuilder, ShamirCoBuilder};
 // Re-exporting the following types from `ultrahonk` and `co_builder` crates:
-pub use co_builder::prelude::{Crs, Polynomial, ProverCrs, ProverWitnessEntities};
-pub use co_builder::prelude::{ProvingKey as PlainProvingKey, VerifyingKey};
+pub use co_builder::prelude::{AcirFormat, ProvingKey as PlainProvingKey, VerifyingKey};
+pub use co_builder::prelude::{
+    Crs, CrsParser, HonkCurve, Polynomial, ProverCrs, ProverWitnessEntities,
+};
 pub use ultrahonk::prelude::HonkProof;
 pub use ultrahonk::prelude::Poseidon2Sponge;
 pub use ultrahonk::prelude::TranscriptFieldType;

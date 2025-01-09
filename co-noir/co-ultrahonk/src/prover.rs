@@ -3,12 +3,21 @@ use crate::{
     co_oink::prover::CoOink,
     key::proving_key::ProvingKey,
     mpc::NoirUltraHonkProver,
+    prelude::{PlainUltraHonkDriver, Rep3UltraHonkDriver, ShamirUltraHonkDriver},
     CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::pairing::Pairing;
 use co_builder::{prelude::HonkCurve, HonkProofResult};
+use mpc_core::protocols::{
+    rep3::network::{IoContext, Rep3Network},
+    shamir::{network::ShamirNetwork, ShamirPreprocessing, ShamirProtocol},
+};
 use std::marker::PhantomData;
 use ultrahonk::prelude::{HonkProof, Transcript, TranscriptFieldType, TranscriptHasher};
+
+pub type Rep3CoUltraHonk<N, P, H> = CoUltraHonk<Rep3UltraHonkDriver<N>, P, H>;
+pub type ShamirCoUltraHonk<N, P, H> =
+    CoUltraHonk<ShamirUltraHonkDriver<<P as Pairing>::ScalarField, N>, P, H>;
 
 pub struct CoUltraHonk<
     T: NoirUltraHonkProver<P>,
@@ -49,10 +58,10 @@ impl<
         gate_challenges
     }
 
-    pub fn prove(
+    pub fn prove_inner(
         mut self,
         proving_key: ProvingKey<T, P>,
-    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, T)> {
         tracing::trace!("CoUltraHonk prove");
 
         let mut transcript = Transcript::<TranscriptFieldType, H>::new();
@@ -70,5 +79,74 @@ impl<
 
         let decider = CoDecider::new(self.driver, memory);
         decider.prove(circuit_size, &crs, transcript)
+    }
+}
+
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        N: Rep3Network,
+    > Rep3CoUltraHonk<N, P, H>
+{
+    pub fn prove(
+        net: N,
+        proving_key: ProvingKey<Rep3UltraHonkDriver<N>, P>,
+    ) -> eyre::Result<(HonkProof<TranscriptFieldType>, N)> {
+        let mut io_context0 = IoContext::init(net)?;
+        let io_context1 = io_context0.fork()?;
+        let prover = Self {
+            driver: Rep3UltraHonkDriver::new(io_context0, io_context1),
+            phantom_data: PhantomData,
+            phantom_hasher: PhantomData,
+        };
+        let (proof, driver) = prover.prove_inner(proving_key)?;
+        Ok((proof, driver.into_network()))
+    }
+}
+
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        N: ShamirNetwork,
+    > ShamirCoUltraHonk<N, P, H>
+{
+    pub fn prove(
+        net: N,
+        threshold: usize,
+        proving_key: ProvingKey<ShamirUltraHonkDriver<<P as Pairing>::ScalarField, N>, P>,
+    ) -> eyre::Result<(HonkProof<TranscriptFieldType>, N)> {
+        // init MPC protocol
+        let num_pairs = if net.get_num_parties() == 3 {
+            0 // Precomputation is done on the fly since it requires no comminication
+        } else {
+            proving_key.ultrahonk_num_randomness()
+        };
+        let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs)?;
+        let mut protocol0 = ShamirProtocol::from(preprocessing);
+        let protocol1 = protocol0.fork_with_pairs(0)?;
+        let driver = ShamirUltraHonkDriver::new(protocol0, protocol1);
+        let prover = Self {
+            driver,
+            phantom_data: PhantomData,
+            phantom_hasher: PhantomData,
+        };
+        let (proof, driver) = prover.prove_inner(proving_key)?;
+        Ok((proof, driver.into_network()))
+    }
+}
+
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
+    CoUltraHonk<PlainUltraHonkDriver, P, H>
+{
+    pub fn prove(
+        proving_key: ProvingKey<PlainUltraHonkDriver, P>,
+    ) -> eyre::Result<HonkProof<TranscriptFieldType>> {
+        let prover = Self {
+            driver: PlainUltraHonkDriver,
+            phantom_data: PhantomData,
+            phantom_hasher: PhantomData,
+        };
+        let (proof, _) = prover.prove_inner(proving_key)?;
+        Ok(proof)
     }
 }
