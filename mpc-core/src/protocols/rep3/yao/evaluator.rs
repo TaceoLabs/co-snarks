@@ -4,7 +4,7 @@
 //!
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
-use super::GCUtils;
+use super::{circuits::FancyBinaryConstant, GCUtils};
 use crate::protocols::rep3::{
     id::PartyID,
     network::{IoContext, Rep3Network},
@@ -24,6 +24,8 @@ pub struct Rep3Evaluator<'a, N: Rep3Network> {
     current_gate: usize,
     circuit: Vec<[u8; 16]>,
     current_circuit_element: usize,
+    const_zero: Option<WireMod2>,
+    const_one: Option<WireMod2>,
 }
 
 impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
@@ -40,6 +42,8 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
             current_gate: 0,
             circuit: Vec::new(),
             current_circuit_element: 0,
+            const_zero: None,
+            const_one: None,
         }
     }
 
@@ -261,5 +265,31 @@ impl<N: Rep3Network> FancyBinary for Rep3Evaluator<'_, N> {
         let gate0 = self.get_block_from_circuit()?;
         let gate1 = self.get_block_from_circuit()?;
         Ok(self.evaluate_and_gate(a, b, &gate0, &gate1))
+    }
+}
+
+impl<N: Rep3Network> FancyBinaryConstant for Rep3Evaluator<'_, N> {
+    fn const_zero(&mut self) -> Result<Self::Item, Self::Error> {
+        let zero = match self.const_zero {
+            Some(zero) => zero,
+            None => {
+                let zero = self.constant(0, 2)?;
+                self.const_zero = Some(zero);
+                zero
+            }
+        };
+        Ok(zero)
+    }
+
+    fn const_one(&mut self) -> Result<Self::Item, Self::Error> {
+        let one = match self.const_one {
+            Some(one) => one,
+            None => {
+                let one = self.constant(1, 2)?;
+                self.const_one = Some(one);
+                one
+            }
+        };
+        Ok(one)
     }
 }

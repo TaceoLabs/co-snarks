@@ -9,6 +9,15 @@ use itertools::izip;
 use num_bigint::BigUint;
 use std::ops::Not;
 
+/// This trait allows to lazily initialize the constants 0 and 1 for the garbled circuit, such that these constants are only send at most once each.
+pub trait FancyBinaryConstant: FancyBinary {
+    /// Takes an already initialized constant 0 or adds it to the garbled circuit if not yet present
+    fn const_zero(&mut self) -> Result<Self::Item, Self::Error>;
+
+    /// Takes an already initialized constant 1 or adds it to the garbled circuit if not yet present
+    fn const_one(&mut self) -> Result<Self::Item, Self::Error>;
+}
+
 /// This struct contains some predefined garbled circuits.
 pub struct GarbledCircuits {}
 
@@ -90,13 +99,13 @@ impl GarbledCircuits {
         Ok((s, c))
     }
     /// Full adder with carry in set
-    fn full_adder_const_cin_set<G: FancyBinary>(
+    fn full_adder_const_cin_set<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         a: &G::Item,
         b: bool,
     ) -> Result<(G::Item, G::Item), G::Error> {
         let (s, c) = if b {
-            (a.clone(), g.constant(1, 2)?)
+            (a.clone(), g.const_one()?)
         } else {
             let s = g.negate(a)?;
             (s, a.clone())
@@ -231,7 +240,7 @@ impl GarbledCircuits {
     }
     /// Needed for subtraction in binary division (for shared/public) where xs is (conceptually) a constant 0 bundle with only some values set and the subtrahend is a constant/public
     #[expect(clippy::type_complexity)]
-    fn bin_subtraction_partial_by_constant<G: FancyBinary>(
+    fn bin_subtraction_partial_by_constant<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         xs: &[G::Item],
         ys: &[bool],
@@ -268,7 +277,7 @@ impl GarbledCircuits {
 
     /// Needed for subtraction in binary division (public/shared) where xs is (conceptually) a constant 0 bundle with only some constant/public values set
     #[expect(clippy::type_complexity)]
-    fn bin_subtraction_partial_from_constant<G: FancyBinary>(
+    fn bin_subtraction_partial_from_constant<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         xs: &[bool],
         ys: &[G::Item],
@@ -301,7 +310,7 @@ impl GarbledCircuits {
     }
     /// Needed for subtraction in binary division (public/shared) where xs is (conceptually) a constant 0 bundle with only some constant/public values set
     #[expect(clippy::type_complexity)]
-    fn bin_subtraction_custom<G: FancyBinary>(
+    fn bin_subtraction_custom<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         first: bool,
         xs: &[G::Item],
@@ -372,7 +381,7 @@ impl GarbledCircuits {
 
     // From swanky:
     /// Binary division by a public value
-    fn bin_div_by_public<G: FancyBinary>(
+    fn bin_div_by_public<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         dividend: &[G::Item],
         divisor: &[bool],
@@ -396,7 +405,7 @@ impl GarbledCircuits {
 
     // From swanky:
     /// Binary division of a public by a shared value
-    fn bin_div_by_shared<G: FancyBinary>(
+    fn bin_div_by_shared<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         dividend: &[bool],
         divisor: &[G::Item],
@@ -1237,7 +1246,7 @@ impl GarbledCircuits {
         Ok(added)
     }
     /// Divides a ring element by another public ring element. The ring element is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
-    fn ring_div_by_public<G: FancyBinary>(
+    fn ring_div_by_public<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         x1s: &[G::Item],
         x2s: &[G::Item],
@@ -1271,7 +1280,7 @@ impl GarbledCircuits {
         Ok(added)
     }
     /// Divides a public ring element by another shared ring element. The ring element is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
-    fn ring_div_by_shared<G: FancyBinary>(
+    fn ring_div_by_shared<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         x1s: &[G::Item],
         x2s: &[G::Item],
@@ -1334,7 +1343,7 @@ impl GarbledCircuits {
         Ok(result)
     }
     /// Divides a field element by another public field element. The field elements is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
-    fn field_int_div_by_public<G: FancyBinary, F: PrimeField>(
+    fn field_int_div_by_public<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
         g: &mut G,
         x1s: &[G::Item],
         x2s: &[G::Item],
@@ -1359,7 +1368,7 @@ impl GarbledCircuits {
         Ok(result)
     }
     /// Divides a public field element by another shared field element. The field elements is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
-    fn field_int_div_by_shared<G: FancyBinary, F: PrimeField>(
+    fn field_int_div_by_shared<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
         g: &mut G,
         x1s: &[G::Item],
         x2s: &[G::Item],
@@ -1496,7 +1505,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
     /// Binary division for two vecs of inputs
-    pub fn ring_div_by_public_many<G: FancyBinary>(
+    pub fn ring_div_by_public_many<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
@@ -1531,7 +1540,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
     /// Binary division for two vecs of inputs
-    pub fn ring_div_by_shared_many<G: FancyBinary>(
+    pub fn ring_div_by_shared_many<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
@@ -1605,7 +1614,10 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
     /// Divides a field element by another public. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b
-    pub(crate) fn field_int_div_by_public_many<G: FancyBinary, F: PrimeField>(
+    pub(crate) fn field_int_div_by_public_many<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
@@ -1643,7 +1655,10 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
     /// Divides a public field element by another shared. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b
-    pub(crate) fn field_int_div_by_shared_many<G: FancyBinary, F: PrimeField>(
+    pub(crate) fn field_int_div_by_shared_many<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
