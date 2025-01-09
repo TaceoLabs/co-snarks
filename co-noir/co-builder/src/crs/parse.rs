@@ -95,7 +95,7 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
         assert!(Path::new(&path).exists());
         let res = file.read_exact(&mut buffer[..]);
         if res.is_err() {
-            tracing::warn!(
+            tracing::error!(
                 "Failed to read enough points in the CRS. Needed {} points.",
                 degree
             );
