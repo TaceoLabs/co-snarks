@@ -104,7 +104,7 @@ impl<P: Pairing> ProvingKey<P> {
     fn get_crs_size<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         circuit: &GenericUltraCircuitBuilder<P, T>,
     ) -> usize {
-        const EXTRA_SRS_POINTS_FOR_ECCVM_IPA: usize = 1;
+        const EXTRA_SRS_POINTS_FOR_ECCVM_IPA: usize = 0; // Is 1 in barrettenberg, but we don't need it with UltraHonk
 
         let num_extra_gates =
             UltraCircuitBuilder::<P>::get_num_gates_added_to_ensure_nonzero_polynomials();

@@ -93,7 +93,17 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
         let file = File::open(path)?;
         let mut file = file.take(g1_buffer_size as u64);
         assert!(Path::new(&path).exists());
-        file.read_exact(&mut buffer[..])?;
+        let res = file.read_exact(&mut buffer[..]);
+        if res.is_err() {
+            tracing::error!(
+                "Failed to read enough points in the CRS. Needed {} points.",
+                degree
+            );
+            eyre::bail!(
+                "Failed to read enough points in the CRS. Needed {} points.",
+                degree
+            );
+        }
         // We must pass the size actually read to the second call, not the desired
         // g1_buffer_size as the file may have been smaller than this.
         let monomials = &mut monomials[0..];

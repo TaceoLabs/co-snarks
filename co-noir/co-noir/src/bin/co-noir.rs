@@ -6,12 +6,13 @@ use co_acvm::{
     ShamirAcvmType,
 };
 use co_noir::{
-    convert_witness_to_vec_rep3, file_utils, share_input_rep3, share_rep3, share_shamir,
-    translate_witness_share_rep3, BuildAndGenerateProofCli, BuildAndGenerateProofConfig,
-    BuildProvingKeyCLi, BuildProvingKeyConfig, CreateVKCli, CreateVKConfig, GenerateProofCli,
-    GenerateProofConfig, GenerateWitnessCli, GenerateWitnessConfig, MPCProtocol,
-    MergeInputSharesCli, MergeInputSharesConfig, PubShared, SplitInputCli, SplitInputConfig,
-    SplitProvingKeyCli, SplitProvingKeyConfig, SplitWitnessCli, SplitWitnessConfig, TranscriptHash,
+    convert_witness_to_vec_rep3, download_g1_crs, file_utils, share_input_rep3, share_rep3,
+    share_shamir, translate_witness_share_rep3, BuildAndGenerateProofCli,
+    BuildAndGenerateProofConfig, BuildProvingKeyCLi, BuildProvingKeyConfig, CreateVKCli,
+    CreateVKConfig, DownloadCrsCLi, DownloadCrsConfig, GenerateProofCli, GenerateProofConfig,
+    GenerateWitnessCli, GenerateWitnessConfig, MPCProtocol, MergeInputSharesCli,
+    MergeInputSharesConfig, PubShared, SplitInputCli, SplitInputConfig, SplitProvingKeyCli,
+    SplitProvingKeyConfig, SplitWitnessCli, SplitWitnessConfig, TranscriptHash,
     TranslateProvingKeyCli, TranslateProvingKeyConfig, TranslateWitnessCli, TranslateWitnessConfig,
     VerifyCli, VerifyConfig,
 };
@@ -97,6 +98,8 @@ enum Commands {
     CreateVK(CreateVKCli),
     /// Verification of a Noir proof.
     Verify(VerifyCli),
+    /// Download a CRS with a given number of points
+    DownloadCrs(DownloadCrsCLi),
 }
 
 fn main() -> color_eyre::Result<ExitCode> {
@@ -154,6 +157,12 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::Verify(cli) => {
             let config = VerifyConfig::parse(cli).context("while parsing config")?;
             run_verify(config)
+        }
+        Commands::DownloadCrs(cli) => {
+            let config = DownloadCrsConfig::parse(cli).context("while parsing config")?;
+            download_g1_crs(config.num_points, &config.crs)?;
+            tracing::info!("Downloaded CRS successfully");
+            Ok(ExitCode::SUCCESS)
         }
     }
 }
