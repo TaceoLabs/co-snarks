@@ -4,7 +4,7 @@
 //!
 //! This implementation is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs)
 
-use super::{GCInputs, GCUtils};
+use super::{circuits::FancyBinaryConstant, GCInputs, GCUtils};
 use crate::{
     protocols::rep3::{
         id::PartyID,
@@ -30,6 +30,8 @@ pub struct StreamingRep3Garbler<'a, N: Rep3Network> {
     current_gate: usize,
     pub(crate) rng: RngType,
     hash: Sha3_256, // For the ID2 to match everything sent with one hash
+    const_zero: Option<WireMod2>,
+    const_one: Option<WireMod2>,
 }
 
 impl<'a, N: Rep3Network> StreamingRep3Garbler<'a, N> {
@@ -53,6 +55,8 @@ impl<'a, N: Rep3Network> StreamingRep3Garbler<'a, N> {
             current_gate: 0,
             rng,
             hash: Sha3_256::default(),
+            const_zero: None,
+            const_one: None,
         }
     }
 
@@ -250,5 +254,32 @@ impl<N: Rep3Network> FancyBinary for StreamingRep3Garbler<'_, N> {
     fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, Self::Error> {
         let delta = self.delta;
         self.xor(&delta, x)
+    }
+}
+
+impl<N: Rep3Network> FancyBinaryConstant for StreamingRep3Garbler<'_, N> {
+    fn const_zero(&mut self) -> Result<Self::Item, Self::Error> {
+        let zero = match self.const_zero {
+            Some(zero) => zero,
+            None => {
+                let zero = self.constant(0, 2)?;
+                self.const_zero = Some(zero);
+                zero
+            }
+        };
+        Ok(zero)
+    }
+
+    fn const_one(&mut self) -> Result<Self::Item, Self::Error> {
+        // We cannot use the const_zero wire since it would leak the delta
+        let zero = match self.const_one {
+            Some(zero) => zero,
+            None => {
+                let zero = self.constant(1, 2)?;
+                self.const_one = Some(zero); // The garbler stores the 0 wire
+                zero
+            }
+        };
+        Ok(zero)
     }
 }
