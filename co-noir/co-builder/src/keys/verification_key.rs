@@ -1,8 +1,9 @@
+use std::sync::Arc;
+
 use crate::{
-    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
-    crs::{parse::CrsParser, Crs, ProverCrs},
+    builder::UltraCircuitBuilder,
+    crs::ProverCrs,
     honk_curve::HonkCurve,
-    keys::proving_key::ProvingKey,
     polynomials::polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE},
     serialize::{Serialize, SerializeP},
     types::types::{AggregationObjectPubInputIndices, AGGREGATION_OBJECT_SIZE},
@@ -10,8 +11,7 @@ use crate::{
     HonkProofError, HonkProofResult, TranscriptFieldType,
 };
 use ark_ec::pairing::Pairing;
-use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
-use eyre::Result;
+use co_acvm::PlainAcvmSolver;
 
 pub struct VerifyingKey<P: Pairing> {
     pub crs: P::G2Affine,
@@ -26,10 +26,11 @@ pub struct VerifyingKey<P: Pairing> {
 impl<P: Pairing> VerifyingKey<P> {
     pub fn create(
         circuit: UltraCircuitBuilder<P>,
-        crs: Crs<P>,
+        prover_crs: Arc<ProverCrs<P>>,
+        verifier_crs: P::G2Affine,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<Self> {
-        let (_, vk) = circuit.create_keys(crs, driver)?;
+        let (_, vk) = circuit.create_keys(prover_crs, verifier_crs, driver)?;
         Ok(vk)
     }
 
@@ -47,28 +48,6 @@ impl<P: Pairing> VerifyingKey<P> {
             pairing_point_accumulator_public_input_indices: barretenberg_vk
                 .pairing_point_accumulator_public_input_indices,
         }
-    }
-
-    pub fn get_crs<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, T>,
-        path_g1: &str,
-        path_g2: &str,
-    ) -> Result<Crs<P>> {
-        tracing::trace!("Getting crs");
-        ProvingKey::get_crs(circuit, path_g1, path_g2)
-    }
-
-    pub fn get_prover_crs<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, T>,
-        path_g1: &str,
-    ) -> Result<ProverCrs<P>> {
-        tracing::trace!("Getting crs");
-        ProvingKey::get_prover_crs(circuit, path_g1)
-    }
-
-    pub fn get_verifier_crs(path_g2: &str) -> Result<P::G2Affine> {
-        tracing::trace!("Getting verifier crs");
-        CrsParser::<P>::get_crs_g2(path_g2)
     }
 }
 

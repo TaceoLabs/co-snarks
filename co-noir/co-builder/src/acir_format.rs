@@ -63,7 +63,7 @@ pub struct AcirFormat<F: PrimeField> {
 
     /// Number of gates added to the circuit per original opcode.
     /// Has length equal to num_acir_opcodes.
-    pub(crate) gates_per_opcode: Vec<usize>,
+    pub(crate) _gates_per_opcode: Vec<usize>,
 
     /// Set of constrained witnesses
     pub(crate) constrained_witness: HashSet<u32>,

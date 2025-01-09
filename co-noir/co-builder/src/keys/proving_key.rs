@@ -1,6 +1,8 @@
+use std::sync::Arc;
+
 use crate::{
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
-    crs::{parse::CrsParser, Crs, ProverCrs},
+    crs::ProverCrs,
     polynomials::{
         polynomial::Polynomial,
         polynomial_types::{Polynomials, PrecomputedEntities},
@@ -9,17 +11,15 @@ use crate::{
         AggregationObjectPubInputIndices, CyclicPermutation, Mapping, PermutationMapping,
         TraceData, NUM_WIRES,
     },
-    utils::Utils,
     HonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
-use eyre::Result;
 use num_bigint::BigUint;
 
 pub struct ProvingKey<P: Pairing> {
-    pub crs: ProverCrs<P>,
+    pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
@@ -36,11 +36,11 @@ impl<P: Pairing> ProvingKey<P> {
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
     pub fn create<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         mut circuit: UltraCircuitBuilder<P>,
-        crs: ProverCrs<P>,
+        crs: Arc<ProverCrs<P>>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<Self> {
         tracing::trace!("ProvingKey create");
-        circuit.finalize_circuit(true, driver)?;
+        assert!(circuit.circuit_finalized);
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
 
@@ -113,46 +113,10 @@ impl<P: Pairing> ProvingKey<P> {
         Ok(proving_key)
     }
 
-    fn get_crs_size<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, T>,
-    ) -> usize {
-        const EXTRA_SRS_POINTS_FOR_ECCVM_IPA: usize = 0; // Is 1 in barrettenberg, but we don't need it with UltraHonk
-
-        let num_extra_gates =
-            UltraCircuitBuilder::<P>::get_num_gates_added_to_ensure_nonzero_polynomials();
-        let total_circuit_size = circuit.get_total_circuit_size();
-        let srs_size = UltraCircuitBuilder::<P>::get_circuit_subgroup_size(
-            total_circuit_size + num_extra_gates,
-        );
-
-        Utils::round_up_power_2(srs_size) + EXTRA_SRS_POINTS_FOR_ECCVM_IPA
-    }
-
-    pub fn get_prover_crs<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, T>,
-        path_g1: &str,
-    ) -> Result<ProverCrs<P>> {
-        tracing::trace!("Getting prover crs");
-
-        let srs_size = Self::get_crs_size(circuit);
-        CrsParser::<P>::get_crs_g1(path_g1, srs_size)
-    }
-
-    pub fn get_crs<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        circuit: &GenericUltraCircuitBuilder<P, T>,
-        path_g1: &str,
-        path_g2: &str,
-    ) -> Result<Crs<P>> {
-        tracing::trace!("Getting crs");
-
-        let srs_size = Self::get_crs_size(circuit);
-        CrsParser::<P>::get_crs(path_g1, path_g2, srs_size)
-    }
-
     fn new(
         circuit_size: usize,
         num_public_inputs: usize,
-        crs: ProverCrs<P>,
+        crs: Arc<ProverCrs<P>>,
         final_active_wire_idx: usize,
     ) -> Self {
         tracing::trace!("ProvingKey new");

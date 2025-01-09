@@ -26,6 +26,7 @@ figment.workspace = true
 mpc-core = { version = "0.7.0", path = "../../mpc-core" }
 mpc-net = { version = "0.2.1", path = "../../mpc-net" }
 noirc-abi.workspace = true
+noirc-artifacts.workspace = true
 rand.workspace = true
 rustls.workspace = true
 serde_json.workspace = true

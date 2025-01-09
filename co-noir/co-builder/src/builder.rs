@@ -1,6 +1,6 @@
 use crate::{
     acir_format::AcirFormat,
-    crs::{Crs, ProverCrs},
+    crs::ProverCrs,
     keys::{
         proving_key::ProvingKey,
         verification_key::{VerifyingKey, VerifyingKeyBarretenberg},
@@ -12,10 +12,10 @@ use crate::{
         types::{
             AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
             AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
-            ColumnIdx, FieldCT, GateCounter, LogicConstraint, MulQuad, PlookupBasicTable,
-            PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate,
-            RamAccessType, RamRecord, RamTable, RamTranscript, RangeList, ReadData, RomRecord,
-            RomTable, RomTranscript, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
+            ColumnIdx, FieldCT, LogicConstraint, MulQuad, PlookupBasicTable, PolyTriple,
+            Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate, RamAccessType,
+            RamRecord, RamTable, RamTranscript, RangeList, ReadData, RomRecord, RomTable,
+            RomTranscript, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
         },
     },
     utils::Utils,
@@ -30,6 +30,7 @@ use num_bigint::BigUint;
 use std::{
     array,
     collections::{BTreeMap, HashMap},
+    sync::Arc,
 };
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
@@ -40,7 +41,7 @@ pub type UltraCircuitBuilder<P> =
 impl<P: Pairing> UltraCircuitBuilder<P> {
     pub fn create_vk_barretenberg(
         self,
-        crs: ProverCrs<P>,
+        crs: Arc<ProverCrs<P>>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<VerifyingKeyBarretenberg<P>> {
         let contains_pairing_point_accumulator = self.contains_pairing_point_accumulator;
@@ -74,14 +75,10 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
     pub fn create_keys(
         self,
-        crs: Crs<P>,
+        prover_crs: Arc<ProverCrs<P>>,
+        verifier_crs: P::G2Affine,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<(ProvingKey<P>, VerifyingKey<P>)> {
-        let prover_crs = ProverCrs {
-            monomials: crs.monomials,
-        };
-        let verifier_crs = crs.g2_x;
-
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
@@ -111,7 +108,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 
     pub fn create_keys_barretenberg(
         self,
-        crs: ProverCrs<P>,
+        crs: Arc<ProverCrs<P>>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<(ProvingKey<P>, VerifyingKeyBarretenberg<P>)> {
         let contains_pairing_point_accumulator = self.contains_pairing_point_accumulator;
@@ -161,7 +158,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     one_idx: u32,
     pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
     pub(crate) num_gates: usize,
-    circuit_finalized: bool,
+    pub circuit_finalized: bool,
     pub contains_pairing_point_accumulator: bool,
     pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
     rom_arrays: Vec<RomTranscript<T::AcvmType>>,
@@ -202,12 +199,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
 
     pub fn create_circuit(
-        constraint_system: AcirFormat<P::ScalarField>,
+        constraint_system: &AcirFormat<P::ScalarField>,
         recursive: bool,
         size_hint: usize,
         witness: Vec<T::AcvmType>,
-        honk_recursion: bool,           // true for ultrahonk
-        collect_gates_per_opcode: bool, // false for ultrahonk
+        honk_recursion: bool, // true for ultrahonk
         driver: &mut T,
     ) -> std::io::Result<Self> {
         tracing::trace!("Builder create circuit");
@@ -227,10 +223,35 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             constraint_system,
             has_valid_witness_assignments,
             honk_recursion,
-            collect_gates_per_opcode,
         )?;
 
+        builder.finalize_circuit(true, driver)?;
+
         Ok(builder)
+    }
+
+    pub fn circuit_size(
+        constraint_system: &AcirFormat<P::ScalarField>,
+        recursive: bool,
+        size_hint: usize,
+        honk_recursion: bool, // true for ultrahonk
+        driver: &mut T,
+    ) -> eyre::Result<usize> {
+        tracing::trace!("Builder create circuit");
+
+        let mut builder = Self::init(
+            size_hint,
+            vec![],
+            constraint_system.public_inputs.to_owned(),
+            constraint_system.varnum as usize,
+            recursive,
+        );
+
+        builder.build_constraints(driver, constraint_system, false, honk_recursion)?;
+
+        builder.finalize_circuit(true, driver)?;
+
+        Ok(builder.compute_dyadic_size())
     }
 
     fn new(size_hint: usize) -> Self {
@@ -1024,47 +1045,27 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn build_constraints(
         &mut self,
         driver: &mut T,
-        mut constraint_system: AcirFormat<P::ScalarField>,
+        constraint_system: &AcirFormat<P::ScalarField>,
         has_valid_witness_assignments: bool,
         honk_recursion: bool,
-        collect_gates_per_opcode: bool,
     ) -> std::io::Result<()> {
         tracing::trace!("Builder build constraints");
-        if collect_gates_per_opcode {
-            constraint_system
-                .gates_per_opcode
-                .resize(constraint_system.num_acir_opcodes as usize, 0);
-        }
-
-        let mut gate_counter = GateCounter::new(collect_gates_per_opcode);
 
         // Add arithmetic gates
-        for (i, constraint) in constraint_system.poly_triple_constraints.iter().enumerate() {
+        for constraint in constraint_system.poly_triple_constraints.iter() {
             self.create_poly_gate(constraint);
-            gate_counter.track_diff(
-                self,
-                &mut constraint_system.gates_per_opcode,
-                constraint_system
-                    .original_opcode_indices
-                    .poly_triple_constraints[i],
-            );
         }
-        for (i, constraint) in constraint_system.quad_constraints.iter().enumerate() {
+        for constraint in constraint_system.quad_constraints.iter() {
             self.create_big_mul_gate(constraint);
-            gate_counter.track_diff(
-                self,
-                &mut constraint_system.gates_per_opcode,
-                constraint_system.original_opcode_indices.quad_constraints[i],
-            );
         }
 
         // Oversize gates are a vector of mul_quad gates.
-        for constraint in constraint_system.big_quad_constraints.iter_mut() {
+        for constraint in constraint_system.big_quad_constraints.iter() {
             let mut next_w4_wire_value = T::AcvmType::default();
             // Define the 4th wire of these mul_quad gates, which is implicitly used by the previous gate.
             let constraint_size = constraint.len();
-            for (j, small_constraint) in constraint.iter_mut().enumerate().take(constraint_size - 1)
-            {
+            for (j, small_constraint) in constraint.iter().enumerate().take(constraint_size - 1) {
+                let mut small_constraint = small_constraint.clone();
                 if j == 0 {
                     next_w4_wire_value = self.get_variable(small_constraint.d.try_into().unwrap());
                 } else {
@@ -1073,7 +1074,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                     small_constraint.d_scaling = -P::ScalarField::one();
                 }
 
-                self.create_big_mul_add_gate(small_constraint, true);
+                self.create_big_mul_add_gate(&small_constraint, true);
 
                 let var_a = self.get_variable(small_constraint.a.try_into().unwrap());
                 let var_b = self.get_variable(small_constraint.b.try_into().unwrap());
@@ -1097,26 +1098,22 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
             let next_w4_wire = self.add_variable(next_w4_wire_value);
 
-            constraint.last_mut().unwrap().d = next_w4_wire;
-            constraint.last_mut().unwrap().d_scaling = -P::ScalarField::one();
+            let mut last_constraint = constraint.last().unwrap().clone();
+            last_constraint.d = next_w4_wire;
+            last_constraint.d_scaling = -P::ScalarField::one();
 
-            self.create_big_mul_add_gate(constraint.last_mut().unwrap(), false);
+            self.create_big_mul_add_gate(&last_constraint, false);
         }
 
         // Add logic constraint
-        for (i, constraint) in constraint_system.logic_constraints.iter().enumerate() {
+        for constraint in constraint_system.logic_constraints.iter() {
             self.create_logic_constraint(driver, constraint)?;
-            gate_counter.track_diff(
-                self,
-                &mut constraint_system.gates_per_opcode,
-                constraint_system.original_opcode_indices.logic_constraints[i],
-            );
         }
 
         // Add range constraints
         // We want to decompose all shared elements in parallel
         let (bits_locations, decomposed, decompose_indices) =
-            self.prepare_for_range_decompose(driver, &constraint_system)?;
+            self.prepare_for_range_decompose(driver, constraint_system)?;
 
         for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
             let mut range = constraint.num_bits;
@@ -1139,12 +1136,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 // Either we do not have to decompose or the value is public
                 self.create_range_constraint(driver, constraint.witness, range)?;
             }
-
-            gate_counter.track_diff(
-                self,
-                &mut constraint_system.gates_per_opcode,
-                constraint_system.original_opcode_indices.range_constraints[i],
-            );
         }
 
         // Add aes128 constraints
@@ -1205,15 +1196,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // }
 
         // Add poseidon2 constraints
-        for (i, constraint) in constraint_system.poseidon2_constraints.iter().enumerate() {
+        for constraint in constraint_system.poseidon2_constraints.iter() {
             self.create_poseidon2_permutations(constraint, driver)?;
-            gate_counter.track_diff(
-                self,
-                &mut constraint_system.gates_per_opcode,
-                constraint_system
-                    .original_opcode_indices
-                    .poseidon2_constraints[i],
-            );
         }
 
         // Add multi scalar mul constraints
@@ -1227,18 +1211,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // }
 
         // Add block constraints
-        for (i, constraint) in constraint_system.block_constraints.iter().enumerate() {
+        for constraint in constraint_system.block_constraints.iter() {
             self.create_block_constraints(constraint, has_valid_witness_assignments, driver)?;
-            if collect_gates_per_opcode {
-                let avg_gates_per_opcode = gate_counter.compute_diff(self)
-                    / constraint_system.original_opcode_indices.block_constraints[i].len();
-                for opcode_index in constraint_system.original_opcode_indices.block_constraints[i]
-                    .iter()
-                    .cloned()
-                {
-                    constraint_system.gates_per_opcode[opcode_index] = avg_gates_per_opcode;
-                }
-            }
         }
 
         // Add big_int constraints
@@ -1255,35 +1229,18 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // }
 
         // assert equals
-        for (i, constraint) in constraint_system.assert_equalities.iter().enumerate() {
+        for constraint in constraint_system.assert_equalities.iter() {
             self.assert_equal(
                 constraint.a.try_into().unwrap(),
                 constraint.b.try_into().unwrap(),
             );
-            gate_counter.track_diff(
-                self,
-                &mut constraint_system.gates_per_opcode,
-                constraint_system.original_opcode_indices.assert_equalities[i],
-            );
         }
 
         // RecursionConstraints
-        self.process_plonk_recursion_constraints(
-            &constraint_system,
-            has_valid_witness_assignments,
-            &mut gate_counter,
-        );
+        self.process_plonk_recursion_constraints(constraint_system, has_valid_witness_assignments);
         let current_aggregation_object = self.init_default_agg_obj_indices();
-        self.process_honk_recursion_constraints(
-            &constraint_system,
-            has_valid_witness_assignments,
-            &mut gate_counter,
-        );
-        self.process_avm_recursion_constraints(
-            &constraint_system,
-            has_valid_witness_assignments,
-            &mut gate_counter,
-        );
+        self.process_honk_recursion_constraints(constraint_system, has_valid_witness_assignments);
+        self.process_avm_recursion_constraints(constraint_system, has_valid_witness_assignments);
         // If the circuit has either honk or avm recursion constraints, add the aggregation object. Otherwise, add a
         // default one if the circuit is recursive and honk_recursion is true.
         if !constraint_system.honk_recursion_constraints.is_empty()
@@ -1320,7 +1277,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
         _has_valid_witness_assignments: bool,
-        _gate_counter: &mut GateCounter,
     ) {
         for _constraint in constraint_system.recursion_constraints.iter() {
             todo!("Plonk recursion");
@@ -1331,7 +1287,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
         _has_valid_witness_assignments: bool,
-        _gate_counter: &mut GateCounter,
     ) {
         {
             for _constraint in constraint_system.honk_recursion_constraints.iter() {
@@ -1344,7 +1299,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
         _has_valid_witness_assignments: bool,
-        _gate_counter: &mut GateCounter,
     ) {
         for _constraint in constraint_system.avm_recursion_constraints.iter() {
             todo!("avm recursion");

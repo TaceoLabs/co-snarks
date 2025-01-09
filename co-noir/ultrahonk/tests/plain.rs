@@ -1,9 +1,10 @@
 use ark_bn254::Bn254;
+use co_builder::prelude::CrsParser;
 use sha3::Keccak256;
 use ultrahonk::{
     prelude::{
-        HonkProof, PlainAcvmSolver, Poseidon2Sponge, ProvingKey, TranscriptFieldType,
-        TranscriptHasher, UltraCircuitBuilder, UltraHonk,
+        HonkProof, PlainAcvmSolver, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher,
+        UltraCircuitBuilder, UltraHonk,
     },
     Utils,
 };
@@ -20,19 +21,22 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     let witness = Utils::get_witness_from_file(witness_file).unwrap();
     let mut driver = PlainAcvmSolver::new();
     let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
-        constraint_system,
+        &constraint_system,
         false, // We don't support recursive atm
         0,
         witness,
         true,
-        false,
         &mut driver,
     )
     .unwrap();
 
-    let crs = ProvingKey::get_crs(&builder, CRS_PATH_G1, CRS_PATH_G2).unwrap();
+    let crs_size = builder.compute_dyadic_size();
+    let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size).unwrap();
+    let (prover_crs, verififer_crs) = crs.split();
 
-    let (proving_key, verifying_key) = builder.create_keys(crs, &mut driver).unwrap();
+    let (proving_key, verifying_key) = builder
+        .create_keys(prover_crs.into(), verififer_crs, &mut driver)
+        .unwrap();
 
     let proof = UltraHonk::<_, H>::prove(proving_key).unwrap();
 

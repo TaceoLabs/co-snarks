@@ -377,43 +377,6 @@ impl<F: PrimeField> UltraTraceBlock<F> {
     }
 }
 
-pub(crate) struct GateCounter {
-    collect_gates_per_opcode: bool,
-    prev_gate_count: usize,
-}
-
-impl GateCounter {
-    pub(crate) fn new(collect_gates_per_opcode: bool) -> Self {
-        Self {
-            collect_gates_per_opcode,
-            prev_gate_count: 0,
-        }
-    }
-
-    pub(crate) fn compute_diff<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        &mut self,
-        builder: &GenericUltraCircuitBuilder<P, T>,
-    ) -> usize {
-        if !self.collect_gates_per_opcode {
-            return 0;
-        }
-        let new_gate_count = builder.get_num_gates();
-        let diff = new_gate_count - self.prev_gate_count;
-        self.prev_gate_count = new_gate_count;
-        diff
-    }
-
-    pub(crate) fn track_diff<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        &mut self,
-        builder: &GenericUltraCircuitBuilder<P, T>,
-        gates_per_opcode: &mut [usize],
-        opcode_index: usize,
-    ) {
-        if self.collect_gates_per_opcode {
-            gates_per_opcode[opcode_index] = self.compute_diff(builder);
-        }
-    }
-}
 pub(crate) struct RangeConstraint {
     pub(crate) witness: u32,
     pub(crate) num_bits: u32,

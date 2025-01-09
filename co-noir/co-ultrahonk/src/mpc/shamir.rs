@@ -27,6 +27,10 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirUltraHonkDriver<F, N> {
             _protocol1: protocol1,
         }
     }
+
+    pub fn into_network(self) -> N {
+        self.protocol0.network
+    }
 }
 
 impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>

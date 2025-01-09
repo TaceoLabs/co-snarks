@@ -58,6 +58,10 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
     pub fn into_io_contexts(self) -> (IoContext<N>, IoContext<N>) {
         (self.io_context0, self.io_context1)
     }
+
+    pub fn into_network(self) -> N {
+        self.io_context0.network
+    }
 }
 
 // TODO maybe we want to merge that with the Rep3VmType?? Atm we do not need

@@ -320,7 +320,7 @@ impl PlainCoSolver<ark_bn254::Fr> {
 
     pub fn solve_and_print_output(self) {
         let abi = self.abi.clone();
-        let result = self.solve().unwrap();
+        let (result, _) = self.solve().unwrap();
         let mut result = Self::convert_to_plain_acvm_witness(result);
         let main_witness = result.pop().unwrap();
         let (_, ret_val) = abi.decode(&main_witness.witness).unwrap();
@@ -367,7 +367,7 @@ where
         Ok(())
     }
 
-    pub fn solve(mut self) -> CoAcvmResult<WitnessStack<T::AcvmType>> {
+    pub fn solve(mut self) -> CoAcvmResult<(WitnessStack<T::AcvmType>, T)> {
         let functions = std::mem::take(&mut self.functions);
 
         for opcode in functions[self.function_index].opcodes.iter() {
@@ -400,6 +400,6 @@ where
         for (idx, witness) in self.witness_map.into_iter().rev().enumerate() {
             witness_stack.push(u32::try_from(idx).expect("usize fits into u32"), witness);
         }
-        Ok(witness_stack)
+        Ok((witness_stack, self.driver))
     }
 }
