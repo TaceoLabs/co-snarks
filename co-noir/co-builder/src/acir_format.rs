@@ -591,7 +591,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 iv: _,
                 key: _,
                 outputs: _,
-            } => todo!("BlackBoxFuncCall::AES128Encrypt "),
+            } => todo!("BlackBoxFuncCall::AES128Encrypt"),
             BlackBoxFuncCall::AND {
                 lhs: _,
                 rhs: _,
@@ -646,7 +646,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 points: _,
                 scalars: _,
                 outputs: _,
-            } => todo!(),
+            } => todo!("BlackBoxFuncCall::MultiScalarMul"),
             BlackBoxFuncCall::EmbeddedCurveAdd {
                 input1: _,
                 input2: _,
@@ -694,7 +694,7 @@ impl<F: PrimeField> AcirFormat<F> {
             BlackBoxFuncCall::BigIntToLeBytes {
                 input: _,
                 outputs: _,
-            } => todo!(),
+            } => todo!("BlackBoxFuncCall::BigIntToLeBytes"),
             BlackBoxFuncCall::Poseidon2Permutation {
                 inputs: _,
                 outputs: _,

@@ -308,13 +308,17 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
     }
 
     fn not(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
-        if let PlainBrilligType::Int(val, IntegerBitSize::U1) = val {
-            Ok(PlainBrilligType::Int(
-                u128::from(val == 0),
-                IntegerBitSize::U1,
-            ))
-        } else {
-            eyre::bail!("NOT only supported on U1")
+        match val {
+            PlainBrilligType::Int(val, integer_bit_size) => {
+                if integer_bit_size == IntegerBitSize::U128 {
+                    Ok(PlainBrilligType::Int(!val, IntegerBitSize::U128))
+                } else {
+                    let bit_size: u32 = integer_bit_size.into();
+                    let mask = (1_u128 << bit_size as u128) - 1;
+                    Ok(PlainBrilligType::Int((!val) & mask, IntegerBitSize::U128))
+                }
+            }
+            PlainBrilligType::Field(_) => eyre::bail!("NOT is not supported for fields"),
         }
     }
 

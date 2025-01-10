@@ -217,4 +217,32 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         result.sort();
         Ok(result)
     }
+
+    fn integer_bitwise_and(
+        &mut self,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        num_bits: u32,
+    ) -> std::io::Result<Self::AcvmType> {
+        debug_assert!(num_bits <= 128);
+        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        let lhs: BigUint = lhs.into();
+        let rhs: BigUint = rhs.into();
+        let res = (lhs & rhs) & mask;
+        Ok(Self::AcvmType::from(res))
+    }
+
+    fn integer_bitwise_xor(
+        &mut self,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        num_bits: u32,
+    ) -> std::io::Result<Self::AcvmType> {
+        debug_assert!(num_bits <= 128);
+        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        let lhs: BigUint = lhs.into();
+        let rhs: BigUint = rhs.into();
+        let res = (lhs ^ rhs) & mask;
+        Ok(Self::AcvmType::from(res))
+    }
 }

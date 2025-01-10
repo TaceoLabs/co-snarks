@@ -160,4 +160,20 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         inputs: &[Self::ArithmeticShare],
         bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
+
+    /// bitwise AND operation for integer datatype (i.e., the result will be smaller than a field)
+    fn integer_bitwise_and(
+        &mut self,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        num_bits: u32,
+    ) -> std::io::Result<Self::AcvmType>;
+
+    /// bitwise XOR operation for integer datatype (i.e., the result will be smaller than a field)
+    fn integer_bitwise_xor(
+        &mut self,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        num_bits: u32,
+    ) -> std::io::Result<Self::AcvmType>;
 }
