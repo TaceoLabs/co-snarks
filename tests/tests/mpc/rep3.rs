@@ -1430,9 +1430,15 @@ mod field_share {
         ) {
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
+                let mut forked = rep3.fork().unwrap();
 
-                let decomposed =
-                    rep3_ring::gadgets::sort::radix_sort_fields(&x, &mut rep3, CHUNK_SIZE).unwrap();
+                let decomposed = rep3_ring::gadgets::sort::radix_sort_fields(
+                    &x,
+                    &mut rep3,
+                    &mut forked,
+                    CHUNK_SIZE,
+                )
+                .unwrap();
                 tx.send(decomposed)
             });
         }

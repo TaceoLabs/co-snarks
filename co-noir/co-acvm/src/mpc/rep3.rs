@@ -1,9 +1,7 @@
-use std::marker::PhantomData;
-
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
-use mpc_core::protocols::rep3::{arithmetic, yao};
+use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao};
 use mpc_core::protocols::rep3_ring::gadgets::sort::radix_sort_fields;
 use mpc_core::{
     lut::LookupTableProvider,
@@ -13,16 +11,29 @@ use mpc_core::{
         Rep3PrimeFieldShare,
     },
 };
+use num_bigint::BigUint;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 
 use super::plain::PlainAcvmSolver;
 use super::NoirWitnessExtensionProtocol;
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
+macro_rules! join {
+    ($t1: expr, $t2: expr) => {{
+        std::thread::scope(|s| {
+            let t1 = s.spawn(|| $t1);
+            let t2 = $t2;
+            (t1.join().expect("can join"), t2)
+        })
+    }};
+}
+
 pub struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
     lut_provider: NaiveRep3LookupTable<N>,
-    io_context: IoContext<N>,
+    io_context0: IoContext<N>,
+    io_context1: IoContext<N>,
     plain_solver: PlainAcvmSolver<F>,
     phantom_data: PhantomData<F>,
 }
@@ -33,16 +44,18 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
         let plain_solver = PlainAcvmSolver::<F>::default();
         let mut io_context = IoContext::init(network).unwrap();
         let forked = io_context.fork().unwrap();
+        let forked2 = io_context.fork().unwrap();
         Self {
             lut_provider: NaiveRep3LookupTable::new(forked),
-            io_context,
+            io_context0: io_context,
+            io_context1: forked2,
             plain_solver,
             phantom_data: PhantomData,
         }
     }
 
-    pub fn get_io_contexts(self) -> (IoContext<N>, IoContext<N>) {
-        (self.io_context, self.lut_provider.get_io_context())
+    pub fn into_io_contexts(self) -> (IoContext<N>, IoContext<N>) {
+        (self.io_context0, self.io_context1)
     }
 }
 
@@ -139,7 +152,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     type BrilligDriver = Rep3BrilligDriver<F, N>;
 
     fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver> {
-        Ok(Rep3BrilligDriver::with_io_context(self.io_context.fork()?))
+        Ok(Rep3BrilligDriver::with_io_context(self.io_context0.fork()?))
     }
 
     fn parse_brillig_result(
@@ -148,7 +161,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         brillig_result
             .into_iter()
-            .map(|value| Rep3AcvmType::from_brillig_type(value, &mut self.io_context))
+            .map(|value| Rep3AcvmType::from_brillig_type(value, &mut self.io_context0))
             .collect()
     }
 
@@ -177,9 +190,9 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn shared_zeros(&mut self, len: usize) -> std::io::Result<Vec<Self::AcvmType>> {
         let a = (0..len)
-            .map(|_| self.io_context.masking_field_element())
+            .map(|_| self.io_context0.masking_field_element())
             .collect::<Vec<_>>();
-        let b = self.io_context.network.reshare_many(&a)?;
+        let b = self.io_context0.network.reshare_many(&a)?;
         let result = izip!(a, b)
             .map(|(a, b)| Rep3AcvmType::Shared(Rep3PrimeFieldShare::new(a, b)))
             .collect();
@@ -203,7 +216,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType) {
-        let id = self.io_context.id;
+        let id = self.io_context0.id;
         let result = match target.to_owned() {
             Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public + secret),
             Rep3AcvmType::Shared(secret) => {
@@ -214,7 +227,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType {
-        let id = self.io_context.id;
+        let id = self.io_context0.id;
         match (lhs, rhs) {
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
                 Rep3AcvmType::Public(lhs + rhs)
@@ -231,7 +244,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
-        let id = self.io_context.id;
+        let id = self.io_context0.id;
 
         match (share_1, share_2) {
             (Rep3AcvmType::Public(share_1), Rep3AcvmType::Public(share_2)) => {
@@ -275,7 +288,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Shared(arithmetic::mul_public(secret_1, secret_2)),
             ),
             (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Shared(secret_2)) => {
-                let result = arithmetic::mul(secret_1, secret_2, &mut self.io_context)?;
+                let result = arithmetic::mul(secret_1, secret_2, &mut self.io_context0)?;
                 Ok(Rep3AcvmType::Shared(result))
             }
         }
@@ -291,7 +304,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn solve_linear_term(&mut self, q_l: F, w_l: Self::AcvmType, target: &mut Self::AcvmType) {
-        let id = self.io_context.id;
+        let id = self.io_context0.id;
         let result = match (w_l, target.to_owned()) {
             (Rep3AcvmType::Public(w_l), Rep3AcvmType::Public(result)) => {
                 Rep3AcvmType::Public(q_l * w_l + result)
@@ -312,7 +325,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn add_assign(&mut self, target: &mut Self::AcvmType, rhs: Self::AcvmType) {
-        let id = self.io_context.id;
+        let id = self.io_context0.id;
         let result = match (target.clone(), rhs) {
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
                 Rep3AcvmType::Public(lhs + rhs)
@@ -344,7 +357,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Shared(arithmetic::mul_public(mul, c))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let shared_mul = arithmetic::mul(lhs, rhs, &mut self.io_context)?;
+                let shared_mul = arithmetic::mul(lhs, rhs, &mut self.io_context0)?;
                 Rep3AcvmType::Shared(arithmetic::mul_public(shared_mul, c))
             }
         };
@@ -357,7 +370,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         c: Self::AcvmType,
     ) -> eyre::Result<Self::AcvmType> {
         //-c/q_l
-        let io_context = &mut self.io_context;
+        let io_context = &mut self.io_context0;
         let result = match (q_l, c) {
             (Rep3AcvmType::Public(q_l), Rep3AcvmType::Public(c)) => {
                 Rep3AcvmType::Public(self.plain_solver.solve_equation(q_l, c)?)
@@ -381,7 +394,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         &mut self,
         values: Vec<Self::AcvmType>,
     ) -> <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap {
-        let id = self.io_context.id;
+        let id = self.io_context0.id;
         let values = values.into_iter().enumerate().map(|(idx, value)| {
             let idx = F::from(u64::try_from(idx).expect("usize fits into u64"));
             let value = match value {
@@ -400,7 +413,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     ) -> std::io::Result<Self::AcvmType> {
         let value = match index {
             Rep3AcvmType::Public(public) => {
-                let id = self.io_context.id;
+                let id = self.io_context0.id;
                 let promoted_key = arithmetic::promote_to_trivial_share(id, *public);
                 self.lut_provider.get_from_lut(promoted_key, lut)
             }
@@ -415,7 +428,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         value: Self::AcvmType,
         lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap,
     ) -> std::io::Result<()> {
-        let id = self.io_context.id;
+        let id = self.io_context0.id;
         match (index, value) {
             (Rep3AcvmType::Public(index), Rep3AcvmType::Public(value)) => {
                 let index = arithmetic::promote_to_trivial_share(id, index);
@@ -455,8 +468,8 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<F>> {
         let bs = a.iter().map(|x| x.b).collect_vec();
-        self.io_context.network.send_next(bs)?;
-        let mut cs = self.io_context.network.recv_prev::<Vec<F>>()?;
+        self.io_context0.network.send_next(bs)?;
+        let mut cs = self.io_context0.network.recv_prev::<Vec<F>>()?;
 
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 
@@ -464,12 +477,12 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
-        let id = self.io_context.id;
+        let id = self.io_context0.id;
         arithmetic::promote_to_trivial_share(id, public_value)
     }
 
     fn promote_to_trivial_shares(&mut self, public_values: &[F]) -> Vec<Self::ArithmeticShare> {
-        let id = self.io_context.id;
+        let id = self.io_context0.id;
         public_values
             .par_iter()
             .with_min_len(1024)
@@ -485,7 +498,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
         yao::decompose_arithmetic(
             input,
-            &mut self.io_context,
+            &mut self.io_context0,
             total_bit_size_per_field,
             decompose_bit_size,
         )
@@ -506,7 +519,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         for inp_chunk in input.chunks(BATCH_SIZE) {
             let result = yao::decompose_arithmetic_many(
                 inp_chunk,
-                &mut self.io_context,
+                &mut self.io_context0,
                 total_bit_size_per_field,
                 decompose_bit_size,
             )?;
@@ -522,6 +535,84 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         inputs: &[Self::ArithmeticShare],
         bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        radix_sort_fields(inputs, &mut self.io_context, bitsize)
+        radix_sort_fields(
+            inputs,
+            &mut self.io_context0,
+            &mut self.io_context1,
+            bitsize,
+        )
+    }
+
+    fn integer_bitwise_and(
+        &mut self,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        num_bits: u32,
+    ) -> std::io::Result<Self::AcvmType> {
+        debug_assert!(num_bits <= 128);
+        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                let lhs: BigUint = lhs.into();
+                let rhs: BigUint = rhs.into();
+                let res = (lhs & rhs) & mask;
+                let res = F::from(res);
+                Ok(Rep3AcvmType::Public(res))
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                let shared = conversion::a2b_selector(shared, &mut self.io_context0)?;
+                let public: BigUint = public.into();
+                let public = public & mask;
+                let binary = binary::and_with_public(&shared, &public); // Already includes masking
+                let result = conversion::b2a_selector(&binary, &mut self.io_context0)?;
+                Ok(Rep3AcvmType::Shared(result))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                let (lhs, rhs) = join!(
+                    conversion::a2b_selector(lhs, &mut self.io_context0),
+                    conversion::a2b_selector(rhs, &mut self.io_context1)
+                );
+                let binary = binary::and(&lhs?, &rhs?, &mut self.io_context0)? & mask;
+                let result = conversion::b2a_selector(&binary, &mut self.io_context0)?;
+                Ok(Rep3AcvmType::Shared(result))
+            }
+        }
+    }
+
+    fn integer_bitwise_xor(
+        &mut self,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        num_bits: u32,
+    ) -> std::io::Result<Self::AcvmType> {
+        debug_assert!(num_bits <= 128);
+        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                let lhs: BigUint = lhs.into();
+                let rhs: BigUint = rhs.into();
+                let res = (lhs ^ rhs) & mask;
+                let res = F::from(res);
+                Ok(Rep3AcvmType::Public(res))
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                let shared = conversion::a2b_selector(shared, &mut self.io_context0)?;
+                let public: BigUint = public.into();
+                let binary = binary::xor_public(&shared, &public, self.io_context0.id) & mask;
+                let result = conversion::b2a_selector(&binary, &mut self.io_context0)?;
+                Ok(Rep3AcvmType::Shared(result))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                let (lhs, rhs) = join!(
+                    conversion::a2b_selector(lhs, &mut self.io_context0),
+                    conversion::a2b_selector(rhs, &mut self.io_context1)
+                );
+                let binary = binary::xor(&lhs?, &rhs?) & mask;
+                let result = conversion::b2a_selector(&binary, &mut self.io_context0)?;
+                Ok(Rep3AcvmType::Shared(result))
+            }
+        }
     }
 }

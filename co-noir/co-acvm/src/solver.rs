@@ -84,6 +84,8 @@ where
     function_index: usize,
     // the memory blocks
     memory_access: IntMap<<T::Lookup as LookupTableProvider<F>>::SecretSharedMap>,
+    // pedantic solving
+    pedantic_solving: bool,
 }
 
 impl<T> CoSolver<T, ark_bn254::Fr>
@@ -183,6 +185,7 @@ where
             witness_map,
             function_index: Self::DEFAULT_FUNCTION_INDEX,
             memory_access: IntMap::new(),
+            pedantic_solving: true,
         })
     }
 
@@ -213,6 +216,7 @@ where
             witness_map,
             function_index: Self::DEFAULT_FUNCTION_INDEX,
             memory_access: IntMap::new(),
+            pedantic_solving: true,
         })
     }
 }
@@ -333,17 +337,15 @@ where
     T: NoirWitnessExtensionProtocol<F>,
     F: PrimeField,
 {
+    pub fn pedantic_solving(&self) -> bool {
+        self.pedantic_solving
+    }
+
     #[inline(always)]
     fn witness(&mut self) -> &mut WitnessMap<T::AcvmType> {
         &mut self.witness_map[self.function_index]
     }
-}
 
-impl<T, F> CoSolver<T, F>
-where
-    T: NoirWitnessExtensionProtocol<F>,
-    F: PrimeField,
-{
     fn open_results(&mut self, function: &Circuit<GenericFieldElement<F>>) -> CoAcvmResult<()> {
         let witness_map = &mut self.witness_map[self.function_index];
 

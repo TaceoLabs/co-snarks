@@ -84,7 +84,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
 
             let proving_key = ProvingKey::create(id, builder, crs, &mut driver).unwrap();
 
-            let (io_context0, io_context1) = driver.get_io_contexts();
+            let (io_context0, io_context1) = driver.into_io_contexts();
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
 
             let prover = CoUltraHonk::<_, _, H>::new(driver);
@@ -166,7 +166,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
 
             let proving_key = ProvingKey::create(id, builder, prover_crs, &mut driver).unwrap();
 
-            let (io_context0, io_context1) = driver.get_io_contexts();
+            let (io_context0, io_context1) = driver.into_io_contexts();
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
             let prover = CoUltraHonk::<_, _, H>::new(driver);
             prover.prove(proving_key).unwrap()

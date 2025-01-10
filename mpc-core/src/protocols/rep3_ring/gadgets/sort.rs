@@ -38,7 +38,8 @@ macro_rules! join {
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     inputs: &[FieldShare<F>],
-    io_context: &mut IoContext<N>,
+    io_context0: &mut IoContext<N>,
+    io_context1: &mut IoContext<N>,
     bitsize: usize,
 ) -> IoResult<Vec<FieldShare<F>>> {
     let len = inputs.len();
@@ -52,10 +53,9 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
             "Too many inputs for radix sort. Use a larger PermRing.",
         ));
     }
-    let mut forked_io_context = io_context.fork()?; // TODO maybe at some future point we have a second one as input to the function
 
-    let perm = gen_perm(inputs, bitsize, io_context, &mut forked_io_context)?;
-    apply_inv_field(&perm, inputs, io_context, &mut forked_io_context)
+    let perm = gen_perm(inputs, bitsize, io_context0, io_context1)?;
+    apply_inv_field(&perm, inputs, io_context0, io_context1)
 }
 
 fn gen_perm<F: PrimeField, N: Rep3Network>(

@@ -967,7 +967,12 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
             }
             Rep3BrilligType::Shared(shared) => match shared {
                 Shared::Ring1(secret) => Rep3BrilligType::shared_u1(!secret),
-                _ => eyre::bail!("NOT only supported on u1 values"),
+                Shared::Ring8(secret) => Rep3BrilligType::shared_u8(!secret),
+                Shared::Ring16(secret) => Rep3BrilligType::shared_u16(!secret),
+                Shared::Ring32(secret) => Rep3BrilligType::shared_u32(!secret),
+                Shared::Ring64(secret) => Rep3BrilligType::shared_u64(!secret),
+                Shared::Ring128(secret) => Rep3BrilligType::shared_u128(!secret),
+                Shared::Field(_) => eyre::bail!("NOT is not supported for fields"),
             },
         };
         Ok(result)
