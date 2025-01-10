@@ -97,7 +97,7 @@ pub(crate) struct BlockConstraint<F: PrimeField> {
 
 #[derive(Default)]
 pub(crate) struct AcirFormatOriginalOpcodeIndices {
-    // pub(crate) logic_constraints: Vec<usize>,
+    pub(crate) logic_constraints: Vec<usize>,
     pub(crate) range_constraints: Vec<usize>,
     // pub(crate) aes128_constraints: Vec<usize>,
     // pub(crate) sha256_constraints: Vec<usize>,
@@ -398,6 +398,46 @@ impl GateCounter {
 pub(crate) struct RangeConstraint {
     pub(crate) witness: u32,
     pub(crate) num_bits: u32,
+}
+
+pub(crate) struct LogicConstraint<F: PrimeField> {
+    pub(crate) a: WitnessOrConstant<F>,
+    pub(crate) b: WitnessOrConstant<F>,
+    pub(crate) result: u32,
+    pub(crate) num_bits: u32,
+    pub(crate) is_xor_gate: bool,
+}
+
+impl<F: PrimeField> LogicConstraint<F> {
+    pub(crate) fn and_gate(
+        a: WitnessOrConstant<F>,
+        b: WitnessOrConstant<F>,
+        result: u32,
+        num_bits: u32,
+    ) -> Self {
+        Self {
+            a,
+            b,
+            result,
+            num_bits,
+            is_xor_gate: false,
+        }
+    }
+
+    pub(crate) fn xor_gate(
+        a: WitnessOrConstant<F>,
+        b: WitnessOrConstant<F>,
+        result: u32,
+        num_bits: u32,
+    ) -> Self {
+        Self {
+            a,
+            b,
+            result,
+            num_bits,
+            is_xor_gate: true,
+        }
+    }
 }
 
 pub(crate) struct RecursionConstraint {
@@ -1336,5 +1376,30 @@ impl PermutationMapping {
         }
 
         Self { sigmas, ids }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WitnessOrConstant<F: PrimeField> {
+    index: u32,
+    value: F,
+    is_constant: bool,
+}
+
+impl<F: PrimeField> WitnessOrConstant<F> {
+    pub(crate) fn from_index(index: u32) -> Self {
+        Self {
+            index,
+            value: F::zero(),
+            is_constant: false,
+        }
+    }
+
+    pub(crate) fn from_constant(constant: F) -> Self {
+        Self {
+            index: 0,
+            value: constant,
+            is_constant: true,
+        }
     }
 }

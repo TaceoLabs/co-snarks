@@ -1,7 +1,7 @@
 use acir::{
     acir_field::GenericFieldElement,
     circuit::{
-        opcodes::{BlackBoxFuncCall, MemOp},
+        opcodes::{BlackBoxFuncCall, FunctionInput, MemOp},
         Circuit,
     },
     native_types::{Expression, Witness, WitnessMap},
@@ -11,8 +11,8 @@ use ark_ff::{PrimeField, Zero};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::types::types::{
-    AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, MulQuad, PolyTriple,
-    RangeConstraint, RecursionConstraint,
+    AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, LogicConstraint, MulQuad,
+    PolyTriple, RangeConstraint, RecursionConstraint, WitnessOrConstant,
 };
 
 #[derive(Default)]
@@ -28,7 +28,7 @@ pub struct AcirFormat<F: PrimeField> {
     //  using PolyTripleConstraint = bb::poly_triple_<bb::curve::BN254::ScalarField>;
     pub public_inputs: Vec<u32>,
     pub(crate) range_constraints: Vec<RangeConstraint>,
-    //  std::vector<LogicConstraint> logic_constraints;
+    pub(crate) logic_constraints: Vec<LogicConstraint<F>>,
     //  std::vector<AES128Constraint> aes128_constraints;
     //  std::vector<Sha256Constraint> sha256_constraints;
     //  std::vector<Sha256Compression> sha256_compression;
@@ -579,6 +579,17 @@ impl<F: PrimeField> AcirFormat<F> {
         block.trace.push(acir_mem_op);
     }
 
+    fn parse_input(input: FunctionInput<GenericFieldElement<F>>) -> WitnessOrConstant<F> {
+        match input.input() {
+            acir::circuit::opcodes::ConstantOrWitnessEnum::Witness(witness) => {
+                WitnessOrConstant::from_index(witness.0)
+            }
+            acir::circuit::opcodes::ConstantOrWitnessEnum::Constant(constant) => {
+                WitnessOrConstant::from_constant(constant.into_repr())
+            }
+        }
+    }
+
     fn handle_blackbox_func_call(
         arg: BlackBoxFuncCall<GenericFieldElement<F>>,
         af: &mut AcirFormat<F>,
@@ -592,16 +603,34 @@ impl<F: PrimeField> AcirFormat<F> {
                 key: _,
                 outputs: _,
             } => todo!("BlackBoxFuncCall::AES128Encrypt"),
-            BlackBoxFuncCall::AND {
-                lhs: _,
-                rhs: _,
-                output: _,
-            } => todo!("BlackBoxFuncCall::AND"),
-            BlackBoxFuncCall::XOR {
-                lhs: _,
-                rhs: _,
-                output: _,
-            } => todo!("BlackBoxFuncCall::XOR"),
+            BlackBoxFuncCall::AND { lhs, rhs, output } => {
+                let lhs_input = Self::parse_input(lhs);
+                let rhs_input = Self::parse_input(rhs);
+                af.logic_constraints.push(LogicConstraint::and_gate(
+                    lhs_input,
+                    rhs_input,
+                    output.0,
+                    lhs.num_bits(),
+                ));
+                af.constrained_witness.insert(output.0);
+                af.original_opcode_indices
+                    .logic_constraints
+                    .push(opcode_index);
+            }
+            BlackBoxFuncCall::XOR { lhs, rhs, output } => {
+                let lhs_input = Self::parse_input(lhs);
+                let rhs_input = Self::parse_input(rhs);
+                af.logic_constraints.push(LogicConstraint::xor_gate(
+                    lhs_input,
+                    rhs_input,
+                    output.0,
+                    lhs.num_bits(),
+                ));
+                af.constrained_witness.insert(output.0);
+                af.original_opcode_indices
+                    .logic_constraints
+                    .push(opcode_index);
+            }
             BlackBoxFuncCall::RANGE { input } => {
                 let witness_input = input.to_witness().witness_index();
                 af.range_constraints.push(RangeConstraint {
