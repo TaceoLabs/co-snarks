@@ -34,18 +34,18 @@ async fn main() -> Result<()> {
     let network = MpcNetworkHandler::establish(config).await?;
 
     let channels = network.get_byte_channels().await?;
-    let mut managed_channels = channels
+    let managed_channels = channels
         .into_iter()
         .map(|(i, c)| (i, ChannelHandle::manage(c)))
         .collect::<HashMap<_, _>>();
 
     // send to all channels
-    for (&i, channel) in managed_channels.iter_mut() {
+    for (&i, channel) in managed_channels.iter() {
         let buf = vec![i as u8; 1024];
         let _ = channel.send(buf.into()).await.await?;
     }
     // recv from all channels
-    for (&_, channel) in managed_channels.iter_mut() {
+    for (&_, channel) in managed_channels.iter() {
         let buf = channel.recv().await.await;
         if let Ok(Ok(b)) = buf {
             println!("received {}, should be {}", b[0], my_id as u8);
