@@ -210,7 +210,7 @@ where
     }
 
     /// Instructs the channel to send a message. Returns a [oneshot::Receiver] that will return the result of the send operation.
-    pub async fn send(&mut self, data: MSend) -> oneshot::Receiver<Result<(), io::Error>> {
+    pub async fn send(&self, data: MSend) -> oneshot::Receiver<Result<(), io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = WriteJob { data, ret };
         match self.write_job_queue.send(job).await {
@@ -228,7 +228,7 @@ where
     }
 
     /// Instructs the channel to receive a message. Returns a [oneshot::Receiver] that will return the result of the receive operation.
-    pub async fn recv(&mut self) -> oneshot::Receiver<Result<MRecv, io::Error>> {
+    pub async fn recv(&self) -> oneshot::Receiver<Result<MRecv, io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = ReadJob { ret };
         match self.read_job_queue.send(job).await {
@@ -246,7 +246,7 @@ where
     }
 
     /// A blocking version of [ChannelHandle::send]. This will block until the send operation is complete.
-    pub fn blocking_send(&mut self, data: MSend) -> oneshot::Receiver<Result<(), io::Error>> {
+    pub fn blocking_send(&self, data: MSend) -> oneshot::Receiver<Result<(), io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = WriteJob { data, ret };
         match self.write_job_queue.blocking_send(job) {
@@ -264,7 +264,7 @@ where
     }
 
     /// A blocking version of [ChannelHandle::recv]. This will block until the receive operation is complete.
-    pub fn blocking_recv(&mut self) -> oneshot::Receiver<Result<MRecv, io::Error>> {
+    pub fn blocking_recv(&self) -> oneshot::Receiver<Result<MRecv, io::Error>> {
         let (ret, recv) = oneshot::channel();
         let job = ReadJob { ret };
         match self.read_job_queue.blocking_send(job) {
