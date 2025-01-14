@@ -203,6 +203,9 @@ pub struct SplitProvingKeyCli {
     /// The number of parties
     #[arg(short, long, default_value_t = 3)]
     pub num_parties: usize,
+    /// Generate a recursive proof
+    #[arg(long)]
+    pub recursive: bool,
 }
 
 /// Config for `split_proving_key`
@@ -222,6 +225,8 @@ pub struct SplitProvingKeyConfig {
     pub threshold: usize,
     /// The number of parties
     pub num_parties: usize,
+    /// Whether to generate a recursive proof
+    pub recursive: bool,
 }
 
 /// Cli arguments for `merge_input_shares`
@@ -405,6 +410,9 @@ pub struct BuildProvingKeyCLi {
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
+    /// Generate a recursive proof
+    #[arg(long)]
+    pub recursive: bool,
 }
 
 /// Config for `build_proving_key`
@@ -424,6 +432,8 @@ pub struct BuildProvingKeyConfig {
     pub threshold: usize,
     /// Network config
     pub network: NetworkConfigFile,
+    /// Whether to generate a recursive proof
+    pub recursive: bool,
 }
 
 /// Cli arguments for `generate_proof`
@@ -515,6 +525,9 @@ pub struct BuildAndGenerateProofCli {
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
+    /// Generate a recursive proof
+    #[arg(long)]
+    pub recursive: bool,
 }
 
 /// Config for `build_and_generate_proof`
@@ -538,6 +551,8 @@ pub struct BuildAndGenerateProofConfig {
     pub threshold: usize,
     /// Network config
     pub network: NetworkConfigFile,
+    /// Whether to generate a recursive proof
+    pub recursive: bool,
 }
 
 /// Cli arguments for `creating_vk`

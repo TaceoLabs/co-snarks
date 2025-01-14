@@ -170,7 +170,8 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         driver: &mut U,
     ) -> HonkProofResult<(Self, VerifyingKeyBarretenberg<P>)> {
         let contains_recursive_proof = circuit.contains_recursive_proof;
-        let recursive_proof_public_input_indices = circuit.recursive_proof_public_input_indices;
+        let recursive_proof_public_input_indices =
+            circuit.pairing_point_accumulator_public_input_indices;
 
         let pk = ProvingKey::create(id, circuit, crs, driver)?;
         let circuit_size = pk.circuit_size;

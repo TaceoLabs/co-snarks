@@ -37,7 +37,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<VerifyingKeyBarretenberg<P>> {
         let contains_recursive_proof = self.contains_recursive_proof;
-        let recursive_proof_public_input_indices = self.recursive_proof_public_input_indices;
+        let recursive_proof_public_input_indices =
+            self.pairing_point_accumulator_public_input_indices;
 
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
@@ -104,7 +105,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<(ProvingKey<P>, VerifyingKeyBarretenberg<P>)> {
         let contains_recursive_proof = self.contains_recursive_proof;
-        let recursive_proof_public_input_indices = self.recursive_proof_public_input_indices;
+        let recursive_proof_public_input_indices =
+            self.pairing_point_accumulator_public_input_indices;
 
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
@@ -151,7 +153,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     num_gates: usize,
     circuit_finalized: bool,
     pub contains_recursive_proof: bool,
-    pub recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
+    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
     rom_arrays: Vec<RomTranscript>,
     ram_arrays: Vec<RamTranscript>,
     pub(crate) lookup_tables: Vec<PlookupBasicTable<P::ScalarField>>,
@@ -245,7 +247,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             num_gates: 0,
             circuit_finalized: false,
             contains_recursive_proof: false,
-            recursive_proof_public_input_indices: Default::default(),
+            pairing_point_accumulator_public_input_indices: Default::default(),
             rom_arrays: Vec::new(),
             ram_arrays: Vec::new(),
             lookup_tables: Vec::new(),
@@ -919,6 +921,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             has_valid_witness_assignments,
             &mut gate_counter,
         );
+        let current_aggregation_object = self.init_default_agg_obj_indices();
         self.process_honk_recursion_constraints(
             &constraint_system,
             has_valid_witness_assignments,
@@ -929,20 +932,38 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             has_valid_witness_assignments,
             &mut gate_counter,
         );
-
-        // If the circuit does not itself contain honk recursion constraints but is going to be
-        // proven with honk then recursively verified, add a default aggregation object
-        if constraint_system.honk_recursion_constraints.is_empty()
-            && honk_recursion
-            && self.is_recursive_circuit
+        // If the circuit has either honk or avm recursion constraints, add the aggregation object. Otherwise, add a
+        // default one if the circuit is recursive and honk_recursion is true.
+        if !constraint_system.honk_recursion_constraints.is_empty()
+            || !constraint_system.avm_recursion_constraints.is_empty()
         {
-            // Set a default aggregation object if we don't have one.
-            let current_aggregation_object = self.init_default_agg_obj_indices();
+            assert!(honk_recursion);
+            self.add_pairing_point_accumulator(current_aggregation_object);
+        } else if honk_recursion && self.is_recursive_circuit {
             // Make sure the verification key records the public input indices of the
             // final recursion output.
-            self.add_recursive_proof(current_aggregation_object);
+            self.add_pairing_point_accumulator(current_aggregation_object);
         }
+
         Ok(())
+    }
+
+    fn add_pairing_point_accumulator(
+        &mut self,
+        pairing_point_accum_witness_indices: AggregationObjectIndices,
+    ) {
+        // TACEO TODO(?)
+        // if (contains_pairing_point_accumulator) {
+        //     failure("added pairing point accumulator when one already exists");
+        //     ASSERT(0);
+        // }
+        // contains_pairing_point_accumulator = true;
+
+        for (i, &idx) in pairing_point_accum_witness_indices.iter().enumerate() {
+            self.set_public_input(idx);
+            self.pairing_point_accumulator_public_input_indices[i] =
+                (self.public_inputs.len() - 1) as u32;
+        }
     }
 
     fn process_plonk_recursion_constraints(
@@ -1110,18 +1131,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         nnf_copy.dedup();
         let num_nnf_ops = nnf_copy.len();
         *nnfcount = num_nnf_ops * Self::GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC;
-    }
-
-    fn add_recursive_proof(&mut self, proof_output_witness_indices: AggregationObjectIndices) {
-        if self.contains_recursive_proof {
-            panic!("added recursive proof when one already exists");
-        }
-        self.contains_recursive_proof = true;
-
-        for (i, idx) in proof_output_witness_indices.into_iter().enumerate() {
-            self.set_public_input(idx);
-            self.recursive_proof_public_input_indices[i] = self.public_inputs.len() as u32 - 1;
-        }
     }
 
     fn set_public_input(&mut self, witness_index: u32) {
