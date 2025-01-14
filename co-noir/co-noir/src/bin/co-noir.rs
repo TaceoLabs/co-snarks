@@ -273,6 +273,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     let out_dir = config.out_dir;
     let t = config.threshold;
     let n = config.num_parties;
+    let recursive = config.recursive;
 
     file_utils::check_file_exists(&witness_path)?;
     file_utils::check_file_exists(&circuit_path)?;
@@ -289,7 +290,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
 
     let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
         constraint_system,
-        false, // We don't support recursive atm
+        recursive,
         0,
         witness,
         true,
@@ -700,6 +701,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
     let protocol = config.protocol;
     let out = config.out;
     let t = config.threshold;
+    let recursive = config.recursive;
 
     file_utils::check_file_exists(&witness)?;
     file_utils::check_file_exists(&circuit_path)?;
@@ -737,7 +739,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             let start = Instant::now();
             let builder = Rep3CoBuilder::<Bn254, Rep3MpcNet>::create_circuit(
                 constraint_system,
-                false, // We don't support recursive atm
+                recursive,
                 0,
                 witness_share,
                 true,
@@ -783,7 +785,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             let start = Instant::now();
             let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
                 constraint_system,
-                false, // We don't support recursive atm
+                recursive,
                 0,
                 witness_share,
                 true,
@@ -982,6 +984,7 @@ fn run_build_and_generate_proof(
     let out = config.out;
     let public_input_filename = config.public_input;
     let t = config.threshold;
+    let recursive = config.recursive;
 
     file_utils::check_file_exists(&witness)?;
     file_utils::check_file_exists(&circuit_path)?;
@@ -1019,7 +1022,7 @@ fn run_build_and_generate_proof(
             let start = Instant::now();
             let builder = Rep3CoBuilder::<Bn254, Rep3MpcNet>::create_circuit(
                 constraint_system,
-                false, // We don't support recursive atm
+                recursive,
                 0,
                 witness_share,
                 true,
@@ -1096,7 +1099,7 @@ fn run_build_and_generate_proof(
             let start = Instant::now();
             let builder = ShamirCoBuilder::<Bn254, ShamirMpcNet>::create_circuit(
                 constraint_system,
-                false, // We don't support recursive atm
+                recursive,
                 0,
                 witness_share,
                 true,
