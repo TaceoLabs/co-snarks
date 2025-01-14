@@ -757,7 +757,7 @@ where
     // read the input file
     let input_file = BufReader::new(File::open(&input).context("while opening input file")?);
 
-    let shares = co_circom::split_input::<P>(input_file, &public_inputs)?;
+    let shares = co_circom::split_input::<P>(serde_json::from_reader(input_file)?, &public_inputs)?;
 
     // write out the shares to the output directory
     let base_name = input

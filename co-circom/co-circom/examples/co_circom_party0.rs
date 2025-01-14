@@ -1,7 +1,7 @@
-use circom_types::traits::CheckElement;
 use co_circom::{
-    Address, Bn254, CoCircomCompiler, CompilerConfig, Groth16, Groth16JsonVerificationKey,
-    Groth16ZKey, NetworkConfig, NetworkParty, PartyID, Rep3MpcNet, ShamirCoGroth16, VMConfig,
+    Address, Bn254, CheckElement, CoCircomCompiler, CompilerConfig, Groth16,
+    Groth16JsonVerificationKey, Groth16ZKey, Input, NetworkConfig, NetworkParty, PartyID,
+    Rep3CoGroth16, Rep3MpcNet, VMConfig, Value,
 };
 use color_eyre::Result;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -60,9 +60,16 @@ fn main() -> Result<()> {
         CoCircomCompiler::<Bn254>::parse(dir.join("circuit.circom"), CompilerConfig::default())?;
 
     // split inputs
-    let input = r#"{ "a": "2", "b": "3" }"#;
-    let [share0, share1, share2] =
-        co_circom::split_input::<Bn254>(input.as_bytes(), circuit.public_inputs())?;
+    let mut input = Input::new();
+    input.insert("a".to_string(), Value::String("2".to_string()));
+    input.insert("b".to_string(), Value::String("3".to_string()));
+    let [share0, share1, share2] = co_circom::split_input::<Bn254>(input, circuit.public_inputs())?;
+
+    // parse zkey
+    let zkey = Arc::new(Groth16ZKey::<Bn254>::from_reader(
+        std::fs::read(dir.join("multiplier2.zkey"))?.as_slice(),
+        CheckElement::No,
+    )?);
 
     // send shares to other parties
     net.send_bytes(PartyID::ID1, bincode::serialize(&share1)?.into())?;
@@ -71,20 +78,10 @@ fn main() -> Result<()> {
     // generate witness
     let (witness, net) =
         co_circom::generate_witness_rep3::<Bn254>(circuit, share0, net, VMConfig::default())?;
-
-    // translate witness to shamir
-    let (witness, net) = co_circom::translate_witness::<Bn254>(witness.into(), net)?;
     let public_inputs = witness.public_inputs[1..].to_vec(); // skip constant 1 at position 0
 
-    // parse zkey
-    let zkey = Arc::new(Groth16ZKey::<Bn254>::from_reader(
-        std::fs::read(dir.join("multiplier2.zkey"))?.as_slice(),
-        CheckElement::No,
-    )?);
-
     // generate proof
-    let threshold = 1;
-    let (proof, _) = ShamirCoGroth16::prove(net, threshold, zkey, witness)?;
+    let (proof, _) = Rep3CoGroth16::prove(net, zkey, witness)?;
 
     // verify proof
     let vk = Groth16JsonVerificationKey::<Bn254>::from_reader(

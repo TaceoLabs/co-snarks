@@ -16,6 +16,7 @@ impl<F: PrimeField> Serialize<F> {
     const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
     const VEC_LEN_BYTES: u32 = 4;
 
+    // TODO maybe change to impl Read?
     pub fn from_buffer(buf: &[u8], size_included: bool) -> HonkProofResult<Vec<F>> {
         let size = buf.len();
         let mut offset = 0;

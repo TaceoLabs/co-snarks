@@ -54,11 +54,13 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size).expect("failed to get crs");
+    let (prover_crs, verifier_crs) = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size)
+        .expect("failed to get crs")
+        .split();
     let (proving_key, verifying_key) =
-        ProvingKey::create_keys(0, builder, crs, &mut driver).unwrap();
+        ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key).unwrap();
+    let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);
@@ -88,11 +90,13 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size).expect("failed to get crs");
+    let (prover_crs, verifier_crs) = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size)
+        .expect("failed to get crs")
+        .split();
     let (proving_key, verifying_key) =
-        ProvingKey::create_keys(0, builder, crs, &mut driver).unwrap();
+        ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key).unwrap();
+    let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
     assert!(is_valid);

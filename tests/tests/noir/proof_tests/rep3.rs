@@ -66,15 +66,10 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
         let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
         threads.push(thread::spawn(move || {
             // generate proving key and vk
-            let (pk, net) = co_noir::generate_proving_key_rep3(
-                net,
-                &constraint_system,
-                witness,
-                prover_crs,
-                false,
-            )
-            .unwrap();
-            let (proof, _) = Rep3CoUltraHonk::<_, _, H>::prove(net, pk).unwrap();
+            let (pk, net) =
+                co_noir::generate_proving_key_rep3(net, &constraint_system, witness, false)
+                    .unwrap();
+            let (proof, _) = Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs).unwrap();
             proof
         }));
     }
@@ -122,11 +117,10 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
                 driver.into_network(),
                 &constraint_system,
                 witness,
-                prover_crs,
                 false,
             )
             .unwrap();
-            let (proof, _) = Rep3CoUltraHonk::<_, _, H>::prove(net, pk).unwrap();
+            let (proof, _) = Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs).unwrap();
             proof
         }));
     }

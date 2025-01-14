@@ -1,6 +1,7 @@
-use co_acvm::solver::Rep3CoSolver;
-use co_noir::{Address, Bn254, NetworkConfig, NetworkParty, PartyID, Rep3CoUltraHonk, Rep3MpcNet};
-use co_ultrahonk::prelude::{CrsParser, Poseidon2Sponge, UltraHonk, Utils};
+use co_noir::{
+    Address, Bn254, CrsParser, NetworkConfig, NetworkParty, PartyID, Poseidon2Sponge,
+    Rep3CoUltraHonk, Rep3MpcNet, UltraHonk, Utils,
+};
 use color_eyre::{eyre::Context, Result};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::path::PathBuf;
@@ -59,11 +60,15 @@ fn main() -> Result<()> {
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
 
     // read the input file
-    let inputs = Rep3CoSolver::<_, Rep3MpcNet>::partially_read_abi_bn254_fieldelement(
-        dir.join("poseidon/Prover.toml"),
-        &program_artifact.abi,
-        &program_artifact.bytecode,
-    )?;
+    let inputs = co_noir::parse_input(dir.join("poseidon/Prover.toml"), &program_artifact)?;
+
+    let recursive = true;
+
+    // parse crs
+    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
+    let (prover_crs, verifier_crs) =
+        CrsParser::<Bn254>::get_crs(dir.join("bn254_g1.dat"), dir.join("bn254_g2.dat"), crs_size)?
+            .split();
 
     // create input shares
     let mut rng = rand::thread_rng();
@@ -77,26 +82,13 @@ fn main() -> Result<()> {
     // generate witness
     let (witness_share, net) = co_noir::generate_witness_rep3(share0, program_artifact, net)?;
 
-    let recursive = true;
-
-    // parse crs
-    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
-    let (prover_crs, verifier_crs) =
-        CrsParser::<Bn254>::get_crs(dir.join("bn254_g1.dat"), dir.join("bn254_g2.dat"), crs_size)?
-            .split();
-
     // generate proving key and vk
-    let (pk, net) = co_noir::generate_proving_key_rep3(
-        net,
-        &constraint_system,
-        witness_share,
-        prover_crs.into(),
-        recursive,
-    )?;
-    let vk = pk.create_vk(verifier_crs)?;
+    let (pk, net) =
+        co_noir::generate_proving_key_rep3(net, &constraint_system, witness_share, recursive)?;
+    let vk = pk.create_vk(&prover_crs, verifier_crs)?;
 
     // generate proof
-    let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk)?;
+    let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk, &prover_crs)?;
 
     // verify proof
     assert!(UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk).context("while verifying proof")?);
