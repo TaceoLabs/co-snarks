@@ -17,7 +17,7 @@ use mpc_core::{
 use noirc_abi::{input_parser::Format, Abi, MAIN_RETURN_NAME};
 use noirc_artifacts::program::ProgramArtifact;
 use partial_abi::PublicMarker;
-use std::{collections::BTreeMap, io, path::PathBuf};
+use std::{collections::BTreeMap, io, path::Path};
 
 use crate::mpc::{
     plain::PlainAcvmSolver, rep3::Rep3AcvmSolver, shamir::ShamirAcvmSolver,
@@ -94,17 +94,14 @@ where
 {
     const DEFAULT_FUNCTION_INDEX: usize = 0;
 
-    pub fn read_abi_bn254_fieldelement<P>(
-        path: P,
+    pub fn read_abi_bn254_fieldelement(
+        path: impl AsRef<Path>,
         abi: &Abi,
-    ) -> eyre::Result<WitnessMap<FieldElement>>
-    where
-        PathBuf: From<P>,
-    {
+    ) -> eyre::Result<WitnessMap<FieldElement>> {
         if abi.is_empty() {
             Ok(WitnessMap::default())
         } else {
-            let input_string = std::fs::read_to_string(PathBuf::from(path))?;
+            let input_string = std::fs::read_to_string(path)?;
             let mut input_map = Format::Toml.parse(&input_string, abi)?;
             let return_value = input_map.remove(MAIN_RETURN_NAME);
             // TACEO TODO the return value can be none for the witness extension
@@ -115,18 +112,15 @@ where
     }
 
     // This is the same as read_abi_bn254_fieldelement, but only warns if parameters are missing instead of throwing an error and returns a map with strings instead
-    pub fn partially_read_abi_bn254_fieldelement<P>(
-        path: P,
+    pub fn partially_read_abi_bn254_fieldelement(
+        path: impl AsRef<Path>,
         abi: &Abi,
         program: &Program<FieldElement>,
-    ) -> eyre::Result<BTreeMap<String, PublicMarker<FieldElement>>>
-    where
-        PathBuf: From<P>,
-    {
+    ) -> eyre::Result<BTreeMap<String, PublicMarker<FieldElement>>> {
         if abi.is_empty() {
             Ok(BTreeMap::default())
         } else {
-            let input_string = std::fs::read_to_string(PathBuf::from(path))?;
+            let input_string = std::fs::read_to_string(path)?;
             let abi_ = Self::create_partial_abi(&input_string, abi)?;
             let mut input_map = Format::Toml.parse(&input_string, &abi_)?;
             let return_value = input_map.remove(MAIN_RETURN_NAME);
@@ -143,10 +137,10 @@ where
         }
     }
 
-    pub fn read_abi_bn254<P>(path: P, abi: &Abi) -> eyre::Result<WitnessMap<T::AcvmType>>
-    where
-        PathBuf: From<P>,
-    {
+    pub fn read_abi_bn254(
+        path: impl AsRef<Path>,
+        abi: &Abi,
+    ) -> eyre::Result<WitnessMap<T::AcvmType>> {
         let initial_witness = Self::read_abi_bn254_fieldelement(path, abi)?;
         let mut witnesses = WitnessMap::<T::AcvmType>::default();
         for (witness, v) in initial_witness.into_iter() {
@@ -155,14 +149,11 @@ where
         Ok(witnesses)
     }
 
-    pub fn new_bn254<P>(
+    pub fn new_bn254(
         mut driver: T,
         compiled_program: ProgramArtifact,
-        prover_path: P,
-    ) -> eyre::Result<Self>
-    where
-        PathBuf: From<P>,
-    {
+        prover_path: impl AsRef<Path>,
+    ) -> eyre::Result<Self> {
         let mut witness_map =
             vec![WitnessMap::default(); compiled_program.bytecode.functions.len()];
         witness_map[Self::DEFAULT_FUNCTION_INDEX] =
@@ -222,14 +213,11 @@ where
 }
 
 impl<N: Rep3Network> Rep3CoSolver<ark_bn254::Fr, N> {
-    pub fn from_network<P>(
+    pub fn from_network(
         network: N,
         compiled_program: ProgramArtifact,
-        prover_path: P,
-    ) -> eyre::Result<Self>
-    where
-        PathBuf: From<P>,
-    {
+        prover_path: impl AsRef<Path>,
+    ) -> eyre::Result<Self> {
         Self::new_bn254(Rep3AcvmSolver::new(network), compiled_program, prover_path)
     }
 
@@ -249,11 +237,8 @@ impl<N: ShamirNetwork> ShamirCoSolver<ark_bn254::Fr, N> {
         network: N,
         threshold: usize,
         compiled_program: ProgramArtifact,
-        prover_path: P,
-    ) -> eyre::Result<Self>
-    where
-        PathBuf: From<P>,
-    {
+        prover_path: impl AsRef<Path>,
+    ) -> eyre::Result<Self> {
         // TODO we are not creating any randomness here
         let shamir_prepr = ShamirPreprocessing::new(threshold, network, 0)?;
         let protocol = ShamirProtocol::from(shamir_prepr);
@@ -308,13 +293,10 @@ impl<F: PrimeField> PlainCoSolver<F> {
 }
 
 impl PlainCoSolver<ark_bn254::Fr> {
-    pub fn init_plain_driver<P>(
+    pub fn init_plain_driver(
         compiled_program: ProgramArtifact,
-        prover_path: P,
-    ) -> eyre::Result<Self>
-    where
-        PathBuf: From<P>,
-    {
+        prover_path: impl AsRef<Path>,
+    ) -> eyre::Result<Self> {
         Self::new_bn254(PlainAcvmSolver::default(), compiled_program, prover_path)
     }
 

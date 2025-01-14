@@ -227,7 +227,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     // Create the proving key and the barretenberg-compatible verifying key
     let (proving_key, vk_barretenberg) =
-        ProvingKey::create_keys_barretenberg(0, builder, prover_crs.into(), &mut driver)
+        ProvingKey::create_keys_barretenberg(0, builder, &prover_crs, &mut driver)
             .context("While creating keys")?;
 
     // Write the vk to a file
@@ -247,11 +247,11 @@ fn main() -> color_eyre::Result<ExitCode> {
     // Create the proof
     let proof = match hasher {
         TranscriptHash::POSEIDON => {
-            CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove(proving_key)
+            CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove(proving_key, &prover_crs)
                 .context("While creating proof")?
         }
         TranscriptHash::KECCAK => {
-            CoUltraHonk::<PlainUltraHonkDriver, _, Keccak256>::prove(proving_key)
+            CoUltraHonk::<PlainUltraHonkDriver, _, Keccak256>::prove(proving_key, &prover_crs)
                 .context("While creating proof")?
         }
     };

@@ -43,11 +43,11 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 threshold,
                 &constraint_system,
                 witness,
-                prover_crs,
                 false,
             )
             .unwrap();
-            let (proof, _) = ShamirCoUltraHonk::<_, _, H>::prove(net, threshold, pk).unwrap();
+            let (proof, _) =
+                ShamirCoUltraHonk::<_, _, H>::prove(net, threshold, pk, &prover_crs).unwrap();
             proof
         }));
     }

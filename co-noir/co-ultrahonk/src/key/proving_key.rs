@@ -10,7 +10,6 @@ use crate::types::Polynomials;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::Crs;
 use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::PrecomputedEntities;
@@ -26,14 +25,12 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
-use std::sync::Arc;
 use ultrahonk::prelude::VerifyingKeyBarretenberg;
 use ultrahonk::Utils;
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "")]
 pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
-    pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,
     #[serde(
         serialize_with = "mpc_core::ark_se",
@@ -57,7 +54,8 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
 }
 
 pub type Rep3ProvingKey<P, N> = ProvingKey<Rep3UltraHonkDriver<N>, P>;
-pub type ShamirProvingKey<F, P, N> = ProvingKey<ShamirUltraHonkDriver<F, N>, P>;
+pub type ShamirProvingKey<P, N> =
+    ProvingKey<ShamirUltraHonkDriver<<P as Pairing>::ScalarField, N>, P>;
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     const PUBLIC_INPUT_WIRE_INDEX: usize = ProverWitnessEntities::<T::ArithmeticShare>::W_R;
@@ -68,7 +66,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     >(
         id: T::PartyID,
         mut circuit: GenericUltraCircuitBuilder<P, U>,
-        crs: Arc<ProverCrs<P>>,
         driver: &mut U,
     ) -> HonkProofResult<Self> {
         tracing::trace!("ProvingKey create");
@@ -93,7 +90,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         let mut proving_key = Self::new(
             dyadic_circuit_size,
             circuit.public_inputs.len(),
-            crs,
             final_active_wire_idx,
         );
         // Construct and add to proving key the wire, selector and copy constraint polynomials
@@ -150,12 +146,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     >(
         id: T::PartyID,
         circuit: GenericUltraCircuitBuilder<P, U>,
-        crs: Crs<P>,
+        prover_crs: &ProverCrs<P>,
+        verifier_crs: P::G2Affine,
         driver: &mut U,
     ) -> HonkProofResult<(Self, VerifyingKey<P>)> {
-        let (prover_crs, verifier_crs) = crs.split();
-
-        let pk = ProvingKey::create(id, circuit, prover_crs.into(), driver)?;
+        let pk = ProvingKey::create(id, circuit, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -163,7 +158,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
         {
-            let comm = Utils::commit(src.as_ref(), &pk.crs)?;
+            let comm = Utils::commit(src.as_ref(), prover_crs)?;
             *des = P::G1Affine::from(comm);
         }
 
@@ -187,14 +182,14 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     >(
         id: T::PartyID,
         circuit: GenericUltraCircuitBuilder<P, U>,
-        crs: Arc<ProverCrs<P>>,
+        crs: &ProverCrs<P>,
         driver: &mut U,
     ) -> HonkProofResult<(Self, VerifyingKeyBarretenberg<P>)> {
         let contains_pairing_point_accumulator = circuit.contains_pairing_point_accumulator;
         let pairing_point_accumulator_public_input_indices =
             circuit.pairing_point_accumulator_public_input_indices;
 
-        let pk = ProvingKey::create(id, circuit, crs, driver)?;
+        let pk = ProvingKey::create(id, circuit, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -202,7 +197,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
         {
-            let comm = Utils::commit(src.as_ref(), &pk.crs)?;
+            let comm = Utils::commit(src.as_ref(), crs)?;
             *des = P::G1Affine::from(comm);
         }
 
@@ -223,17 +218,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         self.public_inputs.clone()
     }
 
-    fn new(
-        circuit_size: usize,
-        num_public_inputs: usize,
-        crs: Arc<ProverCrs<P>>,
-        final_active_wire_idx: usize,
-    ) -> Self {
+    fn new(circuit_size: usize, num_public_inputs: usize, final_active_wire_idx: usize) -> Self {
         tracing::trace!("ProvingKey new");
         let polynomials = Polynomials::new(circuit_size);
 
         Self {
-            crs,
             circuit_size: circuit_size as u32,
             public_inputs: Vec::with_capacity(num_public_inputs),
             num_public_inputs: num_public_inputs as u32,
@@ -301,7 +290,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         plain_key: &PlainProvingKey<P>,
         shares: Vec<T::ArithmeticShare>,
     ) -> Result<Self> {
-        let crs = plain_key.crs.to_owned();
         let circuit_size = plain_key.circuit_size;
         let public_inputs = plain_key.public_inputs.to_owned();
         let num_public_inputs = plain_key.num_public_inputs;
@@ -331,7 +319,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             *des = Polynomial::new(src.to_owned());
         }
         Ok(Self {
-            crs,
             circuit_size,
             public_inputs,
             num_public_inputs,
@@ -360,17 +347,21 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         num_pairs_oink_prove + num_pairs_sumcheck_prove
     }
 
-    pub fn create_vk(&self, crs: P::G2Affine) -> Result<VerifyingKey<P>> {
+    pub fn create_vk(
+        &self,
+        prover_crs: &ProverCrs<P>,
+        verifier_crs: P::G2Affine,
+    ) -> Result<VerifyingKey<P>> {
         let mut commitments = PrecomputedEntities::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(self.polynomials.precomputed.iter())
         {
-            let comm = Utils::commit(src.as_ref(), &self.crs)?;
+            let comm = Utils::commit(src.as_ref(), prover_crs)?;
             *des = P::G1Affine::from(comm);
         }
         Ok(VerifyingKey {
-            crs,
+            crs: verifier_crs,
             circuit_size: self.circuit_size,
             num_public_inputs: self.num_public_inputs,
             pub_inputs_offset: self.pub_inputs_offset,

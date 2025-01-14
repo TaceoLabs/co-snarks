@@ -21,7 +21,7 @@ use super::types::ProverMemory;
 use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver, CoUtils};
 use ark_ff::{One, Zero};
 use co_builder::{
-    prelude::{HonkCurve, Polynomial},
+    prelude::{HonkCurve, Polynomial, ProverCrs},
     HonkProofError, HonkProofResult,
 };
 use itertools::izip;
@@ -484,24 +484,16 @@ impl<
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &ProvingKey<T, P>,
+        crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing wire commitments round");
 
         // Commit to the first three wire polynomials of the instance
         // We only commit to the fourth wire polynomial after adding memory records
 
-        let w_l = CoUtils::commit::<T, P>(
-            proving_key.polynomials.witness.w_l().as_ref(),
-            &proving_key.crs,
-        );
-        let w_r = CoUtils::commit::<T, P>(
-            proving_key.polynomials.witness.w_r().as_ref(),
-            &proving_key.crs,
-        );
-        let w_o = CoUtils::commit::<T, P>(
-            proving_key.polynomials.witness.w_o().as_ref(),
-            &proving_key.crs,
-        );
+        let w_l = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_l().as_ref(), crs);
+        let w_r = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_r().as_ref(), crs);
+        let w_o = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_o().as_ref(), crs);
 
         let open = self.driver.open_point_many(&[w_l, w_r, w_o])?;
 
@@ -518,6 +510,7 @@ impl<
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &ProvingKey<T, P>,
+        crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
@@ -538,13 +531,13 @@ impl<
                 .witness
                 .lookup_read_counts()
                 .as_ref(),
-            &proving_key.crs,
+            crs,
         );
         let lookup_read_tags = CoUtils::commit::<T, P>(
             proving_key.polynomials.witness.lookup_read_tags().as_ref(),
-            &proving_key.crs,
+            crs,
         );
-        let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), &proving_key.crs);
+        let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), crs);
         let opened = self
             .driver
             .open_point_many(&[lookup_read_counts, lookup_read_tags, w_4])?;
@@ -581,6 +574,7 @@ impl<
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &ProvingKey<T, P>,
+        crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing grand product computation round");
 
@@ -588,10 +582,9 @@ impl<
         self.compute_grand_product(proving_key)?;
 
         // This is from the previous round, but we open it here with z_perm
-        let lookup_inverses =
-            CoUtils::commit::<T, P>(self.memory.lookup_inverses.as_ref(), &proving_key.crs);
+        let lookup_inverses = CoUtils::commit::<T, P>(self.memory.lookup_inverses.as_ref(), crs);
 
-        let z_perm = CoUtils::commit::<T, P>(self.memory.z_perm.as_ref(), &proving_key.crs);
+        let z_perm = CoUtils::commit::<T, P>(self.memory.z_perm.as_ref(), crs);
 
         let open = self.driver.open_point_many(&[lookup_inverses, z_perm])?;
 
@@ -604,20 +597,21 @@ impl<
         mut self,
         proving_key: &ProvingKey<T, P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
+        crs: &ProverCrs<P>,
     ) -> HonkProofResult<ProverMemory<T, P>> {
         tracing::trace!("Oink prove");
 
         // Add circuit size public input size and public inputs to transcript
         Self::execute_preamble_round(transcript, proving_key)?;
         // Compute first three wire commitments
-        self.execute_wire_commitments_round(transcript, proving_key)?;
+        self.execute_wire_commitments_round(transcript, proving_key, crs)?;
         // Compute sorted list accumulator and commitment
-        self.execute_sorted_list_accumulator_round(transcript, proving_key)?;
+        self.execute_sorted_list_accumulator_round(transcript, proving_key, crs)?;
 
         // Fiat-Shamir: beta & gamma
         self.execute_log_derivative_inverse_round(transcript, proving_key)?;
         // Compute grand product(s) and commitments.
-        self.execute_grand_product_computation_round(transcript, proving_key)?;
+        self.execute_grand_product_computation_round(transcript, proving_key, crs)?;
 
         // Generate relation separators alphas for sumcheck/combiner computation
         self.generate_alphas_round(transcript);

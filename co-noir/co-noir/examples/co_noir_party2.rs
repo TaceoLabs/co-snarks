@@ -1,9 +1,7 @@
-use co_acvm::Rep3AcvmType;
 use co_noir::{
-    Address, Bn254, NetworkConfig, NetworkParty, PartyID, Poseidon2Sponge, Rep3CoUltraHonk,
-    Rep3MpcNet, UltraHonk, Utils,
+    Address, Bn254, CrsParser, NetworkConfig, NetworkParty, PartyID, Poseidon2Sponge, Rep3AcvmType,
+    Rep3CoUltraHonk, Rep3MpcNet, UltraHonk, Utils,
 };
-use co_ultrahonk::prelude::CrsParser;
 use color_eyre::{eyre::Context, Result};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::{collections::BTreeMap, path::PathBuf};
@@ -61,13 +59,6 @@ fn main() -> Result<()> {
             .context("while parsing program artifact")?;
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
 
-    // recv share from party 0
-    let share: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>> =
-        bincode::deserialize(&net.recv_bytes(PartyID::ID0)?)?;
-
-    // generate witness
-    let (witness_share, net) = co_noir::generate_witness_rep3(share, program_artifact, net)?;
-
     let recursive = true;
 
     // parse crs
@@ -76,18 +67,20 @@ fn main() -> Result<()> {
         CrsParser::<Bn254>::get_crs(dir.join("bn254_g1.dat"), dir.join("bn254_g2.dat"), crs_size)?
             .split();
 
+    // recv share from party 0
+    let share: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>> =
+        bincode::deserialize(&net.recv_bytes(PartyID::ID0)?)?;
+
+    // generate witness
+    let (witness_share, net) = co_noir::generate_witness_rep3(share, program_artifact, net)?;
+
     // generate proving key and vk
-    let (pk, net) = co_noir::generate_proving_key_rep3(
-        net,
-        &constraint_system,
-        witness_share,
-        prover_crs.into(),
-        recursive,
-    )?;
-    let vk = pk.create_vk(verifier_crs)?;
+    let (pk, net) =
+        co_noir::generate_proving_key_rep3(net, &constraint_system, witness_share, recursive)?;
+    let vk = pk.create_vk(&prover_crs, verifier_crs)?;
 
     // generate proof
-    let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk)?;
+    let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk, &prover_crs)?;
 
     // verify proof
     assert!(UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk).context("while verifying proof")?);
