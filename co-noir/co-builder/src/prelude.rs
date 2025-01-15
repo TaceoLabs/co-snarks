@@ -11,6 +11,9 @@ pub use crate::polynomials::polynomial::Polynomial;
 pub use crate::polynomials::polynomial_types::Polynomials;
 pub use crate::polynomials::polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE};
 pub use crate::serialize::{Serialize, SerializeP};
-pub use crate::types::types::{CycleNode, CyclicPermutation, NUM_SELECTORS, NUM_WIRES};
+pub use crate::types::types::{
+    AggregationObjectPubInputIndices, CycleNode, CyclicPermutation, AGGREGATION_OBJECT_SIZE,
+    NUM_SELECTORS, NUM_WIRES,
+};
 pub use crate::utils::Utils;
 pub use co_acvm::PlainAcvmSolver;

@@ -684,6 +684,9 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
         memory_write_records: proving_key.memory_write_records,
         final_active_wire_idx: proving_key.final_active_wire_idx,
         phantom: std::marker::PhantomData,
+        contains_pairing_point_accumulator: proving_key.contains_pairing_point_accumulator,
+        pairing_point_accumulator_public_input_indices: proving_key
+            .pairing_point_accumulator_public_input_indices,
     };
 
     // write result to output file
@@ -985,7 +988,9 @@ fn run_build_and_generate_proof(
     let public_input_filename = config.public_input;
     let t = config.threshold;
     let recursive = config.recursive;
-
+    if hasher == TranscriptHash::KECCAK && recursive {
+        tracing::warn!("Note that the Poseidon hasher is better suited for recursion");
+    }
     file_utils::check_file_exists(&witness)?;
     file_utils::check_file_exists(&circuit_path)?;
     file_utils::check_file_exists(&crs_path)?;
@@ -1209,10 +1214,13 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let crs_path = config.crs;
     let vk_path = config.vk;
     let hasher = config.hasher;
+    let recursive = config.recursive;
 
     file_utils::check_file_exists(&circuit_path)?;
     file_utils::check_file_exists(&crs_path)?;
-
+    if hasher == TranscriptHash::KECCAK && recursive {
+        tracing::warn!("Note that the Poseidon hasher is better suited for recursion");
+    }
     // parse constraint system
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
         .context("while parsing program artifact")?;
@@ -1223,7 +1231,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let start = Instant::now();
     let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
         constraint_system,
-        false, // We don't support recursive atm
+        recursive,
         0,
         vec![],
         true,
@@ -1244,7 +1252,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
         .context("while creating vk")?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
 
-    tracing::info!("Verfication key generation took {} ms", duration_ms);
+    tracing::info!("Verification key generation took {} ms", duration_ms);
 
     let mut out_file =
         BufWriter::new(std::fs::File::create(&vk_path).context("while creating output file")?);

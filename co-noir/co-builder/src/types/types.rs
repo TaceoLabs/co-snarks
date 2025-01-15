@@ -414,9 +414,9 @@ impl RecursionConstraint {
     const NUM_AGGREGATION_ELEMENTS: usize = 4;
 }
 
-pub(crate) const AGGREGATION_OBJECT_SIZE: usize = 16;
+pub const AGGREGATION_OBJECT_SIZE: usize = 16;
 pub(crate) type AggregationObjectIndices = [u32; AGGREGATION_OBJECT_SIZE];
-pub(crate) type AggregationObjectPubInputIndices = [u32; AGGREGATION_OBJECT_SIZE];
+pub type AggregationObjectPubInputIndices = [u32; AGGREGATION_OBJECT_SIZE];
 
 pub(crate) struct RomTable<F: PrimeField> {
     raw_entries: Vec<FieldCT<F>>,

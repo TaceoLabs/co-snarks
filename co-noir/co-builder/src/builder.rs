@@ -36,8 +36,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         crs: ProverCrs<P>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<VerifyingKeyBarretenberg<P>> {
-        let contains_recursive_proof = self.contains_recursive_proof;
-        let recursive_proof_public_input_indices =
+        let contains_pairing_point_accumulator = self.contains_pairing_point_accumulator;
+        let pairing_point_accumulator_public_input_indices =
             self.pairing_point_accumulator_public_input_indices;
 
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
@@ -57,8 +57,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
             log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
             num_public_inputs: pk.num_public_inputs as u64,
             pub_inputs_offset: pk.pub_inputs_offset as u64,
-            contains_recursive_proof,
-            recursive_proof_public_input_indices,
+            contains_pairing_point_accumulator,
+            pairing_point_accumulator_public_input_indices,
             commitments,
         };
 
@@ -94,6 +94,9 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
             num_public_inputs: pk.num_public_inputs,
             pub_inputs_offset: pk.pub_inputs_offset,
             commitments,
+            contains_pairing_point_accumulator: pk.contains_pairing_point_accumulator,
+            pairing_point_accumulator_public_input_indices: pk
+                .pairing_point_accumulator_public_input_indices,
         };
 
         Ok((pk, vk))
@@ -104,8 +107,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         crs: ProverCrs<P>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<(ProvingKey<P>, VerifyingKeyBarretenberg<P>)> {
-        let contains_recursive_proof = self.contains_recursive_proof;
-        let recursive_proof_public_input_indices =
+        let contains_pairing_point_accumulator = self.contains_pairing_point_accumulator;
+        let pairing_point_accumulator_public_input_indices =
             self.pairing_point_accumulator_public_input_indices;
 
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
@@ -126,8 +129,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
             log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
             num_public_inputs: pk.num_public_inputs as u64,
             pub_inputs_offset: pk.pub_inputs_offset as u64,
-            contains_recursive_proof,
-            recursive_proof_public_input_indices,
+            contains_pairing_point_accumulator,
+            pairing_point_accumulator_public_input_indices,
             commitments,
         };
 
@@ -152,7 +155,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
     num_gates: usize,
     circuit_finalized: bool,
-    pub contains_recursive_proof: bool,
+    pub contains_pairing_point_accumulator: bool,
     pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
     rom_arrays: Vec<RomTranscript>,
     ram_arrays: Vec<RamTranscript>,
@@ -246,7 +249,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             blocks: GateBlocks::default(),
             num_gates: 0,
             circuit_finalized: false,
-            contains_recursive_proof: false,
+            contains_pairing_point_accumulator: false,
             pairing_point_accumulator_public_input_indices: Default::default(),
             rom_arrays: Vec::new(),
             ram_arrays: Vec::new(),
@@ -952,13 +955,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         &mut self,
         pairing_point_accum_witness_indices: AggregationObjectIndices,
     ) {
-        // TACEO TODO(?)
-        // if (contains_pairing_point_accumulator) {
-        //     failure("added pairing point accumulator when one already exists");
-        //     ASSERT(0);
-        // }
-        // contains_pairing_point_accumulator = true;
-
+        assert!(
+            !self.contains_pairing_point_accumulator,
+            "added pairing point accumulator when one already exists"
+        );
+        self.contains_pairing_point_accumulator = true;
         for (i, &idx) in pairing_point_accum_witness_indices.iter().enumerate() {
             self.set_public_input(idx);
             self.pairing_point_accumulator_public_input_indices[i] =

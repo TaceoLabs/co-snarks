@@ -18,6 +18,8 @@ pub struct VerifyingKey<P: Pairing> {
     pub circuit_size: u32,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
+    pub contains_pairing_point_accumulator: bool,
+    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
     pub commitments: PrecomputedEntities<P::G1Affine>,
 }
 
@@ -41,6 +43,9 @@ impl<P: Pairing> VerifyingKey<P> {
             num_public_inputs: barretenberg_vk.num_public_inputs as u32,
             pub_inputs_offset: barretenberg_vk.pub_inputs_offset as u32,
             commitments: barretenberg_vk.commitments,
+            contains_pairing_point_accumulator: barretenberg_vk.contains_pairing_point_accumulator,
+            pairing_point_accumulator_public_input_indices: barretenberg_vk
+                .pairing_point_accumulator_public_input_indices,
         }
     }
 
@@ -72,8 +77,8 @@ pub struct VerifyingKeyBarretenberg<P: Pairing> {
     pub log_circuit_size: u64,
     pub num_public_inputs: u64,
     pub pub_inputs_offset: u64,
-    pub contains_recursive_proof: bool,
-    pub recursive_proof_public_input_indices: AggregationObjectPubInputIndices,
+    pub contains_pairing_point_accumulator: bool,
+    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
     pub commitments: PrecomputedEntities<P::G1Affine>,
 }
 
@@ -92,9 +97,12 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
         Serialize::<P::ScalarField>::write_u64(&mut buffer, self.log_circuit_size);
         Serialize::<P::ScalarField>::write_u64(&mut buffer, self.num_public_inputs);
         Serialize::<P::ScalarField>::write_u64(&mut buffer, self.pub_inputs_offset);
-        Serialize::<P::ScalarField>::write_u8(&mut buffer, self.contains_recursive_proof as u8);
+        Serialize::<P::ScalarField>::write_u8(
+            &mut buffer,
+            self.contains_pairing_point_accumulator as u8,
+        );
 
-        for val in self.recursive_proof_public_input_indices.iter() {
+        for val in self.pairing_point_accumulator_public_input_indices.iter() {
             Serialize::<P::ScalarField>::write_u32(&mut buffer, *val);
         }
 
@@ -139,22 +147,22 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
         let num_public_inputs = Serialize::<P::ScalarField>::read_u64(buf, &mut offset);
         let pub_inputs_offset = Serialize::<P::ScalarField>::read_u64(buf, &mut offset);
 
-        let (contains_recursive_proof, recursive_proof_public_input_indices) =
+        let (contains_pairing_point_accumulator, pairing_point_accumulator_public_input_indices) =
             if size == Self::SER_FULL_SIZE {
-                let contains_recursive_proof_u8 =
+                let contains_pairing_point_accumulator_u8 =
                     Serialize::<P::ScalarField>::read_u8(buf, &mut offset);
-                if contains_recursive_proof_u8 > 1 {
+                if contains_pairing_point_accumulator_u8 > 1 {
                     return Err(HonkProofError::CorruptedKey);
                 }
 
-                let mut recursive_proof_public_input_indices =
+                let mut pairing_point_accumulator_public_input_indices =
                     AggregationObjectPubInputIndices::default();
-                for val in recursive_proof_public_input_indices.iter_mut() {
+                for val in pairing_point_accumulator_public_input_indices.iter_mut() {
                     *val = Serialize::<P::ScalarField>::read_u32(buf, &mut offset);
                 }
                 (
-                    contains_recursive_proof_u8 == 1,
-                    recursive_proof_public_input_indices,
+                    contains_pairing_point_accumulator_u8 == 1,
+                    pairing_point_accumulator_public_input_indices,
                 )
             } else {
                 (false, Default::default())
@@ -173,8 +181,8 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
             log_circuit_size,
             num_public_inputs,
             pub_inputs_offset,
-            contains_recursive_proof,
-            recursive_proof_public_input_indices,
+            contains_pairing_point_accumulator,
+            pairing_point_accumulator_public_input_indices,
             commitments,
         })
     }

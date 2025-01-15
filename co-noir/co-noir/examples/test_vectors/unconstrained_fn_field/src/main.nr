@@ -3,7 +3,13 @@ unconstrained fn add(x: Field, y: Field) -> Field {
 }
 
 fn main(x: Field, y: Field, z: pub Field) {
-    assert(unsafe { add(x, y) } == z);
+    assert(
+        unsafe {
+            //@safety: is safe
+            add(x, y)
+        }
+            == z,
+    );
 }
 
 #[test]

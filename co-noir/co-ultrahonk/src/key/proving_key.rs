@@ -10,6 +10,7 @@ use crate::types::ProverWitnessEntities;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::prelude::AggregationObjectPubInputIndices;
 use co_builder::prelude::Crs;
 use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::prelude::Polynomial;
@@ -17,6 +18,7 @@ use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::ProverCrs;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
+use co_builder::prelude::AGGREGATION_OBJECT_SIZE;
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use eyre::Result;
@@ -38,6 +40,8 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
+    pub contains_pairing_point_accumulator: bool,
+    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
     pub polynomials: Polynomials<T::ArithmeticShare, P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
@@ -124,6 +128,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             proving_key.public_inputs.push(var);
         }
 
+        // Set the pairing point accumulator indices
+        proving_key.pairing_point_accumulator_public_input_indices =
+            circuit.pairing_point_accumulator_public_input_indices;
+        proving_key.contains_pairing_point_accumulator = circuit.contains_pairing_point_accumulator;
+
         Ok(proving_key)
     }
 
@@ -156,6 +165,9 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             num_public_inputs: pk.num_public_inputs,
             pub_inputs_offset: pk.pub_inputs_offset,
             commitments,
+            contains_pairing_point_accumulator: pk.contains_pairing_point_accumulator,
+            pairing_point_accumulator_public_input_indices: pk
+                .pairing_point_accumulator_public_input_indices,
         };
 
         Ok((pk, vk))
@@ -169,8 +181,8 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         crs: ProverCrs<P>,
         driver: &mut U,
     ) -> HonkProofResult<(Self, VerifyingKeyBarretenberg<P>)> {
-        let contains_recursive_proof = circuit.contains_recursive_proof;
-        let recursive_proof_public_input_indices =
+        let contains_pairing_point_accumulator = circuit.contains_pairing_point_accumulator;
+        let pairing_point_accumulator_public_input_indices =
             circuit.pairing_point_accumulator_public_input_indices;
 
         let pk = ProvingKey::create(id, circuit, crs, driver)?;
@@ -191,8 +203,8 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
             num_public_inputs: pk.num_public_inputs as u64,
             pub_inputs_offset: pk.pub_inputs_offset as u64,
-            contains_recursive_proof,
-            recursive_proof_public_input_indices,
+            contains_pairing_point_accumulator,
+            pairing_point_accumulator_public_input_indices,
             commitments,
         };
         Ok((pk, vk))
@@ -241,6 +253,8 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             memory_write_records: Vec::new(),
             final_active_wire_idx,
             phantom: PhantomData,
+            contains_pairing_point_accumulator: false,
+            pairing_point_accumulator_public_input_indices: [0; AGGREGATION_OBJECT_SIZE],
         }
     }
 
@@ -337,6 +351,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             memory_write_records,
             final_active_wire_idx,
             phantom: PhantomData,
+            contains_pairing_point_accumulator: plain_key.contains_pairing_point_accumulator,
+            pairing_point_accumulator_public_input_indices: plain_key
+                .pairing_point_accumulator_public_input_indices
+                .to_owned(),
         })
     }
 
