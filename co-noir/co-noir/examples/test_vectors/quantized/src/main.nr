@@ -1,15 +1,14 @@
 use std::cmp::Ordering;
 use std::field::bn254::decompose;
 use std::ops::{Add, Mul, Sub};
-fn main(x: Field, y: pub Field) -> pub Ordering{
-    let new_x= Quantized::new(x);
-    let new_y= Quantized::new(y);
-    let zero= Quantized::zero();
-    let add0= new_x+zero;
-    let sub= add0-new_y;
-    let mul= new_x*sub;
-    Quantized::cmp(mul,new_y)
-
+fn main(x: Field, y: pub Field) -> pub Ordering {
+    let new_x = Quantized::new(x);
+    let new_y = Quantized::new(y);
+    let zero = Quantized::zero();
+    let add0 = new_x + zero;
+    let sub = add0 - new_y;
+    let mul = new_x * sub;
+    Quantized::cmp(mul, new_y)
 }
 
 pub struct Quantized {
@@ -61,6 +60,7 @@ impl Quantized {
         let mut temp: Field = self.x * other.x;
         let mut bytes: [u8; 32] = [0; 32];
         unsafe {
+            //@safety: get_bytes is safe
             bytes = get_bytes(temp);
         }
 
@@ -74,6 +74,7 @@ impl Quantized {
                 - temp
                 + 1;
             unsafe {
+                //@safety: get_bytes is safe
                 bytes = get_bytes(temp);
             }
 

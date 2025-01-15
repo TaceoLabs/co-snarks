@@ -203,7 +203,7 @@ pub struct SplitProvingKeyCli {
     /// The number of parties
     #[arg(short, long, default_value_t = 3)]
     pub num_parties: usize,
-    /// Generate a recursive proof
+    /// Generate a recursive friendly proof
     #[arg(long)]
     pub recursive: bool,
 }
@@ -225,7 +225,7 @@ pub struct SplitProvingKeyConfig {
     pub threshold: usize,
     /// The number of parties
     pub num_parties: usize,
-    /// Whether to generate a recursive proof
+    /// Whether to generate a recursive friendly proof
     pub recursive: bool,
 }
 
@@ -410,7 +410,7 @@ pub struct BuildProvingKeyCLi {
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
-    /// Generate a recursive proof
+    /// Generate a recursive friendly proof
     #[arg(long)]
     pub recursive: bool,
 }
@@ -432,7 +432,7 @@ pub struct BuildProvingKeyConfig {
     pub threshold: usize,
     /// Network config
     pub network: NetworkConfigFile,
-    /// Whether to generate a recursive proof
+    /// Whether to generate a recursive friendly proof
     pub recursive: bool,
 }
 
@@ -525,7 +525,7 @@ pub struct BuildAndGenerateProofCli {
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
-    /// Generate a recursive proof
+    /// Generate a recursive friendly proof
     #[arg(long)]
     pub recursive: bool,
 }
@@ -551,7 +551,7 @@ pub struct BuildAndGenerateProofConfig {
     pub threshold: usize,
     /// Network config
     pub network: NetworkConfigFile,
-    /// Whether to generate a recursive proof
+    /// Whether to generate a recursive friendly proof
     pub recursive: bool,
 }
 
@@ -578,6 +578,9 @@ pub struct CreateVKCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub vk: Option<PathBuf>,
+    /// Generate a recursive friendly vk
+    #[arg(long)]
+    pub recursive: bool,
 }
 
 /// Config for `creating_vk`
@@ -591,6 +594,8 @@ pub struct CreateVKConfig {
     pub crs: PathBuf,
     /// The path to the verification key file
     pub vk: PathBuf,
+    /// Whether to generate a recursive friendly vk
+    pub recursive: bool,
 }
 
 /// Cli arguments for `verify`
@@ -807,7 +812,7 @@ pub fn convert_witness_to_vec_rep3<F: PrimeField>(
     wv
 }
 
-// This funciton is basically copied from Barretenberg
+// This function is basically copied from Barretenberg
 /// Downloads the CRS with num_points points to the crs_path.
 pub fn download_g1_crs(num_points: usize, crs_path: &PathBuf) -> color_eyre::Result<()> {
     tracing::info!("Downloading CRS with {} points", num_points);

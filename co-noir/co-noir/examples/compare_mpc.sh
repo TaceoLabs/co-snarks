@@ -13,7 +13,7 @@ then
     PIPE=" > /dev/null 2>&1"
 fi
 
-# build the plaindriver binary
+# build the co-noir binary
 cargo build --release --bin co-noir
 
 ## install noirup: curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash

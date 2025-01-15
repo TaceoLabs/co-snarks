@@ -5,7 +5,10 @@ use crate::{
         polynomial::Polynomial,
         polynomial_types::{Polynomials, PrecomputedEntities},
     },
-    types::types::{CyclicPermutation, Mapping, PermutationMapping, TraceData, NUM_WIRES},
+    types::types::{
+        AggregationObjectPubInputIndices, CyclicPermutation, Mapping, PermutationMapping,
+        TraceData, NUM_WIRES,
+    },
     utils::Utils,
     HonkProofResult,
 };
@@ -20,6 +23,8 @@ pub struct ProvingKey<P: Pairing> {
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
+    pub contains_pairing_point_accumulator: bool,
+    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
     pub polynomials: Polynomials<P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
@@ -98,6 +103,11 @@ impl<P: Pairing> ProvingKey<P> {
             proving_key.public_inputs.push(*input);
         }
 
+        // Set the pairing point accumulator indices
+        proving_key.pairing_point_accumulator_public_input_indices =
+            circuit.pairing_point_accumulator_public_input_indices;
+        proving_key.contains_pairing_point_accumulator = circuit.contains_pairing_point_accumulator;
+
         Ok(proving_key)
     }
 
@@ -156,6 +166,9 @@ impl<P: Pairing> ProvingKey<P> {
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
             final_active_wire_idx,
+            contains_pairing_point_accumulator: false,
+            pairing_point_accumulator_public_input_indices: [0;
+                crate::types::types::AGGREGATION_OBJECT_SIZE],
         }
     }
 

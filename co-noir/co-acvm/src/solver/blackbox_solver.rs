@@ -129,7 +129,7 @@ where
 
         match bb_func {
             BlackBoxFuncCall::RANGE { input } => Self::solve_range_opcode(initial_witness, input)?,
-            _ => todo!("solve blackbox funciton {} not supported", bb_func.name()),
+            _ => todo!("solve blackbox function {} not supported", bb_func.name()),
         }
 
         Ok(())
