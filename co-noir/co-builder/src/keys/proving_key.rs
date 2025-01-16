@@ -6,7 +6,7 @@ use crate::{
         polynomial_types::{Polynomials, PrecomputedEntities},
     },
     types::types::{
-        ActiveRegionData, AggregationObjectPubInputIndices, CyclicPermutation, Mapping,
+        ActiveRegionData, CyclicPermutation, Mapping, PairingPointAccumulatorPubInputIndices,
         PermutationMapping, TraceData, NUM_WIRES,
     },
     HonkProofResult,
@@ -24,7 +24,7 @@ pub struct ProvingKey<P: Pairing> {
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub contains_pairing_point_accumulator: bool,
-    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
+    pub pairing_point_accumulator_public_input_indices: PairingPointAccumulatorPubInputIndices,
     pub polynomials: Polynomials<P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
@@ -137,7 +137,8 @@ impl<P: Pairing> ProvingKey<P> {
             final_active_wire_idx,
             contains_pairing_point_accumulator: false,
             pairing_point_accumulator_public_input_indices: [0;
-                crate::types::types::AGGREGATION_OBJECT_SIZE],
+                crate::types::types::PAIRING_POINT_ACCUMULATOR_SIZE],
+
             active_region_data: ActiveRegionData::new(),
         }
     }

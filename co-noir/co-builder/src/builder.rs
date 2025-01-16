@@ -1,4 +1,11 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
+use crate::types::types::LogicConstraint;
+use crate::types::types::Poseidon2Constraint;
+use crate::types::types::Poseidon2ExternalGate;
+use crate::types::types::Poseidon2InternalGate;
+use crate::types::types::RamAccessType;
+use crate::types::types::RamRecord;
+use crate::types::types::RamTable;
 use crate::{
     acir_format::AcirFormat,
     crs::ProverCrs,
@@ -11,11 +18,10 @@ use crate::{
         plookup::{BasicTableId, MultiTableId, Plookup},
         poseidon2::Poseidon2CT,
         types::{
-            AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
-            AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
-            ColumnIdx, FieldCT, LogicConstraint, MulQuad, PlookupBasicTable, PolyTriple,
-            Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate, RamAccessType,
-            RamRecord, RamTable, RamTranscript, RangeList, ReadData, RomRecord, RomTable,
+            AddQuad, AddTriple, AuxSelectors, BlockConstraint, BlockType,
+            CachedPartialNonNativeFieldMultiplication, ColumnIdx, FieldCT, MulQuad,
+            PairingPointAccumulatorIndices, PairingPointAccumulatorPubInputIndices,
+            PlookupBasicTable, PolyTriple, RamTranscript, RangeList, ReadData, RomRecord, RomTable,
             RomTranscript, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
         },
     },
@@ -161,7 +167,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub(crate) num_gates: usize,
     pub circuit_finalized: bool,
     pub contains_pairing_point_accumulator: bool,
-    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
+    pub pairing_point_accumulator_public_input_indices: PairingPointAccumulatorPubInputIndices,
     rom_arrays: Vec<RomTranscript<T::AcvmType>>,
     ram_arrays: Vec<RamTranscript<T::AcvmType, P::ScalarField, T::Lookup>>,
     pub(crate) lookup_tables: Vec<PlookupBasicTable<P, T>>,
@@ -1246,10 +1252,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
 
         // RecursionConstraints
-        self.process_plonk_recursion_constraints(constraint_system, has_valid_witness_assignments);
-        let current_aggregation_object = self.init_default_agg_obj_indices();
-        self.process_honk_recursion_constraints(constraint_system, has_valid_witness_assignments);
-        self.process_avm_recursion_constraints(constraint_system, has_valid_witness_assignments);
+        self.process_plonk_recursion_constraints(&constraint_system, has_valid_witness_assignments);
+        let mut current_aggregation_object = self.init_default_agg_obj_indices();
+        current_aggregation_object = self.process_honk_recursion_constraints(
+            constraint_system,
+            has_valid_witness_assignments,
+            current_aggregation_object,
+        );
+        self.process_avm_recursion_constraints(&constraint_system, has_valid_witness_assignments);
         // If the circuit has either honk or avm recursion constraints, add the aggregation object. Otherwise, add a
         // default one if the circuit is recursive and honk_recursion is true.
         if !constraint_system.honk_recursion_constraints.is_empty()
@@ -1268,7 +1278,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
     fn add_pairing_point_accumulator(
         &mut self,
-        pairing_point_accum_witness_indices: AggregationObjectIndices,
+        pairing_point_accum_witness_indices: PairingPointAccumulatorIndices,
     ) {
         assert!(
             !self.contains_pairing_point_accumulator,
@@ -1295,13 +1305,23 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn process_honk_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
-        _has_valid_witness_assignments: bool,
-    ) {
+        has_valid_witness_assignments: bool,
+        current_aggregation_object: PairingPointAccumulatorIndices,
+    ) -> PairingPointAccumulatorIndices {
+        // Add recursion constraints
+        let mut current_aggregation_object = current_aggregation_object;
+        for (idx, constraint) in constraint_system
+            .honk_recursion_constraints
+            .iter()
+            .enumerate()
         {
-            for _constraint in constraint_system.honk_recursion_constraints.iter() {
-                todo!("Honk recursion");
-            }
+            current_aggregation_object = self.create_honk_recursion_constraints(
+                constraint,
+                current_aggregation_object,
+                has_valid_witness_assignments,
+            );
         }
+        current_aggregation_object
     }
 
     fn process_avm_recursion_constraints(
@@ -1312,6 +1332,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         for _constraint in constraint_system.avm_recursion_constraints.iter() {
             todo!("avm recursion");
         }
+        todo!()
     }
 
     pub(crate) fn get_num_gates(&self) -> usize {
@@ -1459,7 +1480,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.public_inputs.push(witness_index);
     }
 
-    fn init_default_agg_obj_indices(&mut self) -> AggregationObjectIndices {
+    fn init_default_agg_obj_indices(&mut self) -> PairingPointAccumulatorIndices {
         const NUM_LIMBS: usize = 4;
         const NUM_LIMB_BITS: u32 = 68;
 
@@ -1467,7 +1488,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/911): These are pairing points extracted from a valid
         // proof. This is a workaround because we can't represent the point at infinity in biggroup yet.
-        let mut agg_obj_indices = AggregationObjectIndices::default();
+        let mut agg_obj_indices = PairingPointAccumulatorIndices::default();
         let x0 = Utils::field_from_hex_string::<P::BaseField>(
             "0x031e97a575e9d05a107acb64952ecab75c020998797da7842ab5d6d1986846cf",
         )
@@ -2157,8 +2178,232 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 block.q_arith().push(P::ScalarField::zero());
                 self.check_selector_length_consistency();
             }
+            AuxSelectors::LimbAccumulate1 => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::one());
+                block.q_4().push(P::ScalarField::one());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                block.q_arith().push(P::ScalarField::zero());
+
+                self.check_selector_length_consistency();
+            }
+            AuxSelectors::LimbAccumulate2 => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::one());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::one());
+                block.q_c().push(P::ScalarField::zero());
+                block.q_arith().push(P::ScalarField::zero());
+
+                self.check_selector_length_consistency();
+            }
             _ => todo!("Aux selectors"),
         }
+    }
+
+    /// Applies range constraints to two 70-bit limbs, splitting each into 5 14-bit sublimbs.
+    /// We can efficiently chain together two 70-bit limb checks in 3 gates, using auxiliary gates.
+    pub fn range_constrain_two_limbs(
+        &mut self,
+        lo_idx: u32,
+        hi_idx: u32,
+        lo_limb_bits: usize,
+        hi_limb_bits: usize,
+    ) {
+        assert!(lo_limb_bits <= 14 * 5);
+        assert!(hi_limb_bits <= 14 * 5);
+
+        let mut get_sublimbs = |limb_idx: u32, sublimb_masks: [u64; 5]| -> [u32; 5] {
+            let limb: BigUint = T::get_public(&self.get_variable(limb_idx as usize))
+                .expect("for the moment I hope this is public")
+                .into();
+            let max_sublimb_mask: BigUint = (BigUint::one() << 14) - BigUint::one();
+            let mut sublimb_indices = [0; 5];
+
+            sublimb_indices[0] = if sublimb_masks[0] != 0 {
+                self.add_variable(T::AcvmType::from(P::ScalarField::from(
+                    limb.clone() & max_sublimb_mask.clone().clone(),
+                )))
+            } else {
+                self.zero_idx
+            };
+            sublimb_indices[1] = if sublimb_masks[1] != 0 {
+                self.add_variable(T::AcvmType::from(P::ScalarField::from(
+                    (limb.clone() >> 14u32) & max_sublimb_mask.clone(),
+                )))
+            } else {
+                self.zero_idx
+            };
+            sublimb_indices[2] = if sublimb_masks[2] != 0 {
+                self.add_variable(T::AcvmType::from(P::ScalarField::from(
+                    (limb.clone() >> 28u32) & max_sublimb_mask.clone(),
+                )))
+            } else {
+                self.zero_idx
+            };
+            sublimb_indices[3] = if sublimb_masks[3] != 0 {
+                self.add_variable(T::AcvmType::from(P::ScalarField::from(
+                    (limb.clone() >> 42u32) & max_sublimb_mask.clone(),
+                )))
+            } else {
+                self.zero_idx
+            };
+            sublimb_indices[4] = if sublimb_masks[4] != 0 {
+                self.add_variable(T::AcvmType::from(P::ScalarField::from(
+                    (limb >> 56u32) & max_sublimb_mask,
+                )))
+            } else {
+                self.zero_idx
+            };
+            sublimb_indices
+        };
+
+        let get_limb_masks = |limb_bits: usize| -> [u64; 5] {
+            let mut sublimb_masks = [0; 5];
+            sublimb_masks[0] = if limb_bits >= 14 { 14 } else { limb_bits } as u64;
+            sublimb_masks[1] = if limb_bits >= 28 {
+                14
+            } else if limb_bits > 14 {
+                limb_bits - 14
+            } else {
+                0
+            } as u64;
+            sublimb_masks[2] = if limb_bits >= 42 {
+                14
+            } else if limb_bits > 28 {
+                limb_bits - 28
+            } else {
+                0
+            } as u64;
+            sublimb_masks[3] = if limb_bits >= 56 {
+                14
+            } else if limb_bits > 42 {
+                limb_bits - 42
+            } else {
+                0
+            } as u64;
+            sublimb_masks[4] = if limb_bits > 56 { limb_bits - 56 } else { 0 } as u64;
+
+            for mask in &mut sublimb_masks {
+                *mask = (1 << *mask) - 1;
+            }
+            sublimb_masks
+        };
+
+        let lo_masks = get_limb_masks(lo_limb_bits);
+        let hi_masks = get_limb_masks(hi_limb_bits);
+        let lo_sublimbs = get_sublimbs(lo_idx, lo_masks);
+        let hi_sublimbs = get_sublimbs(hi_idx, hi_masks);
+
+        self.blocks
+            .aux
+            .populate_wires(lo_sublimbs[0], lo_sublimbs[1], lo_sublimbs[2], lo_idx);
+        self.blocks.aux.populate_wires(
+            lo_sublimbs[3],
+            lo_sublimbs[4],
+            hi_sublimbs[0],
+            hi_sublimbs[1],
+        );
+        self.blocks
+            .aux
+            .populate_wires(hi_sublimbs[2], hi_sublimbs[3], hi_sublimbs[4], hi_idx);
+
+        self.apply_aux_selectors(AuxSelectors::LimbAccumulate1);
+        self.apply_aux_selectors(AuxSelectors::LimbAccumulate2);
+        self.apply_aux_selectors(AuxSelectors::None);
+        self.num_gates += 3;
+
+        for i in 0..5 {
+            if lo_masks[i] != 0 {
+                self.create_new_range_constraint(lo_sublimbs[i], lo_masks[i]);
+            }
+            if hi_masks[i] != 0 {
+                self.create_new_range_constraint(hi_sublimbs[i], hi_masks[i]);
+            }
+        }
+    }
+
+    pub(crate) fn construct_from_limbs(
+        &mut self,
+        _a: FieldCT<P::ScalarField>,
+        _b: FieldCT<P::ScalarField>,
+        _c: FieldCT<P::ScalarField>,
+        _d: FieldCT<P::ScalarField>,
+        _can_overflow: bool,
+    ) -> P::BaseField {
+        // assert!(
+        //     a.is_constant() == b.is_constant()
+        //         && b.is_constant() == c.is_constant()
+        //         && c.is_constant() == d.is_constant()
+        // );
+
+        // let mut result = P::BaseField::default();
+        // let ctx = a.context.clone();
+        // result.context = ctx.clone();
+        // result.binary_basis_limbs[0] = Limb::new(a.clone());
+        // result.binary_basis_limbs[1] = Limb::new(b.clone());
+        // result.binary_basis_limbs[2] = Limb::new(c.clone());
+        // result.binary_basis_limbs[3] = Limb::new(
+        //     d.clone(),
+        //     if can_overflow {
+        //         DEFAULT_MAXIMUM_LIMB
+        //     } else {
+        //         DEFAULT_MAXIMUM_MOST_SIGNIFICANT_LIMB
+        //     },
+        // );
+
+        // result.prime_basis_limb = result.binary_basis_limbs[3]
+        //     .element
+        //     .clone()
+        //     .mul(shift_3)
+        //     .add_two(
+        //         result.binary_basis_limbs[2].element.clone().mul(shift_2),
+        //         result.binary_basis_limbs[1].element.clone().mul(shift_1),
+        //     );
+        // result.prime_basis_limb = result
+        //     .prime_basis_limb
+        //     .add(result.binary_basis_limbs[0].element.clone());
+
+        // let num_last_limb_bits = if can_overflow {
+        //     NUM_LIMB_BITS
+        // } else {
+        //     NUM_LAST_LIMB_BITS
+        // };
+        // // We do have Plookup
+        // // if HasPlookup::<Builder>::value() {
+        // self.range_constrain_two_limbs(
+        //     result.binary_basis_limbs[0]
+        //         .element
+        //         .get_normalized_witness_index(),
+        //     result.binary_basis_limbs[1]
+        //         .element
+        //         .get_normalized_witness_index(),
+        //     NUM_LIMB_BITS,
+        //     NUM_LIMB_BITS,
+        // );
+        // self.range_constrain_two_limbs(
+        //     result.binary_basis_limbs[2]
+        //         .element
+        //         .get_normalized_witness_index(),
+        //     result.binary_basis_limbs[3]
+        //         .element
+        //         .get_normalized_witness_index(),
+        //     NUM_LIMB_BITS,
+        //     num_last_limb_bits,
+        // );
+        // // } else {
+        // //     a.create_range_constraint(NUM_LIMB_BITS);
+        // //     b.create_range_constraint(NUM_LIMB_BITS);
+        // //     c.create_range_constraint(NUM_LIMB_BITS);
+        // //     d.create_range_constraint(num_last_limb_bits);
+        // // }
+
+        //  result
+
+        todo!()
     }
 
     pub(crate) fn create_dummy_gate(

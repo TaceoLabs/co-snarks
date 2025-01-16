@@ -300,6 +300,13 @@ where
                 outputs,
                 *len,
             )?,
+            BlackBoxFuncCall::RecursiveAggregation {
+                verification_key: _,
+                proof: _,
+                public_inputs: _,
+                key_hash: _,
+                proof_type: _,
+            } => {}
             _ => todo!("solve blackbox function {} not supported", bb_func.name()),
         }
 

@@ -1,9 +1,9 @@
-use std::{any::TypeId, array};
-
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Params};
+use num_bigint::BigUint;
+use std::{any::TypeId, array};
 
 use crate::{
     builder::GenericUltraCircuitBuilder,
@@ -393,8 +393,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> std::io::Result<[FieldCT<F>; T]> {
-        let mut state = input.to_owned();
-        self.permutation_in_place(&mut state, builder, driver)?;
+        let mut state = input.clone();
+        Poseidon2CT::permutation_in_place(self, &mut state, builder, driver)?;
         Ok(state)
     }
 }
@@ -413,5 +413,192 @@ impl<F: PrimeField> Default for Poseidon2CT<F, 4, 5> {
         } else {
             panic!("No Poseidon2CT implementation for this field");
         }
+    }
+}
+
+pub trait FieldHashCT<P: Pairing, const T: usize> {
+    fn permutation<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &self,
+        input: &[FieldCT<P::ScalarField>; T],
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> std::io::Result<[FieldCT<P::ScalarField>; T]> {
+        let mut state = input.to_owned();
+        self.permutation_in_place(&mut state, builder, driver);
+        Ok(state)
+    }
+    fn permutation_in_place<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &self,
+        input: &mut [FieldCT<P::ScalarField>; T],
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    );
+}
+
+impl<P: Pairing, const T: usize> FieldHashCT<P, T> for Poseidon2CT<P::ScalarField, T, 5> {
+    fn permutation_in_place<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &self,
+        input: &mut [FieldCT<P::ScalarField>; T],
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) {
+        self.permutation_in_place(input, builder, driver);
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum SpongeMode {
+    Absorb,
+    Squeeze,
+}
+
+pub struct FieldSpongeCT<P: Pairing, const T: usize, const R: usize, H: FieldHashCT<P, T>> {
+    state: [FieldCT<P::ScalarField>; T],
+    cache: [FieldCT<P::ScalarField>; R],
+    cache_size: usize,
+    mode: SpongeMode,
+    hasher: H,
+}
+
+impl<P: Pairing, const T: usize, const R: usize, H: FieldHashCT<P, T>> FieldSpongeCT<P, T, R, H>
+where
+    H: Default,
+{
+    pub(crate) fn new(iv: FieldCT<<P as Pairing>::ScalarField>) -> Self {
+        assert!(R < T);
+        let mut state = [FieldCT::<P::ScalarField>::zero(); T];
+        state[R] = iv;
+
+        Self {
+            state,
+            cache: [FieldCT::<P::ScalarField>::zero(); R],
+            cache_size: 0,
+            mode: SpongeMode::Absorb,
+            hasher: H::default(),
+        }
+    }
+
+    fn perform_duplex<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> [FieldCT<P::ScalarField>; R] {
+        // zero-pad the cache
+        for i in self.cache_size..R {
+            self.cache[i] = FieldCT::<P::ScalarField>::zero();
+        }
+        // add the cache into sponge state
+        for i in 0..R {
+            self.state[i].add_assign(&self.cache[i], builder, driver);
+        }
+        self.hasher
+            .permutation_in_place(&mut self.state, builder, driver);
+        // return `rate` number of field elements from the sponge state.
+        let mut output = [FieldCT::<P::ScalarField>::zero(); R];
+        output.copy_from_slice(&self.state[..R]);
+
+        output
+    }
+
+    fn absorb<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        input: &FieldCT<P::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) {
+        if self.mode == SpongeMode::Absorb && self.cache_size == R {
+            // If we're absorbing, and the cache is full, apply the sponge permutation to compress the cache
+            self.perform_duplex(builder, driver);
+            self.cache[0] = *input;
+            self.cache_size = 1;
+        } else if self.mode == SpongeMode::Absorb && self.cache_size < R {
+            // If we're absorbing, and the cache is not full, add the input into the cache
+            self.cache[self.cache_size] = *input;
+            self.cache_size += 1;
+        } else if self.mode == SpongeMode::Squeeze {
+            // If we're in squeeze mode, switch to absorb mode and add the input into the cache.
+            // N.B. I don't think this code path can be reached?!
+            self.cache[0] = *input;
+            self.cache_size = 1;
+            self.mode = SpongeMode::Absorb;
+        }
+    }
+
+    fn squeeze<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> FieldCT<<P as Pairing>::ScalarField> {
+        if self.mode == SpongeMode::Squeeze && self.cache_size == 0 {
+            // If we're in squeze mode and the cache is empty, there is nothing left to squeeze out of the sponge!
+            // Switch to absorb mode.
+            self.mode = SpongeMode::Absorb;
+            self.cache_size = 0;
+        }
+        if self.mode == SpongeMode::Absorb {
+            // If we're in absorb mode, apply sponge permutation to compress the cache, populate cache with compressed
+            // state and switch to squeeze mode. Note: this code block will execute if the previous `if` condition was
+            // matched
+            self.cache = self.perform_duplex(builder, driver);
+            self.cache_size = R;
+        }
+        // By this point, we should have a non-empty cache. Pop one item off the top of the cache and return it.
+        let result = self.cache[0];
+        for i in 1..self.cache_size {
+            self.cache[i - 1] = self.cache[i];
+        }
+        self.cache_size -= 1;
+        self.cache[self.cache_size] = FieldCT::<P::ScalarField>::zero();
+        result
+    }
+
+    /**
+     * @brief Use the sponge to hash an input string
+     *
+     * @tparam out_len
+     * @tparam is_variable_length. Distinguishes between hashes where the preimage length is constant/not constant
+     * @param input
+     * @return std::array<FF, out_len>
+     */
+    pub(crate) fn hash_internal<
+        const OUT_LEN: usize,
+        const IS_VAR_LEN: bool,
+        WT: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        input: &[FieldCT<P::ScalarField>],
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> [FieldCT<P::ScalarField>; OUT_LEN] {
+        let in_len = input.len();
+        let iv: BigUint = (BigUint::from(in_len) << 64) + OUT_LEN - BigUint::one();
+
+        let mut sponge = Self::new(FieldCT::<P::ScalarField>::from(P::ScalarField::from(iv)));
+        for input in input.iter() {
+            sponge.absorb(input, builder, driver);
+        }
+
+        // In the case where the hash preimage is variable-length, we append `1` to the end of the input, to distinguish
+        // from fixed-length hashes. (the combination of this additional field element + the hash IV ensures
+        // fixed-length and variable-length hashes do not collide)
+        if IS_VAR_LEN {
+            sponge.absorb(&FieldCT::<P::ScalarField>::one(), builder, driver);
+        }
+
+        let mut res = [FieldCT::<P::ScalarField>::zero(); OUT_LEN];
+        for r in res.iter_mut() {
+            *r = sponge.squeeze(builder, driver);
+        }
+        res
+    }
+
+    pub(crate) fn hash_fixed_length<
+        const OUT_LEN: usize,
+        WT: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        input: &[FieldCT<P::ScalarField>],
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> [FieldCT<P::ScalarField>; OUT_LEN] {
+        Self::hash_internal::<OUT_LEN, false, WT>(input, builder, driver)
     }
 }

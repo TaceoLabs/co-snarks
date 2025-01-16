@@ -6,8 +6,10 @@ use crate::prelude::{PrecomputedEntities, ProverWitnessEntities};
 use crate::types::plookup::BasicTableId;
 use crate::utils::Utils;
 use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
+use ark_ff::One;
+use ark_ff::PrimeField;
 use ark_ff::Zero;
-use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use mpc_core::lut::LookupTableProvider;
@@ -151,10 +153,10 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     pub(crate) poseidon2_constraints: Vec<usize>,
     // pub(crate) multi_scalar_mul_constraints: Vec<usize>,
     // pub(crate) ec_add_constraints: Vec<usize>,
-    // pub(crate) recursion_constraints: Vec<usize>,
-    // pub(crate) honk_recursion_constraints: Vec<usize>,
-    // pub(crate) avm_recursion_constraints: Vec<usize>,
-    // pub(crate) ivc_recursion_constraints: Vec<usize>,
+    pub(crate) recursion_constraints: Vec<usize>,
+    pub(crate) honk_recursion_constraints: Vec<usize>,
+    pub(crate) avm_recursion_constraints: Vec<usize>,
+    pub(crate) ivc_recursion_constraints: Vec<usize>,
     // pub(crate) bigint_from_le_bytes_constraints: Vec<usize>,
     // pub(crate) bigint_to_le_bytes_constraints: Vec<usize>,
     // pub(crate) bigint_operations: Vec<usize>,
@@ -432,20 +434,45 @@ impl<F: PrimeField> LogicConstraint<F> {
 pub(crate) struct RecursionConstraint {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
-    key: Vec<u32>,
-    proof: Vec<u32>,
-    public_inputs: Vec<u32>,
+    pub(crate) key: Vec<u32>,
+    pub(crate) proof: Vec<u32>,
+    pub(crate) public_inputs: Vec<u32>,
     key_hash: u32,
-    proof_type: u32,
+    pub(crate) proof_type: u32,
 }
 
 impl RecursionConstraint {
     const NUM_AGGREGATION_ELEMENTS: usize = 4;
+
+    pub fn new(
+        key: Vec<u32>,
+        proof: Vec<u32>,
+        public_inputs: Vec<u32>,
+        key_hash: u32,
+        proof_type: u32,
+    ) -> Self {
+        Self {
+            key,
+            proof,
+            public_inputs,
+            key_hash,
+            proof_type,
+        }
+    }
 }
 
-pub const AGGREGATION_OBJECT_SIZE: usize = 16;
-pub(crate) type AggregationObjectIndices = [u32; AGGREGATION_OBJECT_SIZE];
-pub type AggregationObjectPubInputIndices = [u32; AGGREGATION_OBJECT_SIZE];
+pub const PAIRING_POINT_ACCUMULATOR_SIZE: usize = 16;
+pub(crate) type PairingPointAccumulatorIndices = [u32; PAIRING_POINT_ACCUMULATOR_SIZE];
+pub type PairingPointAccumulatorPubInputIndices = [u32; PAIRING_POINT_ACCUMULATOR_SIZE];
+
+// Aggregation state contains the following:
+// (P0, P1): the aggregated elements storing the verification results of proofs in the past
+// has_data: indicates if this aggregation state contain past (P0, P1)
+pub(crate) struct AggregationState<C: CurveGroup> {
+    pub(crate) p0: C,
+    pub(crate) p1: C,
+    pub(crate) has_data: bool,
+}
 
 pub(crate) struct RomTable<F: PrimeField> {
     raw_entries: Vec<FieldCT<F>>,
@@ -721,7 +748,7 @@ impl<F: PrimeField> RamTable<F> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub(crate) struct FieldCT<F: PrimeField> {
     pub(crate) additive_constant: F,
     pub(crate) multiplicative_constant: F,
@@ -730,6 +757,14 @@ pub(crate) struct FieldCT<F: PrimeField> {
 
 impl<F: PrimeField> FieldCT<F> {
     pub(crate) const IS_CONSTANT: u32 = u32::MAX;
+
+    pub(crate) fn one() -> Self {
+        Self {
+            additive_constant: F::one(),
+            multiplicative_constant: F::zero(),
+            witness_index: Self::IS_CONSTANT,
+        }
+    }
 
     pub(crate) fn zero() -> Self {
         Self {
@@ -1128,7 +1163,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok([lo_wit, slice_wit, hi_wit])
     }
 
-    fn create_range_constraint<
+    pub(crate) fn create_range_constraint<
         P: Pairing<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -2051,6 +2086,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         }
     }
 }
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ActiveRegionData {
     ranges: Vec<(usize, usize)>, // active ranges [start_i, end_i) of the execution trace
@@ -2097,3 +2133,63 @@ impl ActiveRegionData {
         self.ranges.len()
     }
 }
+
+pub(crate) struct CycleScalar<F: PrimeField> {
+    pub(crate) lo: FieldCT<F>,
+    pub(crate) hi: FieldCT<F>,
+}
+impl<F: PrimeField> CycleScalar<F> {
+    const NUM_BITS: usize = F::MODULUS_BIT_SIZE as usize;
+    pub(crate) const LO_BITS: usize = 128;
+    pub(crate) const HI_BITS: usize = Self::NUM_BITS - Self::LO_BITS;
+    pub(crate) fn from_field_ct<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        inp: FieldCT<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        let value = inp.get_value(builder, driver);
+        let lo_v = inp.slice(0, Self::LO_BITS as u8, Self::NUM_BITS, builder, driver)?[0];
+        let hi_v = inp.slice(
+            Self::LO_BITS as u8,
+            Self::HI_BITS as u8,
+            Self::NUM_BITS,
+            builder,
+            driver,
+        )?[2];
+        if inp.is_constant() {
+            let result = Self { lo: lo_v, hi: hi_v };
+        } else {
+            todo!()
+        }
+
+        //     // We need to manually propagate the origin tag
+        //     lo.set_origin_tag(in.get_origin_tag());
+        //     hi.set_origin_tag(in.get_origin_tag());
+        todo!()
+    }
+}
+
+// template <typename Builder> cycle_group<Builder>::cycle_scalar::cycle_scalar(const field_t& in)
+// {
+//     const uint256_t value(in.get_value());
+//     const uint256_t lo_v = value.slice(0, LO_BITS);
+//     const uint256_t hi_v = value.slice(LO_BITS, HI_BITS);
+//     constexpr uint256_t shift = uint256_t(1) << LO_BITS;
+//     if (in.is_constant()) {
+//         lo = lo_v;
+//         hi = hi_v;
+//     } else {
+//         lo = witness_t(in.get_context(), lo_v);
+//         hi = witness_t(in.get_context(), hi_v);
+//         (lo + hi * shift).assert_equal(in);
+//         // TODO(https://github.com/AztecProtocol/barretenberg/issues/1022): ensure lo and hi are in bb::fr modulus not
+//         // bb::fq modulus otherwise we could have two representations for in
+//         validate_scalar_is_in_field();
+//     }
+//     // We need to manually propagate the origin tag
+//     lo.set_origin_tag(in.get_origin_tag());
+//     hi.set_origin_tag(in.get_origin_tag());
+// }

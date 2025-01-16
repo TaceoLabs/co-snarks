@@ -14,7 +14,13 @@ use crate::types::types::{
     AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, LogicConstraint, MulQuad,
     PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint, WitnessOrConstant,
 };
-#[expect(dead_code)]
+pub const PROOF_TYPE_PLONK: u32 = 0;
+pub const PROOF_TYPE_HONK: u32 = 1;
+pub const PROOF_TYPE_OINK: u32 = 2;
+pub const PROOF_TYPE_PG: u32 = 3;
+pub const PROOF_TYPE_AVM: u32 = 4;
+pub const _PROOF_TYPE_ROLLUP_HONK: u32 = 5; //keep for reference
+pub const _PROOF_TYPE_ROOT_ROLLUP_HONK: u32 = 6; //keep for reference#[expect(dead_code)]
 pub struct ProgramMetadata {
     // An IVC instance; needed to construct a circuit from IVC recursion constraints
     // ivc: Option<std::sync::Arc<ClientIVC>>,
@@ -67,7 +73,7 @@ pub struct AcirFormat<F: PrimeField> {
     pub(crate) recursion_constraints: Vec<RecursionConstraint>,
     pub(crate) honk_recursion_constraints: Vec<RecursionConstraint>,
     pub(crate) avm_recursion_constraints: Vec<RecursionConstraint>,
-    //  std::vector<RecursionConstraint> ivc_recursion_constraints;
+    pub(crate) ivc_recursion_constraints: Vec<RecursionConstraint>,
     //  std::vector<BigIntFromLeBytes> bigint_from_le_bytes_constraints;
     //  std::vector<BigIntToLeBytes> bigint_to_le_bytes_constraints;
     //  std::vector<BigIntOperation> bigint_operations;
@@ -624,7 +630,7 @@ impl<F: PrimeField> AcirFormat<F> {
     fn handle_blackbox_func_call(
         arg: BlackBoxFuncCall<GenericFieldElement<F>>,
         af: &mut AcirFormat<F>,
-        _honk_recursive: bool,
+        honk_recursion: bool,
         opcode_index: usize,
     ) {
         match arg {
@@ -780,12 +786,66 @@ impl<F: PrimeField> AcirFormat<F> {
                 outputs: _,
             } => todo!("BlackBoxFuncCall::Sha256Compression"),
             BlackBoxFuncCall::RecursiveAggregation {
-                verification_key: _,
-                proof: _,
-                public_inputs: _,
-                key_hash: _,
-                proof_type: _,
-            } => todo!("BlackBoxFuncCall::RecursiveAggregation"),
+                verification_key,
+                proof,
+                public_inputs,
+                key_hash,
+                proof_type,
+            } => {
+                let key_hash = key_hash.to_witness().witness_index();
+                let mut proof_type = proof_type;
+                // TODO(https://github.com/AztecProtocol/barretenberg/issues/1074): Eventually arg.proof_type will
+                // be the only means for setting the proof type. use of honk_recursion flag in this context can go
+                // away once all noir programs (e.g. protocol circuits) are updated to use the new pattern.
+                if honk_recursion && proof_type != PROOF_TYPE_HONK && proof_type != PROOF_TYPE_AVM {
+                    proof_type = PROOF_TYPE_HONK;
+                }
+                let key = verification_key
+                    .iter()
+                    .map(|e| e.to_witness().witness_index())
+                    .collect();
+                let proof = proof
+                    .iter()
+                    .map(|e| e.to_witness().witness_index())
+                    .collect();
+                let public_inputs = public_inputs
+                    .iter()
+                    .map(|e| e.to_witness().witness_index())
+                    .collect();
+                let c = RecursionConstraint::new(key, proof, public_inputs, key_hash, proof_type);
+
+                // Add the recursion constraint to the appropriate container based on proof type
+                match proof_type {
+                    PROOF_TYPE_PLONK => {
+                        af.recursion_constraints.push(c);
+                        af.original_opcode_indices
+                            .recursion_constraints
+                            .push(opcode_index);
+                    }
+                    PROOF_TYPE_HONK => {
+                        af.honk_recursion_constraints.push(c);
+                        af.original_opcode_indices
+                            .honk_recursion_constraints
+                            .push(opcode_index);
+                    }
+                    PROOF_TYPE_OINK | PROOF_TYPE_PG => {
+                        af.ivc_recursion_constraints.push(c);
+                        af.original_opcode_indices
+                            .ivc_recursion_constraints
+                            .push(opcode_index);
+                    }
+                    PROOF_TYPE_AVM => {
+                        af.avm_recursion_constraints.push(c);
+                        af.original_opcode_indices
+                            .avm_recursion_constraints
+                            .push(opcode_index);
+                    }
+                    _ => {
+                        eprintln!("Invalid PROOF_TYPE in RecursionConstraint!");
+                        panic!("Invalid PROOF_TYPE");
+                    }
+                }
+            }
         }
     }
 }
