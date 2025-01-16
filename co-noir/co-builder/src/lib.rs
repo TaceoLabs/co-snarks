@@ -2,6 +2,7 @@ pub(crate) mod acir_format;
 pub(crate) mod builder;
 pub(crate) mod crs;
 pub(crate) mod honk_curve;
+pub(crate) mod honk_recursion_constraint;
 pub(crate) mod keys;
 pub(crate) mod polynomials;
 pub mod prelude;

@@ -5,7 +5,7 @@ use crate::{
     keys::proving_key::ProvingKey,
     polynomials::polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE},
     serialize::{Serialize, SerializeP},
-    types::types::{AggregationObjectPubInputIndices, AGGREGATION_OBJECT_SIZE},
+    types::types::{PairingPointAccumulatorPubInputIndices, PAIRING_POINT_ACCUMULATOR_SIZE},
     utils::Utils,
     HonkProofError, HonkProofResult, TranscriptFieldType,
 };
@@ -19,7 +19,7 @@ pub struct VerifyingKey<P: Pairing> {
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub contains_pairing_point_accumulator: bool,
-    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
+    pub pairing_point_accumulator_public_input_indices: PairingPointAccumulatorPubInputIndices,
     pub commitments: PrecomputedEntities<P::G1Affine>,
 }
 
@@ -78,7 +78,7 @@ pub struct VerifyingKeyBarretenberg<P: Pairing> {
     pub num_public_inputs: u64,
     pub pub_inputs_offset: u64,
     pub contains_pairing_point_accumulator: bool,
-    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
+    pub pairing_point_accumulator_public_input_indices: PairingPointAccumulatorPubInputIndices,
     pub commitments: PrecomputedEntities<P::G1Affine>,
 }
 
@@ -86,9 +86,9 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
     const FIELDSIZE_BYTES: u32 = SerializeP::<P>::FIELDSIZE_BYTES;
     const SER_FULL_SIZE: usize = 4 * 8
         + 1
-        + AGGREGATION_OBJECT_SIZE * 4
+        + PAIRING_POINT_ACCUMULATOR_SIZE * 4
         + PRECOMPUTED_ENTITIES_SIZE * 2 * Self::FIELDSIZE_BYTES as usize;
-    const SER_COMPRESSED_SIZE: usize = Self::SER_FULL_SIZE - 1 - AGGREGATION_OBJECT_SIZE * 4;
+    const SER_COMPRESSED_SIZE: usize = Self::SER_FULL_SIZE - 1 - PAIRING_POINT_ACCUMULATOR_SIZE * 4;
 
     pub fn to_buffer(&self) -> Vec<u8> {
         let mut buffer = Vec::with_capacity(Self::SER_FULL_SIZE);
@@ -156,7 +156,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
                 }
 
                 let mut pairing_point_accumulator_public_input_indices =
-                    AggregationObjectPubInputIndices::default();
+                    PairingPointAccumulatorPubInputIndices::default();
                 for val in pairing_point_accumulator_public_input_indices.iter_mut() {
                     *val = Serialize::<P::ScalarField>::read_u32(buf, &mut offset);
                 }

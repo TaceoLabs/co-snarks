@@ -5,8 +5,10 @@ use crate::polynomials::polynomial::Polynomial;
 use crate::types::plookup::BasicTableId;
 use crate::utils::Utils;
 use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
+use ark_ff::One;
+use ark_ff::PrimeField;
 use ark_ff::Zero;
-use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;
@@ -132,10 +134,10 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     pub(crate) poseidon2_constraints: Vec<usize>,
     // pub(crate) multi_scalar_mul_constraints: Vec<usize>,
     // pub(crate) ec_add_constraints: Vec<usize>,
-    // pub(crate) recursion_constraints: Vec<usize>,
-    // pub(crate) honk_recursion_constraints: Vec<usize>,
-    // pub(crate) avm_recursion_constraints: Vec<usize>,
-    // pub(crate) ivc_recursion_constraints: Vec<usize>,
+    pub(crate) recursion_constraints: Vec<usize>,
+    pub(crate) honk_recursion_constraints: Vec<usize>,
+    pub(crate) avm_recursion_constraints: Vec<usize>,
+    pub(crate) ivc_recursion_constraints: Vec<usize>,
     // pub(crate) bigint_from_le_bytes_constraints: Vec<usize>,
     // pub(crate) bigint_to_le_bytes_constraints: Vec<usize>,
     // pub(crate) bigint_operations: Vec<usize>,
@@ -467,20 +469,45 @@ impl<F: PrimeField> LogicConstraint<F> {
 pub(crate) struct RecursionConstraint {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
-    key: Vec<u32>,
-    proof: Vec<u32>,
-    public_inputs: Vec<u32>,
+    pub(crate) key: Vec<u32>,
+    pub(crate) proof: Vec<u32>,
+    pub(crate) public_inputs: Vec<u32>,
     key_hash: u32,
-    proof_type: u32,
+    pub(crate) proof_type: u32,
 }
 
 impl RecursionConstraint {
     const NUM_AGGREGATION_ELEMENTS: usize = 4;
+
+    pub fn new(
+        key: Vec<u32>,
+        proof: Vec<u32>,
+        public_inputs: Vec<u32>,
+        key_hash: u32,
+        proof_type: u32,
+    ) -> Self {
+        Self {
+            key,
+            proof,
+            public_inputs,
+            key_hash,
+            proof_type,
+        }
+    }
 }
 
-pub const AGGREGATION_OBJECT_SIZE: usize = 16;
-pub(crate) type AggregationObjectIndices = [u32; AGGREGATION_OBJECT_SIZE];
-pub type AggregationObjectPubInputIndices = [u32; AGGREGATION_OBJECT_SIZE];
+pub const PAIRING_POINT_ACCUMULATOR_SIZE: usize = 16;
+pub(crate) type PairingPointAccumulatorIndices = [u32; PAIRING_POINT_ACCUMULATOR_SIZE];
+pub type PairingPointAccumulatorPubInputIndices = [u32; PAIRING_POINT_ACCUMULATOR_SIZE];
+
+// Aggregation state contains the following:
+// (P0, P1): the aggregated elements storing the verification results of proofs in the past
+// has_data: indicates if this aggregation state contain past (P0, P1)
+pub(crate) struct AggregationState<C: CurveGroup> {
+    pub(crate) p0: C,
+    pub(crate) p1: C,
+    pub(crate) has_data: bool,
+}
 
 pub(crate) struct RomTable<F: PrimeField> {
     raw_entries: Vec<FieldCT<F>>,

@@ -11,13 +11,14 @@ use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::prelude::Crs;
 use co_builder::prelude::GenericUltraCircuitBuilder;
+use co_builder::prelude::PairingPointAccumulatorPubInputIndices;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::ProverCrs;
+use co_builder::prelude::ProverWitnessEntities;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
-use co_builder::prelude::AGGREGATION_OBJECT_SIZE;
-use co_builder::prelude::{AggregationObjectPubInputIndices, ProverWitnessEntities};
+use co_builder::prelude::PAIRING_POINT_ACCUMULATOR_SIZE;
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use eyre::Result;
@@ -40,7 +41,7 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub contains_pairing_point_accumulator: bool,
-    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
+    pub pairing_point_accumulator_public_input_indices: PairingPointAccumulatorPubInputIndices,
     pub polynomials: Polynomials<T::ArithmeticShare, P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
@@ -253,7 +254,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             final_active_wire_idx,
             phantom: PhantomData,
             contains_pairing_point_accumulator: false,
-            pairing_point_accumulator_public_input_indices: [0; AGGREGATION_OBJECT_SIZE],
+            pairing_point_accumulator_public_input_indices: [0; PAIRING_POINT_ACCUMULATOR_SIZE],
         }
     }
 

@@ -14,8 +14,8 @@ pub use crate::polynomials::polynomial_types::{
 };
 pub use crate::serialize::{Serialize, SerializeP};
 pub use crate::types::types::{
-    AggregationObjectPubInputIndices, CycleNode, CyclicPermutation, AGGREGATION_OBJECT_SIZE,
-    NUM_SELECTORS, NUM_WIRES,
+    PairingPointAccumulatorPubInputIndices, CycleNode, CyclicPermutation, NUM_SELECTORS, NUM_WIRES,
+    PAIRING_POINT_ACCUMULATOR_SIZE,
 };
 pub use crate::utils::Utils;
 pub use co_acvm::PlainAcvmSolver;
