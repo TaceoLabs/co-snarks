@@ -236,7 +236,7 @@ for using coCircom:
 **Note**: The `verification_key.json` was generated in Step 2.
 
 For more examples, please refer to the
-[examples folder](/co-circom/examples/). You'll find bash scripts
+[examples folder](https://github.com/TaceoLabs/co-snarks/tree/main/co-circom/co-circom/examples). You'll find bash scripts
 there that demonstrate all the necessary steps, as well as scripts for using Plonk instead of Groth16.
 
 ## Contributing
