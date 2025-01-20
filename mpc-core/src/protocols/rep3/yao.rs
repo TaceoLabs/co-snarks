@@ -682,6 +682,19 @@ pub fn decompose_arithmetic<F: PrimeField, N: Rep3Network>(
     )
 }
 
+/// Slices a shared field element at given indices (msb, lsb), both included in the slice.
+/// Only consideres bitsize bits.
+/// Result  is thus [lo, slice, hi], where slice has all bits from lsb to msb, lo all bits smaller than lsb, and hi all bits greater msb up to bitsize.
+pub fn slice_arithmetic<F: PrimeField, N: Rep3Network>(
+    input: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+    msb: usize,
+    lsb: usize,
+    bitsize: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    slice_arithmetic_many(&[input], io_context, msb, lsb, bitsize)
+}
+
 /// Divides a vector of field elements by a power of 2, rounding down.
 pub fn field_int_div_power_2_many<F: PrimeField, N: Rep3Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
@@ -932,5 +945,26 @@ pub fn decompose_arithmetic_many<F: PrimeField, N: Rep3Network>(
         total_output_elements,
         GarbledCircuits::decompose_field_element_many::<_, F>,
         (decompose_bit_size, total_bit_size_per_field)
+    )
+}
+
+/// Slices a vector of shared field elements at given indices (msb, lsb), both included in the slice.
+/// Only consideres bitsize bits.
+/// Result (per input) is thus [lo, slice, hi], where slice has all bits from lsb to msb, lo all bits smaller than lsb, and hi all bits greater msb up to bitsize.
+pub fn slice_arithmetic_many<F: PrimeField, N: Rep3Network>(
+    inputs: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    msb: usize,
+    lsb: usize,
+    bitsize: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = inputs.len();
+    let total_output_elements = 3 * num_inputs;
+    decompose_circuit_compose_blueprint!(
+        inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::slice_field_element_many::<_, F>,
+        (msb, lsb, bitsize)
     )
 }

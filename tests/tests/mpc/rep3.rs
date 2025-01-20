@@ -1346,6 +1346,67 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
+    fn rep3_slice_shared_field_many_via_yao_inner(msb: usize, lsb: usize, bitsize: usize) {
+        const VEC_SIZE: usize = 10;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect_vec();
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+
+        let mut should_result = Vec::with_capacity(VEC_SIZE * 3);
+        let big_mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
+        let hi_mask = (BigUint::one() << (bitsize - msb)) - BigUint::one();
+        let lo_mask = (BigUint::one() << lsb) - BigUint::one();
+        let slice_mask = (BigUint::one() << ((msb - lsb) as u32 + 1)) - BigUint::one();
+        let msb_plus_one = msb as u32 + 1;
+
+        for x in x.into_iter() {
+            let mut x: BigUint = x.into();
+            x &= &big_mask;
+            let hi = (&x >> msb_plus_one) & &hi_mask;
+            let lo = &x & &lo_mask;
+            let slice = (&x >> lsb) & &slice_mask;
+            assert_eq!(x, &lo + (&slice << lsb) + (&hi << msb_plus_one));
+            should_result.push(ark_bn254::Fr::from(lo));
+            should_result.push(ark_bn254::Fr::from(slice));
+            should_result.push(ark_bn254::Fr::from(hi));
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let decomposed =
+                    yao::slice_arithmetic_many(&x, &mut rep3, msb, lsb, bitsize).unwrap();
+                tx.send(decomposed)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_slice_shared_field_many_via_yao() {
+        rep3_slice_shared_field_many_via_yao_inner(253, 0, 254);
+        rep3_slice_shared_field_many_via_yao_inner(100, 10, 254);
+        rep3_slice_shared_field_many_via_yao_inner(100, 10, 110);
+    }
+
     #[test]
     fn rep3_batcher_odd_even_merge_sort_via_yao() {
         const VEC_SIZE: usize = 10;
