@@ -464,11 +464,10 @@ impl<F: PrimeField> Plookup<F> {
             let is_key_a_constant = key_a.is_constant();
             let length = lookup_data[ColumnIdx::C1].len();
             if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
-                for _i in 0..length {
-                    todo!("Implement lookup case")
-                    // lookup[ColumnIdx::C1].push(field_t<Builder>(ctx, lookup_data[ColumnIdx::C1][i]));
-                    // lookup[ColumnIdx::C2].push(field_t<Builder>(ctx, lookup_data[ColumnIdx::C2][i]));
-                    // lookup[ColumnIdx::C3].push(field_t<Builder>(ctx, lookup_data[ColumnIdx::C3][i]));
+                for i in 0..length {
+                    lookup[ColumnIdx::C1].push(FieldCT::<F>::from(lookup_data[ColumnIdx::C1][i]));
+                    lookup[ColumnIdx::C2].push(FieldCT::<F>::from(lookup_data[ColumnIdx::C2][i]));
+                    lookup[ColumnIdx::C3].push(FieldCT::<F>::from(lookup_data[ColumnIdx::C3][i]));
                 }
             } else {
                 let mut lhs_index = key_a.witness_index;
@@ -480,7 +479,6 @@ impl<F: PrimeField> Plookup<F> {
                 if key_b.is_constant() && is_2_to_1_lookup {
                     rhs_index = builder.put_constant_variable(b);
                 }
-                // auto key_b_witness = std::make_optional(rhs_index);
 
                 let mut key_b_witness = Some(rhs_index);
 
