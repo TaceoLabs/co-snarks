@@ -2,13 +2,13 @@ mod translate_share {
     use ark_std::UniformRand;
     use itertools::Itertools;
     use mpc_core::protocols::{
-        bridges::network::RepToShamirNetwork,
         rep3::{self},
         shamir::{self, ShamirPreprocessing, ShamirProtocol},
     };
     use rand::thread_rng;
     use std::{sync::mpsc, thread};
     use tests::rep3_network::Rep3TestNetwork;
+    use tests::shamir_network::PartyTestNetwork as ShamirPartyTestNetwork;
 
     const VEC_SIZE: usize = 10;
 
@@ -28,7 +28,8 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let preprocessing = ShamirPreprocessing::new(1, net.to_shamir_net(), 1).unwrap();
+                let preprocessing =
+                    ShamirPreprocessing::new(1, ShamirPartyTestNetwork::from(net), 1).unwrap();
                 let mut shamir = ShamirProtocol::from(preprocessing);
                 let share = shamir.translate_primefield_repshare(x);
                 tx.send(share.unwrap())
@@ -64,7 +65,8 @@ mod translate_share {
         {
             thread::spawn(move || {
                 let preprecessing =
-                    ShamirPreprocessing::new(1, net.to_shamir_net(), x.len()).unwrap();
+                    ShamirPreprocessing::new(1, ShamirPartyTestNetwork::from(net), x.len())
+                        .unwrap();
                 let mut shamir = ShamirProtocol::from(preprecessing);
                 let share = shamir.translate_primefield_repshare_vec(x);
                 tx.send(share.unwrap())
@@ -97,7 +99,8 @@ mod translate_share {
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let preprecessing = ShamirPreprocessing::new(1, net.to_shamir_net(), 1).unwrap();
+                let preprecessing =
+                    ShamirPreprocessing::new(1, ShamirPartyTestNetwork::from(net), 1).unwrap();
                 let mut shamir = ShamirProtocol::from(preprecessing);
                 let share = shamir.translate_point_repshare(x);
                 tx.send(share.unwrap())

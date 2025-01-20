@@ -27,7 +27,6 @@ use co_ultrahonk::{
 };
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use mpc_core::protocols::{
-    bridges::network::RepToShamirNetwork,
     rep3::{
         self,
         network::{IoContext, Rep3MpcNet, Rep3Network},
@@ -578,7 +577,7 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     // init MPC protocol
     let threshold = 1;
     let num_pairs = shares.len();
-    let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
+    let preprocessing = ShamirPreprocessing::new(threshold, ShamirMpcNet::from(net), num_pairs)
         .context("while shamir preprocessing")?;
     let mut protocol = ShamirProtocol::from(preprocessing);
 
@@ -646,7 +645,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     // init MPC protocol
     let threshold = 1;
     let num_pairs = shares.len();
-    let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
+    let preprocessing = ShamirPreprocessing::new(threshold, ShamirMpcNet::from(net), num_pairs)
         .context("while shamir preprocessing")?;
     let mut protocol = ShamirProtocol::from(preprocessing);
 

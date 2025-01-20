@@ -1,6 +1,5 @@
 //! Data structures and helpers for the network configuration.
 use color_eyre::eyre;
-use quinn::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Formatter,
@@ -9,6 +8,7 @@ use std::{
     path::PathBuf,
     str::FromStr,
 };
+use tonic::transport::Certificate;
 
 /// A network address wrapper.
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -88,24 +88,28 @@ pub struct NetworkPartyConfig {
     /// The DNS name of the party.
     pub dns_name: Address,
     /// The path to the public certificate of the party.
-    pub cert_path: PathBuf,
+    pub cert_path: Option<PathBuf>,
 }
 
 /// A party in the network.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct NetworkParty {
     /// The id of the party, 0-based indexing.
     pub id: usize,
     /// The DNS name of the party.
     pub dns_name: Address,
     /// The public certificate of the party.
-    pub cert: CertificateDer<'static>,
+    pub cert: Option<Certificate>,
 }
 
 impl TryFrom<NetworkPartyConfig> for NetworkParty {
     type Error = std::io::Error;
     fn try_from(value: NetworkPartyConfig) -> Result<Self, Self::Error> {
-        let cert = CertificateDer::from(std::fs::read(value.cert_path)?).into_owned();
+        let cert = if let Some(path) = value.cert_path {
+            Some(Certificate::from_pem(std::fs::read(path)?))
+        } else {
+            None
+        };
         Ok(NetworkParty {
             id: value.id,
             dns_name: value.dns_name,
@@ -124,11 +128,11 @@ pub struct NetworkConfigFile {
     /// The [SocketAddr] we bind to.
     pub bind_addr: SocketAddr,
     /// The path to our private key file.
-    pub key_path: PathBuf,
+    pub key_path: Option<PathBuf>,
 }
 
 /// The network configuration.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub struct NetworkConfig {
     /// The list of parties in the network.
     pub parties: Vec<NetworkParty>,
@@ -137,7 +141,7 @@ pub struct NetworkConfig {
     /// The [SocketAddr] we bind to.
     pub bind_addr: SocketAddr,
     /// The private key.
-    pub key: PrivateKeyDer<'static>,
+    pub key: Option<Vec<u8>>,
 }
 
 impl TryFrom<NetworkConfigFile> for NetworkConfig {
@@ -148,8 +152,11 @@ impl TryFrom<NetworkConfigFile> for NetworkConfig {
             .into_iter()
             .map(NetworkParty::try_from)
             .collect::<Result<Vec<_>, _>>()?;
-        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(value.key_path)?))
-            .clone_key();
+        let key = if let Some(path) = value.key_path {
+            Some(std::fs::read(path)?)
+        } else {
+            None
+        };
         Ok(NetworkConfig {
             parties,
             my_id: value.my_id,
@@ -165,7 +172,7 @@ impl Clone for NetworkConfig {
             parties: self.parties.clone(),
             my_id: self.my_id,
             bind_addr: self.bind_addr,
-            key: self.key.clone_key(),
+            key: self.key.clone(),
         }
     }
 }

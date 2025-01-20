@@ -25,7 +25,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirGroth16Driver<F, N> {
     }
 }
 
-impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
+impl<P: Pairing, N: ShamirNetwork + Sync> CircomGroth16Prover<P>
     for ShamirGroth16Driver<P::ScalarField, N>
 {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;

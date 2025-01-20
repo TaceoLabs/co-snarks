@@ -23,9 +23,9 @@ fn main() -> Result<()> {
 
     let CertifiedKey { cert, key_pair } =
         rcgen::generate_simple_self_signed(args.sans).context("generating self-signed cert")?;
-    let key = key_pair.serialize_der();
+    let key = key_pair.serialize_pem();
     std::fs::write(args.key_path, key).context("writing key file")?;
-    let cert = cert.der();
+    let cert = cert.pem();
     std::fs::write(args.cert_path, cert).context("writing certificate file")?;
     Ok(())
 }

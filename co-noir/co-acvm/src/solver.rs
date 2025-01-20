@@ -83,7 +83,7 @@ where
     // there will a more fields added as we add functionality
     function_index: usize,
     // the memory blocks
-    memory_access: IntMap<<T::Lookup as LookupTableProvider<F>>::SecretSharedMap>,
+    memory_access: IntMap<u64, <T::Lookup as LookupTableProvider<F>>::SecretSharedMap>,
 }
 
 impl<T> CoSolver<T, ark_bn254::Fr>

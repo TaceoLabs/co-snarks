@@ -2,16 +2,15 @@
 //!
 //! This module contains implementation of the rep3 mpc network
 
-use std::sync::Arc;
+use std::sync::{atomic::AtomicUsize, Arc};
 
 use crate::RngType;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
-use eyre::{bail, eyre, Report};
-use mpc_net::{
-    channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler, MpcNetworkHandlerWrapper,
-};
+use eyre::{bail, Report};
+use mpc_net::{config::NetworkConfig, GrpcNetworking};
+use tokio::runtime::Runtime;
 
 use super::{
     conversion::A2BType,
@@ -144,10 +143,7 @@ pub trait Rep3Network: Send {
     /// Sends `data` to the next party and receives from the previous party. Use this whenever
     /// possible in contrast to calling [`Self::send_next()`] and [`Self::recv_prev()`] sequential. This method
     /// executes send/receive concurrently.
-    fn reshare<F: CanonicalSerialize + CanonicalDeserialize>(
-        &mut self,
-        data: F,
-    ) -> std::io::Result<F> {
+    fn reshare<F: CanonicalSerialize + CanonicalDeserialize>(&self, data: F) -> std::io::Result<F> {
         let mut res = self.reshare_many(&[data])?;
         if res.len() != 1 {
             Err(std::io::Error::new(
@@ -162,13 +158,13 @@ pub trait Rep3Network: Send {
 
     /// Perform multiple reshares with one networking round
     fn reshare_many<F: CanonicalSerialize + CanonicalDeserialize>(
-        &mut self,
+        &self,
         data: &[F],
     ) -> std::io::Result<Vec<F>>;
 
     /// Broadcast data to the other two parties and receive data from them
     fn broadcast<F: CanonicalSerialize + CanonicalDeserialize>(
-        &mut self,
+        &self,
         data: F,
     ) -> std::io::Result<(F, F)> {
         let (mut prev, mut next) = self.broadcast_many(&[data])?;
@@ -187,34 +183,30 @@ pub trait Rep3Network: Send {
 
     /// Broadcast data to the other two parties and receive data from them
     fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
-        &mut self,
+        &self,
         data: &[F],
     ) -> std::io::Result<(Vec<F>, Vec<F>)>;
 
     /// Sends data to the target party. This function has a default implementation for calling [Rep3Network::send_many].
-    fn send<F: CanonicalSerialize>(&mut self, target: PartyID, data: F) -> std::io::Result<()> {
+    fn send<F: CanonicalSerialize>(&self, target: PartyID, data: F) -> std::io::Result<()> {
         self.send_many(target, &[data])
     }
 
     /// Sends a vector of data to the target party.
-    fn send_many<F: CanonicalSerialize>(
-        &mut self,
-        target: PartyID,
-        data: &[F],
-    ) -> std::io::Result<()>;
+    fn send_many<F: CanonicalSerialize>(&self, target: PartyID, data: &[F]) -> std::io::Result<()>;
 
     /// Sends data to the party with id = next_id (i.e., my_id + 1 mod 3). This function has a default implementation for calling [Rep3Network::send] with the next_id.
-    fn send_next<F: CanonicalSerialize>(&mut self, data: F) -> std::io::Result<()> {
+    fn send_next<F: CanonicalSerialize>(&self, data: F) -> std::io::Result<()> {
         self.send(self.get_id().next_id(), data)
     }
 
     /// Sends a vector data to the party with id = next_id (i.e., my_id + 1 mod 3). This function has a default implementation for calling [Rep3Network::send_many] with the next_id.
-    fn send_next_many<F: CanonicalSerialize>(&mut self, data: &[F]) -> std::io::Result<()> {
+    fn send_next_many<F: CanonicalSerialize>(&self, data: &[F]) -> std::io::Result<()> {
         self.send_many(self.get_id().next_id(), data)
     }
 
     /// Receives data from the party with the given id. This function has a default implementation for calling [Rep3Network::recv_many] and checking for the correct length of 1.
-    fn recv<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<F> {
+    fn recv<F: CanonicalDeserialize>(&self, from: PartyID) -> std::io::Result<F> {
         let mut res = self.recv_many(from)?;
         if res.len() != 1 {
             Err(std::io::Error::new(
@@ -227,32 +219,33 @@ pub trait Rep3Network: Send {
     }
 
     /// Receives a vector of data from the party with the given id.
-    fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>>;
+    fn recv_many<F: CanonicalDeserialize>(&self, from: PartyID) -> std::io::Result<Vec<F>>;
 
     /// Receives data from the party with the id = prev_id (i.e., my_id + 2 mod 3). This function has a default implementation for calling [Rep3Network::recv] with the prev_id.
-    fn recv_prev<F: CanonicalDeserialize>(&mut self) -> std::io::Result<F> {
+    fn recv_prev<F: CanonicalDeserialize>(&self) -> std::io::Result<F> {
         self.recv(self.get_id().prev_id())
     }
 
     /// Receives a vector of data from the party with the id = prev_id (i.e., my_id + 2 mod 3). This function has a default implementation for calling [Rep3Network::recv_many] with the prev_id.
-    fn recv_prev_many<F: CanonicalDeserialize>(&mut self) -> std::io::Result<Vec<F>> {
+    fn recv_prev_many<F: CanonicalDeserialize>(&self) -> std::io::Result<Vec<F>> {
         self.recv_many(self.get_id().prev_id())
     }
 
     /// Fork the network into two separate instances with their own connections
-    fn fork(&mut self) -> std::io::Result<Self>
+    fn fork(&self) -> std::io::Result<Self>
     where
         Self: Sized;
 }
 
 // TODO make generic over codec?
 /// This struct can be used to facilitate network communication for the REP3 MPC protocol.
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct Rep3MpcNet {
     pub(crate) id: PartyID,
-    pub(crate) chan_next: ChannelHandle<Bytes, BytesMut>,
-    pub(crate) chan_prev: ChannelHandle<Bytes, BytesMut>,
-    pub(crate) net_handler: Arc<MpcNetworkHandlerWrapper>,
+    pub(crate) net: GrpcNetworking,
+    pub(crate) session_id: usize,
+    pub(crate) next_session_id: Arc<AtomicUsize>,
+    pub(crate) runtime: Arc<Runtime>,
 }
 
 impl Rep3MpcNet {
@@ -262,66 +255,47 @@ impl Rep3MpcNet {
             bail!("REP3 protocol requires exactly 3 parties")
         }
         let id = PartyID::try_from(config.my_id)?;
+
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        let (net_handler, chan_next, chan_prev) = runtime.block_on(async {
-            let net_handler = MpcNetworkHandler::establish(config).await?;
-            let mut channels = net_handler.get_byte_channels().await?;
-            let chan_next = channels
-                .remove(&id.next_id().into())
-                .ok_or(eyre!("no next channel found"))?;
-            let chan_prev = channels
-                .remove(&id.prev_id().into())
-                .ok_or(eyre!("no prev channel found"))?;
-            if !channels.is_empty() {
-                bail!("unexpected channels found")
-            }
 
-            let chan_next = ChannelHandle::manage(chan_next);
-            let chan_prev = ChannelHandle::manage(chan_prev);
-            Ok((net_handler, chan_next, chan_prev))
-        })?;
+        let net = runtime.block_on(GrpcNetworking::new(config))?;
+
         Ok(Self {
             id,
-            net_handler: Arc::new(MpcNetworkHandlerWrapper::new(runtime, net_handler)),
-            chan_next,
-            chan_prev,
+            net,
+            session_id: 0,
+            next_session_id: Arc::new(AtomicUsize::new(1)),
+            runtime: Arc::new(runtime),
         })
     }
 
     /// Sends bytes over the network to the target party.
-    pub fn send_bytes(&mut self, target: PartyID, data: Bytes) -> std::io::Result<()> {
-        if target == self.id.next_id() {
-            std::mem::drop(self.chan_next.blocking_send(data));
-            Ok(())
-        } else if target == self.id.prev_id() {
-            std::mem::drop(self.chan_prev.blocking_send(data));
-            Ok(())
-        } else {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Cannot send to self",
-            ));
-        }
+    pub fn send_bytes(&self, target: PartyID, data: Bytes) -> std::io::Result<()> {
+        self.runtime
+            .block_on(self.net.send(data.to_vec(), target.into(), self.session_id))
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    format!("failed to send bytes {e}"),
+                )
+            })
     }
 
     /// Receives bytes over the network from the party with the given id.
-    pub fn recv_bytes(&mut self, from: PartyID) -> std::io::Result<BytesMut> {
-        let data = if from == self.id.prev_id() {
-            self.chan_prev.blocking_recv().blocking_recv()
-        } else if from == self.id.next_id() {
-            self.chan_next.blocking_recv().blocking_recv()
-        } else {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Cannot recv from self",
-            ));
-        };
-        let data = data.map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::BrokenPipe, "receive channel end died")
-        })??;
-        Ok(data)
+    pub fn recv_bytes(&self, from: PartyID) -> std::io::Result<BytesMut> {
+        Ok(self
+            .runtime
+            .block_on(self.net.receive(from.into(), self.session_id))
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    format!("failed to recv bytes: {e}"),
+                )
+            })?
+            .as_slice()
+            .into())
     }
 }
 
@@ -331,7 +305,7 @@ impl Rep3Network for Rep3MpcNet {
     }
 
     fn reshare_many<F: CanonicalSerialize + CanonicalDeserialize>(
-        &mut self,
+        &self,
         data: &[F],
     ) -> std::io::Result<Vec<F>> {
         self.send_many(self.id.next_id(), data)?;
@@ -339,7 +313,7 @@ impl Rep3Network for Rep3MpcNet {
     }
 
     fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize>(
-        &mut self,
+        &self,
         data: &[F],
     ) -> std::io::Result<(Vec<F>, Vec<F>)> {
         self.send_many(self.id.next_id(), data)?;
@@ -349,11 +323,7 @@ impl Rep3Network for Rep3MpcNet {
         Ok((recv_prev, recv_next))
     }
 
-    fn send_many<F: CanonicalSerialize>(
-        &mut self,
-        target: PartyID,
-        data: &[F],
-    ) -> std::io::Result<()> {
+    fn send_many<F: CanonicalSerialize>(&self, target: PartyID, data: &[F]) -> std::io::Result<()> {
         let size = data.serialized_size(ark_serialize::Compress::No);
         let mut ser_data = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut ser_data)
@@ -361,7 +331,7 @@ impl Rep3Network for Rep3MpcNet {
         self.send_bytes(target, Bytes::from(ser_data))
     }
 
-    fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
+    fn recv_many<F: CanonicalDeserialize>(&self, from: PartyID) -> std::io::Result<Vec<F>> {
         let data = self.recv_bytes(from)?;
 
         let res = Vec::<F>::deserialize_uncompressed(&data[..])
@@ -370,32 +340,33 @@ impl Rep3Network for Rep3MpcNet {
         Ok(res)
     }
 
-    fn fork(&mut self) -> std::io::Result<Self> {
-        let id = self.id;
-        let net_handler = Arc::clone(&self.net_handler);
-        let (chan_next, chan_prev) = net_handler.runtime.block_on(async {
-            let mut channels = net_handler.inner.get_byte_channels().await?;
+    fn fork(&self) -> std::io::Result<Self> {
+        tracing::debug!("Party {}: calling fork", self.id);
+        let session_id = self
+            .next_session_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 
-            let chan_next = channels
-                .remove(&id.next_id().into())
-                .expect("to find next channel");
-            let chan_prev = channels
-                .remove(&id.prev_id().into())
-                .expect("to find prev channel");
-            if !channels.is_empty() {
-                panic!("unexpected channels found")
-            }
-
-            let chan_next = ChannelHandle::manage(chan_next);
-            let chan_prev = ChannelHandle::manage(chan_prev);
-            Ok::<_, std::io::Error>((chan_next, chan_prev))
-        })?;
+        self.runtime
+            .block_on(self.net.new_session(session_id))
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         Ok(Self {
-            id,
-            net_handler,
-            chan_next,
-            chan_prev,
+            id: self.id,
+            net: self.net.clone(),
+            session_id,
+            next_session_id: self.next_session_id.clone(),
+            runtime: self.runtime.clone(),
         })
+    }
+}
+
+impl Drop for Rep3MpcNet {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.runtime) == 1 {
+            tracing::debug!("Party {}: calling shutdown", self.id);
+            if let Err(err) = self.runtime.block_on(self.net.shutdown()) {
+                tracing::error!("Party {}: error in network shutdown: {err}", self.id);
+            }
+        }
     }
 }

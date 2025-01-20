@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package party_node;
+
+service PartyNode {
+    rpc SendMessage (stream SendRequest) returns (SendResponse);
+    rpc Shutdown (ShutdownRequest) returns (ShutdownResponse);
+}
+
+message SendRequest {
+    bytes data = 1;
+}
+
+message SendResponse {}
+
+message ShutdownRequest {}
+
+message ShutdownResponse {}

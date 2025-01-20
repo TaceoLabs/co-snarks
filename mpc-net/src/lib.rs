@@ -1,313 +1,325 @@
 //! A simple networking layer for MPC protocols.
+
 #![warn(missing_docs)]
-use std::{
-    collections::{BTreeMap, HashMap},
-    io,
-    net::{SocketAddr, ToSocketAddrs},
-    sync::Arc,
-    time::Duration,
+
+use std::{collections::HashMap, net::ToSocketAddrs, str::FromStr, sync::Arc};
+
+use crate::proto_generated::party_node::{
+    party_node_client::PartyNodeClient, party_node_server::PartyNode, SendRequest, SendResponse,
 };
 
-use channel::{BytesChannel, Channel};
-use codecs::BincodeCodec;
-use color_eyre::eyre::{self, Context, Report};
-use config::NetworkConfig;
-use quinn::{
-    crypto::rustls::QuicClientConfig,
-    rustls::{pki_types::CertificateDer, RootCertStore},
+use backoff::{future::retry, ExponentialBackoff};
+use config::{NetworkConfig, NetworkParty};
+use eyre::{eyre, Context, ContextCompat};
+use futures::TryFutureExt;
+use proto_generated::party_node::{
+    party_node_server::PartyNodeServer, ShutdownRequest, ShutdownResponse,
 };
-use quinn::{
-    ClientConfig, Connection, Endpoint, IdleTimeout, RecvStream, SendStream, TransportConfig,
-    VarInt,
+use tokio::sync::{
+    mpsc::{self, UnboundedSender},
+    Mutex, Notify, RwLock,
 };
-use serde::{de::DeserializeOwned, Serialize};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    runtime::Runtime,
+use tokio_stream::StreamExt;
+use tonic::{
+    async_trait,
+    metadata::AsciiMetadataValue,
+    transport::{Channel, ClientTlsConfig, Identity, Server, ServerTlsConfig},
+    Request, Response, Status, Streaming,
 };
-use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
 
-pub mod channel;
-pub mod codecs;
 pub mod config;
+mod proto_generated;
 
-/// A warapper for a runtime and a network handler for MPC protocols.
-/// Ensures a gracefull shutdown on drop
-#[derive(Debug)]
-pub struct MpcNetworkHandlerWrapper {
-    /// The runtime used by the network handler
-    pub runtime: Runtime,
-    /// The wrapped network handler
-    pub inner: MpcNetworkHandler,
+/// A gRPC MPC network
+#[derive(Debug, Clone)]
+pub struct GrpcNetworking {
+    id: usize,
+    num_parties: usize,
+    // (other party id, session_id) -> outgoing streams to send messages to that party
+    #[allow(clippy::complexity)]
+    outgoing: Arc<RwLock<HashMap<(usize, usize), Arc<UnboundedSender<SendRequest>>>>>,
+    // (other party id, session_id) -> incoming message streams
+    #[allow(clippy::complexity)]
+    incoming: Arc<RwLock<HashMap<(usize, usize), Mutex<Streaming<SendRequest>>>>>,
+    // other party id -> client to call that party
+    clients: Arc<RwLock<HashMap<usize, PartyNodeClient<Channel>>>>,
+    // session_id -> number of accepted streams
+    ready_sem: Arc<(Mutex<HashMap<usize, usize>>, Notify)>,
+    shutdown_sem: Arc<(Mutex<usize>, Notify)>,
 }
 
-impl MpcNetworkHandlerWrapper {
-    /// Create a new wrapper
-    pub fn new(runtime: Runtime, inner: MpcNetworkHandler) -> Self {
-        Self { runtime, inner }
-    }
-}
-
-impl Drop for MpcNetworkHandlerWrapper {
-    fn drop(&mut self) {
-        // ignore errors in drop
-        let _ = self.runtime.block_on(self.inner.shutdown());
-    }
-}
-
-/// A network handler for MPC protocols.
-#[derive(Debug)]
-pub struct MpcNetworkHandler {
-    // this is a btreemap because we rely on iteration order
-    connections: BTreeMap<usize, Connection>,
-    endpoints: Vec<Endpoint>,
-    my_id: usize,
-}
-
-impl MpcNetworkHandler {
-    /// Tries to establish a connection to other parties in the network based on the provided [NetworkConfig].
-    pub async fn establish(config: NetworkConfig) -> Result<Self, Report> {
-        config.check_config()?;
-        let certs: HashMap<usize, CertificateDer> = config
-            .parties
-            .iter()
-            .map(|p| (p.id, p.cert.clone()))
-            .collect();
-
-        let mut root_store = RootCertStore::empty();
-        for (id, cert) in &certs {
-            root_store
-                .add(cert.clone())
-                .with_context(|| format!("adding certificate for party {} to root store", id))?;
-        }
-        let crypto = quinn::rustls::ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
-
-        let client_config = {
-            let mut transport_config = TransportConfig::default();
-            transport_config.max_idle_timeout(Some(
-                IdleTimeout::try_from(Duration::from_secs(60)).unwrap(),
-            ));
-            // atm clients send keepalive packets
-            transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
-            let mut client_config =
-                ClientConfig::new(Arc::new(QuicClientConfig::try_from(crypto)?));
-            client_config.transport_config(Arc::new(transport_config));
-            client_config
+impl GrpcNetworking {
+    /// Create a new [GrpcNetworking]
+    pub async fn new(config: NetworkConfig) -> eyre::Result<Self> {
+        let num_parties = config.parties.len();
+        let net = Self {
+            id: config.my_id,
+            num_parties,
+            outgoing: Arc::default(),
+            incoming: Arc::default(),
+            clients: Arc::default(),
+            shutdown_sem: Arc::new((Mutex::new(num_parties - 1), Notify::new())),
+            ready_sem: Arc::default(),
         };
 
-        let server_config =
-            quinn::ServerConfig::with_single_cert(vec![certs[&config.my_id].clone()], config.key)
-                .context("creating our server config")?;
-        let our_socket_addr = config.bind_addr;
+        let mut server = if let Some(key) = config.key {
+            let cert = config.parties[config.my_id]
+                .cert
+                .as_ref()
+                .ok_or(eyre!("secret key is present, but no certificate found"))?;
+            let identity = Identity::from_pem(cert, key);
+            Server::builder().tls_config(ServerTlsConfig::new().identity(identity))?
+        } else {
+            Server::builder()
+        };
 
-        let mut endpoints = Vec::new();
-        let server_endpoint = quinn::Endpoint::server(server_config.clone(), our_socket_addr)?;
+        // Initialize server
+        let net_ = net.clone();
+        tokio::spawn(async move {
+            server
+                .add_service(PartyNodeServer::new(net_).max_decoding_message_size(usize::MAX))
+                .serve(config.bind_addr)
+                .await?;
+            Ok::<_, eyre::Report>(())
+        });
 
-        let mut connections = BTreeMap::new();
-
+        // Connect to parties
         for party in config.parties {
             if party.id == config.my_id {
-                // skip self
                 continue;
             }
-            if party.id < config.my_id {
-                // connect to party, we are client
+            net.connect_to_party(party).await?;
+        }
 
-                let party_addresses: Vec<SocketAddr> = party
-                    .dns_name
-                    .to_socket_addrs()
-                    .with_context(|| format!("while resolving DNS name for {}", party.dns_name))?
-                    .collect();
-                if party_addresses.is_empty() {
-                    return Err(eyre::eyre!("could not resolve DNS name {}", party.dns_name));
-                }
-                let party_addr = party_addresses[0];
-                let local_client_socket: SocketAddr = match party_addr {
-                    SocketAddr::V4(_) => {
-                        "0.0.0.0:0".parse().expect("hardcoded IP address is valid")
-                    }
-                    SocketAddr::V6(_) => "[::]:0".parse().expect("hardcoded IP address is valid"),
-                };
-                let endpoint = quinn::Endpoint::client(local_client_socket)
-                    .with_context(|| format!("creating client endpoint to party {}", party.id))?;
-                let conn = endpoint
-                    .connect_with(client_config.clone(), party_addr, &party.dns_name.hostname)
-                    .with_context(|| {
-                        format!("setting up client connection with party {}", party.id)
-                    })?
+        net.new_session(0).await?;
+
+        Ok(net)
+    }
+
+    async fn connect_to_party(&self, party: NetworkParty) -> eyre::Result<()> {
+        tracing::debug!("Party {}: connecting to party {} with", self.id, party.id);
+        let addr = party
+            .dns_name
+            .to_socket_addrs()
+            .with_context(|| format!("while resolving DNS name for {}", party.dns_name))?
+            .next()
+            .with_context(|| format!("could not resolve DNS name {}", party.dns_name))?
+            .to_string();
+
+        let backoff = ExponentialBackoff {
+            max_elapsed_time: Some(std::time::Duration::from_secs(30)),
+            max_interval: std::time::Duration::from_secs(1),
+            multiplier: 1.1,
+            initial_interval: std::time::Duration::from_millis(10),
+            ..Default::default()
+        };
+
+        if let Some(cert) = party.cert {
+            let tls = ClientTlsConfig::new()
+                .ca_certificate(cert)
+                .domain_name(party.dns_name.hostname);
+
+            let endpoint = Channel::builder(format!("https://{addr}").parse()?).tls_config(tls)?;
+
+            let channel = retry(backoff, || async {
+                endpoint.connect().map_err(|e| e.into()).await
+            })
+            .await?;
+
+            let client = PartyNodeClient::new(channel);
+
+            self.clients.write().await.insert(party.id, client);
+        } else {
+            let endpoint = Channel::builder(format!("http://{addr}").parse()?);
+            let client = retry(backoff, || async {
+                PartyNodeClient::connect(endpoint.clone())
+                    .map_err(|e| e.into())
                     .await
-                    .with_context(|| format!("connecting as a client to party {}", party.id))?;
-                let mut uni = conn.open_uni().await?;
-                uni.write_u32(u32::try_from(config.my_id).expect("party id fits into u32"))
-                    .await?;
-                uni.flush().await?;
-                uni.finish()?;
-                tracing::trace!(
-                    "Conn with id {} from {} to {}",
-                    conn.stable_id(),
-                    endpoint.local_addr().unwrap(),
-                    conn.remote_address(),
-                );
-                assert!(connections.insert(party.id, conn).is_none());
-                endpoints.push(endpoint);
-            } else {
-                // we are the server, accept a connection
-                match tokio::time::timeout(Duration::from_secs(60), server_endpoint.accept()).await
-                {
-                    Ok(Some(maybe_conn)) => {
-                        let conn = maybe_conn.await?;
-                        tracing::trace!(
-                            "Conn with id {} from {} to {}",
-                            conn.stable_id(),
-                            server_endpoint.local_addr().unwrap(),
-                            conn.remote_address(),
-                        );
-                        let mut uni = conn.accept_uni().await?;
-                        let other_party_id = uni.read_u32().await?;
-                        assert!(connections
-                            .insert(
-                                usize::try_from(other_party_id).expect("u32 fits into usize"),
-                                conn
-                            )
-                            .is_none());
-                    }
-                    Ok(None) => {
-                        return Err(eyre::eyre!(
-                            "server endpoint did not accept a connection from party {}",
-                            party.id
-                        ))
-                    }
-                    Err(_) => {
-                        return Err(eyre::eyre!(
-                            "party {} did not connect within 60 seconds - timeout",
-                            party.id
-                        ))
-                    }
-                }
-            }
+            })
+            .await?;
+            self.clients.write().await.insert(party.id, client);
         }
-        endpoints.push(server_endpoint);
 
-        Ok(MpcNetworkHandler {
-            connections,
-            endpoints,
-            my_id: config.my_id,
-        })
-    }
-
-    /// Returns the number of sent and received bytes.
-    pub fn get_send_receive(&self, i: usize) -> std::io::Result<(u64, u64)> {
-        let conn = self
-            .connections
-            .get(&i)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such connection"))?;
-        let stats = conn.stats();
-        Ok((stats.udp_tx.bytes, stats.udp_rx.bytes))
-    }
-
-    /// Prints the connection statistics.
-    pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
-        for (i, conn) in &self.connections {
-            let stats = conn.stats();
-            writeln!(
-                out,
-                "Connection {} stats:\n\tSENT: {} bytes\n\tRECV: {} bytes",
-                i, stats.udp_tx.bytes, stats.udp_rx.bytes
-            )?;
-        }
         Ok(())
     }
 
-    /// Sets up a new [BytesChannel] between each party. The resulting map maps the id of the party to its respective [BytesChannel].
-    pub async fn get_byte_channels(
-        &self,
-    ) -> std::io::Result<HashMap<usize, BytesChannel<RecvStream, SendStream>>> {
-        // set max frame length to 1Tb and length_field_length to 5 bytes
-        const NUM_BYTES: usize = 5;
-        let codec = LengthDelimitedCodec::builder()
-            .length_field_type::<u64>() // u64 because this is the type the length is decoded into, and u32 doesnt fit 5 bytes
-            .length_field_length(NUM_BYTES)
-            .max_frame_length(1usize << (NUM_BYTES * 8))
-            .new_codec();
-        self.get_custom_channels(codec).await
-    }
-
-    /// Set up a new [Channel] using [BincodeCodec] between each party. The resulting map maps the id of the party to its respective [Channel].
-    pub async fn get_serde_bincode_channels<M: Serialize + DeserializeOwned + 'static>(
-        &self,
-    ) -> std::io::Result<HashMap<usize, Channel<RecvStream, SendStream, BincodeCodec<M>>>> {
-        let bincodec = BincodeCodec::<M>::new();
-        self.get_custom_channels(bincodec).await
-    }
-
-    /// Set up a new [Channel] using the provided codec between each party. The resulting map maps the id of the party to its respective [Channel].
-    pub async fn get_custom_channels<
-        MSend,
-        MRecv,
-        C: Encoder<MSend, Error = io::Error>
-            + Decoder<Item = MRecv, Error = io::Error>
-            + 'static
-            + Clone,
-    >(
-        &self,
-        codec: C,
-    ) -> std::io::Result<HashMap<usize, Channel<RecvStream, SendStream, C>>> {
-        let mut channels = HashMap::with_capacity(self.connections.len() - 1);
-        for (&id, conn) in self.connections.iter() {
-            if id < self.my_id {
-                // we are the client, so we are the receiver
-                let (mut send_stream, mut recv_stream) = conn.open_bi().await?;
-                send_stream.write_u32(self.my_id as u32).await?;
-                let their_id = recv_stream.read_u32().await?;
-                assert!(their_id == id as u32);
-                let conn = Channel::new(recv_stream, send_stream, codec.clone());
-                assert!(channels.insert(id, conn).is_none());
-            } else {
-                // we are the server, so we are the sender
-                let (mut send_stream, mut recv_stream) = conn.accept_bi().await?;
-                let their_id = recv_stream.read_u32().await?;
-                assert!(their_id == id as u32);
-                send_stream.write_u32(self.my_id as u32).await?;
-                let conn = Channel::new(recv_stream, send_stream, codec.clone());
-                assert!(channels.insert(id, conn).is_none());
+    /// Create a new session
+    pub async fn new_session(&self, session: usize) -> eyre::Result<()> {
+        tracing::debug!("Party {}: new session {session}", self.id);
+        for (id, client) in self.clients.write().await.iter_mut() {
+            if self.outgoing.read().await.contains_key(&(*id, session)) {
+                return Err(eyre!(
+                    "Party {:?} has already created session {session:?}",
+                    self.id
+                ));
             }
+
+            // send message stream
+            let (tx, rx) = mpsc::unbounded_channel();
+            self.outgoing
+                .write()
+                .await
+                .insert((*id, session), Arc::new(tx));
+            let receiving_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
+            let mut request = Request::new(receiving_stream);
+            request.metadata_mut().insert(
+                "sender_id",
+                AsciiMetadataValue::from_str(&self.id.to_string())?,
+            );
+            request.metadata_mut().insert(
+                "session_id",
+                AsciiMetadataValue::from_str(&session.to_string())?,
+            );
+            let _response = client.send_message(request).await?;
         }
-        Ok(channels)
+
+        // wait until all parties connected
+        tracing::debug!("Party {}: wating for new session {session}", self.id);
+        let (ready, notify) = &*self.ready_sem;
+        loop {
+            if *ready
+                .lock()
+                .await
+                .entry(session)
+                .or_insert(self.num_parties - 1)
+                == 0
+            {
+                break;
+            }
+            notify.notified().await;
+        }
+        ready.lock().await.remove(&session);
+        tracing::debug!("Party {}: wating for new session {session} done ", self.id);
+
+        Ok(())
     }
 
-    /// Shutdown all connections, and call [`quinn::Endpoint::wait_idle`] on all of them
-    pub async fn shutdown(&self) -> std::io::Result<()> {
+    /// Send data to `receiver` for `session`
+    pub async fn send(&self, value: Vec<u8>, receiver: usize, session: usize) -> eyre::Result<()> {
+        let outgoing_stream = self
+            .outgoing
+            .read()
+            .await
+            .get(&(receiver, session))
+            .context("while get stream in send")?
+            .clone();
+
+        // Send message via the outgoing stream
+        let request = SendRequest { data: value };
+        outgoing_stream
+            .send(request.clone())
+            .map_err(|e| eyre!(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Receive data from `sender` for `session`
+    pub async fn receive(&self, sender: usize, session: usize) -> eyre::Result<Vec<u8>> {
+        // Just retrieve the first message from the corresponding queue
+        let incoming = self.incoming.read().await;
+        let queue = incoming
+            .get(&(sender, session))
+            .context("while get stream in receive")?;
+
+        let res = queue
+            .lock()
+            .await
+            .next()
+            .await
+            .ok_or(eyre!("No message received"))??;
+
+        Ok(res.data)
+    }
+
+    /// Shutdown and wait for all parties to be done
+    pub async fn shutdown(&self) -> eyre::Result<()> {
+        for (id, client) in self.clients.write().await.iter_mut() {
+            tracing::debug!("Party {}: sending shutdown to {id}", self.id);
+            let mut request = Request::new(ShutdownRequest::default());
+            request.metadata_mut().insert(
+                "sender_id",
+                AsciiMetadataValue::from_str(&self.id.to_string())?,
+            );
+            // get response can fail, we dont care
+            let _response = client.shutdown(request).await;
+        }
+
+        let (shutdown, notify) = &*self.shutdown_sem;
+        loop {
+            if *shutdown.lock().await == 0 {
+                break;
+            }
+            notify.notified().await;
+        }
+
+        tracing::debug!("Party {}: shutdown", self.id);
+
+        Ok(())
+    }
+}
+
+// Server implementation
+#[async_trait]
+impl PartyNode for GrpcNetworking {
+    async fn send_message(
+        &self,
+        request: Request<Streaming<SendRequest>>,
+    ) -> Result<Response<SendResponse>, Status> {
+        let sender_id: usize = request
+            .metadata()
+            .get("sender_id")
+            .ok_or(Status::unauthenticated("Sender ID not found"))?
+            .to_str()
+            .map_err(|_| Status::unauthenticated("Sender ID is not a string"))?
+            .parse()
+            .map_err(|_| Status::invalid_argument("Sender ID is not a number"))?;
+        if sender_id == self.id {
+            return Err(Status::unauthenticated(format!(
+                "Sender ID coincides with receiver ID: {:?}",
+                sender_id
+            )));
+        }
+
+        let session_id: usize = request
+            .metadata()
+            .get("session_id")
+            .ok_or(Status::unauthenticated("Session ID not found"))?
+            .to_str()
+            .map_err(|_| Status::unauthenticated("Session ID is not a string"))?
+            .parse()
+            .map_err(|_| Status::invalid_argument("Session ID is not a number"))?;
+
+        let incoming_stream = request.into_inner();
+
+        self.incoming
+            .write()
+            .await
+            .insert((sender_id, session_id), incoming_stream.into());
+
+        // increase ready sem for this seassion
+        let (ready, notify) = &*self.ready_sem;
+        *ready
+            .lock()
+            .await
+            .entry(session_id)
+            .or_insert(self.num_parties - 1) -= 1;
+        notify.notify_one();
+
         tracing::debug!(
-            "party {} shutting down, conns = {:?}",
-            self.my_id,
-            self.connections.keys()
+            "Party {}: inserted new stream for party {sender_id} and session {session_id} ",
+            self.id
         );
 
-        for (id, conn) in self.connections.iter() {
-            if self.my_id < *id {
-                let mut send = conn.open_uni().await?;
-                send.write_all(b"done").await?;
-            } else {
-                let mut recv = conn.accept_uni().await?;
-                let mut buffer = vec![0u8; b"done".len()];
-                recv.read_exact(&mut buffer).await.map_err(|_| {
-                    std::io::Error::new(std::io::ErrorKind::BrokenPipe, "failed to recv done msg")
-                })?;
+        Ok(Response::new(SendResponse {}))
+    }
 
-                tracing::debug!("party {} closing conn = {id}", self.my_id);
-
-                conn.close(
-                    0u32.into(),
-                    format!("close from party {}", self.my_id).as_bytes(),
-                );
-            }
-        }
-        for endpoint in self.endpoints.iter() {
-            endpoint.wait_idle().await;
-            endpoint.close(VarInt::from_u32(0), &[]);
-        }
-        Ok(())
+    async fn shutdown(
+        &self,
+        _request: Request<ShutdownRequest>,
+    ) -> Result<Response<ShutdownResponse>, Status> {
+        tracing::debug!("Party {}: recv shutdown", self.id);
+        let (shutdown, notify) = &*self.shutdown_sem;
+        *shutdown.lock().await -= 1;
+        notify.notify_one();
+        Ok(Response::new(ShutdownResponse {}))
     }
 }

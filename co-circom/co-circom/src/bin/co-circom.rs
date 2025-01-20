@@ -39,9 +39,8 @@ use co_plonk::Rep3CoPlonk;
 use co_plonk::{Plonk, ShamirCoPlonk};
 use color_eyre::eyre::{self, eyre, Context, ContextCompat};
 use mpc_core::protocols::{
-    bridges::network::RepToShamirNetwork,
     rep3::network::Rep3MpcNet,
-    shamir::{ShamirPreprocessing, ShamirProtocol},
+    shamir::{network::ShamirMpcNet, ShamirPreprocessing, ShamirProtocol},
 };
 use mpc_core::protocols::{rep3::network::Rep3Network, shamir::ShamirPrimeFieldShare};
 use std::time::Instant;
@@ -420,7 +419,7 @@ where
     // init MPC protocol
     let threshold = 1;
     let num_pairs = witness_share.witness.len();
-    let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
+    let preprocessing = ShamirPreprocessing::new(threshold, ShamirMpcNet::from(net), num_pairs)
         .context("while shamir preprocessing")?;
     let mut protocol = ShamirProtocol::from(preprocessing);
     // Translate witness to shamir shares

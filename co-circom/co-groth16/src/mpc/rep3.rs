@@ -27,7 +27,7 @@ impl<N: Rep3Network> Rep3Groth16Driver<N> {
     }
 }
 
-impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
+impl<P: Pairing, N: Rep3Network + Sync> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
 where
     N: 'static,
 {

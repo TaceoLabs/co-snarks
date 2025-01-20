@@ -5,10 +5,9 @@ use color_eyre::{
     eyre::{eyre, Context},
     Result,
 };
-use futures::{SinkExt, StreamExt};
 use mpc_net::{
     config::{NetworkConfig, NetworkConfigFile},
-    MpcNetworkHandler,
+    GrpcNetworking,
 };
 
 #[derive(Parser)]
@@ -30,25 +29,29 @@ async fn main() -> Result<()> {
             .context("parsing config file")?;
     let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
+    let parties = config.parties.clone();
 
-    let network = MpcNetworkHandler::establish(config).await?;
+    let network = GrpcNetworking::new(config).await?;
 
-    let mut channels = network.get_byte_channels().await?;
-
-    // send to all channels
-    for (&i, channel) in channels.iter_mut() {
-        let buf = vec![i as u8; 1024];
-        channel.send(buf.into()).await?;
-    }
-    // recv from all channels
-    for (&_, channel) in channels.iter_mut() {
-        let buf = channel.next().await;
-        if let Some(Ok(b)) = buf {
-            println!("received {}, should be {}", b[0], my_id as u8);
-            assert!(b.iter().all(|&x| x == my_id as u8))
+    // send to all parties
+    for party in parties.iter() {
+        if party.id == my_id {
+            continue;
         }
+        let buf = vec![party.id as u8; 1024];
+        network.send(buf, party.id, 0).await?;
     }
-    network.print_connection_stats(&mut std::io::stdout())?;
+
+    // recv from all parties
+    for party in parties.iter() {
+        if party.id == my_id {
+            continue;
+        }
+        let buf = network.receive(party.id, 0).await?;
+        assert!(buf.iter().all(|&x| x == my_id as u8))
+    }
+
+    network.shutdown().await?;
 
     Ok(())
 }

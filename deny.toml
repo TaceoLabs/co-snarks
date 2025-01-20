@@ -24,6 +24,7 @@ ignore = [
     { id = "RUSTSEC-2021-0139", reason = "ignore ansi_term unmaintained" },
     { id = "RUSTSEC-2022-0081", reason = "ignore json unmaintained" },
     { id = "RUSTSEC-2024-0388", reason = "ignore drivative unmaintained" },
+    { id = "RUSTSEC-2024-0384", reason = "ignore instant unmaintained" },
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories

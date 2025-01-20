@@ -50,8 +50,9 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 eyre = "0.6"
 figment = { version = "0.10.19", features = ["toml", "env"] }
 futures = "0.3.30"
+futures-util = "0.3.31"
 hex-literal = "0.4.1"
-intmap = "2.0.0"
+intmap = "3.0.1"
 itertools = "0.13.0"
 noirc-abi = { version = "1.0.0-beta.1", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-beta.1", package = "noirc_abi" }
 noirc-artifacts = { version = "1.0.0-beta.1", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-beta.1", package = "noirc_artifacts" }
@@ -63,7 +64,7 @@ rand = "0.8.5"
 rand_chacha = "0.3"
 rayon = "1.8.1"
 rcgen = "0.13"
-rustls = "0.23.15"
+rustls = "0.23.18"
 serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9.27"
