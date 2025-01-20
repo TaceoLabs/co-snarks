@@ -11,9 +11,9 @@ use crate::{
         types::{
             AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
             AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
-            ColumnIdx, FieldCT, GateCounter, MulQuad, PlookupBasicTable, PolyTriple, RamTranscript,
-            RangeConstraint, RangeList, ReadData, RomRecord, RomTable, RomTranscript,
-            UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
+            ColumnIdx, FieldCT, GateCounter, LogicConstraint, MulQuad, PlookupBasicTable,
+            PolyTriple, RamTranscript, RangeConstraint, RangeList, ReadData, RomRecord, RomTable,
+            RomTranscript, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
         },
     },
     utils::Utils,
@@ -160,7 +160,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     rom_arrays: Vec<RomTranscript>,
     ram_arrays: Vec<RamTranscript>,
     pub(crate) lookup_tables: Vec<PlookupBasicTable<P::ScalarField>>,
-    plookup: Plookup<P::ScalarField>,
+    pub(crate) plookup: Plookup<P::ScalarField>,
     range_lists: BTreeMap<u64, RangeList>,
     cached_partial_non_native_field_multiplications:
         Vec<CachedPartialNonNativeFieldMultiplication<P::ScalarField>>,
@@ -333,7 +333,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
     }
 
-    fn create_poly_gate(&mut self, inp: &PolyTriple<P::ScalarField>) {
+    pub(crate) fn create_poly_gate(&mut self, inp: &PolyTriple<P::ScalarField>) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c]);
 
         self.blocks
@@ -555,6 +555,184 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.num_gates += 1;
     }
 
+    fn create_logic_constraint(
+        &mut self,
+        driver: &mut T,
+        constraint: &LogicConstraint<P::ScalarField>,
+    ) -> std::io::Result<()> {
+        let left = constraint.a.to_field_ct();
+        let right = constraint.b.to_field_ct();
+
+        let res = self.create_logic_constraint_inner(
+            driver,
+            left,
+            right,
+            constraint.num_bits as usize,
+            constraint.is_xor_gate,
+        )?;
+        let our_res = FieldCT::from_witness_index(constraint.result);
+        res.assert_equal(&our_res, self, driver);
+        Ok(())
+    }
+
+    fn create_logic_constraint_inner(
+        &mut self,
+        driver: &mut T,
+        a: FieldCT<P::ScalarField>,
+        b: FieldCT<P::ScalarField>,
+        num_bits: usize,
+        is_xor_gate: bool,
+    ) -> std::io::Result<FieldCT<P::ScalarField>> {
+        // ensure the number of bits doesn't exceed field size and is not negative
+        assert!(num_bits < 254);
+        assert!(num_bits > 0);
+
+        assert!(!a.is_constant() || !b.is_constant());
+
+        if a.is_constant() && !b.is_constant() {
+            let a_native =
+                T::get_public(&a.get_value(self, driver)).expect("Constant should be public");
+            let a_witness =
+                FieldCT::<P::ScalarField>::from_witness_index(self.put_constant_variable(a_native));
+            return self.create_logic_constraint_inner(driver, a_witness, b, num_bits, is_xor_gate);
+        }
+
+        if !a.is_constant() && b.is_constant() {
+            let b_native =
+                T::get_public(&b.get_value(self, driver)).expect("Constant should be public");
+            let b_witness =
+                FieldCT::<P::ScalarField>::from_witness_index(self.put_constant_variable(b_native));
+            return self.create_logic_constraint_inner(driver, a, b_witness, num_bits, is_xor_gate);
+        }
+
+        // We have Plookup!
+        let num_chunks = (num_bits / 32) + if num_bits % 32 == 0 { 0 } else { 1 };
+        let left = a.get_value(self, driver);
+        let right = b.get_value(self, driver);
+
+        // Decompose the values
+        let mut decomp_left = Vec::new();
+        let mut decomp_right = Vec::new();
+        let mut to_mpc_decompose = Vec::new();
+
+        if !T::is_shared(&left) {
+            let sublimb_mask = (BigUint::one() << 32) - BigUint::one();
+            let mut left_: BigUint = T::get_public(&left)
+                .expect("Already checked it is public")
+                .into();
+
+            decomp_left = (0..num_chunks)
+                .map(|_| {
+                    let sublimb_value = P::ScalarField::from(&left_ & &sublimb_mask);
+                    left_ >>= 32;
+                    T::AcvmType::from(sublimb_value)
+                })
+                .collect();
+        } else {
+            to_mpc_decompose.push(T::get_shared(&left).expect("Already checked it is shared"))
+        }
+
+        if !T::is_shared(&right) {
+            let sublimb_mask = (BigUint::one() << 32) - BigUint::one();
+            let mut right_: BigUint = T::get_public(&right)
+                .expect("Already checked it is public")
+                .into();
+
+            decomp_right = (0..num_chunks)
+                .map(|_| {
+                    let sublimb_value = P::ScalarField::from(&right_ & &sublimb_mask);
+                    right_ >>= 32;
+                    T::AcvmType::from(sublimb_value)
+                })
+                .collect();
+        } else {
+            to_mpc_decompose.push(T::get_shared(&right).expect("Already checked it is shared"))
+        }
+
+        if !to_mpc_decompose.is_empty() {
+            // TACEO TODO can this be batchesd as well?
+            let decomp = T::decompose_arithmetic_many(driver, &to_mpc_decompose, num_bits, 32)?;
+            if T::is_shared(&left) {
+                decomp_left = decomp[0]
+                    .iter()
+                    .map(|val| T::AcvmType::from(val.to_owned()))
+                    .collect();
+            }
+            if T::is_shared(&right) {
+                decomp_right = decomp
+                    .last()
+                    .expect("Is there")
+                    .iter()
+                    .map(|val| T::AcvmType::from(val.to_owned()))
+                    .collect();
+            }
+        }
+
+        let mut a_accumulator = FieldCT::default();
+        let mut b_accumulator = FieldCT::default();
+        let mut res = FieldCT::zero();
+
+        for (i, (left_chunk, right_chunk)) in decomp_left.into_iter().zip(decomp_right).enumerate()
+        {
+            let chunk_size = if i != num_chunks - 1 {
+                32
+            } else {
+                num_bits - i * 32
+            };
+
+            let a_chunk = FieldCT::from_witness(left_chunk, self);
+            let b_chunk = FieldCT::from_witness(right_chunk, self);
+
+            let result_chunk = if is_xor_gate {
+                Plookup::read_from_2_to_1_table(
+                    self,
+                    driver,
+                    MultiTableId::Uint32Xor,
+                    a_chunk.to_owned(),
+                    b_chunk.to_owned(),
+                )
+            } else {
+                Plookup::read_from_2_to_1_table(
+                    self,
+                    driver,
+                    MultiTableId::Uint32And,
+                    a_chunk.to_owned(),
+                    b_chunk.to_owned(),
+                )
+            };
+
+            let scaling_factor = FieldCT::from(P::ScalarField::from(BigUint::one() << (32 * i)));
+            a_accumulator.add_assign(
+                &a_chunk.multiply(&scaling_factor, self, driver)?,
+                self,
+                driver,
+            );
+            b_accumulator.add_assign(
+                &b_chunk.multiply(&scaling_factor, self, driver)?,
+                self,
+                driver,
+            );
+            if chunk_size != 32 {
+                // TACEO TODO can the decompose in here be batched as well?
+                self.create_range_constraint(driver, a_chunk.witness_index, chunk_size as u32)?;
+                self.create_range_constraint(driver, b_chunk.witness_index, chunk_size as u32)?;
+            }
+
+            res.add_assign(
+                &result_chunk.multiply(&scaling_factor, self, driver)?,
+                self,
+                driver,
+            );
+        }
+
+        let a_slice = &a.slice((num_bits - 1) as u8, 0, num_bits, self, driver)?[1];
+        let b_slice = &b.slice((num_bits - 1) as u8, 0, num_bits, self, driver)?[1];
+        a_slice.assert_equal(&a_accumulator, self, driver);
+        b_slice.assert_equal(&b_accumulator, self, driver);
+
+        Ok(res)
+    }
+
     fn create_block_constraints(
         &mut self,
         constraint: &BlockConstraint<P::ScalarField>,
@@ -563,7 +741,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     ) {
         let mut init = Vec::with_capacity(constraint.init.len());
         for inp in constraint.init.iter() {
-            let value = self.poly_to_field_ct(inp);
+            let value: FieldCT<<P as Pairing>::ScalarField> = self.poly_to_field_ct(inp);
             init.push(value);
         }
 
@@ -773,10 +951,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
 
         // Add logic constraint
-        // for (i, constraint) in constraint_system.logic_constraints.iter().enumerate() {
-        //     todo!("Logic gates");
-        // }
+        for (i, constraint) in constraint_system.logic_constraints.iter().enumerate() {
+            self.create_logic_constraint(driver, constraint)?;
+            gate_counter.track_diff(
+                self,
+                &mut constraint_system.gates_per_opcode,
+                constraint_system.original_opcode_indices.logic_constraints[i],
+            );
+        }
 
+        // Add range constraints
         // We want to decompose all shared elements in parallel
         let (bits_locations, decomposed, decompose_indices) =
             self.prepare_for_range_decompose(driver, &constraint_system.range_constraints)?;
@@ -1953,7 +2137,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
     }
 
-    fn create_gates_from_plookup_accumulators(
+    pub(crate) fn create_gates_from_plookup_accumulators(
         &mut self,
         id: MultiTableId,
         read_values: ReadData<P::ScalarField>,
@@ -2499,12 +2683,12 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
     }
 
-    fn decompose_into_default_range(
+    pub(crate) fn decompose_into_default_range(
         &mut self,
         driver: &mut T,
         variable_index: u32,
         num_bits: u64,
-        decompose: Option<&[T::ArithmeticShare]>,
+        decompose: Option<&[T::ArithmeticShare]>, // If already decomposed, values are here
         target_range_bitnum: u64,
     ) -> std::io::Result<Vec<u32>> {
         assert!(self.is_valid_variable(variable_index as usize));
@@ -2544,18 +2728,28 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 .map(|item| T::AcvmType::from(item.clone()))
                 .collect(),
             None => {
-                // Not yet decomposed, i.e., it was a public value
-                let mut accumulator: BigUint = T::get_public(&val)
-                    .expect("Already checked it is public")
-                    .into();
-                let sublimb_mask: BigUint = sublimb_mask.into();
-                (0..num_limbs)
-                    .map(|_| {
-                        let sublimb_value = P::ScalarField::from(&accumulator & &sublimb_mask);
-                        accumulator >>= target_range_bitnum;
-                        T::AcvmType::from(sublimb_value)
-                    })
-                    .collect()
+                // Not yet decomposed
+                if T::is_shared(&val) {
+                    let decomp = T::decompose_arithmetic(
+                        driver,
+                        T::get_shared(&val).expect("Already checked it is shared"),
+                        num_bits as usize,
+                        target_range_bitnum as usize,
+                    )?;
+                    decomp.into_iter().map(T::AcvmType::from).collect()
+                } else {
+                    let mut accumulator: BigUint = T::get_public(&val)
+                        .expect("Already checked it is public")
+                        .into();
+                    let sublimb_mask: BigUint = sublimb_mask.into();
+                    (0..num_limbs)
+                        .map(|_| {
+                            let sublimb_value = P::ScalarField::from(&accumulator & &sublimb_mask);
+                            accumulator >>= target_range_bitnum;
+                            T::AcvmType::from(sublimb_value)
+                        })
+                        .collect()
+                }
             }
         };
         for (i, sublimb) in sublimbs.iter().enumerate() {

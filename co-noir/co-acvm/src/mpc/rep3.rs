@@ -543,6 +543,24 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         )
     }
 
+    fn slice(
+        &mut self,
+        input: Self::ArithmeticShare,
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+    ) -> std::io::Result<[Self::ArithmeticShare; 3]> {
+        let res = yao::slice_arithmetic(
+            input,
+            &mut self.io_context0,
+            msb as usize,
+            lsb as usize,
+            bitsize,
+        )?;
+        debug_assert_eq!(res.len(), 3);
+        Ok([res[0], res[1], res[2]])
+    }
+
     fn integer_bitwise_and(
         &mut self,
         lhs: Self::AcvmType,

@@ -4,7 +4,7 @@ use crate::polynomials::polynomial::Polynomial;
 use crate::types::plookup::BasicTableId;
 use crate::utils::Utils;
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;
@@ -596,7 +596,15 @@ pub(crate) struct FieldCT<F: PrimeField> {
 }
 
 impl<F: PrimeField> FieldCT<F> {
-    const IS_CONSTANT: u32 = u32::MAX;
+    pub(crate) const IS_CONSTANT: u32 = u32::MAX;
+
+    pub(crate) fn zero() -> Self {
+        Self {
+            additive_constant: F::zero(),
+            multiplicative_constant: F::zero(),
+            witness_index: Self::IS_CONSTANT,
+        }
+    }
 
     pub(crate) fn from_witness_index(witness_index: u32) -> Self {
         Self {
@@ -625,13 +633,13 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> T::AcvmType {
-        if self.witness_index != Self::IS_CONSTANT {
+        if !self.is_constant() {
             let variable = builder.get_variable(self.witness_index as usize);
             let mut res = driver.mul_with_public(self.multiplicative_constant, variable);
             driver.add_assign_with_public(self.additive_constant, &mut res);
             res
         } else {
-            T::AcvmType::from(self.additive_constant.to_owned())
+            T::AcvmType::from(self.additive_constant)
         }
     }
 
@@ -678,11 +686,14 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    fn is_constant(&self) -> bool {
+    pub(crate) fn is_constant(&self) -> bool {
         self.witness_index == Self::IS_CONSTANT
     }
 
-    fn normalize<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    pub(crate) fn normalize<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -721,6 +732,309 @@ impl<F: PrimeField> FieldCT<F> {
             const_scaling: self.additive_constant,
         });
         result
+    }
+
+    pub(crate) fn multiply<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        let mut result = Self::default();
+
+        if self.is_constant() && other.is_constant() {
+            // Both inputs are constant - don't add a gate.
+            // The value of a constant is tracked in `.additive_constant`.
+            result.additive_constant = self.additive_constant * other.additive_constant;
+        } else if !self.is_constant() && other.is_constant() {
+            // One input is constant: don't add a gate, but update scaling factors.
+
+            // /**
+            //  * Let:
+            //  *   a := this;
+            //  *   b := other;
+            //  *   a.v := ctx->variables[this.witness_index];
+            //  *   b.v := ctx->variables[other.witness_index];
+            //  *   .mul = .multiplicative_constant
+            //  *   .add = .additive_constant
+            //  */
+            // /**
+            //  * Value of this   = a.v * a.mul + a.add;
+            //  * Value of other  = b.add
+            //  * Value of result = a * b = a.v * [a.mul * b.add] + [a.add * b.add]
+            //  *                             ^   ^result.mul       ^result.add
+            //  *                             ^result.v
+            //  */
+            result.additive_constant = self.additive_constant * other.additive_constant;
+            result.multiplicative_constant = self.multiplicative_constant * other.additive_constant;
+            result.witness_index = self.witness_index;
+        } else if self.is_constant() && !other.is_constant() {
+            // One input is constant: don't add a gate, but update scaling factors.
+
+            // /**
+            //  * Value of this   = a.add;
+            //  * Value of other  = b.v * b.mul + b.add
+            //  * Value of result = a * b = b.v * [a.add * b.mul] + [a.add * b.add]
+            //  *                             ^   ^result.mul       ^result.add
+            //  *                             ^result.v
+            //  */
+            result.additive_constant = self.additive_constant * other.additive_constant;
+            result.multiplicative_constant = other.multiplicative_constant * self.additive_constant;
+            result.witness_index = other.witness_index;
+        } else {
+            // Both inputs map to circuit varaibles: create a `*` constraint.
+
+            // /**
+            //  * Value of this   = a.v * a.mul + a.add;
+            //  * Value of other  = b.v * b.mul + b.add;
+            //  * Value of result = a * b
+            //  *            = [a.v * b.v] * [a.mul * b.mul] + a.v * [a.mul * b.add] + b.v * [a.add * b.mul] + [a.ac * b.add]
+            //  *            = [a.v * b.v] * [     q_m     ] + a.v * [     q_l     ] + b.v * [     q_r     ] + [    q_c     ]
+            //  *            ^               ^Notice the add/mul_constants form selectors when a gate is created.
+            //  *            |                Only the witnesses (pointed-to by the witness_indexes) form the wires in/out of
+            //  *            |                the gate.
+            //  *            ^This entire value is pushed to ctx->variables as a new witness. The
+            //  *             implied additive & multiplicative constants of the new witness are 0 & 1 resp.
+            //  * Left wire value: a.v
+            //  * Right wire value: b.v
+            //  * Output wire value: result.v (with q_o = -1)
+            //  */
+            let q_c = self.additive_constant * other.additive_constant;
+            let q_r = self.additive_constant * other.multiplicative_constant;
+            let q_l = self.multiplicative_constant * other.additive_constant;
+            let q_m = self.multiplicative_constant * other.multiplicative_constant;
+
+            let left = builder.get_variable(self.witness_index as usize);
+            let right = builder.get_variable(other.witness_index as usize);
+
+            let out = driver.mul(left.to_owned(), right.to_owned())?;
+            let mut out = driver.mul_with_public(q_m, out);
+
+            let t0 = driver.mul_with_public(q_l, left);
+            driver.add_assign(&mut out, t0);
+
+            let t0 = driver.mul_with_public(q_r, right);
+            driver.add_assign(&mut out, t0);
+            driver.add_assign_with_public(q_c, &mut out);
+
+            result.witness_index = builder.add_variable(out);
+            builder.create_poly_gate(&PolyTriple::<P::ScalarField> {
+                a: self.witness_index,
+                b: other.witness_index,
+                c: result.witness_index,
+                q_m,
+                q_l,
+                q_r,
+                q_o: -P::ScalarField::one(),
+                q_c,
+            });
+        }
+        Ok(result)
+    }
+
+    pub(crate) fn add<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> Self {
+        let mut result = Self::default();
+
+        if self.witness_index == other.witness_index {
+            result.additive_constant = self.additive_constant + other.additive_constant;
+            result.multiplicative_constant =
+                self.multiplicative_constant + other.multiplicative_constant;
+            result.witness_index = self.witness_index;
+        } else if self.is_constant() && other.is_constant() {
+            // both inputs are constant - don't add a gate
+            result.additive_constant = self.additive_constant + other.additive_constant;
+        } else if !self.is_constant() && other.is_constant() {
+            // one input is constant - don't add a gate, but update scaling factors
+            result.additive_constant = self.additive_constant + other.additive_constant;
+            result.multiplicative_constant = self.multiplicative_constant;
+            result.witness_index = self.witness_index;
+        } else if self.is_constant() && !other.is_constant() {
+            result.additive_constant = self.additive_constant + other.additive_constant;
+            result.multiplicative_constant = other.multiplicative_constant;
+            result.witness_index = other.witness_index;
+        } else {
+            let left = builder.get_variable(self.witness_index as usize);
+            let right = builder.get_variable(other.witness_index as usize);
+            let mut out = driver.mul_with_public(self.multiplicative_constant, left);
+            let t0 = driver.mul_with_public(other.multiplicative_constant, right);
+            driver.add_assign(&mut out, t0);
+            driver.add_assign_with_public(self.additive_constant, &mut out);
+            driver.add_assign_with_public(other.additive_constant, &mut out);
+
+            result.witness_index = builder.add_variable(out);
+            builder.create_add_gate(&AddTriple::<P::ScalarField> {
+                a: self.witness_index,
+                b: other.witness_index,
+                c: result.witness_index,
+                a_scaling: self.multiplicative_constant,
+                b_scaling: other.multiplicative_constant,
+                c_scaling: -P::ScalarField::one(),
+                const_scaling: (self.additive_constant + other.additive_constant),
+            });
+        }
+        result
+    }
+
+    pub(crate) fn add_assign<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        *self = self.add(other, builder, driver);
+    }
+
+    // Slices a `field_ct` at given indices (msb, lsb) both included in the slice,
+    // returns three parts: [low, slice, high].
+    pub(crate) fn slice<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        msb: u8,
+        lsb: u8,
+        total_bitsize: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<[Self; 3]> {
+        const GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH: usize = 252;
+
+        assert!(msb >= lsb);
+        assert!((msb as usize) < GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
+
+        let msb_plus_one = msb as u32 + 1;
+
+        let value = self.get_value(builder, driver);
+        let (hi, lo, slice) = if T::is_shared(&value) {
+            let value = T::get_shared(&value).expect("Already checked it is shared");
+            let [lo, slice, hi] = driver.slice(value, msb, lsb, total_bitsize)?;
+            (
+                T::AcvmType::from(hi),
+                T::AcvmType::from(lo),
+                T::AcvmType::from(slice),
+            )
+        } else {
+            let value: BigUint = T::get_public(&value)
+                .expect("Already checked it is public")
+                .into();
+
+            let hi_mask = (BigUint::one() << (total_bitsize - msb as usize)) - BigUint::one();
+            let hi = (&value >> msb_plus_one) & hi_mask;
+
+            let lo_mask = (BigUint::one() << lsb) - BigUint::one();
+            let lo = &value & lo_mask;
+
+            let slice_mask = (BigUint::one() << ((msb - lsb) as u32 + 1)) - BigUint::one();
+            let slice = (value >> lsb) & slice_mask;
+
+            let hi_ = T::AcvmType::from(F::from(hi));
+            let lo_ = T::AcvmType::from(F::from(lo));
+            let slice_ = T::AcvmType::from(F::from(slice));
+            (hi_, lo_, slice_)
+        };
+
+        let hi_wit = Self::from_witness(hi, builder);
+        let lo_wit = Self::from_witness(lo, builder);
+        let slice_wit = Self::from_witness(slice, builder);
+
+        hi_wit.create_range_constraint(
+            GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH - msb as usize,
+            builder,
+            driver,
+        )?;
+        lo_wit.create_range_constraint(lsb as usize, builder, driver)?;
+        slice_wit.create_range_constraint(msb_plus_one as usize - lsb as usize, builder, driver)?;
+
+        let tmp_hi = hi_wit.multiply(
+            &FieldCT::from(F::from(BigUint::one() << msb_plus_one)),
+            builder,
+            driver,
+        )?;
+        let mut other = tmp_hi.add(&lo_wit, builder, driver);
+        let tmp_slice = slice_wit.multiply(
+            &FieldCT::from(F::from(BigUint::one() << lsb)),
+            builder,
+            driver,
+        )?;
+        other.add_assign(&tmp_slice, builder, driver);
+        self.assert_equal(&other, builder, driver);
+
+        Ok([lo_wit, slice_wit, hi_wit])
+    }
+
+    fn create_range_constraint<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        num_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        if num_bits == 0 {
+            self.assert_is_zero(builder);
+        } else if self.is_constant() {
+            let val: BigUint = T::get_public(&self.get_value(builder, driver))
+                .expect("Constants are public")
+                .into();
+            assert!((val.bits() as usize) < num_bits);
+        } else {
+            let index = self.normalize(builder, driver).get_witness_index();
+            // We have plookup
+            builder.decompose_into_default_range(
+                driver,
+                index,
+                num_bits as u64,
+                None,
+                GenericUltraCircuitBuilder::<P, T>::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn assert_is_zero<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) {
+        if self.is_constant() {
+            assert!(self.additive_constant.is_zero());
+            return;
+        }
+
+        let var = builder.get_variable(self.witness_index as usize);
+        if !T::is_shared(&var) {
+            // Sanity check
+            let value = T::get_public(&var).expect("Already checked it is public");
+            assert!((value * self.multiplicative_constant + self.additive_constant).is_zero())
+        }
+
+        builder.create_poly_gate(&PolyTriple::<P::ScalarField> {
+            a: self.witness_index,
+            b: builder.zero_idx,
+            c: builder.zero_idx,
+            q_m: P::ScalarField::zero(),
+            q_l: self.multiplicative_constant,
+            q_r: P::ScalarField::zero(),
+            q_o: P::ScalarField::zero(),
+            q_c: self.additive_constant,
+        });
     }
 }
 
@@ -1005,9 +1319,87 @@ impl<F: PrimeField> PlookupBasicTable<F> {
         table
     }
 
+    fn generate_and_rotate_table<const BITS_PER_SLICE: u64, const NUM_ROTATED_OUTPUT_BITS: u64>(
+        id: BasicTableId,
+        table_index: usize,
+    ) -> PlookupBasicTable<F> {
+        let base = 1 << BITS_PER_SLICE;
+        let mut table = PlookupBasicTable::new();
+
+        table.id = id;
+        table.table_index = table_index;
+        table.use_twin_keys = true;
+
+        for i in 0..base {
+            for j in 0..base {
+                table.column_1.push(F::from(i));
+                table.column_2.push(F::from(j));
+                table
+                    .column_3
+                    .push(F::from(Utils::rotate64(i & j, NUM_ROTATED_OUTPUT_BITS)));
+            }
+        }
+
+        table.get_values_from_key = BasicTableId::get_and_rotate_values_from_key::<
+            F,
+            BITS_PER_SLICE,
+            NUM_ROTATED_OUTPUT_BITS,
+        >;
+        let base = F::from(base);
+        table.column_1_step_size = base;
+        table.column_2_step_size = base;
+        table.column_3_step_size = base;
+
+        table
+    }
+
+    fn generate_xor_rotate_table<const BITS_PER_SLICE: u64, const NUM_ROTATED_OUTPUT_BITS: u64>(
+        id: BasicTableId,
+        table_index: usize,
+    ) -> PlookupBasicTable<F> {
+        let base = 1 << BITS_PER_SLICE;
+        let mut table = PlookupBasicTable::new();
+
+        table.id = id;
+        table.table_index = table_index;
+        table.use_twin_keys = true;
+
+        for i in 0..base {
+            for j in 0..base {
+                table.column_1.push(F::from(i));
+                table.column_2.push(F::from(j));
+                table
+                    .column_3
+                    .push(F::from(Utils::rotate64(i ^ j, NUM_ROTATED_OUTPUT_BITS)));
+            }
+        }
+
+        table.get_values_from_key = BasicTableId::get_xor_rotate_values_from_key::<
+            F,
+            BITS_PER_SLICE,
+            NUM_ROTATED_OUTPUT_BITS,
+        >;
+        let base = F::from(base);
+        table.column_1_step_size = base;
+        table.column_2_step_size = base;
+        table.column_3_step_size = base;
+
+        table
+    }
+
     pub(crate) fn create_basic_table(id: BasicTableId, index: usize) -> Self {
         // TACEO TODO this is a dummy implementation
-        assert!(id == BasicTableId::HonkDummyBasic1 || id == BasicTableId::HonkDummyBasic2);
+        assert!(
+            matches!(
+                id,
+                BasicTableId::HonkDummyBasic1
+                    | BasicTableId::HonkDummyBasic2
+                    | BasicTableId::UintAndRotate0
+                    | BasicTableId::UintXorRotate0
+            ),
+            "Create Basic Table for {:?} not implemented",
+            id
+        );
 
         match id {
             BasicTableId::HonkDummyBasic1 => Self::generate_honk_dummy_table::<
@@ -1016,8 +1408,10 @@ impl<F: PrimeField> PlookupBasicTable<F> {
             BasicTableId::HonkDummyBasic2 => Self::generate_honk_dummy_table::<
                 { BasicTableId::HonkDummyBasic2 as u64 },
             >(id, index),
+            BasicTableId::UintAndRotate0 => Self::generate_and_rotate_table::<6, 0>(id, index),
+            BasicTableId::UintXorRotate0 => Self::generate_xor_rotate_table::<6, 0>(id, index),
             _ => {
-                todo!()
+                todo!("Create other tables")
             }
         }
     }
@@ -1400,6 +1794,18 @@ impl<F: PrimeField> WitnessOrConstant<F> {
             index: 0,
             value: constant,
             is_constant: true,
+        }
+    }
+
+    pub(crate) fn is_constant(&self) -> bool {
+        self.is_constant
+    }
+
+    pub(crate) fn to_field_ct(&self) -> FieldCT<F> {
+        if self.is_constant {
+            FieldCT::from(self.value)
+        } else {
+            FieldCT::from_witness_index(self.index)
         }
     }
 }

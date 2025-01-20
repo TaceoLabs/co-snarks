@@ -51,4 +51,12 @@ impl Utils {
     pub fn get_msb64(inp: u64) -> u32 {
         inp.ilog2()
     }
+
+    pub fn rotate64(value: u64, rotation: u64) -> u64 {
+        if rotation != 0 {
+            (value >> rotation) | (value << (64 - rotation))
+        } else {
+            value
+        }
+    }
 }

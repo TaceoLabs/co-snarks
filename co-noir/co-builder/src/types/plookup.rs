@@ -1,8 +1,14 @@
+use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
 use std::array::from_fn;
 
-use super::types::{ColumnIdx, LookupEntry, PlookupMultiTable, ReadData};
+use crate::{builder::GenericUltraCircuitBuilder, utils};
+
+use self::utils::Utils;
+
+use super::types::{ColumnIdx, FieldCT, LookupEntry, PlookupMultiTable, ReadData};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum BasicTableId {
@@ -88,6 +94,31 @@ impl BasicTableId {
         let value2 = F::zero();
 
         [value1, value2]
+    }
+    pub(crate) fn get_xor_rotate_values_from_key<
+        F: PrimeField,
+        const BITS_PER_SLICE: u64,
+        const NUM_ROTATED_OUTPUT_BITS: u64,
+    >(
+        key: [u64; 2],
+    ) -> [F; 2] {
+        [
+            F::from(Utils::rotate64(key[0] ^ key[1], NUM_ROTATED_OUTPUT_BITS)),
+            0u64.into(),
+        ]
+    }
+
+    pub(crate) fn get_and_rotate_values_from_key<
+        F: PrimeField,
+        const BITS_PER_SLICE: u64,
+        const NUM_ROTATED_OUTPUT_BITS: u64,
+    >(
+        key: [u64; 2],
+    ) -> [F; 2] {
+        [
+            F::from(Utils::rotate64(key[0] & key[1], NUM_ROTATED_OUTPUT_BITS)),
+            0u64.into(),
+        ]
     }
 }
 
@@ -232,15 +263,59 @@ impl<F: PrimeField> Plookup<F> {
         table
     }
 
+    fn get_uint32_xor_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::Uint32Xor;
+        let num_entries = (32 + 5) / 6;
+        let base = 1 << 6;
+        let mut table =
+            PlookupMultiTable::<F>::new(base.into(), base.into(), base.into(), num_entries);
+
+        table.id = id;
+        for _ in 0..num_entries {
+            table.slice_sizes.push(base);
+            table.basic_table_ids.push(BasicTableId::UintXorRotate0);
+            table
+                .get_table_values
+                .push(BasicTableId::get_xor_rotate_values_from_key::<F, 6, 0>);
+        }
+        table
+    }
+
+    fn get_uint32_and_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::Uint32And;
+        let num_entries = (32 + 5) / 6;
+        let base = 1 << 6;
+        let mut table = PlookupMultiTable::new(base.into(), base.into(), base.into(), num_entries);
+
+        table.id = id;
+        for _ in 0..num_entries {
+            table.slice_sizes.push(base);
+            table.basic_table_ids.push(BasicTableId::UintAndRotate0);
+            table
+                .get_table_values
+                .push(BasicTableId::get_and_rotate_values_from_key::<F, 6, 0>);
+        }
+        table
+    }
+
     fn init_multi_tables() -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
         // TACEO TODO not all are initialized here!
         let mut multi_tables = from_fn(|_| PlookupMultiTable::default());
         multi_tables[usize::from(MultiTableId::HonkDummyMulti)] = Self::get_honk_dummy_multitable();
+        multi_tables[usize::from(MultiTableId::Uint32And)] = Self::get_uint32_and_table();
+        multi_tables[usize::from(MultiTableId::Uint32Xor)] = Self::get_uint32_xor_table();
         multi_tables
     }
 
     pub(crate) fn get_multitable(&self, id: MultiTableId) -> &PlookupMultiTable<F> {
-        assert_eq!(id, MultiTableId::HonkDummyMulti); // The only one implemented so far
+        assert!(
+            matches!(
+                id,
+                MultiTableId::HonkDummyMulti | MultiTableId::Uint32And | MultiTableId::Uint32Xor
+            ),
+            "Multitable for {:?} not implemented",
+            id
+        ); // The only ones implemented so far
         &self.multi_tables[usize::from(id)]
     }
 
@@ -358,5 +433,94 @@ impl<F: PrimeField> Plookup<F> {
                 + lookup[ColumnIdx::C3][i] * multi_table.column_3_step_sizes[i];
         }
         lookup
+    }
+
+    pub(crate) fn get_lookup_accumulators_ct<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+        id: MultiTableId,
+        key_a: FieldCT<F>,
+        key_b: FieldCT<F>,
+        is_2_to_1_lookup: bool,
+    ) -> ReadData<FieldCT<F>> {
+        let key_a = key_a.normalize(builder, driver);
+        let key_b = key_b.normalize(builder, driver);
+
+        let a = key_a.get_value(builder, driver);
+        let b = key_b.get_value(builder, driver);
+        let mut lookup = ReadData::<FieldCT<F>>::default();
+        if T::is_shared(&a) || T::is_shared(&b) {
+            todo!("get_lookup_accumulators_ct in MPC")
+        } else {
+            let a = T::get_public(&a).expect("Already checked it is public");
+            let b = T::get_public(&b).expect("Already checked it is public");
+            let lookup_data =
+                builder
+                    .plookup
+                    .get_lookup_accumulators(id.clone(), a, b, is_2_to_1_lookup);
+            let is_key_a_constant = key_a.is_constant();
+            let length = lookup_data[ColumnIdx::C1].len();
+            if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
+                for _i in 0..length {
+                    todo!("Implement lookup case")
+                    // lookup[ColumnIdx::C1].push(field_t<Builder>(ctx, lookup_data[ColumnIdx::C1][i]));
+                    // lookup[ColumnIdx::C2].push(field_t<Builder>(ctx, lookup_data[ColumnIdx::C2][i]));
+                    // lookup[ColumnIdx::C3].push(field_t<Builder>(ctx, lookup_data[ColumnIdx::C3][i]));
+                }
+            } else {
+                let mut lhs_index = key_a.witness_index;
+                let mut rhs_index = key_b.witness_index;
+                // If only one lookup key is constant, we need to instantiate it as a real witness
+                if is_key_a_constant {
+                    lhs_index = builder.put_constant_variable(a);
+                }
+                if key_b.is_constant() && is_2_to_1_lookup {
+                    rhs_index = builder.put_constant_variable(b);
+                }
+                // auto key_b_witness = std::make_optional(rhs_index);
+
+                let mut key_b_witness = Some(rhs_index);
+
+                if rhs_index == FieldCT::<F>::IS_CONSTANT {
+                    key_b_witness = None;
+                }
+                let accumulator_witnesses = builder.create_gates_from_plookup_accumulators(
+                    id,
+                    lookup_data,
+                    lhs_index,
+                    key_b_witness,
+                );
+
+                for i in 0..length {
+                    lookup[ColumnIdx::C1].push(FieldCT::<F>::from_witness_index(
+                        accumulator_witnesses[ColumnIdx::C1][i],
+                    ));
+                    lookup[ColumnIdx::C2].push(FieldCT::<F>::from_witness_index(
+                        accumulator_witnesses[ColumnIdx::C2][i],
+                    ));
+                    lookup[ColumnIdx::C3].push(FieldCT::<F>::from_witness_index(
+                        accumulator_witnesses[ColumnIdx::C3][i],
+                    ));
+                }
+            }
+        }
+        lookup
+    }
+
+    pub fn read_from_2_to_1_table<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+        id: MultiTableId,
+        key_a: FieldCT<F>,
+        key_b: FieldCT<F>,
+    ) -> FieldCT<F> {
+        let lookup = Self::get_lookup_accumulators_ct(builder, driver, id, key_a, key_b, true);
+        lookup[ColumnIdx::C3][0].clone()
     }
 }
