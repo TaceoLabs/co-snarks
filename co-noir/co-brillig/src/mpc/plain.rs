@@ -315,7 +315,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                 } else {
                     let bit_size: u32 = integer_bit_size.into();
                     let mask = (1_u128 << bit_size as u128) - 1;
-                    Ok(PlainBrilligType::Int((!val) & mask, IntegerBitSize::U128))
+                    Ok(PlainBrilligType::Int((!val) & mask, integer_bit_size))
                 }
             }
             PlainBrilligType::Field(_) => eyre::bail!("NOT is not supported for fields"),
