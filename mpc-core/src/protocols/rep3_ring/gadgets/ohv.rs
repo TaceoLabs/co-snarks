@@ -2,7 +2,7 @@
 //!
 //! This module contains some algorithms to create a random one-hot encoded vector for the Rep3 protocol.
 
-use ark_ff::One;
+use ark_ff::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution};
 
 use crate::protocols::{
@@ -71,7 +71,45 @@ fn ohv<T: IntRing2k, N: Rep3Network>(
     Ok(f)
 }
 
-// TODO pack and send at once
+fn pack<T: IntRing2k>(input: &[Rep3RingShare<Bit>]) -> Rep3RingShare<T> {
+    let mut share_a = RingElement::<T>::zero();
+    let mut share_b = RingElement::<T>::zero();
+    for (i, bit) in input.iter().enumerate() {
+        share_a |= RingElement(T::from(bit.a.convert().convert()) << i);
+        share_b |= RingElement(T::from(bit.b.convert().convert()) << i);
+    }
+    Rep3RingShare::new_ring(share_a, share_b)
+}
+
+fn unpack<T: IntRing2k>(input: Rep3RingShare<T>, len: usize) -> Vec<Rep3RingShare<Bit>> {
+    debug_assert!(len <= T::K);
+    let mut res = Vec::with_capacity(len);
+    for i in 0..len {
+        res.push(input.get_bit(i));
+    }
+    res
+}
+
+fn and_pre_bit<T: IntRing2k, N: Rep3Network>(
+    a: &Rep3RingShare<T>,
+    b: &Rep3RingShare<Bit>,
+    io_context: &mut IoContext<N>,
+) -> RingElement<T>
+where
+    Standard: Distribution<T>,
+{
+    let (mut res, mask_b) = io_context.random_elements::<RingElement<T>>();
+    res ^= mask_b;
+    if b.a.0.convert() {
+        res ^= &a.a;
+        res ^= &a.b;
+    }
+    if b.b.0.convert() {
+        res ^= &a.a;
+    }
+    res
+}
+
 fn pack_and<N: Rep3Network>(
     input: &[Rep3RingShare<Bit>],
     rhs: &Rep3RingShare<Bit>,
@@ -79,12 +117,72 @@ fn pack_and<N: Rep3Network>(
 ) -> IoResult<Vec<Rep3RingShare<Bit>>> {
     let len = input.len();
     debug_assert!(len >= 1);
-    let mut result = Vec::with_capacity(len);
 
-    // TODO THIS IS BAD, OPTIMIZE THIS WITH A PACKED SENDING
-    for el in input.iter() {
-        result.push(binary::and(el, rhs, io_context)?);
+    if len <= 128 {
+        let padded_len = if len.is_power_of_two() {
+            len
+        } else {
+            len.next_power_of_two()
+        };
+        let result = match padded_len {
+            1 => {
+                vec![binary::and(&input[0], rhs, io_context)?]
+            }
+            2 | 4 | 8 => {
+                let packed = pack::<u8>(input);
+                let local_a = and_pre_bit(&packed, rhs, io_context);
+                let local_b = io_context.network.reshare(local_a)?;
+                unpack(Rep3RingShare::new_ring(local_a, local_b), len)
+            }
+            16 => {
+                let packed = pack::<u16>(input);
+                let local_a = and_pre_bit(&packed, rhs, io_context);
+                let local_b = io_context.network.reshare(local_a)?;
+                unpack(Rep3RingShare::new_ring(local_a, local_b), len)
+            }
+            32 => {
+                let packed = pack::<u32>(input);
+                let local_a = and_pre_bit(&packed, rhs, io_context);
+                let local_b = io_context.network.reshare(local_a)?;
+                unpack(Rep3RingShare::new_ring(local_a, local_b), len)
+            }
+            64 => {
+                let packed = pack::<u64>(input);
+                let local_a = and_pre_bit(&packed, rhs, io_context);
+                let local_b = io_context.network.reshare(local_a)?;
+                unpack(Rep3RingShare::new_ring(local_a, local_b), len)
+            }
+            128 => {
+                let packed = pack::<u128>(input);
+                let local_a = and_pre_bit(&packed, rhs, io_context);
+                let local_b = io_context.network.reshare(local_a)?;
+                unpack(Rep3RingShare::new_ring(local_a, local_b), len)
+            }
+            _ => {
+                unreachable!()
+            }
+        };
+        Ok(result)
+    } else {
+        type Packtype = u64;
+        const BITLEN: usize = std::mem::size_of::<Packtype>() * 8;
+
+        let mut result = Vec::with_capacity(len);
+        let mut to_send = Vec::with_capacity(len.div_ceil(BITLEN));
+        for els in input.chunks(BITLEN) {
+            let packed = pack::<Packtype>(els);
+            let u64_a = and_pre_bit(&packed, rhs, io_context);
+            to_send.push(u64_a);
+        }
+        let received = io_context.network.reshare(to_send.to_owned())?;
+
+        let mut remeining = len;
+        for (a, b) in to_send.into_iter().zip(received) {
+            let rcv = std::cmp::min(BITLEN, remeining);
+            result.extend(unpack(Rep3RingShare::new_ring(a, b), rcv));
+            remeining -= rcv;
+        }
+        debug_assert_eq!(remeining, 0);
+        Ok(result)
     }
-
-    Ok(result)
 }

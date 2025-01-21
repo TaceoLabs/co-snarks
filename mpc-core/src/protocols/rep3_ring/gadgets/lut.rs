@@ -23,7 +23,7 @@ macro_rules! join {
     }};
 }
 
-/// Takes a public lookup table (size must be a power of two) containing field elements, and a replicated binary share of an index and returns a replicated binary sharing of the looked up value lut[index].
+/// Takes a public lookup table (size must be a power of two) containing field elements, and a replicated binary share of an index and returns a replicated binary sharing of the looked up value lut`\[`index`\]`.
 /// The algorithm is a rewrite of Protocol 4 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
 pub fn lut<F: PrimeField, T: IntRing2k, N: Rep3Network>(
     lut: &[F],
@@ -60,7 +60,7 @@ where
     Ok(t)
 }
 
-/// Takes a public lookup table (size must be a power of two) containing field elements, and a replicated binary share of an index and returns a non-replicated binary sharing of the looked up value lut[index]. The size of the lookup table must be a perfect square.
+/// Takes a public lookup table (size must be a power of two) containing field elements, and a replicated binary share of an index and returns a non-replicated binary sharing of the looked up value lut`\[`index`\]`. The size of the lookup table must be a perfect square.
 /// The algorithm is a rewrite of Protocol 10 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
 pub fn lut_low_depth<F: PrimeField, T: IntRing2k, N: Rep3Network>(
     lut: &[F],
