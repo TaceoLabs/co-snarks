@@ -27,7 +27,7 @@ pub fn rand_ohv<T: IntRing2k, N: Rep3Network>(
 where
     Standard: Distribution<T>,
 {
-    debug_assert!(k > 1);
+    debug_assert!(k >= 1);
     debug_assert!(k <= T::K); // Make sure datatype is large enough for bitsize
     let (mut a, mut b) = io_context.random_elements::<T>();
     if k != T::K {

@@ -1969,7 +1969,7 @@ mod ring_share {
         Standard: Distribution<T>,
     {
         let mut rng = thread_rng();
-        for k in 2..T::K {
+        for k in 1..T::K {
             let n = 1 << k;
             let lut = (0..n)
                 .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2014,5 +2014,59 @@ mod ring_share {
     #[test]
     fn rep3_lut_test() {
         apply_to_all!(rep3_lut_test_t, [u8, u16]);
+    }
+
+    fn rep3_lut_low_depth_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let mut rng = thread_rng();
+        for k in (2..T::K).step_by(2) {
+            let n = 1 << k;
+            let lut = (0..n)
+                .map(|_| ark_bn254::Fr::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let x = rng.gen_range::<usize, _>(0..n);
+            let x_ = RingElement(T::try_from(x as u64).unwrap());
+            let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
+            let should_result_f = lut[x].to_owned();
+
+            let test_network = Rep3TestNetwork::default();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+
+            std::thread::scope(|s| {
+                let lut_ = &lut;
+                for (net, tx, x) in izip!(
+                    test_network.get_party_networks().into_iter(),
+                    [tx1, tx2, tx3],
+                    x_shares.into_iter(),
+                ) {
+                    s.spawn(move || {
+                        let mut rep3 = IoContext::init(net).unwrap();
+                        let mut forked = rep3.fork().unwrap();
+
+                        let res =
+                            gadgets::lut::lut_low_depth(lut_, x, &mut rep3, &mut forked).unwrap();
+                        tx.send(res)
+                    });
+                }
+            });
+
+            let result1 = rx1.recv().unwrap();
+            let result2 = rx2.recv().unwrap();
+            let result3 = rx3.recv().unwrap();
+            let is_result = result1 ^ result2 ^ result3;
+            let should_result = should_result_f.into();
+            assert_eq!(is_result, should_result);
+            let is_result_f: ark_bn254::Fr = is_result.into();
+            assert_eq!(is_result_f, should_result_f);
+        }
+    }
+
+    #[test]
+    fn rep3_lut_low_depth_test() {
+        apply_to_all!(rep3_lut_low_depth_test_t, [u8, u16]);
     }
 }
