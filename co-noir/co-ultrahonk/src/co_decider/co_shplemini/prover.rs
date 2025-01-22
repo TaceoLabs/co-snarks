@@ -100,15 +100,8 @@ impl<
 
         // Shared part of f_batched
         let mut f_batched = SharedPolynomial::<T, P>::promote_poly(&self.driver, f_batched);
-        for f_poly in f_polynomials.witness.shared_iter() {
+        for f_poly in f_polynomials.witness.iter() {
             f_batched.add_scaled_slice(&mut self.driver, f_poly, &batching_scalar);
-
-            batching_scalar *= rho;
-        }
-
-        // Final public part of f_batched
-        for f_poly in f_polynomials.witness.public_iter() {
-            f_batched.add_scaled_slice_public(&mut self.driver, f_poly, &batching_scalar);
 
             batching_scalar *= rho;
         }
@@ -474,7 +467,7 @@ impl<
         // Find n, the maximum size of all polynomials fⱼ(X)
         let mut max_poly_size: usize = 0;
         for claim in opening_claims {
-            max_poly_size = max_poly_size.max(claim.polynomial.len());
+            max_poly_size = std::cmp::max(max_poly_size, claim.polynomial.len());
         }
 
         // Q(X) = ∑ⱼ νʲ ⋅ ( fⱼ(X) − vⱼ) / ( X − xⱼ )

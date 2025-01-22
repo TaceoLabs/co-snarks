@@ -60,6 +60,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         self.add_scaled_slice(driver, &src.coefficients, scalar);
     }
 
+    #[expect(unused)]
     pub(crate) fn add_scaled_slice_public(
         &mut self,
         driver: &mut T,

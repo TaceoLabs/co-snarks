@@ -84,6 +84,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
         result
     }
 
+    #[expect(unused)]
     pub(crate) fn sub_public(
         &self,
         driver: &mut T,

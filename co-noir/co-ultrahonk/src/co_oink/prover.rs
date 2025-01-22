@@ -19,7 +19,7 @@
 
 use super::types::ProverMemory;
 use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver, CoUtils};
-use ark_ff::One;
+use ark_ff::{One, Zero};
 use co_builder::{
     prelude::{HonkCurve, Polynomial},
     HonkProofError, HonkProofResult,
@@ -28,7 +28,7 @@ use itertools::izip;
 use std::{array, marker::PhantomData};
 use ultrahonk::{
     prelude::{Transcript, TranscriptFieldType, TranscriptHasher},
-    Utils, NUM_ALPHAS,
+    NUM_ALPHAS,
 };
 
 pub(crate) struct CoOink<
@@ -217,21 +217,32 @@ impl<
         // // 1 + polynomial degree of this relation
         // const LENGTH: usize = 5; // both subrelations are degree 4
 
+        let mut q_lookup_mul_read_tag = Vec::with_capacity(proving_key.circuit_size as usize);
         for (i, (q_lookup, lookup_read_tag)) in izip!(
             proving_key.polynomials.precomputed.q_lookup().iter(),
             proving_key.polynomials.witness.lookup_read_tags().iter(),
         )
         .enumerate()
         {
-            if !(q_lookup.is_one() || lookup_read_tag.is_one()) {
-                continue;
-            }
+            // The following check cannot easily be done since lookup_read_tag is shared. We prepare q_lookup_mul_read_tag instead and multiply it later to self.memory.lookup_inverses.
+            // if !(q_lookup.is_one() || lookup_read_tag.is_one()) {
+            //     continue;
+            // }
+            debug_assert!(q_lookup.is_one() || q_lookup.is_zero());
+            let mul = self
+                .driver
+                .mul_with_public(P::ScalarField::one() - q_lookup, lookup_read_tag.to_owned());
+            q_lookup_mul_read_tag.push(self.driver.add_with_public(q_lookup.to_owned(), mul));
 
             // READ_TERMS and WRITE_TERMS are 1, so we skip the loop
             let read_term = self.compute_read_term(proving_key, i);
             let write_term = self.compute_write_term(proving_key, i);
             self.memory.lookup_inverses[i] = self.driver.mul_with_public(write_term, read_term);
         }
+        self.memory.lookup_inverses = Polynomial::new(
+            self.driver
+                .mul_many(self.memory.lookup_inverses.as_ref(), &q_lookup_mul_read_tag)?,
+        );
 
         // Compute inverse polynomial I in place by inverting the product at each row
         // Note: zeroes are ignored as they are not used anyway
@@ -525,28 +536,26 @@ impl<
         self.compute_w4(proving_key);
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
-        let lookup_read_counts = Utils::commit(
+        let lookup_read_counts = CoUtils::commit::<T, P>(
             proving_key
                 .polynomials
                 .witness
                 .lookup_read_counts()
                 .as_ref(),
             &proving_key.crs,
-        )?;
-        let lookup_read_tags = Utils::commit(
+        );
+        let lookup_read_tags = CoUtils::commit::<T, P>(
             proving_key.polynomials.witness.lookup_read_tags().as_ref(),
             &proving_key.crs,
-        )?;
-        let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), &proving_key.crs);
-        let w_4 = self.driver.open_point(w_4)?;
-
-        transcript.send_point_to_verifier::<P>(
-            "LOOKUP_READ_COUNTS".to_string(),
-            lookup_read_counts.into(),
         );
-        transcript
-            .send_point_to_verifier::<P>("LOOKUP_READ_TAGS".to_string(), lookup_read_tags.into());
-        transcript.send_point_to_verifier::<P>("W_4".to_string(), w_4.into());
+        let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), &proving_key.crs);
+        let opened = self
+            .driver
+            .open_point_many(&[lookup_read_counts, lookup_read_tags, w_4])?;
+
+        transcript.send_point_to_verifier::<P>("LOOKUP_READ_COUNTS".to_string(), opened[0].into());
+        transcript.send_point_to_verifier::<P>("LOOKUP_READ_TAGS".to_string(), opened[1].into());
+        transcript.send_point_to_verifier::<P>("W_4".to_string(), opened[2].into());
 
         Ok(())
     }

@@ -7,7 +7,6 @@ use crate::{
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
@@ -63,18 +62,24 @@ pub(crate) struct LogDerivLookupRelation {}
 
 impl LogDerivLookupRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
-    pub(crate) const CRAND_PAIRS_FACTOR: usize = 1;
+    pub(crate) const CRAND_PAIRS_FACTOR: usize = 2;
 }
 
 impl LogDerivLookupRelation {
     // Used in the inverse correctness subrelation; facilitates only computing inverses where necessary
     fn compute_inverse_exists<T: NoirUltraHonkProver<P>, P: Pairing>(
+        driver: &mut T,
         input: &ProverUnivariates<T, P>,
-    ) -> Univariate<P::ScalarField, MAX_PARTIAL_RELATION_LENGTH> {
+        // ) -> Univariate<P::ScalarField, MAX_PARTIAL_RELATION_LENGTH> {
+    ) -> SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH> {
         let row_has_write = input.witness.lookup_read_tags();
         let row_has_read = input.precomputed.q_lookup();
 
-        -(row_has_write.to_owned() * row_has_read) + row_has_write + row_has_read
+        row_has_write
+            .mul_public(driver, row_has_read)
+            .neg(driver)
+            .add(driver, row_has_write)
+            .add_public(driver, row_has_read)
     }
 
     fn compute_read_term<T: NoirUltraHonkProver<P>, P: Pairing>(
@@ -149,11 +154,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for LogDerivLookupRelation
 {
     type Acc = LogDerivLookupRelationAcc<T, P>;
-    const SKIPPABLE: bool = true;
+    const SKIPPABLE: bool = false;
 
-    fn skip(input: &ProverUnivariates<T, P>) -> bool {
-        <Self as Relation<T, P>>::check_skippable();
-        input.precomputed.q_lookup().is_zero() && input.witness.lookup_read_counts().is_zero()
+    fn skip(_input: &ProverUnivariates<T, P>) -> bool {
+        // <Self as Relation<T, P>>::check_skippable();
+        // input.precomputed.q_lookup().is_zero() && input.witness.lookup_read_counts().is_zero()
+        false
     }
 
     /**
@@ -206,7 +212,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let read_counts = input.witness.lookup_read_counts(); // Degree 1
         let read_selector = input.precomputed.q_lookup(); // Degree 1
 
-        let inverse_exists = Self::compute_inverse_exists(input); // Degree 2
+        let inverse_exists = Self::compute_inverse_exists(driver, input); // Degree 2
         let read_term = Self::compute_read_term(driver, input, relation_parameters); // Degree 2 (3)
         let write_term = Self::compute_write_term(input, relation_parameters); // Degree 1 (2)
         let mul = driver.mul_many(read_term.as_ref(), inverses.as_ref())?;
@@ -218,7 +224,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // Degrees:                     2 (3)       1 (2)        1              1
         let tmp = write_inverse
             .mul_public(driver, &write_term)
-            .sub_public(driver, &inverse_exists)
+            .sub(driver, &inverse_exists)
             .scale(driver, *scaling_factor); // Deg 4 (6)
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] =
@@ -230,7 +236,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // Establish validity of the read. Note: no scaling factor here since this constraint is 'linearly dependent,
         // i.e. enforced across the entire trace, not on a per-row basis.
         // Degrees:                       1            2 (3)            1            3 (4)
-        let tmp = write_inverse.mul_public(driver, read_counts);
+        let mul = driver.mul_many(write_inverse.as_ref(), read_counts.as_ref())?;
+        let tmp = SharedUnivariate::from_vec(&mul);
         let tmp = read_inverse
             .mul_public(driver, read_selector)
             .sub(driver, &tmp); // Deg 4 (5)
