@@ -6,11 +6,9 @@ use crate::co_oink::{
 use crate::key::types::TraceData;
 use crate::mpc::NoirUltraHonkProver;
 use crate::types::Polynomials;
-use crate::types::ProverWitnessEntities;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::AggregationObjectPubInputIndices;
 use co_builder::prelude::Crs;
 use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::prelude::Polynomial;
@@ -19,6 +17,7 @@ use co_builder::prelude::ProverCrs;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
 use co_builder::prelude::AGGREGATION_OBJECT_SIZE;
+use co_builder::prelude::{AggregationObjectPubInputIndices, ProverWitnessEntities};
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use eyre::Result;
@@ -50,8 +49,7 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
-    const PUBLIC_INPUT_WIRE_INDEX: usize =
-        ProverWitnessEntities::<T::ArithmeticShare, P::ScalarField>::W_R;
+    const PUBLIC_INPUT_WIRE_INDEX: usize = ProverWitnessEntities::<T::ArithmeticShare>::W_R;
 
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
     pub fn create<
@@ -105,6 +103,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             0,
         );
         PlainProvingKey::construct_lookup_read_counts(
+            driver,
             proving_key
                 .polynomials
                 .witness
@@ -318,24 +317,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         {
             *des = src.to_owned();
         }
-        for (src, des) in plain_key
-            .polynomials
-            .witness
-            .lookup_read_counts_and_tags()
-            .iter()
-            .zip(
-                polynomials
-                    .witness
-                    .lookup_read_counts_and_tags_mut()
-                    .iter_mut(),
-            )
-        {
-            *des = src.to_owned();
-        }
 
         for (src, des) in shares
             .chunks_exact(circuit_size as usize)
-            .zip(polynomials.witness.get_wires_mut().iter_mut())
+            .zip(polynomials.witness.iter_mut())
         {
             *des = Polynomial::new(src.to_owned());
         }

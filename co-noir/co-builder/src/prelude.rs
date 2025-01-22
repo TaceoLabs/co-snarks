@@ -9,7 +9,9 @@ pub use crate::keys::verification_key::VerifyingKey;
 pub use crate::keys::verification_key::VerifyingKeyBarretenberg;
 pub use crate::polynomials::polynomial::Polynomial;
 pub use crate::polynomials::polynomial_types::Polynomials;
-pub use crate::polynomials::polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE};
+pub use crate::polynomials::polynomial_types::{
+    PrecomputedEntities, ProverWitnessEntities, PRECOMPUTED_ENTITIES_SIZE,
+};
 pub use crate::serialize::{Serialize, SerializeP};
 pub use crate::types::types::{
     AggregationObjectPubInputIndices, CycleNode, CyclicPermutation, AGGREGATION_OBJECT_SIZE,

@@ -81,6 +81,7 @@ impl<P: Pairing> ProvingKey<P> {
             0,
         );
         Self::construct_lookup_read_counts(
+            driver,
             proving_key
                 .polynomials
                 .witness
@@ -397,8 +398,10 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
+    // TACEO TODO this function only allows public lookup tables so far, adapt!
     pub fn construct_lookup_read_counts<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        witness: &mut [Polynomial<P::ScalarField>; 2],
+        driver: &mut T,
+        witness: &mut [Polynomial<T::ArithmeticShare>; 2],
         circuit: &mut GenericUltraCircuitBuilder<P, T>,
         dyadic_circuit_size: usize,
     ) {
@@ -410,6 +413,13 @@ impl<P: Pairing> ProvingKey<P> {
         for table in circuit.lookup_tables.iter_mut() {
             table.initialize_index_map();
 
+            // TACEO TODO for shared lookup tables:
+            // - get index_in_table with LUT
+            // - create ohv with index_in_poly
+            // - Bitinject and add it to witness[0]
+            // - OR it to the ohv for the witness[1] values
+            // - finally bitinject the witness[1] values and add to trace
+            // - Skip the or if len is just one
             for gate_data in table.lookup_gates.iter() {
                 // convert lookup gate data to an array of three field elements, one for each of the 3 columns
                 let table_entry = gate_data.to_table_components(table.use_twin_keys);
@@ -419,9 +429,17 @@ impl<P: Pairing> ProvingKey<P> {
 
                 // increment the read count at the corresponding index in the full polynomial
                 let index_in_poly = table_offset + index_in_table;
-                witness[0][index_in_poly] += P::ScalarField::one(); // Read count
-                witness[1][index_in_poly] = P::ScalarField::one(); // Read Tag
-                                                                   // tag is 1 if entry has been read 1 or more times
+                let wit0 = driver.add(
+                    T::AcvmType::from(P::ScalarField::one()),
+                    T::AcvmType::from(witness[0][index_in_poly].to_owned()),
+                );
+                witness[0][index_in_poly] = if T::is_shared(&wit0) {
+                    T::get_shared(&wit0).unwrap()
+                } else {
+                    driver.promote_to_trivial_share(T::get_public(&wit0).unwrap())
+                }; // Read count
+                witness[1][index_in_poly] = driver.promote_to_trivial_share(P::ScalarField::one());
+                // Read Tag; tag is 1 if entry has been read 1 or more times
             }
             table_offset += table.len(); // set the offset of the next table within the polynomials
         }

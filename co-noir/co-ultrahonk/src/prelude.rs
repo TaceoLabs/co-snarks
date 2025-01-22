@@ -4,10 +4,10 @@ pub use crate::mpc::rep3::Rep3UltraHonkDriver;
 pub use crate::mpc::shamir::ShamirUltraHonkDriver;
 pub use crate::mpc::NoirUltraHonkProver;
 pub use crate::prover::CoUltraHonk;
-pub use crate::types::{Polynomials, ProverWitnessEntities};
+pub use crate::types::Polynomials;
 pub use crate::{PlainCoBuilder, Rep3CoBuilder, ShamirCoBuilder};
 // Re-exporting the following types from `ultrahonk` and `co_builder` crates:
-pub use co_builder::prelude::{Crs, Polynomial, ProverCrs};
+pub use co_builder::prelude::{Crs, Polynomial, ProverCrs, ProverWitnessEntities};
 pub use co_builder::prelude::{ProvingKey as PlainProvingKey, VerifyingKey};
 pub use ultrahonk::prelude::HonkProof;
 pub use ultrahonk::prelude::Poseidon2Sponge;

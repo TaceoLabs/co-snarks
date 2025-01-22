@@ -630,7 +630,6 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     let shares = proving_key
         .polynomials
         .witness
-        .private_elements
         .into_iter()
         .flat_map(|el| el.into_vec().into_iter())
         .collect::<Vec<_>>();
@@ -668,8 +667,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
 
     let polynomials = Polynomials {
         witness: ProverWitnessEntities {
-            private_elements: translated_shares,
-            public_elements: proving_key.polynomials.witness.public_elements,
+            elements: translated_shares,
         },
         precomputed: proving_key.polynomials.precomputed,
     };
