@@ -2,7 +2,7 @@ use super::{plain::PlainAcvmSolver, NoirWitnessExtensionProtocol};
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use mpc_core::protocols::{
-    rep3::{lut::NaiveRep3LookupTable, network::Rep3MpcNet},
+    rep3::{lut::Rep3LookupTable, network::Rep3MpcNet},
     shamir::{arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
 };
 use num_bigint::BigUint;
@@ -105,7 +105,7 @@ impl<F: PrimeField> From<ShamirBrilligType<F>> for ShamirAcvmType<F> {
 }
 
 impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for ShamirAcvmSolver<F, N> {
-    type Lookup = NaiveRep3LookupTable<Rep3MpcNet>; // This is just a dummy and unused
+    type Lookup = Rep3LookupTable<Rep3MpcNet>; // This is just a dummy and unused
 
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
 
@@ -349,14 +349,14 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     fn init_lut_by_acvm_type(
         &mut self,
         _values: Vec<Self::AcvmType>,
-    ) -> <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap {
+    ) -> <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType {
         panic!("init_lut_by_acvm_type: Operation atm not supported")
     }
 
     fn read_lut_by_acvm_type(
         &mut self,
-        _index: &Self::AcvmType,
-        _lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap,
+        _index: Self::AcvmType,
+        _lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> std::io::Result<Self::AcvmType> {
         panic!("read_lut_by_acvm_type: Operation atm not supported")
     }
@@ -365,7 +365,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         _index: Self::AcvmType,
         _value: Self::AcvmType,
-        _lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap,
+        _lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> std::io::Result<()> {
         panic!("write_lut_by_acvm_type: Operation atm not supported")
     }

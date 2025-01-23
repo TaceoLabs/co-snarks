@@ -2,71 +2,43 @@
 //!
 //! This module contains the abstraction to lookup tables
 
-use std::{
-    collections::{HashMap, HashSet},
-    io,
-    marker::PhantomData,
-};
-
 use ark_ff::PrimeField;
+use num_bigint::BigUint;
+use std::{io, marker::PhantomData};
 
 /// This is some place holder definition. This will change most likely
 pub trait LookupTableProvider<F: PrimeField> {
     /// The type used in LUTs
     type SecretShare;
-    /// A LUT for performing membership checks (like `HashSet`). Mostly used for range checks.
-    type SecretSharedSet;
-    /// An input/output LUT (like `HashMap`).
-    type SecretSharedMap;
+    /// An input/output LUT (like `Vector`).
+    type LutType;
 
-    /// Initializes a set for membership checks from the provided values.
-    fn init_set(
-        &self,
-        values: impl IntoIterator<Item = Self::SecretShare>,
-    ) -> Self::SecretSharedSet;
+    /// Initializes a LUT from the provided secret values.
+    fn init_private(&self, values: Vec<Self::SecretShare>) -> Self::LutType;
 
-    /// Checks whether the needle is a member of the provided set.
+    /// Initializes a LUT from the provided secret values.
+    fn init_public(&self, values: Vec<F>) -> Self::LutType;
+
+    /// Reads a value from the LUT associated with the provided index. As we work over secret-shared
+    /// values we can not check whether the index is actually in the LUT, the caller must ensure that the LUT is large enough.
     ///
     /// # Returns
-    /// Returns a secret-shared value. If the reconstructed value is 1, the set
-    /// contained the element. Otherwise, shall return secret-shared 0.
-    ///
-    /// Can fail due to networking problems.
-    ///
-    fn contains_set(
-        &mut self,
-        needle: &Self::SecretShare,
-        set: &Self::SecretSharedSet,
-    ) -> io::Result<Self::SecretShare>;
-
-    /// Initializes a map (input/output LUT) from the provided values. The keys and values are
-    /// matched from their order of the iterator.
-    fn init_map(
-        &self,
-        values: impl IntoIterator<Item = (Self::SecretShare, Self::SecretShare)>,
-    ) -> Self::SecretSharedMap;
-
-    /// Reads a value from the map associated with the provided needle. As we work over secret-shared
-    /// values we can not check whether the needle is actually in the set. The caller must ensure that
-    /// the key is in the map.
-    ///
-    /// # Returns
-    /// The secret-shared value associated with the needle. A not known needle results in undefined
+    /// The secret-shared value associated with the index. A not known index results in undefined
     /// behaviour.
     ///
     /// Can fail due to networking problems.
     ///
     fn get_from_lut(
         &mut self,
-        key: Self::SecretShare,
-        map: &Self::SecretSharedMap,
+        index: Self::SecretShare,
+        lut: &Self::LutType,
     ) -> io::Result<Self::SecretShare>;
 
-    /// Writes a value to the map.
+    /// Writes a value to the LUT.
     ///
     /// **IMPORTANT**: the implementation will NOT add
-    /// the key-value pair to the map, if it is not already registered! The implementation
-    /// overwrites an existing key, but a not-known key will be ignored.
+    /// the value to the LUT, if it is too small! The implementation
+    /// overwrites an existing index, but a out-of-bounds index will be ignored.
     ///
     /// #Returns
     /// Can fail due to networking problems.
@@ -74,7 +46,7 @@ pub trait LookupTableProvider<F: PrimeField> {
         &mut self,
         index: Self::SecretShare,
         value: Self::SecretShare,
-        lut: &mut Self::SecretSharedMap,
+        lut: &mut Self::LutType,
     ) -> io::Result<()>;
 }
 
@@ -86,50 +58,42 @@ pub struct PlainLookupTableProvider<F: PrimeField> {
 
 impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
     type SecretShare = F;
-    // we could check if a Vec<F> impl may be faster. Depends on the size of the LUT..
-    type SecretSharedSet = HashSet<F>;
+    type LutType = Vec<F>;
 
-    type SecretSharedMap = HashMap<F, F>;
-
-    fn init_set(
-        &self,
-        values: impl IntoIterator<Item = Self::SecretShare>,
-    ) -> Self::SecretSharedSet {
-        values.into_iter().collect::<HashSet<_>>()
+    fn init_private(&self, values: Vec<Self::SecretShare>) -> Self::LutType {
+        values
     }
 
-    fn contains_set(
-        &mut self,
-        value: &Self::SecretShare,
-        set: &Self::SecretSharedSet,
-    ) -> io::Result<F> {
-        if set.contains(value) {
-            Ok(F::one())
-        } else {
-            Ok(F::zero())
-        }
+    fn init_public(&self, values: Vec<F>) -> Self::LutType {
+        values
     }
 
-    fn init_map(
-        &self,
-        values: impl IntoIterator<Item = (Self::SecretShare, Self::SecretShare)>,
-    ) -> Self::SecretSharedMap {
-        values.into_iter().collect::<HashMap<_, _>>()
-    }
-
-    fn get_from_lut(&mut self, key: F, map: &Self::SecretSharedMap) -> io::Result<F> {
-        Ok(map[&key])
+    fn get_from_lut(&mut self, index: Self::SecretShare, lut: &Self::LutType) -> io::Result<F> {
+        let index: BigUint = index.into();
+        let index = usize::try_from(index).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Index can not be translated to usize",
+            )
+        })?;
+        Ok(lut[index])
     }
 
     fn write_to_lut(
         &mut self,
-        key: F,
-        value: F,
-        map: &mut Self::SecretSharedMap,
+        index: Self::SecretShare,
+        value: Self::SecretShare,
+        lut: &mut Self::LutType,
     ) -> io::Result<()> {
-        if map.insert(key, value).is_none() {
-            panic!("we cannot add new keys to the lookup table!")
-        }
+        let index: BigUint = index.into();
+        let index = usize::try_from(index).map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Index can not be translated to usize",
+            )
+        })?;
+
+        lut[index] = value;
         Ok(())
     }
 }

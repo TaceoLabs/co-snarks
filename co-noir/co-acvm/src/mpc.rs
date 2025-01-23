@@ -102,14 +102,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn init_lut_by_acvm_type(
         &mut self,
         values: Vec<Self::AcvmType>,
-    ) -> <Self::Lookup as LookupTableProvider<F>>::SecretSharedMap;
+    ) -> <Self::Lookup as LookupTableProvider<F>>::LutType;
 
     /// Wrapper around reading from a LUT by the [`Self::AcvmType`] as this can either be a
     /// public or a shared read.
     fn read_lut_by_acvm_type(
         &mut self,
-        index: &Self::AcvmType,
-        lut: &<Self::Lookup as LookupTableProvider<F>>::SecretSharedMap,
+        index: Self::AcvmType,
+        lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
     ) -> io::Result<Self::AcvmType>;
 
     /// Wrapper around writing a value to a LUT. The index and the value can be shared or public.
@@ -117,7 +117,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         index: Self::AcvmType,
         value: Self::AcvmType,
-        lut: &mut <Self::Lookup as LookupTableProvider<F>>::SecretSharedMap,
+        lut: &mut <Self::Lookup as LookupTableProvider<F>>::LutType,
     ) -> io::Result<()>;
 
     /// Returns true if the value is shared

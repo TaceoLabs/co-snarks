@@ -6,7 +6,7 @@ use mpc_core::protocols::rep3_ring::gadgets::sort::radix_sort_fields;
 use mpc_core::{
     lut::LookupTableProvider,
     protocols::rep3::{
-        lut::NaiveRep3LookupTable,
+        lut::Rep3LookupTable,
         network::{IoContext, Rep3Network},
         Rep3PrimeFieldShare,
     },
@@ -31,7 +31,7 @@ macro_rules! join {
 }
 
 pub struct Rep3AcvmSolver<F: PrimeField, N: Rep3Network> {
-    lut_provider: NaiveRep3LookupTable<N>,
+    lut_provider: Rep3LookupTable<N>,
     io_context0: IoContext<N>,
     io_context1: IoContext<N>,
     plain_solver: PlainAcvmSolver<F>,
@@ -46,7 +46,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
         let forked = io_context.fork().unwrap();
         let forked2 = io_context.fork().unwrap();
         Self {
-            lut_provider: NaiveRep3LookupTable::new(forked),
+            lut_provider: Rep3LookupTable::new(forked),
             io_context0: io_context,
             io_context1: forked2,
             plain_solver,
@@ -143,7 +143,7 @@ impl<F: PrimeField> Rep3AcvmType<F> {
 }
 
 impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<F, N> {
-    type Lookup = NaiveRep3LookupTable<N>;
+    type Lookup = Rep3LookupTable<N>;
 
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
 
@@ -393,60 +393,119 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn init_lut_by_acvm_type(
         &mut self,
         values: Vec<Self::AcvmType>,
-    ) -> <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap {
+    ) -> <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType {
         let id = self.io_context0.id;
-        let values = values.into_iter().enumerate().map(|(idx, value)| {
-            let idx = F::from(u64::try_from(idx).expect("usize fits into u64"));
-            let value = match value {
-                Rep3AcvmType::Public(public) => arithmetic::promote_to_trivial_share(id, public),
-                Rep3AcvmType::Shared(shared) => shared,
-            };
-            (arithmetic::promote_to_trivial_share(id, idx), value)
-        });
-        self.lut_provider.init_map(values)
+
+        if values.iter().any(|v| Self::is_shared(v)) {
+            let mut shares = Vec::with_capacity(values.len());
+            for val in values {
+                shares.push(match val {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(id, public)
+                    }
+                    Rep3AcvmType::Shared(shared) => shared,
+                });
+            }
+            self.lut_provider.init_private(shares)
+        } else {
+            let mut public = Vec::with_capacity(values.len());
+            for val in values {
+                public.push(Self::get_public(&val).expect("Already checked it is public"));
+            }
+            self.lut_provider.init_public(public)
+        }
     }
 
     fn read_lut_by_acvm_type(
         &mut self,
-        index: &Self::AcvmType,
-        lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap,
+        index: Self::AcvmType,
+        lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> std::io::Result<Self::AcvmType> {
-        let value = match index {
+        let result = match index {
             Rep3AcvmType::Public(public) => {
-                let id = self.io_context0.id;
-                let promoted_key = arithmetic::promote_to_trivial_share(id, *public);
-                self.lut_provider.get_from_lut(promoted_key, lut)
+                let index: BigUint = public.into();
+                let index = usize::try_from(index).map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Index can not be translated to usize",
+                    )
+                })?;
+
+                match lut {
+                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Public(vec) => {
+                        Self::AcvmType::from(vec[index].to_owned())
+                    }
+                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Shared(vec) => {
+                        Self::AcvmType::from(vec[index].to_owned())
+                    }
+                }
             }
-            Rep3AcvmType::Shared(shared) => self.lut_provider.get_from_lut(*shared, lut),
+            Rep3AcvmType::Shared(shared) => {
+                Self::AcvmType::from(self.lut_provider.get_from_lut(shared, lut)?)
+            }
         };
-        Ok(Rep3AcvmType::Shared(value?))
+        Ok(result)
     }
 
     fn write_lut_by_acvm_type(
         &mut self,
         index: Self::AcvmType,
         value: Self::AcvmType,
-        lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::SecretSharedMap,
+        lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> std::io::Result<()> {
         let id = self.io_context0.id;
         match (index, value) {
             (Rep3AcvmType::Public(index), Rep3AcvmType::Public(value)) => {
-                let index = arithmetic::promote_to_trivial_share(id, index);
-                let value = arithmetic::promote_to_trivial_share(id, value);
-                self.lut_provider.write_to_lut(index, value, lut)
+                let index: BigUint = (index).into();
+                let index = usize::try_from(index).map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Index can not be translated to usize",
+                    )
+                })?;
+
+                match lut {
+                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Public(vec) => {
+                        vec[index] = value;
+                    }
+                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Shared(vec) => {
+                        vec[index] = arithmetic::promote_to_trivial_share(id, value);
+                    }
+                }
             }
             (Rep3AcvmType::Public(index), Rep3AcvmType::Shared(value)) => {
-                let index = arithmetic::promote_to_trivial_share(id, index);
-                self.lut_provider.write_to_lut(index, value, lut)
+                let index: BigUint = (index).into();
+                let index = usize::try_from(index).map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Index can not be translated to usize",
+                    )
+                })?;
+
+                match lut {
+                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Public(vec) => {
+                        let mut vec = vec
+                            .iter()
+                            .map(|value| arithmetic::promote_to_trivial_share(id, *value))
+                            .collect::<Vec<_>>();
+                        vec[index] = value;
+                        *lut = mpc_core::protocols::rep3::lut::PublicPrivateLut::Shared(vec);
+                    }
+                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Shared(vec) => {
+                        vec[index] = value;
+                    }
+                }
             }
             (Rep3AcvmType::Shared(index), Rep3AcvmType::Public(value)) => {
+                // TODO there might be a more efficient implementation for this if the table is also public
                 let value = arithmetic::promote_to_trivial_share(id, value);
-                self.lut_provider.write_to_lut(index, value, lut)
+                self.lut_provider.write_to_lut(index, value, lut)?;
             }
             (Rep3AcvmType::Shared(index), Rep3AcvmType::Shared(value)) => {
-                self.lut_provider.write_to_lut(index, value, lut)
+                self.lut_provider.write_to_lut(index, value, lut)?;
             }
         }
+        todo!()
     }
 
     fn is_shared(a: &Self::AcvmType) -> bool {
