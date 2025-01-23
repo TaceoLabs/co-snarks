@@ -47,7 +47,8 @@ where
     let c = binary::open(&(r ^ index), io_context)?;
     let c: usize =
         c.0.try_into()
-            .expect("This transformation should work, otherwise we have another issue");
+            .expect("This transformation should work, otherwise we have another issue")
+            & ((1 << k) - 1); // Mask potential overflows from non-well-defined input
 
     let mut t = Rep3BigUintShare::<F>::default();
     for (j, e) in e.into_iter().enumerate() {
@@ -107,7 +108,8 @@ where
     let c = binary::open(&(r ^ index), io_context0)?;
     let c: usize =
         c.0.try_into()
-            .expect("This transformation should work, otherwise we have another issue");
+            .expect("This transformation should work, otherwise we have another issue")
+            & ((1 << k) - 1); // Mask potential overflows from non-well-defined input
 
     // Start the result with a random mask (for potential resharing later)
     let (mut t, mask_b) = io_context0

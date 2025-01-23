@@ -2,7 +2,8 @@ use super::{plain::PlainAcvmSolver, NoirWitnessExtensionProtocol};
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use mpc_core::protocols::{
-    rep3::{lut::Rep3LookupTable, network::Rep3MpcNet},
+    rep3::network::Rep3MpcNet,
+    rep3_ring::lut::Rep3LookupTable,
     shamir::{arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
 };
 use num_bigint::BigUint;

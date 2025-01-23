@@ -8,7 +8,6 @@ pub mod conversion;
 mod detail;
 pub mod gadgets;
 pub mod id;
-pub mod lut;
 pub mod network;
 pub mod pointshare;
 pub mod poly;

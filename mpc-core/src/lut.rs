@@ -12,6 +12,8 @@ pub trait LookupTableProvider<F: PrimeField> {
     type SecretShare;
     /// An input/output LUT (like `Vector`).
     type LutType;
+    /// The network used
+    type NetworkProvider;
 
     /// Initializes a LUT from the provided secret values.
     fn init_private(&self, values: Vec<Self::SecretShare>) -> Self::LutType;
@@ -32,6 +34,8 @@ pub trait LookupTableProvider<F: PrimeField> {
         &mut self,
         index: Self::SecretShare,
         lut: &Self::LutType,
+        network0: &mut Self::NetworkProvider,
+        network1: &mut Self::NetworkProvider,
     ) -> io::Result<Self::SecretShare>;
 
     /// Writes a value to the LUT.
@@ -47,6 +51,8 @@ pub trait LookupTableProvider<F: PrimeField> {
         index: Self::SecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
+        network0: &mut Self::NetworkProvider,
+        network1: &mut Self::NetworkProvider,
     ) -> io::Result<()>;
 }
 
@@ -59,6 +65,7 @@ pub struct PlainLookupTableProvider<F: PrimeField> {
 impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
     type SecretShare = F;
     type LutType = Vec<F>;
+    type NetworkProvider = ();
 
     fn init_private(&self, values: Vec<Self::SecretShare>) -> Self::LutType {
         values
@@ -68,7 +75,13 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         values
     }
 
-    fn get_from_lut(&mut self, index: Self::SecretShare, lut: &Self::LutType) -> io::Result<F> {
+    fn get_from_lut(
+        &mut self,
+        index: Self::SecretShare,
+        lut: &Self::LutType,
+        _network0: &mut Self::NetworkProvider,
+        _network1: &mut Self::NetworkProvider,
+    ) -> io::Result<F> {
         let index: BigUint = index.into();
         let index = usize::try_from(index).map_err(|_| {
             std::io::Error::new(
@@ -84,6 +97,8 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         index: Self::SecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
+        _network0: &mut Self::NetworkProvider,
+        _network1: &mut Self::NetworkProvider,
     ) -> io::Result<()> {
         let index: BigUint = index.into();
         let index = usize::try_from(index).map_err(|_| {

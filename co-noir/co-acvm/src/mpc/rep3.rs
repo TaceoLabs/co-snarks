@@ -6,10 +6,10 @@ use mpc_core::protocols::rep3_ring::gadgets::sort::radix_sort_fields;
 use mpc_core::{
     lut::LookupTableProvider,
     protocols::rep3::{
-        lut::Rep3LookupTable,
         network::{IoContext, Rep3Network},
         Rep3PrimeFieldShare,
     },
+    protocols::rep3_ring::lut::Rep3LookupTable,
 };
 use num_bigint::BigUint;
 use rayon::prelude::*;
@@ -44,11 +44,10 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
         let plain_solver = PlainAcvmSolver::<F>::default();
         let mut io_context = IoContext::init(network).unwrap();
         let forked = io_context.fork().unwrap();
-        let forked2 = io_context.fork().unwrap();
         Self {
-            lut_provider: Rep3LookupTable::new(forked),
+            lut_provider: Rep3LookupTable::new(),
             io_context0: io_context,
-            io_context1: forked2,
+            io_context1: forked,
             plain_solver,
             phantom_data: PhantomData,
         }
@@ -432,17 +431,20 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 })?;
 
                 match lut {
-                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
                         Self::AcvmType::from(vec[index].to_owned())
                     }
-                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
                         Self::AcvmType::from(vec[index].to_owned())
                     }
                 }
             }
-            Rep3AcvmType::Shared(shared) => {
-                Self::AcvmType::from(self.lut_provider.get_from_lut(shared, lut)?)
-            }
+            Rep3AcvmType::Shared(shared) => Self::AcvmType::from(self.lut_provider.get_from_lut(
+                shared,
+                lut,
+                &mut self.io_context0,
+                &mut self.io_context1,
+            )?),
         };
         Ok(result)
     }
@@ -465,10 +467,10 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 })?;
 
                 match lut {
-                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
                         vec[index] = value;
                     }
-                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
                         vec[index] = arithmetic::promote_to_trivial_share(id, value);
                     }
                 }
@@ -483,15 +485,15 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 })?;
 
                 match lut {
-                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
                         let mut vec = vec
                             .iter()
                             .map(|value| arithmetic::promote_to_trivial_share(id, *value))
                             .collect::<Vec<_>>();
                         vec[index] = value;
-                        *lut = mpc_core::protocols::rep3::lut::PublicPrivateLut::Shared(vec);
+                        *lut = mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec);
                     }
-                    mpc_core::protocols::rep3::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
                         vec[index] = value;
                     }
                 }
@@ -499,10 +501,22 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             (Rep3AcvmType::Shared(index), Rep3AcvmType::Public(value)) => {
                 // TODO there might be a more efficient implementation for this if the table is also public
                 let value = arithmetic::promote_to_trivial_share(id, value);
-                self.lut_provider.write_to_lut(index, value, lut)?;
+                self.lut_provider.write_to_lut(
+                    index,
+                    value,
+                    lut,
+                    &mut self.io_context0,
+                    &mut self.io_context1,
+                )?;
             }
             (Rep3AcvmType::Shared(index), Rep3AcvmType::Shared(value)) => {
-                self.lut_provider.write_to_lut(index, value, lut)?;
+                self.lut_provider.write_to_lut(
+                    index,
+                    value,
+                    lut,
+                    &mut self.io_context0,
+                    &mut self.io_context1,
+                )?;
             }
         }
         todo!()

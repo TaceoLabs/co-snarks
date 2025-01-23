@@ -130,7 +130,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         index: Self::AcvmType,
         lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> io::Result<F> {
-        self.plain_lut.get_from_lut(index, lut)
+        let mut a = ();
+        let mut b = ();
+        self.plain_lut.get_from_lut(index, lut, &mut a, &mut b)
     }
 
     fn write_lut_by_acvm_type(
@@ -139,7 +141,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         value: Self::AcvmType,
         lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> io::Result<()> {
-        self.plain_lut.write_to_lut(index, value, lut)
+        let mut a = ();
+        let mut b = ();
+        self.plain_lut
+            .write_to_lut(index, value, lut, &mut a, &mut b)
     }
 
     fn is_shared(_: &Self::AcvmType) -> bool {
