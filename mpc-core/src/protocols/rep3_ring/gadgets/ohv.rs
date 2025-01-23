@@ -42,7 +42,7 @@ where
     Ok((bits, e))
 }
 
-fn ohv<T: IntRing2k, N: Rep3Network>(
+pub(crate) fn ohv<T: IntRing2k, N: Rep3Network>(
     k: usize,
     mut bits: Rep3RingShare<T>,
     io_context: &mut IoContext<N>,
