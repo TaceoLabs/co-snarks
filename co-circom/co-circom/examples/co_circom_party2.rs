@@ -6,13 +6,25 @@ use co_circom::{
 use color_eyre::Result;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::{path::PathBuf, sync::Arc};
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{
+    fmt::{self, format::FmtSpan},
+    prelude::*,
+    EnvFilter,
+};
 
 fn main() -> Result<()> {
+    let fmt_layer = fmt::layer()
+        .with_target(false)
+        .with_line_number(false)
+        .with_span_events(FmtSpan::CLOSE | FmtSpan::ENTER);
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
     tracing_subscriber::registry()
-        .with(fmt::layer())
-        .with(EnvFilter::from_default_env())
+        .with(filter_layer)
+        .with(fmt_layer)
         .init();
+
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .unwrap();

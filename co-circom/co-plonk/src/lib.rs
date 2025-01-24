@@ -21,7 +21,6 @@ use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::time::Instant;
 
 /// This module contains the Plonk prover trait
 pub mod mpc;
@@ -86,9 +85,6 @@ where
         zkey: Arc<ZKey<P>>,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<(PlonkProof<P>, T)> {
-        let id = self.driver.get_party_id();
-        tracing::info!("Party {}: starting proof generation..", id);
-        let start = Instant::now();
         tracing::debug!("starting PLONK prove!");
         tracing::debug!(
             "we have {} constraints and {} addition constraints",
@@ -113,8 +109,6 @@ where
         tracing::debug!("round 4 done..");
         let result = state.round5();
         tracing::debug!("round 5 done! We are done!");
-        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-        tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
         result
     }
 }
@@ -221,7 +215,6 @@ mod plonk_utils {
 
 impl<P: Pairing, N: Rep3Network> Rep3CoPlonk<P, N> {
     /// Create a [`PlonkProof`]
-    #[tracing::instrument(name = "time_prove", skip_all)]
     pub fn prove(
         net: N,
         zkey: Arc<ZKey<P>>,
@@ -247,7 +240,6 @@ impl<P: Pairing, N: Rep3Network> Rep3CoPlonk<P, N> {
 
 impl<P: Pairing, N: ShamirNetwork> ShamirCoPlonk<P, N> {
     /// Create a [`PlonkProof`]
-    #[tracing::instrument(name = "time_prove", skip_all)]
     pub fn prove(
         net: N,
         threshold: usize,

@@ -192,17 +192,12 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirPreprocessing<F, N> {
         let seed: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
         let mut rng_buffer = ShamirRng::new(seed, threshold, &mut network)?;
 
-        tracing::info!(
-            "Party {}: generating correlated randomness..",
-            network.get_id()
-        );
         let start = Instant::now();
         // buffer_triple generates amount * batch_size, so we ceil dive the amount we want
         let amount = amount.div_ceil(rng_buffer.get_size_per_batch());
         rng_buffer.buffer_triples(&mut network, amount)?;
-        tracing::info!(
-            "Party {}: generating took {} ms",
-            network.get_id(),
+        tracing::debug!(
+            "generating {amount} triples took {} ms",
             start.elapsed().as_micros() as f64 / 1000.0
         );
 
