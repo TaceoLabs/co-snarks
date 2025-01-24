@@ -1238,6 +1238,16 @@ impl<F: PrimeField> LookupEntry<F> {
             },
         ]
     }
+
+    pub(crate) fn calculate_table_index(&self, use_two_key: bool, base: F) -> usize {
+        let mut index_b = self.key[0].to_owned();
+        if use_two_key {
+            let b: BigUint = base.into();
+            index_b *= b;
+            index_b += &self.key[1];
+        }
+        usize::try_from(index_b).expect("index is too large for usize?")
+    }
 }
 
 pub(crate) struct PlookupBasicTable<F: PrimeField> {

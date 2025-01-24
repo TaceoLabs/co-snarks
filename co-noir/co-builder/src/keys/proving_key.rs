@@ -411,7 +411,7 @@ impl<P: Pairing> ProvingKey<P> {
         let mut table_offset = offset; // offset of the present table in the table polynomials
                                        // loop over all tables used in the circuit; each table contains data about the lookups made on it
         for table in circuit.lookup_tables.iter_mut() {
-            table.initialize_index_map();
+            // table.initialize_index_map(); // We calculate indices from keys
 
             // TACEO TODO for shared lookup tables:
             // - get index_in_table with LUT
@@ -422,10 +422,12 @@ impl<P: Pairing> ProvingKey<P> {
             // - Skip the or if len is just one
             for gate_data in table.lookup_gates.iter() {
                 // convert lookup gate data to an array of three field elements, one for each of the 3 columns
-                let table_entry = gate_data.to_table_components(table.use_twin_keys);
+                // let table_entry = gate_data.to_table_components(table.use_twin_keys); // We calculate indices from keys
 
                 // find the index of the entry in the table
-                let index_in_table = table.index_map[table_entry];
+                // let index_in_table = table.index_map[table_entry]; // We calculate indices from keys
+                let index_in_table =
+                    gate_data.calculate_table_index(table.use_twin_keys, table.column_2_step_size);
 
                 // increment the read count at the corresponding index in the full polynomial
                 let index_in_poly = table_offset + index_in_table;
