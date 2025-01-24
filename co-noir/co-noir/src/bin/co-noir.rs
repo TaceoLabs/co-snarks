@@ -13,10 +13,7 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
-use mpc_core::protocols::{
-    rep3::network::{Rep3MpcNet, Rep3Network},
-    shamir::network::{ShamirMpcNet, ShamirNetwork},
-};
+use mpc_core::protocols::{rep3::network::Rep3MpcNet, shamir::network::ShamirMpcNet};
 use mpc_net::config::NetworkConfigFile;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
@@ -696,21 +693,6 @@ impl_config!(CreateVKCli, CreateVKConfig);
 impl_config!(VerifyCli, VerifyConfig);
 impl_config!(DownloadCrsCli, DownloadCrsConfig);
 
-fn install_tracing() {
-    use tracing_subscriber::prelude::*;
-    use tracing_subscriber::{fmt, EnvFilter};
-
-    let fmt_layer = fmt::layer().with_target(true).with_line_number(true);
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
-        .unwrap();
-
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(fmt_layer)
-        .init();
-}
-
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -772,6 +754,27 @@ fn check_dir_exists(dir_path: &Path) -> color_eyre::Result<()> {
         ));
     }
     Ok(())
+}
+
+fn install_tracing() {
+    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{
+        fmt::{self, format::FmtSpan},
+        EnvFilter,
+    };
+
+    let fmt_layer = fmt::layer()
+        .with_target(false)
+        .with_line_number(false)
+        .with_span_events(FmtSpan::CLOSE | FmtSpan::ENTER);
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
+
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(fmt_layer)
+        .init();
 }
 
 fn main() -> color_eyre::Result<ExitCode> {
@@ -839,7 +842,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     }
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode> {
     let witness_path = config.witness;
     let circuit_path = config.circuit;
@@ -880,6 +883,7 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
 
     let mut rng = rand::thread_rng();
 
+    tracing::info!("Starting split witness...");
     match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
@@ -892,7 +896,7 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
             let start = Instant::now();
             let shares = co_noir::split_witness_rep3(witness, &mut rng);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Sharing took {} ms", duration_ms);
+            tracing::info!("Split witness took {duration_ms} ms");
 
             // write out the shares to the output directory
             let base_name = witness_path
@@ -914,7 +918,7 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
             let start = Instant::now();
             let shares = co_noir::split_witness_shamir(witness, t, n, &mut rng);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Sharing took {} ms", duration_ms);
+            tracing::info!("Split witness took {duration_ms} ms");
 
             // write out the shares to the output directory
             let base_name = witness_path
@@ -936,7 +940,7 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<ExitCode> {
     let witness_path = config.witness;
     let circuit_path = config.circuit;
@@ -968,6 +972,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
 
     let mut rng = rand::thread_rng();
 
+    tracing::info!("Starting split proving key...");
     match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
@@ -982,7 +987,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
             let shares =
                 co_noir::split_proving_key_rep3::<_, _, Rep3MpcNet>(proving_key, &mut rng)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Sharing took {} ms", duration_ms);
+            tracing::info!("Split proving key took {duration_ms} ms");
 
             // write out the shares to the output directory
             let base_name = "proving_key";
@@ -1005,7 +1010,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
                 &mut rng,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Sharing took {} ms", duration_ms);
+            tracing::info!("Split proving key took {duration_ms} ms");
 
             // write out the shares to the output directory
             let base_name = "proving_key";
@@ -1023,7 +1028,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
     let input = config.input;
     let circuit = config.circuit;
@@ -1053,10 +1058,11 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
 
     // create input shares
     let mut rng = rand::thread_rng();
+    tracing::info!("Starting split input...");
     let start = Instant::now();
     let shares = co_noir::split_input_rep3::<Bn254, Rep3MpcNet, _>(inputs, &mut rng);
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Sharing took {} ms", duration_ms);
+    tracing::info!("Split input took {duration_ms} ms");
 
     // write out the shares to the output directory
     let base_name = input
@@ -1075,7 +1081,7 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<ExitCode> {
     let inputs = config.inputs;
     let protocol = config.protocol;
@@ -1094,7 +1100,6 @@ fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<
         check_file_exists(input)?;
     }
 
-    let start = Instant::now();
     let input_shares = inputs
         .iter()
         .map(|input| {
@@ -1107,9 +1112,12 @@ fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<
             color_eyre::Result::<_>::Ok(input_share)
         })
         .collect::<Result<Vec<_>, _>>()?;
+
+    tracing::info!("Starting input shares merging...");
+    let start = Instant::now();
     let result = co_noir::merge_input_shares::<Bn254>(input_shares)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Merging took {} ms", duration_ms);
+    tracing::info!("Merge input shares took {duration_ms} ms");
 
     // write out the shares to the output file
     let out_file = BufWriter::new(File::create(&out).context("while creating output file")?);
@@ -1120,7 +1128,7 @@ fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<ExitCode> {
     let input = config.input;
     let circuit = config.circuit;
@@ -1129,7 +1137,7 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
 
     if protocol != MPCProtocol::REP3 {
         return Err(eyre!(
-            "Only REP3 protocol is supported for merging input shares"
+            "Only REP3 protocol is supported for witness generation"
         ));
     }
     check_file_exists(&input)?;
@@ -1153,13 +1161,13 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
         .try_into()
         .context("while converting network config")?;
     let net = Rep3MpcNet::new(network_config)?;
-    let id = usize::from(net.get_id());
 
+    tracing::info!("Starting witness generation...");
     let start = Instant::now();
     let (result_witness_share, _) =
         co_noir::generate_witness_rep3(input_share, compiled_program, net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Party {}: Witness extension took {} ms", id, duration_ms);
+    tracing::info!("Generate witness took {duration_ms} ms");
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1169,7 +1177,7 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<ExitCode> {
     let witness = config.witness;
     let src_protocol = config.src_protocol;
@@ -1194,13 +1202,13 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
         .try_into()
         .context("while converting network config")?;
     let net = Rep3MpcNet::new(network_config)?;
-    let id = usize::from(net.get_id());
 
     // Translate witness to shamir shares
+    tracing::info!("Starting witness translation...");
     let start = Instant::now();
     let (shamir_witness_shares, _) = co_noir::translate_witness::<Bn254, _, _>(witness_share, net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Party {}: Translating witness took {} ms", id, duration_ms);
+    tracing::info!("Translate witness took {duration_ms} ms");
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1209,7 +1217,7 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::Result<ExitCode> {
     let proving_key = config.proving_key;
     let src_protocol = config.src_protocol;
@@ -1234,13 +1242,13 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
         .try_into()
         .context("while converting network config")?;
     let net = Rep3MpcNet::new(network_config)?;
-    let id = usize::from(net.get_id());
 
-    // Translate witness to shamir shares
+    // Translate proving key to shamir shares
+    tracing::info!("Starting proving key translation...");
     let start = Instant::now();
     let (shamir_proving_key, _) = co_noir::translate_proving_key(proving_key, net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Party {}: Translating shares took {} ms", id, duration_ms);
+    tracing::info!("Translate proving key took {duration_ms} ms");
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1249,7 +1257,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<ExitCode> {
     let witness = config.witness;
     let circuit_path = config.circuit;
@@ -1275,6 +1283,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
         .try_into()
         .context("while converting network config")?;
 
+    tracing::info!("Starting proving key generation...");
     match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
@@ -1284,9 +1293,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 .context("while deserializing witness share")?;
             // connect to network
             let net = Rep3MpcNet::new(network_config)?;
-            let id = net.get_id();
 
-            tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
             let (proving_key, _) = co_noir::generate_proving_key_rep3(
                 net,
@@ -1295,11 +1302,8 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 recursive,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!(
-                "Party {}: Proving key generation took {} ms",
-                id,
-                duration_ms
-            );
+            tracing::info!("Build proving key took {duration_ms} ms");
+
             // write result to output file
             let out_file = BufWriter::new(std::fs::File::create(&out)?);
             bincode::serialize_into(out_file, &proving_key)?;
@@ -1310,9 +1314,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 .context("while deserializing witness share")?;
             // connect to network
             let net = ShamirMpcNet::new(network_config)?;
-            let id = net.get_id();
 
-            tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
             let (proving_key, _) = co_noir::generate_proving_key_shamir(
                 net,
@@ -1322,11 +1324,8 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 recursive,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!(
-                "Party {}: Proving key generation took {} ms",
-                id,
-                duration_ms
-            );
+            tracing::info!("Build proving key took {duration_ms} ms");
+
             // write result to output file
             let out_file = BufWriter::new(std::fs::File::create(&out)?);
             bincode::serialize_into(out_file, &proving_key)?;
@@ -1338,7 +1337,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCode> {
     let proving_key = config.proving_key;
     let protocol = config.protocol;
@@ -1360,13 +1359,13 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let proving_key_file =
         BufReader::new(File::open(proving_key).context("trying to open proving_key file")?);
 
+    tracing::info!("Starting proof generation...");
     let (proof, public_input) = match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
                 return Err(eyre!("REP3 only allows the threshold to be 1"));
             }
             let net = Rep3MpcNet::new(network_config)?;
-            let id = net.get_id();
 
             // Get the proving key and prover
             let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254> =
@@ -1378,7 +1377,6 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             match hasher {
                 TranscriptHash::POSEIDON => {
                     // execute prover in MPC
-                    tracing::info!("Party {}: starting proof generation..", id);
                     let start = Instant::now();
                     let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
                         net,
@@ -1386,17 +1384,16 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                         &prover_crs,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)
                 }
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
-                    tracing::info!("Party {}: starting proof generation..", id);
                     let start = Instant::now();
                     let (proof, _) =
                         Rep3CoUltraHonk::<_, _, Keccak256>::prove(net, proving_key, &prover_crs)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)
                 }
             }
@@ -1404,7 +1401,6 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
         MPCProtocol::SHAMIR => {
             // connect to network
             let net = ShamirMpcNet::new(network_config)?;
-            let id = net.get_id();
 
             // Get the proving key and prover
             let proving_key: ProvingKey<ShamirUltraHonkDriver<ark_bn254::Fr, ShamirMpcNet>, Bn254> =
@@ -1415,7 +1411,6 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let public_input = proving_key.get_public_inputs();
 
             // execute prover in MPC
-            tracing::info!("Party {}: starting proof generation..", id);
             match hasher {
                 TranscriptHash::POSEIDON => {
                     let start = Instant::now();
@@ -1426,7 +1421,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                         &prover_crs,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    tracing::info!("Generate proof took {duration_ms} ms");
 
                     (proof, public_input)
                 }
@@ -1439,7 +1434,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                         &prover_crs,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    tracing::info!("Generate proof took {duration_ms} ms");
 
                     (proof, public_input)
                 }
@@ -1487,7 +1482,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_build_and_generate_proof(
     config: BuildAndGenerateProofConfig,
 ) -> color_eyre::Result<ExitCode> {
@@ -1525,6 +1520,7 @@ fn run_build_and_generate_proof(
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
     let prover_crs = CrsParser::get_crs_g1(crs_path, crs_size)?;
 
+    tracing::info!("Starting proving key generation...");
     let (proof, public_input) = match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
@@ -1534,7 +1530,6 @@ fn run_build_and_generate_proof(
                 .context("while deserializing witness share")?;
             // connect to network
             let net = Rep3MpcNet::new(network_config)?;
-            let id = net.get_id();
 
             let start = Instant::now();
             let (proving_key, net) = co_noir::generate_proving_key_rep3(
@@ -1545,16 +1540,13 @@ fn run_build_and_generate_proof(
             )?;
 
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!(
-                "Party {}: Proving key generation took {} ms",
-                id,
-                duration_ms
-            );
+            tracing::info!("Build proving key took {duration_ms} ms");
 
             let public_input = proving_key.get_public_inputs();
+
+            tracing::info!("Starting proof generation...");
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON => {
-                    tracing::info!("Party {}: starting proof generation..", id);
                     let start = Instant::now();
                     let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
                         net,
@@ -1562,16 +1554,15 @@ fn run_build_and_generate_proof(
                         &prover_crs,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)
                 }
                 TranscriptHash::KECCAK => {
-                    tracing::info!("Party {}: starting proof generation..", id);
                     let start = Instant::now();
                     let (proof, _) =
                         Rep3CoUltraHonk::<_, _, Keccak256>::prove(net, proving_key, &prover_crs)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)
                 }
             };
@@ -1583,9 +1574,7 @@ fn run_build_and_generate_proof(
                 .context("while deserializing witness share")?;
             // connect to network
             let net = ShamirMpcNet::new(network_config)?;
-            let id = net.get_id();
 
-            tracing::info!("Party {}: starting to generate proving key..", id);
             let start = Instant::now();
             let (proving_key, net) = co_noir::generate_proving_key_shamir(
                 net,
@@ -1595,17 +1584,13 @@ fn run_build_and_generate_proof(
                 recursive,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!(
-                "Party {}: Proving key generation took {} ms",
-                id,
-                duration_ms
-            );
+            tracing::info!("Build proving key took {duration_ms} ms");
 
             let public_input = proving_key.get_public_inputs();
 
+            tracing::info!("Starting proof generation...");
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON => {
-                    tracing::info!("Party {}: starting proof generation..", id);
                     let start = Instant::now();
                     let (proof, _) = ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
                         net,
@@ -1614,12 +1599,11 @@ fn run_build_and_generate_proof(
                         &prover_crs,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)
                 }
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
-                    tracing::info!("Party {}: starting proof generation..", id);
                     let start = Instant::now();
                     let (proof, _) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
                         net,
@@ -1628,7 +1612,7 @@ fn run_build_and_generate_proof(
                         &prover_crs,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
+                    tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)
                 }
             };
@@ -1676,7 +1660,7 @@ fn run_build_and_generate_proof(
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let circuit_path = config.circuit;
     let crs_path = config.crs;
@@ -1697,7 +1681,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
     let prover_crs = CrsParser::get_crs_g1(crs_path, crs_size)?;
 
-    tracing::info!("Starting to generate verification key..");
+    tracing::info!("Starting to generate verification key...");
     let start = Instant::now();
     let vk = co_noir::generate_vk_barretenberg::<Bn254>(
         &constraint_system,
@@ -1723,7 +1707,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-#[instrument(skip(config))]
+#[instrument(level = "debug", skip(config))]
 fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let proof = config.proof;
     let vk_path: PathBuf = config.vk;
@@ -1748,8 +1732,8 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let vk = VerifyingKey::from_barrettenberg_and_crs(vk, verifier_crs);
 
     // The actual verifier
+    tracing::info!("Starting proof verification...");
     let start = Instant::now();
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     let res = match hasher {
         TranscriptHash::POSEIDON => {
             UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk).context("while verifying proof")?
@@ -1758,7 +1742,8 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
             UltraHonk::<_, Keccak256>::verify(proof, vk).context("while verifying proof")?
         }
     };
-    tracing::info!("Proof verification took {} ms", duration_ms);
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Verify took {} ms", duration_ms);
 
     if res {
         tracing::info!("Proof verified successfully");

@@ -19,31 +19,12 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{BufReader, BufWriter},
-    path::Path,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
+    time::Instant,
 };
 use tracing::instrument;
-use tracing_subscriber::fmt::format::FmtSpan;
-
-fn install_tracing() {
-    use tracing_subscriber::prelude::*;
-    use tracing_subscriber::{fmt, EnvFilter};
-
-    let fmt_layer = fmt::layer()
-        .with_target(false)
-        .with_line_number(false)
-        .with_span_events(FmtSpan::CLOSE | FmtSpan::ENTER);
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
-        .unwrap();
-
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        .with(fmt_layer)
-        .init();
-}
 
 /// An enum representing the ZK proof system to use.
 #[derive(Debug, Clone, ValueEnum, Serialize, Deserialize)]
@@ -580,6 +561,27 @@ fn check_dir_exists(dir_path: &Path) -> color_eyre::Result<()> {
     Ok(())
 }
 
+fn install_tracing() {
+    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{
+        fmt::{self, format::FmtSpan},
+        EnvFilter,
+    };
+
+    let fmt_layer = fmt::layer()
+        .with_target(false)
+        .with_line_number(false)
+        .with_span_events(FmtSpan::CLOSE | FmtSpan::ENTER);
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
+
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(fmt_layer)
+        .init();
+}
+
 fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
     rustls::crypto::aws_lc_rs::default_provider()
@@ -669,8 +671,7 @@ where
     let r1cs_file = BufReader::new(File::open(&r1cs).context("while opening r1cs file")?);
     let r1cs = R1CS::<P>::from_reader(r1cs_file).context("while parsing r1cs file")?;
 
-    let mut rng = rand::thread_rng();
-
+    tracing::info!("Starting split witness...");
     match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
@@ -680,12 +681,11 @@ where
                 return Err(eyre!("REP3 only allows the number of parties to be 3"));
             }
             // create witness shares
-            let shares = CompressedRep3SharedWitness::share_rep3(
-                witness,
-                r1cs.num_inputs,
-                &mut rng,
-                Compression::SeededHalfShares,
-            );
+            let start = Instant::now();
+            let shares =
+                co_circom::split_witness_rep3(&r1cs, witness, Compression::SeededHalfShares);
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Split witness took {duration_ms} ms");
 
             // write out the shares to the output directory
             let base_name = witness_path
@@ -704,8 +704,10 @@ where
         }
         MPCProtocol::SHAMIR => {
             // create witness shares
-            let shares =
-                ShamirSharedWitness::share_shamir(witness, r1cs.num_inputs, t, n, &mut rng);
+            let start = Instant::now();
+            let shares = co_circom::split_witness_shamir(&r1cs, witness, t, n);
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Split witness took {duration_ms} ms");
 
             // write out the shares to the output directory
             let base_name = witness_path
@@ -735,7 +737,7 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
-    let input = config.input;
+    let input_path = config.input;
     let circuit = config.circuit;
     let protocol = config.protocol;
     let out_dir = config.out_dir;
@@ -745,7 +747,7 @@ where
             "Only REP3 protocol is supported for splitting inputs"
         ));
     }
-    check_file_exists(&input)?;
+    check_file_exists(&input_path)?;
     let circuit_path = PathBuf::from(&circuit);
     check_file_exists(&circuit_path)?;
     check_dir_exists(&out_dir)?;
@@ -755,12 +757,17 @@ where
         .context("while reading public inputs from circuit")?;
 
     // read the input file
-    let input_file = BufReader::new(File::open(&input).context("while opening input file")?);
+    let input = BufReader::new(File::open(&input_path).context("while opening input file")?);
+    let input = serde_json::from_reader(input)?;
 
-    let shares = co_circom::split_input::<P>(serde_json::from_reader(input_file)?, &public_inputs)?;
+    tracing::info!("Starting split input...");
+    let start = Instant::now();
+    let shares = co_circom::split_input::<P>(input, &public_inputs)?;
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Split input took {duration_ms} ms");
 
     // write out the shares to the output directory
-    let base_name = input
+    let base_name = input_path
         .file_name()
         .context("we have a file name")?
         .to_str()
@@ -811,7 +818,13 @@ where
             color_eyre::Result::<_>::Ok(input_share)
         })
         .collect::<Result<Vec<_>, _>>()?;
+
+    tracing::info!("Starting input shares merging...");
+    let start = Instant::now();
     let merged = co_circom::merge_input_shares(input_shares)?;
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Merge input shares took {duration_ms} ms");
+
     let out_file = BufWriter::new(File::create(&out).context("while creating output file")?);
     bincode::serialize_into(out_file, &merged).context("while serializing witness share")?;
     tracing::info!("Wrote merged input share to file {}", out.display());
@@ -834,7 +847,7 @@ where
 
     if protocol != MPCProtocol::REP3 {
         return Err(eyre!(
-            "Only REP3 protocol is supported for merging input shares"
+            "Only REP3 protocol is supported for witness generation"
         ));
     }
     check_file_exists(&input)?;
@@ -860,8 +873,12 @@ where
         .context("while parsing circuit file")?;
 
     // Extend the witness
+    tracing::info!("Starting witness generation...");
+    let start = Instant::now();
     let (result_witness_share, _) =
         co_circom::generate_witness_rep3::<P>(circuit, input_share, mpc_net, config.vm)?;
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Generate witness took {duration_ms} ms");
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -906,7 +923,11 @@ where
     let net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
 
     // Translate witness to shamir shares
+    tracing::info!("Starting witness translation...");
+    let start = Instant::now();
     let (shamir_witness_share, _) = co_circom::translate_witness::<P>(witness_share, net)?;
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Translate witness took {duration_ms} ms");
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -952,6 +973,7 @@ where
         .try_into()
         .context("while converting network config")?;
 
+    tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
             let zkey =
@@ -968,7 +990,12 @@ where
                         bincode::deserialize_from(witness_file)?;
                     let witness_share = witness_share.uncompress(&mut mpc_net)?;
                     let public_input = witness_share.public_inputs.clone();
+
+                    let start = Instant::now();
                     let (proof, _) = Rep3CoGroth16::prove(mpc_net, zkey, witness_share)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Generate proof took {duration_ms} ms");
+
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -976,7 +1003,12 @@ where
                     let witness_share: ShamirSharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
+
+                    let start = Instant::now();
                     let (proof, _) = ShamirCoGroth16::prove(mpc_net, t, zkey, witness_share)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Generate proof took {duration_ms} ms");
+
                     (proof, public_input)
                 }
             };
@@ -1009,7 +1041,12 @@ where
                         bincode::deserialize_from(witness_file)?;
                     let witness_share = witness_share.uncompress(&mut mpc_net)?;
                     let public_input = witness_share.public_inputs.clone();
+
+                    let start = Instant::now();
                     let (proof, _) = Rep3CoPlonk::prove(mpc_net, zkey, witness_share)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Generate proof took {duration_ms} ms");
+
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
@@ -1017,7 +1054,12 @@ where
                     let witness_share: ShamirSharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
+
+                    let start = Instant::now();
                     let (proof, _) = ShamirCoPlonk::prove(mpc_net, t, zkey, witness_share)?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Generate proof took {duration_ms} ms");
+
                     (proof, public_input)
                 }
             };
@@ -1105,6 +1147,8 @@ where
         .context("while converting public input strings to field elements")?;
 
     // verify proof
+    tracing::info!("Starting proof verification...");
+    let start = Instant::now();
     let res = match proofsystem {
         ProofSystem::Groth16 => {
             let proof: Groth16Proof<P> = serde_json::from_reader(proof_file)
@@ -1125,6 +1169,8 @@ where
             Plonk::<P>::verify(&vk, &proof, &public_inputs)
         }
     };
+    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+    tracing::info!("Verify took {} ms", duration_ms);
 
     match res {
         Ok(_) => {

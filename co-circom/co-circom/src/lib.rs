@@ -1,5 +1,11 @@
+//! # Example:
+//!
+//! ```no_run
+#![doc = include_str!("../examples/co_circom_party0.rs")]
+//! ```
+
 #![warn(missing_docs)]
-//! This crate provides a binary and associated helper library for running collaborative SNARK proofs.
+
 use std::{marker::PhantomData, sync::Arc};
 
 use ark_ff::PrimeField;
@@ -252,7 +258,6 @@ where
 }
 
 /// Merge multiple REP3 shared inputs into one
-#[tracing::instrument(name = "time_merge_input_shares", skip_all)]
 pub fn merge_input_shares<F: PrimeField>(
     mut inputs: Vec<Rep3SharedInput<F>>,
 ) -> color_eyre::Result<Rep3SharedInput<F>> {
@@ -264,9 +269,8 @@ pub fn merge_input_shares<F: PrimeField>(
 }
 
 /// Split the witness into REP3 shares
-#[tracing::instrument(name = "time_split_witness_rep3", skip_all)]
 pub fn split_witness_rep3<P: Pairing>(
-    r1cs: R1CS<P>,
+    r1cs: &R1CS<P>,
     witness: Witness<P::ScalarField>,
     compression: Compression,
 ) -> color_eyre::Result<[CompressedRep3SharedWitness<P::ScalarField>; 3]> {
@@ -278,9 +282,8 @@ pub fn split_witness_rep3<P: Pairing>(
 }
 
 /// Split the witness into shamir shares
-#[tracing::instrument(name = "time_split_witness_shamir", skip_all)]
 pub fn split_witness_shamir<P: Pairing>(
-    r1cs: R1CS<P>,
+    r1cs: &R1CS<P>,
     witness: Witness<P::ScalarField>,
     threshold: usize,
     num_parties: usize,
@@ -298,7 +301,6 @@ pub fn split_witness_shamir<P: Pairing>(
 }
 
 /// Translate the REP3 shared witness into a shamir shared witness
-#[tracing::instrument(name = "time_translate_witness", skip_all)]
 pub fn translate_witness<P>(
     witness: CompressedRep3SharedWitness<P::ScalarField>,
     net: Rep3MpcNet,

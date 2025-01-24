@@ -16,7 +16,6 @@ use num_traits::ToPrimitive;
 use rayon::prelude::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::time::Instant;
 use tokio::sync::oneshot;
 use tracing::instrument;
 
@@ -111,9 +110,6 @@ where
         zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> Result<(Groth16Proof<P>, T)> {
-        let id = self.driver.get_party_id();
-        tracing::info!("Party {}: starting proof generation..", id);
-        let start = Instant::now();
         let public_inputs = Arc::new(private_witness.public_inputs);
         if public_inputs.len() != zkey.n_public + 1 {
             eyre::bail!(
@@ -135,9 +131,6 @@ where
             public_inputs,
             private_witness,
         )?;
-
-        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-        tracing::info!("Party {}: Proof generation took {} ms", id, duration_ms);
         Ok((proof, driver))
     }
 
@@ -469,7 +462,6 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a [`Groth16Proof`].
-    #[tracing::instrument(name = "time_prove", skip_all)]
     pub fn prove(
         net: N,
         zkey: Arc<ZKey<P>>,
@@ -495,7 +487,6 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a [`Groth16Proof`].
-    #[tracing::instrument(name = "time_prove", skip_all)]
     pub fn prove(
         net: N,
         threshold: usize,

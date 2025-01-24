@@ -1,3 +1,9 @@
+//! # Example:
+//!
+//! ```no_run
+#![doc = include_str!("../examples/co_noir_party0.rs")]
+//! ```
+
 use acir::{
     acir_field::GenericFieldElement,
     native_types::{WitnessMap, WitnessStack},
