@@ -1,12 +1,10 @@
+use self::utils::Utils;
+use crate::{builder::GenericUltraCircuitBuilder, utils};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
 use std::array::from_fn;
-
-use crate::{builder::GenericUltraCircuitBuilder, utils};
-
-use self::utils::Utils;
 
 use super::types::{ColumnIdx, FieldCT, LookupEntry, PlookupMultiTable, ReadData};
 
@@ -90,34 +88,29 @@ impl From<BasicTableId> for usize {
 
 impl BasicTableId {
     pub(crate) fn get_value_from_key<F: PrimeField, const ID: u64>(key: [u64; 2]) -> [F; 2] {
-        let value1 = F::from(key[0] * 3 + key[1] * 4 + ID * 0x1337);
-        let value2 = F::zero();
-
-        [value1, value2]
+        [F::from(key[0] * 3 + key[1] * 4 + ID * 0x1337), F::zero()]
     }
     pub(crate) fn get_xor_rotate_values_from_key<
         F: PrimeField,
-        const BITS_PER_SLICE: u64,
         const NUM_ROTATED_OUTPUT_BITS: u64,
     >(
         key: [u64; 2],
     ) -> [F; 2] {
         [
             F::from(Utils::rotate64(key[0] ^ key[1], NUM_ROTATED_OUTPUT_BITS)),
-            0u64.into(),
+            F::zero(),
         ]
     }
 
     pub(crate) fn get_and_rotate_values_from_key<
         F: PrimeField,
-        const BITS_PER_SLICE: u64,
         const NUM_ROTATED_OUTPUT_BITS: u64,
     >(
         key: [u64; 2],
     ) -> [F; 2] {
         [
             F::from(Utils::rotate64(key[0] & key[1], NUM_ROTATED_OUTPUT_BITS)),
-            0u64.into(),
+            F::zero(),
         ]
     }
 }
@@ -276,7 +269,7 @@ impl<F: PrimeField> Plookup<F> {
             table.basic_table_ids.push(BasicTableId::UintXorRotate0);
             table
                 .get_table_values
-                .push(BasicTableId::get_xor_rotate_values_from_key::<F, 6, 0>);
+                .push(BasicTableId::get_xor_rotate_values_from_key::<F, 6>);
         }
         table
     }
@@ -293,7 +286,7 @@ impl<F: PrimeField> Plookup<F> {
             table.basic_table_ids.push(BasicTableId::UintAndRotate0);
             table
                 .get_table_values
-                .push(BasicTableId::get_and_rotate_values_from_key::<F, 6, 0>);
+                .push(BasicTableId::get_and_rotate_values_from_key::<F, 6>);
         }
         table
     }
@@ -318,7 +311,6 @@ impl<F: PrimeField> Plookup<F> {
         ); // The only ones implemented so far
         &self.multi_tables[usize::from(id)]
     }
-
     fn slice_input_using_variable_bases(input: BigUint, bases: &[u64]) -> Vec<u64> {
         let mut target = input;
         let mut slices = Vec::with_capacity(bases.len());
@@ -331,48 +323,180 @@ impl<F: PrimeField> Plookup<F> {
         }
         slices
     }
-
-    pub(crate) fn get_lookup_accumulators(
-        &self,
+    #[expect(clippy::type_complexity)]
+    fn slice_and_get_values<T: NoirWitnessExtensionProtocol<F>>(
+        driver: &mut T,
         id: MultiTableId,
-        key_a: F,
-        key_b: F,
+        key_a: T::AcvmType,
+        key_b: T::AcvmType,
+        bases: &[u64],
+    ) -> std::io::Result<(
+        Vec<(T::AcvmType, T::AcvmType)>,
+        Vec<T::AcvmType>,
+        Vec<T::AcvmType>,
+    )> {
+        let mut results: Vec<(T::AcvmType, T::AcvmType)> = Vec::with_capacity(bases.len());
+        let mut key_a_slices = Vec::with_capacity(bases.len());
+        let mut key_b_slices = Vec::with_capacity(bases.len());
+        match id {
+            MultiTableId::Uint32Xor => {
+                if T::is_shared(&key_a) || T::is_shared(&key_b) {
+                    // the case shared/public can probably be optimised (or never happens?)
+                    let key_a = if T::is_shared(&key_a) {
+                        T::get_shared(&key_a).expect("Already checked it is shared")
+                    } else {
+                        T::promote_to_trivial_share(
+                            driver,
+                            T::get_public(&key_a).expect("Already checked it is public"),
+                        )
+                    };
+                    let key_b = if T::is_shared(&key_b) {
+                        T::get_shared(&key_b).expect("Already checked it is shared")
+                    } else {
+                        T::promote_to_trivial_share(
+                            driver,
+                            T::get_public(&key_b).expect("Already checked it is public"),
+                        )
+                    };
+                    let values =
+                        T::slice_and_get_xor_rotate_values::<64>(driver, key_a, key_b, bases, 0)?;
+                    results.extend(values.0);
+                    key_a_slices.extend(values.1);
+                    key_b_slices.extend(values.2);
+                } else {
+                    let slices1 = Self::slice_input_using_variable_bases(
+                        T::get_public(&key_a)
+                            .expect("Already checked it is public")
+                            .into(),
+                        bases,
+                    );
+                    let slices2 = Self::slice_input_using_variable_bases(
+                        T::get_public(&key_b)
+                            .expect("Already checked it is public")
+                            .into(),
+                        bases,
+                    );
+
+                    slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
+                        let values =
+                            BasicTableId::get_and_rotate_values_from_key::<F, 6>([*s1, *s2]);
+                        results.push((values[0].into(), values[1].into()));
+                    });
+                }
+            }
+
+            MultiTableId::Uint32And => {
+                if T::is_shared(&key_a) || T::is_shared(&key_b) {
+                    // the case shared/public can probably be optimised (or never happens?)
+                    let key_a = if T::is_shared(&key_a) {
+                        T::get_shared(&key_a).expect("Already checked it is shared")
+                    } else {
+                        T::promote_to_trivial_share(
+                            driver,
+                            T::get_public(&key_a).expect("Already checked it is public"),
+                        )
+                    };
+                    let key_b = if T::is_shared(&key_b) {
+                        T::get_shared(&key_b).expect("Already checked it is shared")
+                    } else {
+                        T::promote_to_trivial_share(
+                            driver,
+                            T::get_public(&key_b).expect("Already checked it is public"),
+                        )
+                    };
+                    let values =
+                        T::slice_and_get_and_rotate_values::<64>(driver, key_a, key_b, bases, 0)?;
+                    results.extend(values.0);
+                    key_a_slices.extend(values.1);
+                    key_b_slices.extend(values.2);
+                } else {
+                    let slices1 = Self::slice_input_using_variable_bases(
+                        T::get_public(&key_a)
+                            .expect("Already checked it is public")
+                            .into(),
+                        bases,
+                    );
+                    let slices2 = Self::slice_input_using_variable_bases(
+                        T::get_public(&key_b)
+                            .expect("Already checked it is public")
+                            .into(),
+                        bases,
+                    );
+                    slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
+                        let values =
+                            BasicTableId::get_xor_rotate_values_from_key::<F, 6>([*s1, *s2]);
+                        results.push((values[0].into(), values[1].into()));
+                    });
+                }
+            }
+            MultiTableId::HonkDummyMulti => {
+                let key_a_val = T::get_public(&key_a).expect("This should be public"); //according to RW
+                let key_b_val = T::get_public(&key_b).expect("This should be public");
+                //according to RW
+                let slices1 = Self::slice_input_using_variable_bases(key_a_val.into(), bases);
+                let slices2 = Self::slice_input_using_variable_bases(key_b_val.into(), bases);
+                slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
+                    results.push((
+                        F::from(Utils::rotate64(s1 & s2, 6)).into(),
+                        F::zero().into(),
+                    ));
+                });
+                let slices1: Vec<T::AcvmType> =
+                    slices1.into_iter().map(F::from).map(Into::into).collect();
+                let slices2: Vec<T::AcvmType> =
+                    slices2.into_iter().map(F::from).map(Into::into).collect();
+                key_a_slices.extend(slices1);
+                key_b_slices.extend(slices2);
+            }
+            _ => todo!("{:?} not yet implemented", id),
+        }
+        Ok((results, key_a_slices, key_b_slices))
+    }
+
+    pub(crate) fn get_lookup_accumulators<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+        id: MultiTableId,
+        key_a: T::AcvmType,
+        key_b: T::AcvmType,
         is_2_to_1_lookup: bool,
-    ) -> ReadData<F> {
+    ) -> std::io::Result<ReadData<T::AcvmType>> {
         // return multi-table, populating global array of all multi-tables if need be
-        let multi_table = self.get_multitable(id);
+        let multi_table = builder.plookup.get_multitable(id.clone());
         let num_lookups = multi_table.basic_table_ids.len();
 
-        let mut lookup = ReadData::<F>::default();
-        let key_a_slices =
-            Self::slice_input_using_variable_bases(key_a.into(), &multi_table.slice_sizes);
-        let key_b_slices =
-            Self::slice_input_using_variable_bases(key_b.into(), &multi_table.slice_sizes);
-
+        let mut lookup = ReadData::<T::AcvmType>::default();
+        let values_sliced =
+            Self::slice_and_get_values::<T>(driver, id, key_a, key_b, &multi_table.slice_sizes)?;
+        let key_a_slices = values_sliced.1;
+        let key_b_slices = values_sliced.2;
+        let values_sliced = values_sliced.0;
         let mut column_1_raw_values = Vec::with_capacity(num_lookups);
         let mut column_2_raw_values = Vec::with_capacity(num_lookups);
         let mut column_3_raw_values = Vec::with_capacity(num_lookups);
 
         for i in 0..num_lookups {
             // compute the value(s) corresponding to the key(s) using the i-th basic table query function
-            let values = multi_table.get_table_values[i]([key_a_slices[i], key_b_slices[i]]);
-            // store all query data in raw columns and key entry
-            column_1_raw_values.push(key_a_slices[i]);
+
+            column_1_raw_values.push(key_a_slices[i].clone());
             column_2_raw_values.push(if is_2_to_1_lookup {
-                F::from(key_b_slices[i])
+                key_b_slices[i].clone()
             } else {
-                values[0]
+                values_sliced[i].0.clone()
             });
             column_3_raw_values.push(if is_2_to_1_lookup {
-                values[0]
+                values_sliced[i].0.clone()
             } else {
-                values[1]
+                values_sliced[i].1.clone()
             });
 
             // Store the lookup entries for use in constructing the sorted table/lookup polynomials later on
-            let lookup_entry = LookupEntry {
-                key: [key_a_slices[i].into(), key_b_slices[i].into()],
-                value: values,
+            let lookup_entry = LookupEntry::<T::AcvmType> {
+                key: [key_a_slices[i].clone(), key_b_slices[i].clone()],
+                value: values_sliced[i].clone().into(),
             };
             lookup.lookup_entries.push(lookup_entry);
         }
@@ -420,24 +544,40 @@ impl<F: PrimeField> Plookup<F> {
         //  * https://app.gitbook.com/o/-LgCgJ8TCO7eGlBr34fj/s/-MEwtqp3H6YhHUTQ_pVJ/plookup-gates-for-ultraplonk/lookup-table-structures
         //  *
         //  */
-        lookup[ColumnIdx::C1][num_lookups - 1] = F::from(column_1_raw_values[num_lookups - 1]);
-        lookup[ColumnIdx::C2][num_lookups - 1] = column_2_raw_values[num_lookups - 1];
-        lookup[ColumnIdx::C3][num_lookups - 1] = column_3_raw_values[num_lookups - 1];
+        lookup[ColumnIdx::C1][num_lookups - 1] = column_1_raw_values[num_lookups - 1].clone();
+        lookup[ColumnIdx::C2][num_lookups - 1] = column_2_raw_values[num_lookups - 1].clone();
+        lookup[ColumnIdx::C3][num_lookups - 1] = column_3_raw_values[num_lookups - 1].clone();
 
         for i in (1..num_lookups).rev() {
-            lookup[ColumnIdx::C1][i - 1] = F::from(column_1_raw_values[i - 1])
-                + lookup[ColumnIdx::C1][i] * multi_table.column_1_step_sizes[i];
-            lookup[ColumnIdx::C2][i - 1] = column_2_raw_values[i - 1]
-                + lookup[ColumnIdx::C2][i] * multi_table.column_2_step_sizes[i];
-            lookup[ColumnIdx::C3][i - 1] = column_3_raw_values[i - 1]
-                + lookup[ColumnIdx::C3][i] * multi_table.column_3_step_sizes[i];
+            let tmp_sum = T::add(
+                driver,
+                column_1_raw_values[i - 1].clone(),
+                lookup[ColumnIdx::C1][i].clone(),
+            );
+
+            lookup[ColumnIdx::C1][i - 1] =
+                T::mul_with_public(driver, multi_table.column_1_step_sizes[i], tmp_sum);
+            let tmp_sum = T::add(
+                driver,
+                column_2_raw_values[i - 1].clone(),
+                lookup[ColumnIdx::C2][i].clone(),
+            );
+            lookup[ColumnIdx::C2][i - 1] =
+                T::mul_with_public(driver, multi_table.column_2_step_sizes[i], tmp_sum);
+            let tmp_sum = T::add(
+                driver,
+                column_3_raw_values[i - 1].clone(),
+                lookup[ColumnIdx::C3][i].clone(),
+            );
+            lookup[ColumnIdx::C3][i - 1] =
+                T::mul_with_public(driver, multi_table.column_3_step_sizes[i], tmp_sum);
         }
-        lookup
+        Ok(lookup)
     }
 
     pub(crate) fn get_lookup_accumulators_ct<
         P: Pairing<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+        T: NoirWitnessExtensionProtocol<F>,
     >(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -445,29 +585,106 @@ impl<F: PrimeField> Plookup<F> {
         key_a: FieldCT<F>,
         key_b: FieldCT<F>,
         is_2_to_1_lookup: bool,
-    ) -> ReadData<FieldCT<F>> {
+    ) -> std::io::Result<ReadData<FieldCT<F>>> {
         let key_a = key_a.normalize(builder, driver);
         let key_b = key_b.normalize(builder, driver);
 
         let a = key_a.get_value(builder, driver);
         let b = key_b.get_value(builder, driver);
         let mut lookup = ReadData::<FieldCT<F>>::default();
-        if T::is_shared(&a) || T::is_shared(&b) {
-            todo!("get_lookup_accumulators_ct in MPC")
-        } else {
-            let a = T::get_public(&a).expect("Already checked it is public");
-            let b = T::get_public(&b).expect("Already checked it is public");
-            let lookup_data =
-                builder
-                    .plookup
-                    .get_lookup_accumulators(id.clone(), a, b, is_2_to_1_lookup);
+        if T::is_shared(&a) && T::is_shared(&b) {
+            let a = T::get_shared(&a).expect("Already checked it is shared");
+            let b = T::get_shared(&b).expect("Already checked it is shared");
+            let lookup_data = Self::get_lookup_accumulators(
+                builder,
+                driver,
+                id.clone(),
+                a.into(),
+                b.into(),
+                is_2_to_1_lookup,
+            )?;
             let is_key_a_constant = key_a.is_constant();
             let length = lookup_data[ColumnIdx::C1].len();
             if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
                 for i in 0..length {
-                    lookup[ColumnIdx::C1].push(FieldCT::<F>::from(lookup_data[ColumnIdx::C1][i]));
-                    lookup[ColumnIdx::C2].push(FieldCT::<F>::from(lookup_data[ColumnIdx::C2][i]));
-                    lookup[ColumnIdx::C3].push(FieldCT::<F>::from(lookup_data[ColumnIdx::C3][i]));
+                    lookup[ColumnIdx::C1].push(FieldCT::from_witness(
+                        lookup_data[ColumnIdx::C1][i].clone(),
+                        builder,
+                    ));
+                    lookup[ColumnIdx::C2].push(FieldCT::from_witness(
+                        lookup_data[ColumnIdx::C2][i].clone(),
+                        builder,
+                    ));
+                    lookup[ColumnIdx::C3].push(FieldCT::from_witness(
+                        lookup_data[ColumnIdx::C3][i].clone(),
+                        builder,
+                    ));
+                }
+            } else {
+                let lhs_index = key_a.witness_index;
+                let rhs_index = key_b.witness_index;
+                // If only one lookup key is constant, we need to instantiate it as a real witness
+                if is_key_a_constant {
+                    panic!("Apparently constants can be shared???")
+                    // lhs_index = builder.put_constant_variable(a);
+                }
+                if key_b.is_constant() && is_2_to_1_lookup {
+                    panic!("Apparently constants can be shared???")
+                    // rhs_index = builder.put_constant_variable(b);
+                }
+
+                let mut key_b_witness = Some(rhs_index);
+
+                if rhs_index == FieldCT::<F>::IS_CONSTANT {
+                    key_b_witness = None;
+                }
+                let accumulator_witnesses = builder.create_gates_from_plookup_accumulators(
+                    id,
+                    lookup_data,
+                    lhs_index,
+                    key_b_witness,
+                );
+
+                for i in 0..length {
+                    lookup[ColumnIdx::C1].push(FieldCT::<F>::from_witness_index(
+                        accumulator_witnesses[ColumnIdx::C1][i],
+                    ));
+                    lookup[ColumnIdx::C2].push(FieldCT::<F>::from_witness_index(
+                        accumulator_witnesses[ColumnIdx::C2][i],
+                    ));
+                    lookup[ColumnIdx::C3].push(FieldCT::<F>::from_witness_index(
+                        accumulator_witnesses[ColumnIdx::C3][i],
+                    ));
+                }
+            }
+        } else if !T::is_shared(&a) && !T::is_shared(&b) {
+            let a = T::get_public(&a).expect("Already checked it is public");
+            let b = T::get_public(&b).expect("Already checked it is public");
+            let lookup_data = Self::get_lookup_accumulators(
+                builder,
+                driver,
+                id.clone(),
+                a.into(),
+                b.into(),
+                is_2_to_1_lookup,
+            )
+            .unwrap(); //TODO: Handle error
+            let is_key_a_constant = key_a.is_constant();
+            let length = lookup_data[ColumnIdx::C1].len();
+            if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
+                for i in 0..length {
+                    lookup[ColumnIdx::C1].push(FieldCT::from_witness(
+                        lookup_data[ColumnIdx::C1][i].clone(),
+                        builder,
+                    ));
+                    lookup[ColumnIdx::C2].push(FieldCT::from_witness(
+                        lookup_data[ColumnIdx::C2][i].clone(),
+                        builder,
+                    ));
+                    lookup[ColumnIdx::C3].push(FieldCT::from_witness(
+                        lookup_data[ColumnIdx::C3][i].clone(),
+                        builder,
+                    ));
                 }
             } else {
                 let mut lhs_index = key_a.witness_index;
@@ -504,21 +721,23 @@ impl<F: PrimeField> Plookup<F> {
                     ));
                 }
             }
+        } else {
+            todo!("implement mixed case")
         }
-        lookup
+        Ok(lookup)
     }
 
     pub fn read_from_2_to_1_table<
         P: Pairing<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+        T: NoirWitnessExtensionProtocol<F>,
     >(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
         id: MultiTableId,
         key_a: FieldCT<F>,
         key_b: FieldCT<F>,
-    ) -> FieldCT<F> {
-        let lookup = Self::get_lookup_accumulators_ct(builder, driver, id, key_a, key_b, true);
-        lookup[ColumnIdx::C3][0].clone()
+    ) -> std::io::Result<FieldCT<F>> {
+        let lookup = Self::get_lookup_accumulators_ct(builder, driver, id, key_a, key_b, true)?;
+        Ok(lookup[ColumnIdx::C3][0].clone())
     }
 }
