@@ -61,7 +61,7 @@ pub(crate) fn ohv<T: IntRing2k, N: Rep3Network>(
     bits &= mask; // Remove the vk
 
     let mut f = ohv(new_k, bits, io_context)?; // ohv is recursively called k - 1 times
-    let mut e = pack_and(&f[..f.len() - 1], &vk, io_context)?; // This has communication (new_k bits)
+    let mut e = pack_and(&f[..f.len() - 1], &vk, io_context)?; // This has communication (2^new_k - 1 bits)
     e.push(e.iter().fold(vk, |a, b| &a ^ b));
 
     for (e, f) in e.iter().zip(f.iter_mut()) {
