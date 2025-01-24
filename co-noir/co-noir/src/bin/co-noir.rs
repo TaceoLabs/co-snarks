@@ -1045,7 +1045,7 @@ fn run_build_and_generate_proof(
             let proving_key = ProvingKey::create(id, builder, prover_crs, &mut circuit_driver)?;
 
             // init MPC protocol
-            let (io_context0, io_context1) = circuit_driver.get_io_contexts();
+            let (io_context0, io_context1) = circuit_driver.into_io_contexts();
             let driver = Rep3UltraHonkDriver::new(io_context0, io_context1);
             let public_input = proving_key.get_public_inputs();
             let (proof, public_input) = match hasher {

@@ -90,6 +90,35 @@ where
         }
     }
 
+    /// Inserts `value` into the initial witness map under the index `witness`.
+    ///
+    /// Returns an error if there was already a value in the map
+    /// which does not match the value that one is about to insert
+    pub fn insert_value(
+        witness: &Witness,
+        value_to_insert: T::AcvmType,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+    ) -> CoAcvmResult<()> {
+        let optional_old_value = initial_witness.insert(*witness, value_to_insert.to_owned());
+
+        let old_value = match optional_old_value {
+            Some(old_value) => old_value,
+            None => return Ok(()),
+        };
+
+        match (T::get_public(&old_value), T::get_public(&value_to_insert)) {
+            (Some(old_value), Some(value_to_insert)) => {
+                if old_value != value_to_insert {
+                    Err(eyre::eyre!("UnsatisfiedConstraint"))?;
+                }
+            }
+            _ => { // We cannot have this sanitiy check
+            }
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn solve_range_opcode(
         initial_witness: &WitnessMap<T::AcvmType>,
         input: &FunctionInput<GenericFieldElement<F>>,
@@ -108,12 +137,82 @@ where
         Ok(())
     }
 
+    fn and(
+        driver: &mut T,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+        lhs: &FunctionInput<GenericFieldElement<F>>,
+        rhs: &FunctionInput<GenericFieldElement<F>>,
+        output: &Witness,
+        pedantic_solving: bool,
+    ) -> CoAcvmResult<()> {
+        assert_eq!(
+            lhs.num_bits(),
+            rhs.num_bits(),
+            "number of bits specified for each input must be the same"
+        );
+        Self::solve_logic_opcode(
+            driver,
+            initial_witness,
+            lhs,
+            rhs,
+            *output,
+            pedantic_solving,
+            |driver, left, right| T::integer_bitwise_and(driver, left, right, lhs.num_bits()),
+        )
+    }
+
+    fn xor(
+        driver: &mut T,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+        lhs: &FunctionInput<GenericFieldElement<F>>,
+        rhs: &FunctionInput<GenericFieldElement<F>>,
+        output: &Witness,
+        pedantic_solving: bool,
+    ) -> CoAcvmResult<()> {
+        assert_eq!(
+            lhs.num_bits(),
+            rhs.num_bits(),
+            "number of bits specified for each input must be the same"
+        );
+        Self::solve_logic_opcode(
+            driver,
+            initial_witness,
+            lhs,
+            rhs,
+            *output,
+            pedantic_solving,
+            |driver, left, right| T::integer_bitwise_xor(driver, left, right, lhs.num_bits()),
+        )
+    }
+
+    /// Derives the rest of the witness based on the initial low level variables
+    fn solve_logic_opcode(
+        driver: &mut T,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+        a: &FunctionInput<GenericFieldElement<F>>,
+        b: &FunctionInput<GenericFieldElement<F>>,
+        result: Witness,
+        pedantic_solving: bool,
+        logic_op: impl Fn(&mut T, T::AcvmType, T::AcvmType) -> std::io::Result<T::AcvmType>,
+    ) -> CoAcvmResult<()> {
+        // TODO(https://github.com/noir-lang/noir/issues/5985): re-enable these by
+        // default once we figure out how to combine these with existing
+        // noirc_frontend/noirc_evaluator overflow error messages
+        let skip_bitsize_checks = !pedantic_solving;
+        let w_l_value = Self::input_to_value(initial_witness, *a, skip_bitsize_checks)?;
+        let w_r_value = Self::input_to_value(initial_witness, *b, skip_bitsize_checks)?;
+        let assignment = logic_op(driver, w_l_value, w_r_value)?;
+
+        Self::insert_value(&result, assignment, initial_witness)
+    }
+
     pub(super) fn solve_blackbox(
         &mut self,
         bb_func: &BlackBoxFuncCall<GenericFieldElement<F>>,
     ) -> CoAcvmResult<()> {
         tracing::trace!("solving blackbox");
 
+        let pedantic_solving = self.pedantic_solving();
         let initial_witness = &mut self.witness_map[self.function_index];
 
         let inputs = bb_func.get_inputs_vec();
@@ -129,6 +228,22 @@ where
 
         match bb_func {
             BlackBoxFuncCall::RANGE { input } => Self::solve_range_opcode(initial_witness, input)?,
+            BlackBoxFuncCall::AND { lhs, rhs, output } => Self::and(
+                &mut self.driver,
+                initial_witness,
+                lhs,
+                rhs,
+                output,
+                pedantic_solving,
+            )?,
+            BlackBoxFuncCall::XOR { lhs, rhs, output } => Self::xor(
+                &mut self.driver,
+                initial_witness,
+                lhs,
+                rhs,
+                output,
+                pedantic_solving,
+            )?,
             _ => todo!("solve blackbox function {} not supported", bb_func.name()),
         }
 

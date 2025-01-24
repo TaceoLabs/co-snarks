@@ -217,4 +217,55 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         result.sort();
         Ok(result)
     }
+
+    fn slice(
+        &mut self,
+        input: Self::ArithmeticShare,
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+    ) -> std::io::Result<[Self::ArithmeticShare; 3]> {
+        let big_mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
+        let hi_mask = (BigUint::one() << (bitsize - msb as usize)) - BigUint::one();
+        let lo_mask = (BigUint::one() << lsb) - BigUint::one();
+        let slice_mask = (BigUint::one() << ((msb - lsb) as u32 + 1)) - BigUint::one();
+
+        let msb_plus_one = msb as u32 + 1;
+        let mut x: BigUint = input.into();
+        x &= &big_mask;
+
+        let hi = F::from((&x >> msb_plus_one) & hi_mask);
+        let lo = F::from(&x & lo_mask);
+        let slice = F::from((x >> lsb) & slice_mask);
+
+        Ok([lo, slice, hi])
+    }
+
+    fn integer_bitwise_and(
+        &mut self,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        num_bits: u32,
+    ) -> std::io::Result<Self::AcvmType> {
+        debug_assert!(num_bits <= 128);
+        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        let lhs: BigUint = lhs.into();
+        let rhs: BigUint = rhs.into();
+        let res = (lhs & rhs) & mask;
+        Ok(Self::AcvmType::from(res))
+    }
+
+    fn integer_bitwise_xor(
+        &mut self,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        num_bits: u32,
+    ) -> std::io::Result<Self::AcvmType> {
+        debug_assert!(num_bits <= 128);
+        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        let lhs: BigUint = lhs.into();
+        let rhs: BigUint = rhs.into();
+        let res = (lhs ^ rhs) & mask;
+        Ok(Self::AcvmType::from(res))
+    }
 }

@@ -1,10 +1,11 @@
 use super::{plain::PlainAcvmSolver, NoirWitnessExtensionProtocol};
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use mpc_core::protocols::{
     rep3::{lut::NaiveRep3LookupTable, network::Rep3MpcNet},
     shamir::{arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
 };
+use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
@@ -422,5 +423,55 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
         panic!("functionality sort not feasible for Shamir")
+    }
+
+    fn slice(
+        &mut self,
+        _input: Self::ArithmeticShare,
+        _msb: u8,
+        _lsb: u8,
+        _bitsize: usize,
+    ) -> std::io::Result<[Self::ArithmeticShare; 3]> {
+        panic!("functionality slice not feasible for Shamir")
+    }
+
+    fn integer_bitwise_and(
+        &mut self,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        num_bits: u32,
+    ) -> std::io::Result<Self::AcvmType> {
+        debug_assert!(num_bits <= 128);
+        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        match (lhs, rhs) {
+            (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
+                let lhs: BigUint = lhs.into();
+                let rhs: BigUint = rhs.into();
+                let res = (lhs & rhs) & mask;
+                let res = F::from(res);
+                Ok(ShamirAcvmType::Public(res))
+            }
+            _ => panic!("functionality bitwise_and not feasible for Shamir"),
+        }
+    }
+
+    fn integer_bitwise_xor(
+        &mut self,
+        lhs: Self::AcvmType,
+        rhs: Self::AcvmType,
+        num_bits: u32,
+    ) -> std::io::Result<Self::AcvmType> {
+        debug_assert!(num_bits <= 128);
+        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        match (lhs, rhs) {
+            (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
+                let lhs: BigUint = lhs.into();
+                let rhs: BigUint = rhs.into();
+                let res = (lhs ^ rhs) & mask;
+                let res = F::from(res);
+                Ok(ShamirAcvmType::Public(res))
+            }
+            _ => panic!("functionality bitwise_xor not feasible for Shamir"),
+        }
     }
 }
