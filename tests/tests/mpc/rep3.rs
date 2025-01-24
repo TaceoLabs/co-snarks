@@ -1296,7 +1296,7 @@ mod field_share {
     #[test]
     fn rep3_decompose_shared_field_many_via_yao() {
         const VEC_SIZE: usize = 10;
-        const TOTAL_BIT_SIZE: usize = 64;
+        const TOTAL_BIT_SIZE: usize = 32;
         const CHUNK_SIZE: usize = 14;
 
         let test_network = Rep3TestNetwork::default();
@@ -1405,6 +1405,180 @@ mod field_share {
         rep3_slice_shared_field_many_via_yao_inner(253, 0, 254);
         rep3_slice_shared_field_many_via_yao_inner(100, 10, 254);
         rep3_slice_shared_field_many_via_yao_inner(100, 10, 110);
+    }
+
+    #[test]
+    fn rep3_slice_and_and_rotated() {
+        const VEC_SIZE: usize = 10;
+        const TOTAL_BIT_SIZE: usize = 64; //note there is some stuff hardcoded to u64 in this test case
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+        let x = (0..VEC_SIZE)
+            .map(|_| {
+                let mut res = BigUint::from(ark_bn254::Fr::rand(&mut rng));
+                res &= &mask;
+                ark_bn254::Fr::from(res)
+            })
+            .collect_vec();
+
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+        let y = (0..VEC_SIZE)
+            .map(|_| {
+                let mut res = BigUint::from(ark_bn254::Fr::rand(&mut rng));
+                res &= &mask;
+                ark_bn254::Fr::from(res)
+            })
+            .collect_vec();
+        let y_shares = rep3::share_field_elements(&y, &mut rng);
+        let rotation = 2;
+        let base = 6;
+        let div: usize = 1 << base;
+        let mut should_result = Vec::new();
+        for (x, y) in x.into_iter().zip(y.into_iter()) {
+            let mut x: BigUint = x.into();
+            let mut y: BigUint = y.into();
+            let mut xs = Vec::new();
+            let mut ys = Vec::new();
+            let mut rs = Vec::new();
+
+            for _ in 0..TOTAL_BIT_SIZE.div_ceil(base) {
+                let res1 = &x % div;
+                xs.push(ark_bn254::Fr::from(res1.clone()));
+                x /= div;
+                let res2 = &y % div;
+                ys.push(ark_bn254::Fr::from(res2.clone()));
+                y /= div;
+                let res = res1 & res2;
+                let res: u64 = if res == BigUint::zero() {
+                    0_u64
+                } else {
+                    res.to_u64_digits()[0]
+                };
+                let rotated = if rotation != 0 {
+                    (res >> rotation as u64) | (res << (64 - rotation) as u64)
+                } else {
+                    res
+                };
+                rs.push(ark_bn254::Fr::from(rotated));
+            }
+            should_result.extend(xs);
+            should_result.extend(ys);
+            should_result.extend(rs);
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let decomposed =
+                    yao::slice_and_many(&x, &y, &mut rep3, base, rotation, TOTAL_BIT_SIZE).unwrap();
+                tx.send(decomposed)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_slice_and_xor_rotated() {
+        const VEC_SIZE: usize = 10;
+        const TOTAL_BIT_SIZE: usize = 64;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+        let x = (0..VEC_SIZE)
+            .map(|_| {
+                let mut res = BigUint::from(ark_bn254::Fr::rand(&mut rng));
+                res &= &mask;
+                ark_bn254::Fr::from(res)
+            })
+            .collect_vec();
+
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+        let y = (0..VEC_SIZE)
+            .map(|_| {
+                let mut res = BigUint::from(ark_bn254::Fr::rand(&mut rng));
+                res &= &mask;
+                ark_bn254::Fr::from(res)
+            })
+            .collect_vec();
+        let y_shares = rep3::share_field_elements(&y, &mut rng);
+        let rotation = 2;
+        let base = 6;
+        let div: usize = 1 << base;
+        let mut should_result = Vec::new();
+        for (x, y) in x.into_iter().zip(y.into_iter()) {
+            let mut x: BigUint = x.into();
+            let mut y: BigUint = y.into();
+            let mut xs = Vec::new();
+            let mut ys = Vec::new();
+            let mut rs = Vec::new();
+
+            for _ in 0..TOTAL_BIT_SIZE.div_ceil(base) {
+                let res1 = &x % div;
+                xs.push(ark_bn254::Fr::from(res1.clone()));
+                x /= div;
+                let res2 = &y % div;
+                ys.push(ark_bn254::Fr::from(res2.clone()));
+                y /= div;
+                let res = res1 ^ res2;
+                let res: u64 = if res == BigUint::zero() {
+                    0_u64
+                } else {
+                    res.to_u64_digits()[0]
+                };
+                let rotated = if rotation != 0 {
+                    (res >> rotation as u64) | (res << (64 - rotation) as u64)
+                } else {
+                    res
+                };
+                rs.push(ark_bn254::Fr::from(rotated));
+            }
+            should_result.extend(xs);
+            should_result.extend(ys);
+            should_result.extend(rs);
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let decomposed =
+                    yao::slice_xor_many(&x, &y, &mut rep3, base, rotation, TOTAL_BIT_SIZE).unwrap();
+                tx.send(decomposed)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+
+        assert_eq!(is_result, should_result);
     }
 
     #[test]

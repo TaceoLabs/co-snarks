@@ -125,6 +125,16 @@ impl GarbledCircuits {
         Ok(c)
     }
 
+    /// Returns a constant bundle of 0s and 1s
+    fn bin_constant_bundle<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        xs: &[bool],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        xs.iter()
+            .map(|&x| if x { g.const_one() } else { g.const_zero() })
+            .collect::<Result<Vec<G::Item>, G::Error>>()
+    }
+
     /// Binary addition. Returns the result and the carry.
     #[expect(clippy::type_complexity)]
     fn bin_addition<G: FancyBinary>(
@@ -448,7 +458,7 @@ impl GarbledCircuits {
             .collect::<Result<Vec<G::Item>, G::Error>>()
     }
 
-    /// subtracts p from wires (with carry) and returns the result and the overflow bit
+    /// Subtracts p from wires (with carry) and returns the result and the overflow bit.
     #[expect(clippy::type_complexity)]
     fn sub_p<G: FancyBinary, F: PrimeField>(
         g: &mut G,
@@ -524,7 +534,7 @@ impl GarbledCircuits {
         Ok(result)
     }
 
-    /// Adds two shared field elements mod p. The field elements are encoded as Yao shared wires
+    /// Adds two shared field elements mod p. The field elements are encoded as Yao shared wires.
     pub fn adder_mod_p<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -541,7 +551,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(res))
     }
 
-    /// Adds two shared ring elements mod 2^k. The ring elements are encoded as Yao shared wires
+    /// Adds two shared ring elements mod 2^k. The ring elements are encoded as Yao shared wires.
     pub fn adder_mod_2k<G: FancyBinary>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -1189,7 +1199,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b
+    /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b.
     fn ring_div_power_2<G: FancyBinary>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -1236,7 +1246,7 @@ impl GarbledCircuits {
         Ok(added)
     }
 
-    /// Divides a field element by a power of 2. The field element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b
+    /// Divides a field element by a power of 2. The field element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b.
     fn field_int_div_power_2<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -1270,7 +1280,7 @@ impl GarbledCircuits {
         Ok(result)
     }
 
-    /// Divides a ring element by another. The ring elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
+    /// Divides a ring element by another. The ring elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires.
     fn ring_div<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         x1s: &[G::Item],
@@ -1307,7 +1317,7 @@ impl GarbledCircuits {
         Ok(added)
     }
 
-    /// Divides a ring element by another public ring element. The ring element is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
+    /// Divides a ring element by another public ring element. The ring element is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires.
     fn ring_div_by_public<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         x1s: &[G::Item],
@@ -1342,7 +1352,7 @@ impl GarbledCircuits {
         Ok(added)
     }
 
-    /// Divides a public ring element by another shared ring element. The ring element is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
+    /// Divides a public ring element by another shared ring element. The ring element is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires.
     fn ring_div_by_shared<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         x1s: &[G::Item],
@@ -1377,7 +1387,7 @@ impl GarbledCircuits {
         Ok(added)
     }
 
-    /// Divides a field element by another. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
+    /// Divides a field element by another. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires.
     fn field_int_div<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
         g: &mut G,
         x1s: &[G::Item],
@@ -1407,7 +1417,7 @@ impl GarbledCircuits {
         Ok(result)
     }
 
-    /// Divides a field element by another public field element. The field elements is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
+    /// Divides a field element by another public field element. The field elements is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires.
     fn field_int_div_by_public<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
         g: &mut G,
         x1s: &[G::Item],
@@ -1433,7 +1443,7 @@ impl GarbledCircuits {
         Ok(result)
     }
 
-    /// Divides a public field element by another shared field element. The field elements is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires
+    /// Divides a public field element by another shared field element. The field elements is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires.
     fn field_int_div_by_shared<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
         g: &mut G,
         x1s: &[G::Item],
@@ -1459,7 +1469,7 @@ impl GarbledCircuits {
         Ok(result)
     }
 
-    /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b
+    /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b.
     pub(crate) fn ring_div_power_2_many<G: FancyBinary>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -1497,7 +1507,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Divides a field element by a power of 2. The field element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b
+    /// Divides a field element by a power of 2. The field element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b.
     pub(crate) fn field_int_div_power_2_many<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -1572,7 +1582,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Binary division for two vecs of inputs. The ring elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b
+    /// Binary division for two vecs of inputs. The ring elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b.
     pub fn ring_div_by_public_many<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -1608,7 +1618,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Binary division for two vecs of inputs. The ring elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b
+    /// Binary division for two vecs of inputs. The ring elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b.
     pub fn ring_div_by_shared_many<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -1644,7 +1654,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Divides a field element by another. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b
+    /// Divides a field element by another. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b.
     pub(crate) fn field_int_div_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -1683,7 +1693,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Divides a field element by another public. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b
+    /// Divides a field element by another public. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b.
     pub(crate) fn field_int_div_by_public_many<
         G: FancyBinary + FancyBinaryConstant,
         F: PrimeField,
@@ -1725,7 +1735,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Divides a public field element by another shared. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b
+    /// Divides public field elements by another shared. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b.
     pub(crate) fn field_int_div_by_shared_many<
         G: FancyBinary + FancyBinaryConstant,
         F: PrimeField,
@@ -1734,7 +1744,7 @@ impl GarbledCircuits {
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
-        divisor: Vec<bool>,
+        dividend: Vec<bool>,
     ) -> Result<BinaryBundle<G::Item>, G::Error>
     where
         G::Item: Default,
@@ -1746,13 +1756,13 @@ impl GarbledCircuits {
 
         debug_assert_eq!(length % input_bitlen, 0);
         debug_assert_eq!(wires_c.size(), length);
-        debug_assert_eq!(divisor.len(), length);
+        debug_assert_eq!(dividend.len(), length);
         let mut results = Vec::with_capacity(wires_c.size());
 
         for (chunk_x1, chunk_x2, div, chunk_c) in izip!(
             wires_x1.wires().chunks(input_bitlen),
             wires_x2.wires().chunks(input_bitlen),
-            divisor.chunks(input_bitlen),
+            dividend.chunks(input_bitlen),
             wires_c.wires().chunks(input_bitlen),
         ) {
             results.extend(Self::field_int_div_by_shared::<G, F>(
@@ -1765,6 +1775,256 @@ impl GarbledCircuits {
             )?);
         }
         Ok(BinaryBundle::new(results))
+    }
+
+    /// Slices field elements in chunks, then XORs the slices and rotates them, a specific circuit for the plookup accumulator in the builder. The field elements are represented as two bitdecompositions wires_x1, wires_x2 which need to be split first to get the two inputs. The output is composed using wires_c. Base is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    pub(crate) fn slice_and_get_xor_rotate_values_from_key_many<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        base: usize,
+        rotation: usize,
+        total_output_bitlen_per_field: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+        let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base);
+        let num_inputs = (length / 2) / input_bitlen;
+
+        let total_output_elements = 3 * num_decomps_per_field * num_inputs;
+        debug_assert_eq!(wires_c.size(), total_output_elements * input_bitlen);
+        debug_assert_eq!((length / 2) % input_bitlen, 0);
+
+        let mut results = Vec::with_capacity(wires_c.size() / 3);
+
+        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
+            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x1.wires()[length / 2..].chunks(input_bitlen),
+            wires_x2.wires()[length / 2..].chunks(input_bitlen),
+            wires_c
+                .wires()
+                .chunks(3 * input_bitlen * num_decomps_per_field),
+        ) {
+            let value = Self::slice_and_get_xor_rotate_values_from_key::<G, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_y1,
+                chunk_y2,
+                chunk_c,
+                base,
+                rotation,
+                total_output_bitlen_per_field,
+            )?;
+
+            results.extend(value);
+        }
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Slices field elements in chunks, then ANDs the slices and rotates them, a specific circuit for the plookup accumulator in the builder. The field elements are represented as two bitdecompositions wires_x1, wires_x2 which need to be split first to get the two sets of inputs. The output is composed using wires_c. Base is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    pub(crate) fn slice_and_get_and_rotate_values_from_key_many<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        base: usize,
+        rotation: usize,
+        total_output_bitlen_per_field: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+        let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base);
+        let num_inputs = (length / 2) / input_bitlen;
+
+        let total_output_elements = 3 * num_decomps_per_field * num_inputs;
+        debug_assert_eq!(wires_c.size(), total_output_elements * input_bitlen);
+        debug_assert_eq!((length / 2) % input_bitlen, 0);
+
+        let mut results = Vec::with_capacity(wires_c.size() / 3);
+
+        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
+            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x1.wires()[length / 2..].chunks(input_bitlen),
+            wires_x2.wires()[length / 2..].chunks(input_bitlen),
+            wires_c
+                .wires()
+                .chunks(3 * input_bitlen * num_decomps_per_field),
+        ) {
+            let value = Self::slice_and_get_and_rotate_values_from_key::<G, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_y1,
+                chunk_y2,
+                chunk_c,
+                base,
+                rotation,
+                total_output_bitlen_per_field,
+            )?;
+            results.extend(value);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Slice two field elements in chunks, then XORs the slices and rotates them, a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two sets of inputs. The output is composed using wires_c. Base is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) fn slice_and_get_xor_rotate_values_from_key<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        y1s: &[G::Item],
+        y2s: &[G::Item],
+        wires_c: &[G::Item],
+        base: usize,
+        rotation: usize,
+        total_output_bitlen_per_field: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bitlen = x1s.len();
+        let length_c = wires_c.len();
+        let input_bits_1 =
+            Self::adder_mod_p_with_output_size::<_, F>(g, x1s, x2s, total_output_bitlen_per_field)?;
+
+        let input_bits_2 =
+            Self::adder_mod_p_with_output_size::<_, F>(g, y1s, y2s, total_output_bitlen_per_field)?;
+        let mut results = Vec::with_capacity(length_c / 3);
+        let mut rands = wires_c.chunks(input_bitlen);
+
+        let res: Vec<G::Item> = input_bits_1
+            .iter()
+            .zip(input_bits_2.iter())
+            .map(|(x, y)| g.xor(x, y))
+            .collect::<Result<Vec<_>, _>>()?;
+        let const_zeros =
+            Self::bin_constant_bundle(g, &vec![false; total_output_bitlen_per_field - base])?;
+        let mut padded_res_chunks = Vec::new();
+
+        for inp in res.chunks(base) {
+            padded_res_chunks.extend_from_slice(inp);
+            padded_res_chunks.extend_from_slice(&const_zeros);
+            if inp.len() != base {
+                let additional_padding =
+                    Self::bin_constant_bundle(g, &vec![false; base - inp.len()])?;
+                padded_res_chunks.extend_from_slice(&additional_padding);
+            }
+        }
+
+        for inp_1 in input_bits_1.chunks(base) {
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                inp_1,
+                rands.next().unwrap(),
+            )?);
+        }
+        for inp_2 in input_bits_2.chunks(base) {
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                inp_2,
+                rands.next().unwrap(),
+            )?);
+        }
+        for xs in padded_res_chunks.chunks_mut(total_output_bitlen_per_field) {
+            xs.reverse();
+
+            xs.rotate_right(rotation);
+            xs.reverse();
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                xs,
+                rands.next().unwrap(),
+            )?);
+        }
+        Ok(results)
+    }
+
+    /// Slice two field elements in chunks, then ANDs the slices and rotates them, a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two inputs. The output is composed using wires_c. Base is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) fn slice_and_get_and_rotate_values_from_key<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        y1s: &[G::Item],
+        y2s: &[G::Item],
+        wires_c: &[G::Item],
+        base: usize,
+        rotation: usize,
+        total_output_bitlen_per_field: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bitlen = x1s.len();
+        let length_c = wires_c.len();
+        let input_bits_1 =
+            Self::adder_mod_p_with_output_size::<_, F>(g, x1s, x2s, total_output_bitlen_per_field)?;
+
+        let input_bits_2 =
+            Self::adder_mod_p_with_output_size::<_, F>(g, y1s, y2s, total_output_bitlen_per_field)?;
+        let mut results = Vec::with_capacity(length_c / 3);
+        let mut rands = wires_c.chunks(input_bitlen);
+
+        let res = input_bits_1
+            .iter()
+            .zip(input_bits_2.iter())
+            .map(|(x, y)| g.and(x, y))
+            .collect::<Result<Vec<_>, _>>()?;
+        let const_zeros =
+            Self::bin_constant_bundle(g, &vec![false; total_output_bitlen_per_field - base])?;
+        let mut padded_res_chunks = Vec::new();
+
+        for inp in res.chunks(base) {
+            padded_res_chunks.extend_from_slice(inp);
+            padded_res_chunks.extend_from_slice(&const_zeros);
+            if inp.len() != base {
+                let additional_padding =
+                    Self::bin_constant_bundle(g, &vec![false; base - inp.len()])?;
+                padded_res_chunks.extend_from_slice(&additional_padding);
+            }
+        }
+
+        for inp_1 in input_bits_1.chunks(base) {
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                inp_1,
+                rands.next().unwrap(),
+            )?);
+        }
+        for inp_2 in input_bits_2.chunks(base) {
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                inp_2,
+                rands.next().unwrap(),
+            )?);
+        }
+        for xs in padded_res_chunks.chunks_mut(total_output_bitlen_per_field) {
+            xs.reverse();
+
+            xs.rotate_right(rotation);
+            xs.reverse();
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                xs,
+                rands.next().unwrap(),
+            )?);
+        }
+        Ok(results)
     }
 }
 

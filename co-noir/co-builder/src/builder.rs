@@ -159,7 +159,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
     rom_arrays: Vec<RomTranscript>,
     ram_arrays: Vec<RamTranscript>,
-    pub(crate) lookup_tables: Vec<PlookupBasicTable<P::ScalarField>>,
+    pub(crate) lookup_tables: Vec<PlookupBasicTable<P, T>>,
     pub(crate) plookup: Plookup<P::ScalarField>,
     range_lists: BTreeMap<u64, RangeList>,
     cached_partial_non_native_field_multiplications:
@@ -650,7 +650,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
 
         if !to_mpc_decompose.is_empty() {
-            // TACEO TODO can this be batchesd as well?
+            // TACEO TODO can this be batched as well?
             let decomp = T::decompose_arithmetic_many(driver, &to_mpc_decompose, num_bits, 32)?;
             if T::is_shared(&left) {
                 decomp_left = decomp[0]
@@ -684,21 +684,21 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             let b_chunk = FieldCT::from_witness(right_chunk, self);
 
             let result_chunk = if is_xor_gate {
-                Plookup::read_from_2_to_1_table(
+                Plookup::<P::ScalarField>::read_from_2_to_1_table(
                     self,
                     driver,
                     MultiTableId::Uint32Xor,
                     a_chunk.to_owned(),
                     b_chunk.to_owned(),
-                )
+                )?
             } else {
-                Plookup::read_from_2_to_1_table(
+                Plookup::<P::ScalarField>::read_from_2_to_1_table(
                     self,
                     driver,
                     MultiTableId::Uint32And,
                     a_chunk.to_owned(),
                     b_chunk.to_owned(),
-                )
+                )?
             };
 
             let scaling_factor = FieldCT::from(P::ScalarField::from(BigUint::one() << (32 * i)));
@@ -1934,18 +1934,22 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let left_witness_index = self.add_variable(T::AcvmType::from(left_witness_value));
         let right_witness_index = self.add_variable(T::AcvmType::from(right_witness_value));
 
-        let dummy_accumulators = self.plookup.get_lookup_accumulators(
-            MultiTableId::HonkDummyMulti,
-            left_witness_value,
-            right_witness_value,
-            true,
-        );
-        self.create_gates_from_plookup_accumulators(
-            MultiTableId::HonkDummyMulti,
-            dummy_accumulators,
-            left_witness_index,
-            Some(right_witness_index),
-        );
+        // TACEO TODO FIX THIS:
+        // let dummy_accumulators = Plookup::get_lookup_accumulators(
+        //     self,
+        //     driver,
+        //     MultiTableId::HonkDummyMulti,
+        //     left_witness_value,
+        //     right_witness_value,
+        //     true,
+        // )
+        // .unwrap(); // TODO
+        // self.create_gates_from_plookup_accumulators(
+        //     MultiTableId::HonkDummyMulti,
+        //     dummy_accumulators,
+        //     left_witness_index,
+        //     Some(right_witness_index),
+        // );
 
         // mock a poseidon external gate, with all zeros as input
         self.blocks.poseidon2_external.populate_wires(
@@ -2117,7 +2121,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         std::cmp::max(minimum_circuit_size, num_filled_gates) + Self::NUM_RESERVED_GATES
     }
 
-    fn get_table(&mut self, id: BasicTableId) -> &mut PlookupBasicTable<P::ScalarField> {
+    fn get_table(&mut self, id: BasicTableId) -> &mut PlookupBasicTable<P, T> {
         let mut index = self.lookup_tables.len();
         for (i, table) in self.lookup_tables.iter().enumerate() {
             if table.id == id {
@@ -2140,7 +2144,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) fn create_gates_from_plookup_accumulators(
         &mut self,
         id: MultiTableId,
-        read_values: ReadData<P::ScalarField>,
+        read_values: ReadData<T::AcvmType>,
         key_a_index: u32,
         key_b_index: Option<u32>,
     ) -> ReadData<u32> {
@@ -2163,16 +2167,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             let first_idx = if i == 0 {
                 key_a_index
             } else {
-                self.add_variable(T::AcvmType::from(read_values[ColumnIdx::C1][i]))
+                self.add_variable(read_values[ColumnIdx::C1][i].clone())
             };
 
             #[expect(clippy::unnecessary_unwrap)]
             let second_idx = if i == 0 && (key_b_index.is_some()) {
                 key_b_index.unwrap()
             } else {
-                self.add_variable(T::AcvmType::from(read_values[ColumnIdx::C2][i]))
+                self.add_variable(read_values[ColumnIdx::C2][i].clone())
             };
-            let third_idx = self.add_variable(T::AcvmType::from(read_values[ColumnIdx::C3][i]));
+            let third_idx = self.add_variable(read_values[ColumnIdx::C3][i].clone());
 
             read_data[ColumnIdx::C1].push(first_idx);
             read_data[ColumnIdx::C2].push(second_idx);

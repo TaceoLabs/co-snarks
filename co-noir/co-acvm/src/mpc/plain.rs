@@ -1,11 +1,12 @@
-use ark_ff::{One, PrimeField};
-use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
-use mpc_core::lut::{LookupTableProvider, PlainLookupTableProvider};
-use num_bigint::BigUint;
+use std::collections::HashMap;
 use std::io;
 use std::marker::PhantomData;
 
 use super::NoirWitnessExtensionProtocol;
+use ark_ff::{One, PrimeField};
+use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
+use mpc_core::lut::{LookupTableProvider, PlainLookupTableProvider};
+use num_bigint::BigUint;
 
 #[derive(Default)]
 pub struct PlainAcvmSolver<F: PrimeField> {
@@ -302,5 +303,89 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let rhs: BigUint = rhs.into();
         let res = (lhs ^ rhs) & mask;
         Ok(Self::AcvmType::from(res))
+    }
+
+    fn slice_and_get_and_rotate_values<const BITS_PER_SLICE: u64>(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        bases: &[u64],
+        rotation: usize,
+    ) -> std::io::Result<(
+        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        let mut target1: BigUint = input1.into();
+        let mut target2: BigUint = input2.into();
+        let mut slices1: Vec<u64> = Vec::with_capacity(bases.len());
+        let mut slices2: Vec<u64> = Vec::with_capacity(bases.len());
+        for i in 0..bases.len() {
+            if (target1 >= bases[i].into() || target2 >= bases[i].into()) && i == bases.len() - 1 {
+                panic!("Last key slice greater than {}", bases[i]);
+            }
+            slices1.push((&target1 % bases[i]).try_into().unwrap());
+            slices2.push((&target2 % bases[i]).try_into().unwrap());
+            target1 /= bases[i];
+            target2 /= bases[i];
+        }
+        let mut results = Vec::with_capacity(bases.len());
+        slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
+            results.push((
+                F::from(if rotation != 0 {
+                    (s1 & s2 >> rotation) | (s1 & s2 << (64 - rotation))
+                } else {
+                    s1 & s2
+                }),
+                F::zero(),
+            ));
+        });
+        Ok((
+            results,
+            slices1.into_iter().map(F::from).collect(),
+            slices2.into_iter().map(F::from).collect(),
+        ))
+    }
+
+    fn slice_and_get_xor_rotate_values<const BITS_PER_SLICE: u64>(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        bases: &[u64],
+        rotation: usize,
+    ) -> std::io::Result<(
+        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        let mut target1: BigUint = input1.into();
+        let mut target2: BigUint = input2.into();
+        let mut slices1: Vec<u64> = Vec::with_capacity(bases.len());
+        let mut slices2: Vec<u64> = Vec::with_capacity(bases.len());
+        for i in 0..bases.len() {
+            if (target1 >= bases[i].into() || target2 >= bases[i].into()) && i == bases.len() - 1 {
+                panic!("Last key slice greater than {}", bases[i]);
+            }
+            slices1.push((&target1 % bases[i]).try_into().unwrap());
+            slices2.push((&target2 % bases[i]).try_into().unwrap());
+            target1 /= bases[i];
+            target2 /= bases[i];
+        }
+        let mut results = Vec::with_capacity(bases.len());
+        slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
+            results.push((
+                F::from(if rotation != 0 {
+                    (s1 ^ s2 >> rotation) | (s1 ^ s2 << (64 - rotation))
+                } else {
+                    s1 ^ s2
+                }),
+                F::zero(),
+            ));
+        });
+        Ok((
+            results,
+            slices1.into_iter().map(F::from).collect(),
+            slices2.into_iter().map(F::from).collect(),
+        ))
     }
 }

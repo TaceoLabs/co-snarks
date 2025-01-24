@@ -202,4 +202,32 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         rhs: Self::AcvmType,
         num_bits: u32,
     ) -> std::io::Result<Self::AcvmType>;
+
+    /// slices according to bases, does and on them and then rotates them
+    #[expect(clippy::type_complexity)]
+    fn slice_and_get_and_rotate_values<const BITS_PER_SLICE: u64>(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        bases: &[u64],
+        rotation: usize,
+    ) -> std::io::Result<(
+        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )>;
+
+    /// slices according to bases, does xor on them and then rotates them
+    #[expect(clippy::type_complexity)]
+    fn slice_and_get_xor_rotate_values<const BITS_PER_SLICE: u64>(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        bases: &[u64],
+        rotation: usize,
+    ) -> std::io::Result<(
+        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )>;
 }
