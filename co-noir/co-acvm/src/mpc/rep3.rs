@@ -746,7 +746,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             input1,
             input2,
             &mut self.io_context0,
-            bases[0] as usize,
+            bases[0].ilog2() as usize,
             rotation,
             BITS_PER_SLICE.try_into().unwrap(),
         )?;
@@ -789,7 +789,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             input1,
             input2,
             &mut self.io_context0,
-            bases[0] as usize,
+            bases[0].ilog2() as usize,
             rotation,
             BITS_PER_SLICE.try_into().unwrap(),
         )?;

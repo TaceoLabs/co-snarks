@@ -606,6 +606,14 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
+    pub(crate) fn zero_with_additive(additive: F) -> Self {
+        Self {
+            additive_constant: additive,
+            multiplicative_constant: F::zero(),
+            witness_index: Self::IS_CONSTANT,
+        }
+    }
+
     pub(crate) fn from_witness_index(witness_index: u32) -> Self {
         Self {
             additive_constant: F::zero(),
@@ -1225,26 +1233,35 @@ pub(crate) struct LookupEntry<F: Clone> {
 impl<F: PrimeField> LookupEntry<F> {
     pub(crate) fn to_table_components(&self, use_two_key: bool) -> [F; 3] {
         [
-            self.key[0].to_owned(),
+            self.key[0],
             if use_two_key {
-                self.key[1].to_owned()
+                self.key[1]
             } else {
-                self.value[0].clone()
+                self.value[0]
             },
             if use_two_key {
-                self.value[0].clone()
+                self.value[0]
             } else {
-                self.value[1].clone()
+                self.value[1]
             },
         ]
     }
+}
 
-    // TACEO TODO this one will get adapted to return an ACVMType later
-    pub(crate) fn calculate_table_index(&self, use_two_key: bool, base: F) -> F {
-        let mut index_b = F::from(self.key[0].to_owned());
+impl<C: Clone> LookupEntry<C> {
+    pub(crate) fn calculate_table_index<
+        F: PrimeField,
+        T: NoirWitnessExtensionProtocol<F, AcvmType = C>,
+    >(
+        &self,
+        driver: &mut T,
+        use_two_key: bool,
+        base: F,
+    ) -> C {
+        let mut index_b = self.key[0].to_owned();
         if use_two_key {
-            index_b *= base;
-            index_b += F::from(self.key[1].to_owned());
+            index_b = driver.mul_with_public(base, index_b);
+            driver.add_assign(&mut index_b, self.key[1].to_owned());
         }
         index_b
     }

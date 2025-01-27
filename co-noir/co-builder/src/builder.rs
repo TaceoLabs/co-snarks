@@ -1723,7 +1723,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // self.num_gates += 1;
     }
 
-    pub fn add_gates_to_ensure_all_polys_are_non_zero(&mut self) {
+    pub fn add_gates_to_ensure_all_polys_are_non_zero(&mut self, driver: &mut T) {
         // q_m, q_1, q_2, q_3, q_4
         self.blocks.arithmetic.populate_wires(
             self.zero_idx,
@@ -1928,28 +1928,27 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let left_value = 3;
         let right_value = 3;
 
-        let left_witness_value = P::ScalarField::from(left_value as u64);
-        let right_witness_value = P::ScalarField::from(right_value as u64);
+        let left_witness_value = T::AcvmType::from(P::ScalarField::from(left_value as u64));
+        let right_witness_value = T::AcvmType::from(P::ScalarField::from(right_value as u64));
 
-        let left_witness_index = self.add_variable(T::AcvmType::from(left_witness_value));
-        let right_witness_index = self.add_variable(T::AcvmType::from(right_witness_value));
+        let left_witness_index = self.add_variable(left_witness_value.to_owned());
+        let right_witness_index = self.add_variable(right_witness_value.to_owned());
 
-        // TACEO TODO FIX THIS:
-        // let dummy_accumulators = Plookup::get_lookup_accumulators(
-        //     self,
-        //     driver,
-        //     MultiTableId::HonkDummyMulti,
-        //     left_witness_value,
-        //     right_witness_value,
-        //     true,
-        // )
-        // .unwrap(); // TODO
-        // self.create_gates_from_plookup_accumulators(
-        //     MultiTableId::HonkDummyMulti,
-        //     dummy_accumulators,
-        //     left_witness_index,
-        //     Some(right_witness_index),
-        // );
+        let dummy_accumulators = Plookup::get_lookup_accumulators(
+            self,
+            driver,
+            MultiTableId::HonkDummyMulti,
+            left_witness_value,
+            right_witness_value,
+            true,
+        )
+        .expect("Values are public so no network needed");
+        self.create_gates_from_plookup_accumulators(
+            MultiTableId::HonkDummyMulti,
+            dummy_accumulators,
+            left_witness_index,
+            Some(right_witness_index),
+        );
 
         // mock a poseidon external gate, with all zeros as input
         self.blocks.poseidon2_external.populate_wires(
@@ -2096,15 +2095,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.zero_idx,
             self.zero_idx,
         );
-    }
-
-    pub fn get_num_gates_added_to_ensure_nonzero_polynomials() -> usize {
-        let mut builder = Self::new(0);
-        let num_gates_prior = builder.get_num_gates();
-        builder.add_gates_to_ensure_all_polys_are_non_zero();
-        let num_gates_post = builder.get_num_gates(); // accounts for finalization gates
-
-        num_gates_post - num_gates_prior
     }
 
     pub fn get_circuit_subgroup_size(num_gates: usize) -> usize {
@@ -2268,7 +2258,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             tracing::warn!("WARNING: Redundant call to finalize_circuit(). Is this intentional?");
         } else {
             if ensure_nonzero {
-                self.add_gates_to_ensure_all_polys_are_non_zero();
+                self.add_gates_to_ensure_all_polys_are_non_zero(driver);
             }
 
             self.process_non_native_field_multiplications();
@@ -3132,5 +3122,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
+    }
+}
+
+impl<P: Pairing> UltraCircuitBuilder<P> {
+    pub fn get_num_gates_added_to_ensure_nonzero_polynomials() -> usize {
+        let mut builder = Self::new(0);
+        let num_gates_prior = builder.get_num_gates();
+        builder.add_gates_to_ensure_all_polys_are_non_zero(&mut PlainAcvmSolver::default());
+        let num_gates_post = builder.get_num_gates(); // accounts for finalization gates
+
+        num_gates_post - num_gates_prior
     }
 }

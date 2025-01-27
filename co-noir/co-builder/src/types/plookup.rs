@@ -269,7 +269,7 @@ impl<F: PrimeField> Plookup<F> {
             table.basic_table_ids.push(BasicTableId::UintXorRotate0);
             table
                 .get_table_values
-                .push(BasicTableId::get_xor_rotate_values_from_key::<F, 6>);
+                .push(BasicTableId::get_xor_rotate_values_from_key::<F, 0>);
         }
         table
     }
@@ -286,7 +286,7 @@ impl<F: PrimeField> Plookup<F> {
             table.basic_table_ids.push(BasicTableId::UintAndRotate0);
             table
                 .get_table_values
-                .push(BasicTableId::get_and_rotate_values_from_key::<F, 6>);
+                .push(BasicTableId::get_and_rotate_values_from_key::<F, 0>);
         }
         table
     }
@@ -324,132 +324,92 @@ impl<F: PrimeField> Plookup<F> {
         slices
     }
     #[expect(clippy::type_complexity)]
-    fn slice_and_get_values<T: NoirWitnessExtensionProtocol<F>>(
+    fn slice_and_get_values<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
         id: MultiTableId,
         key_a: T::AcvmType,
         key_b: T::AcvmType,
-        bases: &[u64],
     ) -> std::io::Result<(
         Vec<(T::AcvmType, T::AcvmType)>,
         Vec<T::AcvmType>,
         Vec<T::AcvmType>,
     )> {
+        let multi_table = builder.plookup.get_multitable(id.clone());
+        let num_lookups = multi_table.basic_table_ids.len();
+        let bases = &multi_table.slice_sizes;
         let mut results: Vec<(T::AcvmType, T::AcvmType)> = Vec::with_capacity(bases.len());
-        let mut key_a_slices = Vec::with_capacity(bases.len());
-        let mut key_b_slices = Vec::with_capacity(bases.len());
-        match id {
-            MultiTableId::Uint32Xor => {
-                if T::is_shared(&key_a) || T::is_shared(&key_b) {
-                    // the case shared/public can probably be optimised (or never happens?)
-                    let key_a = if T::is_shared(&key_a) {
-                        T::get_shared(&key_a).expect("Already checked it is shared")
-                    } else {
-                        T::promote_to_trivial_share(
-                            driver,
-                            T::get_public(&key_a).expect("Already checked it is public"),
-                        )
-                    };
-                    let key_b = if T::is_shared(&key_b) {
-                        T::get_shared(&key_b).expect("Already checked it is shared")
-                    } else {
-                        T::promote_to_trivial_share(
-                            driver,
-                            T::get_public(&key_b).expect("Already checked it is public"),
-                        )
-                    };
-                    let values =
-                        T::slice_and_get_xor_rotate_values::<64>(driver, key_a, key_b, bases, 0)?;
-                    results.extend(values.0);
-                    key_a_slices.extend(values.1);
-                    key_b_slices.extend(values.2);
-                } else {
-                    let slices1 = Self::slice_input_using_variable_bases(
-                        T::get_public(&key_a)
-                            .expect("Already checked it is public")
-                            .into(),
-                        bases,
-                    );
-                    let slices2 = Self::slice_input_using_variable_bases(
-                        T::get_public(&key_b)
-                            .expect("Already checked it is public")
-                            .into(),
-                        bases,
-                    );
+        let mut key_a_slices: Vec<T::AcvmType> = Vec::with_capacity(bases.len());
+        let mut key_b_slices: Vec<T::AcvmType> = Vec::with_capacity(bases.len());
+        if !T::is_shared(&key_a) && !T::is_shared(&key_b) {
+            let key_a_slice = Self::slice_input_using_variable_bases(
+                T::get_public(&key_a)
+                    .expect("Already checked it is public")
+                    .into(),
+                &multi_table.slice_sizes,
+            );
+            let key_b_slice = Self::slice_input_using_variable_bases(
+                T::get_public(&key_b)
+                    .expect("Already checked it is public")
+                    .into(),
+                &multi_table.slice_sizes,
+            );
 
-                    slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
-                        let values =
-                            BasicTableId::get_and_rotate_values_from_key::<F, 6>([*s1, *s2]);
-                        results.push((values[0].into(), values[1].into()));
-                    });
-                }
+            for i in 0..num_lookups {
+                let values = multi_table.get_table_values[i]([key_a_slice[i], key_b_slice[i]]);
+                results.push((values[0].into(), values[1].into()));
+            }
+            key_a_slices = key_a_slice
+                .iter()
+                .map(|&x| T::AcvmType::from(F::from(x)))
+                .collect();
+            key_b_slices = key_b_slice
+                .iter()
+                .map(|&x| T::AcvmType::from(F::from(x)))
+                .collect();
+
+            return Ok((results, key_a_slices, key_b_slices));
+        }
+
+        // At least one key is shared, so we have to do something different
+
+        // the case shared/public can probably be optimised (or never happens?)
+        let key_a = if T::is_shared(&key_a) {
+            T::get_shared(&key_a).expect("Already checked it is shared")
+        } else {
+            T::promote_to_trivial_share(
+                driver,
+                T::get_public(&key_a).expect("Already checked it is public"),
+            )
+        };
+        let key_b = if T::is_shared(&key_b) {
+            T::get_shared(&key_b).expect("Already checked it is shared")
+        } else {
+            T::promote_to_trivial_share(
+                driver,
+                T::get_public(&key_b).expect("Already checked it is public"),
+            )
+        };
+
+        match multi_table.id {
+            MultiTableId::Uint32Xor => {
+                let values =
+                    T::slice_and_get_xor_rotate_values::<64>(driver, key_a, key_b, bases, 0)?;
+                results.extend(values.0);
+                key_a_slices.extend(values.1);
+                key_b_slices.extend(values.2);
             }
 
             MultiTableId::Uint32And => {
-                if T::is_shared(&key_a) || T::is_shared(&key_b) {
-                    // the case shared/public can probably be optimised (or never happens?)
-                    let key_a = if T::is_shared(&key_a) {
-                        T::get_shared(&key_a).expect("Already checked it is shared")
-                    } else {
-                        T::promote_to_trivial_share(
-                            driver,
-                            T::get_public(&key_a).expect("Already checked it is public"),
-                        )
-                    };
-                    let key_b = if T::is_shared(&key_b) {
-                        T::get_shared(&key_b).expect("Already checked it is shared")
-                    } else {
-                        T::promote_to_trivial_share(
-                            driver,
-                            T::get_public(&key_b).expect("Already checked it is public"),
-                        )
-                    };
-                    let values =
-                        T::slice_and_get_and_rotate_values::<64>(driver, key_a, key_b, bases, 0)?;
-                    results.extend(values.0);
-                    key_a_slices.extend(values.1);
-                    key_b_slices.extend(values.2);
-                } else {
-                    let slices1 = Self::slice_input_using_variable_bases(
-                        T::get_public(&key_a)
-                            .expect("Already checked it is public")
-                            .into(),
-                        bases,
-                    );
-                    let slices2 = Self::slice_input_using_variable_bases(
-                        T::get_public(&key_b)
-                            .expect("Already checked it is public")
-                            .into(),
-                        bases,
-                    );
-                    slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
-                        let values =
-                            BasicTableId::get_xor_rotate_values_from_key::<F, 6>([*s1, *s2]);
-                        results.push((values[0].into(), values[1].into()));
-                    });
-                }
+                let values =
+                    T::slice_and_get_and_rotate_values::<64>(driver, key_a, key_b, bases, 0)?;
+                results.extend(values.0);
+                key_a_slices.extend(values.1);
+                key_b_slices.extend(values.2);
             }
-            MultiTableId::HonkDummyMulti => {
-                let key_a_val = T::get_public(&key_a).expect("This should be public"); //according to RW
-                let key_b_val = T::get_public(&key_b).expect("This should be public");
-                //according to RW
-                let slices1 = Self::slice_input_using_variable_bases(key_a_val.into(), bases);
-                let slices2 = Self::slice_input_using_variable_bases(key_b_val.into(), bases);
-                slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
-                    results.push((
-                        F::from(Utils::rotate64(s1 & s2, 6)).into(),
-                        F::zero().into(),
-                    ));
-                });
-                let slices1: Vec<T::AcvmType> =
-                    slices1.into_iter().map(F::from).map(Into::into).collect();
-                let slices2: Vec<T::AcvmType> =
-                    slices2.into_iter().map(F::from).map(Into::into).collect();
-                key_a_slices.extend(slices1);
-                key_b_slices.extend(slices2);
-            }
-            _ => todo!("{:?} not yet implemented", id),
+            _ => todo!("{:?} not yet implemented", multi_table.id),
         }
+
         Ok((results, key_a_slices, key_b_slices))
     }
 
@@ -464,13 +424,12 @@ impl<F: PrimeField> Plookup<F> {
         key_b: T::AcvmType,
         is_2_to_1_lookup: bool,
     ) -> std::io::Result<ReadData<T::AcvmType>> {
+        let mut lookup = ReadData::<T::AcvmType>::default();
+        let values_sliced = Self::slice_and_get_values(builder, driver, id.clone(), key_a, key_b)?;
         // return multi-table, populating global array of all multi-tables if need be
-        let multi_table = builder.plookup.get_multitable(id.clone());
+        let multi_table = builder.plookup.get_multitable(id);
         let num_lookups = multi_table.basic_table_ids.len();
 
-        let mut lookup = ReadData::<T::AcvmType>::default();
-        let values_sliced =
-            Self::slice_and_get_values::<T>(driver, id, key_a, key_b, &multi_table.slice_sizes)?;
         let key_a_slices = values_sliced.1;
         let key_b_slices = values_sliced.2;
         let values_sliced = values_sliced.0;
@@ -549,28 +508,29 @@ impl<F: PrimeField> Plookup<F> {
         lookup[ColumnIdx::C3][num_lookups - 1] = column_3_raw_values[num_lookups - 1].clone();
 
         for i in (1..num_lookups).rev() {
-            let tmp_sum = T::add(
+            let tmp_mul = T::mul_with_public(
                 driver,
-                column_1_raw_values[i - 1].clone(),
+                multi_table.column_1_step_sizes[i],
                 lookup[ColumnIdx::C1][i].clone(),
             );
-
             lookup[ColumnIdx::C1][i - 1] =
-                T::mul_with_public(driver, multi_table.column_1_step_sizes[i], tmp_sum);
-            let tmp_sum = T::add(
+                T::add(driver, column_1_raw_values[i - 1].clone(), tmp_mul);
+
+            let tmp_mul = T::mul_with_public(
                 driver,
-                column_2_raw_values[i - 1].clone(),
+                multi_table.column_2_step_sizes[i],
                 lookup[ColumnIdx::C2][i].clone(),
             );
             lookup[ColumnIdx::C2][i - 1] =
-                T::mul_with_public(driver, multi_table.column_2_step_sizes[i], tmp_sum);
-            let tmp_sum = T::add(
+                T::add(driver, column_2_raw_values[i - 1].clone(), tmp_mul);
+
+            let tmp_mul = T::mul_with_public(
                 driver,
-                column_3_raw_values[i - 1].clone(),
+                multi_table.column_3_step_sizes[i],
                 lookup[ColumnIdx::C3][i].clone(),
             );
             lookup[ColumnIdx::C3][i - 1] =
-                T::mul_with_public(driver, multi_table.column_3_step_sizes[i], tmp_sum);
+                T::add(driver, column_3_raw_values[i - 1].clone(), tmp_mul);
         }
         Ok(lookup)
     }
@@ -607,23 +567,23 @@ impl<F: PrimeField> Plookup<F> {
             let length = lookup_data[ColumnIdx::C1].len();
             if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
                 for i in 0..length {
-                    lookup[ColumnIdx::C1].push(FieldCT::from_witness(
-                        lookup_data[ColumnIdx::C1][i].clone(),
-                        builder,
+                    lookup[ColumnIdx::C1].push(FieldCT::zero_with_additive(
+                        T::get_public(&lookup_data[ColumnIdx::C1][i])
+                            .expect("Constant should be public"),
                     ));
-                    lookup[ColumnIdx::C2].push(FieldCT::from_witness(
-                        lookup_data[ColumnIdx::C2][i].clone(),
-                        builder,
+                    lookup[ColumnIdx::C2].push(FieldCT::zero_with_additive(
+                        T::get_public(&lookup_data[ColumnIdx::C2][i])
+                            .expect("Constant should be public"),
                     ));
-                    lookup[ColumnIdx::C3].push(FieldCT::from_witness(
-                        lookup_data[ColumnIdx::C3][i].clone(),
-                        builder,
+                    lookup[ColumnIdx::C3].push(FieldCT::zero_with_additive(
+                        T::get_public(&lookup_data[ColumnIdx::C3][i])
+                            .expect("Constant should be public"),
                     ));
                 }
             } else {
                 let lhs_index = key_a.witness_index;
                 let rhs_index = key_b.witness_index;
-                // If only one lookup key is constant, we need to instantiate it as a real witness
+                // If only one lookup key is constant, we need to instantiate it as a real witness  lookup_data[ColumnIdx::C1][i]
                 if is_key_a_constant {
                     panic!("Apparently constants can be shared???")
                     // lhs_index = builder.put_constant_variable(a);
@@ -667,23 +627,22 @@ impl<F: PrimeField> Plookup<F> {
                 a.into(),
                 b.into(),
                 is_2_to_1_lookup,
-            )
-            .unwrap(); //TODO: Handle error
+            )?;
             let is_key_a_constant = key_a.is_constant();
             let length = lookup_data[ColumnIdx::C1].len();
             if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
                 for i in 0..length {
-                    lookup[ColumnIdx::C1].push(FieldCT::from_witness(
-                        lookup_data[ColumnIdx::C1][i].clone(),
-                        builder,
+                    lookup[ColumnIdx::C1].push(FieldCT::zero_with_additive(
+                        T::get_public(&lookup_data[ColumnIdx::C1][i])
+                            .expect("Constant should be public"),
                     ));
-                    lookup[ColumnIdx::C2].push(FieldCT::from_witness(
-                        lookup_data[ColumnIdx::C2][i].clone(),
-                        builder,
+                    lookup[ColumnIdx::C2].push(FieldCT::zero_with_additive(
+                        T::get_public(&lookup_data[ColumnIdx::C2][i])
+                            .expect("Constant should be public"),
                     ));
-                    lookup[ColumnIdx::C3].push(FieldCT::from_witness(
-                        lookup_data[ColumnIdx::C3][i].clone(),
-                        builder,
+                    lookup[ColumnIdx::C3].push(FieldCT::zero_with_additive(
+                        T::get_public(&lookup_data[ColumnIdx::C3][i])
+                            .expect("Constant should be public"),
                     ));
                 }
             } else {
