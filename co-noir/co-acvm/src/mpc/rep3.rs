@@ -519,7 +519,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 )?;
             }
         }
-        todo!()
+        Ok(())
     }
 
     fn is_shared(a: &Self::AcvmType) -> bool {
