@@ -161,14 +161,16 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N
         } else {
             len.next_power_of_two().ilog2()
         };
-        let result = match k {
-            1 => Self::get_from_lut_internal::<Bit, _>(bits, lut, network0, network1)?,
-            2 | 4 | 8 => Self::get_from_lut_internal::<u8, _>(bits, lut, network0, network1)?,
-            16 => Self::get_from_lut_internal::<u16, _>(bits, lut, network0, network1)?,
-            32 => Self::get_from_lut_internal::<u32, _>(bits, lut, network0, network1)?,
-            64 => Self::get_from_lut_internal::<u64, _>(bits, lut, network0, network1)?,
-            128 => Self::get_from_lut_internal::<u128, _>(bits, lut, network0, network1)?,
-            _ => panic!("Table is too large"),
+        let result = if k == 1 {
+            Self::get_from_lut_internal::<Bit, _>(bits, lut, network0, network1)?
+        } else if k <= 8 {
+            Self::get_from_lut_internal::<u8, _>(bits, lut, network0, network1)?
+        } else if k <= 16 {
+            Self::get_from_lut_internal::<u16, _>(bits, lut, network0, network1)?
+        } else if k <= 32 {
+            Self::get_from_lut_internal::<u32, _>(bits, lut, network0, network1)?
+        } else {
+            panic!("Table is too large")
         };
         tracing::debug!("got a result!");
         Ok(result)
@@ -190,17 +192,19 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N
         } else {
             len.next_power_of_two().ilog2()
         };
-        match k {
-            1 => Self::write_to_lut_internal::<Bit, _>(bits, lut, &value, network0, network1)?,
-            2 | 4 | 8 => {
-                Self::write_to_lut_internal::<u8, _>(bits, lut, &value, network0, network1)?
-            }
-            16 => Self::write_to_lut_internal::<u16, _>(bits, lut, &value, network0, network1)?,
-            32 => Self::write_to_lut_internal::<u32, _>(bits, lut, &value, network0, network1)?,
-            64 => Self::write_to_lut_internal::<u64, _>(bits, lut, &value, network0, network1)?,
-            128 => Self::write_to_lut_internal::<u128, _>(bits, lut, &value, network0, network1)?,
-            _ => panic!("Table is too large"),
+
+        if k == 1 {
+            Self::write_to_lut_internal::<Bit, _>(bits, lut, &value, network0, network1)?
+        } else if k <= 8 {
+            Self::write_to_lut_internal::<u8, _>(bits, lut, &value, network0, network1)?
+        } else if k <= 16 {
+            Self::write_to_lut_internal::<u16, _>(bits, lut, &value, network0, network1)?
+        } else if k <= 32 {
+            Self::write_to_lut_internal::<u32, _>(bits, lut, &value, network0, network1)?
+        } else {
+            panic!("Table is too large")
         };
+
         tracing::debug!("we are done");
         Ok(())
     }
