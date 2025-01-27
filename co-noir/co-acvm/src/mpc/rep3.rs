@@ -522,6 +522,30 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(())
     }
 
+    fn one_hot_vector_from_shared_index(
+        &mut self,
+        index: Self::ArithmeticShare,
+        len: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        self.lut_provider
+            .ohv_from_index(index, len, &mut self.io_context0, &mut self.io_context1)
+    }
+
+    fn write_to_shared_lut_from_ohv(
+        &mut self,
+        ohv: &[Self::ArithmeticShare],
+        value: Self::ArithmeticShare,
+        lut: &mut [Self::ArithmeticShare],
+    ) -> std::io::Result<()> {
+        self.lut_provider.write_to_shared_lut_from_ohv(
+            ohv,
+            value,
+            lut,
+            &mut self.io_context0,
+            &mut self.io_context1,
+        )
+    }
+
     fn is_shared(a: &Self::AcvmType) -> bool {
         matches!(a, Rep3AcvmType::Shared(_))
     }

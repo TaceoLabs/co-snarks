@@ -120,6 +120,21 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         lut: &mut <Self::Lookup as LookupTableProvider<F>>::LutType,
     ) -> io::Result<()>;
 
+    /// Creates a shared one-hot-encoded vector from a given shared index
+    fn one_hot_vector_from_shared_index(
+        &mut self,
+        index: Self::ArithmeticShare,
+        len: usize,
+    ) -> io::Result<Vec<Self::ArithmeticShare>>;
+
+    /// Writes to a shared LUT from a given shared one-hot-encoded vector.
+    fn write_to_shared_lut_from_ohv(
+        &mut self,
+        ohv: &[Self::ArithmeticShare],
+        value: Self::ArithmeticShare,
+        lut: &mut [Self::ArithmeticShare],
+    ) -> io::Result<()>;
+
     /// Returns true if the value is shared
     fn is_shared(a: &Self::AcvmType) -> bool;
 

@@ -16,6 +16,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
 use eyre::Result;
+use num_bigint::BigUint;
 
 pub struct ProvingKey<P: Pairing> {
     pub crs: ProverCrs<P>,
@@ -428,20 +429,35 @@ impl<P: Pairing> ProvingKey<P> {
                 // let index_in_table = table.index_map[table_entry]; // We calculate indices from keys
                 let index_in_table =
                     gate_data.calculate_table_index(table.use_twin_keys, table.column_2_step_size);
+                let index_in_table = T::AcvmType::from(index_in_table); // TODO this just simulates that we potentially have shared LUTs, adapt later when we implement it
 
-                // increment the read count at the corresponding index in the full polynomial
-                let index_in_poly = table_offset + index_in_table;
-                let wit0 = driver.add(
-                    T::AcvmType::from(P::ScalarField::one()),
-                    T::AcvmType::from(witness[0][index_in_poly].to_owned()),
-                );
-                witness[0][index_in_poly] = if T::is_shared(&wit0) {
-                    T::get_shared(&wit0).unwrap()
+                if T::is_shared(&index_in_table) {
+                    let index_in_table =
+                        T::get_shared(&index_in_table).expect("Already checked it is shared");
+                    todo!()
                 } else {
-                    driver.promote_to_trivial_share(T::get_public(&wit0).unwrap())
-                }; // Read count
-                witness[1][index_in_poly] = driver.promote_to_trivial_share(P::ScalarField::one());
-                // Read Tag; tag is 1 if entry has been read 1 or more times
+                    // Index is public
+                    let index_in_table: BigUint = T::get_public(&index_in_table)
+                        .expect("Already checked it is public")
+                        .into();
+                    let index_in_table =
+                        usize::try_from(index_in_table).expect("index is too large for usize?");
+
+                    let index_in_poly = table_offset + index_in_table;
+
+                    // increment the read count at the corresponding index in the full polynomial
+                    let mut wit0 = T::AcvmType::from(witness[0][index_in_poly].to_owned());
+                    driver.add_assign_with_public(P::ScalarField::one(), &mut wit0);
+                    witness[0][index_in_poly] = if T::is_shared(&wit0) {
+                        T::get_shared(&wit0).unwrap()
+                    } else {
+                        driver.promote_to_trivial_share(T::get_public(&wit0).unwrap())
+                    }; // Read count
+                       // Set the read tag
+                    witness[1][index_in_poly] =
+                        driver.promote_to_trivial_share(P::ScalarField::one());
+                    // Read Tag; tag is 1 if entry has been read 1 or more times
+                }
             }
             table_offset += table.len(); // set the offset of the next table within the polynomials
         }

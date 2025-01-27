@@ -198,9 +198,21 @@ where
     let e = gadgets::ohv::ohv::<T, _>(k, index, io_context)?;
     let injected = conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, io_context)?;
 
+    write_lut_from_ohv(value, lut, &injected, io_context)
+}
+
+/// The second part of writing to a shared lookup table, i.e, takes the shared value, the shared LUT and and one_hot_vector (all elements 0 except for the index to write to which is set to one) and writes to the shared LUT.
+pub fn write_lut_from_ohv<F: PrimeField, N: Rep3Network>(
+    value: &Rep3PrimeFieldShare<F>,
+    lut: &mut [Rep3PrimeFieldShare<F>],
+    ohv: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<()> {
+    let n = lut.len();
+    assert!(n <= ohv.len());
     let mut local_a = Vec::with_capacity(n);
-    for (l, e) in lut.iter().zip(injected.into_iter()) {
-        local_a.push(e * (value - l) + l.a + io_context.rngs.rand.masking_field_element::<F>());
+    for (l, e) in lut.iter().zip(ohv.iter()) {
+        local_a.push(e * &(value - l) + l.a + io_context.rngs.rand.masking_field_element::<F>());
     }
     let local_b = io_context.network.reshare_many(&local_a)?;
 
@@ -208,6 +220,5 @@ where
         des.a = src_a;
         des.b = src_b;
     }
-
     Ok(())
 }
