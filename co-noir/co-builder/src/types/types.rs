@@ -1247,7 +1247,6 @@ impl<F: PrimeField> LookupEntry<F> {
             index_b += F::from(self.key[1].to_owned());
         }
         index_b
-        // usize::try_from(index_b).expect("index is too large for usize?")
     }
 }
 

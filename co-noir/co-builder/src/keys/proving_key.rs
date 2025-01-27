@@ -91,7 +91,7 @@ impl<P: Pairing> ProvingKey<P> {
                 .unwrap(),
             &mut circuit,
             dyadic_circuit_size,
-        );
+        )?;
 
         // Construct the public inputs array
         for input in proving_key
@@ -399,13 +399,13 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    // TACEO TODO this function only allows public lookup tables so far, adapt!
+    // TACEO TODO adapt this function once the calculate_table_index returns an ACVM type
     pub fn construct_lookup_read_counts<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         driver: &mut T,
         witness: &mut [Polynomial<T::ArithmeticShare>; 2],
         circuit: &mut GenericUltraCircuitBuilder<P, T>,
         dyadic_circuit_size: usize,
-    ) {
+    ) -> std::io::Result<()> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
         let offset = dyadic_circuit_size - circuit.get_tables_size();
 
@@ -414,14 +414,7 @@ impl<P: Pairing> ProvingKey<P> {
         for table in circuit.lookup_tables.iter_mut() {
             // table.initialize_index_map(); // We calculate indices from keys
 
-            // TACEO TODO for shared lookup tables:
-            // - get index_in_table with LUT
-            // - create ohv with index_in_poly
-            // - Bitinject and add it to witness[0]
-            // - OR it to the ohv for the witness[1] values
-            // - finally bitinject the witness[1] values and add to trace
-            // - Skip the or if len is just one
-            for gate_data in table.lookup_gates.iter() {
+            for (i, gate_data) in table.lookup_gates.iter().enumerate() {
                 // convert lookup gate data to an array of three field elements, one for each of the 3 columns
                 // let table_entry = gate_data.to_table_components(table.use_twin_keys); // We calculate indices from keys
 
@@ -434,7 +427,41 @@ impl<P: Pairing> ProvingKey<P> {
                 if T::is_shared(&index_in_table) {
                     let index_in_table =
                         T::get_shared(&index_in_table).expect("Already checked it is shared");
-                    todo!()
+                    let ohv =
+                        driver.one_hot_vector_from_shared_index(index_in_table, table.len())?;
+
+                    // increment the read count at the corresponding index in the full polynomial
+                    for (src, des) in ohv
+                        .iter()
+                        .zip(witness[0].iter_mut().skip(table_offset).take(table.len()))
+                    {
+                        let wit = T::AcvmType::from(des.to_owned());
+                        let src = T::AcvmType::from(src.to_owned());
+                        let added = driver.add(wit, src);
+                        *des = if T::is_shared(&added) {
+                            T::get_shared(&added).unwrap()
+                        } else {
+                            driver.promote_to_trivial_share(T::get_public(&added).unwrap())
+                        }; // Read count
+                    }
+
+                    // Set the read tag
+                    // Read tag is 1 if entry has been read 1 or more times
+                    if i == 0 {
+                        // Just assign, no cmux needed
+                        for (src, des) in ohv
+                            .into_iter()
+                            .zip(witness[1].iter_mut().skip(table_offset).take(table.len()))
+                        {
+                            *des = src
+                        }
+                    } else {
+                        // Assign the value via a cmux
+                        let lut =
+                            &mut witness[1].as_mut()[table_offset..table_offset + table.len()];
+                        let one = driver.promote_to_trivial_share(P::ScalarField::one());
+                        driver.write_to_shared_lut_from_ohv(&ohv, one, lut)?;
+                    }
                 } else {
                     // Index is public
                     let index_in_table: BigUint = T::get_public(&index_in_table)
@@ -453,13 +480,16 @@ impl<P: Pairing> ProvingKey<P> {
                     } else {
                         driver.promote_to_trivial_share(T::get_public(&wit0).unwrap())
                     }; // Read count
-                       // Set the read tag
+
+                    // Set the read tag
                     witness[1][index_in_poly] =
                         driver.promote_to_trivial_share(P::ScalarField::one());
-                    // Read Tag; tag is 1 if entry has been read 1 or more times
+                    // Read tag is 1 if entry has been read 1 or more times
                 }
             }
             table_offset += table.len(); // set the offset of the next table within the polynomials
         }
+
+        Ok(())
     }
 }
