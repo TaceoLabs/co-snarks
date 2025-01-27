@@ -147,6 +147,39 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             .write_to_lut(index, value, lut, &mut a, &mut b)
     }
 
+    fn one_hot_vector_from_shared_index(
+        &mut self,
+        index: Self::ArithmeticShare,
+        len: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        let len_ = if len.is_power_of_two() {
+            len
+        } else {
+            len.next_power_of_two()
+        };
+        let mut result = vec![F::zero(); len_];
+        let index: BigUint = index.into();
+        let index = usize::try_from(index).expect("Index to large for usize");
+        result[index] = F::one();
+        Ok(result)
+    }
+
+    fn write_to_shared_lut_from_ohv(
+        &mut self,
+        ohv: &[Self::ArithmeticShare],
+        value: Self::ArithmeticShare,
+        lut: &mut [Self::ArithmeticShare],
+    ) -> std::io::Result<()> {
+        let index = ohv
+            .iter()
+            .enumerate()
+            .find(|x| x.1.is_one())
+            .expect("Is an one_hot_encoded vector")
+            .0;
+        lut[index] = value;
+        Ok(())
+    }
+
     fn is_shared(_: &Self::AcvmType) -> bool {
         false
     }

@@ -12,7 +12,7 @@ use crate::{
             network::{IoContext, Rep3Network},
             IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
         },
-        rep3_ring::{gadgets, ring::bit::Bit},
+        rep3_ring::{conversion, gadgets, ring::bit::Bit},
     },
 };
 use ark_ff::PrimeField;
@@ -127,6 +127,63 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
                 gadgets::lut::write_lut(value, shared, share, network0)?;
             }
         }
+        Ok(())
+    }
+
+    fn ohv_from_index_internal<T: IntRing2k, F: PrimeField>(
+        index: Rep3BigUintShare<F>,
+        k: usize,
+        network0: &mut IoContext<N>,
+        _network1: &mut IoContext<N>,
+    ) -> IoResult<Vec<Rep3RingShare<Bit>>> {
+        let a = T::cast_from_biguint(&index.a);
+        let b = T::cast_from_biguint(&index.b);
+        let bits = Rep3RingShare::new(a, b);
+
+        gadgets::ohv::ohv(k, bits, network0)
+    }
+
+    /// Creates a shared one-hot-encoded vector from a given shared index
+    pub fn ohv_from_index<F: PrimeField>(
+        &mut self,
+        index: Rep3PrimeFieldShare<F>,
+        len: usize,
+        network0: &mut IoContext<N>,
+        network1: &mut IoContext<N>,
+    ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+        let bits = rep3::conversion::a2b_selector(index, network0)?;
+        let k = if len.is_power_of_two() {
+            len.ilog2()
+        } else {
+            len.next_power_of_two().ilog2()
+        } as usize;
+
+        let e = match k {
+            1 => Self::ohv_from_index_internal::<Bit, _>(bits, k, network0, network1)?,
+            2 | 4 | 8 => Self::ohv_from_index_internal::<u8, _>(bits, k, network0, network1)?,
+            16 => Self::ohv_from_index_internal::<u16, _>(bits, k, network0, network1)?,
+            32 => Self::ohv_from_index_internal::<u32, _>(bits, k, network0, network1)?,
+            64 => Self::ohv_from_index_internal::<u64, _>(bits, k, network0, network1)?,
+            128 => Self::ohv_from_index_internal::<u128, _>(bits, k, network0, network1)?,
+            _ => panic!("Table is too large"),
+        };
+
+        conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, network0)
+    }
+
+    /// Writes to a shared lookup table with the index already being transformed into the shared one-hot-encoded vector
+    pub fn write_to_shared_lut_from_ohv<F: PrimeField>(
+        &mut self,
+        ohv: &[Rep3PrimeFieldShare<F>],
+        value: Rep3PrimeFieldShare<F>,
+        lut: &mut [Rep3PrimeFieldShare<F>],
+        network0: &mut IoContext<N>,
+        _network1: &mut IoContext<N>,
+    ) -> IoResult<()> {
+        let len = lut.len();
+        tracing::debug!("doing write on LUT-map of size {}", len);
+        gadgets::lut::write_lut_from_ohv(&value, lut, ohv, network0)?;
+        tracing::debug!("we are done");
         Ok(())
     }
 }

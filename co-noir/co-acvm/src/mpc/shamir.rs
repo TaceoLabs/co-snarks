@@ -371,6 +371,23 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         panic!("write_lut_by_acvm_type: Operation atm not supported")
     }
 
+    fn one_hot_vector_from_shared_index(
+        &mut self,
+        _index: Self::ArithmeticShare,
+        _len: usize,
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        panic!("one_hot_vector_from_shared_index: Operation atm not supported")
+    }
+
+    fn write_to_shared_lut_from_ohv(
+        &mut self,
+        _ohv: &[Self::ArithmeticShare],
+        _value: Self::ArithmeticShare,
+        _lut: &mut [Self::ArithmeticShare],
+    ) -> std::io::Result<()> {
+        panic!("write_to_shared_lut_from_ohv: Operation atm not supported")
+    }
+
     fn is_shared(a: &Self::AcvmType) -> bool {
         matches!(a, ShamirAcvmType::Shared(_))
     }
