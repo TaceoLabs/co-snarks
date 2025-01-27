@@ -158,14 +158,16 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
             len.next_power_of_two().ilog2()
         } as usize;
 
-        let e = match k {
-            1 => Self::ohv_from_index_internal::<Bit, _>(bits, k, network0, network1)?,
-            2 | 4 | 8 => Self::ohv_from_index_internal::<u8, _>(bits, k, network0, network1)?,
-            16 => Self::ohv_from_index_internal::<u16, _>(bits, k, network0, network1)?,
-            32 => Self::ohv_from_index_internal::<u32, _>(bits, k, network0, network1)?,
-            64 => Self::ohv_from_index_internal::<u64, _>(bits, k, network0, network1)?,
-            128 => Self::ohv_from_index_internal::<u128, _>(bits, k, network0, network1)?,
-            _ => panic!("Table is too large"),
+        let e = if k == 1 {
+            Self::ohv_from_index_internal::<Bit, _>(bits, k, network0, network1)?
+        } else if k <= 8 {
+            Self::ohv_from_index_internal::<u8, _>(bits, k, network0, network1)?
+        } else if k <= 16 {
+            Self::ohv_from_index_internal::<u16, _>(bits, k, network0, network1)?
+        } else if k <= 32 {
+            Self::ohv_from_index_internal::<u32, _>(bits, k, network0, network1)?
+        } else {
+            panic!("Table is too large")
         };
 
         conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, network0)

@@ -420,9 +420,11 @@ impl<P: Pairing> ProvingKey<P> {
 
                 // find the index of the entry in the table
                 // let index_in_table = table.index_map[table_entry]; // We calculate indices from keys
-                let index_in_table =
-                    gate_data.calculate_table_index(table.use_twin_keys, table.column_2_step_size);
-                let index_in_table = T::AcvmType::from(index_in_table); // TODO this just simulates that we potentially have shared LUTs, adapt later when we implement it
+                let index_in_table = gate_data.calculate_table_index(
+                    driver,
+                    table.use_twin_keys,
+                    table.column_2_step_size,
+                );
 
                 if T::is_shared(&index_in_table) {
                     let index_in_table =

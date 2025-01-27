@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io;
 use std::marker::PhantomData;
 
@@ -8,7 +7,6 @@ use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
 use mpc_core::lut::{LookupTableProvider, PlainLookupTableProvider};
 use num_bigint::BigUint;
 
-#[derive(Default)]
 pub struct PlainAcvmSolver<F: PrimeField> {
     plain_lut: PlainLookupTableProvider<F>,
     phantom_data: PhantomData<F>,
@@ -19,6 +17,12 @@ impl<F: PrimeField> PlainAcvmSolver<F> {
             plain_lut: Default::default(),
             phantom_data: Default::default(),
         }
+    }
+}
+
+impl<F: PrimeField> Default for PlainAcvmSolver<F> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
