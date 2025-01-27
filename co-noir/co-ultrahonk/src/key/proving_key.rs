@@ -112,7 +112,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
                 .unwrap(),
             &mut circuit,
             dyadic_circuit_size,
-        );
+        )?;
 
         // Construct the public inputs array
         let block = circuit.blocks.get_pub_inputs();
