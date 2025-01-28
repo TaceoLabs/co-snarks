@@ -752,12 +752,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         )?;
         let num_outputs = result.len();
         let mut chunks = result.chunks(num_outputs / 3);
-        let rotation_values = chunks
-            .next()
-            .unwrap()
-            .iter()
-            .map(|a| (Rep3AcvmType::Shared(*a), Rep3AcvmType::Public(F::zero())))
-            .collect();
         let key_a_slices = chunks
             .next()
             .unwrap()
@@ -769,6 +763,12 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .unwrap()
             .iter()
             .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+        let rotation_values = chunks
+            .next()
+            .unwrap()
+            .iter()
+            .map(|a| (Rep3AcvmType::Shared(*a), Rep3AcvmType::Public(F::zero())))
             .collect();
 
         Ok((rotation_values, key_a_slices, key_b_slices))
@@ -795,12 +795,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         )?;
         let num_outputs = result.len();
         let mut chunks = result.chunks(num_outputs / 3);
-        let rotation_values = chunks
-            .next()
-            .unwrap()
-            .iter()
-            .map(|a| (Rep3AcvmType::Shared(*a), Rep3AcvmType::Public(F::zero())))
-            .collect();
         let key_a_slices = chunks
             .next()
             .unwrap()
@@ -812,6 +806,12 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .unwrap()
             .iter()
             .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+        let rotation_values = chunks
+            .next()
+            .unwrap()
+            .iter()
+            .map(|a| (Rep3AcvmType::Shared(*a), Rep3AcvmType::Public(F::zero())))
             .collect();
 
         Ok((rotation_values, key_a_slices, key_b_slices))
