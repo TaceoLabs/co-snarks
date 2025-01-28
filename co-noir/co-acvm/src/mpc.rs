@@ -1,8 +1,7 @@
-use std::{fmt, io};
-
 use ark_ff::PrimeField;
 use co_brillig::mpc::BrilligDriver;
 use mpc_core::lut::LookupTableProvider;
+use std::{fmt, io};
 
 pub(super) mod plain;
 pub(super) mod rep3;
@@ -231,5 +230,19 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
+    )>;
+
+    /// Sorts a vector of shared values in ascending order, only considering the first bitsize bits and then applies the same permutation to two other vectors.
+    #[expect(clippy::type_complexity)]
+    fn sort_vec_by(
+        &mut self,
+        input1: &[Self::ArithmeticShare],
+        input2: &[Self::ArithmeticShare],
+        input3: &[Self::ArithmeticShare],
+        bitsize: usize,
+    ) -> std::io::Result<(
+        Vec<Self::ArithmeticShare>,
+        Vec<Self::ArithmeticShare>,
+        Vec<Self::ArithmeticShare>,
     )>;
 }

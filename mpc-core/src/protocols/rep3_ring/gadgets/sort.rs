@@ -43,6 +43,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     bitsize: usize,
 ) -> IoResult<Vec<FieldShare<F>>> {
     let len = inputs.len();
+
     if len
         > PermRing::MAX
             .try_into()
@@ -56,6 +57,37 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
 
     let perm = gen_perm(inputs, bitsize, io_context0, io_context1)?;
     apply_inv_field(&perm, inputs, io_context0, io_context1)
+}
+
+/// Sorts the inputs using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then also used to sort two other vecs.
+/// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
+#[expect(clippy::type_complexity)]
+pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
+    inputs: &[FieldShare<F>],
+    other_inputs1: &[FieldShare<F>],
+    other_inputs2: &[FieldShare<F>],
+    io_context0: &mut IoContext<N>,
+    io_context1: &mut IoContext<N>,
+    bitsize: usize,
+) -> IoResult<(Vec<FieldShare<F>>, Vec<FieldShare<F>>, Vec<FieldShare<F>>)> {
+    let len = inputs.len();
+    if len
+        > PermRing::MAX
+            .try_into()
+            .expect("transformation of PermRing::MAX into usize failed")
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Too many inputs for radix sort. Use a larger PermRing.",
+        ));
+    }
+
+    let perm = gen_perm(inputs, bitsize, io_context0, io_context1)?;
+    Ok((
+        apply_inv_field(&perm, inputs, io_context0, io_context1)?,
+        apply_inv_field(&perm, other_inputs1, io_context0, io_context1)?,
+        apply_inv_field(&perm, other_inputs2, io_context0, io_context1)?,
+    ))
 }
 
 fn gen_perm<F: PrimeField, N: Rep3Network>(

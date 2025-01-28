@@ -412,4 +412,41 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             slices2.into_iter().map(F::from).collect(),
         ))
     }
+
+    fn sort_vec_by(
+        &mut self,
+        input1: &[Self::ArithmeticShare],
+        input2: &[Self::ArithmeticShare],
+        input3: &[Self::ArithmeticShare],
+        bitsize: usize,
+    ) -> std::io::Result<(
+        Vec<Self::ArithmeticShare>,
+        Vec<Self::ArithmeticShare>,
+        Vec<Self::ArithmeticShare>,
+    )> {
+        let mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
+
+        let mut indexed_values: Vec<(F, usize)> = input1
+            .iter()
+            .enumerate()
+            .map(|(i, x)| {
+                let mut x: BigUint = (*x).into();
+                x &= &mask;
+                (F::from(x), i)
+            })
+            .collect();
+
+        indexed_values.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let sorted1: Vec<Self::ArithmeticShare> =
+            indexed_values.iter().map(|(_, i)| input1[*i]).collect();
+
+        let sorted2: Vec<Self::ArithmeticShare> =
+            indexed_values.iter().map(|(_, i)| input2[*i]).collect();
+
+        let sorted3: Vec<Self::ArithmeticShare> =
+            indexed_values.iter().map(|(_, i)| input3[*i]).collect();
+
+        Ok((sorted1, sorted2, sorted3))
+    }
 }

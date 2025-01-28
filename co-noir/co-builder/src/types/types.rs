@@ -503,15 +503,17 @@ impl<F: PrimeField> RomTable<F> {
         }
         self.initialize_table(builder, driver);
 
-        // TACEO TODO this is only implemented for the plain backend...
-        let value = T::get_public(&index.get_value(builder, driver))
-            .expect("TODO: Only implemented for plain");
-        let val: BigUint = value.into();
-        assert!(val < BigUint::from(self.length));
+        if !T::is_shared(&builder.get_variable(index.witness_index as usize)) {
+            // Sanity check, only doable in plain
+            let value = T::get_public(&index.get_value(builder, driver))
+                .expect("Already checked it is public");
+            let val: BigUint = value.into();
+            assert!(val < BigUint::from(self.length));
+        }
 
         let witness_index = index.normalize(builder, driver).get_witness_index();
         let output_idx = builder
-            .read_rom_array(self.rom_id, witness_index)
+            .read_rom_array(self.rom_id, witness_index, driver)
             .expect("Not implemented for other cases");
         FieldCT::from_witness_index(output_idx)
     }
@@ -1252,58 +1254,59 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P, T
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct RomRecord {
+pub(crate) struct RomRecord<F: Clone> {
     pub(crate) index_witness: u32,
     pub(crate) value_column1_witness: u32,
     pub(crate) value_column2_witness: u32,
-    pub(crate) index: u32,
+    pub(crate) index: F,
     pub(crate) record_witness: u32,
     pub(crate) gate_index: usize,
 }
 
-impl RomRecord {
-    fn less_than(&self, other: &Self) -> bool {
-        self.index < other.index
-    }
+// TODO: do we need this anymore?
+// impl<F: Clone> RomRecord<F> {
+//     fn less_than(&self, other: &Self) -> bool {
+//         self.index < other.index
+//     }
 
-    fn equal(&self, other: &Self) -> bool {
-        self.index_witness == other.index_witness
-            && self.value_column1_witness == other.value_column1_witness
-            && self.value_column2_witness == other.value_column2_witness
-            && self.index == other.index
-            && self.record_witness == other.record_witness
-            && self.gate_index == other.gate_index
-    }
-}
+//     fn equal(&self, other: &Self) -> bool {
+//         self.index_witness == other.index_witness
+//             && self.value_column1_witness == other.value_column1_witness
+//             && self.value_column2_witness == other.value_column2_witness
+//             && self.index == other.index
+//             && self.record_witness == other.record_witness
+//             && self.gate_index == other.gate_index
+//     }
+// }
 
-impl PartialEq for RomRecord {
-    fn eq(&self, other: &Self) -> bool {
-        self.equal(other)
-    }
-}
+// impl PartialEq for RomRecord {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.equal(other)
+//     }
+// }
 
-impl Eq for RomRecord {}
+// impl Eq for RomRecord {}
 
-impl PartialOrd for RomRecord {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
+// impl PartialOrd for RomRecord {
+//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+//         Some(self.cmp(other))
+//     }
+// }
 
-impl Ord for RomRecord {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        if self.less_than(other) {
-            Ordering::Less
-        } else if self.equal(other) {
-            Ordering::Equal
-        } else {
-            Ordering::Greater
-        }
-    }
-}
+// impl Ord for RomRecord {
+//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+//         if self.less_than(other) {
+//             Ordering::Less
+//         } else if self.equal(other) {
+//             Ordering::Equal
+//         } else {
+//             Ordering::Greater
+//         }
+//     }
+// }
 
 #[derive(Default)]
-pub(crate) struct RomTranscript {
+pub(crate) struct RomTranscript<F: Clone> {
     // Contains the value of each index of the array
     pub(crate) state: Vec<[u32; 2]>,
 
@@ -1311,7 +1314,7 @@ pub(crate) struct RomTranscript {
     // + The constant witness with the index
     // + The value in the memory slot
     // + The actual index value
-    pub(crate) records: Vec<RomRecord>,
+    pub(crate) records: Vec<RomRecord<F>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
