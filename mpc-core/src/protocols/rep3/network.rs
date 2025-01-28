@@ -271,7 +271,7 @@ impl Rep3MpcNet {
         let net_handler = runtime.block_on(MpcNetworkHandler::init(config))?;
         let queue = runtime.block_on(MpcNetworkHandler::queue(net_handler, queue_size))?;
 
-        let mut channels = queue.get_channels()?;
+        let mut channels = runtime.block_on(queue.get_channels())?;
         let chan_next = channels
             .remove(&id.next_id().into())
             .context("while removing channel")?;
@@ -369,12 +369,15 @@ impl Rep3Network for Rep3MpcNet {
     }
 
     fn fork(&mut self) -> std::io::Result<Self> {
-        let mut channels = self.queue.get_channels().map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "could not get channels from queue, channel died",
-            )
-        })?;
+        let mut channels = self
+            .runtime
+            .block_on(self.queue.get_channels())
+            .map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "could not get channels from queue, channel died",
+                )
+            })?;
         let chan_next = channels
             .remove(&self.id.next_id().into())
             .expect("to find next channel");

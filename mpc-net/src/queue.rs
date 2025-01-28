@@ -29,10 +29,12 @@ impl ChannelQueue {
     }
 
     /// Get a channels from the queue. New connections will be created in the background.
-    pub fn get_channels(&self) -> eyre::Result<HashMap<usize, ChannelHandle<Bytes, BytesMut>>> {
+    pub async fn get_channels(
+        &self,
+    ) -> eyre::Result<HashMap<usize, ChannelHandle<Bytes, BytesMut>>> {
         let (send, recv) = oneshot::channel();
-        self.sender.blocking_send(QueueJob::GetChannels(send))?;
-        Ok(recv.blocking_recv()?)
+        self.sender.send(QueueJob::GetChannels(send)).await?;
+        Ok(recv.await?)
     }
 }
 
