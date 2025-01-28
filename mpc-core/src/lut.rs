@@ -18,7 +18,7 @@ pub trait LookupTableProvider<F: PrimeField> {
     /// Initializes a LUT from the provided secret values.
     fn init_private(&self, values: Vec<Self::SecretShare>) -> Self::LutType;
 
-    /// Initializes a LUT from the provided secret values.
+    /// Initializes a LUT from the provided public values.
     fn init_public(&self, values: Vec<F>) -> Self::LutType;
 
     /// Reads a value from the LUT associated with the provided index. As we work over secret-shared

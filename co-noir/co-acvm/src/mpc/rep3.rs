@@ -731,14 +731,15 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn slice_and_get_and_rotate_values<const BITS_PER_SLICE: u64>(
+    fn slice_and_get_and_rotate_values(
         &mut self,
         input1: Self::ArithmeticShare,
         input2: Self::ArithmeticShare,
-        bases: &[u64],
+        basis_bits: usize,
+        total_bitsize: usize,
         rotation: usize,
     ) -> std::io::Result<(
-        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
@@ -746,42 +747,42 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             input1,
             input2,
             &mut self.io_context0,
-            bases[0].ilog2() as usize,
+            basis_bits,
             rotation,
-            BITS_PER_SLICE.try_into().unwrap(),
+            total_bitsize,
         )?;
         let num_outputs = result.len();
-        let mut chunks = result.chunks(num_outputs / 3);
-        let key_a_slices = chunks
-            .next()
-            .unwrap()
+        debug_assert_eq!(num_outputs % 3, 0);
+        let size = num_outputs / 3;
+        let key_a_slices = result
             .iter()
+            .take(size)
             .map(|a| Rep3AcvmType::Shared(*a))
             .collect();
-        let key_b_slices = chunks
-            .next()
-            .unwrap()
+        let key_b_slices = result
             .iter()
+            .skip(size)
+            .take(size)
             .map(|a| Rep3AcvmType::Shared(*a))
             .collect();
-        let rotation_values = chunks
-            .next()
-            .unwrap()
-            .iter()
-            .map(|a| (Rep3AcvmType::Shared(*a), Rep3AcvmType::Public(F::zero())))
+        let rotation_values = result
+            .into_iter()
+            .skip(2 * size)
+            .map(|a| Rep3AcvmType::Shared(a))
             .collect();
 
         Ok((rotation_values, key_a_slices, key_b_slices))
     }
 
-    fn slice_and_get_xor_rotate_values<const BITS_PER_SLICE: u64>(
+    fn slice_and_get_xor_rotate_values(
         &mut self,
         input1: Self::ArithmeticShare,
         input2: Self::ArithmeticShare,
-        bases: &[u64],
+        basis_bits: usize,
+        total_bitsize: usize,
         rotation: usize,
     ) -> std::io::Result<(
-        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
@@ -789,29 +790,28 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             input1,
             input2,
             &mut self.io_context0,
-            bases[0].ilog2() as usize,
+            basis_bits,
             rotation,
-            BITS_PER_SLICE.try_into().unwrap(),
+            total_bitsize,
         )?;
         let num_outputs = result.len();
-        let mut chunks = result.chunks(num_outputs / 3);
-        let key_a_slices = chunks
-            .next()
-            .unwrap()
+        debug_assert_eq!(num_outputs % 3, 0);
+        let size = num_outputs / 3;
+        let key_a_slices = result
             .iter()
+            .take(size)
             .map(|a| Rep3AcvmType::Shared(*a))
             .collect();
-        let key_b_slices = chunks
-            .next()
-            .unwrap()
+        let key_b_slices = result
             .iter()
+            .skip(size)
+            .take(size)
             .map(|a| Rep3AcvmType::Shared(*a))
             .collect();
-        let rotation_values = chunks
-            .next()
-            .unwrap()
-            .iter()
-            .map(|a| (Rep3AcvmType::Shared(*a), Rep3AcvmType::Public(F::zero())))
+        let rotation_values = result
+            .into_iter()
+            .skip(2 * size)
+            .map(|a| Rep3AcvmType::Shared(a))
             .collect();
 
         Ok((rotation_values, key_a_slices, key_b_slices))
