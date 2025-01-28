@@ -304,8 +304,8 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         let memory_write_records = plain_key.memory_write_records.to_owned();
         let final_active_wire_idx = plain_key.final_active_wire_idx;
 
-        if shares.len() != circuit_size as usize * 4 {
-            return Err(eyre::eyre!("Share length is not 4 times circuit size"));
+        if shares.len() != circuit_size as usize * 6 {
+            return Err(eyre::eyre!("Share length is not 6 times circuit size"));
         }
 
         let mut polynomials = Polynomials::default();

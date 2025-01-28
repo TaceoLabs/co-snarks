@@ -72,6 +72,10 @@ impl<T: Default> ProverWitnessEntities<T> {
     // const Z_PERM: usize = 4; // column 4 (computed by prover)
     // const LOOKUP_INVERSES: usize = 5; // column 5 (computed by prover);
 
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.elements.iter()
+    }
+
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.elements.iter_mut()
     }

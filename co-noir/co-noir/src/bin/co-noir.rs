@@ -309,7 +309,6 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     let witness_entities = proving_key
         .polynomials
         .witness
-        .get_wires()
         .iter()
         .flat_map(|el| el.iter().cloned())
         .collect::<Vec<_>>();
@@ -656,7 +655,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Party {}: Translating shares took {} ms", id, duration_ms);
 
-    if translated_shares.len() != 4 * proving_key.circuit_size as usize {
+    if translated_shares.len() != 6 * proving_key.circuit_size as usize {
         return Err(eyre!("Invalid number of shares translated"));
     };
 
