@@ -399,7 +399,6 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    // TACEO TODO adapt this function once the calculate_table_index returns an ACVM type
     pub fn construct_lookup_read_counts<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         driver: &mut T,
         witness: &mut [Polynomial<T::ArithmeticShare>; 2],

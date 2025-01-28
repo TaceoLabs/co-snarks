@@ -394,7 +394,7 @@ impl<F: PrimeField> Plookup<F> {
         match multi_table.id {
             MultiTableId::Uint32Xor => {
                 let values =
-                    T::slice_and_get_xor_rotate_values::<64>(driver, key_a, key_b, bases, 0)?;
+                    T::slice_and_get_xor_rotate_values::<32>(driver, key_a, key_b, bases, 0)?;
                 results.extend(values.0);
                 key_a_slices.extend(values.1);
                 key_b_slices.extend(values.2);
@@ -402,7 +402,7 @@ impl<F: PrimeField> Plookup<F> {
 
             MultiTableId::Uint32And => {
                 let values =
-                    T::slice_and_get_and_rotate_values::<64>(driver, key_a, key_b, bases, 0)?;
+                    T::slice_and_get_and_rotate_values::<32>(driver, key_a, key_b, bases, 0)?;
                 results.extend(values.0);
                 key_a_slices.extend(values.1);
                 key_b_slices.extend(values.2);
@@ -552,136 +552,69 @@ impl<F: PrimeField> Plookup<F> {
         let a = key_a.get_value(builder, driver);
         let b = key_b.get_value(builder, driver);
         let mut lookup = ReadData::<FieldCT<F>>::default();
-        if T::is_shared(&a) && T::is_shared(&b) {
-            let a = T::get_shared(&a).expect("Already checked it is shared");
-            let b = T::get_shared(&b).expect("Already checked it is shared");
-            let lookup_data = Self::get_lookup_accumulators(
-                builder,
-                driver,
-                id.clone(),
-                a.into(),
-                b.into(),
-                is_2_to_1_lookup,
-            )?;
-            let is_key_a_constant = key_a.is_constant();
-            let length = lookup_data[ColumnIdx::C1].len();
-            if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
-                for i in 0..length {
-                    lookup[ColumnIdx::C1].push(FieldCT::zero_with_additive(
-                        T::get_public(&lookup_data[ColumnIdx::C1][i])
-                            .expect("Constant should be public"),
-                    ));
-                    lookup[ColumnIdx::C2].push(FieldCT::zero_with_additive(
-                        T::get_public(&lookup_data[ColumnIdx::C2][i])
-                            .expect("Constant should be public"),
-                    ));
-                    lookup[ColumnIdx::C3].push(FieldCT::zero_with_additive(
-                        T::get_public(&lookup_data[ColumnIdx::C3][i])
-                            .expect("Constant should be public"),
-                    ));
-                }
-            } else {
-                let lhs_index = key_a.witness_index;
-                let rhs_index = key_b.witness_index;
-                // If only one lookup key is constant, we need to instantiate it as a real witness  lookup_data[ColumnIdx::C1][i]
-                if is_key_a_constant {
-                    panic!("Apparently constants can be shared???")
-                    // lhs_index = builder.put_constant_variable(a);
-                }
-                if key_b.is_constant() && is_2_to_1_lookup {
-                    panic!("Apparently constants can be shared???")
-                    // rhs_index = builder.put_constant_variable(b);
-                }
 
-                let mut key_b_witness = Some(rhs_index);
+        let lookup_data = Self::get_lookup_accumulators(
+            builder,
+            driver,
+            id.clone(),
+            a.to_owned(),
+            b.to_owned(),
+            is_2_to_1_lookup,
+        )?;
 
-                if rhs_index == FieldCT::<F>::IS_CONSTANT {
-                    key_b_witness = None;
-                }
-                let accumulator_witnesses = builder.create_gates_from_plookup_accumulators(
-                    id,
-                    lookup_data,
-                    lhs_index,
-                    key_b_witness,
-                );
-
-                for i in 0..length {
-                    lookup[ColumnIdx::C1].push(FieldCT::<F>::from_witness_index(
-                        accumulator_witnesses[ColumnIdx::C1][i],
-                    ));
-                    lookup[ColumnIdx::C2].push(FieldCT::<F>::from_witness_index(
-                        accumulator_witnesses[ColumnIdx::C2][i],
-                    ));
-                    lookup[ColumnIdx::C3].push(FieldCT::<F>::from_witness_index(
-                        accumulator_witnesses[ColumnIdx::C3][i],
-                    ));
-                }
-            }
-        } else if !T::is_shared(&a) && !T::is_shared(&b) {
-            let a = T::get_public(&a).expect("Already checked it is public");
-            let b = T::get_public(&b).expect("Already checked it is public");
-            let lookup_data = Self::get_lookup_accumulators(
-                builder,
-                driver,
-                id.clone(),
-                a.into(),
-                b.into(),
-                is_2_to_1_lookup,
-            )?;
-            let is_key_a_constant = key_a.is_constant();
-            let length = lookup_data[ColumnIdx::C1].len();
-            if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
-                for i in 0..length {
-                    lookup[ColumnIdx::C1].push(FieldCT::zero_with_additive(
-                        T::get_public(&lookup_data[ColumnIdx::C1][i])
-                            .expect("Constant should be public"),
-                    ));
-                    lookup[ColumnIdx::C2].push(FieldCT::zero_with_additive(
-                        T::get_public(&lookup_data[ColumnIdx::C2][i])
-                            .expect("Constant should be public"),
-                    ));
-                    lookup[ColumnIdx::C3].push(FieldCT::zero_with_additive(
-                        T::get_public(&lookup_data[ColumnIdx::C3][i])
-                            .expect("Constant should be public"),
-                    ));
-                }
-            } else {
-                let mut lhs_index = key_a.witness_index;
-                let mut rhs_index = key_b.witness_index;
-                // If only one lookup key is constant, we need to instantiate it as a real witness
-                if is_key_a_constant {
-                    lhs_index = builder.put_constant_variable(a);
-                }
-                if key_b.is_constant() && is_2_to_1_lookup {
-                    rhs_index = builder.put_constant_variable(b);
-                }
-
-                let mut key_b_witness = Some(rhs_index);
-
-                if rhs_index == FieldCT::<F>::IS_CONSTANT {
-                    key_b_witness = None;
-                }
-                let accumulator_witnesses = builder.create_gates_from_plookup_accumulators(
-                    id,
-                    lookup_data,
-                    lhs_index,
-                    key_b_witness,
-                );
-
-                for i in 0..length {
-                    lookup[ColumnIdx::C1].push(FieldCT::<F>::from_witness_index(
-                        accumulator_witnesses[ColumnIdx::C1][i],
-                    ));
-                    lookup[ColumnIdx::C2].push(FieldCT::<F>::from_witness_index(
-                        accumulator_witnesses[ColumnIdx::C2][i],
-                    ));
-                    lookup[ColumnIdx::C3].push(FieldCT::<F>::from_witness_index(
-                        accumulator_witnesses[ColumnIdx::C3][i],
-                    ));
-                }
+        let is_key_a_constant = key_a.is_constant();
+        let length = lookup_data[ColumnIdx::C1].len();
+        if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
+            for i in 0..length {
+                lookup[ColumnIdx::C1].push(FieldCT::zero_with_additive(
+                    T::get_public(&lookup_data[ColumnIdx::C1][i])
+                        .expect("Constant should be public"),
+                ));
+                lookup[ColumnIdx::C2].push(FieldCT::zero_with_additive(
+                    T::get_public(&lookup_data[ColumnIdx::C2][i])
+                        .expect("Constant should be public"),
+                ));
+                lookup[ColumnIdx::C3].push(FieldCT::zero_with_additive(
+                    T::get_public(&lookup_data[ColumnIdx::C3][i])
+                        .expect("Constant should be public"),
+                ));
             }
         } else {
-            todo!("implement mixed case")
+            let mut lhs_index = key_a.witness_index;
+            let mut rhs_index = key_b.witness_index;
+            // If only one lookup key is constant, we need to instantiate it as a real witness  lookup_data[ColumnIdx::C1][i]
+            if is_key_a_constant {
+                lhs_index = builder
+                    .put_constant_variable(T::get_public(&a).expect("Constant should be public"));
+            }
+            if key_b.is_constant() && is_2_to_1_lookup {
+                rhs_index = builder
+                    .put_constant_variable(T::get_public(&b).expect("Constant should be public"));
+            }
+
+            let mut key_b_witness = Some(rhs_index);
+
+            if rhs_index == FieldCT::<F>::IS_CONSTANT {
+                key_b_witness = None;
+            }
+            let accumulator_witnesses = builder.create_gates_from_plookup_accumulators(
+                id,
+                lookup_data,
+                lhs_index,
+                key_b_witness,
+            );
+
+            for i in 0..length {
+                lookup[ColumnIdx::C1].push(FieldCT::<F>::from_witness_index(
+                    accumulator_witnesses[ColumnIdx::C1][i],
+                ));
+                lookup[ColumnIdx::C2].push(FieldCT::<F>::from_witness_index(
+                    accumulator_witnesses[ColumnIdx::C2][i],
+                ));
+                lookup[ColumnIdx::C3].push(FieldCT::<F>::from_witness_index(
+                    accumulator_witnesses[ColumnIdx::C3][i],
+                ));
+            }
         }
         Ok(lookup)
     }
