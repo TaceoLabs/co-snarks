@@ -47,10 +47,7 @@ where
     Standard: Distribution<T>,
 {
     let mut g = kogge_stone_loop(p.to_owned(), g.to_owned(), io_context)?;
-    let c = Rep3RingShare {
-        a: RingElement(Bit::new(g.a.get_bit(T::K - 1).0 == T::one())),
-        b: RingElement(Bit::new(g.b.get_bit(T::K - 1).0 == T::one())),
-    };
+    let c = g.get_bit(T::K - 1);
     g <<= 1;
     g ^= p;
     Ok((g, c))

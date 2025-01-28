@@ -16,6 +16,7 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::arithmetic;
     use mpc_core::protocols::rep3_ring::casts;
     use mpc_core::protocols::rep3_ring::conversion;
+    use mpc_core::protocols::rep3_ring::gadgets;
     use mpc_core::protocols::rep3_ring::ring::bit::Bit;
     use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
@@ -1897,5 +1898,280 @@ mod ring_share {
     #[test]
     fn rep3_bin_div_by_shared_via_yao() {
         apply_to_all!(rep3_bin_div_by_shared_via_yao_t, [u8, u16, u32, u64, u128]);
+    }
+
+    fn rep3_rand_ohv_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let test_network = Rep3TestNetwork::default();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                // First run, get one of size K
+                let res = gadgets::ohv::rand_ohv::<T, _>(T::K, &mut rep3).unwrap();
+                tx.send(res).unwrap();
+
+                // Second run, get one of size K/2
+                let res = gadgets::ohv::rand_ohv::<T, _>(T::K >> 1, &mut rep3).unwrap();
+                tx.send(res)
+            });
+        }
+
+        // Check first run
+        let (result1, bits1) = rx1.recv().unwrap();
+        let (result2, bits2) = rx2.recv().unwrap();
+        let (result3, bits3) = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_element_binary(result1, result2, result3);
+        let is_bits = rep3_ring::combine_ring_elements(&bits1, &bits2, &bits3);
+        assert_eq!(is_bits.len(), 1 << T::K);
+        let index: usize = is_result.0.try_into().unwrap();
+        for (i, el) in is_bits.into_iter().enumerate() {
+            if i == index {
+                assert!(el.0.convert())
+            } else {
+                assert!(!el.0.convert())
+            }
+        }
+
+        // Check second run
+        let (result1, bits1) = rx1.recv().unwrap();
+        let (result2, bits2) = rx2.recv().unwrap();
+        let (result3, bits3) = rx3.recv().unwrap();
+        let is_result = rep3_ring::combine_ring_element_binary(result1, result2, result3);
+        let is_bits = rep3_ring::combine_ring_elements(&bits1, &bits2, &bits3);
+        assert_eq!(is_bits.len(), 1 << (T::K >> 1));
+        let index: usize = is_result.0.try_into().unwrap();
+        for (i, el) in is_bits.into_iter().enumerate() {
+            if i == index {
+                assert!(el.0.convert())
+            } else {
+                assert!(!el.0.convert())
+            }
+        }
+    }
+
+    #[test]
+    fn rep3_rand_ohv_test() {
+        apply_to_all!(rep3_rand_ohv_test_t, [u8, u16]);
+    }
+
+    fn rep3_lut_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let mut rng = thread_rng();
+        for k in 1..T::K {
+            let n = 1 << k;
+            let lut = (0..n)
+                .map(|_| ark_bn254::Fr::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let x = rng.gen_range::<usize, _>(0..n);
+            let x_ = RingElement(T::try_from(x as u64).unwrap());
+            let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
+            let should_result_f = lut[x].to_owned();
+
+            let test_network = Rep3TestNetwork::default();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+
+            std::thread::scope(|s| {
+                let lut_ = &lut;
+                for (net, tx, x) in izip!(
+                    test_network.get_party_networks().into_iter(),
+                    [tx1, tx2, tx3],
+                    x_shares.into_iter(),
+                ) {
+                    s.spawn(move || {
+                        let mut rep3 = IoContext::init(net).unwrap();
+
+                        let res = gadgets::lut::read_public_lut(lut_, x, &mut rep3).unwrap();
+                        tx.send(res)
+                    });
+                }
+            });
+
+            let result1 = rx1.recv().unwrap();
+            let result2 = rx2.recv().unwrap();
+            let result3 = rx3.recv().unwrap();
+            let is_result = rep3::combine_binary_element(result1, result2, result3);
+            let should_result = should_result_f.into();
+            assert_eq!(is_result, should_result);
+            let is_result_f: ark_bn254::Fr = is_result.into();
+            assert_eq!(is_result_f, should_result_f);
+        }
+    }
+
+    #[test]
+    fn rep3_lut_test() {
+        apply_to_all!(rep3_lut_test_t, [u8, u16]);
+    }
+
+    fn rep3_lut_low_depth_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let mut rng = thread_rng();
+        for k in 1..T::K {
+            let n = 1 << k;
+            let lut = (0..n)
+                .map(|_| ark_bn254::Fr::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let x = rng.gen_range::<usize, _>(0..n);
+            let x_ = RingElement(T::try_from(x as u64).unwrap());
+            let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
+            let should_result_f = lut[x].to_owned();
+
+            let test_network = Rep3TestNetwork::default();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+
+            std::thread::scope(|s| {
+                let lut_ = &lut;
+                for (net, tx, x) in izip!(
+                    test_network.get_party_networks().into_iter(),
+                    [tx1, tx2, tx3],
+                    x_shares.into_iter(),
+                ) {
+                    s.spawn(move || {
+                        let mut rep3 = IoContext::init(net).unwrap();
+                        let mut forked = rep3.fork().unwrap();
+
+                        let res = gadgets::lut::read_public_lut_low_depth(
+                            lut_,
+                            x,
+                            &mut rep3,
+                            &mut forked,
+                        )
+                        .unwrap();
+                        tx.send(res)
+                    });
+                }
+            });
+
+            let result1 = rx1.recv().unwrap();
+            let result2 = rx2.recv().unwrap();
+            let result3 = rx3.recv().unwrap();
+            let is_result = result1 ^ result2 ^ result3;
+            let should_result = should_result_f.into();
+            assert_eq!(is_result, should_result);
+            let is_result_f: ark_bn254::Fr = is_result.into();
+            assert_eq!(is_result_f, should_result_f);
+        }
+    }
+
+    #[test]
+    fn rep3_lut_low_depth_test() {
+        apply_to_all!(rep3_lut_low_depth_test_t, [u8, u16]);
+    }
+
+    fn rep3_shared_lut_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let mut rng = thread_rng();
+        for k in 1..T::K {
+            let n = 1 << k;
+            let lut = (0..n)
+                .map(|_| ark_bn254::Fr::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let x = rng.gen_range::<usize, _>(0..n);
+            let x_ = RingElement(T::try_from(x as u64).unwrap());
+            let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
+            let lut_shares = rep3::share_field_elements(&lut, &mut rng);
+            let should_result = lut[x].to_owned();
+
+            let test_network = Rep3TestNetwork::default();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+
+            for (net, tx, x, lut) in izip!(
+                test_network.get_party_networks().into_iter(),
+                [tx1, tx2, tx3],
+                x_shares.into_iter(),
+                lut_shares.into_iter()
+            ) {
+                thread::spawn(move || {
+                    let mut rep3 = IoContext::init(net).unwrap();
+
+                    let res = gadgets::lut::read_shared_lut(&lut, x, &mut rep3).unwrap();
+                    tx.send(res)
+                });
+            }
+
+            let result1 = rx1.recv().unwrap();
+            let result2 = rx2.recv().unwrap();
+            let result3 = rx3.recv().unwrap();
+            let is_result = result1 + result2 + result3;
+            assert_eq!(is_result, should_result);
+        }
+    }
+
+    #[test]
+    fn rep3_shared_lut_test() {
+        apply_to_all!(rep3_shared_lut_test_t, [u8, u16]);
+    }
+
+    fn rep3_write_lut_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let mut rng = thread_rng();
+        for k in 1..T::K {
+            let n = 1 << k;
+            let lut = (0..n)
+                .map(|_| ark_bn254::Fr::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let x = rng.gen_range::<usize, _>(0..n);
+            let x_ = RingElement(T::try_from(x as u64).unwrap());
+            let y = ark_bn254::Fr::rand(&mut rng);
+            let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
+            let lut_shares = rep3::share_field_elements(&lut, &mut rng);
+            let y_shares = rep3::share_field_element(y, &mut rng);
+            let mut should_result = lut;
+            should_result[x] = y;
+
+            let test_network = Rep3TestNetwork::default();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+
+            for (net, tx, x, y, mut lut) in izip!(
+                test_network.get_party_networks().into_iter(),
+                [tx1, tx2, tx3],
+                x_shares.into_iter(),
+                y_shares.into_iter(),
+                lut_shares.into_iter()
+            ) {
+                thread::spawn(move || {
+                    let mut rep3 = IoContext::init(net).unwrap();
+
+                    gadgets::lut::write_lut(&y, &mut lut, x, &mut rep3).unwrap();
+                    tx.send(lut)
+                });
+            }
+
+            let result1 = rx1.recv().unwrap();
+            let result2 = rx2.recv().unwrap();
+            let result3 = rx3.recv().unwrap();
+            let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+            assert_eq!(is_result, should_result);
+        }
+    }
+
+    #[test]
+    fn rep3_write_lut_test() {
+        apply_to_all!(rep3_write_lut_test_t, [u8, u16]);
     }
 }

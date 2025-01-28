@@ -87,7 +87,7 @@ where
                     "tried to access block {} but not present",
                     block_id.0
                 ))?;
-            let value = self.driver.read_lut_by_acvm_type(&index, lut)?;
+            let value = self.driver.read_lut_by_acvm_type(index, lut)?;
             if let Some(predicate) = predicate {
                 let predicate = predicate?;
                 if T::is_public_zero(&predicate) {

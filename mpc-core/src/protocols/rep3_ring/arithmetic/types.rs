@@ -3,7 +3,7 @@ use crate::protocols::{
         id::PartyID,
         network::{IoContext, Rep3Network},
     },
-    rep3_ring::ring::{int_ring::IntRing2k, ring_impl::RingElement},
+    rep3_ring::ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
 use num_traits::Zero;
 use rand::{distributions::Standard, prelude::Distribution};
@@ -73,6 +73,13 @@ impl<T: IntRing2k> Rep3RingShare<T> {
             PartyID::ID0 => Self::new_ring(*val, RingElement::zero()),
             PartyID::ID1 => Self::new_ring(RingElement::zero(), *val),
             PartyID::ID2 => Self::zero_share(),
+        }
+    }
+
+    pub(crate) fn get_bit(&self, index: usize) -> Rep3RingShare<Bit> {
+        Rep3RingShare {
+            a: RingElement(Bit::new(self.a.get_bit(index).0 == T::one())),
+            b: RingElement(Bit::new(self.b.get_bit(index).0 == T::one())),
         }
     }
 }

@@ -1,11 +1,9 @@
-use std::collections::HashMap;
-use std::io;
-use std::marker::PhantomData;
-
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
 use mpc_core::lut::{LookupTableProvider, PlainLookupTableProvider};
 use num_bigint::BigUint;
+use std::io;
+use std::marker::PhantomData;
 
 use super::NoirWitnessExtensionProtocol;
 
@@ -120,29 +118,33 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(-c / q_l)
     }
 
-    fn init_lut_by_acvm_type(&mut self, values: Vec<Self::AcvmType>) -> HashMap<F, F> {
-        self.plain_lut
-            .init_map(values.into_iter().enumerate().map(|(idx, value)| {
-                let promoted_idx = F::from(u64::try_from(idx).expect("usize fits into u64"));
-                (promoted_idx, value)
-            }))
+    fn init_lut_by_acvm_type(
+        &mut self,
+        values: Vec<Self::AcvmType>,
+    ) -> <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType {
+        self.plain_lut.init_public(values)
     }
 
     fn read_lut_by_acvm_type(
         &mut self,
-        index: &Self::AcvmType,
-        lut: &HashMap<F, F>,
+        index: Self::AcvmType,
+        lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> io::Result<F> {
-        self.plain_lut.get_from_lut(*index, lut)
+        let mut a = ();
+        let mut b = ();
+        self.plain_lut.get_from_lut(index, lut, &mut a, &mut b)
     }
 
     fn write_lut_by_acvm_type(
         &mut self,
         index: Self::AcvmType,
         value: Self::AcvmType,
-        map: &mut HashMap<F, F>,
+        lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> io::Result<()> {
-        self.plain_lut.write_to_lut(index, value, map)
+        let mut a = ();
+        let mut b = ();
+        self.plain_lut
+            .write_to_lut(index, value, lut, &mut a, &mut b)
     }
 
     fn is_shared(_: &Self::AcvmType) -> bool {
