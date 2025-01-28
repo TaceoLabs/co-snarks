@@ -684,7 +684,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             let b_chunk = FieldCT::from_witness(right_chunk, self);
 
             let result_chunk = if is_xor_gate {
-                Plookup::<P::ScalarField>::read_from_2_to_1_table(
+                Plookup::read_from_2_to_1_table(
                     self,
                     driver,
                     MultiTableId::Uint32Xor,
@@ -692,7 +692,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                     b_chunk.to_owned(),
                 )?
             } else {
-                Plookup::<P::ScalarField>::read_from_2_to_1_table(
+                Plookup::read_from_2_to_1_table(
                     self,
                     driver,
                     MultiTableId::Uint32And,

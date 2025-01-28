@@ -125,16 +125,6 @@ impl GarbledCircuits {
         Ok(c)
     }
 
-    /// Returns a constant bundle of 0s and 1s
-    fn bin_constant_bundle<G: FancyBinary + FancyBinaryConstant>(
-        g: &mut G,
-        xs: &[bool],
-    ) -> Result<Vec<G::Item>, G::Error> {
-        xs.iter()
-            .map(|&x| if x { g.const_one() } else { g.const_zero() })
-            .collect::<Result<Vec<G::Item>, G::Error>>()
-    }
-
     /// Binary addition. Returns the result and the carry.
     #[expect(clippy::type_complexity)]
     fn bin_addition<G: FancyBinary>(
@@ -1777,7 +1767,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Slices field elements in chunks, then XORs the slices and rotates them, a specific circuit for the plookup accumulator in the builder. The field elements are represented as two bitdecompositions wires_x1, wires_x2 which need to be split first to get the two inputs. The output is composed using wires_c. Base is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    /// Slices field elements in chunks, then XORs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as two bitdecompositions wires_x1, wires_x2 which need to be split first to get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
     pub(crate) fn slice_and_get_xor_rotate_values_from_key_many<
         G: FancyBinary + FancyBinaryConstant,
         F: PrimeField,
@@ -1786,7 +1776,7 @@ impl GarbledCircuits {
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
-        base: usize,
+        base_bit: usize,
         rotation: usize,
         total_output_bitlen_per_field: usize,
     ) -> Result<BinaryBundle<G::Item>, G::Error> {
@@ -1794,14 +1784,14 @@ impl GarbledCircuits {
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
         debug_assert_eq!(length % 2, 0);
-        let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base);
+        let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base_bit);
         let num_inputs = (length / 2) / input_bitlen;
 
         let total_output_elements = 3 * num_decomps_per_field * num_inputs;
         debug_assert_eq!(wires_c.size(), total_output_elements * input_bitlen);
         debug_assert_eq!((length / 2) % input_bitlen, 0);
 
-        let mut results = Vec::with_capacity(wires_c.size() / 3);
+        let mut results = Vec::with_capacity(wires_c.size());
 
         for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
             wires_x1.wires()[0..length / 2].chunks(input_bitlen),
@@ -1819,7 +1809,7 @@ impl GarbledCircuits {
                 chunk_y1,
                 chunk_y2,
                 chunk_c,
-                base,
+                base_bit,
                 rotation,
                 total_output_bitlen_per_field,
             )?;
@@ -1829,7 +1819,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Slices field elements in chunks, then ANDs the slices and rotates them, a specific circuit for the plookup accumulator in the builder. The field elements are represented as two bitdecompositions wires_x1, wires_x2 which need to be split first to get the two sets of inputs. The output is composed using wires_c. Base is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    /// Slices field elements in chunks, then ANDs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as two bitdecompositions wires_x1, wires_x2 which need to be split first to get the two sets of inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
     pub(crate) fn slice_and_get_and_rotate_values_from_key_many<
         G: FancyBinary + FancyBinaryConstant,
         F: PrimeField,
@@ -1838,7 +1828,7 @@ impl GarbledCircuits {
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
-        base: usize,
+        base_bit: usize,
         rotation: usize,
         total_output_bitlen_per_field: usize,
     ) -> Result<BinaryBundle<G::Item>, G::Error> {
@@ -1846,14 +1836,14 @@ impl GarbledCircuits {
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
         debug_assert_eq!(length % 2, 0);
-        let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base);
+        let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base_bit);
         let num_inputs = (length / 2) / input_bitlen;
 
         let total_output_elements = 3 * num_decomps_per_field * num_inputs;
         debug_assert_eq!(wires_c.size(), total_output_elements * input_bitlen);
         debug_assert_eq!((length / 2) % input_bitlen, 0);
 
-        let mut results = Vec::with_capacity(wires_c.size() / 3);
+        let mut results = Vec::with_capacity(wires_c.size());
 
         for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
             wires_x1.wires()[0..length / 2].chunks(input_bitlen),
@@ -1871,7 +1861,7 @@ impl GarbledCircuits {
                 chunk_y1,
                 chunk_y2,
                 chunk_c,
-                base,
+                base_bit,
                 rotation,
                 total_output_bitlen_per_field,
             )?;
@@ -1881,7 +1871,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Slice two field elements in chunks, then XORs the slices and rotates them, a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two sets of inputs. The output is composed using wires_c. Base is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    /// Slice two field elements in chunks, then XORs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two sets of inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn slice_and_get_xor_rotate_values_from_key<
         G: FancyBinary + FancyBinaryConstant,
@@ -1893,68 +1883,69 @@ impl GarbledCircuits {
         y1s: &[G::Item],
         y2s: &[G::Item],
         wires_c: &[G::Item],
-        base: usize,
+        base_bit: usize,
         rotation: usize,
         total_output_bitlen_per_field: usize,
     ) -> Result<Vec<G::Item>, G::Error> {
-        let input_bitlen = x1s.len();
-        let length_c = wires_c.len();
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base_bit);
+        debug_assert_eq!(x1s.len(), input_bitlen);
+        debug_assert_eq!(x2s.len(), input_bitlen);
+        debug_assert_eq!(y1s.len(), input_bitlen);
+        debug_assert_eq!(y2s.len(), input_bitlen);
+        debug_assert_eq!(wires_c.len(), 3 * input_bitlen * num_decomps_per_field);
+
+        // Combine the inputs
         let input_bits_1 =
             Self::adder_mod_p_with_output_size::<_, F>(g, x1s, x2s, total_output_bitlen_per_field)?;
-
         let input_bits_2 =
             Self::adder_mod_p_with_output_size::<_, F>(g, y1s, y2s, total_output_bitlen_per_field)?;
-        let mut results = Vec::with_capacity(length_c / 3);
+
+        let mut results = Vec::with_capacity(input_bitlen * num_decomps_per_field);
         let mut rands = wires_c.chunks(input_bitlen);
 
-        let res: Vec<G::Item> = input_bits_1
+        // Perform the actual XOR
+        let res = input_bits_1
             .iter()
             .zip(input_bits_2.iter())
             .map(|(x, y)| g.xor(x, y))
             .collect::<Result<Vec<_>, _>>()?;
-        let const_zeros =
-            Self::bin_constant_bundle(g, &vec![false; total_output_bitlen_per_field - base])?;
-        let mut padded_res_chunks = Vec::new();
 
-        for inp in res.chunks(base) {
-            padded_res_chunks.extend_from_slice(inp);
-            padded_res_chunks.extend_from_slice(&const_zeros);
-            if inp.len() != base {
-                let additional_padding =
-                    Self::bin_constant_bundle(g, &vec![false; base - inp.len()])?;
-                padded_res_chunks.extend_from_slice(&additional_padding);
+        // Compose the inputs
+        for inp in input_bits_1
+            .chunks(base_bit)
+            .chain(input_bits_2.chunks(base_bit))
+        {
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                inp,
+                rands.next().unwrap(),
+            )?);
+        }
+
+        // Compose the results
+        for xs in res.chunks(base_bit) {
+            if rotation == 0 {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    xs,
+                    rands.next().unwrap(),
+                )?);
+            } else {
+                let mut rotated = xs.to_owned();
+                rotated.resize(64, g.const_zero()?);
+                rotated.rotate_left(rotation);
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    &rotated,
+                    rands.next().unwrap(),
+                )?);
             }
-        }
-
-        for inp_1 in input_bits_1.chunks(base) {
-            results.extend(Self::compose_field_element::<_, F>(
-                g,
-                inp_1,
-                rands.next().unwrap(),
-            )?);
-        }
-        for inp_2 in input_bits_2.chunks(base) {
-            results.extend(Self::compose_field_element::<_, F>(
-                g,
-                inp_2,
-                rands.next().unwrap(),
-            )?);
-        }
-        for xs in padded_res_chunks.chunks_mut(total_output_bitlen_per_field) {
-            xs.reverse();
-
-            xs.rotate_right(rotation);
-            xs.reverse();
-            results.extend(Self::compose_field_element::<_, F>(
-                g,
-                xs,
-                rands.next().unwrap(),
-            )?);
         }
         Ok(results)
     }
 
-    /// Slice two field elements in chunks, then ANDs the slices and rotates them, a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two inputs. The output is composed using wires_c. Base is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    /// Slice two field elements in chunks, then ANDs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn slice_and_get_and_rotate_values_from_key<
         G: FancyBinary + FancyBinaryConstant,
@@ -1966,63 +1957,64 @@ impl GarbledCircuits {
         y1s: &[G::Item],
         y2s: &[G::Item],
         wires_c: &[G::Item],
-        base: usize,
+        base_bit: usize,
         rotation: usize,
         total_output_bitlen_per_field: usize,
     ) -> Result<Vec<G::Item>, G::Error> {
-        let input_bitlen = x1s.len();
-        let length_c = wires_c.len();
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base_bit);
+        debug_assert_eq!(x1s.len(), input_bitlen);
+        debug_assert_eq!(x2s.len(), input_bitlen);
+        debug_assert_eq!(y1s.len(), input_bitlen);
+        debug_assert_eq!(y2s.len(), input_bitlen);
+        debug_assert_eq!(wires_c.len(), 3 * input_bitlen * num_decomps_per_field);
+
+        // Combine the inputs
         let input_bits_1 =
             Self::adder_mod_p_with_output_size::<_, F>(g, x1s, x2s, total_output_bitlen_per_field)?;
-
         let input_bits_2 =
             Self::adder_mod_p_with_output_size::<_, F>(g, y1s, y2s, total_output_bitlen_per_field)?;
-        let mut results = Vec::with_capacity(length_c / 3);
+
+        let mut results = Vec::with_capacity(input_bitlen * num_decomps_per_field);
         let mut rands = wires_c.chunks(input_bitlen);
 
+        // Perform the actual AND
         let res = input_bits_1
             .iter()
             .zip(input_bits_2.iter())
             .map(|(x, y)| g.and(x, y))
             .collect::<Result<Vec<_>, _>>()?;
-        let const_zeros =
-            Self::bin_constant_bundle(g, &vec![false; total_output_bitlen_per_field - base])?;
-        let mut padded_res_chunks = Vec::new();
 
-        for inp in res.chunks(base) {
-            padded_res_chunks.extend_from_slice(inp);
-            padded_res_chunks.extend_from_slice(&const_zeros);
-            if inp.len() != base {
-                let additional_padding =
-                    Self::bin_constant_bundle(g, &vec![false; base - inp.len()])?;
-                padded_res_chunks.extend_from_slice(&additional_padding);
+        // Compose the inputs
+        for inp in input_bits_1
+            .chunks(base_bit)
+            .chain(input_bits_2.chunks(base_bit))
+        {
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                inp,
+                rands.next().unwrap(),
+            )?);
+        }
+
+        // Compose the results
+        for xs in res.chunks(base_bit) {
+            if rotation == 0 {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    xs,
+                    rands.next().unwrap(),
+                )?);
+            } else {
+                let mut rotated = xs.to_owned();
+                rotated.resize(64, g.const_zero()?);
+                rotated.rotate_left(rotation);
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    &rotated,
+                    rands.next().unwrap(),
+                )?);
             }
-        }
-
-        for inp_1 in input_bits_1.chunks(base) {
-            results.extend(Self::compose_field_element::<_, F>(
-                g,
-                inp_1,
-                rands.next().unwrap(),
-            )?);
-        }
-        for inp_2 in input_bits_2.chunks(base) {
-            results.extend(Self::compose_field_element::<_, F>(
-                g,
-                inp_2,
-                rands.next().unwrap(),
-            )?);
-        }
-        for xs in padded_res_chunks.chunks_mut(total_output_bitlen_per_field) {
-            xs.reverse();
-
-            xs.rotate_right(rotation);
-            xs.reverse();
-            results.extend(Self::compose_field_element::<_, F>(
-                g,
-                xs,
-                rands.next().unwrap(),
-            )?);
         }
         Ok(results)
     }

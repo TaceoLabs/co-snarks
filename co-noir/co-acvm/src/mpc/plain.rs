@@ -309,40 +309,50 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(Self::AcvmType::from(res))
     }
 
-    fn slice_and_get_and_rotate_values<const BITS_PER_SLICE: u64>(
+    fn slice_and_get_and_rotate_values(
         &mut self,
         input1: Self::ArithmeticShare,
         input2: Self::ArithmeticShare,
-        bases: &[u64],
+        basis_bits: usize,
+        total_bitsize: usize,
         rotation: usize,
     ) -> std::io::Result<(
-        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
+        let num_decomps_per_field = total_bitsize.div_ceil(basis_bits);
+        let basis = BigUint::one() << basis_bits;
+
         let mut target1: BigUint = input1.into();
         let mut target2: BigUint = input2.into();
-        let mut slices1: Vec<u64> = Vec::with_capacity(bases.len());
-        let mut slices2: Vec<u64> = Vec::with_capacity(bases.len());
-        for i in 0..bases.len() {
-            if (target1 >= bases[i].into() || target2 >= bases[i].into()) && i == bases.len() - 1 {
-                panic!("Last key slice greater than {}", bases[i]);
+        let mut slices1: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
+        let mut slices2: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
+        for i in 0..num_decomps_per_field {
+            if i == num_decomps_per_field - 1 && (target1 >= basis || target2 >= basis) {
+                panic!("Last key slice greater than {}", basis);
             }
-            slices1.push((&target1 % bases[i]).try_into().unwrap());
-            slices2.push((&target2 % bases[i]).try_into().unwrap());
-            target1 /= bases[i];
-            target2 /= bases[i];
+            slices1.push(
+                (&target1 % &basis)
+                    .try_into()
+                    .expect("Conversion must work"),
+            );
+            slices2.push(
+                (&target2 % &basis)
+                    .try_into()
+                    .expect("Conversion must work"),
+            );
+            target1 /= &basis;
+            target2 /= &basis;
         }
-        let mut results = Vec::with_capacity(bases.len());
+        let mut results = Vec::with_capacity(num_decomps_per_field);
         slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
-            results.push((
-                F::from(if rotation != 0 {
-                    (s1 & s2 >> rotation) | (s1 & s2 << (64 - rotation))
-                } else {
-                    s1 & s2
-                }),
-                F::zero(),
-            ));
+            let res = s1 & s2;
+            results.push(F::from(if rotation != 0 {
+                (res >> rotation) | (res << (64 - rotation))
+            } else {
+                res
+            }));
         });
         Ok((
             results,
@@ -351,40 +361,50 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         ))
     }
 
-    fn slice_and_get_xor_rotate_values<const BITS_PER_SLICE: u64>(
+    fn slice_and_get_xor_rotate_values(
         &mut self,
         input1: Self::ArithmeticShare,
         input2: Self::ArithmeticShare,
-        bases: &[u64],
+        basis_bits: usize,
+        total_bitsize: usize,
         rotation: usize,
     ) -> std::io::Result<(
-        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
+        let num_decomps_per_field = total_bitsize.div_ceil(basis_bits);
+        let basis = BigUint::one() << basis_bits;
+
         let mut target1: BigUint = input1.into();
         let mut target2: BigUint = input2.into();
-        let mut slices1: Vec<u64> = Vec::with_capacity(bases.len());
-        let mut slices2: Vec<u64> = Vec::with_capacity(bases.len());
-        for i in 0..bases.len() {
-            if (target1 >= bases[i].into() || target2 >= bases[i].into()) && i == bases.len() - 1 {
-                panic!("Last key slice greater than {}", bases[i]);
+        let mut slices1: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
+        let mut slices2: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
+        for i in 0..num_decomps_per_field {
+            if i == num_decomps_per_field - 1 && (target1 >= basis || target2 >= basis) {
+                panic!("Last key slice greater than {}", basis);
             }
-            slices1.push((&target1 % bases[i]).try_into().unwrap());
-            slices2.push((&target2 % bases[i]).try_into().unwrap());
-            target1 /= bases[i];
-            target2 /= bases[i];
+            slices1.push(
+                (&target1 % &basis)
+                    .try_into()
+                    .expect("Conversion must work"),
+            );
+            slices2.push(
+                (&target2 % &basis)
+                    .try_into()
+                    .expect("Conversion must work"),
+            );
+            target1 /= &basis;
+            target2 /= &basis;
         }
-        let mut results = Vec::with_capacity(bases.len());
+        let mut results = Vec::with_capacity(num_decomps_per_field);
         slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
-            results.push((
-                F::from(if rotation != 0 {
-                    (s1 ^ s2 >> rotation) | (s1 ^ s2 << (64 - rotation))
-                } else {
-                    s1 ^ s2
-                }),
-                F::zero(),
-            ));
+            let res = s1 ^ s2;
+            results.push(F::from(if rotation != 0 {
+                (res >> rotation) | (res << (64 - rotation))
+            } else {
+                res
+            }));
         });
         Ok((
             results,

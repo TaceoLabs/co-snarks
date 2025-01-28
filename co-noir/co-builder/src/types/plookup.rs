@@ -323,6 +323,7 @@ impl<F: PrimeField> Plookup<F> {
         }
         slices
     }
+
     #[expect(clippy::type_complexity)]
     fn slice_and_get_values<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -338,10 +339,11 @@ impl<F: PrimeField> Plookup<F> {
         let multi_table = builder.plookup.get_multitable(id.clone());
         let num_lookups = multi_table.basic_table_ids.len();
         let bases = &multi_table.slice_sizes;
-        let mut results: Vec<(T::AcvmType, T::AcvmType)> = Vec::with_capacity(bases.len());
-        let mut key_a_slices: Vec<T::AcvmType> = Vec::with_capacity(bases.len());
-        let mut key_b_slices: Vec<T::AcvmType> = Vec::with_capacity(bases.len());
+        let mut results = Vec::with_capacity(bases.len());
+        let mut key_a_slices = Vec::with_capacity(bases.len());
+        let mut key_b_slices = Vec::with_capacity(bases.len());
         if !T::is_shared(&key_a) && !T::is_shared(&key_b) {
+            // Everything public
             let key_a_slice = Self::slice_input_using_variable_bases(
                 T::get_public(&key_a)
                     .expect("Already checked it is public")
@@ -393,17 +395,35 @@ impl<F: PrimeField> Plookup<F> {
 
         match multi_table.id {
             MultiTableId::Uint32Xor => {
-                let values =
-                    T::slice_and_get_xor_rotate_values::<32>(driver, key_a, key_b, bases, 0)?;
-                results.extend(values.0);
+                let values = T::slice_and_get_xor_rotate_values(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases[0].ilog2() as usize,
+                    32,
+                    0,
+                )?;
+                results.reserve(values.0.len());
+                for val in values.0 {
+                    results.push((val, T::public_zero()))
+                }
                 key_a_slices.extend(values.1);
                 key_b_slices.extend(values.2);
             }
 
             MultiTableId::Uint32And => {
-                let values =
-                    T::slice_and_get_and_rotate_values::<32>(driver, key_a, key_b, bases, 0)?;
-                results.extend(values.0);
+                let values = T::slice_and_get_and_rotate_values(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases[0].ilog2() as usize,
+                    32,
+                    0,
+                )?;
+                results.reserve(values.0.len());
+                for val in values.0 {
+                    results.push((val, T::public_zero()))
+                }
                 key_a_slices.extend(values.1);
                 key_b_slices.extend(values.2);
             }
@@ -424,7 +444,7 @@ impl<F: PrimeField> Plookup<F> {
         key_b: T::AcvmType,
         is_2_to_1_lookup: bool,
     ) -> std::io::Result<ReadData<T::AcvmType>> {
-        let mut lookup = ReadData::<T::AcvmType>::default();
+        let mut lookup = ReadData::default();
         let values_sliced = Self::slice_and_get_values(builder, driver, id.clone(), key_a, key_b)?;
         // return multi-table, populating global array of all multi-tables if need be
         let multi_table = builder.plookup.get_multitable(id);
@@ -551,7 +571,7 @@ impl<F: PrimeField> Plookup<F> {
 
         let a = key_a.get_value(builder, driver);
         let b = key_b.get_value(builder, driver);
-        let mut lookup = ReadData::<FieldCT<F>>::default();
+        let mut lookup = ReadData::default();
 
         let lookup_data = Self::get_lookup_accumulators(
             builder,

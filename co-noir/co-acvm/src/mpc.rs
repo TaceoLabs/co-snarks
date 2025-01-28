@@ -203,30 +203,32 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         num_bits: u32,
     ) -> std::io::Result<Self::AcvmType>;
 
-    /// slices according to bases, does and on them and then rotates them
+    /// Slices input1 and input2 into a vector of basis_bits bits each, ANDs all values and rotates the results by rotation. Thereby, in total only total_bitsize bits per input are considered.
     #[expect(clippy::type_complexity)]
-    fn slice_and_get_and_rotate_values<const BITS_PER_SLICE: u64>(
+    fn slice_and_get_and_rotate_values(
         &mut self,
         input1: Self::ArithmeticShare,
         input2: Self::ArithmeticShare,
-        bases: &[u64],
+        basis_bits: usize,
+        total_bitsize: usize,
         rotation: usize,
     ) -> std::io::Result<(
-        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )>;
 
-    /// slices according to bases, does xor on them and then rotates them
+    /// Slices input1 and input2 into a vector of basis_bits bits each, XORs all values and rotates the results by rotation. Thereby, in total only total_bitsize bits per input are considered.
     #[expect(clippy::type_complexity)]
-    fn slice_and_get_xor_rotate_values<const BITS_PER_SLICE: u64>(
+    fn slice_and_get_xor_rotate_values(
         &mut self,
         input1: Self::ArithmeticShare,
         input2: Self::ArithmeticShare,
-        bases: &[u64],
+        basis_bits: usize,
+        total_bitsize: usize,
         rotation: usize,
     ) -> std::io::Result<(
-        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )>;

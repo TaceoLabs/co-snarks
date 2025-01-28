@@ -493,28 +493,30 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
-    fn slice_and_get_and_rotate_values<const BITS_PER_SLICE: u64>(
+    fn slice_and_get_and_rotate_values(
         &mut self,
         _input1: Self::ArithmeticShare,
         _input2: Self::ArithmeticShare,
-        _bases: &[u64],
+        _basis_bits: usize,
+        _total_bitsize: usize,
         _rotation: usize,
     ) -> std::io::Result<(
-        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
         panic!("functionality slice_and_get_and_rotate_values not feasible for Shamir")
     }
 
-    fn slice_and_get_xor_rotate_values<const BITS_PER_SLICE: u64>(
+    fn slice_and_get_xor_rotate_values(
         &mut self,
         _input1: Self::ArithmeticShare,
         _input2: Self::ArithmeticShare,
-        _bases: &[u64],
+        _basis_bits: usize,
+        _total_bitsize: usize,
         _rotation: usize,
     ) -> std::io::Result<(
-        Vec<(Self::AcvmType, Self::AcvmType)>,
+        Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
