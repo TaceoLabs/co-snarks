@@ -138,9 +138,9 @@ impl<F: PrimeField> AcirFormat<F> {
                 acir::circuit::Opcode::MemoryInit {
                     block_id,
                     init,
-                    block_type: _,
+                    block_type,
                 } => {
-                    let block = Self::handle_memory_init(init);
+                    let block = Self::handle_memory_init(init, block_type);
                     let block_id = block_id.0;
                     let opcode_indices = vec![i];
                     block_id_to_block_constraint.insert(block_id, (block, opcode_indices));
@@ -533,7 +533,10 @@ impl<F: PrimeField> AcirFormat<F> {
         }
     }
 
-    fn handle_memory_init(mem_init: Vec<Witness>) -> BlockConstraint<F> {
+    fn handle_memory_init(
+        mem_init: Vec<Witness>,
+        block_type: acir::circuit::opcodes::BlockType,
+    ) -> BlockConstraint<F> {
         let mut block = BlockConstraint::default();
         block.init.reserve(mem_init.len());
 
@@ -550,9 +553,16 @@ impl<F: PrimeField> AcirFormat<F> {
             });
         }
 
-        // Databus is only supported for Goblin, non Goblin builders will treat call_data and return_data as normal
-        // array.
-        block.type_ = BlockType::ReturnData;
+        // Databus is only supported for Goblin, non Goblin builders will treat call_data and return_data as normal array.
+        match block_type {
+            acir::circuit::opcodes::BlockType::Memory => {}
+            acir::circuit::opcodes::BlockType::CallData(val) => {
+                block.type_ = BlockType::CallData;
+                block.calldata = val;
+            }
+            acir::circuit::opcodes::BlockType::ReturnData => block.type_ = BlockType::ReturnData,
+        }
+
         block
     }
 

@@ -72,7 +72,7 @@ pub(crate) struct MemOp<F: PrimeField> {
     pub(crate) value: PolyTriple<F>,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 #[expect(clippy::upper_case_acronyms)]
 pub(crate) enum BlockType {
     ROM = 0,
@@ -586,6 +586,145 @@ impl<F: PrimeField> RamTable<F> {
             all_entries_written_to_with_constant_index: false,
         }
     }
+
+    pub(crate) fn read<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        index: &FieldCT<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> FieldCT<F> {
+        let index_value = index.get_value(builder, driver);
+
+        if let Some(native_index) = T::get_public(&index_value) {
+            assert!(native_index < P::ScalarField::from(self.length as u64));
+        }
+
+        self.initialize_table(builder, driver);
+        assert!(self.check_indices_initialized());
+
+        let index_wire = if index.is_constant() {
+            let nativ_index = T::get_public(&index_value).expect("Constant should be public");
+            FieldCT::from_witness_index(builder.put_constant_variable(nativ_index))
+        } else {
+            index.to_owned()
+        };
+
+        let wit_index = index_wire.get_normalized_witness_index(builder, driver);
+        let output_idx = builder
+            .read_ram_array(self.ram_id, wit_index)
+            .expect("Not implemented for shared cases");
+        FieldCT::from_witness_index(output_idx)
+    }
+
+    pub(crate) fn write<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        index: &FieldCT<F>,
+        value: &FieldCT<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        let index_value = index.get_value(builder, driver);
+
+        if let Some(native_index) = T::get_public(&index_value) {
+            assert!(native_index < P::ScalarField::from(self.length as u64));
+        }
+
+        self.initialize_table(builder, driver);
+
+        let index_wire = if index.is_constant() {
+            let nativ_index = T::get_public(&index_value).expect("Constant should be public");
+            FieldCT::from_witness_index(builder.put_constant_variable(nativ_index))
+        } else {
+            self.initialize_table(builder, driver);
+            index.to_owned()
+        };
+
+        let value_value = value.get_value(builder, driver);
+        let value_wire = if value.is_constant() {
+            let native_wire = T::get_public(&value_value).expect("Constant should be public");
+            FieldCT::from_witness_index(builder.put_constant_variable(native_wire))
+        } else {
+            value.to_owned()
+        };
+
+        if index.is_constant() {
+            let cast_index: BigUint = T::get_public(&index_value)
+                .expect("Constant should be public")
+                .into();
+            let cast_index = usize::try_from(cast_index).expect("Invalid index");
+            if !self.index_initialized[cast_index] {
+                // if index constant && not initialized
+                builder.init_ram_element(self.ram_id, cast_index, value_wire.get_witness_index());
+                self.index_initialized[cast_index] = true;
+                return;
+            }
+        }
+
+        // else
+        let index_ = index_wire.get_normalized_witness_index(builder, driver);
+        let value_ = value_wire.get_normalized_witness_index(builder, driver);
+        builder
+            .write_ram_array(self.ram_id, index_, value_)
+            .expect("Not implemented for shared cases");
+    }
+
+    fn check_indices_initialized(&mut self) -> bool {
+        if self.all_entries_written_to_with_constant_index {
+            return true;
+        }
+        if self.length == 0 {
+            return false;
+        }
+        let mut init = true;
+        for i in self.index_initialized.iter() {
+            init = init && *i;
+        }
+        self.all_entries_written_to_with_constant_index = init;
+        self.all_entries_written_to_with_constant_index
+    }
+
+    fn initialize_table<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        if self.ram_table_generated_in_builder {
+            return;
+        }
+
+        self.ram_id = builder.create_ram_array(self.length);
+
+        for (i, (raw, ind)) in self
+            .raw_entries
+            .iter_mut()
+            .zip(self.index_initialized.iter_mut())
+            .enumerate()
+        {
+            if *ind {
+                continue;
+            }
+            let entry = if raw.is_constant() {
+                let val = T::get_public(&raw.get_value(builder, driver))
+                    .expect("Constant should be public");
+                FieldCT::from_witness_index(builder.put_constant_variable(val))
+            } else {
+                raw.normalize(builder, driver)
+            };
+            builder.init_ram_element(self.ram_id, i, entry.get_witness_index());
+            *ind = true;
+        }
+
+        self.ram_table_generated_in_builder = true;
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -740,6 +879,17 @@ impl<F: PrimeField> FieldCT<F> {
             const_scaling: self.additive_constant,
         });
         result
+    }
+
+    pub(crate) fn get_normalized_witness_index<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> u32 {
+        self.normalize(builder, driver).witness_index
     }
 
     pub(crate) fn multiply<
@@ -1164,17 +1314,26 @@ pub(crate) struct RomTranscript {
     pub(crate) records: Vec<RomRecord>,
 }
 
-pub(crate) enum AccessType {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RamAccessType {
     Read,
     Write,
 }
 
+impl Default for RamAccessType {
+    fn default() -> Self {
+        Self::Read
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct RamRecord {
     pub(crate) index_witness: u32,
     pub(crate) timestamp_witness: u32,
     pub(crate) value_witness: u32,
     pub(crate) index: u32,
-    pub(crate) access_type: AccessType,
+    pub(crate) access_type: RamAccessType,
+    pub(crate) timestamp: u32,
     pub(crate) record_witness: u32,
     pub(crate) gate_index: usize,
 }
@@ -1186,9 +1345,54 @@ impl Default for RamRecord {
             timestamp_witness: 0,
             value_witness: 0,
             index: 0,
-            access_type: AccessType::Read,
+            access_type: RamAccessType::Read,
+            timestamp: 0,
             record_witness: 0,
             gate_index: 0,
+        }
+    }
+}
+
+impl RamRecord {
+    fn less_than(&self, other: &Self) -> bool {
+        let index_test = self.index < other.index;
+        index_test || (self.index == other.index && self.timestamp < other.timestamp)
+    }
+
+    fn equal(&self, other: &Self) -> bool {
+        self.index_witness == other.index_witness
+            && self.timestamp_witness == other.timestamp_witness
+            && self.value_witness == other.value_witness
+            && self.index == other.index
+            && self.timestamp == other.timestamp
+            && self.access_type == other.access_type
+            && self.record_witness == other.record_witness
+            && self.gate_index == other.gate_index
+    }
+}
+
+impl PartialEq for RamRecord {
+    fn eq(&self, other: &Self) -> bool {
+        self.equal(other)
+    }
+}
+
+impl Eq for RamRecord {}
+
+impl PartialOrd for RamRecord {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RamRecord {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.less_than(other) {
+            Ordering::Less
+        } else if self.equal(other) {
+            Ordering::Equal
+        } else {
+            Ordering::Greater
         }
     }
 }
