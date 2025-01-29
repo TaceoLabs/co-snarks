@@ -12,8 +12,9 @@ use crate::{
             AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
             AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
             ColumnIdx, FieldCT, GateCounter, LogicConstraint, MulQuad, PlookupBasicTable,
-            PolyTriple, RamTranscript, RangeConstraint, RangeList, ReadData, RomRecord, RomTable,
-            RomTranscript, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
+            PolyTriple, RamAccessType, RamRecord, RamTable, RamTranscript, RangeConstraint,
+            RangeList, ReadData, RomRecord, RomTable, RomTranscript, UltraTraceBlock,
+            UltraTraceBlocks, NUM_WIRES,
         },
     },
     utils::Utils,
@@ -172,7 +173,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
 
 // This workaround is required due to mutability issues
 macro_rules! create_dummy_gate {
-    ($builder:expr, $block:expr, $ixd_1:expr, $ixd_2:expr, $ixd_3:expr, $ixd_4:expr, ) => {
+    ($builder:expr, $block:expr, $ixd_1:expr, $ixd_2:expr, $ixd_3:expr, $ixd_4:expr) => {
         Self::create_dummy_gate($block, $ixd_1, $ixd_2, $ixd_3, $ixd_4);
         $builder.check_selector_length_consistency();
         $builder.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
@@ -296,7 +297,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
         // be "set" later on via the assert_equal mechanism.
         for _ in len..varnum {
-            builder.add_variable(T::AcvmType::from(P::ScalarField::zero()));
+            builder.add_variable(T::public_zero());
         }
 
         // Add the public_inputs from acir
@@ -750,7 +751,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             BlockType::CallData | BlockType::ReturnData | BlockType::ROM => {
                 self.process_rom_operations(constraint, has_valid_witness_assignments, init, driver)
             }
-            BlockType::RAM => todo!("BLOCK RAM constraint"),
+            BlockType::RAM => {
+                self.process_ram_operations(constraint, has_valid_witness_assignments, init, driver)
+            }
         }
     }
 
@@ -1418,13 +1421,48 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 // If witness are assigned, we use the correct value for w
                 index.get_value(self, driver)
             } else {
-                T::AcvmType::from(P::ScalarField::zero())
+                T::public_zero()
             };
             let w = FieldCT::from_witness(w_value, self);
 
             let extract = &table.index_field_ct(&w, self, driver);
             value.assert_equal(extract, self, driver);
             w.assert_equal(&index, self, driver);
+        }
+    }
+
+    fn process_ram_operations(
+        &mut self,
+        constraint: &BlockConstraint<P::ScalarField>,
+        has_valid_witness_assignments: bool,
+        init: Vec<FieldCT<P::ScalarField>>,
+        driver: &mut T,
+    ) {
+        let mut table = RamTable::new(init);
+
+        for op in constraint.trace.iter() {
+            let value = self.poly_to_field_ct(&op.value);
+            let index = self.poly_to_field_ct(&op.index);
+
+            // We create a new witness w to avoid issues with non-valid witness assignements.
+            // If witness are not assigned, then index will be zero and table[index] won't hit bounds check.
+            // If witness are assigned, we use the correct value for index
+            let index_value = if has_valid_witness_assignments {
+                index.get_value(self, driver)
+            } else {
+                T::public_zero()
+            };
+            // Create new witness and ensure equal to index.
+            let w = FieldCT::from_witness(index_value, self);
+            w.assert_equal(&index, self, driver);
+
+            if op.access_type == 0 {
+                let read = table.read(&index, self, driver);
+                value.assert_equal(&read, self, driver);
+            } else {
+                assert_eq!(op.access_type, 1);
+                table.write(&index, &value, self, driver);
+            }
         }
     }
 
@@ -1527,6 +1565,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.rom_arrays.len() - 1
     }
 
+    pub(crate) fn create_ram_array(&mut self, array_size: usize) -> usize {
+        let mut new_transcript = RamTranscript::default();
+        for _ in 0..array_size {
+            new_transcript.state.push(Self::UNINITIALIZED_MEMORY_RECORD);
+        }
+        self.ram_arrays.push(new_transcript);
+        self.ram_arrays.len() - 1
+    }
+
     pub(crate) fn set_rom_element(
         &mut self,
         rom_id: usize,
@@ -1600,14 +1647,72 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.rom_arrays[rom_id].records.push(new_record);
     }
 
+    pub(crate) fn init_ram_element(
+        &mut self,
+        ram_id: usize,
+        index_value: usize,
+        value_witness: u32,
+    ) {
+        assert!(self.ram_arrays.len() > ram_id);
+        let index_witness = if index_value == 0 {
+            self.zero_idx
+        } else {
+            self.put_constant_variable(P::ScalarField::from(index_value as u64))
+        };
+
+        assert!(self.ram_arrays[ram_id].state.len() > index_value);
+        assert!(self.ram_arrays[ram_id].state[index_value] == Self::UNINITIALIZED_MEMORY_RECORD);
+
+        let mut new_record = RamRecord {
+            index_witness,
+            timestamp_witness: self.put_constant_variable(P::ScalarField::from(
+                self.ram_arrays[ram_id].access_count as u64,
+            )),
+            value_witness,
+            index: index_value as u32,
+            timestamp: self.ram_arrays[ram_id].access_count as u32,
+            access_type: RamAccessType::Write,
+            record_witness: 0,
+            gate_index: 0,
+        };
+
+        self.ram_arrays[ram_id].state[index_value] = value_witness;
+        self.ram_arrays[ram_id].access_count += 1;
+        self.create_ram_gate(&mut new_record);
+        self.ram_arrays[ram_id].records.push(new_record);
+    }
+
     fn create_rom_gate(&mut self, record: &mut RomRecord) {
         // Record wire value can't yet be computed
-        record.record_witness = self.add_variable(T::AcvmType::from(P::ScalarField::zero()));
+        record.record_witness = self.add_variable(T::public_zero());
         self.apply_aux_selectors(AuxSelectors::RomRead);
         self.blocks.aux.populate_wires(
             record.index_witness,
             record.value_column1_witness,
             record.value_column2_witness,
+            record.record_witness,
+        );
+
+        // Note: record the index into the block that contains the RAM/ROM gates
+        record.gate_index = self.blocks.aux.len() - 1;
+        self.num_gates += 1;
+    }
+
+    fn create_ram_gate(&mut self, record: &mut RamRecord) {
+        // Record wire value can't yet be computed (uses randomnes generated during proof construction).
+        // However it needs a distinct witness index,
+        // we will be applying copy constraints + set membership constraints.
+        // Later on during proof construction we will compute the record wire value + assign it
+        record.record_witness = self.add_variable(T::public_zero());
+        self.apply_aux_selectors(if record.access_type == RamAccessType::Read {
+            AuxSelectors::RamRead
+        } else {
+            AuxSelectors::RamWrite
+        });
+        self.blocks.aux.populate_wires(
+            record.index_witness,
+            record.timestamp_witness,
+            record.value_witness,
             record.record_witness,
         );
 
@@ -1645,6 +1750,85 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         // create_read_gate
         Ok(value_witness)
+    }
+
+    // TACEO TODO only implemented for public values so far
+    pub(crate) fn read_ram_array(
+        &mut self,
+        ram_id: usize,
+        index_witness: u32,
+    ) -> HonkProofResult<u32> {
+        assert!(self.ram_arrays.len() > ram_id);
+        let val: BigUint = T::get_public(&self.get_variable(index_witness as usize))
+            .ok_or(HonkProofError::ExpectedPublicWitness)?
+            .into();
+        let index: usize = val.try_into().unwrap();
+
+        assert!(self.ram_arrays[ram_id].state.len() > index);
+        assert!(self.ram_arrays[ram_id].state[index] != Self::UNINITIALIZED_MEMORY_RECORD);
+        let value = self.get_variable(self.ram_arrays[ram_id].state[index] as usize);
+        let value_witness = self.add_variable(value);
+
+        let mut new_record = RamRecord {
+            index_witness,
+            timestamp_witness: self.put_constant_variable(P::ScalarField::from(
+                self.ram_arrays[ram_id].access_count as u64,
+            )),
+            value_witness,
+            index: index as u32,
+            timestamp: self.ram_arrays[ram_id].access_count as u32,
+            access_type: RamAccessType::Read,
+            record_witness: 0,
+            gate_index: 0,
+        };
+        self.create_ram_gate(&mut new_record);
+        self.ram_arrays[ram_id].records.push(new_record);
+
+        // increment ram array's access count
+        self.ram_arrays[ram_id].access_count += 1;
+
+        // return witness index of the value in the array
+        Ok(value_witness)
+    }
+
+    // TACEO TODO only implemented for public values so far
+    pub(crate) fn write_ram_array(
+        &mut self,
+        ram_id: usize,
+        index_witness: u32,
+        value_witness: u32,
+    ) -> HonkProofResult<()> {
+        assert!(self.ram_arrays.len() > ram_id);
+        let val: BigUint = T::get_public(&self.get_variable(index_witness as usize))
+            .ok_or(HonkProofError::ExpectedPublicWitness)?
+            .into();
+        let index: usize = val.try_into().unwrap();
+
+        assert!(self.ram_arrays[ram_id].state.len() > index);
+        assert!(self.ram_arrays[ram_id].state[index] != Self::UNINITIALIZED_MEMORY_RECORD);
+
+        let mut new_record = RamRecord {
+            index_witness,
+            timestamp_witness: self.put_constant_variable(P::ScalarField::from(
+                self.ram_arrays[ram_id].access_count as u64,
+            )),
+            value_witness,
+            index: index as u32,
+            timestamp: self.ram_arrays[ram_id].access_count as u32,
+            access_type: RamAccessType::Write,
+            record_witness: 0,
+            gate_index: 0,
+        };
+        self.create_ram_gate(&mut new_record);
+        self.ram_arrays[ram_id].records.push(new_record);
+
+        // increment ram array's access count
+        self.ram_arrays[ram_id].access_count += 1;
+
+        // update Composer's current state of RAM array
+        self.ram_arrays[ram_id].state[index] = value_witness;
+
+        Ok(())
     }
 
     fn apply_aux_selectors(&mut self, type_: AuxSelectors) {
@@ -1687,6 +1871,59 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 block.q_4().push(P::ScalarField::zero());
                 block.q_m().push(P::ScalarField::zero());
                 block.q_c().push(P::ScalarField::zero());
+                block.q_arith().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            AuxSelectors::RamConsistencyCheck => {
+                // Memory read gate used with the sorted list of memory reads.
+                // 1. Validate adjacent index values across 2 gates increases by 0 or 1
+                // 2. Validate record computation (r = read_write_flag + index * \eta + \timestamp * \eta^2 + value * \eta^3)
+                // 3. If adjacent index values across 2 gates does not change, and the next gate's read_write_flag is set to
+                // 'read', validate adjacent values do not change Used for ROM reads and RAM reads across read/write boundaries
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                block.q_arith().push(P::ScalarField::one());
+                self.check_selector_length_consistency();
+            }
+            AuxSelectors::RamTimestampCheck => {
+                // For two adjacent RAM entries that share the same index, validate the timestamp value is monotonically
+                // increasing
+                block.q_1().push(P::ScalarField::one());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::one());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                block.q_arith().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            AuxSelectors::RamRead => {
+                // Memory read gate for reading memory cells.
+                // Validates record witness computation (r = read_write_flag + index * \eta + timestamp * \eta^2 + value *
+                // \eta^3)
+                block.q_1().push(P::ScalarField::one());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::one()); // validate record witness is correctly computed
+                block.q_c().push(P::ScalarField::zero()); // read/write flag stored in q_c
+                block.q_arith().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            AuxSelectors::RamWrite => {
+                // Memory read gate for writing memory cells.
+                // Validates record witness computation (r = read_write_flag + index * \eta + timestamp * \eta^2 + value *
+                // \eta^3)
+                block.q_1().push(P::ScalarField::one());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::one()); // validate record witness is correctly computed
+                block.q_c().push(P::ScalarField::one()); // read/write flag stored in q_c
                 block.q_arith().push(P::ScalarField::zero());
                 self.check_selector_length_consistency();
             }
@@ -1814,7 +2051,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
-            self.zero_idx,
+            self.zero_idx
         );
 
         // q_elliptic
@@ -1862,7 +2099,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
-            self.zero_idx,
+            self.zero_idx
         );
 
         // q_aux
@@ -1898,7 +2135,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
-            self.zero_idx,
+            self.zero_idx
         );
 
         // Add nonzero values in w_4 and q_c (q_4*w_4 + q_c --> 1*1 - 1 = 0)
@@ -2020,7 +2257,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
-            self.zero_idx,
+            self.zero_idx
         );
 
         // mock a poseidon internal gate, with all zeros as input
@@ -2093,7 +2330,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
-            self.zero_idx,
+            self.zero_idx
         );
     }
 
@@ -2263,7 +2500,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
             self.process_non_native_field_multiplications();
             self.process_rom_arrays()?;
-            self.process_ram_arrays();
+            self.process_ram_arrays()?;
             self.process_range_lists(driver)?;
             self.circuit_finalized = true;
         }
@@ -2277,10 +2514,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
-    fn process_ram_arrays(&mut self) {
-        for _ in self.ram_arrays.iter() {
-            todo!("process ram array");
+    fn process_ram_arrays(&mut self) -> std::io::Result<()> {
+        for i in 0..self.ram_arrays.len() {
+            self.process_ram_array(i)?;
         }
+        Ok(())
     }
 
     fn process_range_lists(&mut self, driver: &mut T) -> std::io::Result<()> {
@@ -2313,6 +2551,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 self.set_rom_element_pair(rom_id, i, [self.zero_idx, self.zero_idx]);
             }
         }
+
         self.rom_arrays[rom_id].records.sort();
         let records = self.rom_arrays[rom_id].records.clone();
         for record in records {
@@ -2362,7 +2601,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let max_index: u32 =
             self.add_variable(T::AcvmType::from(P::ScalarField::from(max_index_value)));
 
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This was formerly a single arithmetic gate. A
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This was formerly a single arithmetic gate. A
         // dummy gate has been added to allow the previous gate to access the required wire data via shifts, allowing the
         // arithmetic gate to occur out of sequence.
         create_dummy_gate!(
@@ -2371,7 +2610,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             max_index,
             self.zero_idx,
             self.zero_idx,
-            self.zero_idx,
+            self.zero_idx
         );
         self.create_big_add_gate(
             &AddQuad {
@@ -2391,8 +2630,144 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // because the first cell is explicitly initialized using zero_idx as the index field.
         Ok(())
     }
+
+    fn process_ram_array(&mut self, ram_id: usize) -> std::io::Result<()> {
+        let access_tag = self.get_new_tag(); // current_tag + 1;
+        let sorted_list_tag = self.get_new_tag(); // current_tag + 2;
+        self.create_tag(access_tag, sorted_list_tag);
+        self.create_tag(sorted_list_tag, access_tag);
+
+        // Make sure that every cell has been initialized
+        // AZTEC TODO: throw some kind of error here? Circuit should initialize all RAM elements to prevent errors.
+        // e.g. if a RAM record is uninitialized but the index of that record is a function of public/private inputs,
+        // different public iputs will produce different circuit constraints.
+        for i in 0..self.ram_arrays[ram_id].state.len() {
+            if self.ram_arrays[ram_id].state[i] == Self::UNINITIALIZED_MEMORY_RECORD {
+                self.init_ram_element(ram_id, i, self.zero_idx);
+            }
+        }
+
+        let mut sorted_ram_records = Vec::with_capacity(self.ram_arrays[ram_id].records.len());
+
+        self.ram_arrays[ram_id].records.sort();
+        let records = self.ram_arrays[ram_id].records.clone();
+
+        // Iterate over all but final RAM record.
+        for (i, record) in records.into_iter().enumerate() {
+            let index = record.index;
+            let value = self.get_variable(record.value_witness.try_into().unwrap());
+            let index_witness = self.add_variable(T::AcvmType::from(P::ScalarField::from(index)));
+            let timestamp_witness =
+                self.add_variable(T::AcvmType::from(P::ScalarField::from(record.timestamp)));
+            let value_witness = self.add_variable(value);
+
+            let mut sorted_record = RamRecord {
+                index_witness,
+                timestamp_witness,
+                value_witness,
+                index,
+                timestamp: record.timestamp,
+                access_type: record.access_type.to_owned(),
+                record_witness: 0,
+                gate_index: 0,
+            };
+
+            // create a list of sorted ram records
+            sorted_ram_records.push(sorted_record.to_owned());
+
+            // We don't apply the RAM consistency check gate to the final record,
+            // as this gate expects a RAM record to be present at the next gate
+            if i < self.ram_arrays[ram_id].records.len() - 1 {
+                self.create_sorted_ram_gate(&mut sorted_record);
+            } else {
+                // For the final record in the sorted list, we do not apply the full consistency check gate.
+                // Only need to check the index value = RAM array size - 1.
+                self.create_final_sorted_ram_gate(
+                    &mut sorted_record,
+                    self.ram_arrays[ram_id].state.len(),
+                );
+            }
+
+            self.assign_tag(record.record_witness, access_tag);
+            self.assign_tag(sorted_record.record_witness, sorted_list_tag);
+
+            // For ROM/RAM gates, the 'record' wire value (wire column 4) is a linear combination of the first 3 wire
+            // values. However...the record value uses the random challenge 'eta', generated after the first 3 wires are
+            // committed to. i.e. we can't compute the record witness here because we don't know what `eta` is! Take the
+            // gate indices of the two rom gates (original read gate + sorted gate) and store in `memory_records`. Once
+            // we
+            // generate the `eta` challenge, we'll use `memory_records` to figure out which gates need a record wire
+            // value
+            // to be computed.
+            match record.access_type {
+                RamAccessType::Read => {
+                    self.memory_read_records
+                        .push(sorted_record.gate_index as u32);
+                    self.memory_read_records.push(record.gate_index as u32);
+                }
+                RamAccessType::Write => {
+                    self.memory_write_records
+                        .push(sorted_record.gate_index as u32);
+                    self.memory_write_records.push(record.gate_index as u32);
+                }
+            }
+        }
+
+        // Step 2: Create gates that validate correctness of RAM timestamps
+
+        let mut timestamp_deltas = Vec::with_capacity(sorted_ram_records.len() - 1);
+        for i in 0..sorted_ram_records.len() - 1 {
+            // create_RAM_timestamp_gate(sorted_records[i], sorted_records[i + 1])
+            let current = &sorted_ram_records[i];
+            let next = &sorted_ram_records[i + 1];
+
+            let share_index = current.index == next.index;
+            let timestamp_delta = if share_index {
+                assert!(next.timestamp > current.timestamp);
+                P::ScalarField::from(next.timestamp - current.timestamp)
+            } else {
+                P::ScalarField::zero()
+            };
+
+            let timestamp_delta_witness = self.add_variable(T::AcvmType::from(timestamp_delta));
+
+            self.apply_aux_selectors(AuxSelectors::RamTimestampCheck);
+            self.blocks.aux.populate_wires(
+                current.index_witness,
+                current.timestamp_witness,
+                timestamp_delta_witness,
+                self.zero_idx,
+            );
+
+            self.num_gates += 1;
+
+            // store timestamp offsets for later. Need to apply range checks to them, but calling
+            // `create_new_range_constraint` can add gates. Would ruin the structure of our sorted timestamp list.
+            timestamp_deltas.push(timestamp_delta_witness);
+        }
+
+        // add the index/timestamp values of the last sorted record in an empty add gate.
+        // (the previous gate will access the wires on this gate and requires them to be those of the last record)
+        let last = &sorted_ram_records[self.ram_arrays[ram_id].records.len() - 1];
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.aux,
+            last.index_witness,
+            last.timestamp_witness,
+            self.zero_idx,
+            self.zero_idx
+        );
+
+        // Step 3: validate difference in timestamps is monotonically increasing. i.e. is <= maximum timestamp
+        let max_timestamp = self.ram_arrays[ram_id].access_count - 1;
+        for w in timestamp_deltas {
+            self.create_new_range_constraint(w, max_timestamp as u64);
+        }
+        Ok(())
+    }
+
     fn create_sorted_rom_gate(&mut self, record: &mut RomRecord) {
-        record.record_witness = self.add_variable(T::AcvmType::from(P::ScalarField::zero()));
+        record.record_witness = self.add_variable(T::public_zero());
 
         self.apply_aux_selectors(AuxSelectors::RomConsistencyCheck);
         self.blocks.aux.populate_wires(
@@ -2405,6 +2780,62 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // Note: record the index into the block that contains the RAM/ROM gates
         record.gate_index = self.blocks.aux.len() - 1;
         self.num_gates += 1;
+    }
+
+    fn create_sorted_ram_gate(&mut self, record: &mut RamRecord) {
+        record.record_witness = self.add_variable(T::public_zero());
+
+        self.apply_aux_selectors(AuxSelectors::RamConsistencyCheck);
+        self.blocks.aux.populate_wires(
+            record.index_witness,
+            record.timestamp_witness,
+            record.value_witness,
+            record.record_witness,
+        );
+
+        // Note: record the index into the block that contains the RAM/ROM gates
+        record.gate_index = self.blocks.aux.len() - 1;
+        self.num_gates += 1;
+    }
+
+    fn create_final_sorted_ram_gate(&mut self, record: &mut RamRecord, ram_aray_size: usize) {
+        record.record_witness = self.add_variable(T::public_zero());
+
+        // Note: record the index into the block that contains the RAM/ROM gates
+        record.gate_index = self.blocks.aux.len(); // no -1 since we havent added the gate yet
+
+        // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This method used to add a single arithmetic gate
+        // with two purposes: (1) to provide wire values to the previous RAM gate via shifts, and (2) to perform a
+        // consistency check on the value in wire 1. These two purposes have been split into a dummy gate and a simplified
+        // arithmetic gate, respectively. This allows both purposes to be served even after arithmetic gates are sorted out
+        // of sequence with the RAM gates.
+
+        // Create a final gate with all selectors zero; wire values are accessed by the previous RAM gate via shifted wires
+
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.aux,
+            record.index_witness,
+            record.timestamp_witness,
+            record.value_witness,
+            record.record_witness
+        );
+
+        // Create an add gate ensuring the final index is consistent with the size of the RAM array
+        self.create_big_add_gate(
+            &AddQuad {
+                a: record.index_witness,
+                b: self.zero_idx,
+                c: self.zero_idx,
+                d: self.zero_idx,
+                a_scaling: P::ScalarField::one(),
+                b_scaling: P::ScalarField::zero(),
+                c_scaling: P::ScalarField::zero(),
+                d_scaling: P::ScalarField::zero(),
+                const_scaling: -P::ScalarField::from(ram_aray_size as u64 - 1),
+            },
+            false,
+        );
     }
 
     fn process_range_list(&mut self, list: &mut RangeList, driver: &mut T) -> std::io::Result<()> {
@@ -2933,7 +3364,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 chunk[0],
                 chunk[1],
                 chunk[2],
-                chunk[3],
+                chunk[3]
             );
         }
     }
@@ -3066,7 +3497,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             variable_index[variable_index.len() - 1],
             self.zero_idx,
             self.zero_idx,
-            self.zero_idx,
+            self.zero_idx
         );
 
         self.create_add_gate(&AddTriple {
