@@ -1263,47 +1263,46 @@ pub(crate) struct RomRecord<F: Clone> {
     pub(crate) gate_index: usize,
 }
 
-// TODO: do we need this anymore?
-// impl<F: Clone> RomRecord<F> {
-//     fn less_than(&self, other: &Self) -> bool {
-//         self.index < other.index
-//     }
+impl<F: PrimeField> RomRecord<F> {
+    fn less_than(&self, other: &Self) -> bool {
+        self.index < other.index
+    }
 
-//     fn equal(&self, other: &Self) -> bool {
-//         self.index_witness == other.index_witness
-//             && self.value_column1_witness == other.value_column1_witness
-//             && self.value_column2_witness == other.value_column2_witness
-//             && self.index == other.index
-//             && self.record_witness == other.record_witness
-//             && self.gate_index == other.gate_index
-//     }
-// }
+    fn equal(&self, other: &Self) -> bool {
+        self.index_witness == other.index_witness
+            && self.value_column1_witness == other.value_column1_witness
+            && self.value_column2_witness == other.value_column2_witness
+            && self.index == other.index
+            && self.record_witness == other.record_witness
+            && self.gate_index == other.gate_index
+    }
+}
 
-// impl PartialEq for RomRecord {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.equal(other)
-//     }
-// }
+impl<F: PrimeField> PartialEq for RomRecord<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.equal(other)
+    }
+}
 
-// impl Eq for RomRecord {}
+impl<F: PrimeField> Eq for RomRecord<F> {}
 
-// impl PartialOrd for RomRecord {
-//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-//         Some(self.cmp(other))
-//     }
-// }
+impl<F: PrimeField> PartialOrd for RomRecord<F> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
-// impl Ord for RomRecord {
-//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-//         if self.less_than(other) {
-//             Ordering::Less
-//         } else if self.equal(other) {
-//             Ordering::Equal
-//         } else {
-//             Ordering::Greater
-//         }
-//     }
-// }
+impl<F: PrimeField> Ord for RomRecord<F> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.less_than(other) {
+            Ordering::Less
+        } else if self.equal(other) {
+            Ordering::Equal
+        } else {
+            Ordering::Greater
+        }
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct RomTranscript<F: Clone> {
