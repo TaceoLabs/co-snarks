@@ -273,12 +273,10 @@ pub fn split_witness_rep3<P: Pairing>(
     r1cs: &R1CS<P>,
     witness: Witness<P::ScalarField>,
     compression: Compression,
-) -> color_eyre::Result<[CompressedRep3SharedWitness<P::ScalarField>; 3]> {
+) -> [CompressedRep3SharedWitness<P::ScalarField>; 3] {
     let mut rng = rand::thread_rng();
     // create witness shares
-    let shares =
-        CompressedRep3SharedWitness::share_rep3(witness, r1cs.num_inputs, &mut rng, compression);
-    Ok(shares)
+    CompressedRep3SharedWitness::share_rep3(witness, r1cs.num_inputs, &mut rng, compression)
 }
 
 /// Split the witness into shamir shares
@@ -287,17 +285,16 @@ pub fn split_witness_shamir<P: Pairing>(
     witness: Witness<P::ScalarField>,
     threshold: usize,
     num_parties: usize,
-) -> color_eyre::Result<Vec<ShamirSharedWitness<P::ScalarField>>> {
+) -> Vec<ShamirSharedWitness<P::ScalarField>> {
     let mut rng = rand::thread_rng();
     // create witness shares
-    let shares = ShamirSharedWitness::<P::ScalarField>::share_shamir(
+    ShamirSharedWitness::<P::ScalarField>::share_shamir(
         witness,
         r1cs.num_inputs,
         threshold,
         num_parties,
         &mut rng,
-    );
-    Ok(shares)
+    )
 }
 
 /// Translate the REP3 shared witness into a shamir shared witness
