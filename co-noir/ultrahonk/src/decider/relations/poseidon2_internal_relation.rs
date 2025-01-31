@@ -1,12 +1,10 @@
 use super::Relation;
-use crate::{
-    decider::{
-        types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
-        univariate::Univariate,
-    },
-    prelude::POSEIDON2_BN254_T4_PARAMS,
+use crate::decider::{
+    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+    univariate::Univariate,
 };
 use ark_ff::{PrimeField, Zero};
+use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
 
 #[derive(Clone, Debug, Default)]

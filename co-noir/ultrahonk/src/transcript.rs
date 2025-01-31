@@ -1,11 +1,11 @@
 use crate::{
-    poseidon2::poseidon2_permutation::Poseidon2,
     sponge_hasher::{FieldHash, FieldSponge},
     types::HonkProof,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{One, PrimeField, Zero};
 use co_builder::{prelude::HonkCurve, HonkProofError, HonkProofResult};
+use mpc_core::gadgets::poseidon2::Poseidon2;
 use num_bigint::BigUint;
 use std::{collections::BTreeMap, ops::Index};
 

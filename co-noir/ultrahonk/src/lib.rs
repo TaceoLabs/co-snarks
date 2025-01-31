@@ -1,7 +1,6 @@
 pub(crate) mod decider;
 pub(crate) mod keccak_hash;
 pub(crate) mod oink;
-pub(crate) mod poseidon2;
 pub mod prelude;
 pub(crate) mod prover;
 pub(crate) mod sponge_hasher;
@@ -16,7 +15,6 @@ use co_builder::{
     prelude::{AcirFormat, ProverCrs},
     HonkProofResult,
 };
-use eyre::Error;
 use noirc_artifacts::program::ProgramArtifact;
 use std::{io, path::Path};
 
@@ -29,10 +27,6 @@ pub const N_MAX: usize = 1 << 25;
 pub struct Utils {}
 
 impl Utils {
-    pub(crate) fn field_from_hex_string<F: PrimeField>(str: &str) -> Result<F, Error> {
-        co_builder::prelude::Utils::field_from_hex_string(str)
-    }
-
     pub fn get_program_artifact_from_file(path: impl AsRef<Path>) -> io::Result<ProgramArtifact> {
         let program = std::fs::read_to_string(path)?;
         Ok(serde_json::from_str::<ProgramArtifact>(&program)?)

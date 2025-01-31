@@ -4,6 +4,7 @@
 
 #![warn(missing_docs)]
 
+pub mod gadgets;
 pub mod lut;
 pub mod protocols;
 pub use protocols::serde_compat::{ark_de, ark_se};

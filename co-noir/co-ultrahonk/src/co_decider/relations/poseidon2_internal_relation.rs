@@ -10,8 +10,9 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
-use ultrahonk::prelude::{TranscriptFieldType, Univariate, POSEIDON2_BN254_T4_PARAMS};
+use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Poseidon2InternalRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
