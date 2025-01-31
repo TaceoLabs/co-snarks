@@ -1,14 +1,17 @@
 use super::{plain::PlainAcvmSolver, NoirWitnessExtensionProtocol};
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
-use mpc_core::protocols::{
-    rep3::network::Rep3MpcNet,
-    rep3_ring::lut::Rep3LookupTable,
-    shamir::{arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
+use mpc_core::{
+    gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
+    protocols::{
+        rep3::network::Rep3MpcNet,
+        rep3_ring::lut::Rep3LookupTable,
+        shamir::{arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
+    },
 };
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
+use std::{array, marker::PhantomData};
 
 pub struct ShamirAcvmSolver<F: PrimeField, N: ShamirNetwork> {
     protocol: ShamirProtocol<F, N>,
@@ -530,5 +533,81 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _bitsize: usize,
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
         panic!("functionality sort_vec_by not feasible for Shamir")
+    }
+
+    fn poseidon2_permutation<const T: usize, const D: u64>(
+        &mut self,
+        mut input: Vec<Self::AcvmType>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        if input.len() != T {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Expected {} values but encountered {}", T, input.len(),),
+            ));
+        }
+
+        if input.iter().any(|x| Self::is_shared(x)) {
+            let mut shared = array::from_fn(|i| match input[i] {
+                ShamirAcvmType::Public(public) => {
+                    // The initial linear layer of poseidon makes the whole state shared anyway
+                    arithmetic::promote_to_trivial_share(public)
+                }
+                ShamirAcvmType::Shared(shared) => shared,
+            });
+            poseidon2
+                .shamir_permutation_in_place_with_precomputation(&mut shared, &mut self.protocol)?;
+
+            for (src, des) in shared.into_iter().zip(input.iter_mut()) {
+                *des = ShamirAcvmType::Shared(src);
+            }
+        } else {
+            let mut public = array::from_fn(|i| Self::get_public(&input[i]).unwrap());
+            poseidon2.permutation_in_place(&mut public);
+
+            for (src, des) in public.into_iter().zip(input.iter_mut()) {
+                *des = ShamirAcvmType::Public(src);
+            }
+        }
+
+        Ok(input)
+    }
+
+    fn poseidon2_matmul_external_inplace<const T: usize, const D: u64>(
+        &self,
+        input: &mut [Self::ArithmeticShare; T],
+    ) {
+        Poseidon2::<F, T, D>::matmul_external_shamir(input);
+    }
+
+    fn poseidon2_preprocess_permutation<const T: usize, const D: u64>(
+        &mut self,
+        num_poseidon: usize,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<Poseidon2Precomputations<Self::ArithmeticShare>> {
+        // Prepare enough randomness
+        self.protocol
+            .buffer_triples(poseidon2.rand_required(num_poseidon, true))?;
+        poseidon2.precompute_shamir(num_poseidon, &mut self.protocol)
+    }
+
+    fn poseidon2_external_round_inplace_with_precomp<const T: usize, const D: u64>(
+        &mut self,
+        input: &mut [Self::ArithmeticShare; T],
+        r: usize,
+        precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<()> {
+        poseidon2.shamir_external_round_precomp(input, r, precomp, &mut self.protocol)
+    }
+
+    fn poseidon2_internal_round_inplace_with_precomp<const T: usize, const D: u64>(
+        &mut self,
+        input: &mut [Self::ArithmeticShare; T],
+        r: usize,
+        precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<()> {
+        poseidon2.shamir_internal_round_precomp(input, r, precomp, &mut self.protocol)
     }
 }

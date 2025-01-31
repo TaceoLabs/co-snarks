@@ -66,6 +66,24 @@ pub(crate) struct MulQuad<F: PrimeField> {
     pub(crate) const_scaling: F,
 }
 
+#[derive(Default, PartialEq, Eq)]
+pub(crate) struct Poseidon2ExternalGate {
+    pub(crate) a: u32,
+    pub(crate) b: u32,
+    pub(crate) c: u32,
+    pub(crate) d: u32,
+    pub(crate) round_idx: usize,
+}
+
+#[derive(Default, PartialEq, Eq)]
+pub(crate) struct Poseidon2InternalGate {
+    pub(crate) a: u32,
+    pub(crate) b: u32,
+    pub(crate) c: u32,
+    pub(crate) d: u32,
+    pub(crate) round_idx: usize,
+}
+
 pub(crate) struct MemOp<F: PrimeField> {
     pub(crate) access_type: u8,
     pub(crate) index: PolyTriple<F>,
@@ -111,7 +129,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     // pub(crate) keccak_permutations: Vec<usize>,
     // pub(crate) pedersen_constraints: Vec<usize>,
     // pub(crate) pedersen_hash_constraints: Vec<usize>,
-    // pub(crate) poseidon2_constraints: Vec<usize>,
+    pub(crate) poseidon2_constraints: Vec<usize>,
     // pub(crate) multi_scalar_mul_constraints: Vec<usize>,
     // pub(crate) ec_add_constraints: Vec<usize>,
     // pub(crate) recursion_constraints: Vec<usize>,
@@ -398,6 +416,12 @@ impl GateCounter {
 pub(crate) struct RangeConstraint {
     pub(crate) witness: u32,
     pub(crate) num_bits: u32,
+}
+
+pub(crate) struct Poseidon2Constraint<F: PrimeField> {
+    pub(crate) state: Vec<WitnessOrConstant<F>>,
+    pub(crate) result: Vec<u32>,
+    pub(crate) len: u32,
 }
 
 pub(crate) struct LogicConstraint<F: PrimeField> {

@@ -8,6 +8,7 @@ use acir::{
     AcirField,
 };
 use ark_ff::PrimeField;
+use mpc_core::gadgets::poseidon2::Poseidon2;
 
 impl<T, F> CoSolver<T, F>
 where
@@ -206,6 +207,47 @@ where
         Self::insert_value(&result, assignment, initial_witness)
     }
 
+    fn solve_poseidon2_permutation_opcode(
+        driver: &mut T,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+        inputs: &[FunctionInput<GenericFieldElement<F>>],
+        outputs: &[Witness],
+        len: u32,
+    ) -> CoAcvmResult<()> {
+        if len as usize != inputs.len() {
+            Err(eyre::eyre!(
+                "the number of inputs does not match specified length. {} != {}",
+                inputs.len(),
+                len
+            ))?;
+        }
+        if len as usize != outputs.len() {
+            Err(eyre::eyre!(
+                "the number of outputs does not match specified length. {} != {}",
+                outputs.len(),
+                len
+            ))?;
+        }
+
+        // Read witness assignments
+        let mut state = Vec::with_capacity(inputs.len());
+        for input in inputs.iter() {
+            let witness_assignment = Self::input_to_value(initial_witness, *input, false)?;
+            state.push(witness_assignment);
+        }
+
+        const STATE_T: usize = 4;
+        const D: u64 = 5;
+        let poseidon2 = Poseidon2::<F, STATE_T, D>::default();
+        let state = driver.poseidon2_permutation(state, &poseidon2)?;
+
+        // Write witness assignments
+        for (output_witness, value) in outputs.iter().zip(state.into_iter()) {
+            Self::insert_value(output_witness, value, initial_witness)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn solve_blackbox(
         &mut self,
         bb_func: &BlackBoxFuncCall<GenericFieldElement<F>>,
@@ -243,6 +285,17 @@ where
                 rhs,
                 output,
                 pedantic_solving,
+            )?,
+            BlackBoxFuncCall::Poseidon2Permutation {
+                inputs,
+                outputs,
+                len,
+            } => Self::solve_poseidon2_permutation_opcode(
+                &mut self.driver,
+                initial_witness,
+                inputs,
+                outputs,
+                *len,
             )?,
             _ => todo!("solve blackbox function {} not supported", bb_func.name()),
         }

@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::types::types::{
     AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, LogicConstraint, MulQuad,
-    PolyTriple, RangeConstraint, RecursionConstraint, WitnessOrConstant,
+    PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint, WitnessOrConstant,
 };
 
 #[derive(Default)]
@@ -41,7 +41,7 @@ pub struct AcirFormat<F: PrimeField> {
     //  std::vector<Keccakf1600> keccak_permutations;
     //  std::vector<PedersenConstraint> pedersen_constraints;
     //  std::vector<PedersenHashConstraint> pedersen_hash_constraints;
-    //  std::vector<Poseidon2Constraint> poseidon2_constraints;
+    pub(crate) poseidon2_constraints: Vec<Poseidon2Constraint<F>>,
     //  std::vector<MultiScalarMul> multi_scalar_mul_constraints;
     //  std::vector<EcAdd> ec_add_constraints;
     pub(crate) recursion_constraints: Vec<RecursionConstraint>,
@@ -735,10 +735,24 @@ impl<F: PrimeField> AcirFormat<F> {
                 outputs: _,
             } => todo!("BlackBoxFuncCall::BigIntToLeBytes"),
             BlackBoxFuncCall::Poseidon2Permutation {
-                inputs: _,
-                outputs: _,
-                len: _,
-            } => todo!("BlackBoxFuncCall::Poseidon2Permutation"),
+                inputs,
+                outputs,
+                len,
+            } => {
+                let constraint = Poseidon2Constraint {
+                    state: inputs.into_iter().map(|e| Self::parse_input(e)).collect(),
+                    result: outputs.into_iter().map(|e| e.0).collect(),
+                    len,
+                };
+                for output in constraint.result.iter() {
+                    af.constrained_witness.insert(*output);
+                }
+                af.poseidon2_constraints.push(constraint);
+
+                af.original_opcode_indices
+                    .poseidon2_constraints
+                    .push(opcode_index);
+            }
             BlackBoxFuncCall::Sha256Compression {
                 inputs: _,
                 hash_values: _,

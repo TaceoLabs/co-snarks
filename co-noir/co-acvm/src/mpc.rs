@@ -1,6 +1,9 @@
 use ark_ff::PrimeField;
 use co_brillig::mpc::BrilligDriver;
-use mpc_core::lut::LookupTableProvider;
+use mpc_core::{
+    gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
+    lut::LookupTableProvider,
+};
 use std::{fmt, io};
 
 pub(super) mod plain;
@@ -239,4 +242,42 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )>;
+
+    /// Computes the Poseidon2 permutation for the given input.
+    fn poseidon2_permutation<const T: usize, const D: u64>(
+        &mut self,
+        input: Vec<Self::AcvmType>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<Vec<Self::AcvmType>>;
+
+    /// Computes the matrix_multiplication in the external round of the Poseidon2 permutation for the given input.
+    fn poseidon2_matmul_external_inplace<const T: usize, const D: u64>(
+        &self,
+        input: &mut [Self::ArithmeticShare; T],
+    );
+
+    /// Creates preprocessing data for one Poseidon2 permutation
+    fn poseidon2_preprocess_permutation<const T: usize, const D: u64>(
+        &mut self,
+        num_poseidon: usize,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<Poseidon2Precomputations<Self::ArithmeticShare>>;
+
+    /// Computes the external round fo the Poseidon2 permutation for the given input.
+    fn poseidon2_external_round_inplace_with_precomp<const T: usize, const D: u64>(
+        &mut self,
+        input: &mut [Self::ArithmeticShare; T],
+        r: usize,
+        precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<()>;
+
+    /// Computes the internal round fo the Poseidon2 permutation for the given input.
+    fn poseidon2_internal_round_inplace_with_precomp<const T: usize, const D: u64>(
+        &mut self,
+        input: &mut [Self::ArithmeticShare; T],
+        r: usize,
+        precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<()>;
 }

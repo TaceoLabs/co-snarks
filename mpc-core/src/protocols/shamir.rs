@@ -308,6 +308,20 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         ))
     }
 
+    /// Makes sure that num_triples are already preprocessed. It will thus create present_triples - num_triples new triples if not enough are present.
+    pub fn buffer_triples(&mut self, num_triples: usize) -> std::io::Result<()> {
+        let present_triples = self.rng_buffer.r_t.len();
+        debug_assert_eq!(self.rng_buffer.r_2t.len(), present_triples);
+        if present_triples >= num_triples {
+            return Ok(());
+        }
+
+        self.rng_buffer.buffer_triples(
+            &mut self.network,
+            (num_triples - present_triples).div_ceil(self.rng_buffer.get_size_per_batch()),
+        )
+    }
+
     /// Generates a random field element and returns it as a share.
     pub fn rand(&mut self) -> std::io::Result<ShamirPrimeFieldShare<F>> {
         self.get_pair().map(|(r, _)| ShamirPrimeFieldShare::new(r))
