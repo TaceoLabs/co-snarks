@@ -1,7 +1,6 @@
 pub use crate::decider::barycentric::Barycentric;
 pub use crate::decider::types::GateSeparatorPolynomial;
 pub use crate::decider::univariate::Univariate;
-pub use crate::poseidon2::poseidon2_bn254::POSEIDON2_BN254_T4_PARAMS;
 pub use crate::prover::UltraHonk;
 pub use crate::transcript::Poseidon2Sponge;
 pub use crate::transcript::{Transcript, TranscriptHasher};

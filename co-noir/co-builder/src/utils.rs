@@ -2,19 +2,13 @@ use crate::{crs::ProverCrs, HonkProofError, HonkProofResult};
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
 use ark_ff::PrimeField;
 use eyre::Error;
-use num_bigint::BigUint;
-use num_traits::Num;
+use mpc_core::gadgets;
 
 pub struct Utils {}
 
 impl Utils {
     pub fn field_from_hex_string<F: PrimeField>(str: &str) -> Result<F, Error> {
-        let tmp = match str.strip_prefix("0x") {
-            Some(t) => BigUint::from_str_radix(t, 16),
-            None => BigUint::from_str_radix(str, 16),
-        };
-
-        Ok(tmp?.into())
+        Ok(gadgets::field_from_hex_string(str)?)
     }
 
     pub fn batch_invert<F: PrimeField>(coeffs: &mut [F]) {

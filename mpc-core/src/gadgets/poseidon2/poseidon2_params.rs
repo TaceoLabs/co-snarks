@@ -1,13 +1,20 @@
 use ark_ff::PrimeField;
 
+/// A parameter set containing the parameters for the Poseidon2 permutation.
 #[derive(Clone, Debug)]
 pub struct Poseidon2Params<F: PrimeField, const T: usize, const D: u64> {
-    pub(crate) rounds_f_beginning: usize,
-    pub(crate) rounds_f_end: usize,
-    pub(crate) rounds_p: usize,
-    pub mat_internal_diag_m_1: &'static [F; T], // The diagonal of the internal matrix, each element taken minus 1 for more efficient implementations
-    pub(crate) round_constants_external: &'static Vec<[F; T]>,
-    pub(crate) round_constants_internal: &'static Vec<F>,
+    /// The amount of external rounds at the beginning of the permutation.
+    pub rounds_f_beginning: usize,
+    /// The amount of external rounds at the end of the permutation.
+    pub rounds_f_end: usize,
+    /// The amount of internal rounds.
+    pub rounds_p: usize,
+    /// The diagonal of t x t matrix of the internal permutation. Each element is taken minus 1 for more efficient implementations.
+    pub mat_internal_diag_m_1: &'static [F; T],
+    /// The round constants of the external rounds.
+    pub round_constants_external: &'static Vec<[F; T]>,
+    /// The round constants of the internal rounds.
+    pub round_constants_internal: &'static Vec<F>,
 }
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2Params<F, T, D> {
