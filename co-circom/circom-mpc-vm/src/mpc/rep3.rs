@@ -201,7 +201,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let zero_val = self.plain.val(F::zero());
                 let is_pos = arithmetic::ge_public(sqrt_val, zero_val, &mut self.io_context0)?;
                 let mut mul = arithmetic::mul(sqrt, is_pos, &mut self.io_context0)?;
-                mul.double();
+                mul.double_in_place();
                 mul -= sqrt;
                 Ok(mul.into())
             }

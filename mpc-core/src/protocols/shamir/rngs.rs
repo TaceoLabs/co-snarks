@@ -186,7 +186,7 @@ impl<F: PrimeField> ShamirRng<F> {
         result
     }
 
-    fn mamtul(mat: &[Vec<F>], inp: &[F], outp: &mut [F]) {
+    fn matmul(mat: &[Vec<F>], inp: &[F], outp: &mut [F]) {
         debug_assert_eq!(outp.len(), mat.len());
         for (res, row) in outp.iter_mut().zip(mat.iter()) {
             debug_assert_eq!(row.len(), inp.len());
@@ -413,10 +413,10 @@ impl<F: PrimeField> ShamirRng<F> {
         let r_2t_chunks = r_2t.chunks_exact_mut(size);
 
         for (des, src) in izip!(r_t_chunks, rcv_rt) {
-            Self::mamtul(&self.matrix, &src, des);
+            Self::matmul(&self.matrix, &src, des);
         }
         for (des, src) in izip!(r_2t_chunks, rcv_r2t) {
-            Self::mamtul(&self.matrix, &src, des);
+            Self::matmul(&self.matrix, &src, des);
         }
 
         self.r_t.extend(r_t);
