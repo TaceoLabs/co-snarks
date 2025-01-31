@@ -5,6 +5,7 @@ mod field_share {
     use ark_std::{UniformRand, Zero};
     use itertools::izip;
     use itertools::Itertools;
+    use mpc_core::gadgets::poseidon2::Poseidon2;
     use mpc_core::protocols::rep3::conversion;
     use mpc_core::protocols::rep3::gadgets;
     use mpc_core::protocols::rep3::id::PartyID;
@@ -1886,11 +1887,198 @@ mod field_share {
         let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
         assert_eq!(is_result, x);
     }
+
     #[test]
     fn reshare_from_2_to_3_parties_test() {
         reshare_from_2_to_3_parties_test_internal(PartyID::ID0);
         reshare_from_2_to_3_parties_test_internal(PartyID::ID1);
         reshare_from_2_to_3_parties_test_internal(PartyID::ID2);
+    }
+
+    #[test]
+    fn rep3_poseidon2_gadget_kat1() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let input = [
+            ark_bn254::Fr::from(0),
+            ark_bn254::Fr::from(1),
+            ark_bn254::Fr::from(2),
+            ark_bn254::Fr::from(3),
+        ];
+
+        let input_shares = rep3::share_field_elements(&input, &mut rng);
+
+        let expected = [
+            mpc_core::gadgets::field_from_hex_string(
+                "0x01bd538c2ee014ed5141b29e9ae240bf8db3fe5b9a38629a9647cf8d76c01737",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x239b62e7db98aa3a2a8f6a0d2fa1709e7a35959aa6c7034814d9daa90cbac662",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x04cbb44c61d928ed06808456bf758cbf0c18d1e15a7b6dbc8245fa7515d5e3cb",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x2e11c5cff2a22c64d01304b778d78f6998eff1ab73163a35603f54794c30847a",
+            )
+            .unwrap(),
+        ];
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            input_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let poseidon = Poseidon2::<_, 4, 5>::default();
+                let output = poseidon
+                    .rep3_permutation(x.as_slice().try_into().unwrap(), &mut rep3)
+                    .unwrap();
+                tx.send(output)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+
+        assert_eq!(is_result, expected);
+    }
+
+    #[test]
+    fn rep3_poseidon2_gadget_kat1_precomp() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let input = [
+            ark_bn254::Fr::from(0),
+            ark_bn254::Fr::from(1),
+            ark_bn254::Fr::from(2),
+            ark_bn254::Fr::from(3),
+        ];
+
+        let input_shares = rep3::share_field_elements(&input, &mut rng);
+
+        let expected = [
+            mpc_core::gadgets::field_from_hex_string(
+                "0x01bd538c2ee014ed5141b29e9ae240bf8db3fe5b9a38629a9647cf8d76c01737",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x239b62e7db98aa3a2a8f6a0d2fa1709e7a35959aa6c7034814d9daa90cbac662",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x04cbb44c61d928ed06808456bf758cbf0c18d1e15a7b6dbc8245fa7515d5e3cb",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x2e11c5cff2a22c64d01304b778d78f6998eff1ab73163a35603f54794c30847a",
+            )
+            .unwrap(),
+        ];
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            input_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let poseidon = Poseidon2::<_, 4, 5>::default();
+                let output = poseidon
+                    .rep3_permutation_with_precomputation(
+                        x.as_slice().try_into().unwrap(),
+                        &mut rep3,
+                    )
+                    .unwrap();
+                tx.send(output)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+
+        assert_eq!(is_result, expected);
+    }
+
+    #[test]
+    fn rep3_poseidon2_gadget_kat1_precomp_additive() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let input = [
+            ark_bn254::Fr::from(0),
+            ark_bn254::Fr::from(1),
+            ark_bn254::Fr::from(2),
+            ark_bn254::Fr::from(3),
+        ];
+
+        let input_shares = rep3::share_field_elements(&input, &mut rng);
+
+        let expected = [
+            mpc_core::gadgets::field_from_hex_string(
+                "0x01bd538c2ee014ed5141b29e9ae240bf8db3fe5b9a38629a9647cf8d76c01737",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x239b62e7db98aa3a2a8f6a0d2fa1709e7a35959aa6c7034814d9daa90cbac662",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x04cbb44c61d928ed06808456bf758cbf0c18d1e15a7b6dbc8245fa7515d5e3cb",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x2e11c5cff2a22c64d01304b778d78f6998eff1ab73163a35603f54794c30847a",
+            )
+            .unwrap(),
+        ];
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            input_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let poseidon = Poseidon2::<_, 4, 5>::default();
+                let output = poseidon
+                    .rep3_permutation_additive_with_precomputation(
+                        x.as_slice().try_into().unwrap(),
+                        &mut rep3,
+                    )
+                    .unwrap();
+                tx.send(output)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+
+        assert_eq!(is_result, expected);
     }
 }
 

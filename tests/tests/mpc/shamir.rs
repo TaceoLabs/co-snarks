@@ -2,7 +2,10 @@ mod field_share {
     use ark_ff::Field;
     use ark_std::{UniformRand, Zero};
     use itertools::{izip, Itertools};
-    use mpc_core::protocols::shamir::{self, arithmetic, ShamirPreprocessing};
+    use mpc_core::{
+        gadgets::poseidon2::Poseidon2,
+        protocols::shamir::{self, arithmetic, ShamirPreprocessing},
+    };
     use rand::thread_rng;
     use std::{str::FromStr, sync::mpsc, thread};
     use tests::shamir_network::ShamirTestNetwork;
@@ -356,6 +359,155 @@ mod field_share {
     fn shamir_inv() {
         shamir_inv_inner(3, 1);
         shamir_inv_inner(10, 4);
+    }
+
+    fn shamir_poseidon2_gadget_kat1_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let input = [
+            ark_bn254::Fr::from(0),
+            ark_bn254::Fr::from(1),
+            ark_bn254::Fr::from(2),
+            ark_bn254::Fr::from(3),
+        ];
+
+        let input_shares = shamir::share_field_elements(&input, threshold, num_parties, &mut rng);
+
+        let expected = [
+            mpc_core::gadgets::field_from_hex_string(
+                "0x01bd538c2ee014ed5141b29e9ae240bf8db3fe5b9a38629a9647cf8d76c01737",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x239b62e7db98aa3a2a8f6a0d2fa1709e7a35959aa6c7034814d9daa90cbac662",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x04cbb44c61d928ed06808456bf758cbf0c18d1e15a7b6dbc8245fa7515d5e3cb",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x2e11c5cff2a22c64d01304b778d78f6998eff1ab73163a35603f54794c30847a",
+            )
+            .unwrap(),
+        ];
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = mpsc::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x) in izip!(test_network.get_party_networks(), tx, input_shares) {
+            thread::spawn(move || {
+                let poseidon = Poseidon2::<_, 4, 5>::default();
+                let mut shamir =
+                    ShamirPreprocessing::new(threshold, net, poseidon.rand_required(1, false))
+                        .unwrap()
+                        .into();
+                let output = poseidon
+                    .shamir_permutation(x.as_slice().try_into().unwrap(), &mut shamir)
+                    .unwrap()
+                    .to_vec();
+
+                tx.send(output)
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.recv().unwrap());
+        }
+
+        let is_result =
+            shamir::combine_field_elements(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
+
+        assert_eq!(is_result, expected);
+    }
+
+    #[test]
+    fn shamir_poseidon2_gadget_kat1() {
+        shamir_poseidon2_gadget_kat1_inner(3, 1);
+        shamir_poseidon2_gadget_kat1_inner(10, 4);
+    }
+
+    fn shamir_poseidon2_gadget_kat1_precomp_inner(num_parties: usize, threshold: usize) {
+        let test_network = ShamirTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let input = [
+            ark_bn254::Fr::from(0),
+            ark_bn254::Fr::from(1),
+            ark_bn254::Fr::from(2),
+            ark_bn254::Fr::from(3),
+        ];
+
+        let input_shares = shamir::share_field_elements(&input, threshold, num_parties, &mut rng);
+
+        let expected = [
+            mpc_core::gadgets::field_from_hex_string(
+                "0x01bd538c2ee014ed5141b29e9ae240bf8db3fe5b9a38629a9647cf8d76c01737",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x239b62e7db98aa3a2a8f6a0d2fa1709e7a35959aa6c7034814d9daa90cbac662",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x04cbb44c61d928ed06808456bf758cbf0c18d1e15a7b6dbc8245fa7515d5e3cb",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x2e11c5cff2a22c64d01304b778d78f6998eff1ab73163a35603f54794c30847a",
+            )
+            .unwrap(),
+        ];
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = mpsc::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x) in izip!(test_network.get_party_networks(), tx, input_shares) {
+            thread::spawn(move || {
+                let poseidon = Poseidon2::<_, 4, 5>::default();
+                let mut shamir =
+                    ShamirPreprocessing::new(threshold, net, poseidon.rand_required(1, true))
+                        .unwrap()
+                        .into();
+                let output = poseidon
+                    .shamir_permutation_with_precomputation(
+                        x.as_slice().try_into().unwrap(),
+                        &mut shamir,
+                    )
+                    .unwrap()
+                    .to_vec();
+
+                tx.send(output)
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.recv().unwrap());
+        }
+
+        let is_result =
+            shamir::combine_field_elements(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
+
+        assert_eq!(is_result, expected);
+    }
+
+    #[test]
+    fn shamir_poseidon2_gadget_kat1_precomp() {
+        shamir_poseidon2_gadget_kat1_precomp_inner(3, 1);
+        shamir_poseidon2_gadget_kat1_precomp_inner(10, 4);
     }
 }
 
