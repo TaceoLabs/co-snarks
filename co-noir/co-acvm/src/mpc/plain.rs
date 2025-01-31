@@ -1,11 +1,13 @@
-use std::io;
-use std::marker::PhantomData;
-
 use super::NoirWitnessExtensionProtocol;
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
-use mpc_core::lut::{LookupTableProvider, PlainLookupTableProvider};
+use mpc_core::{
+    gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
+    lut::{LookupTableProvider, PlainLookupTableProvider},
+};
 use num_bigint::BigUint;
+use std::io;
+use std::marker::PhantomData;
 
 pub struct PlainAcvmSolver<F: PrimeField> {
     plain_lut: PlainLookupTableProvider<F>,
@@ -439,5 +441,62 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             results.push(indexed_values.iter().map(|(_, i)| inp[*i]).collect())
         }
         Ok(results)
+    }
+
+    fn poseidon2_permutation<const T: usize, const D: u64>(
+        &mut self,
+        mut input: Vec<Self::AcvmType>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        if input.len() != T {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Expected {} values but encountered {}", T, input.len(),),
+            ));
+        }
+        poseidon2.permutation_in_place(
+            input
+                .as_mut_slice()
+                .try_into()
+                .expect("Sizes are checked already"),
+        );
+        Ok(input)
+    }
+
+    fn poseidon2_matmul_external_inplace<const T: usize, const D: u64>(
+        &self,
+        input: &mut [Self::ArithmeticShare; T],
+    ) {
+        Poseidon2::<F, T, D>::matmul_external(input);
+    }
+
+    fn poseidon2_preprocess_permutation<const T: usize, const D: u64>(
+        &mut self,
+        _num_poseidon: usize,
+        _poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<Poseidon2Precomputations<Self::ArithmeticShare>> {
+        Ok(Poseidon2Precomputations::default())
+    }
+
+    fn poseidon2_external_round_inplace_with_precomp<const T: usize, const D: u64>(
+        &mut self,
+        input: &mut [Self::ArithmeticShare; T],
+        r: usize,
+        _precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<()> {
+        poseidon2.external_round(input, r);
+        Ok(())
+    }
+
+    fn poseidon2_internal_round_inplace_with_precomp<const T: usize, const D: u64>(
+        &mut self,
+        input: &mut [Self::ArithmeticShare; T],
+        r: usize,
+        _precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<()> {
+        poseidon2.internal_round(input, r);
+        Ok(())
     }
 }

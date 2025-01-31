@@ -1,6 +1,7 @@
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
+use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
 use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao};
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
@@ -14,6 +15,7 @@ use mpc_core::{
 use num_bigint::BigUint;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::array;
 use std::marker::PhantomData;
 
 use super::plain::PlainAcvmSolver;
@@ -830,5 +832,80 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             &mut self.io_context1,
             bitsize,
         )
+    }
+
+    fn poseidon2_permutation<const T: usize, const D: u64>(
+        &mut self,
+        mut input: Vec<Self::AcvmType>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        if input.len() != T {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Expected {} values but encountered {}", T, input.len(),),
+            ));
+        }
+
+        if input.iter().any(|x| Self::is_shared(x)) {
+            let mut shared = array::from_fn(|i| match input[i] {
+                Rep3AcvmType::Public(public) => {
+                    // The initial linear layer of poseidon makes the whole state shared anyway
+                    arithmetic::promote_to_trivial_share(self.io_context0.id, public)
+                }
+                Rep3AcvmType::Shared(shared) => shared,
+            });
+            poseidon2.rep3_permutation_in_place_with_precomputation(
+                &mut shared,
+                &mut self.io_context0,
+            )?;
+
+            for (src, des) in shared.into_iter().zip(input.iter_mut()) {
+                *des = Rep3AcvmType::Shared(src);
+            }
+        } else {
+            let mut public = array::from_fn(|i| Self::get_public(&input[i]).unwrap());
+            poseidon2.permutation_in_place(&mut public);
+
+            for (src, des) in public.into_iter().zip(input.iter_mut()) {
+                *des = Rep3AcvmType::Public(src);
+            }
+        }
+
+        Ok(input)
+    }
+
+    fn poseidon2_matmul_external_inplace<const T: usize, const D: u64>(
+        &self,
+        input: &mut [Self::ArithmeticShare; T],
+    ) {
+        Poseidon2::<F, T, D>::matmul_external_rep3(input);
+    }
+
+    fn poseidon2_preprocess_permutation<const T: usize, const D: u64>(
+        &mut self,
+        num_poseidon: usize,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<Poseidon2Precomputations<Self::ArithmeticShare>> {
+        poseidon2.precompute_rep3(num_poseidon, &mut self.io_context0)
+    }
+
+    fn poseidon2_external_round_inplace_with_precomp<const T: usize, const D: u64>(
+        &mut self,
+        input: &mut [Self::ArithmeticShare; T],
+        r: usize,
+        precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<()> {
+        poseidon2.rep3_external_round_precomp(input, r, precomp, &mut self.io_context0)
+    }
+
+    fn poseidon2_internal_round_inplace_with_precomp<const T: usize, const D: u64>(
+        &mut self,
+        input: &mut [Self::ArithmeticShare; T],
+        r: usize,
+        precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
+        poseidon2: &Poseidon2<F, T, D>,
+    ) -> std::io::Result<()> {
+        poseidon2.rep3_internal_round_precomp(input, r, precomp, &mut self.io_context0)
     }
 }

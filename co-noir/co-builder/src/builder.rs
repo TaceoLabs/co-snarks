@@ -8,13 +8,15 @@ use crate::{
     polynomials::polynomial_types::PrecomputedEntities,
     types::{
         plookup::{BasicTableId, MultiTableId, Plookup},
+        poseidon2::Poseidon2CT,
         types::{
             AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
             AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
             ColumnIdx, FieldCT, GateCounter, LogicConstraint, MulQuad, PlookupBasicTable,
-            PolyTriple, RamAccessType, RamRecord, RamTable, RamTranscript, RangeConstraint,
-            RangeList, ReadData, RomRecord, RomTable, RomTranscript, UltraTraceBlock,
-            UltraTraceBlocks, NUM_WIRES,
+            PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate,
+            RamAccessType, RamRecord, RamTable, RamTranscript, RangeConstraint, RangeList,
+            ReadData, RomRecord, RomTable, RomTranscript, UltraTraceBlock, UltraTraceBlocks,
+            NUM_WIRES,
         },
     },
     utils::Utils,
@@ -24,8 +26,12 @@ use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
 use itertools::izip;
+use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    array,
+    collections::{BTreeMap, HashMap},
+};
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
@@ -155,7 +161,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub(crate) zero_idx: u32,
     one_idx: u32,
     pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
-    num_gates: usize,
+    pub(crate) num_gates: usize,
     circuit_finalized: bool,
     pub contains_pairing_point_accumulator: bool,
     pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
@@ -557,6 +563,138 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.num_gates += 1;
     }
 
+    pub(crate) fn create_poseidon2_external_gate(&mut self, inp: &Poseidon2ExternalGate) {
+        self.blocks
+            .poseidon2_external
+            .populate_wires(inp.a, inp.b, inp.c, inp.d);
+        self.blocks
+            .poseidon2_external
+            .q_m()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_1()
+            .push(P::ScalarField::from(BigUint::from(
+                POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][0],
+            )));
+        self.blocks
+            .poseidon2_external
+            .q_2()
+            .push(P::ScalarField::from(BigUint::from(
+                POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][1],
+            )));
+        self.blocks
+            .poseidon2_external
+            .q_3()
+            .push(P::ScalarField::from(BigUint::from(
+                POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][2],
+            )));
+        self.blocks
+            .poseidon2_external
+            .q_c()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_arith()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_4()
+            .push(P::ScalarField::from(BigUint::from(
+                POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][3],
+            )));
+        self.blocks
+            .poseidon2_external
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_elliptic()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_aux()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_poseidon2_external()
+            .push(P::ScalarField::one());
+        self.blocks
+            .poseidon2_external
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        self.check_selector_length_consistency();
+        self.num_gates += 1;
+    }
+
+    pub(crate) fn create_poseidon2_internal_gate(&mut self, inp: &Poseidon2InternalGate) {
+        self.blocks
+            .poseidon2_internal
+            .populate_wires(inp.a, inp.b, inp.c, inp.d);
+        self.blocks
+            .poseidon2_internal
+            .q_m()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_1()
+            .push(P::ScalarField::from(BigUint::from(
+                POSEIDON2_BN254_T4_PARAMS.round_constants_internal[inp.round_idx],
+            )));
+        self.blocks
+            .poseidon2_internal
+            .q_2()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_3()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_c()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_arith()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_4()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_elliptic()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_aux()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_poseidon2_internal()
+            .push(P::ScalarField::one());
+
+        self.check_selector_length_consistency();
+        self.num_gates += 1;
+    }
+
     fn create_logic_constraint(
         &mut self,
         driver: &mut T,
@@ -810,7 +948,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         variable_index < self.variables.len()
     }
 
-    fn check_selector_length_consistency(&self) {
+    pub(crate) fn check_selector_length_consistency(&self) {
         for block in self.blocks.get() {
             let nominal_size = block.selectors[0].len();
             for selector in block.selectors.iter().skip(1) {
@@ -1051,9 +1189,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // }
 
         // Add poseidon2 constraints
-        // for (i, constraint) in constraint_system.poseidon2_constraints.iter().enumerate() {
-        //     todo!("poseidon2 gates");
-        // }
+        for (i, constraint) in constraint_system.poseidon2_constraints.iter().enumerate() {
+            self.create_poseidon2_permutations(constraint, driver)?;
+            gate_counter.track_diff(
+                self,
+                &mut constraint_system.gates_per_opcode,
+                constraint_system
+                    .original_opcode_indices
+                    .poseidon2_constraints[i],
+            );
+        }
 
         // Add multi scalar mul constraints
         // for (i, constraint) in constraint_system.multi_scalar_mul_constraints.iter().enumerate() {
@@ -1946,7 +2091,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
     }
 
-    fn create_dummy_gate(
+    pub(crate) fn create_dummy_gate(
         // &mut self,
         block: &mut UltraTraceBlock<P::ScalarField>,
         idx_1: u32,
@@ -2473,6 +2618,40 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.num_gates += 1;
         }
         read_data
+    }
+
+    fn create_poseidon2_permutations(
+        &mut self,
+        constraint: &Poseidon2Constraint<P::ScalarField>,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        const STATE_T: usize = 4;
+        const D: u64 = 5;
+
+        assert_eq!(constraint.state.len(), constraint.len as usize);
+        assert_eq!(constraint.result.len(), constraint.len as usize);
+        assert_eq!(constraint.len as usize, STATE_T);
+        // Get the witness assignment for each witness index
+        // Write the witness assignment to the byte_array state
+        let mut state = array::from_fn(|i| constraint.state[i].to_field_ct());
+
+        let poseidon2 = Poseidon2CT::<P::ScalarField, STATE_T, D>::default();
+        poseidon2.permutation_in_place(&mut state, self, driver)?;
+
+        for (out, res) in state.into_iter().zip(constraint.result.iter()) {
+            let assert_equal = PolyTriple {
+                a: out.normalize(self, driver).witness_index,
+                b: *res,
+                c: 0,
+                q_m: P::ScalarField::zero(),
+                q_l: P::ScalarField::one(),
+                q_r: -P::ScalarField::one(),
+                q_o: P::ScalarField::zero(),
+                q_c: P::ScalarField::zero(),
+            };
+            self.create_poly_gate(&assert_equal);
+        }
+        Ok(())
     }
 
     pub fn finalize_circuit(
@@ -3131,7 +3310,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             //  *    num_bits <= DEFAULT_PLOOKUP_RANGE_BITNUM is correctly enforced in the circuit.
             //  *    Longer term, as Zac says, we would need to refactor the composer to fix this.
             //  **/
-            self.create_poly_gate(&PolyTriple::<P::ScalarField> {
+            self.create_poly_gate(&PolyTriple {
                 a: variable_index,
                 b: variable_index,
                 c: variable_index,
