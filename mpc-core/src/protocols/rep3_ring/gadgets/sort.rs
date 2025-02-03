@@ -43,6 +43,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     bitsize: usize,
 ) -> IoResult<Vec<FieldShare<F>>> {
     let len = inputs.len();
+
     if len
         > PermRing::MAX
             .try_into()
@@ -56,6 +57,34 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
 
     let perm = gen_perm(inputs, bitsize, io_context0, io_context1)?;
     apply_inv_field(&perm, inputs, io_context0, io_context1)
+}
+
+/// Sorts the inputs using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
+/// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
+pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
+    key: &[FieldShare<F>],
+    inputs: Vec<&[FieldShare<F>]>,
+    io_context0: &mut IoContext<N>,
+    io_context1: &mut IoContext<N>,
+    bitsize: usize,
+) -> IoResult<Vec<Vec<FieldShare<F>>>> {
+    let len = key.len();
+    if len
+        > PermRing::MAX
+            .try_into()
+            .expect("transformation of PermRing::MAX into usize failed")
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Too many inputs for radix sort. Use a larger PermRing.",
+        ));
+    }
+    let mut results = Vec::with_capacity(inputs.len());
+    let perm = gen_perm(key, bitsize, io_context0, io_context1)?;
+    for inp in inputs {
+        results.push(apply_inv_field(&perm, inp, io_context0, io_context1)?)
+    }
+    Ok(results)
 }
 
 fn gen_perm<F: PrimeField, N: Rep3Network>(

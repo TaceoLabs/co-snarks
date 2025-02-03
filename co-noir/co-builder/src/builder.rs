@@ -23,6 +23,7 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
+use itertools::izip;
 use num_bigint::BigUint;
 use std::collections::{BTreeMap, HashMap};
 
@@ -158,7 +159,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     circuit_finalized: bool,
     pub contains_pairing_point_accumulator: bool,
     pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
-    rom_arrays: Vec<RomTranscript>,
+    rom_arrays: Vec<RomTranscript<T::AcvmType>>,
     ram_arrays: Vec<RamTranscript>,
     pub(crate) lookup_tables: Vec<PlookupBasicTable<P, T>>,
     pub(crate) plookup: Plookup<P::ScalarField>,
@@ -1601,11 +1602,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // * The second initialization value here is the witness, because in ROM it doesn't matter. We will decouple this
         // * logic later.
         // */
-        let mut new_record = RomRecord {
+        let mut new_record = RomRecord::<T::AcvmType> {
             index_witness,
             value_column1_witness: value_witness,
             value_column2_witness: self.zero_idx,
-            index: index_value as u32,
+            index: P::ScalarField::from(index_value as u64).into(),
             record_witness: 0,
             gate_index: 0,
         };
@@ -1632,11 +1633,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         assert!(self.rom_arrays[rom_id].state.len() > index_value);
         assert!(self.rom_arrays[rom_id].state[index_value][0] == Self::UNINITIALIZED_MEMORY_RECORD);
 
-        let mut new_record = RomRecord {
+        let mut new_record = RomRecord::<T::AcvmType> {
             index_witness,
             value_column1_witness: value_witnesses[0],
             value_column2_witness: value_witnesses[1],
-            index: index_value as u32,
+            index: P::ScalarField::from(index_value as u32).into(),
             record_witness: 0,
             gate_index: 0,
         };
@@ -1682,7 +1683,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.ram_arrays[ram_id].records.push(new_record);
     }
 
-    fn create_rom_gate(&mut self, record: &mut RomRecord) {
+    fn create_rom_gate(&mut self, record: &mut RomRecord<T::AcvmType>) {
         // Record wire value can't yet be computed
         record.record_witness = self.add_variable(T::public_zero());
         self.apply_aux_selectors(AuxSelectors::RomRead);
@@ -1725,23 +1726,37 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         &mut self,
         rom_id: usize,
         index_witness: u32,
+        driver: &mut T,
     ) -> HonkProofResult<u32> {
         assert!(self.rom_arrays.len() > rom_id);
-        let val: BigUint = T::get_public(&self.get_variable(index_witness as usize))
-            .ok_or(HonkProofError::ExpectedPublicWitness)?
-            .into();
-        let index: usize = val.try_into().unwrap();
+        let val = self.get_variable(index_witness as usize);
 
-        assert!(self.rom_arrays[rom_id].state.len() > index);
-        assert!(self.rom_arrays[rom_id].state[index][0] != Self::UNINITIALIZED_MEMORY_RECORD);
-        let value = self.get_variable(self.rom_arrays[rom_id].state[index][0] as usize);
+        if !T::is_shared(&val) {
+            // Sanity check only doable in plain
+            let val: BigUint = T::get_public(&val)
+                .expect("Already checked it is public")
+                .into();
+            let index: usize = val.try_into().unwrap();
+            assert!(self.rom_arrays[rom_id].state.len() > index);
+            assert!(self.rom_arrays[rom_id].state[index][0] != Self::UNINITIALIZED_MEMORY_RECORD);
+        }
+
+        let fields = self.rom_arrays[rom_id]
+            .state
+            .iter()
+            .map(|x| self.get_variable(x[0] as usize))
+            .collect();
+
+        let lut = T::init_lut_by_acvm_type(driver, fields);
+        let value = T::read_lut_by_acvm_type(driver, val.to_owned(), &lut)?;
+
         let value_witness = self.add_variable(value);
 
-        let mut new_record = RomRecord {
+        let mut new_record = RomRecord::<T::AcvmType> {
             index_witness,
             value_column1_witness: value_witness,
             value_column2_witness: self.zero_idx,
-            index: index as u32,
+            index: val,
             record_witness: 0,
             gate_index: 0,
         };
@@ -2499,7 +2514,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             }
 
             self.process_non_native_field_multiplications();
-            self.process_rom_arrays()?;
+            self.process_rom_arrays(driver)?;
             self.process_ram_arrays()?;
             self.process_range_lists(driver)?;
             self.circuit_finalized = true;
@@ -2507,9 +2522,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
-    fn process_rom_arrays(&mut self) -> std::io::Result<()> {
+    fn process_rom_arrays(&mut self, driver: &mut T) -> std::io::Result<()> {
         for i in 0..self.rom_arrays.len() {
-            self.process_rom_array(i)?;
+            self.process_rom_array(i, driver)?;
         }
         Ok(())
     }
@@ -2539,7 +2554,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
-    fn process_rom_array(&mut self, rom_id: usize) -> std::io::Result<()> {
+    fn process_rom_array(&mut self, rom_id: usize, driver: &mut T) -> std::io::Result<()> {
         let read_tag = self.get_new_tag(); // current_tag + 1;
         let sorted_list_tag = self.get_new_tag(); // current_tag + 2;
         self.create_tag(read_tag, sorted_list_tag);
@@ -2552,46 +2567,139 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             }
         }
 
-        self.rom_arrays[rom_id].records.sort();
-        let records = self.rom_arrays[rom_id].records.clone();
-        for record in records {
-            let index = record.index;
-            let value1 = self.get_variable(record.value_column1_witness.try_into().unwrap());
-            let value2 = self.get_variable(record.value_column2_witness.try_into().unwrap());
-            let index_witness = self.add_variable(T::AcvmType::from(P::ScalarField::from(index)));
+        let records = &self.rom_arrays[rom_id].records;
+        let all_public = records.iter().all(|record| !T::is_shared(&record.index));
+        if all_public {
+            let mut records: Vec<_> = records
+                .iter()
+                .map(|x| RomRecord::<P::ScalarField> {
+                    index_witness: x.index_witness,
+                    value_column1_witness: x.value_column1_witness,
+                    value_column2_witness: x.value_column2_witness,
+                    index: T::get_public(&x.index).expect("Already checked it is public"),
+                    record_witness: x.record_witness,
+                    gate_index: x.gate_index,
+                })
+                .collect();
+            records.sort();
+            for record in records {
+                let index = record.index;
+                let value1 = self.get_variable(record.value_column1_witness.try_into().unwrap());
+                let value2 = self.get_variable(record.value_column2_witness.try_into().unwrap());
+                let index_witness = self.add_variable(T::AcvmType::from(index));
 
-            let value1_witness = self.add_variable(value1);
+                let value1_witness = self.add_variable(value1);
 
-            let value2_witness = self.add_variable(value2);
+                let value2_witness = self.add_variable(value2);
 
-            let mut sorted_record = RomRecord {
-                index_witness,
-                value_column1_witness: value1_witness,
-                value_column2_witness: value2_witness,
-                index,
-                record_witness: 0,
-                gate_index: 0,
-            };
-            self.create_sorted_rom_gate(&mut sorted_record);
+                let mut sorted_record = RomRecord::<T::AcvmType> {
+                    index_witness,
+                    value_column1_witness: value1_witness,
+                    value_column2_witness: value2_witness,
+                    index: index.into(),
+                    record_witness: 0,
+                    gate_index: 0,
+                };
+                self.create_sorted_rom_gate(&mut sorted_record);
 
-            self.assign_tag(record.record_witness, read_tag);
-            self.assign_tag(sorted_record.record_witness, sorted_list_tag);
+                self.assign_tag(record.record_witness, read_tag);
+                self.assign_tag(sorted_record.record_witness, sorted_list_tag);
 
-            // For ROM/RAM gates, the 'record' wire value (wire column 4) is a linear combination of the first 3 wire
-            // values. However...the record value uses the random challenge 'eta', generated after the first 3 wires are
-            // committed to. i.e. we can't compute the record witness here because we don't know what `eta` is! Take the
-            // gate indices of the two rom gates (original read gate + sorted gate) and store in `memory_records`. Once
-            // we
-            // generate the `eta` challenge, we'll use `memory_records` to figure out which gates need a record wire
-            // value
-            // to be computed.
-            // record (w4) = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag (0 for reads, 1 for writes)
-            // Separate containers used to store gate indices of reads and writes. Need to differentiate because of
-            // `read_write_flag` (N.B. all ROM accesses are considered reads. Writes are for RAM operations)
-            self.memory_read_records
-                .push(sorted_record.gate_index as u32);
-            self.memory_read_records.push(record.gate_index as u32);
+                // For ROM/RAM gates, the 'record' wire value (wire column 4) is a linear combination of the first 3 wire
+                // values. However...the record value uses the random challenge 'eta', generated after the first 3 wires are
+                // committed to. i.e. we can't compute the record witness here because we don't know what `eta` is! Take the
+                // gate indices of the two rom gates (original read gate + sorted gate) and store in `memory_records`. Once
+                // we
+                // generate the `eta` challenge, we'll use `memory_records` to figure out which gates need a record wire
+                // value
+                // to be computed.
+                // record (w4) = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag (0 for reads, 1 for writes)
+                // Separate containers used to store gate indices of reads and writes. Need to differentiate because of
+                // `read_write_flag` (N.B. all ROM accesses are considered reads. Writes are for RAM operations)
+                self.memory_read_records
+                    .push(sorted_record.gate_index as u32);
+                self.memory_read_records.push(record.gate_index as u32);
+            }
+        } else {
+            // The MPC case, we only need to sort some parts of the RomRecord, so we prepare these indices.
+            let to_sort1: Vec<_> = records
+                .iter()
+                .map(|y| {
+                    if T::is_shared(&y.index) {
+                        T::get_shared(&y.index).expect("Already checked it is shared")
+                    } else {
+                        //TACEO TODO: optimize sorting with many public indices
+                        T::promote_to_trivial_share(
+                            driver,
+                            T::get_public(&y.index).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            let to_sort2: Vec<_> = records
+                .iter()
+                .map(|y| {
+                    let val = self.get_variable(y.value_column1_witness as usize);
+                    if T::is_shared(&val) {
+                        T::get_shared(&val).expect("Already checked it is shared")
+                    } else {
+                        //TACEO TODO: optimize sorting with many public indices
+                        T::promote_to_trivial_share(
+                            driver,
+                            T::get_public(&val).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            let to_sort3: Vec<_> = records
+                .iter()
+                .map(|y| {
+                    let val = self.get_variable(y.value_column2_witness as usize);
+                    if T::is_shared(&val) {
+                        T::get_shared(&val).expect("Already checked it is shared")
+                    } else {
+                        //TACEO TODO: optimize sorting with many public indices
+                        T::promote_to_trivial_share(
+                            driver,
+                            T::get_public(&val).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            let inputs = vec![to_sort1.as_ref(), to_sort2.as_ref(), to_sort3.as_ref()];
+
+            let sorted = T::sort_vec_by(driver, &to_sort1, inputs, 32)?;
+            let records = self.rom_arrays[rom_id].records.clone();
+            for (record, index, col1, col2) in izip!(
+                records,
+                sorted[0].clone(),
+                sorted[1].clone(),
+                sorted[2].clone()
+            ) {
+                let index_witness = self.add_variable(index.clone().into());
+
+                let value1_witness = self.add_variable(col1.into());
+
+                let value2_witness = self.add_variable(col2.into());
+
+                let mut sorted_record = RomRecord::<T::AcvmType> {
+                    index_witness,
+                    value_column1_witness: value1_witness,
+                    value_column2_witness: value2_witness,
+                    index: index.into(),
+                    record_witness: 0,
+                    gate_index: 0,
+                };
+                self.create_sorted_rom_gate(&mut sorted_record);
+                self.assign_tag(record.record_witness, read_tag);
+                self.assign_tag(sorted_record.record_witness, sorted_list_tag);
+                // These elements don't need to be sorted, since the ordering does not play a role during the prover
+                self.memory_read_records
+                    .push(sorted_record.gate_index as u32);
+                self.memory_read_records.push(record.gate_index as u32);
+            }
         }
+
         // One of the checks we run on the sorted list, is to validate the difference between
         // the index field across two gates is either 0 or 1.
         // If we add a dummy gate at the end of the sorted list, where we force the first wire to
@@ -2766,7 +2874,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
-    fn create_sorted_rom_gate(&mut self, record: &mut RomRecord) {
+    fn create_sorted_rom_gate(&mut self, record: &mut RomRecord<T::AcvmType>) {
         record.record_witness = self.add_variable(T::public_zero());
 
         self.apply_aux_selectors(AuxSelectors::RomConsistencyCheck);

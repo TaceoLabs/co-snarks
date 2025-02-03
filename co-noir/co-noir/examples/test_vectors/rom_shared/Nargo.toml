@@ -1,0 +1,6 @@
+[package]
+name = "rom_shared"
+type = "bin"
+authors = [""]
+
+[dependencies]

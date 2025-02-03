@@ -522,4 +522,13 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     )> {
         panic!("functionality slice_and_get_xor_rotate_values not feasible for Shamir")
     }
+
+    fn sort_vec_by(
+        &mut self,
+        _key: &[Self::ArithmeticShare],
+        _inputs: Vec<&[Self::ArithmeticShare]>,
+        _bitsize: usize,
+    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+        panic!("functionality sort_vec_by not feasible for Shamir")
+    }
 }

@@ -1,8 +1,7 @@
-use std::{fmt, io};
-
 use ark_ff::PrimeField;
 use co_brillig::mpc::BrilligDriver;
 use mpc_core::lut::LookupTableProvider;
+use std::{fmt, io};
 
 pub(super) mod plain;
 pub(super) mod rep3;
@@ -175,6 +174,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         inputs: &[Self::ArithmeticShare],
         bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
+
+    /// Creates a permutation to sort a vector of shared values based on ordering key in ascending order, only considering the first bitsize bits. Then applies the permutation to the vectors in inputs.
+    fn sort_vec_by(
+        &mut self,
+        key: &[Self::ArithmeticShare],
+        inputs: Vec<&[Self::ArithmeticShare]>,
+        bitsize: usize,
+    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>>;
 
     /// Slices a value at given indices (msb, lsb), both included in the slice.
     /// Only consideres bitsize bits.

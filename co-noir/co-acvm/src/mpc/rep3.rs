@@ -2,7 +2,7 @@ use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
 use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao};
-use mpc_core::protocols::rep3_ring::gadgets::sort::radix_sort_fields;
+use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider,
     protocols::rep3::{
@@ -815,5 +815,20 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .collect();
 
         Ok((rotation_values, key_a_slices, key_b_slices))
+    }
+
+    fn sort_vec_by(
+        &mut self,
+        key: &[Self::ArithmeticShare],
+        inputs: Vec<&[Self::ArithmeticShare]>,
+        bitsize: usize,
+    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+        radix_sort_fields_vec_by(
+            key,
+            inputs,
+            &mut self.io_context0,
+            &mut self.io_context1,
+            bitsize,
+        )
     }
 }
