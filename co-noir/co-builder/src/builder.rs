@@ -2665,10 +2665,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                     )
                 })
                 .collect();
-            let (first, second, third) =
-                T::sort_vec_by(driver, &to_sort1, &to_sort2, &to_sort3, 32)?;
+            let inputs = vec![to_sort1.as_ref(), to_sort2.as_ref(), to_sort3.as_ref()];
+
+            let sorted = T::sort_vec_by(driver, &to_sort1, inputs, 32)?;
             let records = self.rom_arrays[rom_id].records.clone();
-            for (record, index, col1, col2) in izip!(records, first, second, third) {
+            for (record, index, col1, col2) in izip!(
+                records,
+                sorted[0].clone(),
+                sorted[1].clone(),
+                sorted[2].clone()
+            ) {
                 let values = self.get_variables_shared(&[col1.into(), col2.into()], driver)?;
                 let value1 = values[0].clone();
                 let value2 = values[1].clone();

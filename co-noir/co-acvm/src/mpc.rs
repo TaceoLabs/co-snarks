@@ -175,6 +175,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
 
+    /// Creates a permutation to sort a vector of shared values based on ordering key in ascending order, only considering the first bitsize bits. Then applies the permutation to the vectors in inputs.
+    fn sort_vec_by(
+        &mut self,
+        key: &[Self::ArithmeticShare],
+        inputs: Vec<&[Self::ArithmeticShare]>,
+        bitsize: usize,
+    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>>;
+
     /// Slices a value at given indices (msb, lsb), both included in the slice.
     /// Only consideres bitsize bits.
     /// Result is thus [lo, slice, hi], where slice has all bits from lsb to msb, lo all bits smaller than lsb, and hi all bits greater msb up to bitsize.
@@ -230,19 +238,5 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
-    )>;
-
-    /// Sorts a vector of shared values in ascending order, only considering the first bitsize bits and then applies the same permutation to two other vectors.
-    #[expect(clippy::type_complexity)]
-    fn sort_vec_by(
-        &mut self,
-        input1: &[Self::ArithmeticShare],
-        input2: &[Self::ArithmeticShare],
-        input3: &[Self::ArithmeticShare],
-        bitsize: usize,
-    ) -> std::io::Result<(
-        Vec<Self::ArithmeticShare>,
-        Vec<Self::ArithmeticShare>,
-        Vec<Self::ArithmeticShare>,
     )>;
 }

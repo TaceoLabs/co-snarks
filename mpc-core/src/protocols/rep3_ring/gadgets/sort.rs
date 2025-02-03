@@ -59,18 +59,16 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     apply_inv_field(&perm, inputs, io_context0, io_context1)
 }
 
-/// Sorts the inputs using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then also used to sort two other vecs.
+/// Sorts the inputs using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
-#[expect(clippy::type_complexity)]
 pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
-    inputs: &[FieldShare<F>],
-    other_inputs1: &[FieldShare<F>],
-    other_inputs2: &[FieldShare<F>],
+    key: &[FieldShare<F>],
+    inputs: Vec<&[FieldShare<F>]>,
     io_context0: &mut IoContext<N>,
     io_context1: &mut IoContext<N>,
     bitsize: usize,
-) -> IoResult<(Vec<FieldShare<F>>, Vec<FieldShare<F>>, Vec<FieldShare<F>>)> {
-    let len = inputs.len();
+) -> IoResult<Vec<Vec<FieldShare<F>>>> {
+    let len = key.len();
     if len
         > PermRing::MAX
             .try_into()
@@ -81,13 +79,12 @@ pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
             "Too many inputs for radix sort. Use a larger PermRing.",
         ));
     }
-
-    let perm = gen_perm(inputs, bitsize, io_context0, io_context1)?;
-    Ok((
-        apply_inv_field(&perm, inputs, io_context0, io_context1)?,
-        apply_inv_field(&perm, other_inputs1, io_context0, io_context1)?,
-        apply_inv_field(&perm, other_inputs2, io_context0, io_context1)?,
-    ))
+    let mut results = Vec::with_capacity(inputs.len());
+    let perm = gen_perm(key, bitsize, io_context0, io_context1)?;
+    for inp in inputs {
+        results.push(apply_inv_field(&perm, inp, io_context0, io_context1)?)
+    }
+    Ok(results)
 }
 
 fn gen_perm<F: PrimeField, N: Rep3Network>(

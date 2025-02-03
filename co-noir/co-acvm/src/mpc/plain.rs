@@ -415,18 +415,13 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn sort_vec_by(
         &mut self,
-        input1: &[Self::ArithmeticShare],
-        input2: &[Self::ArithmeticShare],
-        input3: &[Self::ArithmeticShare],
+        key: &[Self::ArithmeticShare],
+        inputs: Vec<&[Self::ArithmeticShare]>,
         bitsize: usize,
-    ) -> std::io::Result<(
-        Vec<Self::ArithmeticShare>,
-        Vec<Self::ArithmeticShare>,
-        Vec<Self::ArithmeticShare>,
-    )> {
+    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
         let mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
 
-        let mut indexed_values: Vec<(F, usize)> = input1
+        let mut indexed_values: Vec<(F, usize)> = key
             .iter()
             .enumerate()
             .map(|(i, x)| {
@@ -438,15 +433,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
         indexed_values.sort_by(|a, b| a.0.cmp(&b.0));
 
-        let sorted1: Vec<Self::ArithmeticShare> =
-            indexed_values.iter().map(|(_, i)| input1[*i]).collect();
+        let mut results = Vec::with_capacity(inputs.len());
 
-        let sorted2: Vec<Self::ArithmeticShare> =
-            indexed_values.iter().map(|(_, i)| input2[*i]).collect();
-
-        let sorted3: Vec<Self::ArithmeticShare> =
-            indexed_values.iter().map(|(_, i)| input3[*i]).collect();
-
-        Ok((sorted1, sorted2, sorted3))
+        for inp in inputs {
+            results.push(indexed_values.iter().map(|(_, i)| inp[*i]).collect())
+        }
+        Ok(results)
     }
 }

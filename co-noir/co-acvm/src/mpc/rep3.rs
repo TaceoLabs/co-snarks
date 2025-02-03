@@ -819,19 +819,13 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn sort_vec_by(
         &mut self,
-        input1: &[Self::ArithmeticShare],
-        input2: &[Self::ArithmeticShare],
-        input3: &[Self::ArithmeticShare],
+        key: &[Self::ArithmeticShare],
+        inputs: Vec<&[Self::ArithmeticShare]>,
         bitsize: usize,
-    ) -> std::io::Result<(
-        Vec<Self::ArithmeticShare>,
-        Vec<Self::ArithmeticShare>,
-        Vec<Self::ArithmeticShare>,
-    )> {
+    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
         radix_sort_fields_vec_by(
-            input1,
-            input2,
-            input3,
+            key,
+            inputs,
             &mut self.io_context0,
             &mut self.io_context1,
             bitsize,
