@@ -1472,23 +1472,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.variables[self.real_variable_index[index] as usize].to_owned()
     }
 
-    pub fn get_variables_shared(
-        &self,
-        indices: &[T::AcvmType],
-        driver: &mut T,
-    ) -> std::io::Result<Vec<T::AcvmType>> {
-        let direct_variables = self
-            .real_variable_index
-            .iter()
-            .map(|x| self.variables[*x as usize].clone())
-            .collect();
-        let lut = T::init_lut_by_acvm_type(driver, direct_variables);
-        let mut result = Vec::with_capacity(indices.len());
-        for index in indices {
-            result.push(T::read_lut_by_acvm_type(driver, index.clone(), &lut)?)
-        }
-        Ok(result)
-    }
     fn update_variable(&mut self, index: usize, value: T::AcvmType) {
         assert!(self.variables.len() > index);
         self.variables[self.real_variable_index[index] as usize] = value;
@@ -1748,20 +1731,26 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         assert!(self.rom_arrays.len() > rom_id);
         let val = self.get_variable(index_witness as usize);
 
-        // TACEO TODO these asserts
-        // assert!(self.rom_arrays[rom_id].state.len() > index);
-        // assert!(self.rom_arrays[rom_id].state[index][0] != Self::UNINITIALIZED_MEMORY_RECORD);
+        if !T::is_shared(&val) {
+            // Sanity check only doable in plain
+            let val: BigUint = T::get_public(&val)
+                .expect("Already checked it is public")
+                .into();
+            let index: usize = val.try_into().unwrap();
+            assert!(self.rom_arrays[rom_id].state.len() > index);
+            assert!(self.rom_arrays[rom_id].state[index][0] != Self::UNINITIALIZED_MEMORY_RECORD);
+        }
 
         let fields = self.rom_arrays[rom_id]
             .state
             .iter()
-            .map(|x| T::AcvmType::from(P::ScalarField::from(x[0])))
+            .map(|x| self.get_variable(x[0] as usize))
             .collect();
-        let lut = T::init_lut_by_acvm_type(driver, fields);
-        let index = T::read_lut_by_acvm_type(driver, val.clone(), &lut)?;
 
-        let value = self.get_variables_shared(&[index], driver)?;
-        let value_witness = self.add_variable(value[0].clone());
+        let lut = T::init_lut_by_acvm_type(driver, fields);
+        let value = T::read_lut_by_acvm_type(driver, val.to_owned(), &lut)?;
+
+        let value_witness = self.add_variable(value);
 
         let mut new_record = RomRecord::<T::AcvmType> {
             index_witness,
@@ -2631,15 +2620,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                     .push(sorted_record.gate_index as u32);
                 self.memory_read_records.push(record.gate_index as u32);
             }
-        }
-        //TACEO TODO: optimize case with many public indices
-        else {
+        } else {
+            // The MPC case, we only need to sort some parts of the RomRecord, so we prepare these indices.
             let to_sort1: Vec<_> = records
                 .iter()
                 .map(|y| {
                     if T::is_shared(&y.index) {
                         T::get_shared(&y.index).expect("Already checked it is shared")
                     } else {
+                        //TACEO TODO: optimize sorting with many public indices
                         T::promote_to_trivial_share(
                             driver,
                             T::get_public(&y.index).expect("Already checked it is public"),
@@ -2650,19 +2639,31 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             let to_sort2: Vec<_> = records
                 .iter()
                 .map(|y| {
-                    T::promote_to_trivial_share(
-                        driver,
-                        P::ScalarField::from(y.value_column1_witness),
-                    )
+                    let val = self.get_variable(y.value_column1_witness as usize);
+                    if T::is_shared(&val) {
+                        T::get_shared(&val).expect("Already checked it is shared")
+                    } else {
+                        //TACEO TODO: optimize sorting with many public indices
+                        T::promote_to_trivial_share(
+                            driver,
+                            T::get_public(&val).expect("Already checked it is public"),
+                        )
+                    }
                 })
                 .collect();
             let to_sort3: Vec<_> = records
                 .iter()
                 .map(|y| {
-                    T::promote_to_trivial_share(
-                        driver,
-                        P::ScalarField::from(y.value_column2_witness),
-                    )
+                    let val = self.get_variable(y.value_column2_witness as usize);
+                    if T::is_shared(&val) {
+                        T::get_shared(&val).expect("Already checked it is shared")
+                    } else {
+                        //TACEO TODO: optimize sorting with many public indices
+                        T::promote_to_trivial_share(
+                            driver,
+                            T::get_public(&val).expect("Already checked it is public"),
+                        )
+                    }
                 })
                 .collect();
             let inputs = vec![to_sort1.as_ref(), to_sort2.as_ref(), to_sort3.as_ref()];
@@ -2675,14 +2676,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 sorted[1].clone(),
                 sorted[2].clone()
             ) {
-                let values = self.get_variables_shared(&[col1.into(), col2.into()], driver)?;
-                let value1 = values[0].clone();
-                let value2 = values[1].clone();
                 let index_witness = self.add_variable(index.clone().into());
 
-                let value1_witness = self.add_variable(value1);
+                let value1_witness = self.add_variable(col1.into());
 
-                let value2_witness = self.add_variable(value2);
+                let value2_witness = self.add_variable(col2.into());
 
                 let mut sorted_record = RomRecord::<T::AcvmType> {
                     index_witness,
@@ -2695,6 +2693,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 self.create_sorted_rom_gate(&mut sorted_record);
                 self.assign_tag(record.record_witness, read_tag);
                 self.assign_tag(sorted_record.record_witness, sorted_list_tag);
+                // These elements don't need to be sorted, since the ordering does not play a role during the prover
                 self.memory_read_records
                     .push(sorted_record.gate_index as u32);
                 self.memory_read_records.push(record.gate_index as u32);
@@ -2710,7 +2709,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let max_index: u32 =
             self.add_variable(T::AcvmType::from(P::ScalarField::from(max_index_value)));
 
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This was formerly a single arithmetic gate. A
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This was formerly a single arithmetic gate. A
         // dummy gate has been added to allow the previous gate to access the required wire data via shifts, allowing the
         // arithmetic gate to occur out of sequence.
         create_dummy_gate!(
