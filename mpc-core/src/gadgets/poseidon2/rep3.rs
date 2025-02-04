@@ -139,19 +139,43 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     fn matmul_internal_rep3(&self, input: &mut [Rep3PrimeFieldShare<F>; T]) {
-        // Compute input sum
-        let mut sum = input[0];
-        for el in input.iter().skip(1) {
-            sum += el;
-        }
-        // Add sum + diag entry * element to each element
+        match T {
+            2 => {
+                // Matrix [[2, 1], [1, 3]]
+                debug_assert_eq!(self.params.mat_internal_diag_m_1[0], F::one());
+                debug_assert_eq!(self.params.mat_internal_diag_m_1[1], F::from(2u64));
+                let sum = input[0] + input[1];
+                input[0] += &sum;
+                input[1].double_in_place();
+                input[1] += sum;
+            }
+            3 => {
+                // Matrix [[2, 1, 1], [1, 2, 1], [1, 1, 3]]
+                debug_assert_eq!(self.params.mat_internal_diag_m_1[0], F::one());
+                debug_assert_eq!(self.params.mat_internal_diag_m_1[1], F::one());
+                debug_assert_eq!(self.params.mat_internal_diag_m_1[2], F::from(2u64));
+                let sum = input[0] + input[1] + input[2];
+                input[0] += &sum;
+                input[1] += &sum;
+                input[2].double_in_place();
+                input[2] += sum;
+            }
+            _ => {
+                // Compute input sum
+                let mut sum = input[0];
+                for el in input.iter().skip(1) {
+                    sum += el;
+                }
+                // Add sum + diag entry * element to each element
 
-        for (s, m) in input
-            .iter_mut()
-            .zip(self.params.mat_internal_diag_m_1.iter())
-        {
-            *s *= *m;
-            *s += sum;
+                for (s, m) in input
+                    .iter_mut()
+                    .zip(self.params.mat_internal_diag_m_1.iter())
+                {
+                    *s *= *m;
+                    *s += sum;
+                }
+            }
         }
     }
 
