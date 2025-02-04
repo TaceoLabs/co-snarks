@@ -1,6 +1,7 @@
-use std::sync::LazyLock;
-
+/// Parameters are compatible with the original Poseidon2 parameter generation script found at:
+/// [https://github.com/HorizenLabs/poseidon2/blob/main/poseidon2_rust_params.sage](https://github.com/HorizenLabs/poseidon2/blob/main/poseidon2_rust_params.sage)
 use super::Poseidon2Params;
+use std::sync::LazyLock;
 
 type Scalar = ark_bn254::Fr;
 
@@ -9,8 +10,7 @@ const D: u64 = 5;
 const ROUNDS_F: usize = 8;
 const ROUNDS_P: usize = 56;
 
-// lazy_static! {
-pub(crate) static MAT_DIAG_M_1: LazyLock<[Scalar; 4]> = LazyLock::new(|| {
+pub(crate) static MAT_DIAG_M_1: LazyLock<[Scalar; T]> = LazyLock::new(|| {
     [
         crate::gadgets::field_from_hex_string(
             "0x10dc6e9c006ea38b04b1e03b4bd9490c0d03f98929ca1d7fb56821fd19d3b6e7",

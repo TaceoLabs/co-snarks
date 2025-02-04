@@ -2,13 +2,15 @@
 //!
 //! This module contains implementations of the Poseidon2 permutation.
 
-pub(crate) mod poseidon2_bn254;
+pub(crate) mod poseidon2_bn254_t2;
+pub(crate) mod poseidon2_bn254_t3;
+pub(crate) mod poseidon2_bn254_t4;
 pub(crate) mod poseidon2_params;
 pub(crate) mod poseidon2_permutation;
 pub(crate) mod rep3;
 pub(crate) mod shamir;
 
-pub use poseidon2_bn254::POSEIDON2_BN254_T4_PARAMS;
+pub use poseidon2_bn254_t4::POSEIDON2_BN254_T4_PARAMS;
 pub use poseidon2_params::Poseidon2Params;
 pub use poseidon2_permutation::Poseidon2;
 

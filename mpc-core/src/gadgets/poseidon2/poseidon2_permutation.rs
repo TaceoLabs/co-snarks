@@ -113,16 +113,40 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     pub(crate) fn matmul_internal(&self, input: &mut [F; T]) {
-        // Compute input sum
-        let sum: F = input.iter().sum();
-        // Add sum + diag entry * element to each element
+        match T {
+            2 => {
+                // Matrix [[2, 1], [1, 3]]
+                debug_assert_eq!(self.params.mat_internal_diag_m_1[0], F::one());
+                debug_assert_eq!(self.params.mat_internal_diag_m_1[1], F::from(2u64));
+                let sum = input[0] + input[1];
+                input[0] += &sum;
+                input[1].double_in_place();
+                input[1] += sum;
+            }
+            3 => {
+                // Matrix [[2, 1, 1], [1, 2, 1], [1, 1, 3]]
+                debug_assert_eq!(self.params.mat_internal_diag_m_1[0], F::one());
+                debug_assert_eq!(self.params.mat_internal_diag_m_1[1], F::one());
+                debug_assert_eq!(self.params.mat_internal_diag_m_1[2], F::from(2u64));
+                let sum = input[0] + input[1] + input[2];
+                input[0] += &sum;
+                input[1] += &sum;
+                input[2].double_in_place();
+                input[2] += sum;
+            }
+            _ => {
+                // Compute input sum
+                let sum: F = input.iter().sum();
+                // Add sum + diag entry * element to each element
 
-        for (s, m) in input
-            .iter_mut()
-            .zip(self.params.mat_internal_diag_m_1.iter())
-        {
-            *s *= m;
-            *s += sum;
+                for (s, m) in input
+                    .iter_mut()
+                    .zip(self.params.mat_internal_diag_m_1.iter())
+                {
+                    *s *= m;
+                    *s += sum;
+                }
+            }
         }
     }
 
@@ -184,14 +208,41 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 }
 
-impl<F: PrimeField> Default for Poseidon2<F, 4, 5> {
+impl<F: PrimeField, const T: usize> Default for Poseidon2<F, T, 5> {
     fn default() -> Self {
         if TypeId::of::<F>() == TypeId::of::<ark_bn254::Fr>() {
-            let params = &super::poseidon2_bn254::POSEIDON2_BN254_T4_PARAMS;
-            let poseidon2 = Poseidon2::new(params);
-            // Safety: We checked that the types match
-            unsafe {
-                std::mem::transmute::<Poseidon2<ark_bn254::Fr, 4, 5>, Poseidon2<F, 4, 5>>(poseidon2)
+            match T {
+                2 => {
+                    let params = &super::poseidon2_bn254_t2::POSEIDON2_BN254_T2_PARAMS;
+                    let poseidon2 = Poseidon2::new(params);
+                    // Safety: We checked that the types match
+                    unsafe {
+                        std::mem::transmute::<Poseidon2<ark_bn254::Fr, 2, 5>, Poseidon2<F, T, 5>>(
+                            poseidon2,
+                        )
+                    }
+                }
+                3 => {
+                    let params = &super::poseidon2_bn254_t3::POSEIDON2_BN254_T3_PARAMS;
+                    let poseidon2 = Poseidon2::new(params);
+                    // Safety: We checked that the types match
+                    unsafe {
+                        std::mem::transmute::<Poseidon2<ark_bn254::Fr, 3, 5>, Poseidon2<F, T, 5>>(
+                            poseidon2,
+                        )
+                    }
+                }
+                4 => {
+                    let params = &super::poseidon2_bn254_t4::POSEIDON2_BN254_T4_PARAMS;
+                    let poseidon2 = Poseidon2::new(params);
+                    // Safety: We checked that the types match
+                    unsafe {
+                        std::mem::transmute::<Poseidon2<ark_bn254::Fr, 4, 5>, Poseidon2<F, T, 5>>(
+                            poseidon2,
+                        )
+                    }
+                }
+                _ => panic!("No Poseidon2 implementation for T={}", T),
             }
         } else {
             panic!("No Poseidon2 implementation for this field");
@@ -202,7 +253,11 @@ impl<F: PrimeField> Default for Poseidon2<F, 4, 5> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::gadgets::poseidon2::poseidon2_bn254::POSEIDON2_BN254_T4_PARAMS;
+    use crate::gadgets::poseidon2::{
+        poseidon2_bn254_t2::POSEIDON2_BN254_T2_PARAMS,
+        poseidon2_bn254_t3::POSEIDON2_BN254_T3_PARAMS,
+        poseidon2_bn254_t4::POSEIDON2_BN254_T4_PARAMS,
+    };
     use rand::thread_rng;
 
     const TESTRUNS: usize = 10;
@@ -242,7 +297,53 @@ mod test {
     }
 
     #[test]
+    fn posedon2_bn254_t2_kat1() {
+        let input = [ark_bn254::Fr::from(0u64), ark_bn254::Fr::from(1u64)];
+        let expected = [
+            crate::gadgets::field_from_hex_string(
+                "0x1d01e56f49579cec72319e145f06f6177f6c5253206e78c2689781452a31878b",
+            )
+            .unwrap(),
+            crate::gadgets::field_from_hex_string(
+                "0x0d189ec589c41b8cffa88cfc523618a055abe8192c70f75aa72fc514560f6c61",
+            )
+            .unwrap(),
+        ];
+
+        poseidon2_kat(&POSEIDON2_BN254_T2_PARAMS, &input, &expected);
+    }
+
+    #[test]
+    fn posedon2_bn254_t3_kat1() {
+        // Parameters are compatible with the original Poseidon2 parameter generation script found at:
+        // [https://github.com/HorizenLabs/poseidon2/blob/main/poseidon2_rust_params.sage](https://github.com/HorizenLabs/poseidon2/blob/main/poseidon2_rust_params.sage)
+        let input = [
+            ark_bn254::Fr::from(0u64),
+            ark_bn254::Fr::from(1u64),
+            ark_bn254::Fr::from(2u64),
+        ];
+        let expected = [
+            crate::gadgets::field_from_hex_string(
+                "0x0bb61d24daca55eebcb1929a82650f328134334da98ea4f847f760054f4a3033",
+            )
+            .unwrap(),
+            crate::gadgets::field_from_hex_string(
+                "0x303b6f7c86d043bfcbcc80214f26a30277a15d3f74ca654992defe7ff8d03570",
+            )
+            .unwrap(),
+            crate::gadgets::field_from_hex_string(
+                "0x1ed25194542b12eef8617361c3ba7c52e660b145994427cc86296242cf766ec8",
+            )
+            .unwrap(),
+        ];
+
+        poseidon2_kat(&POSEIDON2_BN254_T3_PARAMS, &input, &expected);
+    }
+
+    #[test]
     fn posedon2_bn254_t4_kat1() {
+        // Parameters are compatible with the original Poseidon2 parameter generation script found at:
+        // [https://github.com/HorizenLabs/poseidon2/blob/main/poseidon2_rust_params.sage](https://github.com/HorizenLabs/poseidon2/blob/main/poseidon2_rust_params.sage)
         let input = [
             ark_bn254::Fr::from(0u64),
             ark_bn254::Fr::from(1u64),
@@ -273,6 +374,8 @@ mod test {
 
     #[test]
     fn posedon2_bn254_t4_kat2() {
+        // Parameters are compatible with the original Poseidon2 parameter generation script found at:
+        // [https://github.com/HorizenLabs/poseidon2/blob/main/poseidon2_rust_params.sage](https://github.com/HorizenLabs/poseidon2/blob/main/poseidon2_rust_params.sage)
         let input = [
             crate::gadgets::field_from_hex_string(
                 "9a807b615c4d3e2fa0b1c2d3e4f56789fedcba9876543210abcdef0123456789",
