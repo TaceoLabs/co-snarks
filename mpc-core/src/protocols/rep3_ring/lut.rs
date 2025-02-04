@@ -28,6 +28,12 @@ pub enum PublicPrivateLut<F: PrimeField> {
     Shared(Vec<Rep3PrimeFieldShare<F>>),
 }
 
+impl<F: PrimeField> Default for PublicPrivateLut<F> {
+    fn default() -> Self {
+        PublicPrivateLut::Public(Vec::new())
+    }
+}
+
 impl<F: PrimeField> PublicPrivateLut<F> {
     /// Returns the number of elements contained in the lookup table
     pub fn len(&self) -> usize {
@@ -188,6 +194,14 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
         tracing::debug!("we are done");
         Ok(())
     }
+
+    /// Returns true if LUT is public
+    pub fn is_public_lut<F: PrimeField>(lut: &PublicPrivateLut<F>) -> bool {
+        match lut {
+            PublicPrivateLut::Public(_) => true,
+            PublicPrivateLut::Shared(_) => false,
+        }
+    }
 }
 
 impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N> {
@@ -266,5 +280,22 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N
 
         tracing::debug!("we are done");
         Ok(())
+    }
+
+    fn get_lut_len(lut: &Self::LutType) -> usize {
+        match lut {
+            PublicPrivateLut::Public(items) => items.len(),
+            PublicPrivateLut::Shared(shares) => shares.len(),
+        }
+    }
+
+    fn get_public_lut(lut: &Self::LutType) -> std::io::Result<Vec<F>> {
+        match lut {
+            PublicPrivateLut::Public(items) => Ok(items.clone()),
+            PublicPrivateLut::Shared(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Expected public LUT",
+            )),
+        }
     }
 }

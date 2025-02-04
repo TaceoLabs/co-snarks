@@ -122,6 +122,17 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         lut: &mut <Self::Lookup as LookupTableProvider<F>>::LutType,
     ) -> io::Result<()>;
 
+    /// Returns the size of a lut
+    fn get_length_of_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> usize;
+
+    /// Returns the LUT as a vector of fields if the table is public
+    fn get_public_lut(
+        lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
+    ) -> io::Result<Vec<F>>;
+
+    /// Returns true if the LUT is public
+    fn is_public_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> bool;
+
     /// Creates a shared one-hot-encoded vector from a given shared index
     fn one_hot_vector_from_shared_index(
         &mut self,
@@ -145,6 +156,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     /// Returns the value if the value is public
     fn get_public(a: &Self::AcvmType) -> Option<F>;
+
+    /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
+    fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType>;
 
     // TODO do we want this here?
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>>;

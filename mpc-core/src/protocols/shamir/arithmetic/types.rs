@@ -1,7 +1,6 @@
-use std::mem::ManuallyDrop;
-
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use std::mem::ManuallyDrop;
 
 /// This type represents a Shamir-shared value. Since a Shamir-share of a field element is a field element, this is a wrapper over a field element.
 #[derive(

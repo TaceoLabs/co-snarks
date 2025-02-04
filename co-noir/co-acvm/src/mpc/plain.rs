@@ -154,6 +154,16 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             .write_to_lut(index, value, lut, &mut a, &mut b)
     }
 
+    fn get_length_of_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> usize {
+        <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::get_lut_len(lut)
+    }
+
+    fn get_public_lut(
+        lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
+    ) -> io::Result<Vec<F>> {
+        <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::get_public_lut(lut)
+    }
+
     fn one_hot_vector_from_shared_index(
         &mut self,
         index: Self::ArithmeticShare,
@@ -498,5 +508,13 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     ) -> std::io::Result<()> {
         poseidon2.internal_round(input, r);
         Ok(())
+    }
+
+    fn is_public_lut(_lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> bool {
+        true
+    }
+
+    fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        Ok(Self::ArithmeticShare::from(a == b))
     }
 }

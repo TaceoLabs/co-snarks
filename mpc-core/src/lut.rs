@@ -7,11 +7,11 @@ use num_bigint::BigUint;
 use std::{io, marker::PhantomData};
 
 /// This is some place holder definition. This will change most likely
-pub trait LookupTableProvider<F: PrimeField> {
+pub trait LookupTableProvider<F: PrimeField>: Default {
     /// The type used in LUTs
     type SecretShare;
     /// An input/output LUT (like `Vector`).
-    type LutType;
+    type LutType: Default;
     /// The network used
     type NetworkProvider;
 
@@ -54,6 +54,12 @@ pub trait LookupTableProvider<F: PrimeField> {
         network0: &mut Self::NetworkProvider,
         network1: &mut Self::NetworkProvider,
     ) -> io::Result<()>;
+
+    /// Returns the length of the LUT
+    fn get_lut_len(lut: &Self::LutType) -> usize;
+
+    /// Returns the LUT as a vec if public
+    fn get_public_lut(lut: &Self::LutType) -> io::Result<Vec<F>>;
 }
 
 /// LUT provider for public values
@@ -110,5 +116,13 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
 
         lut[index] = value;
         Ok(())
+    }
+
+    fn get_lut_len(lut: &Self::LutType) -> usize {
+        lut.len()
+    }
+
+    fn get_public_lut(lut: &Self::LutType) -> io::Result<Vec<F>> {
+        Ok(lut.clone())
     }
 }

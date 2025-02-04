@@ -124,6 +124,35 @@ impl<
             *target = self.driver.add(*target, mul3);
             *target = self.driver.add_with_public(P::ScalarField::one(), *target);
         }
+
+        // This computes the values for cases where the type (r/w) of the record is a secret share of 0/1 and adds this share
+        if let Some(types) = proving_key.write_records_type.clone() {
+            if let Some(records) = proving_key.memory_records_shared_type.clone() {
+                for (gate_idx, type_share) in records.iter().zip(types) {
+                    let gate_idx = *gate_idx as usize;
+                    let target = &mut self.memory.w_4[gate_idx];
+
+                    let mul1 = self.driver.mul_with_public(
+                        self.memory.challenges.eta_1,
+                        proving_key.polynomials.witness.w_l()[gate_idx],
+                    );
+                    let mul2 = self.driver.mul_with_public(
+                        self.memory.challenges.eta_2,
+                        proving_key.polynomials.witness.w_r()[gate_idx],
+                    );
+                    let mul3 = self.driver.mul_with_public(
+                        self.memory.challenges.eta_3,
+                        proving_key.polynomials.witness.w_o()[gate_idx],
+                    );
+
+                    // TACEO TODO add_assign?
+                    *target = self.driver.add(*target, mul1);
+                    *target = self.driver.add(*target, mul2);
+                    *target = self.driver.add(*target, mul3);
+                    *target = self.driver.add(type_share, *target);
+                }
+            }
+        }
     }
 
     fn compute_read_term(
