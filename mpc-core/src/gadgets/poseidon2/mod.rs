@@ -27,6 +27,7 @@ pub struct Poseidon2Precomputations<F> {
 
 impl<F> Poseidon2Precomputations<F> {
     pub(crate) fn get(&self, offset: usize) -> (&F, &F, &F, &F, &F) {
+        debug_assert!(offset < self.r.len());
         let r = &self.r[offset];
         let r2 = &self.r2[offset];
         let r3 = &self.r3[offset];

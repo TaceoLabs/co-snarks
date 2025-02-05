@@ -561,8 +561,12 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
                 }
                 ShamirAcvmType::Shared(shared) => shared,
             });
-            poseidon2
-                .shamir_permutation_in_place_with_precomputation(&mut shared, &mut self.protocol)?;
+            let mut precomp = poseidon2.precompute_shamir(1, &mut self.protocol)?;
+            poseidon2.shamir_permutation_in_place_with_precomputation(
+                &mut shared,
+                &mut precomp,
+                &mut self.protocol,
+            )?;
 
             for (src, des) in shared.into_iter().zip(input.iter_mut()) {
                 *des = ShamirAcvmType::Shared(src);
