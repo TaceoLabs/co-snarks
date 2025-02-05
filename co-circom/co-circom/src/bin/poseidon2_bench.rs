@@ -124,6 +124,9 @@ fn main() -> color_eyre::Result<ExitCode> {
     poseidon2_shamir::<ark_bn254::Fr, T, D>(&config)?;
     poseidon2_shamir_with_precomp::<ark_bn254::Fr, T, D>(&config)?;
 
+    const NUM_POSEIDON: usize = 10;
+    poseidon2_shamir_with_precomp_packed::<ark_bn254::Fr, T, D>(&config, NUM_POSEIDON)?;
+
     Ok(ExitCode::SUCCESS)
 }
 
@@ -326,10 +329,11 @@ where
 fn share_random_input_shamir<F: PrimeField, const T: usize, R: Rng + CryptoRng>(
     net: &mut ShamirMpcNet,
     threshold: usize,
+    num_poseidon: usize,
     rng: &mut R,
 ) -> color_eyre::Result<Vec<ShamirPrimeFieldShare<F>>> {
     let share = if net.get_id() == 0 {
-        let input: Vec<F> = (0..T).map(|_| F::rand(rng)).collect();
+        let input: Vec<F> = (0..T * num_poseidon).map(|_| F::rand(rng)).collect();
         let shares = shamir::share_field_elements(&input, threshold, net.get_num_parties(), rng);
         let myshare = shares[0].clone();
         for (i, val) in shares.into_iter().enumerate().skip(1) {
@@ -360,7 +364,8 @@ where
         let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
         id = net.get_id();
 
-        let mut share = share_random_input_shamir::<F, T, _>(&mut net, config.threshold, &mut rng)?;
+        let mut share =
+            share_random_input_shamir::<F, T, _>(&mut net, config.threshold, 1, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
@@ -403,7 +408,8 @@ where
         let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
         id = net.get_id();
 
-        let mut share = share_random_input_shamir::<F, T, _>(&mut net, config.threshold, &mut rng)?;
+        let mut share =
+            share_random_input_shamir::<F, T, _>(&mut net, config.threshold, 1, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
@@ -416,8 +422,10 @@ where
         let mut protocol = ShamirProtocol::from(preprocessing);
 
         let start = Instant::now();
+        let mut precomp = poseidon2.precompute_shamir(1, &mut protocol)?;
         poseidon2.shamir_permutation_in_place_with_precomputation(
             share.as_mut_slice().try_into().unwrap(),
+            &mut precomp,
             &mut protocol,
         )?;
         let duration = start.elapsed().as_micros() as f64;
@@ -432,6 +440,76 @@ where
         "Poseidon2 shamir with precomp -- rand_generation",
     );
     print_runtimes(times, id, "Poseidon2 shamir with precomp -- online");
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn poseidon2_shamir_with_precomp_packed<F: PrimeField, const T: usize, const D: u64>(
+    config: &Config,
+    num_poseidon: usize,
+) -> color_eyre::Result<ExitCode>
+where
+    Poseidon2<F, T, D>: Default,
+{
+    let mut rng = rand::thread_rng();
+
+    let mut times = Vec::with_capacity(config.runs);
+    let mut preprocess_times = Vec::with_capacity(config.runs);
+    let mut id = 0;
+
+    for _ in 0..config.runs {
+        // connect to network
+        let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
+        id = net.get_id();
+
+        let mut share = share_random_input_shamir::<F, T, _>(
+            &mut net,
+            config.threshold,
+            num_poseidon,
+            &mut rng,
+        )?;
+
+        let poseidon2 = Poseidon2::<F, T, D>::default();
+
+        // init MPC protocol
+        let num_pairs = poseidon2.rand_required(num_poseidon, true);
+        let start = Instant::now();
+        let preprocessing = ShamirPreprocessing::new(config.threshold, net, num_pairs)?;
+        let duration = start.elapsed().as_micros() as f64;
+        preprocess_times.push(duration);
+        let mut protocol = ShamirProtocol::from(preprocessing);
+
+        let start = Instant::now();
+        let mut precomp = poseidon2.precompute_shamir(num_poseidon, &mut protocol)?;
+        poseidon2.shamir_permutation_in_place_with_precomputation_packed(
+            &mut share,
+            &mut precomp,
+            &mut protocol,
+        )?;
+        let duration = start.elapsed().as_micros() as f64;
+        times.push(duration);
+
+        sleep(Duration::from_millis(100));
+    }
+
+    print_runtimes(
+        preprocess_times,
+        id,
+        format!(
+            "Poseidon2 shamir with precomp packed n={} -- rand_generation",
+            num_poseidon
+        )
+        .as_str(),
+    );
+    print_runtimes(
+        times,
+        id,
+        format!(
+            "Poseidon2 shamir with precomp packed n={} -- online",
+            num_poseidon
+        )
+        .as_str(),
+    );
 
     Ok(ExitCode::SUCCESS)
 }

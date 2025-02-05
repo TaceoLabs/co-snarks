@@ -37,6 +37,13 @@ impl<F: PrimeField> ShamirPrimeFieldShare<F> {
         unsafe { &*(vec as *const [Self] as *const [F]) }
     }
 
+    /// Transforms a mutable slice of `ShamirPrimeFieldShare<F>` to a mutable slice of `F`
+    // Safe because ShamirPrimeFieldShare has repr(transparent)
+    pub fn convert_mut(vec: &mut [Self]) -> &mut [F] {
+        // SAFETY: ShamirPrimeFieldShare has repr(transparent)
+        unsafe { &mut *(vec as *mut [Self] as *mut [F]) }
+    }
+
     /// Transforms a vector of `ShamirPrimeFieldShare<F>` to a vector of `F`
     // Safe because ShamirPrimeFieldShare has repr(transparent)
     pub fn convert_vec(vec: Vec<Self>) -> Vec<F> {
