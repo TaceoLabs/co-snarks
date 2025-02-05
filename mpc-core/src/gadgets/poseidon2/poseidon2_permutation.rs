@@ -16,6 +16,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Self { params }
     }
 
+    pub(crate) fn num_sbox(&self) -> usize {
+        (self.params.rounds_f_beginning + self.params.rounds_f_end) * T + self.params.rounds_p
+    }
+
     fn sbox(input: &mut [F; T]) {
         input.iter_mut().for_each(Self::single_sbox);
     }

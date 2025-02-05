@@ -893,8 +893,10 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 }
                 Rep3AcvmType::Shared(shared) => shared,
             });
+            let mut precomp = poseidon2.precompute_rep3(1, &mut self.io_context0)?;
             poseidon2.rep3_permutation_in_place_with_precomputation(
                 &mut shared,
+                &mut precomp,
                 &mut self.io_context0,
             )?;
 

@@ -512,12 +512,12 @@ mod field_share {
         shamir_poseidon2_gadget_kat1_precomp_inner(10, 4);
     }
 
-    fn shamir_packed_poseidon2_gadget_kat1_precomp_inner(num_parties: usize, threshold: usize) {
+    fn shamir_poseidon2_gadget_kat1_precomp_packed_inner(num_parties: usize, threshold: usize) {
         const NUM_POSEIDON: usize = 10;
 
         let test_network = ShamirTestNetwork::new(num_parties);
         let mut rng = thread_rng();
-        let mut input = Vec::with_capacity(NUM_POSEIDON * 4);
+        let mut input = vec![ark_bn254::Fr::default(); NUM_POSEIDON * 4];
         for input in input.chunks_exact_mut(4) {
             input[0] = ark_bn254::Fr::from(0);
             input[1] = ark_bn254::Fr::from(1);
@@ -584,15 +584,16 @@ mod field_share {
         let is_result =
             shamir::combine_field_elements(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
+
         for r in is_result.chunks_exact(4) {
             assert_eq!(r, expected);
         }
     }
 
     #[test]
-    fn shamir_packed_poseidon2_gadget_kat1_precomp() {
-        shamir_packed_poseidon2_gadget_kat1_precomp_inner(3, 1);
-        shamir_packed_poseidon2_gadget_kat1_precomp_inner(10, 4);
+    fn shamir_poseidon2_gadget_kat1_precomp_packed() {
+        shamir_poseidon2_gadget_kat1_precomp_packed_inner(3, 1);
+        shamir_poseidon2_gadget_kat1_precomp_packed_inner(10, 4);
     }
 }
 

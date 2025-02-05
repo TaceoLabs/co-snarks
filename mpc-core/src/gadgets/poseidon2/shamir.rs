@@ -23,10 +23,6 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         num_sbox * mult_per_sbox * num_poseidon
     }
 
-    fn num_sbox(&self) -> usize {
-        (self.params.rounds_f_beginning + self.params.rounds_f_end) * T + self.params.rounds_p
-    }
-
     /// The matrix multiplication in the external rounds of the Poseidon2 permutation. Implemented for the Shamir MPC protocol.
     pub fn matmul_external_shamir(state: &mut [ShamirPrimeFieldShare<F>; T]) -> &mut [F; T] {
         let state = Self::transmute_shamir_state(state);
@@ -79,7 +75,6 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         driver: &mut ShamirProtocol<F, N>,
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
     ) -> std::io::Result<()> {
-        debug_assert_eq!(input.len() % T, 0);
         assert_eq!(D, 5);
         for (i, inp) in input.iter_mut().enumerate() {
             *inp -= &precomp.r[precomp.offset + i].a;
