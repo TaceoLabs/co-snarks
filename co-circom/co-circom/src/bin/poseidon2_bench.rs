@@ -31,6 +31,8 @@ use std::{
 };
 use tracing_subscriber::fmt::format::FmtSpan;
 
+const SLEEP: Duration = Duration::from_millis(200);
+
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{fmt, EnvFilter};
@@ -125,6 +127,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     poseidon2_shamir_with_precomp::<ark_bn254::Fr, T, D>(&config)?;
 
     const NUM_POSEIDON: usize = 10;
+    poseidon2_rep3_with_precomp_packed::<ark_bn254::Fr, T, D>(&config, NUM_POSEIDON)?;
     poseidon2_shamir_with_precomp_packed::<ark_bn254::Fr, T, D>(&config, NUM_POSEIDON)?;
 
     Ok(ExitCode::SUCCESS)
@@ -177,11 +180,12 @@ where
 
 fn share_random_input_rep3<F: PrimeField, const T: usize, R: Rng + CryptoRng>(
     net: &mut Rep3MpcNet,
+    num_poseidon: usize,
     rng: &mut R,
 ) -> color_eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
     let share = match net.get_id() {
         rep3::id::PartyID::ID0 => {
-            let input: Vec<F> = (0..T).map(|_| F::rand(rng)).collect();
+            let input: Vec<F> = (0..T * num_poseidon).map(|_| F::rand(rng)).collect();
             let shares = rep3::share_field_elements(&input, rng);
             let shares = shares
                 .into_iter()
@@ -219,7 +223,7 @@ where
         let mut net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
         id = usize::from(net.get_id());
 
-        let mut share = share_random_input_rep3::<F, T, _>(&mut net, &mut rng)?;
+        let mut share = share_random_input_rep3::<F, T, _>(&mut net, 1, &mut rng)?;
 
         // init MPC protocol
         let mut protocol = IoContext::init(net)?;
@@ -232,7 +236,7 @@ where
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
 
-        sleep(Duration::from_millis(100));
+        sleep(SLEEP);
     }
 
     print_runtimes(times, id, "Poseidon2 rep3");
@@ -260,7 +264,7 @@ where
         let mut net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
         id = usize::from(net.get_id());
 
-        let mut share = share_random_input_rep3::<F, T, _>(&mut net, &mut rng)?;
+        let mut share = share_random_input_rep3::<F, T, _>(&mut net, 1, &mut rng)?;
 
         // init MPC protocol
         let mut protocol = IoContext::init(net)?;
@@ -268,14 +272,16 @@ where
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         let start = Instant::now();
+        let mut precomp = poseidon2.precompute_rep3(1, &mut protocol)?;
         poseidon2.rep3_permutation_in_place_with_precomputation(
             share.as_mut_slice().try_into().unwrap(),
+            &mut precomp,
             &mut protocol,
         )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
 
-        sleep(Duration::from_millis(100));
+        sleep(SLEEP);
     }
 
     print_runtimes(times, id, "Poseidon2 rep3 with precomp");
@@ -303,7 +309,7 @@ where
         let mut net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
         id = usize::from(net.get_id());
 
-        let mut share = share_random_input_rep3::<F, T, _>(&mut net, &mut rng)?;
+        let mut share = share_random_input_rep3::<F, T, _>(&mut net, 1, &mut rng)?;
 
         // init MPC protocol
         let mut protocol = IoContext::init(net)?;
@@ -311,17 +317,69 @@ where
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         let start = Instant::now();
+        let mut precomp = poseidon2.precompute_rep3_additive(1, &mut protocol)?;
         poseidon2.rep3_permutation_additive_in_place_with_precomputation(
             share.as_mut_slice().try_into().unwrap(),
+            &mut precomp,
             &mut protocol,
         )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
 
-        sleep(Duration::from_millis(100));
+        sleep(SLEEP);
     }
 
     print_runtimes(times, id, "Poseidon2 rep3 with precomp (additive)");
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn poseidon2_rep3_with_precomp_packed<F: PrimeField, const T: usize, const D: u64>(
+    config: &Config,
+    num_poseidon: usize,
+) -> color_eyre::Result<ExitCode>
+where
+    Poseidon2<F, T, D>: Default,
+{
+    if config.threshold != 1 {
+        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+    }
+
+    let mut rng = rand::thread_rng();
+
+    let mut times = Vec::with_capacity(config.runs);
+    let mut id = 0;
+
+    for _ in 0..config.runs {
+        // connect to network
+        let mut net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
+        id = usize::from(net.get_id());
+
+        let mut share = share_random_input_rep3::<F, T, _>(&mut net, num_poseidon, &mut rng)?;
+
+        // init MPC protocol
+        let mut protocol = IoContext::init(net)?;
+
+        let poseidon2 = Poseidon2::<F, T, D>::default();
+
+        let start = Instant::now();
+        let mut precomp = poseidon2.precompute_rep3(num_poseidon, &mut protocol)?;
+        poseidon2.rep3_permutation_in_place_with_precomputation_packed(
+            &mut share,
+            &mut precomp,
+            &mut protocol,
+        )?;
+        let duration = start.elapsed().as_micros() as f64;
+        times.push(duration);
+
+        sleep(SLEEP);
+    }
+
+    print_runtimes(
+        times,
+        id,
+        format!("Poseidon2 rep3 with precomp packed n={}", num_poseidon).as_str(),
+    );
 
     Ok(ExitCode::SUCCESS)
 }
@@ -383,7 +441,7 @@ where
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
 
-        sleep(Duration::from_millis(100));
+        sleep(SLEEP);
     }
     print_runtimes(preprocess_times, id, "Poseidon2 shamir-- rand_generation");
     print_runtimes(times, id, "Poseidon2 shamir -- online");
@@ -431,7 +489,7 @@ where
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
 
-        sleep(Duration::from_millis(100));
+        sleep(SLEEP);
     }
 
     print_runtimes(
@@ -489,7 +547,7 @@ where
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
 
-        sleep(Duration::from_millis(100));
+        sleep(SLEEP);
     }
 
     print_runtimes(

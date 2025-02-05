@@ -2002,9 +2002,11 @@ mod field_share {
                 let mut rep3 = IoContext::init(net).unwrap();
 
                 let poseidon = Poseidon2::<_, 4, 5>::default();
+                let mut precomp = poseidon.precompute_rep3(1, &mut rep3).unwrap();
                 let output = poseidon
                     .rep3_permutation_with_precomputation(
                         x.as_slice().try_into().unwrap(),
+                        &mut precomp,
                         &mut rep3,
                     )
                     .unwrap();
@@ -2018,6 +2020,72 @@ mod field_share {
         let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
 
         assert_eq!(is_result, expected);
+    }
+
+    #[test]
+    fn rep3_poseidon2_gadget_kat1_precomp_packed() {
+        const NUM_POSEIDON: usize = 10;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let mut input = vec![ark_bn254::Fr::default(); NUM_POSEIDON * 4];
+        for input in input.chunks_exact_mut(4) {
+            input[0] = ark_bn254::Fr::from(0);
+            input[1] = ark_bn254::Fr::from(1);
+            input[2] = ark_bn254::Fr::from(2);
+            input[3] = ark_bn254::Fr::from(3);
+        }
+
+        let input_shares = rep3::share_field_elements(&input, &mut rng);
+
+        let expected = [
+            mpc_core::gadgets::field_from_hex_string(
+                "0x01bd538c2ee014ed5141b29e9ae240bf8db3fe5b9a38629a9647cf8d76c01737",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x239b62e7db98aa3a2a8f6a0d2fa1709e7a35959aa6c7034814d9daa90cbac662",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x04cbb44c61d928ed06808456bf758cbf0c18d1e15a7b6dbc8245fa7515d5e3cb",
+            )
+            .unwrap(),
+            mpc_core::gadgets::field_from_hex_string(
+                "0x2e11c5cff2a22c64d01304b778d78f6998eff1ab73163a35603f54794c30847a",
+            )
+            .unwrap(),
+        ];
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            input_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let poseidon = Poseidon2::<_, 4, 5>::default();
+                let mut precomp = poseidon.precompute_rep3(NUM_POSEIDON, &mut rep3).unwrap();
+                let output = poseidon
+                    .rep3_permutation_with_precomputation_packed(&x, &mut precomp, &mut rep3)
+                    .unwrap();
+                tx.send(output)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+
+        for r in is_result.chunks_exact(4) {
+            assert_eq!(r, expected);
+        }
     }
 
     #[test]
@@ -2065,9 +2133,11 @@ mod field_share {
                 let mut rep3 = IoContext::init(net).unwrap();
 
                 let poseidon = Poseidon2::<_, 4, 5>::default();
+                let mut precomp = poseidon.precompute_rep3_additive(1, &mut rep3).unwrap();
                 let output = poseidon
                     .rep3_permutation_additive_with_precomputation(
                         x.as_slice().try_into().unwrap(),
+                        &mut precomp,
                         &mut rep3,
                     )
                     .unwrap();

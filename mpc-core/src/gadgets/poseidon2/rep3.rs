@@ -53,7 +53,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         })
     }
 
-    fn precompute_rep3_additive<N: Rep3Network>(
+    /// Create Poseidon2Precomputations for the Rep3 MPC protocol, but only save the additive shares.
+    pub fn precompute_rep3_additive<N: Rep3Network>(
         &self,
         num_poseidon: usize,
         driver: &mut IoContext<N>,
@@ -217,7 +218,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     fn sbox_rep3_precomp<N: Rep3Network>(
-        input: &mut [Rep3PrimeFieldShare<F>; T],
+        input: &mut [Rep3PrimeFieldShare<F>],
         driver: &mut IoContext<N>,
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
     ) -> std::io::Result<()> {
@@ -294,6 +295,22 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         *input = Self::sbox_rep3_precomp_post(&y, r, r2, r3, r4, r5, &driver.network.get_id());
         precomp.offset += 1;
+
+        Ok(())
+    }
+
+    fn single_sbox_rep3_precomp_packed<N: Rep3Network>(
+        input: &mut [Rep3PrimeFieldShare<F>],
+        driver: &mut IoContext<N>,
+        precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
+    ) -> std::io::Result<()> {
+        debug_assert_eq!(input.len() % T, 0);
+        let mut vec = input.iter().cloned().step_by(T).collect::<Vec<_>>();
+        Self::sbox_rep3_precomp(&mut vec, driver, precomp)?;
+
+        for (inp, r) in input.iter_mut().step_by(T).zip(vec) {
+            *inp = r;
+        }
 
         Ok(())
     }
@@ -502,6 +519,66 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
+    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    fn rep3_external_round_precomp_packed<N: Rep3Network>(
+        &self,
+        state: &mut [Rep3PrimeFieldShare<F>],
+        r: usize,
+        precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
+        driver: &mut IoContext<N>,
+    ) -> std::io::Result<()> {
+        debug_assert_eq!(state.len() % T, 0);
+        if driver.id == PartyID::ID0 {
+            for state in state.chunks_exact_mut(T) {
+                for (s, rc) in state
+                    .iter_mut()
+                    .zip(self.params.round_constants_external[r].iter())
+                {
+                    s.a += rc;
+                }
+            }
+        } else if driver.id == PartyID::ID1 {
+            for state in state.chunks_exact_mut(T) {
+                for (s, rc) in state
+                    .iter_mut()
+                    .zip(self.params.round_constants_external[r].iter())
+                {
+                    s.b += rc;
+                }
+            }
+        }
+        Self::sbox_rep3_precomp(state, driver, precomp)?;
+        for s in state.chunks_exact_mut(T) {
+            Self::matmul_external_rep3(s.try_into().unwrap());
+        }
+        Ok(())
+    }
+
+    /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    fn rep3_internal_round_precomp_packed<N: Rep3Network>(
+        &self,
+        state: &mut [Rep3PrimeFieldShare<F>],
+        r: usize,
+        precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
+        driver: &mut IoContext<N>,
+    ) -> std::io::Result<()> {
+        debug_assert_eq!(state.len() % T, 0);
+        if driver.id == PartyID::ID0 {
+            for s in state.chunks_exact_mut(T) {
+                s[0].a += self.params.round_constants_internal[r];
+            }
+        } else if driver.id == PartyID::ID1 {
+            for s in state.chunks_exact_mut(T) {
+                s[0].b += self.params.round_constants_internal[r];
+            }
+        }
+        Self::single_sbox_rep3_precomp_packed(state, driver, precomp)?;
+        for s in state.chunks_exact_mut(T) {
+            self.matmul_internal_rep3(s.try_into().unwrap());
+        }
+        Ok(())
+    }
+
     /// One external round of the Poseidon2 permuation. Implemented for the Rep3 MPC protocol.
     fn rep3_external_round<N: Rep3Network>(
         &self,
@@ -532,35 +609,76 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// Computes the Poseidon2 permuation using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
-    pub fn rep3_permutation_in_place_with_precomputation<N: Rep3Network>(
+    /// Computes multiple Poseidon2 permuations in parallel using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    pub fn rep3_permutation_in_place_with_precomputation_packed<N: Rep3Network>(
         &self,
-        state: &mut [Rep3PrimeFieldShare<F>; T],
+        state: &mut [Rep3PrimeFieldShare<F>],
+        precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         driver: &mut IoContext<N>,
     ) -> std::io::Result<()> {
-        let mut precomp = self.precompute_rep3(1, driver)?;
+        assert_eq!(state.len() % T, 0);
+
+        let num_poseidon = state.len() / T;
+        let offset = precomp.offset;
+        // let mut precomp = self.precompute_rep3(num_poseidon, driver)?;
 
         // Linear layer at beginning
-        Self::matmul_external_rep3(state);
+        for s in state.chunks_exact_mut(T) {
+            Self::matmul_external_rep3(s.try_into().unwrap());
+        }
 
         // First set of external rounds
         for r in 0..self.params.rounds_f_beginning {
-            self.rep3_external_round_precomp(state, r, &mut precomp, driver)?;
+            self.rep3_external_round_precomp_packed(state, r, precomp, driver)?;
         }
 
         // Internal rounds
         for r in 0..self.params.rounds_p {
-            self.rep3_internal_round_precomp(state, r, &mut precomp, driver)?;
+            self.rep3_internal_round_precomp_packed(state, r, precomp, driver)?;
         }
 
         // Remaining external rounds
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            self.rep3_external_round_precomp(state, r, &mut precomp, driver)?;
+            self.rep3_external_round_precomp_packed(state, r, precomp, driver)?;
         }
 
-        debug_assert_eq!(precomp.offset, precomp.r.len());
+        debug_assert_eq!(precomp.offset - offset, self.num_sbox() * num_poseidon);
+        Ok(())
+    }
+
+    /// Computes the Poseidon2 permuation using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    pub fn rep3_permutation_in_place_with_precomputation<N: Rep3Network>(
+        &self,
+        state: &mut [Rep3PrimeFieldShare<F>; T],
+        precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
+        driver: &mut IoContext<N>,
+    ) -> std::io::Result<()> {
+        let offset = precomp.offset;
+        // let mut precomp = self.precompute_rep3(1, driver)?;
+
+        // Linear layer at beginning
+        Self::matmul_external_rep3(state);
+
+        // First set of external rounds
+        for r in 0..self.params.rounds_f_beginning {
+            self.rep3_external_round_precomp(state, r, precomp, driver)?;
+        }
+
+        // Internal rounds
+        for r in 0..self.params.rounds_p {
+            self.rep3_internal_round_precomp(state, r, precomp, driver)?;
+        }
+
+        // Remaining external rounds
+        for r in self.params.rounds_f_beginning
+            ..self.params.rounds_f_beginning + self.params.rounds_f_end
+        {
+            self.rep3_external_round_precomp(state, r, precomp, driver)?;
+        }
+
+        debug_assert_eq!(precomp.offset - offset, self.num_sbox());
         Ok(())
     }
 
@@ -568,35 +686,38 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     pub fn rep3_permutation_additive_in_place_with_precomputation<N: Rep3Network>(
         &self,
         state_: &mut [Rep3PrimeFieldShare<F>; T],
+        precomp: &mut Poseidon2Precomputations<F>,
         driver: &mut IoContext<N>,
     ) -> std::io::Result<()> {
+        let offset = precomp.offset;
+        // let mut precomp = self.precompute_rep3_additive(1, driver)?;
+
         // Just use a
         let mut state = array::from_fn(|i| state_[i].a);
-        let mut precomp = self.precompute_rep3_additive(1, driver)?;
 
         // Linear layer at beginning
         Self::matmul_external(&mut state);
 
         // First set of external rounds
         for r in 0..self.params.rounds_f_beginning {
-            self.rep3_external_round_precomp_additive(&mut state, r, &mut precomp, driver)?;
+            self.rep3_external_round_precomp_additive(&mut state, r, precomp, driver)?;
         }
 
         // Internal rounds
         for r in 0..self.params.rounds_p {
-            self.rep3_internal_round_precomp_additive(&mut state, r, &mut precomp, driver)?;
+            self.rep3_internal_round_precomp_additive(&mut state, r, precomp, driver)?;
         }
 
         // Remaining external rounds
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            self.rep3_external_round_precomp_additive(&mut state, r, &mut precomp, driver)?;
+            self.rep3_external_round_precomp_additive(&mut state, r, precomp, driver)?;
         }
 
         *state_ = Self::reshare_state_rep3(&mut state, driver)?;
 
-        debug_assert_eq!(precomp.offset, precomp.r.len());
+        debug_assert_eq!(precomp.offset - offset, self.num_sbox());
         Ok(())
     }
 
@@ -651,11 +772,25 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     pub fn rep3_permutation_with_precomputation<N: Rep3Network>(
         &self,
         state: &[Rep3PrimeFieldShare<F>; T],
+        precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         driver: &mut IoContext<N>,
     ) -> std::io::Result<[Rep3PrimeFieldShare<F>; T]> {
         assert_eq!(D, 5);
         let mut state = state.to_owned();
-        self.rep3_permutation_in_place_with_precomputation(&mut state, driver)?;
+        self.rep3_permutation_in_place_with_precomputation(&mut state, precomp, driver)?;
+        Ok(state)
+    }
+
+    /// Computes multiple Poseidon2 permuations in paralllel using the Rep3 MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    pub fn rep3_permutation_with_precomputation_packed<N: Rep3Network>(
+        &self,
+        state: &[Rep3PrimeFieldShare<F>],
+        precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
+        driver: &mut IoContext<N>,
+    ) -> std::io::Result<Vec<Rep3PrimeFieldShare<F>>> {
+        assert_eq!(D, 5);
+        let mut state = state.to_owned();
+        self.rep3_permutation_in_place_with_precomputation_packed(&mut state, precomp, driver)?;
         Ok(state)
     }
 
@@ -663,11 +798,12 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     pub fn rep3_permutation_additive_with_precomputation<N: Rep3Network>(
         &self,
         state: &[Rep3PrimeFieldShare<F>; T],
+        precomp: &mut Poseidon2Precomputations<F>,
         driver: &mut IoContext<N>,
     ) -> std::io::Result<[Rep3PrimeFieldShare<F>; T]> {
         assert_eq!(D, 5);
         let mut state = state.to_owned();
-        self.rep3_permutation_additive_in_place_with_precomputation(&mut state, driver)?;
+        self.rep3_permutation_additive_in_place_with_precomputation(&mut state, precomp, driver)?;
         Ok(state)
     }
 }
