@@ -2152,6 +2152,55 @@ mod field_share {
 
         assert_eq!(is_result, expected);
     }
+
+    #[test]
+    fn rep3_poseidon2_merkle_tree() {
+        const NUM_LEAVES: usize = 4usize.pow(3);
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let input = (0..NUM_LEAVES)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect_vec();
+
+        let input_shares = rep3::share_field_elements(&input, &mut rng);
+
+        let poseidon2 = Poseidon2::<ark_bn254::Fr, 4, 5>::default();
+        let expected1 = poseidon2.merkle_tree_sponge::<2>(input.clone());
+        let expected2 = poseidon2.merkle_tree_compression::<4>(input);
+        let expected = [expected1, expected2];
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            input_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let poseidon = Poseidon2::<_, 4, 5>::default();
+                let output1 = poseidon
+                    .merkle_tree_sponge_rep3::<2, _>(x.clone(), &mut rep3)
+                    .unwrap();
+                let output2 = poseidon
+                    .merkle_tree_compression_rep3::<4, _>(x, &mut rep3)
+                    .unwrap();
+                let output = [output1, output2];
+                tx.send(output)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+
+        assert_eq!(is_result, expected);
+    }
 }
 
 mod curve_share {

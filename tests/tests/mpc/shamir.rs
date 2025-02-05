@@ -595,6 +595,65 @@ mod field_share {
         shamir_poseidon2_gadget_kat1_precomp_packed_inner(3, 1);
         shamir_poseidon2_gadget_kat1_precomp_packed_inner(10, 4);
     }
+
+    fn shamir_poseidon2_merkle_tree_inner(num_parties: usize, threshold: usize) {
+        const NUM_LEAVES: usize = 4usize.pow(3);
+
+        let test_network = ShamirTestNetwork::new(num_parties);
+        let mut rng = thread_rng();
+        let input = (0..NUM_LEAVES)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect_vec();
+
+        let input_shares = shamir::share_field_elements(&input, threshold, num_parties, &mut rng);
+
+        let poseidon2 = Poseidon2::<ark_bn254::Fr, 4, 5>::default();
+        let expected1 = poseidon2.merkle_tree_sponge::<2>(input.clone());
+        let expected2 = poseidon2.merkle_tree_compression::<4>(input);
+        let expected = [expected1, expected2];
+
+        let mut tx = Vec::with_capacity(num_parties);
+        let mut rx = Vec::with_capacity(num_parties);
+        for _ in 0..num_parties {
+            let (t, r) = mpsc::channel();
+            tx.push(t);
+            rx.push(r);
+        }
+
+        for (net, tx, x) in izip!(test_network.get_party_networks(), tx, input_shares) {
+            thread::spawn(move || {
+                let mut shamir = ShamirPreprocessing::new(threshold, net, 0).unwrap().into();
+
+                let poseidon = Poseidon2::<_, 4, 5>::default();
+                let output1 = poseidon
+                    .merkle_tree_sponge_shamir::<2, _>(x.clone(), &mut shamir)
+                    .unwrap();
+                let output2 = poseidon
+                    .merkle_tree_compression_shamir::<4, _>(x, &mut shamir)
+                    .unwrap();
+                let output = vec![output1, output2];
+
+                tx.send(output)
+            });
+        }
+
+        let mut results = Vec::with_capacity(num_parties);
+        for r in rx {
+            results.push(r.recv().unwrap());
+        }
+
+        let is_result =
+            shamir::combine_field_elements(&results, &(1..=num_parties).collect_vec(), threshold)
+                .unwrap();
+
+        assert_eq!(is_result, expected);
+    }
+
+    #[test]
+    fn shamir_poseidon2_merkle_tree() {
+        shamir_poseidon2_merkle_tree_inner(3, 1);
+        shamir_poseidon2_merkle_tree_inner(10, 4);
+    }
 }
 
 mod curve_share {
