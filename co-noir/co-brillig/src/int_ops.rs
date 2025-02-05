@@ -28,33 +28,32 @@ where
             .memory
             .try_read_int(lhs, bit_size)
             .context("while getting lhs int for int binary op")?;
-        let rhs = self
+        let mut rhs = self
             .memory
             .try_read_int(rhs, rhs_bit_size)
             .context("while getting rhs for int binary op")?;
 
         let result = match op {
             BinaryIntOp::Add => self.driver.add(lhs, rhs),
-            BinaryIntOp::Sub => todo!(),
-            BinaryIntOp::Mul => todo!(),
+            BinaryIntOp::Sub => self.driver.sub(lhs, rhs),
+            BinaryIntOp::Mul => self.driver.mul(lhs, rhs),
             BinaryIntOp::Div => {
-                if self.shared_ctx.as_ref().is_some() {
+                if let Some(cond) = self.shared_ctx.as_ref() {
                     tracing::debug!(
                         "we are in shared context and and maybe need to prevent from div by zero"
                     );
-                    //rhs = self.driver.cmux(cond.clone(), rhs, T::public_one())?;
-                    todo!("cmux with the correct int type")
+                    rhs = self.driver.cmux(cond.clone(), rhs, T::public_one())?;
                 }
                 self.driver.div(lhs, rhs)
             }
             BinaryIntOp::Equals => self.driver.eq(lhs, rhs),
             BinaryIntOp::LessThan => self.driver.lt(lhs, rhs),
             BinaryIntOp::LessThanEquals => self.driver.le(lhs, rhs),
-            BinaryIntOp::And => todo!(),
-            BinaryIntOp::Or => todo!(),
-            BinaryIntOp::Xor => todo!(),
-            BinaryIntOp::Shl => todo!(),
-            BinaryIntOp::Shr => todo!(),
+            BinaryIntOp::And => todo!("BinaryIntOp::And"),
+            BinaryIntOp::Or => todo!("BinaryIntOp::Or"),
+            BinaryIntOp::Xor => todo!("BinaryIntOp::Xor"),
+            BinaryIntOp::Shl => todo!("BinaryIntOp::Shl"),
+            BinaryIntOp::Shr => todo!("BinaryIntOp::Shr"),
         };
 
         self.memory.write(destination, result?)?;
