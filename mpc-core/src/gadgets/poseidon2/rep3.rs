@@ -18,9 +18,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     ) -> std::io::Result<Poseidon2Precomputations<Rep3PrimeFieldShare<F>>> {
         assert_eq!(D, 5);
 
-        let num_sbox = ((self.params.rounds_f_beginning + self.params.rounds_f_end) * T
-            + self.params.rounds_p)
-            * num_poseidon;
+        let num_sbox = self.num_sbox() * num_poseidon;
 
         let mut r = Vec::with_capacity(num_sbox);
         for _ in 0..num_sbox {
