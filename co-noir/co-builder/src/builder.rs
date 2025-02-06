@@ -1330,8 +1330,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         _has_valid_witness_assignments: bool,
         _gate_counter: &mut GateCounter,
     ) {
-        let _current_aggregation_object = self.init_default_agg_obj_indices();
-
         for _constraint in constraint_system.avm_recursion_constraints.iter() {
             todo!("avm recursion");
         }
@@ -1629,8 +1627,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     }
 
     pub(crate) fn assert_equal(&mut self, a_idx: usize, b_idx: usize) {
-        self.is_valid_variable(a_idx);
-        self.is_valid_variable(b_idx);
+        self.assert_valid_variables(&[a_idx as u32, b_idx as u32]);
 
         let a = T::get_public(&self.get_variable(a_idx));
 
