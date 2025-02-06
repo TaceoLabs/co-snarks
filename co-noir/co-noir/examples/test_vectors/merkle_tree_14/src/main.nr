@@ -1,8 +1,8 @@
 // use dep::poseidon;
 use std::hash::poseidon;
 
-fn main(mut leaves: [Field; 65536]) -> pub Field {
-    let mut depth = 16;
+fn main(mut leaves: [Field; 16384]) -> pub Field {
+    let mut depth = 14;
 
     let mut len = leaves.len();
     for _ in 0..depth {

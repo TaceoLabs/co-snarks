@@ -1,28 +1,23 @@
-use dep::poseidon;
+// use dep::poseidon;
+use std::hash::poseidon;
 
-fn main(leaves: [Field; 1024]) -> pub Field {
-    let mut vector: Vec<Field> = Vec::from_slice(leaves);
+fn main(mut leaves: [Field; 1024]) -> pub Field {
     let mut depth = 10;
 
+    let mut len = leaves.len();
     for _ in 0..depth {
-        let mut next_level: Vec<Field> = Vec::new();
-        let len = vector.len();
-
         for k in 0..len {
             if k % 2 == 0 {
-                let left = vector.get(k);
-                let right = if k + 1 < len { vector.get(k + 1) } else { left }; // else shouldnt happen
-                let parent = hash([left, right]);
-                next_level.push(parent);
+                let parent = hash(leaves[k], leaves[k + 1]);
+                leaves[k / 2] = parent;
             }
         }
-
-        vector = next_level;
+        len = len / 2;
     }
 
-    vector.get(0)
+    leaves[0]
 }
 
-fn hash(nodes: [Field; 2]) -> Field {
-    poseidon::bn254::hash_2(nodes)
+fn hash(left: Field, right: Field) -> Field {
+    poseidon::bn254::hash_2([left, right])
 }
