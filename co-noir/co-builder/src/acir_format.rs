@@ -8,7 +8,7 @@ use acir::{
     AcirField,
 };
 use ark_ff::{PrimeField, Zero};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use crate::types::types::{
     AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, LogicConstraint, MulQuad,
@@ -112,8 +112,9 @@ impl<F: PrimeField> AcirFormat<F> {
             .collect();
 
         // Map to a pair of: BlockConstraint, and list of opcodes associated with that BlockConstraint
-        let mut block_id_to_block_constraint: HashMap<u32, (BlockConstraint<F>, Vec<usize>)> =
-            HashMap::new();
+        // TACEO TODO: THIS IS NOT DETERMINISTIC IN Barrettenberg (use of unordered_map), thus some tests may produce different circuits! We need to make it deterministic though since the MPC parties may produce different circuits and MPC will fail...
+        let mut block_id_to_block_constraint: BTreeMap<u32, (BlockConstraint<F>, Vec<usize>)> =
+            BTreeMap::new();
         for (i, gate) in circuit.opcodes.into_iter().enumerate() {
             match gate {
                 acir::circuit::Opcode::AssertZero(expression) => {
