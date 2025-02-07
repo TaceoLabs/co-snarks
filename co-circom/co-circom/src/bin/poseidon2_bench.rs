@@ -412,14 +412,13 @@ where
 
     let mut times = Vec::with_capacity(config.runs);
 
+    // connect to network
+    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
+    // init MPC protocol
+    let mut protocol = IoContext::init(net)?;
+
     for _ in 0..config.runs {
-        // connect to network
-        let mut net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
-
-        let mut share = share_random_input_rep3::<F, T, _>(&mut net, T, &mut rng)?;
-
-        // init MPC protocol
-        let mut protocol = IoContext::init(net)?;
+        let mut share = share_random_input_rep3::<F, T, _>(&mut protocol.network, T, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
@@ -428,10 +427,9 @@ where
             .rep3_permutation_in_place(share.as_mut_slice().try_into().unwrap(), &mut protocol)?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
-
-        sleep(SLEEP);
     }
 
+    sleep(SLEEP);
     print_runtimes(times, config.network.my_id, "Poseidon2 rep3");
 
     Ok(ExitCode::SUCCESS)
@@ -452,14 +450,13 @@ where
 
     let mut times = Vec::with_capacity(config.runs);
 
+    // connect to network
+    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
+    // init MPC protocol
+    let mut protocol = IoContext::init(net)?;
+
     for _ in 0..config.runs {
-        // connect to network
-        let mut net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
-
-        let mut share = share_random_input_rep3::<F, T, _>(&mut net, T, &mut rng)?;
-
-        // init MPC protocol
-        let mut protocol = IoContext::init(net)?;
+        let mut share = share_random_input_rep3::<F, T, _>(&mut protocol.network, T, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
@@ -472,10 +469,9 @@ where
         )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
-
-        sleep(SLEEP);
     }
 
+    sleep(SLEEP);
     print_runtimes(times, config.network.my_id, "Poseidon2 rep3 with precomp");
 
     Ok(ExitCode::SUCCESS)
@@ -496,14 +492,13 @@ where
 
     let mut times = Vec::with_capacity(config.runs);
 
+    // connect to network
+    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
+    // init MPC protocol
+    let mut protocol = IoContext::init(net)?;
+
     for _ in 0..config.runs {
-        // connect to network
-        let mut net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
-
-        let mut share = share_random_input_rep3::<F, T, _>(&mut net, T, &mut rng)?;
-
-        // init MPC protocol
-        let mut protocol = IoContext::init(net)?;
+        let mut share = share_random_input_rep3::<F, T, _>(&mut protocol.network, T, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
@@ -516,10 +511,9 @@ where
         )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
-
-        sleep(SLEEP);
     }
 
+    sleep(SLEEP);
     print_runtimes(
         times,
         config.network.my_id,
@@ -544,15 +538,17 @@ where
 
     let mut times = Vec::with_capacity(config.runs);
 
+    // connect to network
+    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
+    // init MPC protocol
+    let mut protocol = IoContext::init(net)?;
+
     for _ in 0..config.runs {
-        // connect to network
-        let mut net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
-
-        let mut share =
-            share_random_input_rep3::<F, T, _>(&mut net, config.batch_size * T, &mut rng)?;
-
-        // init MPC protocol
-        let mut protocol = IoContext::init(net)?;
+        let mut share = share_random_input_rep3::<F, T, _>(
+            &mut protocol.network,
+            config.batch_size * T,
+            &mut rng,
+        )?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
@@ -565,10 +561,9 @@ where
         )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
-
-        sleep(SLEEP);
     }
 
+    sleep(SLEEP);
     print_runtimes(
         times,
         config.network.my_id,
@@ -600,14 +595,13 @@ where
 
     let size = next_power_of_n(config.merkle_size, ARITY);
 
+    // connect to network
+    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
+    // init MPC protocol
+    let mut protocol = IoContext::init(net)?;
+
     for _ in 0..config.runs {
-        // connect to network
-        let mut net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
-
-        let share = share_random_input_rep3::<F, T, _>(&mut net, size, &mut rng)?;
-
-        // init MPC protocol
-        let mut protocol = IoContext::init(net)?;
+        let share = share_random_input_rep3::<F, T, _>(&mut protocol.network, size, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
@@ -619,10 +613,9 @@ where
         }
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
-
-        sleep(SLEEP);
     }
 
+    sleep(SLEEP);
     print_runtimes(
         times,
         config.network.my_id,
@@ -666,10 +659,10 @@ where
     let mut times = Vec::with_capacity(config.runs);
     let mut preprocess_times = Vec::with_capacity(config.runs);
 
-    for _ in 0..config.runs {
-        // connect to network
-        let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
+    // connect to network
+    let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
 
+    for _ in 0..config.runs {
         let mut share =
             share_random_input_shamir::<F, T, _>(&mut net, config.threshold, T, &mut rng)?;
 
@@ -689,8 +682,10 @@ where
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
 
-        sleep(SLEEP);
+        net = protocol.into_network();
     }
+
+    sleep(SLEEP);
     print_runtimes(
         preprocess_times,
         config.network.my_id,
@@ -713,10 +708,10 @@ where
     let mut times = Vec::with_capacity(config.runs);
     let mut preprocess_times = Vec::with_capacity(config.runs);
 
-    for _ in 0..config.runs {
-        // connect to network
-        let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
+    // connect to network
+    let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
 
+    for _ in 0..config.runs {
         let mut share =
             share_random_input_shamir::<F, T, _>(&mut net, config.threshold, T, &mut rng)?;
 
@@ -740,9 +735,10 @@ where
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
 
-        sleep(SLEEP);
+        net = protocol.into_network();
     }
 
+    sleep(SLEEP);
     print_runtimes(
         preprocess_times,
         config.network.my_id,
@@ -769,10 +765,10 @@ where
     let mut times = Vec::with_capacity(config.runs);
     let mut preprocess_times = Vec::with_capacity(config.runs);
 
-    for _ in 0..config.runs {
-        // connect to network
-        let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
+    // connect to network
+    let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
 
+    for _ in 0..config.runs {
         let mut share = share_random_input_shamir::<F, T, _>(
             &mut net,
             config.threshold,
@@ -800,9 +796,10 @@ where
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
 
-        sleep(SLEEP);
+        net = protocol.into_network();
     }
 
+    sleep(SLEEP);
     print_runtimes(
         preprocess_times,
         config.network.my_id,
@@ -845,10 +842,10 @@ where
     let size = next_power_of_n(config.merkle_size, ARITY);
     let num_hashes = (size - 1) / (ARITY - 1);
 
-    for _ in 0..config.runs {
-        // connect to network
-        let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
+    // connect to network
+    let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
 
+    for _ in 0..config.runs {
         let share =
             share_random_input_shamir::<F, T, _>(&mut net, config.threshold, size, &mut rng)?;
 
@@ -871,9 +868,10 @@ where
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
 
-        sleep(SLEEP);
+        net = protocol.into_network();
     }
 
+    sleep(SLEEP);
     print_runtimes(
         preprocess_times,
         config.network.my_id,
