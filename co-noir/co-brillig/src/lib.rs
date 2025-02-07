@@ -1,4 +1,5 @@
 #![warn(missing_docs)]
+#![warn(clippy::iter_over_hash_type)]
 //! This crate defines the [CoBrilligVM].
 //!
 //! The VM computes unconstrained functions for the ACVM witness extension.

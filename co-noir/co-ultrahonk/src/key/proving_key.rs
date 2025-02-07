@@ -23,6 +23,7 @@ use co_builder::HonkProofResult;
 use eyre::Result;
 use serde::Deserialize;
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use ultrahonk::prelude::VerifyingKeyBarretenberg;
 use ultrahonk::Utils;
@@ -44,12 +45,11 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub polynomials: Polynomials<T::ArithmeticShare, P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
-    pub memory_records_shared_type: Option<Vec<u32>>,
     #[serde(
         serialize_with = "mpc_core::ark_se",
         deserialize_with = "mpc_core::ark_de"
     )]
-    pub write_records_type: Option<Vec<T::ArithmeticShare>>,
+    pub memory_records_shared: BTreeMap<u32, T::ArithmeticShare>,
     pub final_active_wire_idx: usize,
     pub phantom: PhantomData<T>,
 }
@@ -92,7 +92,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             final_active_wire_idx,
         );
         // Construct and add to proving key the wire, selector and copy constraint polynomials
-        proving_key.populate_trace(id, &mut circuit, false);
+        proving_key.populate_trace(id, &mut circuit, driver, false);
 
         // First and last lagrange polynomials (in the full circuit size)
         proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
@@ -133,22 +133,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             proving_key.public_inputs.push(var);
         }
 
-        proving_key.write_records_type = Some(
-            circuit
-                .write_records_type
-                .iter()
-                .map(|x| {
-                    if U::is_shared(x) {
-                        U::get_shared(x).expect("Already checked it is shared")
-                    } else {
-                        U::promote_to_trivial_share(
-                            driver,
-                            U::get_public(x).expect("Already checked it is public"),
-                        )
-                    }
-                })
-                .collect::<Vec<_>>(),
-        );
         // Set the pairing point accumulator indices
         proving_key.pairing_point_accumulator_public_input_indices =
             circuit.pairing_point_accumulator_public_input_indices;
@@ -275,8 +259,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             phantom: PhantomData,
             contains_pairing_point_accumulator: false,
             pairing_point_accumulator_public_input_indices: [0; AGGREGATION_OBJECT_SIZE],
-            write_records_type: None,
-            memory_records_shared_type: None,
+            memory_records_shared: BTreeMap::new(),
         }
     }
 
@@ -286,6 +269,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         &mut self,
         id: T::PartyID,
         builder: &mut GenericUltraCircuitBuilder<P, U>,
+        driver: &mut U,
         is_structured: bool,
     ) {
         tracing::trace!("Populating trace");
@@ -304,17 +288,17 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             &mut self.memory_write_records,
         );
 
-        self.memory_records_shared_type = if builder.memory_records_shared_type.is_empty() {
-            None
-        } else {
-            Some(
-                builder
-                    .memory_records_shared_type
-                    .iter()
-                    .map(|y| (y + ram_rom_offset))
-                    .collect(),
-            )
-        };
+        for (k, el) in builder.memory_records_shared.iter() {
+            let val = if U::is_shared(el) {
+                U::get_shared(el).expect("Already checked it is shared")
+            } else {
+                U::promote_to_trivial_share(
+                    driver,
+                    U::get_public(el).expect("Already checked it is public"),
+                )
+            };
+            self.memory_records_shared.insert(k + ram_rom_offset, val);
+        }
 
         // Compute the permutation argument polynomials (sigma/id) and add them to proving key
         PlainProvingKey::compute_permutation_argument_polynomials(
@@ -325,6 +309,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             self.pub_inputs_offset as usize,
         );
     }
+
     pub fn from_plain_key_and_shares(
         plain_key: &PlainProvingKey<P>,
         shares: Vec<T::ArithmeticShare>,
@@ -373,8 +358,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             pairing_point_accumulator_public_input_indices: plain_key
                 .pairing_point_accumulator_public_input_indices
                 .to_owned(),
-            write_records_type: None,
-            memory_records_shared_type: None,
+            memory_records_shared: BTreeMap::new(),
         })
     }
 

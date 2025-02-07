@@ -177,8 +177,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     // Stores gate index of RAM writes (required by proving key)
     pub(crate) memory_write_records: Vec<u32>,
     // Stores gate index where Read/Write type is shared
-    pub memory_records_shared_type: Vec<u32>,
-    pub write_records_type: Vec<T::AcvmType>,
+    pub memory_records_shared: BTreeMap<u32, T::AcvmType>, // order does not matter
 }
 
 // This workaround is required due to mutability issues
@@ -270,9 +269,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             cached_partial_non_native_field_multiplications: Vec::new(),
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
-            memory_records_shared_type: Vec::new(),
+            memory_records_shared: BTreeMap::new(),
             current_tag: 0,
-            write_records_type: Vec::new(),
         }
     }
 
@@ -3275,9 +3273,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 }
             }
             // Note: For these we need to sorted order, so we insert them in this new container which gets a special treatment in the prover.
-            self.memory_records_shared_type
-                .push(sorted_record.gate_index as u32);
-            self.write_records_type.push(access_type.clone().into());
+            self.memory_records_shared
+                .insert(sorted_record.gate_index as u32, access_type.clone().into());
         }
 
         // Step 2: Create gates that validate correctness of RAM timestamps

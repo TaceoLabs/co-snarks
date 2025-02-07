@@ -1,3 +1,5 @@
+#![warn(clippy::iter_over_hash_type)]
+
 pub(crate) mod acir_format;
 pub(crate) mod builder;
 pub(crate) mod crs;

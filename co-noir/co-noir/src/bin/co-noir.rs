@@ -684,8 +684,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
         contains_pairing_point_accumulator: proving_key.contains_pairing_point_accumulator,
         pairing_point_accumulator_public_input_indices: proving_key
             .pairing_point_accumulator_public_input_indices,
-        write_records_type: None,
-        memory_records_shared_type: None,
+        memory_records_shared: BTreeMap::new(),
     };
 
     // write result to output file
