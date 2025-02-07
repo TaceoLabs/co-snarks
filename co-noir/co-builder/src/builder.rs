@@ -1632,23 +1632,24 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.variables[self.real_variable_index[index] as usize].to_owned()
     }
 
-    // TACEO TODO: keeping it for now, but maybe we can optimize it away
-    pub fn get_variables_shared(
+    pub fn get_variable_shared(
         &self,
-        indices: &[T::AcvmType],
+        index: T::AcvmType,
         driver: &mut T,
-    ) -> std::io::Result<Vec<T::AcvmType>> {
+        min_wit_index: u32, // Specify to reduce LUT size
+        max_wit_index: u32, // Specify to reduce LUT size
+    ) -> std::io::Result<T::AcvmType> {
+        debug_assert!(max_wit_index >= min_wit_index);
         let direct_variables = self
             .real_variable_index
             .iter()
+            .skip(min_wit_index as usize)
+            .take((max_wit_index - min_wit_index + 1) as usize)
             .map(|x| self.variables[*x as usize].clone())
             .collect();
         let lut = T::init_lut_by_acvm_type(driver, direct_variables);
-        let mut result = Vec::with_capacity(indices.len());
-        for index in indices {
-            result.push(T::read_lut_by_acvm_type(driver, index.clone(), &lut)?)
-        }
-        Ok(result)
+        let corrected_index = driver.sub(index, P::ScalarField::from(min_wit_index as u64).into());
+        T::read_lut_by_acvm_type(driver, corrected_index, &lut)
     }
 
     fn update_variable(&mut self, index: usize, value: T::AcvmType) {
@@ -1990,9 +1991,26 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
 
         let lut = &self.ram_arrays[ram_id].state;
+
+        // We get the minimum and maximum of the write recors to reduce the size of LUTs required to read the variable
+        let min_witness = self.ram_arrays[ram_id]
+            .records
+            .iter()
+            .filter(|x| x.access_type == RamAccessType::Write)
+            .map(|x| x.value_witness)
+            .min()
+            .unwrap_or(0);
+        let max_witness = self.ram_arrays[ram_id]
+            .records
+            .iter()
+            .filter(|x| x.access_type == RamAccessType::Write)
+            .map(|x| x.value_witness)
+            .max()
+            .unwrap_or(0);
+
         let index_ram = T::read_lut_by_acvm_type(driver, index.clone(), lut)?;
-        let value = self.get_variables_shared(&[index_ram.clone()], driver)?;
-        let value_witness = self.add_variable(value[0].clone());
+        let value = self.get_variable_shared(index_ram, driver, min_witness, max_witness)?;
+        let value_witness = self.add_variable(value);
 
         let mut new_record = RamRecord::<T::AcvmType> {
             index_witness,
