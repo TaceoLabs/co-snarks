@@ -2831,6 +2831,146 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
+    fn process_rom_array_public_inner(
+        &mut self,
+        rom_id: usize,
+        read_tag: u32,
+        sorted_list_tag: u32,
+    ) {
+        let records = &self.rom_arrays[rom_id].records;
+        let mut records: Vec<_> = records
+            .iter()
+            .map(|x| RomRecord::<P::ScalarField> {
+                index_witness: x.index_witness,
+                value_column1_witness: x.value_column1_witness,
+                value_column2_witness: x.value_column2_witness,
+                index: T::get_public(&x.index).expect("Already checked it is public"),
+                record_witness: x.record_witness,
+                gate_index: x.gate_index,
+            })
+            .collect();
+        records.sort();
+        for record in records {
+            let index = record.index;
+            let value1 = self.get_variable(record.value_column1_witness.try_into().unwrap());
+            let value2 = self.get_variable(record.value_column2_witness.try_into().unwrap());
+            let index_witness = self.add_variable(T::AcvmType::from(index));
+            let value1_witness = self.add_variable(value1);
+            let value2_witness = self.add_variable(value2);
+            let mut sorted_record = RomRecord::<T::AcvmType> {
+                index_witness,
+                value_column1_witness: value1_witness,
+                value_column2_witness: value2_witness,
+                index: index.into(),
+                record_witness: 0,
+                gate_index: 0,
+            };
+            self.create_sorted_rom_gate(&mut sorted_record);
+
+            self.assign_tag(record.record_witness, read_tag);
+            self.assign_tag(sorted_record.record_witness, sorted_list_tag);
+
+            // For ROM/RAM gates, the 'record' wire value (wire column 4) is a linear combination of the first 3 wire
+            // values. However...the record value uses the random challenge 'eta', generated after the first 3 wires are
+            // committed to. i.e. we can't compute the record witness here because we don't know what `eta` is! Take the
+            // gate indices of the two rom gates (original read gate + sorted gate) and store in `memory_records`. Once
+            // we
+            // generate the `eta` challenge, we'll use `memory_records` to figure out which gates need a record wire
+            // value
+            // to be computed.
+            // record (w4) = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag (0 for reads, 1 for writes)
+            // Separate containers used to store gate indices of reads and writes. Need to differentiate because of
+            // `read_write_flag` (N.B. all ROM accesses are considered reads. Writes are for RAM operations)
+            self.memory_read_records
+                .push(sorted_record.gate_index as u32);
+            self.memory_read_records.push(record.gate_index as u32);
+        }
+    }
+
+    fn process_rom_array_shared_inner(
+        &mut self,
+        rom_id: usize,
+        read_tag: u32,
+        sorted_list_tag: u32,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        let records = &self.rom_arrays[rom_id].records;
+        let to_sort1: Vec<_> = records
+            .iter()
+            .map(|y| {
+                if T::is_shared(&y.index) {
+                    T::get_shared(&y.index).expect("Already checked it is shared")
+                } else {
+                    //TACEO TODO: optimize sorting with many public indices
+                    T::promote_to_trivial_share(
+                        driver,
+                        T::get_public(&y.index).expect("Already checked it is public"),
+                    )
+                }
+            })
+            .collect();
+        let to_sort2: Vec<_> = records
+            .iter()
+            .map(|y| {
+                let val = self.get_variable(y.value_column1_witness as usize);
+                if T::is_shared(&val) {
+                    T::get_shared(&val).expect("Already checked it is shared")
+                } else {
+                    //TACEO TODO: optimize sorting with many public indices
+                    T::promote_to_trivial_share(
+                        driver,
+                        T::get_public(&val).expect("Already checked it is public"),
+                    )
+                }
+            })
+            .collect();
+        let to_sort3: Vec<_> = records
+            .iter()
+            .map(|y| {
+                let val = self.get_variable(y.value_column2_witness as usize);
+                if T::is_shared(&val) {
+                    T::get_shared(&val).expect("Already checked it is shared")
+                } else {
+                    //TACEO TODO: optimize sorting with many public indices
+                    T::promote_to_trivial_share(
+                        driver,
+                        T::get_public(&val).expect("Already checked it is public"),
+                    )
+                }
+            })
+            .collect();
+        let inputs = vec![to_sort1.as_ref(), to_sort2.as_ref(), to_sort3.as_ref()];
+
+        let sorted = T::sort_vec_by(driver, &to_sort1, inputs, 32)?;
+        let records = self.rom_arrays[rom_id].records.clone();
+        for (record, index, col1, col2) in izip!(
+            records,
+            sorted[0].clone(),
+            sorted[1].clone(),
+            sorted[2].clone()
+        ) {
+            let index_witness = self.add_variable(index.clone().into());
+            let value1_witness = self.add_variable(col1.into());
+            let value2_witness = self.add_variable(col2.into());
+            let mut sorted_record = RomRecord::<T::AcvmType> {
+                index_witness,
+                value_column1_witness: value1_witness,
+                value_column2_witness: value2_witness,
+                index: index.into(),
+                record_witness: 0,
+                gate_index: 0,
+            };
+            self.create_sorted_rom_gate(&mut sorted_record);
+            self.assign_tag(record.record_witness, read_tag);
+            self.assign_tag(sorted_record.record_witness, sorted_list_tag);
+            // These elements don't need to be sorted, since the ordering does not play a role during the prover
+            self.memory_read_records
+                .push(sorted_record.gate_index as u32);
+            self.memory_read_records.push(record.gate_index as u32);
+        }
+        Ok(())
+    }
+
     fn process_rom_array(&mut self, rom_id: usize, driver: &mut T) -> std::io::Result<()> {
         let read_tag = self.get_new_tag(); // current_tag + 1;
         let sorted_list_tag = self.get_new_tag(); // current_tag + 2;
@@ -2847,128 +2987,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let records = &self.rom_arrays[rom_id].records;
         let all_public = records.iter().all(|record| !T::is_shared(&record.index));
         if all_public {
-            let mut records: Vec<_> = records
-                .iter()
-                .map(|x| RomRecord::<P::ScalarField> {
-                    index_witness: x.index_witness,
-                    value_column1_witness: x.value_column1_witness,
-                    value_column2_witness: x.value_column2_witness,
-                    index: T::get_public(&x.index).expect("Already checked it is public"),
-                    record_witness: x.record_witness,
-                    gate_index: x.gate_index,
-                })
-                .collect();
-            records.sort();
-            for record in records {
-                let index = record.index;
-                let value1 = self.get_variable(record.value_column1_witness.try_into().unwrap());
-                let value2 = self.get_variable(record.value_column2_witness.try_into().unwrap());
-                let index_witness = self.add_variable(T::AcvmType::from(index));
-                let value1_witness = self.add_variable(value1);
-                let value2_witness = self.add_variable(value2);
-                let mut sorted_record = RomRecord::<T::AcvmType> {
-                    index_witness,
-                    value_column1_witness: value1_witness,
-                    value_column2_witness: value2_witness,
-                    index: index.into(),
-                    record_witness: 0,
-                    gate_index: 0,
-                };
-                self.create_sorted_rom_gate(&mut sorted_record);
-
-                self.assign_tag(record.record_witness, read_tag);
-                self.assign_tag(sorted_record.record_witness, sorted_list_tag);
-
-                // For ROM/RAM gates, the 'record' wire value (wire column 4) is a linear combination of the first 3 wire
-                // values. However...the record value uses the random challenge 'eta', generated after the first 3 wires are
-                // committed to. i.e. we can't compute the record witness here because we don't know what `eta` is! Take the
-                // gate indices of the two rom gates (original read gate + sorted gate) and store in `memory_records`. Once
-                // we
-                // generate the `eta` challenge, we'll use `memory_records` to figure out which gates need a record wire
-                // value
-                // to be computed.
-                // record (w4) = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag (0 for reads, 1 for writes)
-                // Separate containers used to store gate indices of reads and writes. Need to differentiate because of
-                // `read_write_flag` (N.B. all ROM accesses are considered reads. Writes are for RAM operations)
-                self.memory_read_records
-                    .push(sorted_record.gate_index as u32);
-                self.memory_read_records.push(record.gate_index as u32);
-            }
+            self.process_rom_array_public_inner(rom_id, read_tag, sorted_list_tag);
         } else {
             // The MPC case, we only need to sort some parts of the RomRecord, so we prepare these indices.
-            let to_sort1: Vec<_> = records
-                .iter()
-                .map(|y| {
-                    if T::is_shared(&y.index) {
-                        T::get_shared(&y.index).expect("Already checked it is shared")
-                    } else {
-                        //TACEO TODO: optimize sorting with many public indices
-                        T::promote_to_trivial_share(
-                            driver,
-                            T::get_public(&y.index).expect("Already checked it is public"),
-                        )
-                    }
-                })
-                .collect();
-            let to_sort2: Vec<_> = records
-                .iter()
-                .map(|y| {
-                    let val = self.get_variable(y.value_column1_witness as usize);
-                    if T::is_shared(&val) {
-                        T::get_shared(&val).expect("Already checked it is shared")
-                    } else {
-                        //TACEO TODO: optimize sorting with many public indices
-                        T::promote_to_trivial_share(
-                            driver,
-                            T::get_public(&val).expect("Already checked it is public"),
-                        )
-                    }
-                })
-                .collect();
-            let to_sort3: Vec<_> = records
-                .iter()
-                .map(|y| {
-                    let val = self.get_variable(y.value_column2_witness as usize);
-                    if T::is_shared(&val) {
-                        T::get_shared(&val).expect("Already checked it is shared")
-                    } else {
-                        //TACEO TODO: optimize sorting with many public indices
-                        T::promote_to_trivial_share(
-                            driver,
-                            T::get_public(&val).expect("Already checked it is public"),
-                        )
-                    }
-                })
-                .collect();
-            let inputs = vec![to_sort1.as_ref(), to_sort2.as_ref(), to_sort3.as_ref()];
-
-            let sorted = T::sort_vec_by(driver, &to_sort1, inputs, 32)?;
-            let records = self.rom_arrays[rom_id].records.clone();
-            for (record, index, col1, col2) in izip!(
-                records,
-                sorted[0].clone(),
-                sorted[1].clone(),
-                sorted[2].clone()
-            ) {
-                let index_witness = self.add_variable(index.clone().into());
-                let value1_witness = self.add_variable(col1.into());
-                let value2_witness = self.add_variable(col2.into());
-                let mut sorted_record = RomRecord::<T::AcvmType> {
-                    index_witness,
-                    value_column1_witness: value1_witness,
-                    value_column2_witness: value2_witness,
-                    index: index.into(),
-                    record_witness: 0,
-                    gate_index: 0,
-                };
-                self.create_sorted_rom_gate(&mut sorted_record);
-                self.assign_tag(record.record_witness, read_tag);
-                self.assign_tag(sorted_record.record_witness, sorted_list_tag);
-                // These elements don't need to be sorted, since the ordering does not play a role during the prover
-                self.memory_read_records
-                    .push(sorted_record.gate_index as u32);
-                self.memory_read_records.push(record.gate_index as u32);
-            }
+            self.process_rom_array_shared_inner(rom_id, read_tag, sorted_list_tag, driver)?;
         }
 
         // One of the checks we run on the sorted list, is to validate the difference between
@@ -3009,6 +3031,320 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
+    fn process_ram_array_public_inner(
+        &mut self,
+        ram_id: usize,
+        access_tag: u32,
+        sorted_list_tag: u32,
+    ) {
+        let mut sorted_ram_records = Vec::with_capacity(self.ram_arrays[ram_id].records.len());
+
+        let records = &self.ram_arrays[ram_id].records;
+        let mut records: Vec<_> = records
+            .iter()
+            .map(|x| RamRecord::<P::ScalarField> {
+                index_witness: x.index_witness,
+                timestamp_witness: x.timestamp_witness,
+                value_witness: x.value_witness,
+                index: T::get_public(&x.index).expect("Already checked it is public"),
+                access_type: x.access_type.clone(),
+                timestamp: x.timestamp,
+                record_witness: x.record_witness,
+                gate_index: x.gate_index,
+            })
+            .collect();
+        records.sort();
+        // Iterate over all but final RAM record.
+        for (i, record) in records.into_iter().enumerate() {
+            let index = record.index;
+            let value = self.get_variable(record.value_witness.try_into().unwrap());
+            let index_witness = self.add_variable(T::AcvmType::from(index));
+
+            let timestamp_witness =
+                self.add_variable(T::AcvmType::from(P::ScalarField::from(record.timestamp)));
+
+            let value_witness = self.add_variable(value);
+            let mut sorted_record = RamRecord::<T::AcvmType> {
+                index_witness,
+                timestamp_witness,
+                value_witness,
+                index: index.into(),
+                timestamp: record.timestamp,
+                access_type: record.access_type.to_owned(),
+                record_witness: 0,
+                gate_index: 0,
+            };
+
+            // create a list of sorted ram records
+            sorted_ram_records.push(sorted_record.to_owned());
+
+            // We don't apply the RAM consistency check gate to the final record,
+            // as this gate expects a RAM record to be present at the next gate
+            if i < self.ram_arrays[ram_id].records.len() - 1 {
+                self.create_sorted_ram_gate(&mut sorted_record);
+            } else {
+                // For the final record in the sorted list, we do not apply the full consistency check gate.
+                // Only need to check the index value = RAM array size - 1.
+                let len = T::get_length_of_lut(&self.ram_arrays[ram_id].state);
+                self.create_final_sorted_ram_gate(&mut sorted_record, len);
+            }
+
+            self.assign_tag(record.record_witness, access_tag);
+            self.assign_tag(sorted_record.record_witness, sorted_list_tag);
+
+            // For ROM/RAM gates, the 'record' wire value (wire column 4) is a linear combination of the first 3 wire
+            // values. However...the record value uses the random challenge 'eta', generated after the first 3 wires are
+            // committed to. i.e. we can't compute the record witness here because we don't know what `eta` is! Take the
+            // gate indices of the two rom gates (original read gate + sorted gate) and store in `memory_records`. Once
+            // we
+            // generate the `eta` challenge, we'll use `memory_records` to figure out which gates need a record wire
+            // value
+            // to be computed.
+            match record.access_type {
+                RamAccessType::Read => {
+                    self.memory_read_records
+                        .push(sorted_record.gate_index as u32);
+                    self.memory_read_records.push(record.gate_index as u32);
+                }
+                RamAccessType::Write => {
+                    self.memory_write_records
+                        .push(sorted_record.gate_index as u32);
+                    self.memory_write_records.push(record.gate_index as u32);
+                }
+            }
+        }
+        // Step 2: Create gates that validate correctness of RAM timestamps
+
+        let mut timestamp_deltas = Vec::with_capacity(sorted_ram_records.len() - 1);
+        for i in 0..sorted_ram_records.len() - 1 {
+            let current = &sorted_ram_records[i];
+            let next = &sorted_ram_records[i + 1];
+
+            let share_index = current.index == next.index;
+            let timestamp_delta = if share_index {
+                assert!(next.timestamp > current.timestamp);
+                P::ScalarField::from(next.timestamp - current.timestamp)
+            } else {
+                P::ScalarField::zero()
+            };
+
+            let timestamp_delta_witness = self.add_variable(T::AcvmType::from(timestamp_delta));
+
+            self.apply_aux_selectors(AuxSelectors::RamTimestampCheck);
+            self.blocks.aux.populate_wires(
+                current.index_witness,
+                current.timestamp_witness,
+                timestamp_delta_witness,
+                self.zero_idx,
+            );
+
+            self.num_gates += 1;
+
+            // store timestamp offsets for later. Need to apply range checks to them, but calling
+            // `create_new_range_constraint` can add gates. Would ruin the structure of our sorted timestamp list.
+            timestamp_deltas.push(timestamp_delta_witness);
+        }
+
+        // add the index/timestamp values of the last sorted record in an empty add gate.
+        // (the previous gate will access the wires on this gate and requires them to be those of the last record)
+        let last = &sorted_ram_records[self.ram_arrays[ram_id].records.len() - 1];
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.aux,
+            last.index_witness,
+            last.timestamp_witness,
+            self.zero_idx,
+            self.zero_idx
+        );
+
+        // Step 3: validate difference in timestamps is monotonically increasing. i.e. is <= maximum timestamp
+        let max_timestamp = self.ram_arrays[ram_id].access_count - 1;
+        for w in timestamp_deltas {
+            self.create_new_range_constraint(w, max_timestamp as u64);
+        }
+    }
+
+    fn process_ram_array_shared_inner(
+        &mut self,
+        ram_id: usize,
+        access_tag: u32,
+        sorted_list_tag: u32,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        let mut sorted_ram_records = Vec::with_capacity(self.ram_arrays[ram_id].records.len());
+
+        let records = &self.ram_arrays[ram_id].records;
+        let to_sort1: Vec<_> = records
+            .iter()
+            .map(|y| {
+                if T::is_shared(&y.index) {
+                    T::get_shared(&y.index).expect("Already checked it is shared")
+                } else {
+                    T::promote_to_trivial_share(
+                        driver,
+                        T::get_public(&y.index).expect("Already checked it is public"),
+                    )
+                }
+            })
+            .collect();
+        let to_sort2: Vec<_> = records
+            .iter()
+            .map(|y| {
+                let val = self.get_variable(y.value_witness as usize);
+                if T::is_shared(&val) {
+                    T::get_shared(&val).expect("Already checked it is shared")
+                } else {
+                    //TACEO TODO: optimize sorting with many public indices
+                    T::promote_to_trivial_share(
+                        driver,
+                        T::get_public(&val).expect("Already checked it is public"),
+                    )
+                }
+            })
+            .collect();
+        let to_sort3: Vec<_> = records
+            .iter()
+            .map(|y| T::promote_to_trivial_share(driver, P::ScalarField::from(y.timestamp)))
+            .collect();
+        let to_sort4: Vec<_> = records
+            .iter()
+            .map(|y| {
+                let val = if y.access_type == RamAccessType::Read {
+                    0u32
+                } else {
+                    1u32
+                };
+                T::promote_to_trivial_share(driver, P::ScalarField::from(val))
+            })
+            .collect();
+        let inputs = vec![
+            to_sort1.as_ref(),
+            to_sort2.as_ref(),
+            to_sort3.as_ref(),
+            to_sort4.as_ref(),
+        ];
+        // here we sort two times, since the ordering should be according to this: self.index < other.index || (self.index == other.index && self.timestamp < other.timestamp), hence we first sort along timestamp, then along index
+        let sorted = T::sort_vec_by(driver, &to_sort3, inputs, 32)?;
+        let sorted = T::sort_vec_by(
+            driver,
+            &to_sort1,
+            sorted.iter().map(|v| &v[..]).collect(),
+            32,
+        )?;
+        let records = self.ram_arrays[ram_id].records.clone();
+        let stamps = sorted[2].clone();
+        // Iterate over all but final RAM record.
+        for (i, (record, index, value, stamp, access_type)) in izip!(
+            records,
+            sorted[0].clone(),
+            sorted[1].clone(),
+            sorted[2].clone(),
+            sorted[3].clone()
+        )
+        .enumerate()
+        {
+            let index_witness = self.add_variable(index.clone().into());
+            let timestamp_witness = self.add_variable(stamp.clone().into());
+            let value_witness = self.add_variable(value.into());
+            let mut sorted_record = RamRecord::<T::AcvmType> {
+                index_witness,
+                timestamp_witness,
+                value_witness,
+                index: index.clone().into(),
+                timestamp: record.timestamp, // NOTE: these values are not the correct ones, but we do not need them
+                access_type: record.access_type.to_owned(), // NOTE: these values are not the correct ones, but we do not need them
+                record_witness: 0,
+                gate_index: 0,
+            };
+
+            // create a list of sorted ram records
+            sorted_ram_records.push(sorted_record.to_owned());
+
+            // We don't apply the RAM consistency check gate to the final record,
+            // as this gate expects a RAM record to be present at the next gate
+            if i < self.ram_arrays[ram_id].records.len() - 1 {
+                self.create_sorted_ram_gate(&mut sorted_record);
+            } else {
+                // For the final record in the sorted list, we do not apply the full consistency check gate.
+                // Only need to check the index value = RAM array size - 1.
+                let len = T::get_length_of_lut(&self.ram_arrays[ram_id].state);
+                self.create_final_sorted_ram_gate(&mut sorted_record, len);
+            }
+
+            self.assign_tag(record.record_witness, access_tag);
+            self.assign_tag(sorted_record.record_witness, sorted_list_tag);
+
+            // For ROM/RAM gates, the 'record' wire value (wire column 4) is a linear combination of the first 3 wire
+            // values. However...the record value uses the random challenge 'eta', generated after the first 3 wires are
+            // committed to. i.e. we can't compute the record witness here because we don't know what `eta` is! Take the
+            // gate indices of the two rom gates (original read gate + sorted gate) and store in `memory_records`. Once
+            // we
+            // generate the `eta` challenge, we'll use `memory_records` to figure out which gates need a record wire
+            // value
+            // to be computed.
+
+            // Note: these values are not really inserted in the correct way, but handled in the right way in the prover
+            match record.access_type {
+                RamAccessType::Read => {
+                    self.memory_read_records.push(record.gate_index as u32);
+                }
+                RamAccessType::Write => {
+                    self.memory_write_records.push(record.gate_index as u32);
+                }
+            }
+            self.memory_records_shared_type
+                .push(sorted_record.gate_index as u32);
+            self.write_records_type.push(access_type.into());
+        }
+
+        // Step 2: Create gates that validate correctness of RAM timestamps
+
+        let mut timestamp_deltas = Vec::with_capacity(sorted_ram_records.len() - 1);
+        for i in 0..sorted_ram_records.len() - 1 {
+            let current = &sorted_ram_records[i];
+            let next = &sorted_ram_records[i + 1];
+            let current_timestamp = stamps[i].clone();
+            let next_timestamp = stamps[i + 1].clone();
+
+            let assert = T::equal(driver, &current.index, &next.index)?;
+            let timestamp_delta = T::sub(driver, next_timestamp.into(), current_timestamp.into());
+            let timestamp_delta = T::mul(driver, timestamp_delta, assert)?;
+            let timestamp_delta_witness = self.add_variable(timestamp_delta);
+            self.apply_aux_selectors(AuxSelectors::RamTimestampCheck);
+            self.blocks.aux.populate_wires(
+                current.index_witness,
+                current.timestamp_witness,
+                timestamp_delta_witness,
+                self.zero_idx,
+            );
+
+            self.num_gates += 1;
+
+            // store timestamp offsets for later. Need to apply range checks to them, but calling
+            // `create_new_range_constraint` can add gates. Would ruin the structure of our sorted timestamp list.
+            timestamp_deltas.push(timestamp_delta_witness);
+        }
+
+        // add the index/timestamp values of the last sorted record in an empty add gate.
+        // (the previous gate will access the wires on this gate and requires them to be those of the last record)
+        let last = &sorted_ram_records[self.ram_arrays[ram_id].records.len() - 1];
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.aux,
+            last.index_witness,
+            last.timestamp_witness,
+            self.zero_idx,
+            self.zero_idx
+        );
+
+        // Step 3: validate difference in timestamps is monotonically increasing. i.e. is <= maximum timestamp
+        let max_timestamp = self.ram_arrays[ram_id].access_count - 1;
+        for w in timestamp_deltas {
+            self.create_new_range_constraint(w, max_timestamp as u64);
+        }
+        Ok(())
+    }
+
     fn process_ram_array(&mut self, ram_id: usize, driver: &mut T) -> std::io::Result<()> {
         let access_tag = self.get_new_tag(); // current_tag + 1;
         let sorted_list_tag = self.get_new_tag(); // current_tag + 2;
@@ -3033,303 +3369,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             }
         }
 
-        let mut sorted_ram_records = Vec::with_capacity(self.ram_arrays[ram_id].records.len());
-
         let records = &self.ram_arrays[ram_id].records;
         let all_public = records.iter().all(|record| !T::is_shared(&record.index));
         if all_public {
-            let mut records: Vec<_> = records
-                .iter()
-                .map(|x| RamRecord::<P::ScalarField> {
-                    index_witness: x.index_witness,
-                    timestamp_witness: x.timestamp_witness,
-                    value_witness: x.value_witness,
-                    index: T::get_public(&x.index).expect("Already checked it is public"),
-                    access_type: x.access_type.clone(),
-                    timestamp: x.timestamp,
-                    record_witness: x.record_witness,
-                    gate_index: x.gate_index,
-                })
-                .collect();
-            records.sort();
-            // Iterate over all but final RAM record.
-            for (i, record) in records.into_iter().enumerate() {
-                let index = record.index;
-                let value = self.get_variable(record.value_witness.try_into().unwrap());
-                let index_witness = self.add_variable(T::AcvmType::from(index));
-
-                let timestamp_witness =
-                    self.add_variable(T::AcvmType::from(P::ScalarField::from(record.timestamp)));
-
-                let value_witness = self.add_variable(value);
-                let mut sorted_record = RamRecord::<T::AcvmType> {
-                    index_witness,
-                    timestamp_witness,
-                    value_witness,
-                    index: index.into(),
-                    timestamp: record.timestamp,
-                    access_type: record.access_type.to_owned(),
-                    record_witness: 0,
-                    gate_index: 0,
-                };
-
-                // create a list of sorted ram records
-                sorted_ram_records.push(sorted_record.to_owned());
-
-                // We don't apply the RAM consistency check gate to the final record,
-                // as this gate expects a RAM record to be present at the next gate
-                if i < self.ram_arrays[ram_id].records.len() - 1 {
-                    self.create_sorted_ram_gate(&mut sorted_record);
-                } else {
-                    // For the final record in the sorted list, we do not apply the full consistency check gate.
-                    // Only need to check the index value = RAM array size - 1.
-                    let len = T::get_length_of_lut(&self.ram_arrays[ram_id].state);
-                    self.create_final_sorted_ram_gate(&mut sorted_record, len);
-                }
-
-                self.assign_tag(record.record_witness, access_tag);
-                self.assign_tag(sorted_record.record_witness, sorted_list_tag);
-
-                // For ROM/RAM gates, the 'record' wire value (wire column 4) is a linear combination of the first 3 wire
-                // values. However...the record value uses the random challenge 'eta', generated after the first 3 wires are
-                // committed to. i.e. we can't compute the record witness here because we don't know what `eta` is! Take the
-                // gate indices of the two rom gates (original read gate + sorted gate) and store in `memory_records`. Once
-                // we
-                // generate the `eta` challenge, we'll use `memory_records` to figure out which gates need a record wire
-                // value
-                // to be computed.
-                match record.access_type {
-                    RamAccessType::Read => {
-                        self.memory_read_records
-                            .push(sorted_record.gate_index as u32);
-                        self.memory_read_records.push(record.gate_index as u32);
-                    }
-                    RamAccessType::Write => {
-                        self.memory_write_records
-                            .push(sorted_record.gate_index as u32);
-                        self.memory_write_records.push(record.gate_index as u32);
-                    }
-                }
-            }
-            // Step 2: Create gates that validate correctness of RAM timestamps
-
-            let mut timestamp_deltas = Vec::with_capacity(sorted_ram_records.len() - 1);
-            for i in 0..sorted_ram_records.len() - 1 {
-                let current = &sorted_ram_records[i];
-                let next = &sorted_ram_records[i + 1];
-
-                let share_index = current.index == next.index;
-                let timestamp_delta = if share_index {
-                    assert!(next.timestamp > current.timestamp);
-                    P::ScalarField::from(next.timestamp - current.timestamp)
-                } else {
-                    P::ScalarField::zero()
-                };
-
-                let timestamp_delta_witness = self.add_variable(T::AcvmType::from(timestamp_delta));
-
-                self.apply_aux_selectors(AuxSelectors::RamTimestampCheck);
-                self.blocks.aux.populate_wires(
-                    current.index_witness,
-                    current.timestamp_witness,
-                    timestamp_delta_witness,
-                    self.zero_idx,
-                );
-
-                self.num_gates += 1;
-
-                // store timestamp offsets for later. Need to apply range checks to them, but calling
-                // `create_new_range_constraint` can add gates. Would ruin the structure of our sorted timestamp list.
-                timestamp_deltas.push(timestamp_delta_witness);
-            }
-
-            // add the index/timestamp values of the last sorted record in an empty add gate.
-            // (the previous gate will access the wires on this gate and requires them to be those of the last record)
-            let last = &sorted_ram_records[self.ram_arrays[ram_id].records.len() - 1];
-            create_dummy_gate!(
-                self,
-                &mut self.blocks.aux,
-                last.index_witness,
-                last.timestamp_witness,
-                self.zero_idx,
-                self.zero_idx
-            );
-
-            // Step 3: validate difference in timestamps is monotonically increasing. i.e. is <= maximum timestamp
-            let max_timestamp = self.ram_arrays[ram_id].access_count - 1;
-            for w in timestamp_deltas {
-                self.create_new_range_constraint(w, max_timestamp as u64);
-            }
+            self.process_ram_array_public_inner(ram_id, access_tag, sorted_list_tag);
         } else {
-            let to_sort1: Vec<_> = records
-                .iter()
-                .map(|y| {
-                    if T::is_shared(&y.index) {
-                        T::get_shared(&y.index).expect("Already checked it is shared")
-                    } else {
-                        T::promote_to_trivial_share(
-                            driver,
-                            T::get_public(&y.index).expect("Already checked it is public"),
-                        )
-                    }
-                })
-                .collect();
-            let to_sort2: Vec<_> = records
-                .iter()
-                .map(|y| {
-                    let val = self.get_variable(y.value_witness as usize);
-                    if T::is_shared(&val) {
-                        T::get_shared(&val).expect("Already checked it is shared")
-                    } else {
-                        //TACEO TODO: optimize sorting with many public indices
-                        T::promote_to_trivial_share(
-                            driver,
-                            T::get_public(&val).expect("Already checked it is public"),
-                        )
-                    }
-                })
-                .collect();
-            let to_sort3: Vec<_> = records
-                .iter()
-                .map(|y| T::promote_to_trivial_share(driver, P::ScalarField::from(y.timestamp)))
-                .collect();
-            let to_sort4: Vec<_> = records
-                .iter()
-                .map(|y| {
-                    let val = if y.access_type == RamAccessType::Read {
-                        0u32
-                    } else {
-                        1u32
-                    };
-                    T::promote_to_trivial_share(driver, P::ScalarField::from(val))
-                })
-                .collect();
-            let inputs = vec![
-                to_sort1.as_ref(),
-                to_sort2.as_ref(),
-                to_sort3.as_ref(),
-                to_sort4.as_ref(),
-            ];
-            // here we sort two times, since the ordering should be according to this: self.index < other.index || (self.index == other.index && self.timestamp < other.timestamp), hence we first sort along timestamp, then along index
-            let sorted = T::sort_vec_by(driver, &to_sort3, inputs, 32)?;
-            let sorted = T::sort_vec_by(
-                driver,
-                &to_sort1,
-                sorted.iter().map(|v| &v[..]).collect(),
-                32,
-            )?;
-            let records = self.ram_arrays[ram_id].records.clone();
-            let stamps = sorted[2].clone();
-            // Iterate over all but final RAM record.
-            for (i, (record, index, value, stamp, access_type)) in izip!(
-                records,
-                sorted[0].clone(),
-                sorted[1].clone(),
-                sorted[2].clone(),
-                sorted[3].clone()
-            )
-            .enumerate()
-            {
-                let index_witness = self.add_variable(index.clone().into());
-                let timestamp_witness = self.add_variable(stamp.clone().into());
-                let value_witness = self.add_variable(value.into());
-                let mut sorted_record = RamRecord::<T::AcvmType> {
-                    index_witness,
-                    timestamp_witness,
-                    value_witness,
-                    index: index.clone().into(),
-                    timestamp: record.timestamp, // NOTE: these values are not the correct ones, but we do not need them
-                    access_type: record.access_type.to_owned(), // NOTE: these values are not the correct ones, but we do not need them
-                    record_witness: 0,
-                    gate_index: 0,
-                };
-
-                // create a list of sorted ram records
-                sorted_ram_records.push(sorted_record.to_owned());
-
-                // We don't apply the RAM consistency check gate to the final record,
-                // as this gate expects a RAM record to be present at the next gate
-                if i < self.ram_arrays[ram_id].records.len() - 1 {
-                    self.create_sorted_ram_gate(&mut sorted_record);
-                } else {
-                    // For the final record in the sorted list, we do not apply the full consistency check gate.
-                    // Only need to check the index value = RAM array size - 1.
-                    let len = T::get_length_of_lut(&self.ram_arrays[ram_id].state);
-                    self.create_final_sorted_ram_gate(&mut sorted_record, len);
-                }
-
-                self.assign_tag(record.record_witness, access_tag);
-                self.assign_tag(sorted_record.record_witness, sorted_list_tag);
-
-                // For ROM/RAM gates, the 'record' wire value (wire column 4) is a linear combination of the first 3 wire
-                // values. However...the record value uses the random challenge 'eta', generated after the first 3 wires are
-                // committed to. i.e. we can't compute the record witness here because we don't know what `eta` is! Take the
-                // gate indices of the two rom gates (original read gate + sorted gate) and store in `memory_records`. Once
-                // we
-                // generate the `eta` challenge, we'll use `memory_records` to figure out which gates need a record wire
-                // value
-                // to be computed.
-
-                // Note: these values are not really inserted in the correct way, but handled in the right way in the prover
-                match record.access_type {
-                    RamAccessType::Read => {
-                        self.memory_read_records.push(record.gate_index as u32);
-                    }
-                    RamAccessType::Write => {
-                        self.memory_write_records.push(record.gate_index as u32);
-                    }
-                }
-                self.memory_records_shared_type
-                    .push(sorted_record.gate_index as u32);
-                self.write_records_type.push(access_type.into());
-            }
-
-            // Step 2: Create gates that validate correctness of RAM timestamps
-
-            let mut timestamp_deltas = Vec::with_capacity(sorted_ram_records.len() - 1);
-            for i in 0..sorted_ram_records.len() - 1 {
-                let current = &sorted_ram_records[i];
-                let next = &sorted_ram_records[i + 1];
-                let current_timestamp = stamps[i].clone();
-                let next_timestamp = stamps[i + 1].clone();
-
-                let assert = T::equal(driver, &current.index, &next.index)?;
-                let timestamp_delta =
-                    T::sub(driver, next_timestamp.into(), current_timestamp.into());
-                let timestamp_delta = T::mul(driver, timestamp_delta, assert)?;
-                let timestamp_delta_witness = self.add_variable(timestamp_delta);
-                self.apply_aux_selectors(AuxSelectors::RamTimestampCheck);
-                self.blocks.aux.populate_wires(
-                    current.index_witness,
-                    current.timestamp_witness,
-                    timestamp_delta_witness,
-                    self.zero_idx,
-                );
-
-                self.num_gates += 1;
-
-                // store timestamp offsets for later. Need to apply range checks to them, but calling
-                // `create_new_range_constraint` can add gates. Would ruin the structure of our sorted timestamp list.
-                timestamp_deltas.push(timestamp_delta_witness);
-            }
-
-            // add the index/timestamp values of the last sorted record in an empty add gate.
-            // (the previous gate will access the wires on this gate and requires them to be those of the last record)
-            let last = &sorted_ram_records[self.ram_arrays[ram_id].records.len() - 1];
-            create_dummy_gate!(
-                self,
-                &mut self.blocks.aux,
-                last.index_witness,
-                last.timestamp_witness,
-                self.zero_idx,
-                self.zero_idx
-            );
-
-            // Step 3: validate difference in timestamps is monotonically increasing. i.e. is <= maximum timestamp
-            let max_timestamp = self.ram_arrays[ram_id].access_count - 1;
-            for w in timestamp_deltas {
-                self.create_new_range_constraint(w, max_timestamp as u64);
-            }
+            // The MPC case, we only need to sort some parts of the RomRecord, so we prepare these indices.
+            self.process_ram_array_shared_inner(ram_id, access_tag, sorted_list_tag, driver)?;
         }
         Ok(())
     }
