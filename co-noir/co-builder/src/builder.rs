@@ -3159,6 +3159,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let to_sort1: Vec<_> = records
             .iter()
             .map(|y| {
+                //TACEO TODO: optimize sorting with many public indices
                 if T::is_shared(&y.index) {
                     T::get_shared(&y.index).expect("Already checked it is shared")
                 } else {
@@ -3186,7 +3187,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             .collect();
         let to_sort3: Vec<_> = records
             .iter()
-            .map(|y| T::promote_to_trivial_share(driver, P::ScalarField::from(y.timestamp)))
+            .map(|y| {
+                //TACEO TODO: optimize sorting with many public indices
+                T::promote_to_trivial_share(driver, P::ScalarField::from(y.timestamp))
+            })
             .collect();
         let to_sort4: Vec<_> = records
             .iter()
@@ -3196,6 +3200,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 } else {
                     1u32
                 };
+                //TACEO TODO: optimize sorting with many public indices
                 T::promote_to_trivial_share(driver, P::ScalarField::from(val))
             })
             .collect();
