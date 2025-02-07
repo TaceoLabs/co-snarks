@@ -2009,7 +2009,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(value_witness)
     }
 
-    // TACEO TODO only implemented for public values so far
     pub(crate) fn write_ram_array(
         &mut self,
         driver: &mut T,
