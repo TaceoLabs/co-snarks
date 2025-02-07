@@ -2430,7 +2430,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let right_witness_value = T::AcvmType::from(P::ScalarField::from(right_value as u64));
 
         let left_witness_index = self.add_variable(left_witness_value.to_owned());
-
         let right_witness_index = self.add_variable(right_witness_value.to_owned());
         let dummy_accumulators = Plookup::get_lookup_accumulators(
             self,
@@ -2680,7 +2679,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.blocks
                 .lookup
                 .populate_wires(first_idx, second_idx, third_idx, self.zero_idx);
-
             self.blocks.lookup.q_1().push(P::ScalarField::zero());
             self.blocks.lookup.q_2().push(if i == (num_lookups - 1) {
                 P::ScalarField::zero()
