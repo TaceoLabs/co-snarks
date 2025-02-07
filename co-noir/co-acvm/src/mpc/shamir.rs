@@ -619,7 +619,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
 
     fn get_public_lut(
         _lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
-    ) -> std::io::Result<Vec<F>> {
+    ) -> std::io::Result<&Vec<F>> {
         panic!("functionality get_public_lut not feasible for Shamir")
     }
 

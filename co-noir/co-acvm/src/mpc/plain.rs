@@ -160,7 +160,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn get_public_lut(
         lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
-    ) -> io::Result<Vec<F>> {
+    ) -> io::Result<&Vec<F>> {
         <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::get_public_lut(lut)
     }
 

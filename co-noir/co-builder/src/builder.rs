@@ -1841,9 +1841,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.put_constant_variable(P::ScalarField::from(index_value as u64))
         };
 
-        // TACEO TODO these asserts
-        // assert!(self.ram_arrays[ram_id].state.len() > index_value);
-        // assert!(self.ram_arrays[ram_id].state[index_value] == Self::UNINITIALIZED_MEMORY_RECORD);
+        assert!(T::get_length_of_lut(&self.ram_arrays[ram_id].state) > index_value);
+        if T::is_public_lut(&self.ram_arrays[ram_id].state) {
+            let lut_pub = T::get_public_lut(&self.ram_arrays[ram_id].state)
+                .expect("Already checked it is public");
+            // Check the value if public
+            assert!(
+                lut_pub[index_value] == P::ScalarField::from(Self::UNINITIALIZED_MEMORY_RECORD)
+            );
+        }
+
         let mut new_record = RamRecord::<T::AcvmType> {
             index_witness,
             timestamp_witness: self.put_constant_variable(P::ScalarField::from(

@@ -289,9 +289,9 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N
         }
     }
 
-    fn get_public_lut(lut: &Self::LutType) -> std::io::Result<Vec<F>> {
+    fn get_public_lut(lut: &Self::LutType) -> std::io::Result<&Vec<F>> {
         match lut {
-            PublicPrivateLut::Public(items) => Ok(items.clone()),
+            PublicPrivateLut::Public(items) => Ok(items),
             PublicPrivateLut::Shared(_) => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Expected public LUT",

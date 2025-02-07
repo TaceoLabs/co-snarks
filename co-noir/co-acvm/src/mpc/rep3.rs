@@ -554,7 +554,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn get_public_lut(
         lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
-    ) -> std::io::Result<Vec<F>> {
+    ) -> std::io::Result<&Vec<F>> {
         <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::get_public_lut(lut)
     }
 

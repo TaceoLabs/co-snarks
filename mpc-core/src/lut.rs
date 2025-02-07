@@ -59,7 +59,7 @@ pub trait LookupTableProvider<F: PrimeField>: Default {
     fn get_lut_len(lut: &Self::LutType) -> usize;
 
     /// Returns the LUT as a vec if public
-    fn get_public_lut(lut: &Self::LutType) -> io::Result<Vec<F>>;
+    fn get_public_lut(lut: &Self::LutType) -> io::Result<&Vec<F>>;
 }
 
 /// LUT provider for public values
@@ -122,7 +122,7 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         lut.len()
     }
 
-    fn get_public_lut(lut: &Self::LutType) -> io::Result<Vec<F>> {
-        Ok(lut.clone())
+    fn get_public_lut(lut: &Self::LutType) -> io::Result<&Vec<F>> {
+        Ok(lut)
     }
 }

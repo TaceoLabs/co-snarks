@@ -128,7 +128,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Returns the LUT as a vector of fields if the table is public
     fn get_public_lut(
         lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
-    ) -> io::Result<Vec<F>>;
+    ) -> io::Result<&Vec<F>>;
 
     /// Returns true if the LUT is public
     fn is_public_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> bool;
