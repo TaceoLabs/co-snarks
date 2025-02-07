@@ -529,6 +529,11 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
 
         Ok(ShamirPointShare::new(my_share - r_t))
     }
+
+    /// Consumes self and returns the network
+    pub fn into_network(self) -> N {
+        self.network
+    }
 }
 
 impl<F: PrimeField> ShamirProtocol<F, ShamirMpcNet> {
