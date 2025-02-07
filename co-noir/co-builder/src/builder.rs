@@ -3019,15 +3019,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // AZTEC TODO: throw some kind of error here? Circuit should initialize all RAM elements to prevent errors.
         // e.g. if a RAM record is uninitialized but the index of that record is a function of public/private inputs,
         // different public iputs will produce different circuit constraints.
+
+        // We need to initialize the RAM if it is uninitialized. Since RAM gets initialized on every read/write, it can only be uninitialized if it is public
         if T::is_public_lut(&self.ram_arrays[ram_id].state) {
             let len = T::get_length_of_lut(&self.ram_arrays[ram_id].state);
             for i in 0..len {
-                let read_value = T::read_lut_by_acvm_type(
-                    driver,
-                    P::ScalarField::from(i as u32).into(),
-                    &self.ram_arrays[ram_id].state,
-                )?;
-                if T::get_public(&read_value).expect("Already checked it is public")
+                if T::get_public_lut(&self.ram_arrays[ram_id].state)
+                    .expect("Already checked it is public")[i]
                     == P::ScalarField::from(Self::UNINITIALIZED_MEMORY_RECORD)
                 {
                     self.init_ram_element(driver, ram_id, i, self.zero_idx)?;
