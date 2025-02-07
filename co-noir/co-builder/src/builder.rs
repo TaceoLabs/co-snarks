@@ -2943,20 +2943,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         let sorted = T::sort_vec_by(driver, &to_sort1, inputs, 32)?;
         let records = self.rom_arrays[rom_id].records.clone();
-        for (record, index, col1, col2) in izip!(
-            records,
-            sorted[0].clone(),
-            sorted[1].clone(),
-            sorted[2].clone()
-        ) {
+        for (record, index, col1, col2) in izip!(records, &sorted[0], &sorted[1], &sorted[2]) {
             let index_witness = self.add_variable(index.clone().into());
-            let value1_witness = self.add_variable(col1.into());
-            let value2_witness = self.add_variable(col2.into());
+            let value1_witness = self.add_variable(col1.clone().into());
+            let value2_witness = self.add_variable(col2.clone().into());
             let mut sorted_record = RomRecord::<T::AcvmType> {
                 index_witness,
                 value_column1_witness: value1_witness,
                 value_column2_witness: value2_witness,
-                index: index.into(),
+                index: index.clone().into(),
                 record_witness: 0,
                 gate_index: 0,
             };
@@ -3036,7 +3031,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         ram_id: usize,
         access_tag: u32,
         sorted_list_tag: u32,
-    ) {
+    ) -> (u32, u32, Vec<u32>) {
         let mut sorted_ram_records = Vec::with_capacity(self.ram_arrays[ram_id].records.len());
 
         let records = &self.ram_arrays[ram_id].records;
@@ -3054,6 +3049,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             })
             .collect();
         records.sort();
+
         // Iterate over all but final RAM record.
         for (i, record) in records.into_iter().enumerate() {
             let index = record.index;
@@ -3113,8 +3109,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 }
             }
         }
-        // Step 2: Create gates that validate correctness of RAM timestamps
 
+        // Step 2: Create gates that validate correctness of RAM timestamps
         let mut timestamp_deltas = Vec::with_capacity(sorted_ram_records.len() - 1);
         for i in 0..sorted_ram_records.len() - 1 {
             let current = &sorted_ram_records[i];
@@ -3145,23 +3141,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             timestamp_deltas.push(timestamp_delta_witness);
         }
 
-        // add the index/timestamp values of the last sorted record in an empty add gate.
-        // (the previous gate will access the wires on this gate and requires them to be those of the last record)
         let last = &sorted_ram_records[self.ram_arrays[ram_id].records.len() - 1];
-        create_dummy_gate!(
-            self,
-            &mut self.blocks.aux,
-            last.index_witness,
-            last.timestamp_witness,
-            self.zero_idx,
-            self.zero_idx
-        );
 
-        // Step 3: validate difference in timestamps is monotonically increasing. i.e. is <= maximum timestamp
-        let max_timestamp = self.ram_arrays[ram_id].access_count - 1;
-        for w in timestamp_deltas {
-            self.create_new_range_constraint(w, max_timestamp as u64);
-        }
+        (last.index_witness, last.timestamp_witness, timestamp_deltas)
     }
 
     fn process_ram_array_shared_inner(
@@ -3170,7 +3152,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         access_tag: u32,
         sorted_list_tag: u32,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<(u32, u32, Vec<u32>)> {
         let mut sorted_ram_records = Vec::with_capacity(self.ram_arrays[ram_id].records.len());
 
         let records = &self.ram_arrays[ram_id].records;
@@ -3231,21 +3213,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             sorted.iter().map(|v| &v[..]).collect(),
             32,
         )?;
+
         let records = self.ram_arrays[ram_id].records.clone();
-        let stamps = sorted[2].clone();
+        let stamps = &sorted[2];
         // Iterate over all but final RAM record.
-        for (i, (record, index, value, stamp, access_type)) in izip!(
-            records,
-            sorted[0].clone(),
-            sorted[1].clone(),
-            sorted[2].clone(),
-            sorted[3].clone()
-        )
-        .enumerate()
+        for (i, (record, index, value, stamp, access_type)) in
+            izip!(records, &sorted[0], &sorted[1], &sorted[2], &sorted[3]).enumerate()
         {
             let index_witness = self.add_variable(index.clone().into());
             let timestamp_witness = self.add_variable(stamp.clone().into());
-            let value_witness = self.add_variable(value.into());
+            let value_witness = self.add_variable(value.clone().into());
             let mut sorted_record = RamRecord::<T::AcvmType> {
                 index_witness,
                 timestamp_witness,
@@ -3283,7 +3260,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             // value
             // to be computed.
 
-            // Note: these values are not really inserted in the correct way, but handled in the right way in the prover
+            // Note: these values are not really inserted in the correct order, but order does not matter in the prover
             match record.access_type {
                 RamAccessType::Read => {
                     self.memory_read_records.push(record.gate_index as u32);
@@ -3292,13 +3269,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                     self.memory_write_records.push(record.gate_index as u32);
                 }
             }
+            // Note: For these we need to sorted order, so we insert them in this new container which gets a special treatment in the prover.
             self.memory_records_shared_type
                 .push(sorted_record.gate_index as u32);
-            self.write_records_type.push(access_type.into());
+            self.write_records_type.push(access_type.clone().into());
         }
 
         // Step 2: Create gates that validate correctness of RAM timestamps
-
         let mut timestamp_deltas = Vec::with_capacity(sorted_ram_records.len() - 1);
         for i in 0..sorted_ram_records.len() - 1 {
             let current = &sorted_ram_records[i];
@@ -3306,10 +3283,12 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             let current_timestamp = stamps[i].clone();
             let next_timestamp = stamps[i + 1].clone();
 
-            let assert = T::equal(driver, &current.index, &next.index)?;
+            let share_index = T::equal(driver, &current.index, &next.index)?;
             let timestamp_delta = T::sub(driver, next_timestamp.into(), current_timestamp.into());
-            let timestamp_delta = T::mul(driver, timestamp_delta, assert)?;
+            let timestamp_delta = T::mul(driver, timestamp_delta, share_index)?;
+
             let timestamp_delta_witness = self.add_variable(timestamp_delta);
+
             self.apply_aux_selectors(AuxSelectors::RamTimestampCheck);
             self.blocks.aux.populate_wires(
                 current.index_witness,
@@ -3325,24 +3304,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             timestamp_deltas.push(timestamp_delta_witness);
         }
 
-        // add the index/timestamp values of the last sorted record in an empty add gate.
-        // (the previous gate will access the wires on this gate and requires them to be those of the last record)
         let last = &sorted_ram_records[self.ram_arrays[ram_id].records.len() - 1];
-        create_dummy_gate!(
-            self,
-            &mut self.blocks.aux,
-            last.index_witness,
-            last.timestamp_witness,
-            self.zero_idx,
-            self.zero_idx
-        );
 
-        // Step 3: validate difference in timestamps is monotonically increasing. i.e. is <= maximum timestamp
-        let max_timestamp = self.ram_arrays[ram_id].access_count - 1;
-        for w in timestamp_deltas {
-            self.create_new_range_constraint(w, max_timestamp as u64);
-        }
-        Ok(())
+        Ok((last.index_witness, last.timestamp_witness, timestamp_deltas))
     }
 
     fn process_ram_array(&mut self, ram_id: usize, driver: &mut T) -> std::io::Result<()> {
@@ -3371,11 +3335,28 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         let records = &self.ram_arrays[ram_id].records;
         let all_public = records.iter().all(|record| !T::is_shared(&record.index));
-        if all_public {
-            self.process_ram_array_public_inner(ram_id, access_tag, sorted_list_tag);
+        let (last_index_witness, last_timestamp_witness, timestamp_deltas) = if all_public {
+            self.process_ram_array_public_inner(ram_id, access_tag, sorted_list_tag)
         } else {
             // The MPC case, we only need to sort some parts of the RomRecord, so we prepare these indices.
-            self.process_ram_array_shared_inner(ram_id, access_tag, sorted_list_tag, driver)?;
+            self.process_ram_array_shared_inner(ram_id, access_tag, sorted_list_tag, driver)?
+        };
+
+        // add the index/timestamp values of the last sorted record in an empty add gate.
+        // (the previous gate will access the wires on this gate and requires them to be those of the last record)
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.aux,
+            last_index_witness,
+            last_timestamp_witness,
+            self.zero_idx,
+            self.zero_idx
+        );
+
+        // Step 3: validate difference in timestamps is monotonically increasing. i.e. is <= maximum timestamp
+        let max_timestamp = self.ram_arrays[ram_id].access_count - 1;
+        for w in timestamp_deltas {
+            self.create_new_range_constraint(w, max_timestamp as u64);
         }
         Ok(())
     }
