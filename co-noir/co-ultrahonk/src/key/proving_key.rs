@@ -288,6 +288,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             &mut self.memory_write_records,
         );
 
+        // We have to add the shared memory records to the proving key as well
         for (k, el) in builder.memory_records_shared.iter() {
             let val = if U::is_shared(el) {
                 U::get_shared(el).expect("Already checked it is shared")
