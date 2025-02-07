@@ -548,6 +548,16 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         )
     }
 
+    fn get_length_of_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> usize {
+        <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::get_lut_len(lut)
+    }
+
+    fn get_public_lut(
+        lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
+    ) -> std::io::Result<&Vec<F>> {
+        <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::get_public_lut(lut)
+    }
+
     fn is_shared(a: &Self::AcvmType) -> bool {
         matches!(a, Rep3AcvmType::Shared(_))
     }
@@ -907,5 +917,36 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()> {
         poseidon2.rep3_internal_round_precomp(input, r, precomp, &mut self.io_context0)
+    }
+
+    fn is_public_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> bool {
+        Self::Lookup::is_public_lut(lut)
+    }
+
+    fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        match (a, b) {
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) => {
+                Ok(Rep3AcvmType::Public(F::from(a == b)))
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared)) => {
+                Ok(Rep3AcvmType::Shared(arithmetic::eq_public(
+                    *shared,
+                    *public,
+                    &mut self.io_context0,
+                )?))
+            }
+
+            (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Ok(Rep3AcvmType::Shared(arithmetic::eq_public(
+                    *shared,
+                    *public,
+                    &mut self.io_context0,
+                )?))
+            }
+
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => Ok(Rep3AcvmType::Shared(
+                arithmetic::eq(*a, *b, &mut self.io_context0)?,
+            )),
+        }
     }
 }

@@ -174,11 +174,11 @@ impl<P: Pairing> ProvingKey<P> {
         }
     }
 
-    fn populate_trace(&mut self, builder: &mut UltraCircuitBuilder<P>, is_strucutred: bool) {
+    fn populate_trace(&mut self, builder: &mut UltraCircuitBuilder<P>, is_structured: bool) {
         tracing::trace!("Populating trace");
 
         let mut trace_data = TraceData::new(builder, self);
-        trace_data.construct_trace_data(builder, is_strucutred);
+        trace_data.construct_trace_data(builder, is_structured);
 
         let ram_rom_offset = trace_data.ram_rom_offset;
         let copy_cycles = trace_data.copy_cycles;

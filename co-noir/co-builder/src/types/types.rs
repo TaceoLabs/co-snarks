@@ -9,6 +9,7 @@ use ark_ff::Zero;
 use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
+use mpc_core::lut::LookupTableProvider;
 use num_bigint::BigUint;
 use std::array;
 use std::cmp::Ordering;
@@ -621,14 +622,14 @@ impl<F: PrimeField> RamTable<F> {
         index: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> FieldCT<F> {
+    ) -> std::io::Result<FieldCT<F>> {
         let index_value = index.get_value(builder, driver);
 
         if let Some(native_index) = T::get_public(&index_value) {
             assert!(native_index < P::ScalarField::from(self.length as u64));
         }
 
-        self.initialize_table(builder, driver);
+        self.initialize_table(builder, driver)?;
         assert!(self.check_indices_initialized());
 
         let index_wire = if index.is_constant() {
@@ -639,10 +640,8 @@ impl<F: PrimeField> RamTable<F> {
         };
 
         let wit_index = index_wire.get_normalized_witness_index(builder, driver);
-        let output_idx = builder
-            .read_ram_array(self.ram_id, wit_index)
-            .expect("Not implemented for shared cases");
-        FieldCT::from_witness_index(output_idx)
+        let output_idx = builder.read_ram_array(self.ram_id, wit_index, driver)?;
+        Ok(FieldCT::from_witness_index(output_idx))
     }
 
     pub(crate) fn write<
@@ -654,20 +653,20 @@ impl<F: PrimeField> RamTable<F> {
         value: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) {
+    ) -> std::io::Result<()> {
         let index_value = index.get_value(builder, driver);
 
         if let Some(native_index) = T::get_public(&index_value) {
             assert!(native_index < P::ScalarField::from(self.length as u64));
         }
 
-        self.initialize_table(builder, driver);
+        self.initialize_table(builder, driver)?;
 
         let index_wire = if index.is_constant() {
             let nativ_index = T::get_public(&index_value).expect("Constant should be public");
             FieldCT::from_witness_index(builder.put_constant_variable(nativ_index))
         } else {
-            self.initialize_table(builder, driver);
+            self.initialize_table(builder, driver)?;
             index.to_owned()
         };
 
@@ -686,18 +685,22 @@ impl<F: PrimeField> RamTable<F> {
             let cast_index = usize::try_from(cast_index).expect("Invalid index");
             if !self.index_initialized[cast_index] {
                 // if index constant && not initialized
-                builder.init_ram_element(self.ram_id, cast_index, value_wire.get_witness_index());
+                builder.init_ram_element(
+                    driver,
+                    self.ram_id,
+                    cast_index,
+                    value_wire.get_witness_index(),
+                )?;
                 self.index_initialized[cast_index] = true;
-                return;
+                return Ok(());
             }
         }
 
         // else
         let index_ = index_wire.get_normalized_witness_index(builder, driver);
         let value_ = value_wire.get_normalized_witness_index(builder, driver);
-        builder
-            .write_ram_array(self.ram_id, index_, value_)
-            .expect("Not implemented for shared cases");
+        builder.write_ram_array(driver, self.ram_id, index_, value_)?;
+        Ok(())
     }
 
     fn check_indices_initialized(&mut self) -> bool {
@@ -722,12 +725,12 @@ impl<F: PrimeField> RamTable<F> {
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) {
+    ) -> std::io::Result<()> {
         if self.ram_table_generated_in_builder {
-            return;
+            return Ok(());
         }
 
-        self.ram_id = builder.create_ram_array(self.length);
+        self.ram_id = builder.create_ram_array(self.length, driver);
 
         for (i, (raw, ind)) in self
             .raw_entries
@@ -745,11 +748,12 @@ impl<F: PrimeField> RamTable<F> {
             } else {
                 raw.normalize(builder, driver)
             };
-            builder.init_ram_element(self.ram_id, i, entry.get_witness_index());
+            builder.init_ram_element(driver, self.ram_id, i, entry.get_witness_index())?;
             *ind = true;
         }
 
         self.ram_table_generated_in_builder = true;
+        Ok(())
     }
 }
 
@@ -1353,24 +1357,24 @@ impl Default for RamAccessType {
 }
 
 #[derive(Clone)]
-pub(crate) struct RamRecord {
+pub(crate) struct RamRecord<F: Clone> {
     pub(crate) index_witness: u32,
     pub(crate) timestamp_witness: u32,
     pub(crate) value_witness: u32,
-    pub(crate) index: u32,
+    pub(crate) index: F,
     pub(crate) access_type: RamAccessType,
     pub(crate) timestamp: u32,
     pub(crate) record_witness: u32,
     pub(crate) gate_index: usize,
 }
 
-impl Default for RamRecord {
+impl<F: Clone + Default> Default for RamRecord<F> {
     fn default() -> Self {
         Self {
             index_witness: 0,
             timestamp_witness: 0,
             value_witness: 0,
-            index: 0,
+            index: F::default(),
             access_type: RamAccessType::Read,
             timestamp: 0,
             record_witness: 0,
@@ -1379,7 +1383,7 @@ impl Default for RamRecord {
     }
 }
 
-impl RamRecord {
+impl<F: PrimeField> RamRecord<F> {
     fn less_than(&self, other: &Self) -> bool {
         let index_test = self.index < other.index;
         index_test || (self.index == other.index && self.timestamp < other.timestamp)
@@ -1397,21 +1401,21 @@ impl RamRecord {
     }
 }
 
-impl PartialEq for RamRecord {
+impl<F: PrimeField> PartialEq for RamRecord<F> {
     fn eq(&self, other: &Self) -> bool {
         self.equal(other)
     }
 }
 
-impl Eq for RamRecord {}
+impl<F: PrimeField> Eq for RamRecord<F> {}
 
-impl PartialOrd for RamRecord {
+impl<F: PrimeField> PartialOrd for RamRecord<F> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for RamRecord {
+impl<F: PrimeField> Ord for RamRecord<F> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         if self.less_than(other) {
             Ordering::Less
@@ -1424,18 +1428,28 @@ impl Ord for RamRecord {
 }
 
 #[derive(Default)]
-pub(crate) struct RamTranscript {
+pub(crate) struct RamTranscript<U: Clone + Default, F: PrimeField, L: LookupTableProvider<F>> {
     // Contains the value of each index of the array
-    pub(crate) state: Vec<u32>,
+    pub(crate) state: L::LutType,
 
     // A vector of records, each of which contains:
     // + The constant witness with the index
     // + The value in the memory slot
     // + The actual index value
-    pub(crate) records: Vec<RamRecord>,
+    pub(crate) records: Vec<RamRecord<U>>,
 
     // used for RAM records, to compute the timestamp when performing a read/write
     pub(crate) access_count: usize,
+}
+
+impl<U: Clone + Default, F: PrimeField, L: LookupTableProvider<F>> RamTranscript<U, F, L> {
+    pub(crate) fn from_lut(lut: L::LutType) -> Self {
+        Self {
+            state: lut,
+            records: Vec::new(),
+            access_count: 0,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq)]

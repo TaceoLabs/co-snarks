@@ -1,3 +1,5 @@
+#![warn(clippy::iter_over_hash_type)]
+
 pub(crate) mod co_decider;
 pub(crate) mod co_oink;
 pub(crate) mod key;

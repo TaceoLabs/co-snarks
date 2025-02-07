@@ -391,6 +391,12 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         panic!("write_to_shared_lut_from_ohv: Operation atm not supported")
     }
 
+    fn get_length_of_lut(
+        _lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
+    ) -> usize {
+        panic!("get_length_of_lut: Operation atm not supported")
+    }
+
     fn is_shared(a: &Self::AcvmType) -> bool {
         matches!(a, ShamirAcvmType::Shared(_))
     }
@@ -609,5 +615,25 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()> {
         poseidon2.shamir_internal_round_precomp(input, r, precomp, &mut self.protocol)
+    }
+
+    fn get_public_lut(
+        _lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
+    ) -> std::io::Result<&Vec<F>> {
+        panic!("functionality get_public_lut not feasible for Shamir")
+    }
+
+    fn is_public_lut(
+        _lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
+    ) -> bool {
+        panic!("functionality is_public_lut not feasible for Shamir")
+    }
+
+    fn equal(
+        &mut self,
+        _a: &Self::AcvmType,
+        _b: &Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        panic!("functionality equal not feasible for Shamir")
     }
 }

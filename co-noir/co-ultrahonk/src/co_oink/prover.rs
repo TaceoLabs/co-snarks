@@ -59,6 +59,27 @@ impl<
         }
     }
 
+    fn compute_w4_inner(&mut self, proving_key: &ProvingKey<T, P>, gate_idx: usize) {
+        let target = &mut self.memory.w_4[gate_idx];
+
+        let mul1 = self.driver.mul_with_public(
+            self.memory.challenges.eta_1,
+            proving_key.polynomials.witness.w_l()[gate_idx],
+        );
+        let mul2 = self.driver.mul_with_public(
+            self.memory.challenges.eta_2,
+            proving_key.polynomials.witness.w_r()[gate_idx],
+        );
+        let mul3 = self.driver.mul_with_public(
+            self.memory.challenges.eta_3,
+            proving_key.polynomials.witness.w_o()[gate_idx],
+        );
+        // TACEO TODO add_assign?
+        *target = self.driver.add(*target, mul1);
+        *target = self.driver.add(*target, mul2);
+        *target = self.driver.add(*target, mul3);
+    }
+
     fn compute_w4(&mut self, proving_key: &ProvingKey<T, P>) {
         tracing::trace!("compute w4");
         // The memory record values are computed at the indicated indices as
@@ -81,48 +102,23 @@ impl<
         // Compute read record values
         for gate_idx in proving_key.memory_read_records.iter() {
             let gate_idx = *gate_idx as usize;
-            let target = &mut self.memory.w_4[gate_idx];
-
-            let mul1 = self.driver.mul_with_public(
-                self.memory.challenges.eta_1,
-                proving_key.polynomials.witness.w_l()[gate_idx],
-            );
-            let mul2 = self.driver.mul_with_public(
-                self.memory.challenges.eta_2,
-                proving_key.polynomials.witness.w_r()[gate_idx],
-            );
-            let mul3 = self.driver.mul_with_public(
-                self.memory.challenges.eta_3,
-                proving_key.polynomials.witness.w_o()[gate_idx],
-            );
-            // TACEO TODO add_assign?
-            *target = self.driver.add(*target, mul1);
-            *target = self.driver.add(*target, mul2);
-            *target = self.driver.add(*target, mul3);
+            self.compute_w4_inner(proving_key, gate_idx);
         }
 
         // Compute write record values
         for gate_idx in proving_key.memory_write_records.iter() {
             let gate_idx = *gate_idx as usize;
+            self.compute_w4_inner(proving_key, gate_idx);
             let target = &mut self.memory.w_4[gate_idx];
-
-            let mul1 = self.driver.mul_with_public(
-                self.memory.challenges.eta_1,
-                proving_key.polynomials.witness.w_l()[gate_idx],
-            );
-            let mul2 = self.driver.mul_with_public(
-                self.memory.challenges.eta_2,
-                proving_key.polynomials.witness.w_r()[gate_idx],
-            );
-            let mul3 = self.driver.mul_with_public(
-                self.memory.challenges.eta_3,
-                proving_key.polynomials.witness.w_o()[gate_idx],
-            );
-            // TACEO TODO add_assign?
-            *target = self.driver.add(*target, mul1);
-            *target = self.driver.add(*target, mul2);
-            *target = self.driver.add(*target, mul3);
             *target = self.driver.add_with_public(P::ScalarField::one(), *target);
+        }
+
+        // This computes the values for cases where the type (r/w) of the record is a secret share of 0/1 and adds this share
+        for (gate_idx, type_share) in proving_key.memory_records_shared.iter() {
+            let gate_idx = *gate_idx as usize;
+            self.compute_w4_inner(proving_key, gate_idx);
+            let target = &mut self.memory.w_4[gate_idx];
+            *target = self.driver.add(*type_share, *target);
         }
     }
 
