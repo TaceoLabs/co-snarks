@@ -14,9 +14,8 @@ use crate::{
             AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
             ColumnIdx, FieldCT, GateCounter, LogicConstraint, MulQuad, PlookupBasicTable,
             PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate,
-            RamAccessType, RamRecord, RamTable, RamTranscript, RangeConstraint, RangeList,
-            ReadData, RomRecord, RomTable, RomTranscript, UltraTraceBlock, UltraTraceBlocks,
-            NUM_WIRES,
+            RamAccessType, RamRecord, RamTable, RamTranscript, RangeList, ReadData, RomRecord,
+            RomTable, RomTranscript, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
         },
     },
     utils::Utils,
@@ -972,7 +971,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         &mut self,
         driver: &mut T,
         constraint_system: &AcirFormat<P::ScalarField>,
-        range_constraints: &[RangeConstraint],
     ) -> std::io::Result<(
         HashMap<u32, usize>,
         Vec<Vec<Vec<T::ArithmeticShare>>>,
@@ -982,7 +980,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let mut decompose_indices: Vec<(bool, usize)> = vec![];
         let mut bits_locations: HashMap<u32, usize> = HashMap::new();
 
-        for constraint in range_constraints.iter() {
+        for constraint in constraint_system.range_constraints.iter() {
             let val = &self.get_variable(constraint.witness as usize);
 
             let mut num_bits = constraint.num_bits;
@@ -1117,11 +1115,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         // Add range constraints
         // We want to decompose all shared elements in parallel
-        let (bits_locations, decomposed, decompose_indices) = self.prepare_for_range_decompose(
-            driver,
-            &constraint_system,
-            &constraint_system.range_constraints,
-        )?;
+        let (bits_locations, decomposed, decompose_indices) =
+            self.prepare_for_range_decompose(driver, &constraint_system)?;
 
         for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
             let mut range = constraint.num_bits;
