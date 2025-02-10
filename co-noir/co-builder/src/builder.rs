@@ -3851,35 +3851,28 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 target_range_bitnum * (3 * i + 1),
                 target_range_bitnum * (3 * i + 2),
             ];
+            let shiftmask = (BigUint::one() << 256) - BigUint::one(); // Simulate u256
+            let shift0 = P::ScalarField::from((BigUint::one() << shifts[0]) & &shiftmask);
+            let shift1 = P::ScalarField::from((BigUint::one() << shifts[1]) & &shiftmask);
+            let shift2 = P::ScalarField::from((BigUint::one() << shifts[2]) & shiftmask);
 
-            let mut subtrahend = T::mul_with_public(
-                driver,
-                P::ScalarField::from(BigUint::one() << shifts[0]),
-                round_sublimbs[0].clone(),
-            );
-            let term0 = T::mul_with_public(
-                driver,
-                P::ScalarField::from(BigUint::one() << shifts[1]),
-                round_sublimbs[1].clone(),
-            );
-            let term1 = T::mul_with_public(
-                driver,
-                P::ScalarField::from(BigUint::one() << shifts[2]),
-                round_sublimbs[2].clone(),
-            );
+            let mut subtrahend = T::mul_with_public(driver, shift0, round_sublimbs[0].clone());
+            let term0 = T::mul_with_public(driver, shift1, round_sublimbs[1].clone());
+            let term1 = T::mul_with_public(driver, shift2, round_sublimbs[2].clone());
             T::add_assign(driver, &mut subtrahend, term0);
             T::add_assign(driver, &mut subtrahend, term1);
 
             let new_accumulator = T::sub(driver, accumulator.clone(), subtrahend);
+
             self.create_big_add_gate(
                 &AddQuad {
                     a: new_limbs[0],
                     b: new_limbs[1],
                     c: new_limbs[2],
                     d: accumulator_idx,
-                    a_scaling: (BigUint::one() << shifts[0]).into(),
-                    b_scaling: (BigUint::one() << shifts[1]).into(),
-                    c_scaling: (BigUint::one() << shifts[2]).into(),
+                    a_scaling: shift0,
+                    b_scaling: shift1,
+                    c_scaling: shift2,
                     d_scaling: -P::ScalarField::one(),
                     const_scaling: P::ScalarField::zero(),
                 },
