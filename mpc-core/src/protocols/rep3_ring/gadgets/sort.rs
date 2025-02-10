@@ -264,7 +264,7 @@ where
     Standard: Distribution<T>,
 {
     let len = rho.len();
-    debug_assert_eq!(len, rho.len());
+    debug_assert_eq!(len, priv_bits.len() + pub_bits.len());
 
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
     let (perm_a, perm_b) = io_context0.rngs.rand.random_perm(unshuffled);
@@ -293,7 +293,7 @@ fn apply_inv_field<F: PrimeField, N: Rep3Network>(
     io_context1: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
     let len = rho.len();
-    debug_assert_eq!(len, rho.len());
+    debug_assert_eq!(len, priv_bits.len() + pub_bits.len());
 
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
     let (perm_a, perm_b) = io_context0.rngs.rand.random_perm(unshuffled);
