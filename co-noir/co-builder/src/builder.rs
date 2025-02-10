@@ -971,6 +971,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn prepare_for_range_decompose(
         &mut self,
         driver: &mut T,
+        constraint_system: &AcirFormat<P::ScalarField>,
         range_constraints: &[RangeConstraint],
     ) -> std::io::Result<(
         HashMap<u32, usize>,
@@ -984,7 +985,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         for constraint in range_constraints.iter() {
             let val = &self.get_variable(constraint.witness as usize);
 
-            let num_bits = constraint.num_bits;
+            let mut num_bits = constraint.num_bits;
+            if let Some(r) = constraint_system.minimal_range.get(&constraint.witness) {
+                num_bits = *r;
+            }
             if num_bits > Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32 && T::is_shared(val) {
                 let share_val = T::get_shared(val).expect("Already checked it is shared");
                 if let Some(&idx) = bits_locations.get(&num_bits) {
@@ -1113,24 +1117,32 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         // Add range constraints
         // We want to decompose all shared elements in parallel
-        let (bits_locations, decomposed, decompose_indices) =
-            self.prepare_for_range_decompose(driver, &constraint_system.range_constraints)?;
+        let (bits_locations, decomposed, decompose_indices) = self.prepare_for_range_decompose(
+            driver,
+            &constraint_system,
+            &constraint_system.range_constraints,
+        )?;
 
         for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
-            let idx_option = bits_locations.get(&constraint.num_bits);
+            let mut range = constraint.num_bits;
+            if let Some(r) = constraint_system.minimal_range.get(&constraint.witness) {
+                range = *r;
+            }
+
+            let idx_option = bits_locations.get(&range);
             if idx_option.is_some() && decompose_indices[i].0 {
                 // Already decomposed
                 let idx = idx_option.unwrap().to_owned();
                 self.decompose_into_default_range(
                     driver,
                     constraint.witness,
-                    constraint.num_bits as u64,
+                    range as u64,
                     Some(&decomposed[idx][decompose_indices[i].1]),
                     Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
                 )?;
             } else {
                 // Either we do not have to decompose or the value is public
-                self.create_range_constraint(driver, constraint.witness, constraint.num_bits)?;
+                self.create_range_constraint(driver, constraint.witness, range)?;
             }
 
             gate_counter.track_diff(
