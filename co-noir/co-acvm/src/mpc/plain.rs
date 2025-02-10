@@ -169,11 +169,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         index: Self::ArithmeticShare,
         len: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        let len_ = if len.is_power_of_two() {
-            len
-        } else {
-            len.next_power_of_two()
-        };
+        let len_ = len.next_power_of_two();
         let mut result = vec![F::zero(); len_];
         let index: BigUint = index.into();
         let index = usize::try_from(index).expect("Index to large for usize");

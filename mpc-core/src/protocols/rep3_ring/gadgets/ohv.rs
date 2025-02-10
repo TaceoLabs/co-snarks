@@ -122,11 +122,7 @@ fn pack_and<N: Rep3Network>(
     debug_assert!(len >= 1);
 
     if len <= 128 {
-        let padded_len = if len.is_power_of_two() {
-            len
-        } else {
-            len.next_power_of_two()
-        };
+        let padded_len = len.next_power_of_two();
         let result = match padded_len {
             1 => {
                 vec![binary::and(&input[0], rhs, io_context)?]

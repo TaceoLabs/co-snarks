@@ -34,11 +34,8 @@ where
     Standard: Distribution<T>,
 {
     let n = lut.len();
-    let k = if n.is_power_of_two() {
-        n.ilog2()
-    } else {
-        n.next_power_of_two().ilog2()
-    } as usize;
+    let k = n.next_power_of_two().ilog2() as usize;
+
     assert!(k <= T::K);
 
     let (r, e) = gadgets::ohv::rand_ohv::<T, _>(k, io_context)?;
@@ -80,11 +77,8 @@ where
     Standard: Distribution<T>,
 {
     let n = lut.len();
-    let mut k = if n.is_power_of_two() {
-        n.ilog2()
-    } else {
-        n.next_power_of_two().ilog2()
-    } as usize;
+    let mut k = n.next_power_of_two().ilog2() as usize;
+
     if k & 1 == 1 {
         k += 1; // Make even
                 // TODO is it possible to not needing to do that?
@@ -157,11 +151,7 @@ where
     Standard: Distribution<T>,
 {
     let n = lut.len();
-    let k = if n.is_power_of_two() {
-        n.ilog2()
-    } else {
-        n.next_power_of_two().ilog2()
-    } as usize;
+    let k = n.next_power_of_two().ilog2() as usize;
     assert!(k <= T::K);
 
     let e = gadgets::ohv::ohv::<T, _>(k, index, io_context)?;
@@ -188,11 +178,7 @@ where
     Standard: Distribution<T>,
 {
     let n = lut.len();
-    let k = if n.is_power_of_two() {
-        n.ilog2()
-    } else {
-        n.next_power_of_two().ilog2()
-    } as usize;
+    let k = n.next_power_of_two().ilog2() as usize;
     assert!(k <= T::K);
 
     let e = gadgets::ohv::ohv::<T, _>(k, index, io_context)?;

@@ -158,11 +158,7 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
         network1: &mut IoContext<N>,
     ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
         let bits = rep3::conversion::a2b_selector(index, network0)?;
-        let k = if len.is_power_of_two() {
-            len.ilog2()
-        } else {
-            len.next_power_of_two().ilog2()
-        } as usize;
+        let k = len.next_power_of_two().ilog2() as usize;
 
         let e = if k == 1 {
             Self::ohv_from_index_internal::<Bit, _>(bits, k, network0, network1)?
@@ -229,11 +225,8 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N
         let len = lut.len();
         tracing::debug!("doing read on LUT-map of size {}", len);
         let bits = rep3::conversion::a2b_selector(index, network0)?;
-        let k = if len.is_power_of_two() {
-            len.ilog2()
-        } else {
-            len.next_power_of_two().ilog2()
-        };
+        let k = len.next_power_of_two().ilog2() as usize;
+
         let result = if k == 1 {
             Self::get_from_lut_internal::<Bit, _>(bits, lut, network0, network1)?
         } else if k <= 8 {
@@ -260,11 +253,7 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N
         let len = lut.len();
         tracing::debug!("doing write on LUT-map of size {}", len);
         let bits = rep3::conversion::a2b_selector(index, network0)?;
-        let k = if len.is_power_of_two() {
-            len.ilog2()
-        } else {
-            len.next_power_of_two().ilog2()
-        };
+        let k = len.next_power_of_two().ilog2();
 
         if k == 1 {
             Self::write_to_lut_internal::<Bit, _>(bits, lut, &value, network0, network1)?

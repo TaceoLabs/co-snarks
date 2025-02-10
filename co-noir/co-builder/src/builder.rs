@@ -3473,7 +3473,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let sorted_list = T::sort(
             driver,
             &sorted_list,
-            Utils::get_msb64(list.target_range.next_power_of_two()) as usize,
+            Utils::get_msb64(list.target_range.next_power_of_two() + 1) as usize,
         )?;
 
         // list must be padded to a multipe of 4 and larger than 4 (gate_width)
