@@ -2854,49 +2854,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         driver: &mut T,
     ) -> std::io::Result<()> {
         let records = &self.rom_arrays[rom_id].records;
-        let to_sort1: Vec<_> = records
-            .iter()
-            .map(|y| {
-                if T::is_shared(&y.index) {
-                    T::get_shared(&y.index).expect("Already checked it is shared")
-                } else {
-                    //TACEO TODO: optimize sorting with many public indices
-                    T::promote_to_trivial_share(
-                        driver,
-                        T::get_public(&y.index).expect("Already checked it is public"),
-                    )
-                }
-            })
-            .collect();
+        let to_sort1: Vec<_> = records.iter().map(|y| y.index.to_owned()).collect();
         let to_sort2: Vec<_> = records
             .iter()
-            .map(|y| {
-                let val = self.get_variable(y.value_column1_witness as usize);
-                if T::is_shared(&val) {
-                    T::get_shared(&val).expect("Already checked it is shared")
-                } else {
-                    //TACEO TODO: optimize sorting with many public indices
-                    T::promote_to_trivial_share(
-                        driver,
-                        T::get_public(&val).expect("Already checked it is public"),
-                    )
-                }
-            })
+            .map(|y| self.get_variable(y.value_column1_witness as usize))
             .collect();
         let to_sort3: Vec<_> = records
             .iter()
-            .map(|y| {
-                let val = self.get_variable(y.value_column2_witness as usize);
-                if T::is_shared(&val) {
-                    T::get_shared(&val).expect("Already checked it is shared")
-                } else {
-                    //TACEO TODO: optimize sorting with many public indices
-                    T::promote_to_trivial_share(
-                        driver,
-                        T::get_public(&val).expect("Already checked it is public"),
-                    )
-                }
-            })
+            .map(|y| self.get_variable(y.value_column2_witness as usize))
             .collect();
         let inputs = vec![to_sort1.as_ref(), to_sort2.as_ref(), to_sort3.as_ref()];
 
@@ -3115,41 +3080,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let mut sorted_ram_records = Vec::with_capacity(self.ram_arrays[ram_id].records.len());
 
         let records = &self.ram_arrays[ram_id].records;
-        let to_sort1: Vec<_> = records
-            .iter()
-            .map(|y| {
-                //TACEO TODO: optimize sorting with many public indices
-                if T::is_shared(&y.index) {
-                    T::get_shared(&y.index).expect("Already checked it is shared")
-                } else {
-                    T::promote_to_trivial_share(
-                        driver,
-                        T::get_public(&y.index).expect("Already checked it is public"),
-                    )
-                }
-            })
-            .collect();
+        let to_sort1: Vec<_> = records.iter().map(|y| y.index.to_owned()).collect();
         let to_sort2: Vec<_> = records
             .iter()
-            .map(|y| {
-                let val = self.get_variable(y.value_witness as usize);
-                if T::is_shared(&val) {
-                    T::get_shared(&val).expect("Already checked it is shared")
-                } else {
-                    //TACEO TODO: optimize sorting with many public indices
-                    T::promote_to_trivial_share(
-                        driver,
-                        T::get_public(&val).expect("Already checked it is public"),
-                    )
-                }
-            })
+            .map(|y| self.get_variable(y.value_witness as usize))
             .collect();
         let to_sort3: Vec<_> = records
             .iter()
-            .map(|y| {
-                //TACEO TODO: optimize sorting with many public indices
-                T::promote_to_trivial_share(driver, P::ScalarField::from(y.timestamp))
-            })
+            .map(|y| P::ScalarField::from(y.timestamp).into())
             .collect();
         let to_sort4: Vec<_> = records
             .iter()
@@ -3159,8 +3097,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 } else {
                     1u32
                 };
-                //TACEO TODO: optimize sorting with many public indices
-                T::promote_to_trivial_share(driver, P::ScalarField::from(val))
+                P::ScalarField::from(val).into()
             })
             .collect();
         let inputs = vec![
@@ -3171,6 +3108,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         ];
         // here we sort two times, since the ordering should be according to this: self.index < other.index || (self.index == other.index && self.timestamp < other.timestamp), hence we first sort along timestamp, then along index
         let sorted = T::sort_vec_by(driver, &to_sort3, inputs, 32)?;
+        let sorted = sorted
+            .into_iter()
+            .map(|v| v.into_iter().map(T::AcvmType::from).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
         let sorted = T::sort_vec_by(
             driver,
             &to_sort1,
@@ -3419,15 +3360,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let mut sorted_list = Vec::with_capacity(list.variable_indices.len());
         for &variable_index in &list.variable_indices {
             let field_element = self.get_variable(variable_index as usize);
-
-            let field_element = if T::is_shared(&field_element) {
-                T::get_shared(&field_element).expect("Already checked it is shared")
-            } else {
-                T::promote_to_trivial_share(
-                    driver,
-                    T::get_public(&field_element).expect("Already checked it is public"),
-                )
-            };
             sorted_list.push(field_element);
         }
 
@@ -3575,7 +3507,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             //  *      and throwing an error would require a refactor of the Composer to catelog all 'orphan' variables not
             //  *      assigned to gates.
             //  *
-            //  * TODO(Suyash):
+            //  * AZTEC TODO(Suyash):
             //  *    The following is a temporary fix to make sure the range constraints on numbers with
             //  *    num_bits <= DEFAULT_PLOOKUP_RANGE_BITNUM is correctly enforced in the circuit.
             //  *    Longer term, as Zac says, we would need to refactor the composer to fix this.
@@ -4036,7 +3968,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         // dummy gate needed because of sort widget's check of next row
         // use this gate to check end condition
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This was formerly a single arithmetic gate. A
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This was formerly a single arithmetic gate. A
         // dummy gate has been added to allow the previous gate to access the required wire data via shifts, allowing the
         // arithmetic gate to occur out of sequence.
 

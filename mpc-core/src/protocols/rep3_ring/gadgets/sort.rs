@@ -37,8 +37,8 @@ macro_rules! join {
 /// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
-    priv_inputs: &[FieldShare<F>],
-    pub_inputs: &[F],
+    priv_inputs: Vec<FieldShare<F>>,
+    pub_inputs: Vec<F>,
     io_context0: &mut IoContext<N>,
     io_context1: &mut IoContext<N>,
     bitsize: usize,
@@ -56,7 +56,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
         ));
     }
 
-    let perm = gen_perm(priv_inputs, pub_inputs, bitsize, io_context0, io_context1)?;
+    let perm = gen_perm(&priv_inputs, &pub_inputs, bitsize, io_context0, io_context1)?;
     apply_inv_field(&perm, priv_inputs, pub_inputs, io_context0, io_context1)
 }
 
@@ -65,7 +65,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
 pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
     priv_key: &[FieldShare<F>],
     pub_key: &[F],
-    inputs: Vec<(&[FieldShare<F>], &[F])>,
+    inputs: Vec<(Vec<FieldShare<F>>, Vec<F>)>,
     io_context0: &mut IoContext<N>,
     io_context1: &mut IoContext<N>,
     bitsize: usize,
@@ -287,8 +287,8 @@ where
 
 fn apply_inv_field<F: PrimeField, N: Rep3Network>(
     rho: &[Rep3RingShare<PermRing>],
-    priv_bits: &[Rep3PrimeFieldShare<F>],
-    pub_bits: &[F],
+    priv_bits: Vec<Rep3PrimeFieldShare<F>>,
+    pub_bits: Vec<F>,
     io_context0: &mut IoContext<N>,
     io_context1: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
@@ -476,8 +476,8 @@ where
 
 fn shuffle_field<F: PrimeField, N: Rep3Network>(
     pi: &[Rep3RingShare<PermRing>],
-    priv_input: &[Rep3PrimeFieldShare<F>],
-    pub_input: &[F],
+    priv_input: Vec<Rep3PrimeFieldShare<F>>,
+    pub_input: Vec<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
     let len = pi.len();
@@ -498,7 +498,7 @@ fn shuffle_field<F: PrimeField, N: Rep3Network>(
                 let (alpha_1_, alpha_3_) = io_context.random_fes::<F>();
                 alpha_1.push(alpha_1_);
                 alpha_3.push(alpha_3_);
-                beta_1.push(*a); // a.a is public share
+                beta_1.push(a); // a.a is public share
             }
 
             // first shuffle
