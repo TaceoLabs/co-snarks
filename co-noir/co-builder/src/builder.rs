@@ -14,9 +14,8 @@ use crate::{
             AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
             ColumnIdx, FieldCT, GateCounter, LogicConstraint, MulQuad, PlookupBasicTable,
             PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate,
-            RamAccessType, RamRecord, RamTable, RamTranscript, RangeConstraint, RangeList,
-            ReadData, RomRecord, RomTable, RomTranscript, UltraTraceBlock, UltraTraceBlocks,
-            NUM_WIRES,
+            RamAccessType, RamRecord, RamTable, RamTranscript, RangeList, ReadData, RomRecord,
+            RomTable, RomTranscript, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
         },
     },
     utils::Utils,
@@ -971,7 +970,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn prepare_for_range_decompose(
         &mut self,
         driver: &mut T,
-        range_constraints: &[RangeConstraint],
+        constraint_system: &AcirFormat<P::ScalarField>,
     ) -> std::io::Result<(
         HashMap<u32, usize>,
         Vec<Vec<Vec<T::ArithmeticShare>>>,
@@ -981,10 +980,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let mut decompose_indices: Vec<(bool, usize)> = vec![];
         let mut bits_locations: HashMap<u32, usize> = HashMap::new();
 
-        for constraint in range_constraints.iter() {
+        for constraint in constraint_system.range_constraints.iter() {
             let val = &self.get_variable(constraint.witness as usize);
 
-            let num_bits = constraint.num_bits;
+            let mut num_bits = constraint.num_bits;
+            if let Some(r) = constraint_system.minimal_range.get(&constraint.witness) {
+                num_bits = *r;
+            }
             if num_bits > Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32 && T::is_shared(val) {
                 let share_val = T::get_shared(val).expect("Already checked it is shared");
                 if let Some(&idx) = bits_locations.get(&num_bits) {
@@ -1114,23 +1116,28 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // Add range constraints
         // We want to decompose all shared elements in parallel
         let (bits_locations, decomposed, decompose_indices) =
-            self.prepare_for_range_decompose(driver, &constraint_system.range_constraints)?;
+            self.prepare_for_range_decompose(driver, &constraint_system)?;
 
         for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
-            let idx_option = bits_locations.get(&constraint.num_bits);
+            let mut range = constraint.num_bits;
+            if let Some(r) = constraint_system.minimal_range.get(&constraint.witness) {
+                range = *r;
+            }
+
+            let idx_option = bits_locations.get(&range);
             if idx_option.is_some() && decompose_indices[i].0 {
                 // Already decomposed
                 let idx = idx_option.unwrap().to_owned();
                 self.decompose_into_default_range(
                     driver,
                     constraint.witness,
-                    constraint.num_bits as u64,
+                    range as u64,
                     Some(&decomposed[idx][decompose_indices[i].1]),
                     Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
                 )?;
             } else {
                 // Either we do not have to decompose or the value is public
-                self.create_range_constraint(driver, constraint.witness, constraint.num_bits)?;
+                self.create_range_constraint(driver, constraint.witness, range)?;
             }
 
             gate_counter.track_diff(
@@ -3473,7 +3480,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let sorted_list = T::sort(
             driver,
             &sorted_list,
-            Utils::get_msb64(list.target_range.next_power_of_two()) as usize,
+            Utils::get_msb64((list.target_range + 1).next_power_of_two()) as usize,
         )?;
 
         // list must be padded to a multipe of 4 and larger than 4 (gate_width)
@@ -3839,35 +3846,28 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 target_range_bitnum * (3 * i + 1),
                 target_range_bitnum * (3 * i + 2),
             ];
+            let shiftmask = (BigUint::one() << 256) - BigUint::one(); // Simulate u256
+            let shift0 = P::ScalarField::from((BigUint::one() << shifts[0]) & &shiftmask);
+            let shift1 = P::ScalarField::from((BigUint::one() << shifts[1]) & &shiftmask);
+            let shift2 = P::ScalarField::from((BigUint::one() << shifts[2]) & shiftmask);
 
-            let mut subtrahend = T::mul_with_public(
-                driver,
-                P::ScalarField::from(BigUint::one() << shifts[0]),
-                round_sublimbs[0].clone(),
-            );
-            let term0 = T::mul_with_public(
-                driver,
-                P::ScalarField::from(BigUint::one() << shifts[1]),
-                round_sublimbs[1].clone(),
-            );
-            let term1 = T::mul_with_public(
-                driver,
-                P::ScalarField::from(BigUint::one() << shifts[2]),
-                round_sublimbs[2].clone(),
-            );
+            let mut subtrahend = T::mul_with_public(driver, shift0, round_sublimbs[0].clone());
+            let term0 = T::mul_with_public(driver, shift1, round_sublimbs[1].clone());
+            let term1 = T::mul_with_public(driver, shift2, round_sublimbs[2].clone());
             T::add_assign(driver, &mut subtrahend, term0);
             T::add_assign(driver, &mut subtrahend, term1);
 
             let new_accumulator = T::sub(driver, accumulator.clone(), subtrahend);
+
             self.create_big_add_gate(
                 &AddQuad {
                     a: new_limbs[0],
                     b: new_limbs[1],
                     c: new_limbs[2],
                     d: accumulator_idx,
-                    a_scaling: (BigUint::one() << shifts[0]).into(),
-                    b_scaling: (BigUint::one() << shifts[1]).into(),
-                    c_scaling: (BigUint::one() << shifts[2]).into(),
+                    a_scaling: shift0,
+                    b_scaling: shift1,
+                    c_scaling: shift2,
                     d_scaling: -P::ScalarField::one(),
                     const_scaling: P::ScalarField::zero(),
                 },
