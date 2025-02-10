@@ -60,7 +60,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     apply_inv_field(&perm, priv_inputs, pub_inputs, io_context0, io_context1)
 }
 
-/// Sorts the inputs using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
+/// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
     priv_key: &[FieldShare<F>],
@@ -148,7 +148,7 @@ fn gen_perm<F: PrimeField, N: Rep3Network>(
 
     for i in 1..bitsize {
         let priv_bit_i = inject_bit(&priv_bits, io_context0, i)?;
-        let pub_bit_i = inject_public_bit(pub_inputs, 0);
+        let pub_bit_i = inject_public_bit(pub_inputs, i);
         let bit_i = apply_inv(&perm, &priv_bit_i, &pub_bit_i, io_context0, io_context1)?;
         let perm_i = gen_bit_perm(bit_i, vec![], io_context0)?;
         perm = compose(perm, perm_i, io_context0)?;

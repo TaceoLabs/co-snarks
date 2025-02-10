@@ -652,9 +652,9 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let mut pub_inputs = Vec::new();
         for val in inputs {
             if Self::is_shared(val) {
-                priv_inputs.push(Self::get_shared(val).unwrap());
+                priv_inputs.push(Self::get_shared(val).expect("Already checked it is shared"));
             } else {
-                pub_inputs.push(Self::get_public(val).unwrap());
+                pub_inputs.push(Self::get_public(val).expect("Already checked it is public"));
             }
         }
         radix_sort_fields(
@@ -853,9 +853,9 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let mut pub_key = Vec::new();
         for val in key {
             if Self::is_shared(val) {
-                priv_key.push(Self::get_shared(val).unwrap());
+                priv_key.push(Self::get_shared(val).expect("Already checked it is shared"));
             } else {
-                pub_key.push(Self::get_public(val).unwrap());
+                pub_key.push(Self::get_public(val).expect("Already checked it is public"));
             }
         }
 
@@ -865,9 +865,9 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             let mut pub_inputs = Vec::new();
             for val in inp {
                 if Self::is_shared(val) {
-                    priv_inputs.push(Self::get_shared(val).unwrap());
+                    priv_inputs.push(Self::get_shared(val).expect("Already checked it is shared"));
                 } else {
-                    pub_inputs.push(Self::get_public(val).unwrap());
+                    pub_inputs.push(Self::get_public(val).expect("Already checked it is public"));
                 }
             }
             inputs_.push((priv_inputs, pub_inputs));
