@@ -37,7 +37,7 @@ macro_rules! join {
 /// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
-    priv_inputs: Vec<FieldShare<F>>,
+    mut priv_inputs: Vec<FieldShare<F>>,
     pub_inputs: Vec<F>,
     io_context0: &mut IoContext<N>,
     io_context1: &mut IoContext<N>,
@@ -57,7 +57,16 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     }
 
     let perm = gen_perm(&priv_inputs, &pub_inputs, bitsize, io_context0, io_context1)?;
-    apply_inv_field(&perm, priv_inputs, pub_inputs, io_context0, io_context1)
+    priv_inputs.reserve(pub_inputs.len());
+
+    // Does not matter whether inputs are shares or not
+    for value in pub_inputs {
+        priv_inputs.push(rep3::arithmetic::promote_to_trivial_share(
+            io_context0.id,
+            value,
+        ));
+    }
+    apply_inv_field(&perm, &priv_inputs, io_context0, io_context1)
 }
 
 /// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
@@ -65,7 +74,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
 pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
     priv_key: &[FieldShare<F>],
     pub_key: &[F],
-    inputs: Vec<(Vec<FieldShare<F>>, Vec<F>)>,
+    inputs: Vec<&[FieldShare<F>]>,
     io_context0: &mut IoContext<N>,
     io_context1: &mut IoContext<N>,
     bitsize: usize,
@@ -83,14 +92,8 @@ pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
     }
     let mut results = Vec::with_capacity(inputs.len());
     let perm = gen_perm(priv_key, pub_key, bitsize, io_context0, io_context1)?;
-    for (priv_inp, pub_inp) in inputs {
-        results.push(apply_inv_field(
-            &perm,
-            priv_inp,
-            pub_inp,
-            io_context0,
-            io_context1,
-        )?)
+    for inp in inputs {
+        results.push(apply_inv_field(&perm, inp, io_context0, io_context1)?)
     }
     Ok(results)
 }
@@ -287,13 +290,12 @@ where
 
 fn apply_inv_field<F: PrimeField, N: Rep3Network>(
     rho: &[Rep3RingShare<PermRing>],
-    priv_bits: Vec<Rep3PrimeFieldShare<F>>,
-    pub_bits: Vec<F>,
+    bits: &[Rep3PrimeFieldShare<F>],
     io_context0: &mut IoContext<N>,
     io_context1: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
     let len = rho.len();
-    debug_assert_eq!(len, priv_bits.len() + pub_bits.len());
+    debug_assert_eq!(len, bits.len());
 
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
     let (perm_a, perm_b) = io_context0.rngs.rand.random_perm(unshuffled);
@@ -305,7 +307,7 @@ fn apply_inv_field<F: PrimeField, N: Rep3Network>(
 
     let (opened, bits_shuffled) = join!(
         shuffle_reveal(&perm, rho, io_context0),
-        shuffle_field(&perm, priv_bits, pub_bits, io_context1)
+        shuffle_field(&perm, bits, io_context1)
     );
     let mut result = vec![Rep3PrimeFieldShare::zero_share(); len];
     for (p, b) in opened?.into_iter().zip(bits_shuffled?) {
@@ -476,29 +478,22 @@ where
 
 fn shuffle_field<F: PrimeField, N: Rep3Network>(
     pi: &[Rep3RingShare<PermRing>],
-    priv_input: Vec<Rep3PrimeFieldShare<F>>,
-    pub_input: Vec<F>,
+    input: &[Rep3PrimeFieldShare<F>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
     let len = pi.len();
-    debug_assert_eq!(len, priv_input.len() + pub_input.len());
+    debug_assert_eq!(len, input.len());
     let result = match io_context.id {
         rep3::id::PartyID::ID0 => {
             // has p1, p3
             let mut alpha_1 = Vec::with_capacity(len);
             let mut alpha_3 = Vec::with_capacity(len);
             let mut beta_1 = Vec::with_capacity(len);
-            for a in priv_input {
+            for a in input {
                 let (alpha_1_, alpha_3_) = io_context.random_fes::<F>();
                 alpha_1.push(alpha_1_);
                 alpha_3.push(alpha_3_);
                 beta_1.push(a.a + a.b);
-            }
-            for a in pub_input {
-                let (alpha_1_, alpha_3_) = io_context.random_fes::<F>();
-                alpha_1.push(alpha_1_);
-                alpha_3.push(alpha_3_);
-                beta_1.push(a); // a.a is public share
             }
 
             // first shuffle
@@ -527,15 +522,10 @@ fn shuffle_field<F: PrimeField, N: Rep3Network>(
             // has p2, p1
             let mut alpha_1 = Vec::with_capacity(len);
             let mut beta_2 = Vec::with_capacity(len);
-            for a in priv_input {
+            for a in input {
                 let alpha_1_ = io_context.rngs.rand.random_field_element_rng2::<F>();
                 alpha_1.push(alpha_1_);
                 beta_2.push(a.a);
-            }
-            for _ in pub_input {
-                let alpha_1_ = io_context.rngs.rand.random_field_element_rng2::<F>();
-                alpha_1.push(alpha_1_);
-                beta_2.push(F::zero()); // a.a is 0
             }
 
             // first shuffle
@@ -674,7 +664,6 @@ where
 
 fn unshuffle<T: IntRing2k, N: Rep3Network>(
     pi: &[Rep3RingShare<PermRing>],
-
     input: &[Rep3RingShare<T>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<Rep3RingShare<T>>>

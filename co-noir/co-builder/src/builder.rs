@@ -2854,18 +2854,26 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         driver: &mut T,
     ) -> std::io::Result<()> {
         let records = &self.rom_arrays[rom_id].records;
-        let to_sort1: Vec<_> = records.iter().map(|y| y.index.to_owned()).collect();
+        let key: Vec<_> = records.iter().map(|y| y.index.clone()).collect();
+        let to_sort1: Vec<_> = records
+            .iter()
+            .map(|y| Self::get_as_shared(&y.index, driver))
+            .collect();
         let to_sort2: Vec<_> = records
             .iter()
-            .map(|y| self.get_variable(y.value_column1_witness as usize))
+            .map(|y| {
+                Self::get_as_shared(&self.get_variable(y.value_column1_witness as usize), driver)
+            })
             .collect();
         let to_sort3: Vec<_> = records
             .iter()
-            .map(|y| self.get_variable(y.value_column2_witness as usize))
+            .map(|y| {
+                Self::get_as_shared(&self.get_variable(y.value_column2_witness as usize), driver)
+            })
             .collect();
         let inputs = vec![to_sort1.as_ref(), to_sort2.as_ref(), to_sort3.as_ref()];
 
-        let sorted = T::sort_vec_by(driver, &to_sort1, inputs, 32)?;
+        let sorted = T::sort_vec_by(driver, &key, inputs, 32)?;
         let records = self.rom_arrays[rom_id].records.clone();
         for (record, index, col1, col2) in izip!(records, &sorted[0], &sorted[1], &sorted[2]) {
             let index_witness = self.add_variable(index.clone().into());
@@ -3070,6 +3078,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         (last.index_witness, last.timestamp_witness, timestamp_deltas)
     }
 
+    pub(crate) fn get_as_shared(value: &T::AcvmType, driver: &mut T) -> T::ArithmeticShare {
+        if T::is_shared(value) {
+            T::get_shared(value).expect("Already checked it is shared")
+        } else {
+            driver.promote_to_trivial_share(
+                T::get_public(value).expect("Already checked it is public"),
+            )
+        }
+    }
+
     fn process_ram_array_shared_inner(
         &mut self,
         ram_id: usize,
@@ -3080,44 +3098,46 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let mut sorted_ram_records = Vec::with_capacity(self.ram_arrays[ram_id].records.len());
 
         let records = &self.ram_arrays[ram_id].records;
-        let to_sort1: Vec<_> = records.iter().map(|y| y.index.to_owned()).collect();
-        let to_sort2: Vec<_> = records
+        let mut indexed_to_sort3: Vec<_> = records
             .iter()
-            .map(|y| self.get_variable(y.value_witness as usize))
+            .enumerate()
+            .map(|(i, y)| (i, P::ScalarField::from(y.timestamp)))
             .collect();
-        let to_sort3: Vec<_> = records
-            .iter()
-            .map(|y| P::ScalarField::from(y.timestamp).into())
-            .collect();
-        let to_sort4: Vec<_> = records
-            .iter()
-            .map(|y| {
-                let val = if y.access_type == RamAccessType::Read {
-                    0u32
+
+        // here we sort two times, since the ordering should be according to this: self.index < other.index || (self.index == other.index && self.timestamp < other.timestamp), hence we first sort along timestamp (which is public), then along index
+        indexed_to_sort3.sort_by(|a, b| a.1.cmp(&b.1));
+
+        let mut key = Vec::with_capacity(indexed_to_sort3.len());
+        let mut to_sort1 = Vec::with_capacity(indexed_to_sort3.len());
+        let mut to_sort2 = Vec::with_capacity(indexed_to_sort3.len());
+        let mut to_sort3 = Vec::with_capacity(indexed_to_sort3.len());
+        let mut to_sort4 = Vec::with_capacity(indexed_to_sort3.len());
+        for (i, val) in indexed_to_sort3 {
+            key.push(records[i].index.to_owned());
+            to_sort1.push(Self::get_as_shared(&records[i].index, driver));
+            to_sort2.push(Self::get_as_shared(
+                &self.get_variable(records[i].value_witness as usize),
+                driver,
+            ));
+            to_sort3.push(driver.promote_to_trivial_share(val));
+            to_sort4.push(driver.promote_to_trivial_share(
+                if records[i].access_type == RamAccessType::Read {
+                    P::ScalarField::zero()
                 } else {
-                    1u32
-                };
-                P::ScalarField::from(val).into()
-            })
-            .collect();
+                    P::ScalarField::one()
+                },
+            ));
+        }
+
         let inputs = vec![
             to_sort1.as_ref(),
             to_sort2.as_ref(),
             to_sort3.as_ref(),
             to_sort4.as_ref(),
         ];
-        // here we sort two times, since the ordering should be according to this: self.index < other.index || (self.index == other.index && self.timestamp < other.timestamp), hence we first sort along timestamp, then along index
-        let sorted = T::sort_vec_by(driver, &to_sort3, inputs, 32)?;
-        let sorted = sorted
-            .into_iter()
-            .map(|v| v.into_iter().map(T::AcvmType::from).collect::<Vec<_>>())
-            .collect::<Vec<_>>();
-        let sorted = T::sort_vec_by(
-            driver,
-            &to_sort1,
-            sorted.iter().map(|v| &v[..]).collect(),
-            32,
-        )?;
+
+        // Second sort along the index
+        let sorted = T::sort_vec_by(driver, &key, inputs, 32)?;
 
         let records = self.ram_arrays[ram_id].records.clone();
         let stamps = &sorted[2];

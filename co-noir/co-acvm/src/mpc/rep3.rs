@@ -846,41 +846,43 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn sort_vec_by(
         &mut self,
         key: &[Self::AcvmType],
-        inputs: Vec<&[Self::AcvmType]>,
+        inputs: Vec<&[Self::ArithmeticShare]>,
         bitsize: usize,
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
-        let mut priv_key = Vec::new();
-        let mut pub_key = Vec::new();
-        for val in key {
-            if Self::is_shared(val) {
-                priv_key.push(Self::get_shared(val).expect("Already checked it is shared"));
-            } else {
-                pub_key.push(Self::get_public(val).expect("Already checked it is public"));
-            }
-        }
+        // let mut priv_key = Vec::new();
+        // let mut pub_key = Vec::new();
+        // for val in key {
+        //     if Self::is_shared(val) {
+        //         priv_key.push(Self::get_shared(val).expect("Already checked it is shared"));
+        //     } else {
+        //         pub_key.push(Self::get_public(val).expect("Already checked it is public"));
+        //     }
+        // }
 
-        let mut inputs_ = Vec::with_capacity(inputs.len());
-        for inp in inputs {
-            let mut priv_inputs = Vec::new();
-            let mut pub_inputs = Vec::new();
-            for val in inp {
-                if Self::is_shared(val) {
-                    priv_inputs.push(Self::get_shared(val).expect("Already checked it is shared"));
-                } else {
-                    pub_inputs.push(Self::get_public(val).expect("Already checked it is public"));
-                }
-            }
-            inputs_.push((priv_inputs, pub_inputs));
-        }
+        todo!()
 
-        radix_sort_fields_vec_by(
-            &priv_key,
-            &pub_key,
-            inputs_,
-            &mut self.io_context0,
-            &mut self.io_context1,
-            bitsize,
-        )
+        // let mut inputs_ = Vec::with_capacity(inputs.len());
+        // for inp in inputs {
+        //     let mut priv_inputs = Vec::new();
+        //     let mut pub_inputs = Vec::new();
+        //     for val in inp {
+        //         if Self::is_shared(val) {
+        //             priv_inputs.push(Self::get_shared(val).expect("Already checked it is shared"));
+        //         } else {
+        //             pub_inputs.push(Self::get_public(val).expect("Already checked it is public"));
+        //         }
+        //     }
+        //     inputs_.push((priv_inputs, pub_inputs));
+        // }
+
+        // radix_sort_fields_vec_by(
+        //     &priv_key,
+        //     &pub_key,
+        //     inputs_,
+        //     &mut self.io_context0,
+        //     &mut self.io_context1,
+        //     bitsize,
+        // )
     }
 
     fn poseidon2_permutation<const T: usize, const D: u64>(

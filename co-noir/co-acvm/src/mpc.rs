@@ -196,7 +196,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn sort_vec_by(
         &mut self,
         key: &[Self::AcvmType],
-        inputs: Vec<&[Self::AcvmType]>,
+        inputs: Vec<&[Self::ArithmeticShare]>,
         bitsize: usize,
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>>;
 

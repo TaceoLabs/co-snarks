@@ -369,14 +369,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
         if native_state.iter().any(|x| WT::is_shared(x)) {
             let mut shared_state = array::from_fn(|i| {
-                if WT::is_shared(&native_state[i]) {
-                    WT::get_shared(&native_state[i]).expect("Already checked it is shared")
-                } else {
-                    // We promote since the first linear layer makes every element shared anyway
-                    driver.promote_to_trivial_share(
-                        WT::get_public(&native_state[i]).expect("Already checked it is public"),
-                    )
-                }
+                GenericUltraCircuitBuilder::<P, WT>::get_as_shared(&native_state[i], driver)
             });
             self.permutation_in_place_shared(state, &mut shared_state, builder, driver)?;
         } else {

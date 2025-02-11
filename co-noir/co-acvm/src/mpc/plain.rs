@@ -423,7 +423,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn sort_vec_by(
         &mut self,
-        key: &[Self::ArithmeticShare],
+        key: &[Self::AcvmType],
         inputs: Vec<&[Self::ArithmeticShare]>,
         bitsize: usize,
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
