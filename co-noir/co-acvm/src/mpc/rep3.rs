@@ -851,38 +851,22 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
         let mut priv_key = Vec::new();
         let mut pub_key = Vec::new();
+        let mut order = Vec::with_capacity(key.len());
         for val in key {
             if Self::is_shared(val) {
+                order.push(true);
                 priv_key.push(Self::get_shared(val).expect("Already checked it is shared"));
             } else {
+                order.push(false);
                 pub_key.push(Self::get_public(val).expect("Already checked it is public"));
             }
-        }
-
-        // We need to reorder the inputs to follow the ordering of priv_then_pub of key
-        let mut sorted_inputs = Vec::with_capacity(inputs.len());
-        for inp in inputs {
-            let mut sorted_input = Vec::with_capacity(key.len());
-            // First push private values
-            for (key, val) in key.iter().zip(inp.iter()) {
-                if Self::is_shared(key) {
-                    sorted_input.push(*val);
-                }
-            }
-            // Then push public values
-            for (key, val) in key.iter().zip(inp.iter()) {
-                if !Self::is_shared(key) {
-                    sorted_input.push(*val);
-                }
-            }
-
-            sorted_inputs.push(sorted_input);
         }
 
         radix_sort_fields_vec_by(
             &priv_key,
             &pub_key,
-            sorted_inputs,
+            &order,
+            inputs,
             &mut self.io_context0,
             &mut self.io_context1,
             bitsize,

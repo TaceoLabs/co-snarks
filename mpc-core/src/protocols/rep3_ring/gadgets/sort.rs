@@ -34,7 +34,7 @@ macro_rules! join {
     }};
 }
 
-/// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize.
+/// Sorts the inputs (both public and shared, where shared is inputted *before* public) using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     mut priv_inputs: Vec<FieldShare<F>>,
@@ -69,12 +69,13 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     apply_inv_field(&perm, &priv_inputs, io_context0, io_context1)
 }
 
-/// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). The values in inputs need to be organized such that the values according to priv must come before the values according to pub. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
+/// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). The values public/shared values need to be organized to match the order given in order (false means a public value, true means a private value). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
     priv_key: &[FieldShare<F>],
     pub_key: &[F],
-    inputs: Vec<Vec<FieldShare<F>>>,
+    order: &[bool],
+    inputs: Vec<&[FieldShare<F>]>,
     io_context0: &mut IoContext<N>,
     io_context1: &mut IoContext<N>,
     bitsize: usize,
@@ -91,23 +92,20 @@ pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
         ));
     }
     let mut results = Vec::with_capacity(inputs.len());
-    let perm = gen_perm(priv_key, pub_key, bitsize, io_context0, io_context1)?;
+    let perm = gen_perm_ordered(priv_key, pub_key, order, bitsize, io_context0, io_context1)?;
     for inp in inputs {
-        results.push(apply_inv_field(&perm, &inp, io_context0, io_context1)?)
+        results.push(apply_inv_field(&perm, inp, io_context0, io_context1)?)
     }
     Ok(results)
 }
 
-fn gen_perm<F: PrimeField, N: Rep3Network>(
+fn decompose<F: PrimeField, N: Rep3Network>(
     priv_inputs: &[FieldShare<F>],
-    pub_inputs: &[F],
     bitsize: usize,
     io_context0: &mut IoContext<N>,
     io_context1: &mut IoContext<N>,
-) -> IoResult<Vec<Rep3RingShare<PermRing>>> {
+) -> IoResult<Vec<Rep3BigUintShare<F>>> {
     let mask = (BigUint::one() << bitsize) - BigUint::one();
-
-    // Decompose all private inputs
     let mut priv_bits = vec![Rep3BigUintShare::zero_share(); priv_inputs.len()];
     let (split1, split2) = priv_bits.split_at_mut(priv_inputs.len() / 2);
     let mut result1 = None;
@@ -145,6 +143,19 @@ fn gen_perm<F: PrimeField, N: Rep3Network>(
         return Err(err);
     }
 
+    Ok(priv_bits)
+}
+
+fn gen_perm<F: PrimeField, N: Rep3Network>(
+    priv_inputs: &[FieldShare<F>],
+    pub_inputs: &[F],
+    bitsize: usize,
+    io_context0: &mut IoContext<N>,
+    io_context1: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<PermRing>>> {
+    // Decompose all private inputs
+    let priv_bits = decompose(priv_inputs, bitsize, io_context0, io_context1)?;
+
     let priv_bit_0 = inject_bit(&priv_bits, io_context0, 0)?;
     let pub_bit_0 = inject_public_bit(pub_inputs, 0);
     let mut perm = gen_bit_perm(priv_bit_0, pub_bit_0, io_context0)?;
@@ -153,6 +164,56 @@ fn gen_perm<F: PrimeField, N: Rep3Network>(
         let priv_bit_i = inject_bit(&priv_bits, io_context0, i)?;
         let pub_bit_i = inject_public_bit(pub_inputs, i);
         let bit_i = apply_inv(&perm, &priv_bit_i, &pub_bit_i, io_context0, io_context1)?;
+        let perm_i = gen_bit_perm(bit_i, vec![], io_context0)?;
+        perm = compose(perm, perm_i, io_context0)?;
+    }
+
+    Ok(perm)
+}
+
+fn order_amd_promote_inputs(
+    priv_inputs: Vec<Rep3RingShare<PermRing>>,
+    pub_inputs: Vec<RingElement<PermRing>>,
+    order: &[bool],
+    id: PartyID,
+) -> Vec<Rep3RingShare<PermRing>> {
+    assert_eq!(priv_inputs.len() + pub_inputs.len(), order.len());
+    let mut perm = Vec::with_capacity(order.len());
+    let mut priv_iter = priv_inputs.into_iter();
+    let mut pub_iter = pub_inputs.into_iter();
+    for order in order {
+        if *order {
+            perm.push(priv_iter.next().expect("Checked lengths"));
+        } else {
+            let val =
+                arithmetic::promote_to_trivial_share(id, pub_iter.next().expect("Checked lengths"));
+            perm.push(val);
+        }
+    }
+    perm
+}
+
+fn gen_perm_ordered<F: PrimeField, N: Rep3Network>(
+    priv_inputs: &[FieldShare<F>],
+    pub_inputs: &[F],
+    order: &[bool],
+    bitsize: usize,
+    io_context0: &mut IoContext<N>,
+    io_context1: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<PermRing>>> {
+    // Decompose all private inputs
+    let priv_bits = decompose(priv_inputs, bitsize, io_context0, io_context1)?;
+
+    let priv_bit_0 = inject_bit(&priv_bits, io_context0, 0)?;
+    let pub_bit_0 = inject_public_bit(pub_inputs, 0);
+    let perm = order_amd_promote_inputs(priv_bit_0, pub_bit_0, order, io_context0.id);
+    let mut perm = gen_bit_perm(perm, vec![], io_context0)?; // This first permutation could be otpimized by not promoting the public bits
+
+    for i in 1..bitsize {
+        let priv_bit_i = inject_bit(&priv_bits, io_context0, i)?;
+        let pub_bit_i = inject_public_bit(pub_inputs, i);
+        let bit_i = order_amd_promote_inputs(priv_bit_i, pub_bit_i, order, io_context0.id);
+        let bit_i = apply_inv(&perm, &bit_i, &[], io_context0, io_context1)?;
         let perm_i = gen_bit_perm(bit_i, vec![], io_context0)?;
         perm = compose(perm, perm_i, io_context0)?;
     }
