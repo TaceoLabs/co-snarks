@@ -10,7 +10,7 @@ use co_ultrahonk::{
     },
     PlainCoBuilder,
 };
-use color_eyre::eyre::{eyre, Context};
+use color_eyre::eyre::Context;
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
     io::{BufWriter, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::ExitCode,
 };
 
@@ -152,32 +152,6 @@ fn convert_witness<F: PrimeField>(mut witness_stack: WitnessStack<F>) -> Vec<F> 
     witness_map_to_witness_vector(witness_map)
 }
 
-/// Check if a file exists at the given path, and is actually a file.
-fn check_file_exists(file_path: &Path) -> color_eyre::Result<()> {
-    if !file_path.exists() {
-        return Err(eyre!("File not found: {file_path:?}"));
-    }
-    if !file_path.is_file() {
-        return Err(eyre!(
-            "Expected {file_path:?} to be a file, but it is a directory."
-        ));
-    }
-    Ok(())
-}
-
-/// Check if a directory exists at the given path, and is actually a directory.
-fn check_dir_exists(dir_path: &Path) -> color_eyre::Result<()> {
-    if !dir_path.exists() {
-        return Err(eyre!("Dir not found: {dir_path:?}"));
-    }
-    if !dir_path.is_dir() {
-        return Err(eyre!(
-            "Expected {dir_path:?} to be a directory, but it is a file."
-        ));
-    }
-    Ok(())
-}
-
 fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
 
@@ -190,12 +164,6 @@ fn main() -> color_eyre::Result<ExitCode> {
     let circuit_path = config.circuit;
     let hasher = config.hasher;
     let out_dir = config.out_dir;
-
-    check_file_exists(&prover_crs_path)?;
-    check_file_exists(&verifier_crs_path)?;
-    check_file_exists(&input_path)?;
-    check_file_exists(&circuit_path)?;
-    check_dir_exists(&out_dir)?;
 
     // Read circuit
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_path)

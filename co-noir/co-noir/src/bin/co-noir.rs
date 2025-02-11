@@ -21,7 +21,7 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::{BufReader, BufWriter, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::ExitCode,
     time::Instant,
 };
@@ -730,32 +730,6 @@ enum Commands {
     DownloadCrs(DownloadCrsCli),
 }
 
-/// Check if a file exists at the given path, and is actually a file.
-fn check_file_exists(file_path: &Path) -> color_eyre::Result<()> {
-    if !file_path.exists() {
-        return Err(eyre!("File not found: {file_path:?}"));
-    }
-    if !file_path.is_file() {
-        return Err(eyre!(
-            "Expected {file_path:?} to be a file, but it is a directory."
-        ));
-    }
-    Ok(())
-}
-
-/// Check if a directory exists at the given path, and is actually a directory.
-fn check_dir_exists(dir_path: &Path) -> color_eyre::Result<()> {
-    if !dir_path.exists() {
-        return Err(eyre!("Dir not found: {dir_path:?}"));
-    }
-    if !dir_path.is_dir() {
-        return Err(eyre!(
-            "Expected {dir_path:?} to be a directory, but it is a file."
-        ));
-    }
-    Ok(())
-}
-
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{
@@ -850,10 +824,6 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
     let out_dir = config.out_dir;
     let t = config.threshold;
     let n = config.num_parties;
-
-    check_file_exists(&witness_path)?;
-    check_file_exists(&circuit_path)?;
-    check_dir_exists(&out_dir)?;
 
     // parse constraint system
     let program = Utils::get_program_artifact_from_file(&circuit_path)
@@ -951,11 +921,6 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     let n = config.num_parties;
     let recursive = config.recursive;
 
-    check_file_exists(&witness_path)?;
-    check_file_exists(&circuit_path)?;
-    check_file_exists(&crs_path)?;
-    check_dir_exists(&out_dir)?;
-
     // parse constraint system
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
         .context("while parsing program artifact")?;
@@ -1040,10 +1005,7 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
             "Only REP3 protocol is supported for splitting inputs"
         ));
     }
-    check_file_exists(&input)?;
     let circuit_path = PathBuf::from(&circuit);
-    check_file_exists(&circuit_path)?;
-    check_dir_exists(&out_dir)?;
 
     // parse constraint system
     let compiled_program = Utils::get_program_artifact_from_file(&circuit_path)
@@ -1096,9 +1058,6 @@ fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<
     if inputs.len() < 2 {
         return Err(eyre!("Need at least two input shares to merge"));
     }
-    for input in &inputs {
-        check_file_exists(input)?;
-    }
 
     let input_shares = inputs
         .iter()
@@ -1140,9 +1099,7 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
             "Only REP3 protocol is supported for witness generation"
         ));
     }
-    check_file_exists(&input)?;
     let circuit_path = PathBuf::from(&circuit);
-    check_file_exists(&circuit_path)?;
 
     // parse constraint system
     let compiled_program = Utils::get_program_artifact_from_file(&circuit_path)
@@ -1187,7 +1144,6 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
         return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
     }
-    check_file_exists(&witness)?;
 
     // parse witness shares
     let witness_file =
@@ -1227,7 +1183,6 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
         return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
     }
-    check_file_exists(&proving_key)?;
 
     // parse proving_key shares
     let proving_key_file =
@@ -1265,9 +1220,6 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
     let out = config.out;
     let t = config.threshold;
     let recursive = config.recursive;
-
-    check_file_exists(&witness)?;
-    check_file_exists(&circuit_path)?;
 
     // parse witness shares
     let witness_file =
@@ -1346,8 +1298,6 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let public_input_filename = config.public_input;
     let t = config.threshold;
     let crs_path = config.crs;
-
-    check_file_exists(&proving_key)?;
 
     let network_config = config
         .network
@@ -1498,10 +1448,6 @@ fn run_build_and_generate_proof(
     if hasher == TranscriptHash::KECCAK && recursive {
         tracing::warn!("Note that the Poseidon hasher is better suited for recursion");
     }
-
-    check_file_exists(&witness)?;
-    check_file_exists(&circuit_path)?;
-    check_file_exists(&crs_path)?;
 
     // parse witness shares
     let witness_file =
@@ -1671,9 +1617,6 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
         tracing::warn!("Note that the Poseidon hasher is better suited for recursion");
     }
 
-    check_file_exists(&circuit_path)?;
-    check_file_exists(&crs_path)?;
-
     // parse constraint system
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
         .context("while parsing program artifact")?;
@@ -1713,10 +1656,6 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let vk_path: PathBuf = config.vk;
     let crs_path = config.crs;
     let hasher = config.hasher;
-
-    check_file_exists(&proof)?;
-    check_file_exists(&vk_path)?;
-    check_file_exists(&crs_path)?;
 
     // parse proof file
     let proof_u8 = std::fs::read(&proof).context("while reading proof file")?;

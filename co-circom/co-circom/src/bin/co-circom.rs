@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{BufReader, BufWriter},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::ExitCode,
     sync::Arc,
     time::Instant,
@@ -535,32 +535,6 @@ enum Commands {
     Verify(VerifyCli),
 }
 
-/// Check if a file exists at the given path, and is actually a file.
-fn check_file_exists(file_path: &Path) -> color_eyre::Result<()> {
-    if !file_path.exists() {
-        return Err(eyre!("File not found: {file_path:?}"));
-    }
-    if !file_path.is_file() {
-        return Err(eyre!(
-            "Expected {file_path:?} to be a file, but it is a directory."
-        ));
-    }
-    Ok(())
-}
-
-/// Check if a directory exists at the given path, and is actually a directory.
-fn check_dir_exists(dir_path: &Path) -> color_eyre::Result<()> {
-    if !dir_path.exists() {
-        return Err(eyre!("Dir not found: {dir_path:?}"));
-    }
-    if !dir_path.is_dir() {
-        return Err(eyre!(
-            "Expected {dir_path:?} to be a directory, but it is a file."
-        ));
-    }
-    Ok(())
-}
-
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{
@@ -657,10 +631,6 @@ where
     let t = config.threshold;
     let n = config.num_parties;
 
-    check_file_exists(&witness_path)?;
-    check_file_exists(&r1cs)?;
-    check_dir_exists(&out_dir)?;
-
     // read the circom witness file
     let witness_file =
         BufReader::new(File::open(&witness_path).context("while opening witness file")?);
@@ -747,10 +717,7 @@ where
             "Only REP3 protocol is supported for splitting inputs"
         ));
     }
-    check_file_exists(&input_path)?;
     let circuit_path = PathBuf::from(&circuit);
-    check_file_exists(&circuit_path)?;
-    check_dir_exists(&out_dir)?;
 
     //get the public inputs if any from parser
     let public_inputs = CoCircomCompiler::<P>::get_public_inputs(circuit_path, config.compiler)
@@ -803,9 +770,6 @@ where
     if inputs.len() < 2 {
         return Err(eyre!("Need at least two input shares to merge"));
     }
-    for input in &inputs {
-        check_file_exists(input)?;
-    }
 
     let input_shares = inputs
         .iter()
@@ -840,19 +804,16 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
-    let input = config.input.clone();
-    let circuit = config.circuit.clone();
+    let input = config.input;
+    let circuit = config.circuit;
     let protocol = config.protocol;
-    let out = config.out.clone();
+    let out = config.out;
 
     if protocol != MPCProtocol::REP3 {
         return Err(eyre!(
             "Only REP3 protocol is supported for witness generation"
         ));
     }
-    check_file_exists(&input)?;
-    let circuit_path = PathBuf::from(&circuit);
-    check_file_exists(&circuit_path)?;
 
     // connect to network
     let network_config = config
@@ -906,7 +867,6 @@ where
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
         return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
     }
-    check_file_exists(&witness)?;
 
     // parse witness shares
     let witness_file =
@@ -956,9 +916,6 @@ where
     } else {
         CheckElement::No
     };
-
-    check_file_exists(&witness)?;
-    check_file_exists(&zkey)?;
 
     // parse witness shares
     let witness_file =
@@ -1118,10 +1075,6 @@ where
     let proof = config.proof;
     let vk = config.vk;
     let public_input = config.public_input;
-
-    check_file_exists(&proof)?;
-    check_file_exists(&vk)?;
-    check_file_exists(&public_input)?;
 
     // parse circom proof file
     let proof_file = BufReader::new(File::open(&proof).context("while opening proof file")?);
