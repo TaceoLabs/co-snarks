@@ -1,6 +1,6 @@
 use co_builder::prelude::{Polynomial, PrecomputedEntities, ProverWitnessEntities};
 use serde::{Deserialize, Serialize};
-use ultrahonk::prelude::{ShiftedTableEntities, ShiftedWitnessEntities, WitnessEntities};
+use ultrahonk::prelude::{ShiftedWitnessEntities, WitnessEntities};
 
 // This is what we get from the proving key, we shift at a later point
 #[derive(Default, Serialize, Deserialize)]
@@ -39,12 +39,11 @@ pub(crate) struct AllEntities<Shared: Default, Public: Default> {
     pub(crate) witness: WitnessEntities<Shared>,
     pub(crate) precomputed: PrecomputedEntities<Public>,
     pub(crate) shifted_witness: ShiftedWitnessEntities<Shared>,
-    pub(crate) shifted_tables: ShiftedTableEntities<Public>,
 }
 
 impl<Shared: Default, Public: Default> AllEntities<Shared, Public> {
     pub(crate) fn public_iter(&self) -> impl Iterator<Item = &Public> {
-        self.precomputed.iter().chain(self.shifted_tables.iter())
+        self.precomputed.iter()
     }
 
     pub(crate) fn shared_iter(&self) -> impl Iterator<Item = &Shared> {
@@ -56,9 +55,7 @@ impl<Shared: Default, Public: Default> AllEntities<Shared, Public> {
     }
 
     pub(crate) fn public_iter_mut(&mut self) -> impl Iterator<Item = &mut Public> {
-        self.precomputed
-            .iter_mut()
-            .chain(self.shifted_tables.iter_mut())
+        self.precomputed.iter_mut()
     }
 
     pub(crate) fn shared_iter_mut(&mut self) -> impl Iterator<Item = &mut Shared> {
@@ -88,7 +85,6 @@ impl<T: Default> AllEntities<T, T> {
         self.precomputed
             .iter()
             .chain(self.witness.iter())
-            .chain(self.shifted_tables.iter())
             .chain(self.shifted_witness.iter())
     }
 }

@@ -23,18 +23,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) -> PolyGShift<P::ScalarField> {
         PolyGShift {
-            tables: &evaluations.shifted_tables,
             wires: &evaluations.shifted_witness,
         }
     }
 
     pub fn get_g_shift_comms(evaluations: &VerifierCommitments<P::G1Affine>) -> PolyG<P::G1Affine> {
         PolyG {
-            tables: evaluations
-                .precomputed
-                .get_table_polynomials()
-                .try_into()
-                .unwrap(),
             wires: evaluations.witness.to_be_shifted().try_into().unwrap(),
         }
     }

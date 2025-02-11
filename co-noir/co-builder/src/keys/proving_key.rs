@@ -1,6 +1,3 @@
-use std::sync::Arc;
-
-use crate::types::types::ActiveRegionData;
 use crate::{
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
@@ -9,8 +6,8 @@ use crate::{
         polynomial_types::{Polynomials, PrecomputedEntities},
     },
     types::types::{
-        AggregationObjectPubInputIndices, CyclicPermutation, Mapping, PermutationMapping,
-        TraceData, NUM_WIRES,
+        ActiveRegionData, AggregationObjectPubInputIndices, CyclicPermutation, Mapping,
+        PermutationMapping, TraceData, NUM_WIRES,
     },
     HonkProofResult,
 };
@@ -18,6 +15,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
 use num_bigint::BigUint;
+use std::sync::Arc;
 
 pub struct ProvingKey<P: Pairing> {
     pub crs: Arc<ProverCrs<P>>,

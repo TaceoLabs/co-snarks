@@ -232,7 +232,7 @@ impl<
         Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
 
         let res = SumcheckOutput {
-            claimed_evaluations: multivariate_evaluations,
+            _claimed_evaluations: multivariate_evaluations,
             challenges: multivariate_challenge,
         };
         Ok(res)

@@ -13,9 +13,6 @@ pub(crate) struct SharedPolynomial<T: NoirUltraHonkProver<P>, P: Pairing> {
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
-    pub fn new(coefficients: Vec<T::ArithmeticShare>) -> Self {
-        Self { coefficients }
-    }
     pub fn new_zero(size: usize) -> Self {
         Self {
             coefficients: vec![Default::default(); size],
@@ -25,10 +22,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
     pub(crate) fn promote_poly(driver: &T, poly: Polynomial<P::ScalarField>) -> Self {
         let coefficients = T::promote_to_trivial_shares(driver.get_party_id(), poly.as_ref());
         Self { coefficients }
-    }
-
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T::ArithmeticShare> {
-        self.coefficients.iter()
     }
 
     pub(crate) fn add_assign_slice(&mut self, driver: &mut T, other: &[T::ArithmeticShare]) {

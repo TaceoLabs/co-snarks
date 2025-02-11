@@ -28,16 +28,13 @@ impl<F: PrimeField> HonkProof<F> {
     }
 }
 
-pub(crate) const NUM_ALL_ENTITIES: usize = WITNESS_ENTITIES_SIZE
-    + PRECOMPUTED_ENTITIES_SIZE
-    + SHIFTED_TABLE_ENTITIES_SIZE
-    + SHIFTED_WITNESS_ENTITIES_SIZE;
+pub(crate) const NUM_ALL_ENTITIES: usize =
+    WITNESS_ENTITIES_SIZE + PRECOMPUTED_ENTITIES_SIZE + SHIFTED_WITNESS_ENTITIES_SIZE;
 #[derive(Default)]
 pub(crate) struct AllEntities<T: Default> {
     pub(crate) witness: WitnessEntities<T>,
     pub(crate) precomputed: PrecomputedEntities<T>,
     pub(crate) shifted_witness: ShiftedWitnessEntities<T>,
-    pub(crate) shifted_tables: ShiftedTableEntities<T>,
 }
 
 impl<T: Default> AllEntities<T> {
@@ -45,7 +42,6 @@ impl<T: Default> AllEntities<T> {
         self.precomputed
             .iter()
             .chain(self.witness.iter())
-            .chain(self.shifted_tables.iter())
             .chain(self.shifted_witness.iter())
     }
 
@@ -53,7 +49,6 @@ impl<T: Default> AllEntities<T> {
         self.precomputed
             .iter_mut()
             .chain(self.witness.iter_mut())
-            .chain(self.shifted_tables.iter_mut())
             .chain(self.shifted_witness.iter_mut())
     }
 }
@@ -82,24 +77,9 @@ pub struct ShiftedWitnessEntities<T: Default> {
     pub(crate) elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
 }
 
-const SHIFTED_TABLE_ENTITIES_SIZE: usize = 4;
-#[derive(Default)]
-pub struct ShiftedTableEntities<T: Default> {
-    pub(crate) elements: [T; SHIFTED_TABLE_ENTITIES_SIZE],
-}
-
 impl<T: Default> IntoIterator for WitnessEntities<T> {
     type Item = T;
     type IntoIter = std::array::IntoIter<T, WITNESS_ENTITIES_SIZE>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.elements.into_iter()
-    }
-}
-
-impl<T: Default> IntoIterator for ShiftedTableEntities<T> {
-    type Item = T;
-    type IntoIter = std::array::IntoIter<T, SHIFTED_TABLE_ENTITIES_SIZE>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.elements.into_iter()
@@ -119,11 +99,8 @@ impl<T: Default> IntoIterator for AllEntities<T> {
     type Item = T;
     type IntoIter = std::iter::Chain<
         std::iter::Chain<
-            std::iter::Chain<
-                std::array::IntoIter<T, PRECOMPUTED_ENTITIES_SIZE>,
-                std::array::IntoIter<T, WITNESS_ENTITIES_SIZE>,
-            >,
-            std::array::IntoIter<T, SHIFTED_TABLE_ENTITIES_SIZE>,
+            std::array::IntoIter<T, PRECOMPUTED_ENTITIES_SIZE>,
+            std::array::IntoIter<T, WITNESS_ENTITIES_SIZE>,
         >,
         std::array::IntoIter<T, SHIFTED_WITNESS_ENTITIES_SIZE>,
     >;
@@ -132,7 +109,6 @@ impl<T: Default> IntoIterator for AllEntities<T> {
         self.precomputed
             .into_iter()
             .chain(self.witness)
-            .chain(self.shifted_tables)
             .chain(self.shifted_witness)
     }
 }
@@ -274,41 +250,5 @@ impl<T: Default> ShiftedWitnessEntities<T> {
 
     pub fn z_perm(&self) -> &T {
         &self.elements[Self::Z_PERM]
-    }
-}
-
-#[expect(dead_code)]
-impl<T: Default> ShiftedTableEntities<T> {
-    /// column 0
-    const TABLE_1: usize = 0;
-    /// column 1
-    const TABLE_2: usize = 1;
-    /// column 2
-    const TABLE_3: usize = 2;
-    /// column 3
-    const TABLE_4: usize = 3;
-
-    pub fn iter(&self) -> impl Iterator<Item = &T> {
-        self.elements.iter()
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
-        self.elements.iter_mut()
-    }
-
-    pub(crate) fn table_1(&self) -> &T {
-        &self.elements[Self::TABLE_1]
-    }
-
-    pub(crate) fn table_2(&self) -> &T {
-        &self.elements[Self::TABLE_2]
-    }
-
-    pub(crate) fn table_3(&self) -> &T {
-        &self.elements[Self::TABLE_3]
-    }
-
-    pub(crate) fn table_4(&self) -> &T {
-        &self.elements[Self::TABLE_4]
     }
 }

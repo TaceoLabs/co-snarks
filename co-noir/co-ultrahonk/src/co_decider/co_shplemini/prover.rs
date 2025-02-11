@@ -1,9 +1,8 @@
 use super::types::{PolyF, PolyG};
 use crate::{
     co_decider::{
-        co_shplemini::{ShpleminiOpeningClaim, ShpleminiOpeningPair},
+        co_shplemini::{OpeningPair, ShpleminiOpeningClaim},
         co_sumcheck::SumcheckOutput,
-        co_zeromorph::{OpeningPair, ZeroMorphOpeningClaim},
         polynomial::SharedPolynomial,
         prover::CoDecider,
     },
@@ -324,7 +323,7 @@ impl<
             self.driver.eval_poly(fold_poly.as_ref(), r_challenge);
         opening_claims.push(ShpleminiOpeningClaim {
             polynomial: fold_poly,
-            opening_pair: ShpleminiOpeningPair {
+            opening_pair: OpeningPair {
                 challenge: r_challenge,
                 evaluation,
             },
@@ -335,7 +334,7 @@ impl<
             let evaluation = self.driver.eval_poly(fold_poly.as_ref(), -r_square);
             opening_claims.push(ShpleminiOpeningClaim {
                 polynomial: fold_poly,
-                opening_pair: ShpleminiOpeningPair {
+                opening_pair: OpeningPair {
                     challenge: -r_square,
                     evaluation,
                 },
@@ -358,7 +357,7 @@ impl<
         opening_claims: Vec<ShpleminiOpeningClaim<T, P>>,
         commitment_key: &ProverCrs<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-    ) -> HonkProofResult<ZeroMorphOpeningClaim<T, P>> {
+    ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         tracing::trace!("Shplonk prove");
         let nu = transcript.get_challenge::<P>("Shplonk:nu".to_string());
         let batched_quotient =
@@ -387,7 +386,7 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
-    ) -> HonkProofResult<ZeroMorphOpeningClaim<T, P>> {
+    ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         tracing::trace!("Shplemini prove");
         let log_circuit_size = Utils::get_msb32(circuit_size);
         let opening_claims = self.gemini_prove(
@@ -415,7 +414,7 @@ impl<
         batched_quotient_q: SharedPolynomial<T, P>,
         nu_challenge: P::ScalarField,
         z_challenge: P::ScalarField,
-    ) -> ZeroMorphOpeningClaim<T, P> {
+    ) -> ShpleminiOpeningClaim<T, P> {
         tracing::trace!("Compute partially evaluated batched quotient");
         let num_opening_claims = opening_claims.len();
 
@@ -442,11 +441,11 @@ impl<
             current_nu *= nu_challenge;
         }
 
-        crate::co_decider::co_zeromorph::ZeroMorphOpeningClaim {
+        ShpleminiOpeningClaim {
             polynomial: g,
             opening_pair: OpeningPair {
                 challenge: z_challenge,
-                evaluation: P::ScalarField::zero(),
+                evaluation: T::ArithmeticShare::default(),
             },
         }
     }
