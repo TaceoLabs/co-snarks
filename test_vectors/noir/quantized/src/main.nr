@@ -1,15 +1,14 @@
 use std::cmp::Ordering;
 use std::field::bn254::decompose;
 use std::ops::{Add, Mul, Sub};
-fn main(x: Field, y: pub Field) -> pub Ordering{
-    let new_x= Quantized::new(x);
-    let new_y= Quantized::new(y);
-    let zero= Quantized::zero();
-    let add0= new_x+zero;
-    let sub= add0-new_y;
-    let mul= new_x*sub;
-    Quantized::cmp(mul,new_y)
-
+fn main(x: Field, y: pub Field) -> pub Ordering {
+    let new_x = Quantized::new(x);
+    let new_y = Quantized::new(y);
+    let zero = Quantized::zero();
+    let add0 = new_x + zero;
+    let sub = add0 - new_y;
+    let mul = new_x * sub;
+    Quantized::cmp(mul, new_y)
 }
 
 pub struct Quantized {
@@ -60,6 +59,7 @@ impl Quantized {
     fn mul(self: Self, other: Self) -> Self {
         let mut temp: Field = self.x * other.x;
         let mut bytes: [u8; 32] = [0; 32];
+        ///Safety: get_bytes is safe
         unsafe {
             bytes = get_bytes(temp);
         }
@@ -73,6 +73,7 @@ impl Quantized {
             temp = 21888242871839275222246405745257275088548364400416034343698204186575808495616
                 - temp
                 + 1;
+            ///Safety: get_bytes is safe
             unsafe {
                 bytes = get_bytes(temp);
             }
@@ -119,14 +120,11 @@ impl Mul for Quantized {
 
 impl Ord for Quantized { // TODO is it cheaper to create a function that returns a bool directly?
     fn cmp(self: Self, other: Self) -> Ordering {
-        if self.x == other.x {
-            Ordering::equal()
-        }
-
         let self_positive = is_positive(self.x);
         let other_positive = is_positive(other.x);
-
-        if (self_positive & !other_positive) {
+        if self.x == other.x {
+            Ordering::equal()
+        } else if (self_positive & !other_positive) {
             Ordering::greater()
         } else if self_positive == other_positive {
             let self_smallest = self.x.lt(other.x);

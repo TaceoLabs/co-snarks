@@ -404,6 +404,7 @@ pub fn translate_proving_key<
         contains_pairing_point_accumulator: proving_key.contains_pairing_point_accumulator,
         pairing_point_accumulator_public_input_indices: proving_key
             .pairing_point_accumulator_public_input_indices,
+        active_region_data: proving_key.active_region_data,
     };
 
     Ok((result, protocol.network))
@@ -418,7 +419,7 @@ pub fn compute_circuit_size<P: Pairing>(
         constraint_system,
         recursive,
         0,
-        true,
+        1,
         &mut PlainAcvmSolver::new(),
     )
 }
@@ -438,7 +439,7 @@ pub fn generate_proving_key_rep3<N: Rep3Network>(
         recursive,
         0,
         witness_share,
-        true,
+        1,
         &mut driver,
     )?;
 
@@ -468,7 +469,7 @@ pub fn generate_proving_key_shamir<N: ShamirNetwork>(
         recursive,
         0,
         witness_share,
-        true,
+        1,
         &mut driver,
     )?;
 
@@ -491,7 +492,7 @@ pub fn generate_proving_key_plain<P: Pairing>(
         recursive,
         0,
         witness,
-        true,
+        1,
         &mut driver,
     )?;
     Ok(PlainProvingKey::create::<PlainAcvmSolver<_>>(
@@ -514,7 +515,7 @@ pub fn generate_vk<P: Pairing>(
         recursive,
         0,
         vec![],
-        true,
+        1,
         &mut driver,
     )?;
 
@@ -538,7 +539,7 @@ pub fn generate_vk_barretenberg<P: Pairing>(
         recursive,
         0,
         vec![],
-        true,
+        1,
         &mut driver,
     )?;
     Ok(circuit.create_vk_barretenberg(prover_crs, &mut driver)?)

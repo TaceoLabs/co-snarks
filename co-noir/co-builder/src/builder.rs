@@ -1,3 +1,4 @@
+use crate::acir_format::ProgramMetadata;
 use crate::{
     acir_format::AcirFormat,
     crs::ProverCrs,
@@ -203,7 +204,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         recursive: bool,
         size_hint: usize,
         witness: Vec<T::AcvmType>,
-        honk_recursion: bool, // true for ultrahonk
+        honk_recursion: u32, // 1 for ultrahonk
         driver: &mut T,
     ) -> std::io::Result<Self> {
         tracing::trace!("Builder create circuit");
@@ -217,12 +218,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             constraint_system.varnum as usize,
             recursive,
         );
-
+        let metadata = ProgramMetadata {
+            recursive,
+            honk_recursion,
+            size_hint,
+        };
         builder.build_constraints(
             driver,
             constraint_system,
             has_valid_witness_assignments,
-            honk_recursion,
+            &metadata,
         )?;
 
         builder.finalize_circuit(true, driver)?;
@@ -234,7 +239,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         constraint_system: &AcirFormat<P::ScalarField>,
         recursive: bool,
         size_hint: usize,
-        honk_recursion: bool, // true for ultrahonk
+        honk_recursion: u32,
         driver: &mut T,
     ) -> eyre::Result<usize> {
         tracing::trace!("Builder create circuit");
@@ -246,8 +251,12 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             constraint_system.varnum as usize,
             recursive,
         );
-
-        builder.build_constraints(driver, constraint_system, false, honk_recursion)?;
+        let metadata = ProgramMetadata {
+            recursive,
+            honk_recursion,
+            size_hint,
+        };
+        builder.build_constraints(driver, constraint_system, false, &metadata)?;
 
         builder.finalize_circuit(true, driver)?;
 
@@ -1047,7 +1056,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         driver: &mut T,
         constraint_system: &AcirFormat<P::ScalarField>,
         has_valid_witness_assignments: bool,
-        honk_recursion: bool,
+        metadata: &ProgramMetadata,
     ) -> std::io::Result<()> {
         tracing::trace!("Builder build constraints");
 
@@ -1246,9 +1255,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         if !constraint_system.honk_recursion_constraints.is_empty()
             || !constraint_system.avm_recursion_constraints.is_empty()
         {
-            assert!(honk_recursion);
+            assert!(metadata.honk_recursion != 0);
             self.add_pairing_point_accumulator(current_aggregation_object);
-        } else if honk_recursion && self.is_recursive_circuit {
+        } else if metadata.honk_recursion != 0 && self.is_recursive_circuit {
             // Make sure the verification key records the public input indices of the
             // final recursion output.
             self.add_pairing_point_accumulator(current_aggregation_object);

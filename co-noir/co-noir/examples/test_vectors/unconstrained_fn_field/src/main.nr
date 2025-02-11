@@ -4,10 +4,8 @@ unconstrained fn add(x: Field, y: Field) -> Field {
 
 fn main(x: Field, y: Field, z: pub Field) {
     assert(
-        unsafe {
-            //@safety: is safe
-            add(x, y)
-        }
+        ///Safety: is safe
+        unsafe { add(x, y) }
             == z,
     );
 }

@@ -48,7 +48,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
         false, // We don't support recursive atm
         0,
         witness,
-        true,
+        1,
         &mut driver,
     )
     .unwrap();
@@ -84,7 +84,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
         false, // We don't support recursive atm
         0,
         witness,
-        true,
+        1,
         &mut driver,
     )
     .unwrap();

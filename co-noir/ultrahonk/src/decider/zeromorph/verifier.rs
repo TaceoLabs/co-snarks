@@ -7,6 +7,7 @@ use crate::{
     Utils, CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::AffineRepr;
+use ark_ff::AdditiveGroup;
 use ark_ff::{Field, One, Zero};
 use co_builder::prelude::HonkCurve;
 

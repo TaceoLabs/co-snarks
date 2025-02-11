@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::types::types::ActiveRegionData;
 use crate::{
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
@@ -30,6 +31,7 @@ pub struct ProvingKey<P: Pairing> {
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
     pub final_active_wire_idx: usize,
+    pub active_region_data: ActiveRegionData,
 }
 
 impl<P: Pairing> ProvingKey<P> {
@@ -139,6 +141,7 @@ impl<P: Pairing> ProvingKey<P> {
             contains_pairing_point_accumulator: false,
             pairing_point_accumulator_public_input_indices: [0;
                 crate::types::types::AGGREGATION_OBJECT_SIZE],
+            active_region_data: ActiveRegionData::new(),
         }
     }
 
@@ -146,11 +149,12 @@ impl<P: Pairing> ProvingKey<P> {
         tracing::trace!("Populating trace");
 
         let mut trace_data = TraceData::new(builder, self);
-        trace_data.construct_trace_data(builder, is_structured);
-
+        let mut active_region_data = ActiveRegionData::new();
+        trace_data.construct_trace_data(builder, is_structured, &mut active_region_data);
         let ram_rom_offset = trace_data.ram_rom_offset;
         let copy_cycles = trace_data.copy_cycles;
         self.pub_inputs_offset = trace_data.pub_inputs_offset;
+        self.active_region_data = active_region_data;
 
         Self::add_memory_records_to_proving_key(
             ram_rom_offset,
@@ -166,6 +170,7 @@ impl<P: Pairing> ProvingKey<P> {
             copy_cycles,
             self.circuit_size as usize,
             self.pub_inputs_offset as usize,
+            &self.active_region_data,
         );
     }
 
@@ -197,6 +202,7 @@ impl<P: Pairing> ProvingKey<P> {
         copy_cycles: Vec<CyclicPermutation>,
         circuit_size: usize,
         pub_inputs_offset: usize,
+        active_region_data: &ActiveRegionData,
     ) {
         tracing::trace!("Computing permutation argument polynomials");
         let mapping = Self::compute_permutation_mapping(
@@ -211,11 +217,13 @@ impl<P: Pairing> ProvingKey<P> {
             polys.get_sigmas_mut(),
             mapping.sigmas,
             circuit_size,
+            active_region_data,
         );
         Self::compute_honk_style_permutation_lagrange_polynomials_from_mapping(
             polys.get_ids_mut(),
             mapping.ids,
             circuit_size,
+            active_region_data,
         );
     }
 
@@ -292,46 +300,45 @@ impl<P: Pairing> ProvingKey<P> {
         permutation_polynomials: &mut [Polynomial<P::ScalarField>],
         permutation_mappings: Mapping,
         circuit_size: usize,
+        active_region_data: &ActiveRegionData,
     ) {
         let num_gates = circuit_size;
 
-        for (current_permutation_mappings, current_permutation_poly) in permutation_mappings
-            .into_iter()
-            .zip(permutation_polynomials)
-        {
-            debug_assert_eq!(current_permutation_mappings.len(), num_gates);
-            debug_assert_eq!(current_permutation_poly.len(), num_gates);
+        let domain_size = active_region_data.size();
 
-            // TACEO TODO Barrettenberg uses multithreading here
-            for (current_mapping, current_poly) in current_permutation_mappings
-                .into_iter()
-                .zip(current_permutation_poly.iter_mut())
-            {
-                if current_mapping.is_public_input {
+        // TACEO TODO Barrettenberg uses multithreading here
+
+        for (wire_idx, current_permutation_poly) in permutation_polynomials.iter_mut().enumerate() {
+            for i in 0..domain_size {
+                let poly_idx = active_region_data.get_idx(i);
+                let idx = poly_idx as isize;
+                let current_row_idx = permutation_mappings[wire_idx][idx as usize].row_index;
+                let current_col_idx = permutation_mappings[wire_idx][idx as usize].column_index;
+                let current_is_tag = permutation_mappings[wire_idx][idx as usize].is_tag;
+                let current_is_public_input =
+                    permutation_mappings[wire_idx][idx as usize].is_public_input;
+                if current_is_public_input {
                     // We intentionally want to break the cycles of the public input variables.
-                    // During the witness generation, the left and right wire polynomials at index i contain the i-th public
-                    // input. The CyclicPermutation created for these variables always start with (i) -> (n+i), followed by
-                    // the indices of the variables in the "real" gates. We make i point to -(i+1), so that the only way of
-                    // repairing the cycle is add the mapping
+                    // During the witness generation, the left and right wire polynomials at idx i contain the i-th
+                    // public input. The CyclicPermutation created for these variables always start with (i) -> (n+i),
+                    // followed by the indices of the variables in the "real" gates. We make i point to
+                    // -(i+1), so that the only way of repairing the cycle is add the mapping
                     //  -(i+1) -> (n+i)
-                    // These indices are chosen so they can easily be computed by the verifier. They can expect the running
-                    // product to be equal to the "public input delta" that is computed in <honk/utils/grand_product_delta.hpp>
-                    *current_poly = -P::ScalarField::from(
-                        current_mapping.row_index
-                            + 1
-                            + num_gates as u32 * current_mapping.column_index,
+                    // These indices are chosen so they can easily be computed by the verifier. They can expect
+                    // the running product to be equal to the "public input delta" that is computed
+                    // in <honk/utils/grand_product_delta.hpp>
+                    current_permutation_poly[poly_idx] = -P::ScalarField::from(
+                        current_row_idx + 1 + num_gates as u32 * current_col_idx,
                     );
-                } else if current_mapping.is_tag {
+                } else if current_is_tag {
                     // Set evaluations to (arbitrary) values disjoint from non-tag values
-                    *current_poly = P::ScalarField::from(
-                        num_gates as u32 * NUM_WIRES as u32 + current_mapping.row_index,
-                    );
+                    current_permutation_poly[poly_idx] =
+                        P::ScalarField::from(num_gates as u32 * NUM_WIRES as u32 + current_row_idx);
                 } else {
-                    // For the regular permutation we simply point to the next location by setting the evaluation to its
-                    // index
-                    *current_poly = P::ScalarField::from(
-                        current_mapping.row_index + num_gates as u32 * current_mapping.column_index,
-                    );
+                    // For the regular permutation we simply point to the next location by setting the
+                    // evaluation to its idx
+                    current_permutation_poly[poly_idx] =
+                        P::ScalarField::from(current_row_idx + num_gates as u32 * current_col_idx);
                 }
             }
         }

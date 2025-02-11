@@ -11,7 +11,8 @@ use crate::{
     types::AllEntities,
     CoUtils, CONST_PROOF_SIZE_LOG_N, N_MAX,
 };
-use ark_ec::Group;
+use ark_ec::AdditiveGroup;
+use ark_ec::PrimeGroup;
 use ark_ff::{Field, One, Zero};
 use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use co_builder::HonkProofResult;

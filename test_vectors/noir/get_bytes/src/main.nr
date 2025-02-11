@@ -1,4 +1,5 @@
 fn main(x: Field) -> pub [u8; 32] {
+    ///Safety: get_bytes is safe
     unsafe {
         get_bytes(x)
     }

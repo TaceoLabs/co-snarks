@@ -10,6 +10,7 @@ use crate::types::Polynomials;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::prelude::ActiveRegionData;
 use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::PrecomputedEntities;
@@ -50,6 +51,7 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     )]
     pub memory_records_shared: BTreeMap<u32, T::ArithmeticShare>,
     pub final_active_wire_idx: usize,
+    pub active_region_data: ActiveRegionData,
     pub phantom: PhantomData<T>,
 }
 
@@ -239,6 +241,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             contains_pairing_point_accumulator: false,
             pairing_point_accumulator_public_input_indices: [0; AGGREGATION_OBJECT_SIZE],
             memory_records_shared: BTreeMap::new(),
+            active_region_data: ActiveRegionData::new(),
         }
     }
 
@@ -254,12 +257,13 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         tracing::trace!("Populating trace");
 
         let mut trace_data = TraceData::new(builder, self);
-        trace_data.construct_trace_data(id, builder, is_structured);
+        let mut active_region_data = ActiveRegionData::new();
+        trace_data.construct_trace_data(id, builder, is_structured, &mut active_region_data);
 
         let ram_rom_offset = trace_data.ram_rom_offset;
         let copy_cycles = trace_data.copy_cycles;
         self.pub_inputs_offset = trace_data.pub_inputs_offset;
-
+        self.active_region_data = active_region_data;
         PlainProvingKey::add_memory_records_to_proving_key(
             ram_rom_offset,
             builder,
@@ -287,6 +291,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             copy_cycles,
             self.circuit_size as usize,
             self.pub_inputs_offset as usize,
+            &self.active_region_data,
         );
     }
 
@@ -301,6 +306,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         let memory_read_records = plain_key.memory_read_records.to_owned();
         let memory_write_records = plain_key.memory_write_records.to_owned();
         let final_active_wire_idx = plain_key.final_active_wire_idx;
+        let active_region_data = plain_key.active_region_data.to_owned();
 
         if shares.len() != circuit_size as usize * 6 {
             return Err(eyre::eyre!("Share length is not 6 times circuit size"));
@@ -337,6 +343,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
                 .pairing_point_accumulator_public_input_indices
                 .to_owned(),
             memory_records_shared: BTreeMap::new(),
+            active_region_data,
         })
     }
 
