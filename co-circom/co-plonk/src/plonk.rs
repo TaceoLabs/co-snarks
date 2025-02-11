@@ -4,10 +4,8 @@
 //! You will most likely need the plain PLONK implementation to verify a proof from co-PLONK. For that
 //! see the [`Plonk::verify`] method.
 
-use std::{marker::PhantomData, sync::Arc};
-
 use crate::{mpc::plain::PlainPlonkDriver, plonk_utils, types::Domains, CoPlonk};
-use ark_ec::{pairing::Pairing, Group};
+use ark_ec::{pairing::Pairing, PrimeGroup};
 use ark_ff::Field;
 use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof, ZKey},
@@ -16,6 +14,7 @@ use circom_types::{
 use co_circom_snarks::{SharedWitness, VerificationError};
 use num_traits::One;
 use num_traits::Zero;
+use std::{marker::PhantomData, sync::Arc};
 
 use crate::types::Keccak256Transcript;
 

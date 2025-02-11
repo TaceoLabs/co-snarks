@@ -33,7 +33,7 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
         false, // We don't support recursive atm
         0,
         witness,
-        true,
+        1,
         &mut driver,
     )
     .unwrap();

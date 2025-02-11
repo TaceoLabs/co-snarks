@@ -1,9 +1,7 @@
 //  modified from barustenberg:
 
 use super::{Crs, ProverCrs};
-use ark_ec::pairing::Pairing;
-use ark_ec::AffineRepr;
-use ark_ec::CurveGroup;
+use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_serialize::CanonicalDeserialize;
 use eyre::{anyhow, Result};
 use std::fs::File;
@@ -145,6 +143,7 @@ mod tests {
     use super::*;
     use ark_bn254::{Bn254, Fq12, G1Affine, G2Affine};
     use ark_ec::{pairing::Pairing, AffineRepr};
+    use ark_ff::AdditiveGroup;
     use ark_ff::Field;
 
     #[test]

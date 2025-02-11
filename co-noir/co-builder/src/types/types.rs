@@ -11,6 +11,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use mpc_core::lut::LookupTableProvider;
 use num_bigint::BigUint;
+use serde::{Deserialize, Serialize};
 use std::array;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -1912,6 +1913,7 @@ impl<'a, P: Pairing> TraceData<'a, P> {
         &mut self,
         builder: &mut UltraCircuitBuilder<P>,
         is_structured: bool,
+        active_region_data: &mut ActiveRegionData,
     ) {
         tracing::trace!("Construct trace data");
 
@@ -1921,6 +1923,12 @@ impl<'a, P: Pairing> TraceData<'a, P> {
         for block in builder.blocks.get() {
             let block_size = block.len();
 
+            // Save ranges over which the blocks are "active" for use in structured commitments
+            // Mega and Ultra
+            if block_size > 0 {
+                tracing::trace!("Construct active indices");
+                active_region_data.add_range(offset, offset + block_size);
+            }
             // Update wire polynomials and copy cycles
             // NB: The order of row/column loops is arbitrary but needs to be row/column to match old copy_cycle code
 
@@ -2041,5 +2049,51 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         } else {
             FieldCT::from_witness_index(self.index)
         }
+    }
+}
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct ActiveRegionData {
+    ranges: Vec<(usize, usize)>, // active ranges [start_i, end_i) of the execution trace
+    idxs: Vec<usize>,            // full set of poly indices corresposponding to active ranges
+    current_end: usize,          // end of last range; for ensuring monotonicity of ranges
+}
+impl ActiveRegionData {
+    pub fn new() -> Self {
+        Self {
+            ranges: Vec::new(),
+            idxs: Vec::new(),
+            current_end: 0,
+        }
+    }
+
+    pub fn add_range(&mut self, start: usize, end: usize) {
+        assert!(
+            start >= self.current_end,
+            "Ranges should be non-overlapping and increasing"
+        );
+
+        self.ranges.push((start, end));
+        self.idxs.extend(start..end);
+        self.current_end = end;
+    }
+
+    pub fn get_ranges(&self) -> &Vec<(usize, usize)> {
+        &self.ranges
+    }
+
+    pub fn get_idx(&self, idx: usize) -> usize {
+        self.idxs[idx]
+    }
+
+    pub fn get_range(&self, idx: usize) -> (usize, usize) {
+        self.ranges[idx]
+    }
+
+    pub fn size(&self) -> usize {
+        self.idxs.len()
+    }
+
+    pub fn num_ranges(&self) -> usize {
+        self.ranges.len()
     }
 }

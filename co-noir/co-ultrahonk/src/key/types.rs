@@ -2,7 +2,8 @@ use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver};
 use ark_ec::pairing::Pairing;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::prelude::{
-    CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, Polynomial, NUM_SELECTORS, NUM_WIRES,
+    ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, Polynomial,
+    NUM_SELECTORS, NUM_WIRES,
 };
 
 pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: Pairing> {
@@ -66,6 +67,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
         id: T::PartyID,
         builder: &mut GenericUltraCircuitBuilder<P, U>,
         is_structured: bool,
+        active_region_data: &mut ActiveRegionData,
     ) {
         tracing::trace!("Construct trace data");
 
@@ -73,6 +75,13 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
                             // For each block in the trace, populate wire polys, copy cycles and selector polys
         for block in builder.blocks.get() {
             let block_size = block.len();
+
+            // Save ranges over which the blocks are "active" for use in structured commitments
+            // Mega and Ultra
+            if block_size > 0 {
+                tracing::trace!("Construct active indices");
+                active_region_data.add_range(offset, offset + block_size);
+            }
 
             // Update wire polynomials and copy cycles
             // NB: The order of row/column loops is arbitrary but needs to be row/column to match old copy_cycle code
