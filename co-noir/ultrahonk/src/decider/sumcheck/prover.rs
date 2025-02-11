@@ -167,7 +167,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
 
         SumcheckOutput {
-            claimed_evaluations: multivariate_evaluations,
+            _claimed_evaluations: multivariate_evaluations,
             challenges: multivariate_challenge,
         }
     }

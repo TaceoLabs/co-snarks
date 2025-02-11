@@ -138,15 +138,6 @@ impl<P: Pairing> ProverMemory<P> {
             *des = src.into_vec();
         }
 
-        // Shift the tables
-        for (des, src) in izip!(
-            memory.shifted_tables.iter_mut(),
-            polynomials.precomputed.get_table_polynomials()
-        ) {
-            // TACEO TODO use same memory to prevent copying?
-            *des = src.shifted().to_vec();
-        }
-
         // Copy precomputed polynomials
         for (des, src) in izip!(
             memory.precomputed.iter_mut(),

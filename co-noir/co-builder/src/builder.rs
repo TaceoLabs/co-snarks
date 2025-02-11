@@ -1,4 +1,4 @@
-use crate::acir_format::ProgramMetadata;
+use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::{
     acir_format::AcirFormat,
     crs::ProverCrs,
@@ -204,7 +204,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         recursive: bool,
         size_hint: usize,
         witness: Vec<T::AcvmType>,
-        honk_recursion: u32, // 1 for ultrahonk
+        honk_recursion: HonkRecursion, // 1 for ultrahonk
         driver: &mut T,
     ) -> std::io::Result<Self> {
         tracing::trace!("Builder create circuit");
@@ -239,7 +239,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         constraint_system: &AcirFormat<P::ScalarField>,
         recursive: bool,
         size_hint: usize,
-        honk_recursion: u32,
+        honk_recursion: HonkRecursion, // 1 for ultrahonk
         driver: &mut T,
     ) -> eyre::Result<usize> {
         tracing::trace!("Builder create circuit");
@@ -1255,9 +1255,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         if !constraint_system.honk_recursion_constraints.is_empty()
             || !constraint_system.avm_recursion_constraints.is_empty()
         {
-            assert!(metadata.honk_recursion != 0);
+            assert!(metadata.honk_recursion != HonkRecursion::NotHonk);
             self.add_pairing_point_accumulator(current_aggregation_object);
-        } else if metadata.honk_recursion != 0 && self.is_recursive_circuit {
+        } else if metadata.honk_recursion != HonkRecursion::NotHonk && self.is_recursive_circuit {
             // Make sure the verification key records the public input indices of the
             // final recursion output.
             self.add_pairing_point_accumulator(current_aggregation_object);

@@ -3,6 +3,7 @@ use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
+use co_noir::HonkRecursion;
 use co_ultrahonk::prelude::{
     CoUltraHonk, CrsParser, PlainCoBuilder, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey,
     TranscriptFieldType, TranscriptHasher, UltraHonk, Utils,
@@ -48,7 +49,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
         false, // We don't support recursive atm
         0,
         witness,
-        1,
+        HonkRecursion::UltraHonk,
         &mut driver,
     )
     .unwrap();
@@ -84,7 +85,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
         false, // We don't support recursive atm
         0,
         witness,
-        1,
+        HonkRecursion::UltraHonk,
         &mut driver,
     )
     .unwrap();

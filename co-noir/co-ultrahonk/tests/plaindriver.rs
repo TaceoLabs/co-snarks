@@ -1,7 +1,7 @@
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
-use co_builder::prelude::CrsParser;
+use co_builder::prelude::{CrsParser, HonkRecursion};
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, ProvingKey};
 use sha3::Keccak256;
 use ultrahonk::{
@@ -33,7 +33,7 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
         false, // We don't support recursive atm
         0,
         witness,
-        1,
+        HonkRecursion::UltraHonk,
         &mut driver,
     )
     .unwrap();

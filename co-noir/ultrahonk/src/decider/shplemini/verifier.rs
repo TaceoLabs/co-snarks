@@ -23,18 +23,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         evaluations: &ClaimedEvaluations<P::ScalarField>,
     ) -> PolyGShift<P::ScalarField> {
         PolyGShift {
-            tables: &evaluations.shifted_tables,
             wires: &evaluations.shifted_witness,
         }
     }
 
     pub fn get_g_shift_comms(evaluations: &VerifierCommitments<P::G1Affine>) -> PolyG<P::G1Affine> {
         PolyG {
-            tables: evaluations
-                .precomputed
-                .get_table_polynomials()
-                .try_into()
-                .unwrap(),
             wires: evaluations.witness.to_be_shifted().try_into().unwrap(),
         }
     }
@@ -76,11 +70,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     pub fn powers_of_evaluation_challenge(
         gemini_evaluation_challenge: P::ScalarField,
-        proof_size: usize,
+        num_squares: usize,
     ) -> Vec<P::ScalarField> {
-        let mut squares = Vec::with_capacity(proof_size);
+        let mut squares = Vec::with_capacity(num_squares);
         squares.push(gemini_evaluation_challenge);
-        for j in 1..proof_size {
+        for j in 1..num_squares {
             squares.push(squares[j - 1].square());
         }
         squares

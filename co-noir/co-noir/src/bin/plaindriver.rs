@@ -3,6 +3,7 @@ use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
+use co_noir::HonkRecursion;
 use co_ultrahonk::{
     prelude::{
         CoUltraHonk, CrsParser, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey, UltraHonk,
@@ -183,7 +184,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         false, // We don't support recursive atm
         0,
         witness,
-        1,
+        HonkRecursion::UltraHonk,
         &mut driver,
     )
     .context("while creating the circuit")?;

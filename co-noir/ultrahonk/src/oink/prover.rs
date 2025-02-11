@@ -279,30 +279,42 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn compute_grand_product(&mut self, proving_key: &ProvingKey<P>) {
         tracing::trace!("compute grand product");
 
+        let has_active_ranges = proving_key.active_region_data.size() > 0;
+
         // Barratenberg uses multithreading here
 
         // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
         // the permutation grand product does not need to be computed beyond the index of the last active wire
         let domain_size = proving_key.final_active_wire_idx + 1;
-        let domain_upper_limit = domain_size - 1;
+
+        let active_domain_size = if has_active_ranges {
+            proving_key.active_region_data.size()
+        } else {
+            domain_size
+        };
 
         // In Barretenberg circuit size is taken from the q_c polynomial
-        let mut numerator = Vec::with_capacity(domain_upper_limit);
-        let mut denominator = Vec::with_capacity(domain_upper_limit);
+        let mut numerator = Vec::with_capacity(active_domain_size - 1);
+        let mut denominator = Vec::with_capacity(active_domain_size - 1);
 
         // Step (1)
         // Populate `numerator` and `denominator` with the algebra described by Relation
 
-        for i in 0..domain_upper_limit {
-            numerator.push(self.compute_grand_product_numerator(proving_key, i));
-            denominator.push(self.grand_product_denominator(proving_key, i));
+        for i in 0..active_domain_size - 1 {
+            let idx = if has_active_ranges {
+                proving_key.active_region_data.get_idx(i)
+            } else {
+                i
+            };
+            numerator.push(self.compute_grand_product_numerator(proving_key, idx));
+            denominator.push(self.grand_product_denominator(proving_key, idx));
         }
 
         // Step (2)
         // Compute the accumulating product of the numerator and denominator terms.
         // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation signlethreaded for simplicity
 
-        for i in 1..domain_upper_limit {
+        for i in 1..active_domain_size - 1 {
             numerator[i] = numerator[i] * numerator[i - 1];
             denominator[i] = denominator[i] * denominator[i - 1];
         }
@@ -315,12 +327,34 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             .z_perm
             .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
 
-        for (des, num, den) in izip!(
-            self.memory.z_perm.iter_mut().skip(1),
-            numerator.into_iter(),
-            denominator.into_iter()
-        ) {
-            *des = num * den;
+        // For Ultra/Mega, the first row is an inactive zero row thus the grand prod takes value 1 at both i = 0 and i = 1
+        self.memory.z_perm[1] = P::ScalarField::one();
+
+        // Compute grand product values corresponding only to the active regions of the trace
+        for i in 0..active_domain_size - 1 {
+            let idx = if has_active_ranges {
+                proving_key.active_region_data.get_idx(i)
+            } else {
+                i
+            };
+            self.memory.z_perm[idx + 1] = numerator[i] * denominator[i];
+        }
+
+        // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
+        // regions have not yet been set. The polynomial takes an already computed constant value across each inactive
+        // region (since no copy constraints are present there) equal to the value of the grand product at the first index
+        // of the subsequent active region.
+        if has_active_ranges {
+            for i in 0..domain_size {
+                for j in 0..proving_key.active_region_data.num_ranges() - 1 {
+                    let previous_range_end = proving_key.active_region_data.get_range(j).1;
+                    let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
+                    // Set the value of the polynomial if the index falls in an inactive region
+                    if i >= previous_range_end && i < next_range_start {
+                        self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
+                    }
+                }
+            }
         }
     }
 
@@ -376,6 +410,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Commit to the first three wire polynomials of the instance
         // We only commit to the fourth wire polynomial after adding memory records
+
+        // Ultracircuits are not structured
 
         let w_l = Utils::commit(
             proving_key.polynomials.witness.w_l().as_ref(),

@@ -10,7 +10,8 @@ use crate::{
     utils::Utils,
     HonkProofError, HonkProofResult, TranscriptFieldType,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::{pairing::Pairing, AffineRepr};
+use ark_ff::Zero;
 use co_acvm::PlainAcvmSolver;
 
 pub struct VerifyingKey<P: Pairing> {
@@ -49,6 +50,19 @@ impl<P: Pairing> VerifyingKey<P> {
                 .pairing_point_accumulator_public_input_indices,
         }
     }
+
+    pub fn to_barrettenberg(self) -> VerifyingKeyBarretenberg<P> {
+        VerifyingKeyBarretenberg {
+            circuit_size: self.circuit_size as u64,
+            log_circuit_size: Utils::get_msb64(self.circuit_size as u64) as u64,
+            num_public_inputs: self.num_public_inputs as u64,
+            pub_inputs_offset: self.pub_inputs_offset as u64,
+            commitments: self.commitments,
+            contains_pairing_point_accumulator: self.contains_pairing_point_accumulator,
+            pairing_point_accumulator_public_input_indices: self
+                .pairing_point_accumulator_public_input_indices,
+        }
+    }
 }
 
 pub struct VerifyingKeyBarretenberg<P: Pairing> {
@@ -68,6 +82,39 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
         + AGGREGATION_OBJECT_SIZE * 4
         + PRECOMPUTED_ENTITIES_SIZE * 2 * Self::FIELDSIZE_BYTES as usize;
     const SER_COMPRESSED_SIZE: usize = Self::SER_FULL_SIZE - 1 - AGGREGATION_OBJECT_SIZE * 4;
+
+    pub fn to_field_elements(&self) -> Vec<TranscriptFieldType> {
+        let len = 4
+            + self.pairing_point_accumulator_public_input_indices.len()
+            + self.commitments.elements.len() * 2 * P::NUM_BASEFIELD_ELEMENTS;
+        let mut field_elements = Vec::with_capacity(len);
+
+        field_elements.push(TranscriptFieldType::from(self.circuit_size));
+        field_elements.push(TranscriptFieldType::from(self.num_public_inputs));
+        field_elements.push(TranscriptFieldType::from(self.pub_inputs_offset));
+        field_elements.push(TranscriptFieldType::from(
+            self.contains_pairing_point_accumulator,
+        ));
+
+        for val in self.pairing_point_accumulator_public_input_indices.iter() {
+            field_elements.push(TranscriptFieldType::from(*val));
+        }
+
+        for el in self.commitments.iter() {
+            if el.is_zero() {
+                let convert = P::convert_basefield_into(&P::BaseField::zero());
+                field_elements.extend_from_slice(&convert);
+                field_elements.extend(convert);
+            } else {
+                let (x, y) = P::g1_affine_to_xy(el);
+                field_elements.extend(P::convert_basefield_into(&x));
+                field_elements.extend(P::convert_basefield_into(&y));
+            }
+        }
+
+        debug_assert_eq!(field_elements.len(), len);
+        field_elements
+    }
 
     pub fn to_buffer(&self) -> Vec<u8> {
         let mut buffer = Vec::with_capacity(Self::SER_FULL_SIZE);

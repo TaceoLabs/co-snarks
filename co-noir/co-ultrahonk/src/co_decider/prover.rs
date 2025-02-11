@@ -1,5 +1,5 @@
 use super::{
-    co_sumcheck::SumcheckOutput, co_zeromorph::ZeroMorphOpeningClaim, types::ProverMemory,
+    co_shplemini::ShpleminiOpeningClaim, co_sumcheck::SumcheckOutput, types::ProverMemory,
 };
 use crate::{mpc::NoirUltraHonkProver, CoUtils};
 use co_builder::{
@@ -37,14 +37,14 @@ impl<
 
     fn compute_opening_proof(
         driver: &mut T,
-        opening_claim: ZeroMorphOpeningClaim<T, P>,
+        opening_claim: ShpleminiOpeningClaim<T, P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         let mut quotient = opening_claim.polynomial;
         let pair = opening_claim.opening_pair;
 
-        quotient[0] = driver.add_with_public(-pair.evaluation, quotient[0]);
+        quotient[0] = driver.sub(quotient[0], pair.evaluation);
         // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
         quotient.factor_roots(driver, &pair.challenge);
         let quotient_commitment = CoUtils::commit::<T, P>(&quotient.coefficients, crs);

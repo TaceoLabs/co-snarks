@@ -1,9 +1,8 @@
 use super::types::{PolyF, PolyG};
 use crate::{
     co_decider::{
-        co_shplemini::{ShpleminiOpeningClaim, ShpleminiOpeningPair},
+        co_shplemini::{OpeningPair, ShpleminiOpeningClaim},
         co_sumcheck::SumcheckOutput,
-        co_zeromorph::{OpeningPair, ZeroMorphOpeningClaim},
         polynomial::SharedPolynomial,
         prover::CoDecider,
     },
@@ -11,7 +10,7 @@ use crate::{
     types::AllEntities,
     CoUtils, CONST_PROOF_SIZE_LOG_N,
 };
-use ark_ec::PrimeGroup;
+use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use co_builder::HonkProofResult;
@@ -37,37 +36,10 @@ impl<
 
     fn get_g_polynomials(
         polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
-    ) -> PolyG<Vec<T::ArithmeticShare>, Vec<P::ScalarField>> {
-        let tables = [
-            polys.precomputed.table_1(),
-            polys.precomputed.table_2(),
-            polys.precomputed.table_3(),
-            polys.precomputed.table_4(),
-        ];
-
-        let wires = [
-            polys.witness.w_l(),
-            polys.witness.w_r(),
-            polys.witness.w_o(),
-            polys.witness.w_4(),
-        ];
-
+    ) -> PolyG<Vec<T::ArithmeticShare>> {
         PolyG {
-            tables,
-            wires,
-            z_perm: polys.witness.z_perm(),
+            wires: polys.witness.to_be_shifted().try_into().unwrap(),
         }
-    }
-    pub fn powers_of_evaluation_challenge(
-        gemini_evaluation_challenge: P::ScalarField,
-        proof_size: &usize,
-    ) -> Vec<P::ScalarField> {
-        let mut squares = Vec::with_capacity(*proof_size);
-        squares.push(gemini_evaluation_challenge);
-        for j in 1..*proof_size {
-            squares.push(squares[j - 1] * squares[j - 1]);
-        }
-        squares
     }
 
     fn compute_batched_polys(
@@ -88,62 +60,74 @@ impl<
         // Note: g_batched is formed from the to-be-shifted polynomials, but the batched evaluation incorporates the
         // evaluations produced by sumcheck of h_i = g_i_shifted.
 
-        let mut batching_scalar = P::ScalarField::ONE;
-        let mut f_batched = Polynomial::new_zero(n); // batched unshifted polynomials
+        let mut rho_challenge = P::ScalarField::ONE;
+        let mut batched_unshifted = Polynomial::new_zero(n); // batched unshifted polynomials
 
-        // Precomputed part of f_batched
+        // Precomputed part of batched_unshifted
         for f_poly in f_polynomials.precomputed.iter() {
-            f_batched.add_scaled_slice(f_poly, &batching_scalar);
-
-            batching_scalar *= rho;
+            batched_unshifted.add_scaled_slice(f_poly, &rho_challenge);
+            rho_challenge *= rho;
         }
 
-        // Shared part of f_batched
-        let mut f_batched = SharedPolynomial::<T, P>::promote_poly(&self.driver, f_batched);
+        // Shared part of batched_unshifted
+        let mut batched_unshifted =
+            SharedPolynomial::<T, P>::promote_poly(&self.driver, batched_unshifted);
         for f_poly in f_polynomials.witness.iter() {
-            f_batched.add_scaled_slice(&mut self.driver, f_poly, &batching_scalar);
-
-            batching_scalar *= rho;
+            batched_unshifted.add_scaled_slice(&mut self.driver, f_poly, &rho_challenge);
+            rho_challenge *= rho;
         }
 
-        // For g_batched the order of public first and shared later is ok
-        let mut g_batched = Polynomial::new_zero(n); // batched to-be-shifted polynomials
+        // For batched_to_be_shifted we only have shared
+        let mut batched_to_be_shifted = SharedPolynomial::<T, P>::new_zero(n); // batched to-be-shifted polynomials
 
-        // Public part of g_batched
-        for g_poly in g_polynomials.public_iter() {
-            g_batched.add_scaled_slice(g_poly, &batching_scalar);
-
-            batching_scalar *= rho;
+        for g_poly in g_polynomials.iter() {
+            batched_to_be_shifted.add_scaled_slice(&mut self.driver, g_poly, &rho_challenge);
+            rho_challenge *= rho;
         }
 
-        // Shared part of g_batched
-        let mut g_batched = SharedPolynomial::<T, P>::promote_poly(&self.driver, g_batched);
-        for g_poly in g_polynomials.shared_iter() {
-            g_batched.add_scaled_slice(&mut self.driver, g_poly, &batching_scalar);
-
-            batching_scalar *= rho;
-        }
-
-        (f_batched, g_batched)
+        (batched_unshifted, batched_to_be_shifted)
     }
 
-    /**
-     * @brief  * @brief Returns a univariate opening claim equivalent to a set of multilinear evaluation claims for
-     * unshifted polynomials f_i and to-be-shifted polynomials g_i to be subsequently proved with a univariate PCS
-     *
-     * @param f_polynomials Unshifted polynomials
-     * @param g_polynomials To-be-shifted polynomials (of which the shifts h_i were evaluated by sumcheck)
-     * @param evaluations Set of evaluations v_i = f_i(u), w_i = h_i(u) = g_i_shifted(u)
-     * @param multilinear_challenge Multilinear challenge point u
-     * @param commitment_key
-     * @param transcript
-     *
-     * @AZTEC todo https://github.com/AztecProtocol/barretenberg/issues/1030: document concatenation trick
-     */
+    // /**
+    //  * @brief Protocol for opening several multi-linear polynomials at the same point.
+    //  *
+    //  *
+    //  * m = number of variables
+    //  * n = 2ᵐ
+    //  * u = (u₀,...,uₘ₋₁)
+    //  * f₀, …, fₖ₋₁ = multilinear polynomials,
+    //  * g₀, …, gₕ₋₁ = shifted multilinear polynomial,
+    //  *  Each gⱼ is the left-shift of some f↺ᵢ, and gⱼ points to the same memory location as fᵢ.
+    //  * v₀, …, vₖ₋₁, v↺₀, …, v↺ₕ₋₁ = multilinear evalutions  s.t. fⱼ(u) = vⱼ, and gⱼ(u) = f↺ⱼ(u) = v↺ⱼ
+    //  *
+    //  * We use a challenge ρ to create a random linear combination of all fⱼ,
+    //  * and actually define A₀ = F + G↺, where
+    //  *   F  = ∑ⱼ ρʲ fⱼ
+    //  *   G  = ∑ⱼ ρᵏ⁺ʲ gⱼ,
+    //  *   G↺ = is the shift of G
+    //  * where fⱼ is normal, and gⱼ is shifted.
+    //  * The evaluations are also batched, and
+    //  *   v  = ∑ ρʲ⋅vⱼ + ∑ ρᵏ⁺ʲ⋅v↺ⱼ = F(u) + G↺(u)
+    //  *
+    //  * The prover then creates the folded polynomials A₀, ..., Aₘ₋₁,
+    //  * and opens them at different points, as univariates.
+    //  *
+    //  * We open A₀ as univariate at r and -r.
+    //  * Since A₀ = F + G↺, but the verifier only has commitments to the gⱼs,
+    //  * we need to partially evaluate A₀ at both evaluation points.
+    //  * As univariate, we have
+    //  *  A₀(X) = F(X) + G↺(X) = F(X) + G(X)/X
+    //  * So we define
+    //  *  - A₀₊(X) = F(X) + G(X)/r
+    //  *  - A₀₋(X) = F(X) − G(X)/r
+    //  * So that A₀₊(r) = A₀(r) and A₀₋(-r) = A₀(-r).
+    //  * The verifier is able to computed the simulated commitments to A₀₊(X) and A₀₋(X)
+    //  * since they are linear-combinations of the commitments [fⱼ] and [gⱼ].
+    //  */
     pub(crate) fn gemini_prove(
         &mut self,
         multilinear_challenge: Vec<P::ScalarField>,
-        log_n: u32,
+        log_n: usize,
         commitment_key: &ProverCrs<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<T, P>>> {
@@ -153,52 +137,57 @@ impl<
         // Compute batched polynomials
         let (batched_unshifted, batched_to_be_shifted) = self.compute_batched_polys(transcript, n);
 
-        let fold_polynomials = self.compute_fold_polynomials(
-            log_n as usize,
-            multilinear_challenge,
-            batched_unshifted,
-            batched_to_be_shifted,
-        );
+        // Construct the batched polynomial A₀(X) = F(X) + G↺(X) = F(X) + G(X)/X
+        let mut a_0 = batched_unshifted.to_owned();
+        a_0.add_assign_slice(&mut self.driver, batched_to_be_shifted.shifted());
 
-        // Compute and send commitments C_{q_k} = [q_k], k = 0,...,d-1
-        let mut commitments = Vec::with_capacity(log_n as usize);
-        for q in fold_polynomials.iter().skip(2) {
-            let commitment = CoUtils::commit::<T, P>(q.as_ref(), commitment_key);
-            commitments.push(commitment);
+        // Construct the d-1 Gemini foldings of A₀(X)
+        let fold_polynomials = self.compute_fold_polynomials(log_n, multilinear_challenge, a_0);
+
+        let mut commitments = Vec::with_capacity(fold_polynomials.len());
+        for f_poly in fold_polynomials.iter().take(CONST_PROOF_SIZE_LOG_N) {
+            commitments.push(CoUtils::commit::<T, P>(
+                &f_poly.coefficients,
+                commitment_key,
+            ));
         }
         let commitments = self.driver.open_point_many(&commitments)?;
-        for (idx, val) in commitments.into_iter().enumerate() {
-            let label = format!("Gemini:FOLD_{}", idx + 1);
-            transcript.send_point_to_verifier::<P>(label, val.into());
+        for (l, res) in commitments.into_iter().enumerate() {
+            transcript.send_point_to_verifier::<P>(format!("Gemini:a_{}", l + 1), res.into());
         }
-        // Add buffer elements to remove log_N dependence in proof
-        for idx in log_n as usize..CONST_PROOF_SIZE_LOG_N {
-            let res = P::G1::generator();
-            let label = format!("Gemini:FOLD_{}", idx);
-            transcript.send_point_to_verifier::<P>(label, res.into());
+        let res = P::G1Affine::generator();
+        for l in fold_polynomials.len()..CONST_PROOF_SIZE_LOG_N - 1 {
+            transcript.send_point_to_verifier::<P>(format!("Gemini:a_{}", l + 1), res);
         }
 
         let r_challenge: P::ScalarField = transcript.get_challenge::<P>("Gemini:r".to_string());
 
-        let claims = self.compute_fold_polynomial_evaluations(fold_polynomials, r_challenge)?;
-        let mut commitments_claims = Vec::with_capacity(log_n as usize);
-        commitments_claims.extend(
-            claims
-                .iter()
-                .take(log_n as usize + 1)
-                .map(|claim| claim.opening_pair.evaluation),
+        let (a_0_pos, a_0_neg) = self.compute_partially_evaluated_batch_polynomials(
+            batched_unshifted,
+            batched_to_be_shifted,
+            r_challenge,
         );
 
-        let commitments_claims = self.driver.open_many(&commitments_claims)?;
+        let claims = self.construct_univariate_opening_claims(
+            log_n,
+            a_0_pos,
+            a_0_neg,
+            fold_polynomials,
+            r_challenge,
+        );
 
-        for l in 1..=CONST_PROOF_SIZE_LOG_N {
-            if l < commitments_claims.len() && l <= log_n as usize {
-                transcript
-                    .send_fr_to_verifier::<P>(format!("Gemini:a_{}", l), commitments_claims[l]);
-            } else {
-                transcript
-                    .send_fr_to_verifier::<P>(format!("Gemini:a_{}", l), P::ScalarField::zero());
-            }
+        let claim_eval = claims
+            .iter()
+            .skip(1)
+            .take(CONST_PROOF_SIZE_LOG_N)
+            .map(|claim| claim.opening_pair.evaluation)
+            .collect::<Vec<_>>();
+        let claim_eval = self.driver.open_many(&claim_eval)?;
+        for (l, claim) in claim_eval.into_iter().enumerate() {
+            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l + 1), claim);
+        }
+        for l in claims.len()..=CONST_PROOF_SIZE_LOG_N {
+            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l), P::ScalarField::zero());
         }
 
         Ok(claims)
@@ -206,38 +195,26 @@ impl<
 
     pub(crate) fn compute_fold_polynomials(
         &mut self,
-        num_variables: usize,
-        mle_opening_point: Vec<P::ScalarField>,
-        batched_unshifted: SharedPolynomial<T, P>,
-        batched_to_be_shifted: SharedPolynomial<T, P>,
+        log_n: usize,
+        multilinear_challenge: Vec<P::ScalarField>,
+        a_0: SharedPolynomial<T, P>,
     ) -> Vec<SharedPolynomial<T, P>> {
         tracing::trace!("Compute fold polynomials");
         // Note: bb uses multithreading here
-        let mut fold_polynomials: Vec<SharedPolynomial<T, P>> =
-            Vec::with_capacity(num_variables + 1);
-
-        // A₀(X) = F(X) + G↺(X) = F(X) + G(X)/X
-        let mut a_0 = batched_unshifted.clone();
-
-        // If proving the opening for translator, add a non-zero contribution of the batched concatenation polynomials
-        a_0.add_assign_slice(&mut self.driver, batched_to_be_shifted.shifted());
-
-        // F(X) = ∑ⱼ ρʲ fⱼ(X) and G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
-        fold_polynomials.push(batched_unshifted);
-        fold_polynomials.push(batched_to_be_shifted);
+        let mut fold_polynomials: Vec<SharedPolynomial<T, P>> = Vec::with_capacity(log_n + 1);
 
         // A_l = Aₗ(X) is the polynomial being folded
         // in the first iteration, we take the batched polynomial
         // in the next iteration, it is the previously folded one
         let mut a_l = a_0.coefficients;
-        debug_assert!(mle_opening_point.len() >= num_variables - 1);
-        for (l, u_l) in mle_opening_point
+        debug_assert!(multilinear_challenge.len() >= log_n - 1);
+        for (l, u_l) in multilinear_challenge
             .into_iter()
-            .take(num_variables - 1)
+            .take(log_n - 1)
             .enumerate()
         {
             // size of the previous polynomial/2
-            let n_l = 1 << (num_variables - l - 1);
+            let n_l = 1 << (log_n - l - 1);
 
             // A_l_fold = Aₗ₊₁(X) = (1-uₗ)⋅even(Aₗ)(X) + uₗ⋅odd(Aₗ)(X)
             let mut a_l_fold = SharedPolynomial::<T, P>::new_zero(n_l);
@@ -261,89 +238,112 @@ impl<
 
         fold_polynomials
     }
-    /**
-     * @brief Computes/aggragates d+1 Fold polynomials and their opening pairs (challenge, evaluation)
-     *
-     * @details This function assumes that, upon input, last d-1 entries in fold_polynomials are Fold_i.
-     * The first two entries are assumed to be, respectively, the batched unshifted and batched to-be-shifted
-     * polynomials F(X) = ∑ⱼ ρʲfⱼ(X) and G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X). This function completes the computation
-     * of the first two Fold polynomials as F + G/r and F - G/r. It then evaluates each of the d+1
-     * fold polynomials at, respectively, the points r, rₗ = r^{2ˡ} for l = 0, 1, ..., d-1.
-     *
-     * @param mle_opening_point u = (u₀,...,uₘ₋₁) is the MLE opening point
-     * @param fold_polynomials vector of polynomials whose first two elements are F(X) = ∑ⱼ ρʲfⱼ(X)
-     * and G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X), and the next d-1 elements are Fold_i, i = 1, ..., d-1.
-     * @param r_challenge univariate opening challenge
-     */
-    pub(crate) fn compute_fold_polynomial_evaluations(
+
+    // /**
+    //  * @brief Computes partially evaluated batched polynomials A₀₊(X) = F(X) + G(X)/r and A₀₋(X) = F(X) - G(X)/r
+    //  *
+    fn compute_partially_evaluated_batch_polynomials(
         &mut self,
-        mut fold_polynomials: Vec<SharedPolynomial<T, P>>,
+        batched_f: SharedPolynomial<T, P>,
+        mut batched_g: SharedPolynomial<T, P>,
         r_challenge: P::ScalarField,
-    ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<T, P>>> {
-        tracing::trace!("Compute fold polynomial evaluations");
+    ) -> (SharedPolynomial<T, P>, SharedPolynomial<T, P>) {
+        tracing::trace!("Compute_partially_evaluated_batch_polynomials");
 
-        let num_variables = fold_polynomials.len() - 1;
-        let batched_f = &mut fold_polynomials.remove(0); // F(X) = ∑ⱼ ρʲ fⱼ(X)
-        let batched_g = &mut fold_polynomials.remove(0); // G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X)
+        let mut a_0_pos = batched_f.to_owned(); // A₀₊ = F
+        let mut a_0_neg = batched_f; // A₀₋ = F
 
-        // Compute univariate opening queries rₗ = r^{2ˡ} for l = 0, 1, ..., m-1
-        let r_squares = Self::powers_of_evaluation_challenge(r_challenge, &num_variables);
-
-        // Compute G / r and update batched_G
+        // Compute G/r
         let r_inv = r_challenge.inverse().unwrap();
-        let mut batched_g_div_r = batched_g.clone();
-        batched_g_div_r.coefficients.iter_mut().for_each(|x| {
+        batched_g.coefficients.iter_mut().for_each(|x| {
             *x = self.driver.mul_with_public(r_inv, *x);
         });
 
-        // Construct A₀₊ = F + G/r and A₀₋ = F - G/r in place in fold_polynomials
+        a_0_pos.add_assign_slice(&mut self.driver, batched_g.as_ref()); // A₀₊ = F + G/r
+        a_0_neg.sub_assign_slice(&mut self.driver, batched_g.as_ref()); // A₀₋ = F - G/r
 
-        // A₀₊(X) = F(X) + G(X)/r, s.t. A₀₊(r) = A₀(r)
-        let mut a_0_pos = batched_f.clone();
-        a_0_pos.add_assign_slice(&mut self.driver, batched_g_div_r.as_ref());
+        (a_0_pos, a_0_neg)
+    }
 
-        // A₀₋(X) = F(X) - G(X)/r, s.t. A₀₋(-r) = A₀(-r)
-        let mut a_0_neg = batched_f.clone();
-        let mut batched_g_div_r_neg = batched_g_div_r;
-        batched_g_div_r_neg.coefficients.iter_mut().for_each(|x| {
-            *x = self.driver.neg(*x);
-        });
-        a_0_neg.add_assign_slice(&mut self.driver, batched_g_div_r_neg.as_ref()); //TACEO TODO is this always correct?
+    fn powers_of_evaluation_challenge(
+        gemini_evaluation_challenge: P::ScalarField,
+        num_squares: usize,
+    ) -> Vec<P::ScalarField> {
+        let mut squares = Vec::with_capacity(num_squares);
+        squares.push(gemini_evaluation_challenge);
+        for j in 1..num_squares {
+            squares.push(squares[j - 1].square());
+        }
+        squares
+    }
 
-        fold_polynomials.insert(0, a_0_pos);
-        fold_polynomials.insert(1, a_0_neg);
-        // end
-        let mut opening_claims: Vec<ShpleminiOpeningClaim<T, P>> =
-            Vec::with_capacity(num_variables + 1);
+    // /**
+    //  *
+    //  * @param mle_opening_point u = (u₀,...,uₘ₋₁) is the MLE opening point
+    //  * @param fold_polynomials vector of polynomials whose first two elements are F(X) = ∑ⱼ ρʲfⱼ(X)
+    //  * and G(X) = ∑ⱼ ρᵏ⁺ʲ gⱼ(X), and the next d-1 elements are Fold_i, i = 1, ..., d-1.
+    //  * @param r_challenge univariate opening challenge
+    //  */
+    // /**
+    //  * @brief Computes/aggragates d+1 univariate polynomial opening claims of the form {polynomial, (challenge, evaluation)}
+    //  *
+    //  * @details The d+1 evaluations are A₀₊(r), A₀₋(-r), and Aₗ(−r^{2ˡ}) for l = 1, ..., d-1, where the Aₗ are the fold
+    //  * polynomials.
+    //  *
+    //  * @param A_0_pos A₀₊
+    //  * @param A_0_neg A₀₋
+    //  * @param fold_polynomials Aₗ, l = 1, ..., d-1
+    //  * @param r_challenge
+    //  * @return std::vector<typename GeminiProver_<Curve>::Claim> d+1 univariate opening claims
+    //  */
+    fn construct_univariate_opening_claims(
+        &mut self,
+        log_n: usize,
+        a_0_pos: SharedPolynomial<T, P>,
+        a_0_neg: SharedPolynomial<T, P>,
+        fold_polynomials: Vec<SharedPolynomial<T, P>>,
+        r_challenge: P::ScalarField,
+    ) -> Vec<ShpleminiOpeningClaim<T, P>> {
+        let mut claims = Vec::with_capacity(log_n + 1);
 
-        let mut fold_polynomials_iter = fold_polynomials.into_iter();
-
-        // Compute first opening pair {r, A₀(r)}
-        let fold_poly = fold_polynomials_iter.next().expect("Is Present");
-        let evaluation: <T as NoirUltraHonkProver<P>>::ArithmeticShare =
-            self.driver.eval_poly(fold_poly.as_ref(), r_challenge);
-        opening_claims.push(ShpleminiOpeningClaim {
-            polynomial: fold_poly,
-            opening_pair: ShpleminiOpeningPair {
+        // Compute evaluation of partially evaluated batch polynomial (positive) A₀₊(r)
+        let evaluation = self.driver.eval_poly(a_0_pos.as_ref(), r_challenge);
+        claims.push(ShpleminiOpeningClaim {
+            polynomial: a_0_pos,
+            opening_pair: OpeningPair {
                 challenge: r_challenge,
                 evaluation,
             },
         });
+        // Compute evaluation of partially evaluated batch polynomial (negative) A₀₋(-r)
+        let evaluation = self.driver.eval_poly(a_0_neg.as_ref(), -r_challenge);
+        claims.push(ShpleminiOpeningClaim {
+            polynomial: a_0_neg,
+            opening_pair: OpeningPair {
+                challenge: -r_challenge,
+                evaluation,
+            },
+        });
 
-        // Compute the remaining m opening pairs {−r^{2ˡ}, Aₗ(−r^{2ˡ})}, l = 0, ..., m-1
-        for (r_square, fold_poly) in r_squares.into_iter().zip(fold_polynomials_iter) {
+        // Compute univariate opening queries rₗ = r^{2ˡ} for l = 0, 1, ..., m-1
+        let r_squares = Self::powers_of_evaluation_challenge(r_challenge, log_n);
+
+        // Compute the remaining m opening pairs {−r^{2ˡ}, Aₗ(−r^{2ˡ})}, l = 1, ..., m-1.
+
+        for (r_square, fold_poly) in r_squares.into_iter().skip(1).zip(fold_polynomials) {
             let evaluation = self.driver.eval_poly(fold_poly.as_ref(), -r_square);
-            opening_claims.push(ShpleminiOpeningClaim {
+            claims.push(ShpleminiOpeningClaim {
                 polynomial: fold_poly,
-                opening_pair: ShpleminiOpeningPair {
+                opening_pair: OpeningPair {
                     challenge: -r_square,
                     evaluation,
                 },
             });
         }
 
-        Ok(opening_claims)
+        claims
     }
+
     /**
      * @brief Returns a batched opening claim equivalent to a set of opening claims consisting of polynomials, each
      * opened at a single point.
@@ -358,7 +358,7 @@ impl<
         opening_claims: Vec<ShpleminiOpeningClaim<T, P>>,
         commitment_key: &ProverCrs<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-    ) -> HonkProofResult<ZeroMorphOpeningClaim<T, P>> {
+    ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         tracing::trace!("Shplonk prove");
         let nu = transcript.get_challenge::<P>("Shplonk:nu".to_string());
         let batched_quotient =
@@ -387,12 +387,12 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
-    ) -> HonkProofResult<ZeroMorphOpeningClaim<T, P>> {
+    ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         tracing::trace!("Shplemini prove");
         let log_circuit_size = Utils::get_msb32(circuit_size);
         let opening_claims = self.gemini_prove(
             sumcheck_output.challenges,
-            log_circuit_size,
+            log_circuit_size as usize,
             crs,
             transcript,
         )?;
@@ -415,7 +415,7 @@ impl<
         batched_quotient_q: SharedPolynomial<T, P>,
         nu_challenge: P::ScalarField,
         z_challenge: P::ScalarField,
-    ) -> ZeroMorphOpeningClaim<T, P> {
+    ) -> ShpleminiOpeningClaim<T, P> {
         tracing::trace!("Compute partially evaluated batched quotient");
         let num_opening_claims = opening_claims.len();
 
@@ -442,11 +442,11 @@ impl<
             current_nu *= nu_challenge;
         }
 
-        crate::co_decider::co_zeromorph::ZeroMorphOpeningClaim {
+        ShpleminiOpeningClaim {
             polynomial: g,
             opening_pair: OpeningPair {
                 challenge: z_challenge,
-                evaluation: P::ScalarField::zero(),
+                evaluation: T::ArithmeticShare::default(),
             },
         }
     }

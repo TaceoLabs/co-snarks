@@ -2,6 +2,7 @@ use super::plookup::MultiTableId;
 use crate::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder};
 use crate::keys::proving_key::ProvingKey;
 use crate::polynomials::polynomial::Polynomial;
+use crate::prelude::{PrecomputedEntities, ProverWitnessEntities};
 use crate::types::plookup::BasicTableId;
 use crate::utils::Utils;
 use ark_ec::pairing::Pairing;
@@ -150,11 +151,11 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
 
 pub struct UltraTraceBlocks<T: Default> {
     pub(crate) pub_inputs: T,
+    pub(crate) lookup: T,
     pub(crate) arithmetic: T,
     pub(crate) delta_range: T,
     pub(crate) elliptic: T,
     pub(crate) aux: T,
-    pub(crate) lookup: T,
     pub(crate) poseidon2_external: T,
     pub(crate) poseidon2_internal: T,
 }
@@ -163,11 +164,11 @@ impl<T: Default> UltraTraceBlocks<T> {
     pub fn get(&self) -> [&T; 8] {
         [
             &self.pub_inputs,
+            &self.lookup,
             &self.arithmetic,
             &self.delta_range,
             &self.elliptic,
             &self.aux,
-            &self.lookup,
             &self.poseidon2_external,
             &self.poseidon2_internal,
         ]
@@ -176,11 +177,11 @@ impl<T: Default> UltraTraceBlocks<T> {
     pub fn get_mut(&mut self) -> [&mut T; 8] {
         [
             &mut self.pub_inputs,
+            &mut self.lookup,
             &mut self.arithmetic,
             &mut self.delta_range,
             &mut self.elliptic,
             &mut self.aux,
-            &mut self.lookup,
             &mut self.poseidon2_external,
             &mut self.poseidon2_internal,
         ]
@@ -254,41 +255,24 @@ impl<F: PrimeField> UltraTraceBlocks<UltraTraceBlock<F>> {
 }
 
 impl<F: PrimeField> UltraTraceBlock<F> {
-    /// wire column 0
-    const W_L: usize = 0;
-    /// wire column 1
-    const W_R: usize = 1;
-    /// wire column 2
-    const W_O: usize = 2;
-    /// wire column 3
-    const W_4: usize = 3;
+    const W_L: usize = ProverWitnessEntities::<F>::W_L;
+    const W_R: usize = ProverWitnessEntities::<F>::W_R;
+    const W_O: usize = ProverWitnessEntities::<F>::W_O;
+    const W_4: usize = ProverWitnessEntities::<F>::W_4;
 
-    /// selector column 0
-    const Q_M: usize = 0;
-    /// selector column 1
-    const Q_C: usize = 1;
-    /// selector column 2
-    const Q_1: usize = 2;
-    /// selector column 3
-    const Q_2: usize = 3;
-    /// selector column 4
-    const Q_3: usize = 4;
-    /// selector column 5
-    const Q_4: usize = 5;
-    /// selector column 6
-    const Q_ARITH: usize = 6;
-    /// selector column 7
-    const Q_DELTA_RANGE: usize = 7;
-    /// selector column 8
-    const Q_ELLIPTIC: usize = 8;
-    /// selector column 9
-    const Q_AUX: usize = 9;
-    /// selector column 10
-    const Q_LOOKUP_TYPE: usize = 10;
-    /// selector column 11
-    const Q_POSEIDON2_EXTERNAL: usize = 11;
-    /// selector column 12
-    const Q_POSEIDON2_INTERNAL: usize = 12;
+    const Q_M: usize = PrecomputedEntities::<F>::Q_M;
+    const Q_C: usize = PrecomputedEntities::<F>::Q_C;
+    const Q_1: usize = PrecomputedEntities::<F>::Q_L;
+    const Q_2: usize = PrecomputedEntities::<F>::Q_R;
+    const Q_3: usize = PrecomputedEntities::<F>::Q_O;
+    const Q_4: usize = PrecomputedEntities::<F>::Q_4;
+    const Q_ARITH: usize = PrecomputedEntities::<F>::Q_ARITH;
+    const Q_DELTA_RANGE: usize = PrecomputedEntities::<F>::Q_DELTA_RANGE;
+    const Q_ELLIPTIC: usize = PrecomputedEntities::<F>::Q_ELLIPTIC;
+    const Q_AUX: usize = PrecomputedEntities::<F>::Q_AUX;
+    const Q_LOOKUP_TYPE: usize = PrecomputedEntities::<F>::Q_LOOKUP;
+    const Q_POSEIDON2_EXTERNAL: usize = PrecomputedEntities::<F>::Q_POSEIDON2_EXTERNAL;
+    const Q_POSEIDON2_INTERNAL: usize = PrecomputedEntities::<F>::Q_POSEIDON2_INTERNAL;
 
     pub(crate) fn w_l(&mut self) -> &mut Vec<u32> {
         &mut self.wires[Self::W_L]

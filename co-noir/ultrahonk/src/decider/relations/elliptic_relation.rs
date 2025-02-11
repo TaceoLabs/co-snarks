@@ -1,9 +1,9 @@
 use crate::decider::types::{ClaimedEvaluations, RelationParameters};
 use crate::decider::{types::ProverUnivariates, univariate::Univariate};
 use crate::transcript::TranscriptFieldType;
+use ark_ff::AdditiveGroup;
 use ark_ff::{Field, PrimeField, Zero};
 use co_builder::prelude::HonkCurve;
-use ark_ff::AdditiveGroup;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EllipticRelationAcc<F: PrimeField> {
     pub(crate) r0: Univariate<F, 6>,

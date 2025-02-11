@@ -1,4 +1,4 @@
-pub use crate::acir_format::AcirFormat;
+pub use crate::acir_format::{AcirFormat, HonkRecursion};
 pub use crate::builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder};
 pub use crate::crs::parse::CrsParser;
 pub use crate::crs::Crs;
