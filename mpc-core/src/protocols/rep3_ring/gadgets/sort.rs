@@ -69,12 +69,12 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     apply_inv_field(&perm, &priv_inputs, io_context0, io_context1)
 }
 
-/// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
+/// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). The values in inputs need to be organized such that the values according to priv must come before the values according to pub. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
     priv_key: &[FieldShare<F>],
     pub_key: &[F],
-    inputs: Vec<&[FieldShare<F>]>,
+    inputs: Vec<Vec<FieldShare<F>>>,
     io_context0: &mut IoContext<N>,
     io_context1: &mut IoContext<N>,
     bitsize: usize,
@@ -93,7 +93,7 @@ pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
     let mut results = Vec::with_capacity(inputs.len());
     let perm = gen_perm(priv_key, pub_key, bitsize, io_context0, io_context1)?;
     for inp in inputs {
-        results.push(apply_inv_field(&perm, inp, io_context0, io_context1)?)
+        results.push(apply_inv_field(&perm, &inp, io_context0, io_context1)?)
     }
     Ok(results)
 }
