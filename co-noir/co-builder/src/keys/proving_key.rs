@@ -40,7 +40,11 @@ impl<P: Pairing> ProvingKey<P> {
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<Self> {
         tracing::trace!("ProvingKey create");
-        assert!(circuit.circuit_finalized);
+
+        assert!(
+            circuit.circuit_finalized,
+            "the circuit must be finalized before creating the  proving key"
+        );
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
 

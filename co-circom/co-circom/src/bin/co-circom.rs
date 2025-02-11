@@ -45,33 +45,33 @@ impl std::fmt::Display for ProofSystem {
     }
 }
 
-/// An enum representing the MPC protocol to use.
+/// An enum representing the curve to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum MPCCurve {
+pub enum Curve {
     /// The BN254 curve (called BN128 in circom).
     BN254,
     /// The BLS12_381 curve.
     BLS12_381,
 }
 
-impl ValueEnum for MPCCurve {
+impl ValueEnum for Curve {
     fn value_variants<'a>() -> &'a [Self] {
-        &[MPCCurve::BN254, MPCCurve::BLS12_381]
+        &[Curve::BN254, Curve::BLS12_381]
     }
 
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         match self {
-            MPCCurve::BN254 => Some(clap::builder::PossibleValue::new("BN254")),
-            MPCCurve::BLS12_381 => Some(clap::builder::PossibleValue::new("BLS12-381")),
+            Curve::BN254 => Some(clap::builder::PossibleValue::new("BN254")),
+            Curve::BLS12_381 => Some(clap::builder::PossibleValue::new("BLS12-381")),
         }
     }
 }
 
-impl std::fmt::Display for MPCCurve {
+impl std::fmt::Display for Curve {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MPCCurve::BN254 => write!(f, "BN254"),
-            MPCCurve::BLS12_381 => write!(f, "BLS12-381"),
+            Curve::BN254 => write!(f, "BN254"),
+            Curve::BLS12_381 => write!(f, "BLS12-381"),
         }
     }
 }
@@ -119,7 +119,7 @@ pub struct SplitWitnessCli {
     /// The pairing friendly curve to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub curve: Option<MPCCurve>,
+    pub curve: Option<Curve>,
     /// The path to the (existing) output directory
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -142,7 +142,7 @@ pub struct SplitWitnessConfig {
     /// The MPC protocol to be used
     pub protocol: MPCProtocol,
     /// The pairing friendly curve to be used
-    pub curve: MPCCurve,
+    pub curve: Curve,
     /// The path to the (existing) output directory
     pub out_dir: PathBuf,
     /// The threshold of tolerated colluding parties
@@ -173,7 +173,7 @@ pub struct SplitInputCli {
     /// The pairing friendly curve to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub curve: Option<MPCCurve>,
+    pub curve: Option<Curve>,
     /// The path to the (existing) output directory
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -190,7 +190,7 @@ pub struct SplitInputConfig {
     /// The MPC protocol to be used
     pub protocol: MPCProtocol,
     /// The pairing friendly curve to be used
-    pub curve: MPCCurve,
+    pub curve: Curve,
     /// The path to the (existing) output directory
     pub out_dir: PathBuf,
     /// MPC compiler config
@@ -215,7 +215,7 @@ pub struct MergeInputSharesCli {
     /// The pairing friendly curve to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub curve: Option<MPCCurve>,
+    pub curve: Option<Curve>,
     /// The output file where the merged input share is written to
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -230,7 +230,7 @@ pub struct MergeInputSharesConfig {
     /// The MPC protocol to be used
     pub protocol: MPCProtocol,
     /// The pairing friendly curve to be used
-    pub curve: MPCCurve,
+    pub curve: Curve,
     /// The output file where the merged input share is written to
     pub out: PathBuf,
 }
@@ -257,7 +257,7 @@ pub struct GenerateWitnessCli {
     /// The pairing friendly curve to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub curve: Option<MPCCurve>,
+    pub curve: Option<Curve>,
     /// The output file where the final witness share is written to
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -277,7 +277,7 @@ pub struct GenerateWitnessConfig {
     /// The MPC protocol to be used
     pub protocol: MPCProtocol,
     /// The pairing friendly curve to be used
-    pub curve: MPCCurve,
+    pub curve: Curve,
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// MPC compiler config
@@ -312,7 +312,7 @@ pub struct TranslateWitnessCli {
     /// The pairing friendly curve to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub curve: Option<MPCCurve>,
+    pub curve: Option<Curve>,
     /// The output file where the final witness share is written to
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -329,7 +329,7 @@ pub struct TranslateWitnessConfig {
     /// The MPC protocol to be used for the proof generation
     pub target_protocol: MPCProtocol,
     /// The pairing friendly curve to be used
-    pub curve: MPCCurve,
+    pub curve: Curve,
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
@@ -364,7 +364,7 @@ pub struct GenerateProofCli {
     /// The pairing friendly curve to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub curve: Option<MPCCurve>,
+    pub curve: Option<Curve>,
     /// The output file where the final proof is written to. If not passed, this party will not write the proof to a file.
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -392,7 +392,7 @@ pub struct GenerateProofConfig {
     /// The MPC protocol to be used
     pub protocol: MPCProtocol,
     /// The pairing friendly curve to be used
-    pub curve: MPCCurve,
+    pub curve: Curve,
     /// The output file where the final proof is written to. If not passed, this party will not write the proof to a file.
     pub out: Option<PathBuf>,
     /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
@@ -420,7 +420,7 @@ pub struct VerifyCli {
     /// The pairing friendly curve to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub curve: Option<MPCCurve>,
+    pub curve: Option<Curve>,
     /// The path to the verification key file
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -439,7 +439,7 @@ pub struct VerifyConfig {
     /// The path to the proof file
     pub proof: PathBuf,
     /// The pairing friendly curve to be used
-    pub curve: MPCCurve,
+    pub curve: Curve,
     /// The path to the verification key file
     pub vk: PathBuf,
     /// The path to the public input JSON file
@@ -593,50 +593,50 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::SplitWitness(cli) => {
             let config = SplitWitnessConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_split_witness::<Bn254>(config),
-                MPCCurve::BLS12_381 => run_split_witness::<Bls12_381>(config),
+                Curve::BN254 => run_split_witness::<Bn254>(config),
+                Curve::BLS12_381 => run_split_witness::<Bls12_381>(config),
             }
         }
         Commands::SplitInput(cli) => {
             let config = SplitInputConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_split_input::<Bn254>(config),
-                MPCCurve::BLS12_381 => run_split_input::<Bls12_381>(config),
+                Curve::BN254 => run_split_input::<Bn254>(config),
+                Curve::BLS12_381 => run_split_input::<Bls12_381>(config),
             }
         }
         Commands::MergeInputShares(cli) => {
             let config = MergeInputSharesConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_merge_input_shares::<Bn254>(config),
-                MPCCurve::BLS12_381 => run_merge_input_shares::<Bls12_381>(config),
+                Curve::BN254 => run_merge_input_shares::<Bn254>(config),
+                Curve::BLS12_381 => run_merge_input_shares::<Bls12_381>(config),
             }
         }
         Commands::GenerateWitness(cli) => {
             let config = GenerateWitnessConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_generate_witness::<Bn254>(config),
-                MPCCurve::BLS12_381 => run_generate_witness::<Bls12_381>(config),
+                Curve::BN254 => run_generate_witness::<Bn254>(config),
+                Curve::BLS12_381 => run_generate_witness::<Bls12_381>(config),
             }
         }
         Commands::TranslateWitness(cli) => {
             let config = TranslateWitnessConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_translate_witness::<Bn254>(config),
-                MPCCurve::BLS12_381 => run_translate_witness::<Bls12_381>(config),
+                Curve::BN254 => run_translate_witness::<Bn254>(config),
+                Curve::BLS12_381 => run_translate_witness::<Bls12_381>(config),
             }
         }
         Commands::GenerateProof(cli) => {
             let config = GenerateProofConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_generate_proof::<Bn254>(config),
-                MPCCurve::BLS12_381 => run_generate_proof::<Bls12_381>(config),
+                Curve::BN254 => run_generate_proof::<Bn254>(config),
+                Curve::BLS12_381 => run_generate_proof::<Bls12_381>(config),
             }
         }
         Commands::Verify(cli) => {
             let config = VerifyConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                MPCCurve::BN254 => run_verify::<Bn254>(config),
-                MPCCurve::BLS12_381 => run_verify::<Bls12_381>(config),
+                Curve::BN254 => run_verify::<Bn254>(config),
+                Curve::BLS12_381 => run_verify::<Bls12_381>(config),
             }
         }
     }

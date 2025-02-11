@@ -10,7 +10,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use ark_ff::PrimeField;
 use co_circom_snarks::{CompressedRep3SharedWitness, SharedWitness};
-use color_eyre::eyre::{self, bail, Context, ContextCompat};
+use color_eyre::eyre::{self, Context, ContextCompat};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
     shamir::{ShamirPreprocessing, ShamirProtocol},
@@ -261,7 +261,9 @@ where
 pub fn merge_input_shares<F: PrimeField>(
     mut inputs: Vec<Rep3SharedInput<F>>,
 ) -> color_eyre::Result<Rep3SharedInput<F>> {
-    let start_item = inputs.pop().context("we have at least two inputs")?;
+    let start_item = inputs
+        .pop()
+        .context("expected at least two inputs in merge input shares")?;
     let merged = inputs.into_iter().try_fold(start_item, |a, b| {
         a.merge(b).context("while merging input shares")
     })?;
@@ -346,7 +348,7 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     if !input.maybe_shared_inputs.is_empty() {
-        bail!("still unmerged elements left");
+        eyre::bail!("still unmerged elements left");
     }
 
     // init MPC protocol
@@ -356,7 +358,7 @@ where
 
     // execute witness generation in MPC
     let (witness_share, mpc_net) = rep3_vm
-        .run_and_get_network(input)
+        .run_and_return_network(input)
         .context("while running witness generation")?;
 
     Ok((witness_share.into_shared_witness(), mpc_net))

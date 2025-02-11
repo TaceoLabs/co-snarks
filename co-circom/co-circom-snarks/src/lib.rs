@@ -89,8 +89,7 @@ fn reshare_vec<F: PrimeField>(
     vec: Vec<F>,
     mpc_net: &mut Rep3MpcNet,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    mpc_net.send_next_many(&vec)?;
-    let b: Vec<F> = mpc_net.recv_prev_many()?;
+    let b: Vec<F> = mpc_net.reshare_many(&vec)?;
 
     if vec.len() != b.len() {
         return Err(eyre::eyre!("reshare_vec: vec and b have different lengths"));
@@ -147,6 +146,16 @@ where
     )]
     /// The secret-shared witness elements.
     pub witness: Vec<S>,
+}
+
+impl<F: PrimeField, S> SharedWitness<F, S>
+where
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
+    /// Get the public inputs needed for verification (does not include constant 1 at position 0)
+    pub fn public_inputs_for_verify(&self) -> Vec<F> {
+        self.public_inputs[1..].to_vec()
+    }
 }
 
 /// A shared input for a collaborative circom witness extension.

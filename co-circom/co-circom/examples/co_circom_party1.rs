@@ -63,19 +63,20 @@ fn main() -> Result<()> {
     let circuit =
         CoCircomCompiler::<Bn254>::parse(dir.join("circuit.circom"), CompilerConfig::default())?;
 
-    // parse zkey
+    // parse zkey, without performing extra checks (only advised for zkeys knwon to be valid)
     let zkey = Arc::new(Groth16ZKey::<Bn254>::from_reader(
         std::fs::read(dir.join("multiplier2.zkey"))?.as_slice(),
         CheckElement::No,
     )?);
 
-    // recv share from party 0
+    // recv share from party 0, only needed for this demo for private-proof delegation and for PSS this is done separately,
+    // because the party with the shares usually does not take part in the computation
     let share: Rep3SharedInput<_> = bincode::deserialize(&net.recv_bytes(PartyID::ID0)?)?;
 
     // generate witness
     let (witness, net) =
         co_circom::generate_witness_rep3::<Bn254>(circuit, share, net, VMConfig::default())?;
-    let public_inputs = witness.public_inputs[1..].to_vec();
+    let public_inputs = witness.public_inputs_for_verify();
 
     // generate proof
     let (proof, _) = Rep3CoGroth16::prove(net, zkey, witness)?;

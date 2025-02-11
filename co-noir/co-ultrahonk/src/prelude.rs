@@ -11,6 +11,7 @@ pub use crate::{PlainCoBuilder, Rep3CoBuilder, ShamirCoBuilder};
 pub use co_builder::prelude::{AcirFormat, ProvingKey as PlainProvingKey, VerifyingKey};
 pub use co_builder::prelude::{
     Crs, CrsParser, HonkCurve, Polynomial, ProverCrs, ProverWitnessEntities,
+    PROVER_WITNESS_ENTITIES_SIZE,
 };
 pub use ultrahonk::prelude::HonkProof;
 pub use ultrahonk::prelude::Poseidon2Sponge;
