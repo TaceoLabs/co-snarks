@@ -65,53 +65,6 @@ impl UltraPermutationRelation {
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 8;
 }
 
-impl UltraPermutationRelation {
-    fn compute_grand_product_numerator_and_denominator<T: NoirUltraHonkProver<P>, P: Pairing>(
-        driver: &mut T,
-        input: &ProverUnivariates<T, P>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-    ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
-        let w_1 = input.witness.w_l();
-        let w_2 = input.witness.w_r();
-        let w_3 = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let id_1 = input.precomputed.id_1();
-        let id_2 = input.precomputed.id_2();
-        let id_3 = input.precomputed.id_3();
-        let id_4 = input.precomputed.id_4();
-        let sigma_1 = input.precomputed.sigma_1();
-        let sigma_2 = input.precomputed.sigma_2();
-        let sigma_3 = input.precomputed.sigma_3();
-        let sigma_4 = input.precomputed.sigma_4();
-
-        let beta = &relation_parameters.beta;
-        let gamma = &relation_parameters.gamma;
-
-        // witness degree 4; full degree 8
-        let wid1 = w_1.add_public(driver, &(id_1.to_owned() * beta + gamma));
-        let wid2 = w_2.add_public(driver, &(id_2.to_owned() * beta + gamma));
-        let wid3 = w_3.add_public(driver, &(id_3.to_owned() * beta + gamma));
-        let wid4 = w_4.add_public(driver, &(id_4.to_owned() * beta + gamma));
-
-        let wsigma1 = w_1.add_public(driver, &(sigma_1.to_owned() * beta + gamma));
-        let wsigma2 = w_2.add_public(driver, &(sigma_2.to_owned() * beta + gamma));
-        let wsigma3 = w_3.add_public(driver, &(sigma_3.to_owned() * beta + gamma));
-        let wsigma4 = w_4.add_public(driver, &(sigma_4.to_owned() * beta + gamma));
-
-        let lhs = SharedUnivariate::univariates_to_vec(&[wid1, wsigma1, wid3, wsigma3]);
-        let rhs = SharedUnivariate::univariates_to_vec(&[wid2, wsigma2, wid4, wsigma4]);
-        let mul1 = driver.mul_many(&lhs, &rhs)?;
-        let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
-        let mul2 = driver.mul_many(lhs, rhs)?;
-        // We need the result as input to the mul operations
-        // let (num, den) = mul2.split_at(mul2.len() >> 1);
-        // let num = SharedUnivariate::from_vec(num);
-        // let den = SharedUnivariate::from_vec(den);
-        // Ok((num, den))
-        Ok(mul2)
-    }
-}
-
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
     for UltraPermutationRelation
 {
@@ -149,33 +102,67 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate UltraPermutationRelation");
 
+        let w_1 = input.witness.w_l();
+        let w_2 = input.witness.w_r();
+        let w_3 = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let id_1 = input.precomputed.id_1();
+        let id_2 = input.precomputed.id_2();
+        let id_3 = input.precomputed.id_3();
+        let id_4 = input.precomputed.id_4();
+        let sigma_1 = input.precomputed.sigma_1();
+        let sigma_2 = input.precomputed.sigma_2();
+        let sigma_3 = input.precomputed.sigma_3();
+        let sigma_4 = input.precomputed.sigma_4();
+
+        let beta = &relation_parameters.beta;
+        let gamma = &relation_parameters.gamma;
+
         let public_input_delta = &relation_parameters.public_input_delta;
         let z_perm = input.witness.z_perm();
         let z_perm_shift = input.shifted_witness.z_perm();
         let lagrange_first = input.precomputed.lagrange_first();
         let lagrange_last = input.precomputed.lagrange_last();
 
+        let w_1_plus_gamma = w_1.add_scalar(driver, *gamma);
+        let w_2_plus_gamma = w_2.add_scalar(driver, *gamma);
+        let w_3_plus_gamma = w_3.add_scalar(driver, *gamma);
+        let w_4_plus_gamma = w_4.add_scalar(driver, *gamma);
+
+        let mut t1 = w_1_plus_gamma.add_public(driver, &(id_1.to_owned() * beta));
+        t1.scale_inplace(driver, *scaling_factor);
+        let t2 = w_2_plus_gamma.add_public(driver, &(id_2.to_owned() * beta));
+        let t3 = w_3_plus_gamma.add_public(driver, &(id_3.to_owned() * beta));
+        let t4 = w_4_plus_gamma.add_public(driver, &(id_4.to_owned() * beta));
+
+        let mut t5 = w_1_plus_gamma.add_public(driver, &(sigma_1.to_owned() * beta));
+        t5.scale_inplace(driver, *scaling_factor);
+        let t6 = w_2_plus_gamma.add_public(driver, &(sigma_2.to_owned() * beta));
+        let t7 = w_3_plus_gamma.add_public(driver, &(sigma_3.to_owned() * beta));
+        let t8 = w_4_plus_gamma.add_public(driver, &(sigma_4.to_owned() * beta));
+
+        let lhs = SharedUnivariate::univariates_to_vec(&[t1, t5, t3, t7]);
+        let rhs = SharedUnivariate::univariates_to_vec(&[t2, t6, t4, t8]);
+        let mul = driver.mul_many(&lhs, &rhs)?;
+        let (lhs, rhs) = mul.split_at(mul.len() >> 1);
+        let num_den = driver.mul_many(lhs, rhs)?;
+
+        let public_input_term =
+            z_perm_shift.add_public(driver, &(lagrange_last.to_owned() * public_input_delta));
+
         // witness degree: deg 5 - deg 5 = deg 5
         // total degree: deg 9 - deg 10 = deg 10
 
-        let num_den = Self::compute_grand_product_numerator_and_denominator(
-            driver,
-            input,
-            relation_parameters,
-        )?;
-
         let tmp_lhs = z_perm.add_public(driver, lagrange_first);
-        let tmp_rhs =
-            z_perm_shift.add_public(driver, &(lagrange_last.to_owned() * public_input_delta));
-
         let lhs = num_den;
-        let rhs = SharedUnivariate::univariates_to_vec(&[tmp_lhs, tmp_rhs]);
-        let mul1 = driver.mul_many(&lhs, &rhs)?;
-        let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
+        let rhs = SharedUnivariate::univariates_to_vec(&[tmp_lhs, public_input_term]);
+
+        let mul = driver.mul_many(&lhs, &rhs)?;
+        let (lhs, rhs) = mul.split_at(mul.len() >> 1);
         let lhs = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::from_vec(lhs);
         let rhs = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::from_vec(rhs);
 
-        let tmp = lhs.sub(driver, &rhs).scale(driver, *scaling_factor);
+        let tmp = lhs.sub(driver, &rhs);
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] =

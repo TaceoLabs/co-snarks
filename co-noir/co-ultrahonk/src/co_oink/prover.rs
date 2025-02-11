@@ -21,7 +21,7 @@ use super::types::ProverMemory;
 use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver, CoUtils};
 use ark_ff::{One, Zero};
 use co_builder::{
-    prelude::{HonkCurve, Polynomial, ProverCrs},
+    prelude::{ActiveRegionData, HonkCurve, Polynomial, ProverCrs},
     HonkProofError, HonkProofResult,
 };
 use itertools::izip;
@@ -305,21 +305,27 @@ impl<
         beta: &P::ScalarField,
         gamma: &P::ScalarField,
         output_len: usize,
+        active_region_data: &ActiveRegionData,
     ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
         debug_assert!(shared1.len() >= output_len);
         debug_assert!(shared2.len() >= output_len);
         debug_assert!(pub1.len() >= output_len);
         debug_assert!(pub2.len() >= output_len);
+        let has_active_ranges = active_region_data.size() > 0;
 
         // We drop the last element since it is not needed for the grand product
         let mut mul1 = Vec::with_capacity(output_len);
         let mut mul2 = Vec::with_capacity(output_len);
 
-        for (s1, s2, p1, p2) in
-            izip!(shared1.iter(), shared2.iter(), pub1.iter(), pub2.iter()).take(output_len)
-        {
-            let m1 = driver.add_with_public(*p1 * beta + gamma, *s1);
-            let m2 = driver.add_with_public(*p2 * beta + gamma, *s2);
+        for i in 0..output_len {
+            let idx = if has_active_ranges {
+                active_region_data.get_idx(i)
+            } else {
+                i
+            };
+
+            let m1 = driver.add_with_public(pub1[idx] * beta + gamma, shared1[idx]);
+            let m2 = driver.add_with_public(pub2[idx] * beta + gamma, shared2[idx]);
             mul1.push(m1);
             mul2.push(m2);
         }
@@ -358,12 +364,20 @@ impl<
 
     fn compute_grand_product(&mut self, proving_key: &ProvingKey<T, P>) -> HonkProofResult<()> {
         tracing::trace!("compute grand product");
+
+        let has_active_ranges = proving_key.active_region_data.size() > 0;
+
         // Barratenberg uses multithreading here
 
         // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
         // the permutation grand product does not need to be computed beyond the index of the last active wire
         let domain_size = proving_key.final_active_wire_idx + 1;
-        let domain_upper_limit = domain_size - 1;
+
+        let active_domain_size = if has_active_ranges {
+            proving_key.active_region_data.size()
+        } else {
+            domain_size
+        };
 
         // In Barretenberg circuit size is taken from the q_c polynomial
         // Step (1)
@@ -378,7 +392,8 @@ impl<
             proving_key.polynomials.precomputed.sigma_2(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
-            domain_upper_limit,
+            active_domain_size - 1,
+            &proving_key.active_region_data,
         )?;
         let denom2 = Self::batched_grand_product_num_denom(
             self.driver,
@@ -388,7 +403,8 @@ impl<
             proving_key.polynomials.precomputed.sigma_4(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
-            domain_upper_limit,
+            active_domain_size - 1,
+            &proving_key.active_region_data,
         )?;
         let num1 = Self::batched_grand_product_num_denom(
             self.driver,
@@ -398,7 +414,8 @@ impl<
             proving_key.polynomials.precomputed.id_2(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
-            domain_upper_limit,
+            active_domain_size - 1,
+            &proving_key.active_region_data,
         )?;
         let num2 = Self::batched_grand_product_num_denom(
             self.driver,
@@ -408,7 +425,8 @@ impl<
             proving_key.polynomials.precomputed.id_4(),
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
-            domain_upper_limit,
+            active_domain_size - 1,
+            &proving_key.active_region_data,
         )?;
 
         // TACEO TODO could batch here as well
@@ -427,13 +445,42 @@ impl<
         CoUtils::batch_invert::<T, P>(self.driver, &mut denominator)?;
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
-        let mut z_perm = self.driver.mul_many(&numerator, &denominator)?;
-        z_perm.insert(0, T::ArithmeticShare::default()); // insert a default element at the beginning
-        z_perm.resize(
+        let mul = self.driver.mul_many(&numerator, &denominator)?;
+
+        self.memory.z_perm.resize(
             proving_key.circuit_size as usize,
             T::ArithmeticShare::default(),
         );
-        self.memory.z_perm = Polynomial::new(z_perm);
+        self.memory.z_perm[1] =
+            T::promote_to_trivial_share(self.driver.get_party_id(), P::ScalarField::one());
+
+        // Compute grand product values corresponding only to the active regions of the trace
+        for (i, mul) in mul.into_iter().enumerate() {
+            let idx = if has_active_ranges {
+                proving_key.active_region_data.get_idx(i)
+            } else {
+                i
+            };
+            self.memory.z_perm[idx + 1] = mul
+        }
+
+        // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
+        // regions have not yet been set. The polynomial takes an already computed constant value across each inactive
+        // region (since no copy constraints are present there) equal to the value of the grand product at the first index
+        // of the subsequent active region.
+        if has_active_ranges {
+            for i in 0..domain_size {
+                for j in 0..proving_key.active_region_data.num_ranges() - 1 {
+                    let previous_range_end = proving_key.active_region_data.get_range(j).1;
+                    let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
+                    // Set the value of the polynomial if the index falls in an inactive region
+                    if i >= previous_range_end && i < next_range_start {
+                        self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 

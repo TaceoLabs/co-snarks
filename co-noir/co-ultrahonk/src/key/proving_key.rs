@@ -124,7 +124,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
                 .try_into()
                 .unwrap(),
             &mut circuit,
-            dyadic_circuit_size,
         )?;
 
         // Construct the public inputs array
@@ -349,9 +348,15 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
 
     pub fn ultrahonk_num_randomness(&self) -> usize {
         // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+        let active_domain_size_mul = if self.active_region_data.size() > 0 {
+            self.active_region_data.size() - 1
+        } else {
+            self.final_active_wire_idx
+        };
+
         let n = self.circuit_size as usize;
         let num_pairs_oink_prove = CRAND_PAIRS_FACTOR_N * n
-            + CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE * self.final_active_wire_idx
+            + CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE * active_domain_size_mul
             + CRAND_PAIRS_CONST;
         // log2(n) * ((n >>= 1) / 2) == n - 1
         let num_pairs_sumcheck_prove = CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);

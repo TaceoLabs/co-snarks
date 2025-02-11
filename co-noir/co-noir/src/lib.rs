@@ -23,6 +23,7 @@ use mpc_core::protocols::{
     rep3::{self, network::Rep3Network},
     shamir::{self, network::ShamirNetwork, ShamirPreprocessing, ShamirProtocol},
 };
+
 use noirc_abi::Abi;
 use noirc_artifacts::program::ProgramArtifact;
 use rand::{CryptoRng, Rng};
@@ -33,9 +34,10 @@ pub use ark_ec::pairing::Pairing;
 pub use co_acvm::{Rep3AcvmType, ShamirAcvmType};
 pub use co_ultrahonk::{
     prelude::{
-        AcirFormat, CrsParser, PlainProvingKey, Polynomial, Polynomials, Poseidon2Sponge,
-        Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder,
-        UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg, PROVER_WITNESS_ENTITIES_SIZE,
+        AcirFormat, CrsParser, HonkRecursion, PlainProvingKey, Polynomial, Polynomials,
+        Poseidon2Sponge, Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey,
+        UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg,
+        PROVER_WITNESS_ENTITIES_SIZE,
     },
     Rep3CoBuilder, ShamirCoBuilder,
 };
@@ -419,7 +421,7 @@ pub fn compute_circuit_size<P: Pairing>(
         constraint_system,
         recursive,
         0,
-        1,
+        HonkRecursion::UltraHonk,
         &mut PlainAcvmSolver::new(),
     )
 }
@@ -439,7 +441,7 @@ pub fn generate_proving_key_rep3<N: Rep3Network>(
         recursive,
         0,
         witness_share,
-        1,
+        HonkRecursion::UltraHonk,
         &mut driver,
     )?;
 
@@ -469,7 +471,7 @@ pub fn generate_proving_key_shamir<N: ShamirNetwork>(
         recursive,
         0,
         witness_share,
-        1,
+        HonkRecursion::UltraHonk,
         &mut driver,
     )?;
 
@@ -492,7 +494,7 @@ pub fn generate_proving_key_plain<P: Pairing>(
         recursive,
         0,
         witness,
-        1,
+        HonkRecursion::UltraHonk,
         &mut driver,
     )?;
     Ok(PlainProvingKey::create::<PlainAcvmSolver<_>>(
@@ -515,7 +517,7 @@ pub fn generate_vk<P: Pairing>(
         recursive,
         0,
         vec![],
-        1,
+        HonkRecursion::UltraHonk,
         &mut driver,
     )?;
 
@@ -539,7 +541,7 @@ pub fn generate_vk_barretenberg<P: Pairing>(
         recursive,
         0,
         vec![],
-        1,
+        HonkRecursion::UltraHonk,
         &mut driver,
     )?;
     Ok(circuit.create_vk_barretenberg(prover_crs, &mut driver)?)

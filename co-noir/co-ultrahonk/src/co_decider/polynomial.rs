@@ -13,9 +13,6 @@ pub(crate) struct SharedPolynomial<T: NoirUltraHonkProver<P>, P: Pairing> {
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
-    pub fn new(coefficients: Vec<T::ArithmeticShare>) -> Self {
-        Self { coefficients }
-    }
     pub fn new_zero(size: usize) -> Self {
         Self {
             coefficients: vec![Default::default(); size],
@@ -27,14 +24,17 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         Self { coefficients }
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T::ArithmeticShare> {
-        self.coefficients.iter()
-    }
-
     pub(crate) fn add_assign_slice(&mut self, driver: &mut T, other: &[T::ArithmeticShare]) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(other.iter()) {
             *des = driver.add(*des, *src);
+        }
+    }
+
+    pub(crate) fn sub_assign_slice(&mut self, driver: &mut T, other: &[T::ArithmeticShare]) {
+        // Barrettenberg uses multithreading here
+        for (des, src) in self.coefficients.iter_mut().zip(other.iter()) {
+            *des = driver.sub(*des, *src);
         }
     }
 

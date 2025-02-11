@@ -5,6 +5,6 @@ use super::types::ClaimedEvaluations;
 use ark_ff::PrimeField;
 
 pub(crate) struct SumcheckOutput<F: PrimeField> {
-    pub(crate) claimed_evaluations: ClaimedEvaluations<F>,
+    pub(crate) _claimed_evaluations: ClaimedEvaluations<F>,
     pub(crate) challenges: Vec<F>,
 }

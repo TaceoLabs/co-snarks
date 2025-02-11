@@ -1,6 +1,3 @@
-use std::sync::Arc;
-
-use crate::types::types::ActiveRegionData;
 use crate::{
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
@@ -9,8 +6,8 @@ use crate::{
         polynomial_types::{Polynomials, PrecomputedEntities},
     },
     types::types::{
-        AggregationObjectPubInputIndices, CyclicPermutation, Mapping, PermutationMapping,
-        TraceData, NUM_WIRES,
+        ActiveRegionData, AggregationObjectPubInputIndices, CyclicPermutation, Mapping,
+        PermutationMapping, TraceData, NUM_WIRES,
     },
     HonkProofResult,
 };
@@ -18,6 +15,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
 use num_bigint::BigUint;
+use std::sync::Arc;
 
 pub struct ProvingKey<P: Pairing> {
     pub crs: Arc<ProverCrs<P>>,
@@ -96,7 +94,6 @@ impl<P: Pairing> ProvingKey<P> {
                 .try_into()
                 .unwrap(),
             &mut circuit,
-            dyadic_circuit_size,
         )?;
 
         // Construct the public inputs array
@@ -359,7 +356,7 @@ impl<P: Pairing> ProvingKey<P> {
         //  ignored, as used for regular constraints and padding to the next power of 2.
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
         assert!(dyadic_circuit_size > circuit.get_tables_size() + additional_offset);
-        let mut offset = dyadic_circuit_size - circuit.get_tables_size() - additional_offset;
+        let mut offset = circuit.blocks.lookup.trace_offset as usize;
 
         for table in circuit.lookup_tables.iter() {
             let table_index = table.table_index;
@@ -378,13 +375,10 @@ impl<P: Pairing> ProvingKey<P> {
         driver: &mut T,
         witness: &mut [Polynomial<T::ArithmeticShare>; 2],
         circuit: &mut GenericUltraCircuitBuilder<P, T>,
-        dyadic_circuit_size: usize,
     ) -> std::io::Result<()> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
-        let offset = dyadic_circuit_size - circuit.get_tables_size();
+        let mut table_offset = circuit.blocks.lookup.trace_offset as usize;
 
-        let mut table_offset = offset; // offset of the present table in the table polynomials
-                                       // loop over all tables used in the circuit; each table contains data about the lookups made on it
         for table in circuit.lookup_tables.iter_mut() {
             // table.initialize_index_map(); // We calculate indices from keys
 
