@@ -35,7 +35,7 @@ pub use co_ultrahonk::{
     prelude::{
         AcirFormat, CrsParser, PlainProvingKey, Polynomial, Polynomials, Poseidon2Sponge,
         Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder,
-        UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg,
+        UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg, PROVER_WITNESS_ENTITIES_SIZE,
     },
     Rep3CoBuilder, ShamirCoBuilder,
 };
@@ -375,7 +375,7 @@ pub fn translate_proving_key<
     // Translate witness to shamir shares
     let translated_shares = protocol.translate_primefield_repshare_vec(shares)?;
 
-    if translated_shares.len() != 6 * proving_key.circuit_size as usize {
+    if translated_shares.len() != PROVER_WITNESS_ENTITIES_SIZE * proving_key.circuit_size as usize {
         return Err(eyre!("Invalid number of shares translated"));
     };
 
@@ -458,7 +458,8 @@ pub fn generate_proving_key_shamir<N: ShamirNetwork>(
     recursive: bool,
 ) -> Result<(ShamirProvingKey<Bn254, N>, N)> {
     let id = net.get_id();
-    let preprocessing = ShamirPreprocessing::new(threshold, net, 0).unwrap(); // We have to handle precomputation on the fly
+    // We have to handle precomputation on the fly, so amount is 0 initially
+    let preprocessing = ShamirPreprocessing::new(threshold, net, 0)?;
     let protocol = ShamirProtocol::from(preprocessing);
     let mut driver = ShamirAcvmSolver::new(protocol);
     // create the circuit
@@ -561,6 +562,8 @@ pub fn split_proving_key_rep3<P: Pairing, R: Rng + CryptoRng, N: Rep3Network>(
         .into_iter()
         .map(|share| Rep3ProvingKey::from_plain_key_and_shares(&proving_key, share))
         .collect::<Result<Vec<_>>>()?;
+    // the original shares above are of type [T; 3], we just collect the into a vec to
+    // create the `Rep3ProvingKey` type, if that does not fail, we are guaranteed to have 3 elements
     let share2 = shares.pop().unwrap();
     let share1 = shares.pop().unwrap();
     let share0 = shares.pop().unwrap();

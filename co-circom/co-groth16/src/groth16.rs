@@ -123,15 +123,14 @@ where
         let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness)?;
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
 
-        let (proof, driver) = self.create_proof_with_assignment(
+        self.create_proof_with_assignment(
             Arc::clone(&zkey),
             r,
             s,
             h,
             public_inputs,
             private_witness,
-        )?;
-        Ok((proof, driver))
+        )
     }
 
     fn evaluate_constraint(

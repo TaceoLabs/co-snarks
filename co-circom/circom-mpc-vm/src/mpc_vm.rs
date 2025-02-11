@@ -1130,7 +1130,7 @@ impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
     ///
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     #[expect(clippy::type_complexity)]
-    pub fn run_and_get_network(
+    pub fn run_and_return_network(
         mut self,
         input_signals: SharedInput<F, Rep3PrimeFieldShare<F>>,
     ) -> Result<(
