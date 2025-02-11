@@ -4,10 +4,8 @@ unconstrained fn add(x: u32, y: u32) -> u32 {
 
 fn main(x: u32, y: u32, z: pub u32) {
     assert(
-        unsafe {
-            //@safety: is safe
-            add(x, y)
-        }
+        ///Safety: is safe
+        unsafe { add(x, y) }
             == z,
     );
 }

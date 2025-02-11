@@ -1,5 +1,5 @@
 use ark_ff::PrimeField;
-use brillig::{BlackBoxOp, HeapArray, IntegerBitSize, MemoryAddress};
+use brillig::{BlackBoxOp, IntegerBitSize, MemoryAddress};
 use eyre::Context;
 
 use crate::{mpc::BrilligDriver, CoBrilligVM};
@@ -14,9 +14,10 @@ where
             BlackBoxOp::ToRadix {
                 input,
                 radix,
-                output,
+                output_pointer,
+                num_limbs,
                 output_bits,
-            } => self.handle_to_radix(input, radix, output, output_bits)?,
+            } => self.handle_to_radix(input, radix, output_pointer, num_limbs, output_bits)?,
             x => todo!("unimplemented blackbox {x:?}"),
         }
         self.increment_program_counter();
@@ -27,21 +28,27 @@ where
         &mut self,
         input: MemoryAddress,
         radix: MemoryAddress,
-        output: HeapArray,
-        output_bits: bool,
+        output_pointer: MemoryAddress,
+        num_limbs: MemoryAddress,
+        output_bits: MemoryAddress,
     ) -> eyre::Result<()> {
         let input = self
             .memory
             .try_read_field(input)
-            .context("while geting field for ToRadix")?;
+            .context("while getting field for ToRadix")?;
         let radix = self
             .memory
             .try_read_int(radix, IntegerBitSize::U32)
             .context("while getting radix for ToRadix")?;
-        let limbs = self
-            .driver
-            .to_radix(input, radix, output.size, output_bits)?;
-        let mem_offset = self.memory.read_ref(output.pointer)?;
+        let num_limbs = self.memory.try_read_usize(num_limbs)?;
+        let output_bits = self
+            .memory
+            .try_read_int(output_bits, IntegerBitSize::U1)
+            .context("while getting output_bits for ToRadix")?;
+        let output_bits = T::try_into_bool(output_bits).expect("output_bits must be a public");
+
+        let limbs = self.driver.to_radix(input, radix, num_limbs, output_bits)?;
+        let mem_offset = self.memory.read_ref(output_pointer)?;
         self.memory.write_slice(mem_offset, &limbs)?;
         Ok(())
     }

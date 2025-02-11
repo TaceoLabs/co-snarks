@@ -7,7 +7,7 @@ use acir::{
 use ark_ff::PrimeField;
 use brillig::{BitSize, HeapVector, Label, MemoryAddress, Opcode as BrilligOpcode};
 
-/// The coBrillig-VM. If executes unconstrained functions for coNoir.
+/// The coBrillig-VM. It executes unconstrained functions for coNoir.
 ///
 /// In contrast to Noir's Brillig-VM, we initiate one instance and reuse
 /// it during the whole process. This is mostly because we need a network

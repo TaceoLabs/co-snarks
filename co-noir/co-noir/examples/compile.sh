@@ -2,7 +2,7 @@
 
 script_dir="$(dirname "$(realpath "$0")")"
 
-NARGO_VERSION=1.0.0-beta.1 ##specify the desired nargo version here
+NARGO_VERSION=1.0.0-beta.2 ##specify the desired nargo version here
 
 ## install noirup: curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
 r=$(bash -c "nargo --version")
@@ -19,11 +19,11 @@ for folder in "$script_dir"/test_vectors/*; do
 
         cd "$folder" || { echo "Failed to enter folder $folder"; continue; }
 
- 
+
         echo "Executing commands in $folder"
-  
+
         nargo execute
-           
+
         if [ -d "target" ]; then
             echo "Moving files from target in $folder"
             mv -f target/* . 2>/dev/null || echo "No files to move or failed to move files"

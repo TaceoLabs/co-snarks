@@ -9,12 +9,13 @@ use crate::{
     types::AllEntities,
     Utils, CONST_PROOF_SIZE_LOG_N, N_MAX,
 };
-use ark_ec::Group;
+use ark_ff::AdditiveGroup;
 use ark_ff::{Field, One, Zero};
 use co_builder::{
     prelude::{HonkCurve, Polynomial, ProverCrs},
     HonkProofResult,
 };
+use ark_ec::PrimeGroup;
 use itertools::izip;
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {

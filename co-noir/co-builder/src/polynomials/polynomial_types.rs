@@ -141,15 +141,15 @@ impl<T: Default> PrecomputedEntities<T> {
     /// column 5
     const Q_4: usize = 5;
     /// column 6
-    const Q_ARITH: usize = 6;
+    const Q_LOOKUP: usize = 6;
     /// column 7
-    const Q_DELTA_RANGE: usize = 7;
+    const Q_ARITH: usize = 7;
     /// column 8
-    const Q_ELLIPTIC: usize = 8;
+    const Q_DELTA_RANGE: usize = 8;
     /// column 9
-    const Q_AUX: usize = 9;
+    const Q_ELLIPTIC: usize = 9;
     /// column 10
-    const Q_LOOKUP: usize = 10;
+    const Q_AUX: usize = 10;
     /// column 11
     const Q_POSEIDON2_EXTERNAL: usize = 11;
     /// column 12
