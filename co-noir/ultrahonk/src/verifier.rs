@@ -14,6 +14,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     pub fn verify(
         honk_proof: HonkProof<TranscriptFieldType>,
         verifying_key: VerifyingKey<P>,
+        has_zk: bool,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("UltraHonk verification");
 
@@ -30,6 +31,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             Self::generate_gate_challenges(&mut transcript);
 
         let decider_verifier = DeciderVerifier::new(memory);
-        decider_verifier.verify(cicruit_size, &crs, transcript)
+        decider_verifier.verify(cicruit_size, &crs, transcript, has_zk)
     }
 }

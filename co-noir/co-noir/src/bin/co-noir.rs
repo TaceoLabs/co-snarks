@@ -1656,6 +1656,7 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let vk_path: PathBuf = config.vk;
     let crs_path = config.crs;
     let hasher = config.hasher;
+    let has_zk = false;
 
     // parse proof file
     let proof_u8 = std::fs::read(&proof).context("while reading proof file")?;
@@ -1674,11 +1675,10 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     tracing::info!("Starting proof verification...");
     let start = Instant::now();
     let res = match hasher {
-        TranscriptHash::POSEIDON => {
-            UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk).context("while verifying proof")?
-        }
+        TranscriptHash::POSEIDON => UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk, has_zk)
+            .context("while verifying proof")?,
         TranscriptHash::KECCAK => {
-            UltraHonk::<_, Keccak256>::verify(proof, vk).context("while verifying proof")?
+            UltraHonk::<_, Keccak256>::verify(proof, vk, has_zk).context("while verifying proof")?
         }
     };
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;

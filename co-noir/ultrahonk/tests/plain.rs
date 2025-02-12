@@ -18,6 +18,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
 
     let constraint_system = Utils::get_constraint_system_from_file(circuit_file, true).unwrap();
+    let has_zk = false;
     let witness = Utils::get_witness_from_file(witness_file).unwrap();
     let mut driver = PlainAcvmSolver::new();
     let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
@@ -47,7 +48,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
     assert_eq!(proof, read_proof);
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 
