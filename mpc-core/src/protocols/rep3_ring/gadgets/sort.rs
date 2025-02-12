@@ -69,7 +69,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Rep3Network>(
     apply_inv_field(&perm, &priv_inputs, io_context0, io_context1)
 }
 
-/// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). The values public/shared values need to be organized to match the order given in order (false means a public value, true means a private value). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
+/// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). The values public/shared values need to be organized to match the order given in `order` (false means a public value, true means a private value). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 pub fn radix_sort_fields_vec_by<F: PrimeField, N: Rep3Network>(
     priv_key: &[FieldShare<F>],
@@ -171,13 +171,14 @@ fn gen_perm<F: PrimeField, N: Rep3Network>(
     Ok(perm)
 }
 
-fn order_amd_promote_inputs(
+fn order_and_promote_inputs(
     priv_inputs: Vec<Rep3RingShare<PermRing>>,
     pub_inputs: Vec<RingElement<PermRing>>,
     order: &[bool],
     id: PartyID,
 ) -> Vec<Rep3RingShare<PermRing>> {
-    assert_eq!(priv_inputs.len() + pub_inputs.len(), order.len());
+    assert_eq!(priv_inputs.len(), order.iter().filter(|x| **x).count());
+    assert_eq!(pub_inputs.len(), order.iter().filter(|x| !**x).count());
     let mut perm = Vec::with_capacity(order.len());
     let mut priv_iter = priv_inputs.into_iter();
     let mut pub_iter = pub_inputs.into_iter();
@@ -206,13 +207,13 @@ fn gen_perm_ordered<F: PrimeField, N: Rep3Network>(
 
     let priv_bit_0 = inject_bit(&priv_bits, io_context0, 0)?;
     let pub_bit_0 = inject_public_bit(pub_inputs, 0);
-    let perm = order_amd_promote_inputs(priv_bit_0, pub_bit_0, order, io_context0.id);
-    let mut perm = gen_bit_perm(perm, vec![], io_context0)?; // This first permutation could be otpimized by not promoting the public bits
+    let perm = order_and_promote_inputs(priv_bit_0, pub_bit_0, order, io_context0.id);
+    let mut perm = gen_bit_perm(perm, vec![], io_context0)?; // This first permutation could be optimized by not promoting the public bits
 
     for i in 1..bitsize {
         let priv_bit_i = inject_bit(&priv_bits, io_context0, i)?;
         let pub_bit_i = inject_public_bit(pub_inputs, i);
-        let bit_i = order_amd_promote_inputs(priv_bit_i, pub_bit_i, order, io_context0.id);
+        let bit_i = order_and_promote_inputs(priv_bit_i, pub_bit_i, order, io_context0.id);
         let bit_i = apply_inv(&perm, &bit_i, &[], io_context0, io_context1)?;
         let perm_i = gen_bit_perm(bit_i, vec![], io_context0)?;
         perm = compose(perm, perm_i, io_context0)?;
