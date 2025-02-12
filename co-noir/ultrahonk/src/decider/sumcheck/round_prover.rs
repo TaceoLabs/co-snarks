@@ -15,7 +15,7 @@ use crate::{
             ultra_arithmetic_relation::UltraArithmeticRelation,
             AllRelationAcc, Relation,
         },
-        types::ProverUnivariates,
+        types::{ProverUnivariates, ShortMonomialProverUnivariates},
     },
     transcript::TranscriptFieldType,
     types::AllEntities,
@@ -37,14 +37,18 @@ impl SumcheckProverRound {
     }
 
     fn extend_edges<F: PrimeField>(
-        extended_edges: &mut ProverUnivariates<F>,
+        extended_edges: &mut ShortMonomialProverUnivariates<F>,
         multivariates: &AllEntities<Vec<F>>,
         edge_index: usize,
     ) {
         tracing::trace!("Extend edges");
 
         for (src, des) in multivariates.iter().zip(extended_edges.iter_mut()) {
-            des.extend_from(&src[edge_index..edge_index + 2]);
+            let edge = Univariate {
+                evaluations: [src[edge_index], src[edge_index + 1]],
+            };
+            *des = edge;
+            // des.extend_from(&src[edge_index..edge_index + 2]);
         }
     }
 
@@ -111,7 +115,7 @@ impl SumcheckProverRound {
 
     fn accumulate_one_relation_univariates<F: PrimeField, R: Relation<F>>(
         univariate_accumulator: &mut R::Acc,
-        extended_edges: &ProverUnivariates<F>,
+        extended_edges: &ShortMonomialProverUnivariates<F>,
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
@@ -129,7 +133,7 @@ impl SumcheckProverRound {
 
     fn accumulate_elliptic_curve_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulator: &mut EllipticRelationAcc<P::ScalarField>,
-        extended_edges: &ProverUnivariates<P::ScalarField>,
+        extended_edges: &ShortMonomialProverUnivariates<P::ScalarField>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
@@ -147,7 +151,7 @@ impl SumcheckProverRound {
 
     fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut AllRelationAcc<P::ScalarField>,
-        extended_edges: &ProverUnivariates<P::ScalarField>,
+        extended_edges: &ShortMonomialProverUnivariates<P::ScalarField>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
@@ -215,7 +219,7 @@ impl SumcheckProverRound {
         // Barretenberg uses multithreading here
 
         // Construct extended edge containers
-        let mut extended_edge = ProverUnivariates::<P::ScalarField>::default();
+        let mut extended_edge = ShortMonomialProverUnivariates::<P::ScalarField>::default();
 
         let mut univariate_accumulators = AllRelationAcc::<P::ScalarField>::default();
 

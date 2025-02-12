@@ -1,9 +1,11 @@
-use crate::decider::types::{ClaimedEvaluations, RelationParameters};
+use crate::decider::types::{
+    ClaimedEvaluations, RelationParameters, ShortMonomialProverUnivariates,
+};
 use crate::decider::{types::ProverUnivariates, univariate::Univariate};
 use crate::transcript::TranscriptFieldType;
+use ark_ff::AdditiveGroup;
 use ark_ff::{Field, PrimeField, Zero};
 use co_builder::prelude::HonkCurve;
-use ark_ff::AdditiveGroup;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EllipticRelationAcc<F: PrimeField> {
     pub(crate) r0: Univariate<F, 6>,
@@ -60,7 +62,7 @@ impl EllipticRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
     pub(crate) const SKIPPABLE: bool = true;
 
-    pub(crate) fn skip<F: PrimeField>(input: &ProverUnivariates<F>) -> bool {
+    pub(crate) fn skip<F: PrimeField>(input: &ShortMonomialProverUnivariates<F>) -> bool {
         // This is the relation implemented manally
         if !Self::SKIPPABLE {
             panic!("Cannot skip this relation");
@@ -80,7 +82,7 @@ impl EllipticRelation {
      */
     pub(crate) fn accumulate<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulator: &mut EllipticRelationAcc<P::ScalarField>,
-        input: &ProverUnivariates<P::ScalarField>,
+        input: &ShortMonomialProverUnivariates<P::ScalarField>,
         _relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {

@@ -18,7 +18,10 @@ pub(crate) struct VerifierMemory<P: Pairing> {
 }
 
 pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
+pub(crate) const SHORT_MONOMIAL_LENGTH: usize = 2;
 pub(crate) type ProverUnivariates<F> = AllEntities<Univariate<F, MAX_PARTIAL_RELATION_LENGTH>>;
+pub(crate) type ShortMonomialProverUnivariates<F> =
+    AllEntities<Univariate<F, SHORT_MONOMIAL_LENGTH>>;
 pub(crate) type PartiallyEvaluatePolys<F> = AllEntities<Vec<F>>;
 pub(crate) type ClaimedEvaluations<F> = AllEntities<F>;
 pub(crate) type VerifierCommitments<P> = AllEntities<P>;

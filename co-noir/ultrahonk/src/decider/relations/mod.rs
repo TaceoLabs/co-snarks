@@ -7,7 +7,9 @@ pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
-use super::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
+use super::types::{
+    ClaimedEvaluations, ProverUnivariates, RelationParameters, ShortMonomialProverUnivariates,
+};
 use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc, AuxiliaryRelationEvals};
@@ -44,10 +46,10 @@ pub(crate) trait Relation<F: PrimeField> {
         }
     }
 
-    fn skip(input: &ProverUnivariates<F>) -> bool;
+    fn skip(input: &ShortMonomialProverUnivariates<F>) -> bool;
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F>,
+        input: &ShortMonomialProverUnivariates<F>,
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     );

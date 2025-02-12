@@ -1,6 +1,8 @@
 use super::Relation;
 use crate::decider::{
-    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+    types::{
+        ClaimedEvaluations, ProverUnivariates, RelationParameters, ShortMonomialProverUnivariates,
+    },
     univariate::Univariate,
 };
 use ark_ff::{PrimeField, Zero};
@@ -89,7 +91,7 @@ impl<F: PrimeField> Relation<F> for Poseidon2ExternalRelation {
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F>) -> bool {
+    fn skip(input: &ShortMonomialProverUnivariates<F>) -> bool {
         <Self as Relation<F>>::check_skippable();
         input.precomputed.q_poseidon2_external().is_zero()
     }
@@ -120,7 +122,7 @@ impl<F: PrimeField> Relation<F> for Poseidon2ExternalRelation {
      */
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F>,
+        input: &ShortMonomialProverUnivariates<F>,
         _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
