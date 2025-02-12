@@ -150,11 +150,11 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
 
 pub struct UltraTraceBlocks<T: Default> {
     pub(crate) pub_inputs: T,
+    pub(crate) lookup: T,
     pub(crate) arithmetic: T,
     pub(crate) delta_range: T,
     pub(crate) elliptic: T,
     pub(crate) aux: T,
-    pub(crate) lookup: T,
     pub(crate) poseidon2_external: T,
     pub(crate) poseidon2_internal: T,
 }
@@ -163,11 +163,11 @@ impl<T: Default> UltraTraceBlocks<T> {
     pub fn get(&self) -> [&T; 8] {
         [
             &self.pub_inputs,
+            &self.lookup,
             &self.arithmetic,
             &self.delta_range,
             &self.elliptic,
             &self.aux,
-            &self.lookup,
             &self.poseidon2_external,
             &self.poseidon2_internal,
         ]
@@ -176,11 +176,11 @@ impl<T: Default> UltraTraceBlocks<T> {
     pub fn get_mut(&mut self) -> [&mut T; 8] {
         [
             &mut self.pub_inputs,
+            &mut self.lookup,
             &mut self.arithmetic,
             &mut self.delta_range,
             &mut self.elliptic,
             &mut self.aux,
-            &mut self.lookup,
             &mut self.poseidon2_external,
             &mut self.poseidon2_internal,
         ]
