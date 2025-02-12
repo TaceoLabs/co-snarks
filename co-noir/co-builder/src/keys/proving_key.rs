@@ -357,7 +357,7 @@ impl<P: Pairing> ProvingKey<P> {
         //  ignored, as used for regular constraints and padding to the next power of 2.
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
         assert!(dyadic_circuit_size > circuit.get_tables_size() + additional_offset);
-        let mut offset = dyadic_circuit_size - circuit.get_tables_size() - additional_offset;
+        let mut offset = circuit.blocks.lookup.trace_offset as usize;
 
         for table in circuit.lookup_tables.iter() {
             let table_index = table.table_index;
