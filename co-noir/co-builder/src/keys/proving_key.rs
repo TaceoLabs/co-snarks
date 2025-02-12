@@ -377,10 +377,8 @@ impl<P: Pairing> ProvingKey<P> {
         circuit: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> std::io::Result<()> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
-        let offset = circuit.blocks.lookup.trace_offset as usize;
+        let mut table_offset = circuit.blocks.lookup.trace_offset as usize;
 
-        let mut table_offset = offset; // offset of the present table in the table polynomials
-                                       // loop over all tables used in the circuit; each table contains data about the lookups made on it
         for table in circuit.lookup_tables.iter_mut() {
             // table.initialize_index_map(); // We calculate indices from keys
 
