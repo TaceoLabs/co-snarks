@@ -174,7 +174,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> Vec<Polynomial<P::ScalarField>> {
         tracing::trace!("Compute fold polynomials");
         // Note: bb uses multithreading here
-        let mut fold_polynomials: Vec<Polynomial<P::ScalarField>> = Vec::with_capacity(log_n - 1);
+        let mut fold_polynomials = Vec::with_capacity(log_n - 1);
 
         // A_l = Aₗ(X) is the polynomial being folded
         // in the first iteration, we take the batched polynomial

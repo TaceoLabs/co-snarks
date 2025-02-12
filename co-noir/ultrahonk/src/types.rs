@@ -139,7 +139,7 @@ impl<T: Default> WitnessEntities<T> {
         self.elements.iter_mut()
     }
 
-    pub(crate) fn to_be_shifted(&self) -> &[T] {
+    pub fn to_be_shifted(&self) -> &[T] {
         &self.elements[Self::W_L..=Self::Z_PERM]
     }
 

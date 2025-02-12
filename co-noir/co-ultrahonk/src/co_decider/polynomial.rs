@@ -31,6 +31,13 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         }
     }
 
+    pub(crate) fn sub_assign_slice(&mut self, driver: &mut T, other: &[T::ArithmeticShare]) {
+        // Barrettenberg uses multithreading here
+        for (des, src) in self.coefficients.iter_mut().zip(other.iter()) {
+            *des = driver.sub(*des, *src);
+        }
+    }
+
     pub(crate) fn add_scaled_slice(
         &mut self,
         driver: &mut T,
