@@ -21,7 +21,7 @@ impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T> + Default
     TranscriptHasher<F> for FieldSponge<F, T, R, H>
 {
     fn hash(buffer: Vec<F>) -> F {
-        Self::hash_fixed_lenth::<1>(&buffer)[0]
+        Self::hash_fixed_length::<1>(&buffer)[0]
     }
 }
 
@@ -121,6 +121,10 @@ where
     }
 
     fn send_to_verifier(&mut self, label: String, elements: &[F]) {
+        // println!("label: {label}");
+        // elements
+        //     .iter()
+        //     .for_each(|y| println!("{:?}", y.to_string()));
         self.proof_data.extend(elements);
         self.consume_prover_elements(label, elements);
     }
@@ -157,6 +161,7 @@ where
     }
 
     fn receive_n_from_prover(&mut self, label: String, n: usize) -> HonkProofResult<Vec<F>> {
+        // println!("label: {label}");
         if self.num_frs_read + n > self.proof_data.len() {
             return Err(HonkProofError::ProofTooSmall);
         }

@@ -609,6 +609,9 @@ pub struct VerifyCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub crs: Option<PathBuf>,
+    /// Verify a ZK proof
+    #[arg(long)]
+    pub has_zk: bool,
 }
 
 /// Config for `verify`
@@ -622,6 +625,8 @@ pub struct VerifyConfig {
     pub vk: PathBuf,
     /// The path to the verifier crs file
     pub crs: PathBuf,
+    /// Verify a ZK proof
+    pub has_zk: bool,
 }
 
 /// Cli arguments for `verify`
@@ -1683,6 +1688,7 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let vk_path: PathBuf = config.vk;
     let crs_path = config.crs;
     let hasher = config.hasher;
+    let has_zk = config.has_zk;
 
     // parse proof file
     let proof_u8 = std::fs::read(&proof).context("while reading proof file")?;
@@ -1701,11 +1707,10 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     tracing::info!("Starting proof verification...");
     let start = Instant::now();
     let res = match hasher {
-        TranscriptHash::POSEIDON => {
-            UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk).context("while verifying proof")?
-        }
+        TranscriptHash::POSEIDON => UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk, has_zk)
+            .context("while verifying proof")?,
         TranscriptHash::KECCAK => {
-            UltraHonk::<_, Keccak256>::verify(proof, vk).context("while verifying proof")?
+            UltraHonk::<_, Keccak256>::verify(proof, vk, has_zk).context("while verifying proof")?
         }
     };
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;

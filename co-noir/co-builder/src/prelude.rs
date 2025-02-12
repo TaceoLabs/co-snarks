@@ -7,7 +7,7 @@ pub use crate::honk_curve::HonkCurve;
 pub use crate::keys::proving_key::ProvingKey;
 pub use crate::keys::verification_key::VerifyingKey;
 pub use crate::keys::verification_key::VerifyingKeyBarretenberg;
-pub use crate::polynomials::polynomial::Polynomial;
+pub use crate::polynomials::polynomial::{Polynomial, RowDisablingPolynomial};
 pub use crate::polynomials::polynomial_types::Polynomials;
 pub use crate::polynomials::polynomial_types::{
     PrecomputedEntities, ProverWitnessEntities, PRECOMPUTED_ENTITIES_SIZE,

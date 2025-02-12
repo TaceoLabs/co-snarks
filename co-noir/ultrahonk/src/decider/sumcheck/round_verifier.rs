@@ -19,18 +19,19 @@ use crate::{
 use ark_ff::{One, Zero};
 use co_builder::prelude::HonkCurve;
 
-pub(crate) struct SumcheckVerifierRound<P: HonkCurve<TranscriptFieldType>> {
+pub(crate) struct SumcheckVerifierRound<P: HonkCurve<TranscriptFieldType>, const SIZE: usize> {
     pub(crate) target_total_sum: P::ScalarField,
     pub(crate) round_failed: bool,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>> Default for SumcheckVerifierRound<P> {
+impl<P: HonkCurve<TranscriptFieldType>, const SIZE: usize> Default
+    for SumcheckVerifierRound<P, SIZE>
+{
     fn default() -> Self {
         Self::new()
     }
 }
-
-impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
+impl<P: HonkCurve<TranscriptFieldType>, const SIZE: usize> SumcheckVerifierRound<P, SIZE> {
     pub(crate) fn new() -> Self {
         Self {
             target_total_sum: P::ScalarField::zero(),
@@ -40,14 +41,17 @@ impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
 
     pub(crate) fn compute_next_target_sum(
         &mut self,
-        univariate: &SumcheckRoundOutput<P::ScalarField>,
+        univariate: &SumcheckRoundOutput<P::ScalarField, SIZE>,
         round_challenge: P::ScalarField,
     ) {
         tracing::trace!("Compute target sum");
         self.target_total_sum = univariate.evaluate(round_challenge);
     }
 
-    pub(crate) fn check_sum(&mut self, univariate: &SumcheckRoundOutput<P::ScalarField>) -> bool {
+    pub(crate) fn check_sum(
+        &mut self,
+        univariate: &SumcheckRoundOutput<P::ScalarField, SIZE>,
+    ) -> bool {
         tracing::trace!("Check sum");
         let total_sum = univariate.evaluations[0] + univariate.evaluations[1];
         let sumcheck_round_failed = self.target_total_sum != total_sum;

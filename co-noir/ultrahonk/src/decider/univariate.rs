@@ -224,6 +224,15 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
             *result += extended;
         }
     }
+
+    pub(crate) fn get_random() -> Self {
+        let mut rng = rand::thread_rng();
+        let mut evaluations = [F::one(); SIZE];
+        for eval in evaluations.iter_mut() {
+            *eval = F::rand(&mut rng);
+        }
+        Self { evaluations }
+    }
 }
 
 impl<F: PrimeField, const SIZE: usize> Default for Univariate<F, SIZE> {

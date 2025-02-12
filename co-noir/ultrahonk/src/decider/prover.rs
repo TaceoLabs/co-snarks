@@ -1,6 +1,11 @@
-use super::{shplemini::ShpleminiOpeningClaim, sumcheck::SumcheckOutput, types::ProverMemory};
+use super::{
+    shplemini::ShpleminiOpeningClaim,
+    sumcheck::{zk_data::ZKSumcheckData, SumcheckOutput},
+    types::ProverMemory,
+};
 
 use crate::{
+    decider::small_subgroup_ipa::SmallSubgroupIPAProver,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,
     Utils,
@@ -14,13 +19,20 @@ use std::marker::PhantomData;
 pub(crate) struct Decider<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    const SIZE: usize,
 > {
     pub(super) memory: ProverMemory<P>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        const SIZE: usize,
+    > Decider<P, H, SIZE>
+{
+    pub const SUBGROUP_SIZE: usize = 256;
     pub(crate) fn new(memory: ProverMemory<P>) -> Self {
         Self {
             memory,
@@ -40,7 +52,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
         quotient.factor_roots(&pair.challenge);
         let quotient_commitment = Utils::commit(&quotient.coefficients, crs)?;
-        // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
+        // AZTEC TODO(#479): compute_opening_proof
         // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
         // pthreads) or even the work queue itself
         transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
@@ -55,10 +67,26 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_relation_check_rounds(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
+        crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> SumcheckOutput<P::ScalarField> {
-        // This is just Sumcheck.prove
-        self.sumcheck_prove(transcript, circuit_size)
+        has_zk: bool,
+    ) -> (SumcheckOutput<P::ScalarField>, Option<ZKSumcheckData<P>>) {
+        if has_zk {
+            let log_subgroup_size = Utils::get_msb64(Self::SUBGROUP_SIZE as u64);
+            let commitment_key = crs.monomials[..1 << (log_subgroup_size + 1)].to_vec();
+            let mut zk_sumcheck_data: ZKSumcheckData<P> = ZKSumcheckData::<P>::new::<H>(
+                Utils::get_msb64(circuit_size as u64) as usize,
+                transcript,
+                &commitment_key,
+            );
+            (
+                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data),
+                Some(zk_sumcheck_data),
+            )
+        } else {
+            // This is just Sumcheck.prove
+            (self.sumcheck_prove(transcript, circuit_size), None)
+        }
     }
 
     /**
@@ -73,10 +101,34 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
+        has_zk: bool,
+        zk_sumcheck_data: Option<&mut ZKSumcheckData<P>>,
     ) -> HonkProofResult<()> {
-        let prover_opening_claim =
-            self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output)?;
-        Self::compute_opening_proof(prover_opening_claim, transcript, crs)
+        if !has_zk {
+            let prover_opening_claim =
+                self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
+            Self::compute_opening_proof(prover_opening_claim, transcript, crs)
+        } else {
+            //   SmallSubgroupIPA small_subgroup_ipa_prover(
+            //             zk_sumcheck_data, sumcheck_output.challenge, sumcheck_output.claimed_libra_evaluation, transcript, ck);
+
+            let small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H>(
+                zk_sumcheck_data.unwrap(),
+                &sumcheck_output.challenges,
+                sumcheck_output.claimed_libra_evaluation.unwrap(),
+                transcript,
+                crs,
+            );
+            let witness_polynomials = small_subgroup_ipa_prover.get_witness_polynomials();
+            let prover_opening_claim = self.shplemini_prove(
+                transcript,
+                circuit_size,
+                crs,
+                sumcheck_output,
+                Some(witness_polynomials),
+            )?;
+            Self::compute_opening_proof(prover_opening_claim, transcript, crs)
+        }
     }
 
     pub(crate) fn prove(
@@ -84,15 +136,24 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         circuit_size: u32,
         crs: &ProverCrs<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
+        has_zk: bool,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
-        let sumcheck_output = self.execute_relation_check_rounds(&mut transcript, circuit_size);
+        let (sumcheck_output, mut zk_sumcheck_data) =
+            self.execute_relation_check_rounds(&mut transcript, crs, circuit_size, has_zk);
 
         // Fiat-Shamir: rho, y, x, z
         // Execute Zeromorph multilinear PCS
-        self.execute_pcs_rounds(&mut transcript, circuit_size, crs, sumcheck_output)?;
+        self.execute_pcs_rounds(
+            &mut transcript,
+            circuit_size,
+            crs,
+            sumcheck_output,
+            has_zk,
+            zk_sumcheck_data.as_mut(),
+        )?;
         Ok(transcript.get_proof())
     }
 }

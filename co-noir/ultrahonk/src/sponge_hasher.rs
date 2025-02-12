@@ -142,7 +142,7 @@ where
         res
     }
 
-    pub(crate) fn hash_fixed_lenth<const OUT_LEN: usize>(input: &[F]) -> [F; OUT_LEN] {
+    pub(crate) fn hash_fixed_length<const OUT_LEN: usize>(input: &[F]) -> [F; OUT_LEN] {
         Self::hash_internal::<OUT_LEN, false>(input)
     }
 

@@ -165,6 +165,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     let circuit_path = config.circuit;
     let hasher = config.hasher;
     let out_dir = config.out_dir;
+    let has_zk = false;
 
     // Read circuit
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_path)
@@ -241,9 +242,11 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     // Verify the proof
     let is_valid = match hasher {
-        TranscriptHash::POSEIDON => UltraHonk::<_, Poseidon2Sponge>::verify(proof, verifying_key)
-            .context("While verifying proof")?,
-        TranscriptHash::KECCAK => UltraHonk::<_, Keccak256>::verify(proof, verifying_key)
+        TranscriptHash::POSEIDON => {
+            UltraHonk::<_, Poseidon2Sponge>::verify(proof, verifying_key, has_zk)
+                .context("While verifying proof")?
+        }
+        TranscriptHash::KECCAK => UltraHonk::<_, Keccak256>::verify(proof, verifying_key, has_zk)
             .context("While verifying proof")?,
     };
 

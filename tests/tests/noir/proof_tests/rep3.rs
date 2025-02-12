@@ -44,6 +44,7 @@ fn convert_witness_rep3<F: PrimeField>(
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
+    let has_zk = false;
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
@@ -87,13 +88,14 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
     let vk = co_noir::generate_vk(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, vk).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, vk, has_zk).unwrap();
     assert!(is_valid);
 }
 
 fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", name);
+    let has_zk = false;
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
@@ -138,7 +140,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
     let vk = co_noir::generate_vk(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, vk).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, vk, has_zk).unwrap();
     assert!(is_valid);
 }
 
