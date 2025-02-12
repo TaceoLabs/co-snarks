@@ -122,15 +122,17 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Construct the d-1 Gemini foldings of A₀(X)
         let fold_polynomials = Self::compute_fold_polynomials(log_n, multilinear_challenge, a_0);
 
-        for l in 1..CONST_PROOF_SIZE_LOG_N {
-            if l < log_n {
-                let res = Utils::commit(&fold_polynomials[l - 1].coefficients, commitment_key)?;
-                transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l), res.into());
-            } else {
-                let res = P::G1Affine::generator();
-                let label = format!("Gemini:FOLD_{}", l);
-                transcript.send_point_to_verifier::<P>(label, res);
-            }
+        for (l, f_poly) in fold_polynomials
+            .iter()
+            .take(CONST_PROOF_SIZE_LOG_N)
+            .enumerate()
+        {
+            let res = Utils::commit(&f_poly.coefficients, commitment_key)?;
+            transcript.send_point_to_verifier::<P>(format!("Gemini:a_{}", l + 1), res.into());
+        }
+        let res = P::G1Affine::generator();
+        for l in fold_polynomials.len()..CONST_PROOF_SIZE_LOG_N - 1 {
+            transcript.send_point_to_verifier::<P>(format!("Gemini:a_{}", l + 1), res);
         }
 
         let r_challenge: P::ScalarField = transcript.get_challenge::<P>("Gemini:r".to_string());
@@ -148,16 +150,18 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             fold_polynomials,
             r_challenge,
         );
-        for l in 1..=CONST_PROOF_SIZE_LOG_N {
-            if l < claims.len() && l <= log_n {
-                transcript.send_fr_to_verifier::<P>(
-                    format!("Gemini:a_{}", l),
-                    claims[l].opening_pair.evaluation,
-                );
-            } else {
-                transcript
-                    .send_fr_to_verifier::<P>(format!("Gemini:a_{}", l), P::ScalarField::zero());
-            }
+
+        for (l, claim) in claims
+            .iter()
+            .skip(1)
+            .take(CONST_PROOF_SIZE_LOG_N)
+            .enumerate()
+        {
+            transcript
+                .send_fr_to_verifier::<P>(format!("Gemini:a_{}", l), claim.opening_pair.evaluation);
+        }
+        for l in claims.len()..=CONST_PROOF_SIZE_LOG_N {
+            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l), P::ScalarField::zero());
         }
 
         Ok(claims)
@@ -281,7 +285,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Compute the remaining m opening pairs {−r^{2ˡ}, Aₗ(−r^{2ˡ})}, l = 1, ..., m-1.
 
-        for (r_square, fold_poly) in r_squares.into_iter().zip(fold_polynomials) {
+        for (r_square, fold_poly) in r_squares.into_iter().skip(1).zip(fold_polynomials) {
             let evaluation = fold_poly.eval_poly(-r_square);
             claims.push(ShpleminiOpeningClaim {
                 polynomial: fold_poly,

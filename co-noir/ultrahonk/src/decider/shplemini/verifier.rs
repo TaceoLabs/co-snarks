@@ -70,11 +70,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     pub fn powers_of_evaluation_challenge(
         gemini_evaluation_challenge: P::ScalarField,
-        proof_size: usize,
+        num_squares: usize,
     ) -> Vec<P::ScalarField> {
-        let mut squares = Vec::with_capacity(proof_size);
+        let mut squares = Vec::with_capacity(num_squares);
         squares.push(gemini_evaluation_challenge);
-        for j in 1..proof_size {
+        for j in 1..num_squares {
             squares.push(squares[j - 1].square());
         }
         squares
