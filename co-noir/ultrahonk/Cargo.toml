@@ -16,6 +16,7 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 co-builder = { version = "0.3.0", path = "../co-builder" }
 mpc-core = { version = "0.8.0", path = "../../mpc-core" }
+ark-poly.workspace = true
 eyre.workspace = true
 itertools.workspace = true
 noirc-artifacts.workspace = true
@@ -23,6 +24,7 @@ num-bigint.workspace = true
 serde_json.workspace = true
 sha3 = { workspace = true }
 tracing.workspace = true
+rand.workspace = true
 
 [dev-dependencies]
 rand.workspace = true

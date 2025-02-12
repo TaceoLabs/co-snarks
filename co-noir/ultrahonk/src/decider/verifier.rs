@@ -6,7 +6,7 @@ use crate::{
     prelude::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
-    Utils,
+    Utils, NUM_LIBRA_COMMITMENTS,
 };
 use ark_ec::AffineRepr;
 use ark_ff::One;
@@ -16,14 +16,18 @@ use std::marker::PhantomData;
 pub(crate) struct DeciderVerifier<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    const SIZE: usize,
 > {
     pub(super) memory: VerifierMemory<P>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    DeciderVerifier<P, H>
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        const SIZE: usize,
+    > DeciderVerifier<P, H, SIZE>
 {
     pub(crate) fn new(memory: VerifierMemory<P>) -> Self {
         Self {
@@ -90,19 +94,46 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         circuit_size: u32,
         crs: &P::G2Affine,
         mut transcript: Transcript<TranscriptFieldType, H>,
+        has_zk: bool,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("Decider verification");
+        let mut libra_commitments = Vec::with_capacity(NUM_LIBRA_COMMITMENTS);
+        if has_zk {
+            libra_commitments
+                .push(transcript.receive_point_from_prover::<P>(
+                    "Libra:concatenation_commitment".to_string(),
+                )?);
+        }
 
-        let sumcheck_output = self.sumcheck_verify(&mut transcript, circuit_size)?;
+        let sumcheck_output = self.sumcheck_verify(&mut transcript, circuit_size, has_zk)?;
         if !sumcheck_output.verified {
             tracing::trace!("Sumcheck failed");
             return Ok(false);
         }
 
+        if has_zk {
+            libra_commitments.push(
+                transcript
+                    .receive_point_from_prover::<P>("Libra:big_sum_commitment".to_string())?,
+            );
+            libra_commitments.push(
+                transcript
+                    .receive_point_from_prover::<P>("Libra:quotient_commitment".to_string())?,
+            );
+        }
+        let libra_commitments = if has_zk {
+            Some(libra_commitments)
+        } else {
+            None
+        };
+        let mut consistency_checked = true;
         let mut opening_claim = self.compute_batch_opening_claim(
             circuit_size,
             sumcheck_output.multivariate_challenge,
             &mut transcript,
+            libra_commitments,
+            sumcheck_output.claimed_libra_evaluation,
+            &mut consistency_checked,
         )?;
 
         let pairing_points = Self::reduce_verify_shplemini(&mut opening_claim, transcript)?;
@@ -113,6 +144,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             *crs,
             P::G2Affine::generator(),
         );
-        Ok(sumcheck_output.verified && pcs_verified)
+        Ok(sumcheck_output.verified && pcs_verified && consistency_checked)
     }
 }

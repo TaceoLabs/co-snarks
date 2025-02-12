@@ -2,8 +2,9 @@ use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial as _};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use num_traits::Zero;
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::ops::{AddAssign, Index, IndexMut, SubAssign};
+use std::ops::{AddAssign, Index, IndexMut, MulAssign, SubAssign};
 
 #[derive(Clone, Debug, Default)]
 pub struct Polynomial<F> {
@@ -203,6 +204,63 @@ impl<F: PrimeField> Polynomial<F> {
         let poly = DensePolynomial::from_coefficients_slice(&self.coefficients);
         poly.evaluate(&point)
     }
+    pub fn random(size: usize) -> Self {
+        let mut rng = rand::thread_rng();
+        let coefficients = (0..size).map(|_| F::rand(&mut rng)).collect();
+        Self { coefficients }
+    }
+
+    pub fn evaluate_mle(&self, evaluation_points: &[F]) -> F {
+        if self.coefficients.is_empty() {
+            return F::zero();
+        }
+
+        let n = evaluation_points.len();
+        let dim = (self.coefficients.len() - 1)
+            .next_power_of_two()
+            .trailing_zeros() as usize; // Round up to next power of 2
+
+        // To simplify handling of edge cases, we assume that the index space is always a power of 2
+        assert_eq!(self.coefficients.len(), 1 << n);
+
+        // We first fold over dim rounds l = 0,...,dim-1.
+        // in round l, n_l is the size of the buffer containing the Polynomial partially evaluated
+        // at u₀,..., u_l.
+        // In round 0, this is half the size of dim
+        let mut n_l = 1 << (dim - 1);
+        let mut tmp = vec![F::zero(); n_l];
+
+        // Note below: i * 2 + 1 + offset might equal virtual_size. This used to subtlely be handled by extra capacity
+        // padding (and there used to be no assert time checks, which this constant helps with).
+        for (i, val) in tmp.iter_mut().enumerate().take(n_l) {
+            *val = self.coefficients[i * 2]
+                + evaluation_points[0] * (self.coefficients[i * 2 + 1] - self.coefficients[i * 2]);
+        }
+
+        // partially evaluate the dim-1 remaining points
+        for (l, val) in evaluation_points.iter().enumerate().take(dim).skip(1) {
+            n_l = 1 << (dim - l - 1);
+
+            for i in 0..n_l {
+                tmp[i] = tmp[i * 2] + *val * (tmp[i * 2 + 1] - tmp[i * 2]);
+            }
+        }
+        // for l in 1..dim {
+        //     n_l = 1 << (dim - l - 1);
+        //     u_l = evaluation_points[l];
+        //     for i in 0..n_l {
+        //         tmp[i] = tmp[i * 2] + u_l * (tmp[i * 2 + 1] - tmp[i * 2]);
+        //     }
+        // }
+        let mut result = tmp[0];
+
+        // We handle the "trivial" dimensions which are full of zeros.
+        for &point in &evaluation_points[dim..n] {
+            result *= F::one() - point;
+        }
+
+        result
+    }
 }
 
 impl<F> Index<usize> for Polynomial<F> {
@@ -240,5 +298,47 @@ impl<F: PrimeField> SubAssign<&[F]> for Polynomial<F> {
         for (l, r) in self.coefficients.iter_mut().zip(rhs.iter()) {
             *l -= *r;
         }
+    }
+}
+
+impl<F: PrimeField> MulAssign<F> for Polynomial<F> {
+    fn mul_assign(&mut self, rhs: F) {
+        for l in self.coefficients.iter_mut() {
+            *l *= rhs;
+        }
+    }
+}
+
+pub struct RowDisablingPolynomial<F: PrimeField> {
+    pub eval_at_0: F,
+    pub eval_at_1: F,
+}
+
+impl<F: PrimeField> Default for RowDisablingPolynomial<F> {
+    fn default() -> Self {
+        Self {
+            eval_at_0: F::one(),
+            eval_at_1: F::one(),
+        }
+    }
+}
+impl<F: PrimeField> RowDisablingPolynomial<F> {
+    pub fn update_evaluations(&mut self, round_challenge: F, round_idx: usize) {
+        if round_idx == 1 {
+            self.eval_at_0 = F::zero();
+        }
+        if round_idx >= 2 {
+            self.eval_at_1 *= round_challenge;
+        }
+    }
+
+    pub fn evaluate_at_challenge(multivariate_challenge: &[F], log_circuit_size: usize) -> F {
+        let mut evaluation_at_multivariate_challenge = F::one();
+
+        for val in multivariate_challenge.iter().take(log_circuit_size).skip(2) {
+            evaluation_at_multivariate_challenge *= val;
+        }
+
+        F::one() - evaluation_at_multivariate_challenge
     }
 }

@@ -7,16 +7,21 @@ use crate::{
     decider::{shplemini::OpeningPair, verifier::DeciderVerifier},
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::AllEntities,
-    Utils, CONST_PROOF_SIZE_LOG_N,
+    Utils, CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_EVALUATIONS,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::{
     prelude::{HonkCurve, Polynomial, ProverCrs},
-    HonkProofResult,
+    HonkProofError, HonkProofResult,
 };
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        const SIZE: usize,
+    > Decider<P, H, SIZE>
+{
     fn get_f_polynomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {
         PolyF {
             precomputed: &polys.precomputed,
@@ -30,13 +35,37 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
+    #[expect(clippy::type_complexity)]
     fn compute_batched_polys(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        n: usize,
-    ) -> (Polynomial<P::ScalarField>, Polynomial<P::ScalarField>) {
+        multilinear_challenge: &[P::ScalarField],
+        log_n: usize,
+        commitment_key: &ProverCrs<P>,
+        has_zk: bool,
+    ) -> HonkProofResult<(Polynomial<P::ScalarField>, Polynomial<P::ScalarField>)> {
         let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
         let g_polynomials = Self::get_g_polynomials(&self.memory.polys);
+        let n = 1 << log_n;
+        let mut batched_unshifted = Polynomial::new_zero(n); // batched unshifted polynomials
+
+        // To achieve ZK, we mask the batched polynomial by a random polynomial of the same size
+        if has_zk {
+            batched_unshifted = Polynomial::<P::ScalarField>::random(n);
+            let masking_poly_comm = Utils::commit(&batched_unshifted.coefficients, commitment_key)?;
+            transcript.send_point_to_verifier::<P>(
+                "Gemini:masking_poly_comm".to_string(),
+                masking_poly_comm.into(),
+            );
+            // In the provers, the size of multilinear_challenge is CONST_PROOF_SIZE_LOG_N, but we need to evaluate the
+            // hiding polynomial as multilinear in log_n variables
+            let masking_poly_eval =
+                batched_unshifted.evaluate_mle(&multilinear_challenge[0..log_n]);
+            transcript.send_fr_to_verifier::<P>(
+                "Gemini:masking_poly_eval".to_string(),
+                masking_poly_eval,
+            );
+        }
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
         let rho = transcript.get_challenge::<P>("rho".to_string());
@@ -49,7 +78,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // evaluations produced by sumcheck of h_i = g_i_shifted.
 
         let mut rho_challenge = P::ScalarField::ONE;
-        let mut batched_unshifted = Polynomial::new_zero(n); // batched unshifted polynomials
+
+        if has_zk {
+            // ρ⁰ is used to batch the hiding polynomial
+            rho_challenge *= rho;
+        }
 
         for f_poly in f_polynomials.iter() {
             batched_unshifted.add_scaled_slice(f_poly, &rho_challenge);
@@ -63,7 +96,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             rho_challenge *= rho;
         }
 
-        (batched_unshifted, batched_to_be_shifted)
+        Ok((batched_unshifted, batched_to_be_shifted))
     }
 
     // /**
@@ -107,13 +140,19 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         multilinear_challenge: Vec<P::ScalarField>,
         log_n: usize,
         commitment_key: &ProverCrs<P>,
+        has_zk: bool,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<P::ScalarField>>> {
         tracing::trace!("Gemini prove");
-        let n = 1 << log_n;
 
         // Compute batched polynomials
-        let (batched_unshifted, batched_to_be_shifted) = self.compute_batched_polys(transcript, n);
+        let (batched_unshifted, batched_to_be_shifted) = self.compute_batched_polys(
+            transcript,
+            &multilinear_challenge,
+            log_n,
+            commitment_key,
+            has_zk,
+        )?;
 
         // Construct the batched polynomial A₀(X) = F(X) + G↺(X) = F(X) + G(X)/X
         let mut a_0 = batched_unshifted.to_owned();
@@ -128,14 +167,22 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             .enumerate()
         {
             let res = Utils::commit(&f_poly.coefficients, commitment_key)?;
-            transcript.send_point_to_verifier::<P>(format!("Gemini:a_{}", l + 1), res.into());
+            transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res.into());
         }
         let res = P::G1Affine::generator();
         for l in fold_polynomials.len()..CONST_PROOF_SIZE_LOG_N - 1 {
-            transcript.send_point_to_verifier::<P>(format!("Gemini:a_{}", l + 1), res);
+            transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res);
         }
 
         let r_challenge: P::ScalarField = transcript.get_challenge::<P>("Gemini:r".to_string());
+
+        let gemini_challenge_in_small_subgroup: bool =
+            has_zk && (r_challenge.pow([P::SUBGROUP_SIZE as u64]) == P::ScalarField::one());
+
+        if gemini_challenge_in_small_subgroup {
+            //TODO
+            return Err(HonkProofError::GeminiSmallSubgroup);
+        }
 
         let (a_0_pos, a_0_neg) = Self::compute_partially_evaluated_batch_polynomials(
             batched_unshifted,
@@ -283,7 +330,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         });
 
         // Compute univariate opening queries rₗ = r^{2ˡ} for l = 0, 1, ..., m-1
-        let r_squares = DeciderVerifier::<P, H>::powers_of_evaluation_challenge(r_challenge, log_n);
+        let r_squares =
+            DeciderVerifier::<P, H, { SIZE }>::powers_of_evaluation_challenge(r_challenge, log_n);
 
         // Compute the remaining m opening pairs {−r^{2ˡ}, Aₗ(−r^{2ˡ})}, l = 1, ..., m-1.
 
@@ -315,10 +363,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         opening_claims: Vec<ShpleminiOpeningClaim<P::ScalarField>>,
         commitment_key: &ProverCrs<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
+        libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
     ) -> HonkProofResult<ShpleminiOpeningClaim<P::ScalarField>> {
         tracing::trace!("Shplonk prove");
         let nu = transcript.get_challenge::<P>("Shplonk:nu".to_string());
-        let batched_quotient = Self::compute_batched_quotient(&opening_claims, nu);
+
+        let batched_quotient =
+            Self::compute_batched_quotient(&opening_claims, nu, libra_opening_claims.clone());
         let batched_quotient_commitment =
             Utils::commit(&batched_quotient.coefficients, commitment_key)?;
         transcript.send_point_to_verifier::<P>(
@@ -333,6 +384,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             batched_quotient,
             nu,
             z,
+            libra_opening_claims,
         ))
     }
 
@@ -342,17 +394,34 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
+        libra_polynomials: Option<[Polynomial<P::ScalarField>; NUM_LIBRA_EVALUATIONS]>,
     ) -> HonkProofResult<ShpleminiOpeningClaim<P::ScalarField>> {
+        let has_zk = libra_polynomials.is_some();
+
         tracing::trace!("Shplemini prove");
         let log_circuit_size = Utils::get_msb32(circuit_size);
         let opening_claims = self.gemini_prove(
             sumcheck_output.challenges,
             log_circuit_size as usize,
             crs,
+            has_zk,
             transcript,
         )?;
-        let batched_claim = self.shplonk_prove(opening_claims, crs, transcript)?;
-        Ok(batched_claim)
+
+        if has_zk {
+            let gemini_r = opening_claims[0].opening_pair.challenge;
+            let libra_opening_claims = Self::compute_libra_opening_claims(
+                gemini_r,
+                libra_polynomials.expect("we have ZK"),
+                transcript,
+            );
+            let batched_claim =
+                self.shplonk_prove(opening_claims, crs, transcript, Some(libra_opening_claims))?;
+            Ok(batched_claim)
+        } else {
+            let batched_claim = self.shplonk_prove(opening_claims, crs, transcript, None)?;
+            Ok(batched_claim)
+        }
     }
 
     /**
@@ -370,8 +439,10 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         batched_quotient_q: Polynomial<P::ScalarField>,
         nu_challenge: P::ScalarField,
         z_challenge: P::ScalarField,
+        libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
     ) -> ShpleminiOpeningClaim<P::ScalarField> {
         tracing::trace!("Compute partially evaluated batched quotient");
+        let has_zk = libra_opening_claims.is_some();
         let num_opening_claims = opening_claims.len();
 
         let mut inverse_vanishing_evals: Vec<P::ScalarField> =
@@ -379,14 +450,21 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         for claim in &opening_claims {
             inverse_vanishing_evals.push(z_challenge - claim.opening_pair.challenge);
         }
+        if has_zk {
+            // Add the terms (z - uₖ) for k = 0, …, d−1 where d is the number of rounds in Sumcheck
+            for claim in libra_opening_claims.clone().unwrap() {
+                inverse_vanishing_evals.push(z_challenge - claim.opening_pair.challenge);
+            }
+        }
         inverse_vanishing_evals.iter_mut().for_each(|x| {
             x.inverse_in_place();
         });
 
         let mut g = batched_quotient_q;
-
+        let len = opening_claims.len();
         let mut current_nu = P::ScalarField::one();
-        for (idx, claim) in opening_claims.into_iter().enumerate() {
+        let mut idx = 0;
+        for claim in opening_claims.into_iter() {
             let mut tmp = claim.polynomial;
             tmp[0] -= claim.opening_pair.evaluation;
             let scaling_factor = current_nu * inverse_vanishing_evals[idx];
@@ -394,6 +472,26 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             g.add_scaled(&tmp, &-scaling_factor);
 
             current_nu *= nu_challenge;
+            idx += 1;
+        }
+
+        // Take into account the constant proof size in Gemini
+        for _ in len..CONST_PROOF_SIZE_LOG_N + 2 {
+            current_nu *= nu_challenge;
+        }
+
+        if has_zk {
+            for claim in libra_opening_claims.unwrap().into_iter() {
+                // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
+                let mut tmp = claim.polynomial;
+                tmp[0] -= claim.opening_pair.evaluation;
+                let scaling_factor = current_nu * inverse_vanishing_evals[idx]; // = νʲ / (z − xⱼ )
+
+                // Add the claim quotient to the batched quotient polynomial
+                g.add_scaled(&tmp, &-scaling_factor);
+                current_nu *= nu_challenge;
+                idx += 1;
+            }
         }
 
         ShpleminiOpeningClaim {
@@ -415,10 +513,20 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     pub(crate) fn compute_batched_quotient(
         opening_claims: &Vec<ShpleminiOpeningClaim<P::ScalarField>>,
         nu_challenge: P::ScalarField,
+        libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
     ) -> Polynomial<P::ScalarField> {
+        let has_zk = libra_opening_claims.is_some();
         tracing::trace!("Compute batched quotient");
         // Find n, the maximum size of all polynomials fⱼ(X)
         let mut max_poly_size: usize = 0;
+
+        if has_zk {
+            // Max size of the polynomials in Libra opening claims is Curve::SUBGROUP_SIZE*2 + 2; we round it up to the
+            // next power of 2
+            let log_subgroup_size = Utils::get_msb32(P::SUBGROUP_SIZE as u32);
+            max_poly_size = 1 << (log_subgroup_size + 1);
+        }
+
         for claim in opening_claims {
             max_poly_size = max_poly_size.max(claim.polynomial.len());
         }
@@ -426,6 +534,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Q(X) = ∑ⱼ νʲ ⋅ ( fⱼ(X) − vⱼ) / ( X − xⱼ )
         let mut q = Polynomial::new_zero(max_poly_size);
         let mut current_nu = P::ScalarField::one();
+
         for claim in opening_claims {
             // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
             let mut tmp = claim.polynomial.clone();
@@ -437,7 +546,64 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             current_nu *= nu_challenge;
         }
 
+        // We use the same batching challenge for Gemini and Libra opening claims. The number of the claims
+        // batched before adding Libra commitments and evaluations is bounded by CONST_PROOF_SIZE_LOG_N+2
+        if has_zk {
+            for _ in opening_claims.len()..CONST_PROOF_SIZE_LOG_N + 2 {
+                current_nu *= nu_challenge;
+            }
+            let libra_claims = libra_opening_claims.unwrap().clone();
+            for claim in libra_claims {
+                // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
+                let mut tmp = claim.polynomial.clone();
+                tmp[0] -= claim.opening_pair.evaluation;
+                tmp.factor_roots(&claim.opening_pair.challenge);
+
+                // Add the claim quotient to the batched quotient polynomial
+                q.add_scaled(&tmp, &current_nu);
+                current_nu *= nu_challenge;
+            }
+        }
+
         // Return batched quotient polynomial Q(X)
         q
+    }
+
+    /**
+     * @brief For ZK Flavors: Evaluate the polynomials used in SmallSubgroupIPA argument, send the evaluations to the
+     * verifier, and populate a vector of the opening claims.
+     *
+     */
+    fn compute_libra_opening_claims(
+        gemini_r: P::ScalarField,
+        libra_polynomials: [Polynomial<P::ScalarField>; NUM_LIBRA_EVALUATIONS],
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+    ) -> Vec<ShpleminiOpeningClaim<P::ScalarField>> {
+        let mut libra_opening_claims = Vec::new();
+
+        let subgroup_generator = P::get_subgroup_generator();
+
+        let libra_eval_labels = [
+            "Libra:concatenation_eval",
+            "Libra:shifted_big_sum_eval",
+            "Libra:big_sum_eval",
+            "Libra:quotient_eval",
+        ];
+        let evaluation_points = [gemini_r, gemini_r * subgroup_generator, gemini_r, gemini_r];
+
+        for (idx, &label) in libra_eval_labels.iter().enumerate() {
+            let new_claim = ShpleminiOpeningClaim {
+                polynomial: libra_polynomials[idx].clone(),
+                opening_pair: OpeningPair {
+                    challenge: evaluation_points[idx],
+                    evaluation: libra_polynomials[idx].eval_poly(evaluation_points[idx]),
+                },
+            };
+            transcript
+                .send_fr_to_verifier::<P>(label.to_string(), new_claim.opening_pair.evaluation);
+            libra_opening_claims.push(new_claim);
+        }
+
+        libra_opening_claims
     }
 }

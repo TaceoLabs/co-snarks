@@ -10,14 +10,17 @@ use crate::{
     prelude::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
-    Utils, CONST_PROOF_SIZE_LOG_N,
+    Utils, CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_COMMITMENTS, NUM_LIBRA_EVALUATIONS,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::prelude::HonkCurve;
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    DeciderVerifier<P, H>
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        const SIZE: usize,
+    > DeciderVerifier<P, H, SIZE>
 {
     pub fn get_g_shift_evaluations(
         evaluations: &ClaimedEvaluations<P::ScalarField>,
@@ -109,12 +112,26 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         circuit_size: u32,
         multivariate_challenge: Vec<P::ScalarField>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
+        libra_commitments: Option<Vec<P::G1Affine>>,
+        libra_univariate_evaluation: Option<P::ScalarField>,
+        consistency_checked: &mut bool,
         // const std::vector<RefVector<Commitment>>& concatenation_group_commitments = {},
         // RefSpan<P::ScalarField> concatenated_evaluations = {}
     ) -> HonkVerifyResult<ShpleminiVerifierOpeningClaim<P>> {
         tracing::trace!("Compute batch opening claim");
         // Extract log_circuit_size
         let log_circuit_size = Utils::get_msb32(circuit_size);
+
+        let has_zk = libra_commitments.is_some();
+
+        let mut hiding_polynomial_commitment = P::G1Affine::default();
+        let mut batched_evaluation = P::ScalarField::zero();
+        if has_zk {
+            hiding_polynomial_commitment = transcript
+                .receive_point_from_prover::<P>("Gemini:masking_poly_comm".to_string())?;
+            batched_evaluation =
+                transcript.receive_fr_from_prover::<P>("Gemini:masking_poly_eval".to_string())?;
+        }
 
         // Get the challenge ρ to batch commitments to multilinear polynomials and their shifts
         let multivariate_batching_challenge = transcript.get_challenge::<P>("rho".to_string());
@@ -134,6 +151,20 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             gemini_evaluation_challenge,
             CONST_PROOF_SIZE_LOG_N,
         );
+
+        let mut libra_evaluations: Vec<_> = Vec::with_capacity(NUM_LIBRA_EVALUATIONS);
+        if has_zk {
+            libra_evaluations.push(
+                transcript.receive_fr_from_prover::<P>("Libra:concatenation_eval".to_string())?,
+            );
+            libra_evaluations.push(
+                transcript.receive_fr_from_prover::<P>("Libra:shifted_big_sum_eval".to_string())?,
+            );
+            libra_evaluations
+                .push(transcript.receive_fr_from_prover::<P>("Libra:big_sum_eval".to_string())?);
+            libra_evaluations
+                .push(transcript.receive_fr_from_prover::<P>("Libra:quotient_eval".to_string())?);
+        }
 
         // Process Shplonk transcript data:
         // - Get Shplonk batching challenge
@@ -199,15 +230,20 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         //     }
         // }
 
+        if has_zk {
+            opening_claim.commitments.push(hiding_polynomial_commitment);
+            opening_claim.scalars.push(-unshifted_scalar);
+        }
+
         // Place the commitments to prover polynomials in the commitments vector. Compute the evaluation of the
         // batched multilinear polynomial. Populate the vector of scalars for the final batch mul
-        let mut batched_evaluation = P::ScalarField::zero();
         self.batch_multivariate_opening_claims(
             &multivariate_batching_challenge,
             &unshifted_scalar,
             &shifted_scalar,
             &mut opening_claim,
             &mut batched_evaluation,
+            has_zk,
         );
 
         // Place the commitments to Gemini Aᵢ to the vector of commitments, compute the contributions from
@@ -227,8 +263,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let a_0_pos = Self::compute_gemini_batched_univariate_evaluation(
             log_circuit_size,
             batched_evaluation,
-            multivariate_challenge,
-            gemini_eval_challenge_powers,
+            &multivariate_challenge,
+            &gemini_eval_challenge_powers,
             &gemini_evaluations,
         );
         // - Add A₀(r)/(z−r) to the constant term accumulator
@@ -236,6 +272,35 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Add A₀(−r)/(z+r) to the constant term accumulator
         constant_term_accumulator +=
             gemini_evaluations[0] * shplonk_batching_challenge * inverse_vanishing_evals[1];
+
+        // TACEO TODO: BB removes repeated commitments here to reduce the number of scalar muls
+        // remove_repeated_commitments(commitments, scalars, repeated_commitments, has_zk);
+
+        // For ZK flavors, the sumcheck output contains the evaluations of Libra univariates that submitted to the
+        // ShpleminiVerifier, otherwise this argument is set to be empty
+        if has_zk {
+            Self::add_zk_data(
+                &mut opening_claim.commitments,
+                &mut opening_claim.scalars,
+                &mut constant_term_accumulator,
+                &libra_commitments
+                    .expect("We have ZK")
+                    .as_slice()
+                    .try_into()
+                    .unwrap(),
+                &libra_evaluations.as_slice().try_into().unwrap(),
+                &gemini_evaluation_challenge,
+                &shplonk_batching_challenge,
+                &shplonk_evaluation_challenge,
+            )?;
+
+            *consistency_checked = Self::check_evaluations_consistency(
+                &libra_evaluations,
+                gemini_evaluation_challenge,
+                &multivariate_challenge,
+                libra_univariate_evaluation.expect("checked it is ZK"),
+            )?;
+        }
 
         // Finalize the batch opening claim
         opening_claim.commitments.push(P::G1Affine::generator());
@@ -268,8 +333,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     pub fn compute_gemini_batched_univariate_evaluation(
         num_variables: u32,
         mut batched_eval_accumulator: P::ScalarField,
-        evaluation_point: Vec<P::ScalarField>,
-        challenge_powers: Vec<P::ScalarField>,
+        evaluation_point: &[P::ScalarField],
+        challenge_powers: &[P::ScalarField],
         fold_polynomial_evals: &[P::ScalarField],
     ) -> P::ScalarField {
         tracing::trace!("Compute gemini batched univariate evaluation");
@@ -356,12 +421,18 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         shifted_scalar: &P::ScalarField,
         opening_claim: &mut ShpleminiVerifierOpeningClaim<P>,
         batched_evaluation: &mut P::ScalarField,
+        has_zk: bool,
         // concatenated_scalars: Vec<P::ScalarField>,
         // concatenation_group_commitments: &[Vec<P::G1Affine>],
         // concatenated_evaluations: &[P::ScalarField],
     ) {
         tracing::trace!("Batch multivariate opening claims");
+
         let mut current_batching_challenge = P::ScalarField::one();
+        if has_zk {
+            // ρ⁰ is used to batch the hiding polynomial which has already been added to the commitments vector
+            current_batching_challenge *= multivariate_batching_challenge;
+        }
         let unshifted_evaluations = Self::get_f_evaluations(&self.memory.claimed_evaluations);
         let shifted_evaluations = Self::get_g_shift_evaluations(&self.memory.claimed_evaluations);
         let unshifted_commitments = Self::get_f_comms(&self.memory.verifier_commitments);
@@ -486,5 +557,188 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             // Move com(Aᵢ) to the 'commitments' vector
             opening_claim.commitments.push(fold_commitments[j]);
         }
+    }
+
+    /**
+     * @brief Add the opening data corresponding to Libra masking univariates to the batched opening claim
+     *
+     * @details After verifying ZK Sumcheck, the verifier has to validate the claims about the evaluations of Libra
+     * univariates used to mask Sumcheck round univariates. To minimize the overhead of such openings, we continue
+     * the Shplonk batching started in Gemini, i.e. we add new claims multiplied by a suitable power of the Shplonk
+     * batching challenge and re-use the evaluation challenge sampled to prove the evaluations of Gemini
+     * polynomials.
+     *
+     * @param commitments
+     * @param scalars
+     * @param libra_commitments
+     * @param libra_univariate_evaluations
+     * @param multivariate_challenge
+     * @param shplonk_batching_challenge
+     * @param shplonk_evaluation_challenge
+     */
+    #[expect(clippy::too_many_arguments)]
+    fn add_zk_data(
+        commitments: &mut Vec<P::G1Affine>,
+        scalars: &mut Vec<P::ScalarField>,
+        constant_term_accumulator: &mut P::ScalarField,
+        libra_commitments: &[P::G1Affine; NUM_LIBRA_COMMITMENTS],
+        libra_evaluations: &[P::ScalarField; NUM_LIBRA_EVALUATIONS],
+        gemini_evaluation_challenge: &P::ScalarField,
+        shplonk_batching_challenge: &P::ScalarField,
+        shplonk_evaluation_challenge: &P::ScalarField,
+    ) -> HonkVerifyResult<()> {
+        // Compute current power of Shplonk batching challenge taking into account the const proof size
+        let mut shplonk_challenge_power = P::ScalarField::one();
+        for _ in 0..(CONST_PROOF_SIZE_LOG_N + 2) {
+            shplonk_challenge_power *= *shplonk_batching_challenge;
+        }
+
+        // Add Libra commitments to the vector of commitments
+        for &commitment in libra_commitments.iter() {
+            commitments.push(commitment);
+        }
+
+        // Compute corresponding scalars and the correction to the constant term
+        let mut denominators = [P::ScalarField::zero(); NUM_LIBRA_EVALUATIONS];
+        let mut batching_scalars = [P::ScalarField::zero(); NUM_LIBRA_EVALUATIONS];
+        let subgroup_generator = P::get_subgroup_generator();
+
+        // Compute Shplonk denominators and invert them
+        denominators[0] =
+            P::ScalarField::one() / (*shplonk_evaluation_challenge - *gemini_evaluation_challenge);
+        denominators[1] = P::ScalarField::one()
+            / (*shplonk_evaluation_challenge - subgroup_generator * *gemini_evaluation_challenge);
+        denominators[2] = denominators[0];
+        denominators[3] = denominators[0];
+
+        // Compute the scalars to be multiplied against the commitments [libra_concatenated], [big_sum], [big_sum], and
+        // [libra_quotient]
+        for idx in 0..NUM_LIBRA_EVALUATIONS {
+            let scaling_factor = denominators[idx] * shplonk_challenge_power;
+            batching_scalars[idx] = -scaling_factor;
+            shplonk_challenge_power *= *shplonk_batching_challenge;
+            *constant_term_accumulator += scaling_factor * libra_evaluations[idx];
+        }
+
+        // To save a scalar mul, add the sum of the batching scalars corresponding to the big sum evaluations
+        scalars.push(batching_scalars[0]);
+        scalars.push(batching_scalars[1] + batching_scalars[2]);
+        scalars.push(batching_scalars[3]);
+        Ok(())
+    }
+
+    fn check_evaluations_consistency(
+        libra_evaluations: &[P::ScalarField],
+        gemini_evaluation_challenge: P::ScalarField,
+        multilinear_challenge: &[P::ScalarField],
+        inner_product_eval_claim: P::ScalarField,
+    ) -> HonkVerifyResult<bool> {
+        let subgroup_generator_inverse = P::get_subgroup_generator().inverse().unwrap();
+
+        // Compute the evaluation of the vanishing polynomia Z_H(X) at X = gemini_evaluation_challenge
+        let vanishing_poly_eval =
+            gemini_evaluation_challenge.pow([P::SUBGROUP_SIZE as u64]) - P::ScalarField::one();
+
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1194). Handle edge cases in PCS
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1186). Insecure pattern.
+        let gemini_challenge_in_small_subgroup = vanishing_poly_eval == P::ScalarField::zero();
+
+        // The probability of this event is negligible but it has to be processed correctly
+        if gemini_challenge_in_small_subgroup {
+            return Err(eyre::eyre!("Gemini challenge is in the small subgroup"));
+        }
+
+        // Construct the challenge polynomial from the sumcheck challenge, the verifier has to evaluate it on its own
+        let challenge_polynomial_lagrange =
+            Self::compute_challenge_polynomial(multilinear_challenge);
+
+        // Compute the evaluations of the challenge polynomial, Lagrange first, and Lagrange last for the fixed small
+        // subgroup
+        let [challenge_poly, lagrange_first, lagrange_last] =
+            Self::compute_batched_barycentric_evaluations(
+                &challenge_polynomial_lagrange,
+                gemini_evaluation_challenge,
+                &subgroup_generator_inverse,
+                &vanishing_poly_eval,
+            );
+
+        let concatenated_at_r = libra_evaluations[0];
+        let big_sum_shifted_eval = libra_evaluations[1];
+        let big_sum_eval = libra_evaluations[2];
+        let quotient_eval = libra_evaluations[3];
+
+        // Compute the evaluation of
+        // L_1(X) * A(X) + (X - 1/g) (A(gX) - A(X) - F(X) G(X)) + L_{|H|}(X)(A(X) - s) - Z_H(X) * Q(X)
+        let mut diff = lagrange_first * big_sum_eval;
+        diff += (gemini_evaluation_challenge - subgroup_generator_inverse)
+            * (big_sum_shifted_eval - big_sum_eval - concatenated_at_r * challenge_poly);
+        diff += lagrange_last * (big_sum_eval - inner_product_eval_claim)
+            - vanishing_poly_eval * quotient_eval;
+
+        Ok(diff == P::ScalarField::zero())
+    }
+
+    fn compute_challenge_polynomial(
+        multivariate_challenge: &[P::ScalarField],
+    ) -> Vec<P::ScalarField> {
+        let mut challenge_polynomial_lagrange = vec![P::ScalarField::zero(); P::SUBGROUP_SIZE];
+
+        challenge_polynomial_lagrange[0] = P::ScalarField::one();
+
+        // Populate the vector with the powers of the challenges
+        for (idx_poly, challenge) in multivariate_challenge
+            .iter()
+            .enumerate()
+            .take(CONST_PROOF_SIZE_LOG_N)
+        {
+            let current_idx = 1 + P::LIBRA_UNIVARIATES_LENGTH * idx_poly;
+            challenge_polynomial_lagrange[current_idx] = P::ScalarField::one();
+            for idx in 1..P::LIBRA_UNIVARIATES_LENGTH {
+                // Recursively compute the powers of the challenge
+                challenge_polynomial_lagrange[current_idx + idx] =
+                    challenge_polynomial_lagrange[current_idx + idx - 1] * challenge;
+            }
+        }
+
+        challenge_polynomial_lagrange
+    }
+
+    fn compute_batched_barycentric_evaluations(
+        coeffs: &[P::ScalarField],
+        r: P::ScalarField,
+        inverse_root_of_unity: &P::ScalarField,
+        vanishing_poly_eval: &P::ScalarField,
+    ) -> [P::ScalarField; 3] {
+        let mut denominators = vec![P::ScalarField::zero(); P::SUBGROUP_SIZE];
+        let one = P::ScalarField::one();
+        let mut numerator = *vanishing_poly_eval;
+
+        numerator *= one / P::ScalarField::from(P::SUBGROUP_SIZE as u64); // (r^n - 1) / n
+
+        denominators[0] = r - one;
+        let mut work_root = *inverse_root_of_unity; // g^{-1}
+                                                    //
+                                                    // Compute the denominators of the Lagrange polynomials evaluated at r
+        for denominator in denominators.iter_mut().skip(1) {
+            *denominator = work_root * r;
+            *denominator -= one; // r * g^{-i} - 1
+            work_root *= *inverse_root_of_unity;
+        }
+
+        // Invert/Batch invert denominators
+        co_builder::prelude::Utils::batch_invert(&mut denominators);
+
+        let mut result = [P::ScalarField::zero(); 3];
+
+        // Accumulate the evaluation of the polynomials given by `coeffs` vector
+        for (coeff, denominator) in coeffs.iter().zip(denominators.iter()) {
+            result[0] += *coeff * *denominator; // + coeffs_i * 1/(r * g^{-i}  - 1)
+        }
+
+        result[0] *= numerator; // The evaluation of the polynomials given by its evaluations over H
+        result[1] = denominators[0] * numerator; // Lagrange first evaluated at r
+        result[2] = denominators[P::SUBGROUP_SIZE - 1] * numerator; // Lagrange last evaluated at r
+
+        result
     }
 }

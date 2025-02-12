@@ -1,5 +1,10 @@
 use crate::{
-    decider::{types::VerifierMemory, verifier::DeciderVerifier},
+    decider::{
+        types::{
+            VerifierMemory, BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+        },
+        verifier::DeciderVerifier,
+    },
     oink::verifier::OinkVerifier,
     prelude::TranscriptFieldType,
     prover::UltraHonk,
@@ -14,6 +19,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     pub fn verify(
         honk_proof: HonkProof<TranscriptFieldType>,
         verifying_key: VerifyingKey<P>,
+        has_zk: bool,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("UltraHonk verification");
 
@@ -28,8 +34,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let mut memory = VerifierMemory::from_memory_and_key(oink_result, verifying_key);
         memory.relation_parameters.gate_challenges =
             Self::generate_gate_challenges(&mut transcript);
-
-        let decider_verifier = DeciderVerifier::new(memory);
-        decider_verifier.verify(cicruit_size, &crs, transcript)
+        if !has_zk {
+            let decider_verifier =
+                DeciderVerifier::<_, _, BATCHED_RELATION_PARTIAL_LENGTH>::new(memory);
+            decider_verifier.verify(cicruit_size, &crs, transcript, has_zk)
+        } else {
+            let decider_verifier =
+                DeciderVerifier::<_, _, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::new(memory);
+            decider_verifier.verify(cicruit_size, &crs, transcript, has_zk)
+        }
     }
 }

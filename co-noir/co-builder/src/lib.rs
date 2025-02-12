@@ -40,4 +40,10 @@ pub enum HonkProofError {
     ExpectedPublicWitness,
     #[error(transparent)]
     IOError(#[from] std::io::Error),
+    /// Gemini evaluation challenge is in the SmallSubgroup
+    #[error("Gemini evaluation challenge is in the SmallSubgroup.")]
+    GeminiSmallSubgroup,
+    /// The Subgroup for the FFT domain is too large
+    #[error("Too large Subgroup")]
+    LargeSubgroup,
 }

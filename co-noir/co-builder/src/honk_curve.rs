@@ -1,11 +1,14 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField};
 use num_bigint::BigUint;
+use std::str::FromStr;
 
 // Des describes the PrimeField used for the Transcript
 pub trait HonkCurve<Des: PrimeField>: Pairing {
     const NUM_BASEFIELD_ELEMENTS: usize;
     const NUM_SCALARFIELD_ELEMENTS: usize;
+    const SUBGROUP_SIZE: usize;
+    const LIBRA_UNIVARIATES_LENGTH: usize;
 
     fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::G1Affine;
     fn g1_affine_to_xy(p: &Self::G1Affine) -> (Self::BaseField, Self::BaseField);
@@ -21,11 +24,15 @@ pub trait HonkCurve<Des: PrimeField>: Pairing {
 
     // For the elliptic curve relation
     fn get_curve_b() -> Self::ScalarField;
+
+    fn get_subgroup_generator() -> Self::ScalarField;
 }
 
 impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
     const NUM_BASEFIELD_ELEMENTS: usize = 2;
     const NUM_SCALARFIELD_ELEMENTS: usize = 1;
+    const SUBGROUP_SIZE: usize = 256;
+    const LIBRA_UNIVARIATES_LENGTH: usize = 9;
 
     fn g1_affine_from_xy(x: ark_bn254::Fq, y: ark_bn254::Fq) -> ark_bn254::G1Affine {
         ark_bn254::G1Affine::new(x, y)
@@ -61,6 +68,14 @@ impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
     fn get_curve_b() -> Self::ScalarField {
         // We are getting grumpkin::b, which is -17
         -ark_bn254::Fr::from(17)
+    }
+
+    fn get_subgroup_generator() -> Self::ScalarField {
+        ark_bn254::Fr::from_str(
+            "3478517300119284901893091970156912948790432420133812234316178878452092729974",
+        )
+        .map_err(|_| eyre::eyre!("Failed to parse subgroup generator"))
+        .unwrap()
     }
 }
 

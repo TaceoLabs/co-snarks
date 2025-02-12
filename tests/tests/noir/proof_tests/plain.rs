@@ -42,6 +42,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_file, true)
         .expect("failed to parse program artifact");
     let witness = Utils::get_witness_from_file(&witness_file).expect("failed to parse witness");
+    let has_zk = false;
 
     let mut driver = PlainAcvmSolver::new();
     let builder = PlainCoBuilder::<Bn254>::create_circuit(
@@ -63,7 +64,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
 
     let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 
@@ -74,6 +75,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let has_zk = false;
 
     let solver = PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
     let witness = solver.solve().unwrap().0;
@@ -99,7 +101,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
 
     let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 

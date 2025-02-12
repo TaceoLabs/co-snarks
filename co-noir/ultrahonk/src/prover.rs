@@ -1,5 +1,10 @@
 use crate::{
-    decider::{prover::Decider, types::ProverMemory},
+    decider::{
+        prover::Decider,
+        types::{
+            ProverMemory, BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+        },
+    },
     oink::prover::Oink,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,
@@ -33,7 +38,10 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         gate_challenges
     }
 
-    pub fn prove(proving_key: ProvingKey<P>) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+    pub fn prove(
+        proving_key: ProvingKey<P>,
+        has_zk: bool,
+    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("UltraHonk prove");
 
         let mut transcript = Transcript::<TranscriptFieldType, H>::new();
@@ -49,7 +57,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         memory.relation_parameters.gate_challenges =
             Self::generate_gate_challenges(&mut transcript);
 
-        let decider = Decider::new(memory);
-        decider.prove(cicruit_size, &crs, transcript)
+        if !has_zk {
+            let decider = Decider::<_, _, BATCHED_RELATION_PARTIAL_LENGTH>::new(memory);
+            decider.prove(cicruit_size, &crs, transcript, has_zk)
+        } else {
+            let decider = Decider::<_, _, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::new(memory);
+            decider.prove(cicruit_size, &crs, transcript, has_zk)
+        }
     }
 }
