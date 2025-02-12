@@ -645,11 +645,21 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn sort(
         &mut self,
-        inputs: &[Self::ArithmeticShare],
+        inputs: &[Self::AcvmType],
         bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        let mut priv_inputs = Vec::new();
+        let mut pub_inputs = Vec::new();
+        for val in inputs {
+            if Self::is_shared(val) {
+                priv_inputs.push(Self::get_shared(val).expect("Already checked it is shared"));
+            } else {
+                pub_inputs.push(Self::get_public(val).expect("Already checked it is public"));
+            }
+        }
         radix_sort_fields(
-            inputs,
+            priv_inputs,
+            pub_inputs,
             &mut self.io_context0,
             &mut self.io_context1,
             bitsize,
@@ -835,12 +845,27 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn sort_vec_by(
         &mut self,
-        key: &[Self::ArithmeticShare],
+        key: &[Self::AcvmType],
         inputs: Vec<&[Self::ArithmeticShare]>,
         bitsize: usize,
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+        let mut priv_key = Vec::new();
+        let mut pub_key = Vec::new();
+        let mut order = Vec::with_capacity(key.len());
+        for val in key {
+            if Self::is_shared(val) {
+                order.push(true);
+                priv_key.push(Self::get_shared(val).expect("Already checked it is shared"));
+            } else {
+                order.push(false);
+                pub_key.push(Self::get_public(val).expect("Already checked it is public"));
+            }
+        }
+
         radix_sort_fields_vec_by(
-            key,
+            &priv_key,
+            &pub_key,
+            &order,
             inputs,
             &mut self.io_context0,
             &mut self.io_context1,

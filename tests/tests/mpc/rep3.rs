@@ -1613,7 +1613,7 @@ mod field_share {
 
     #[test]
     fn rep3_radix_sort() {
-        const VEC_SIZE: usize = 10;
+        const VEC_SIZE: usize = 20;
         const CHUNK_SIZE: usize = 14;
 
         let test_network = Rep3TestNetwork::default();
@@ -1621,7 +1621,7 @@ mod field_share {
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
             .collect_vec();
-        let x_shares = rep3::share_field_elements(&x, &mut rng);
+        let x_shares = rep3::share_field_elements(&x[..VEC_SIZE / 2], &mut rng);
 
         // Only sort by the first CHUNK_SIZE bits
         let mut shortened = Vec::with_capacity(VEC_SIZE);
@@ -1641,17 +1641,19 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
+        for (net, tx, x_) in izip!(
             test_network.get_party_networks().into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter()
         ) {
+            let x_pub = x[VEC_SIZE / 2..].to_vec();
             thread::spawn(move || {
                 let mut rep3 = IoContext::init(net).unwrap();
                 let mut forked = rep3.fork().unwrap();
 
                 let decomposed = rep3_ring::gadgets::sort::radix_sort_fields(
-                    &x,
+                    x_,
+                    x_pub,
                     &mut rep3,
                     &mut forked,
                     CHUNK_SIZE,

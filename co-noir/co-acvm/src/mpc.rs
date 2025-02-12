@@ -186,16 +186,18 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>>;
 
     /// Sorts a vector of shared values in ascending order, only considering the first bitsize bits.
+    /// The sort is *not* stable.
     fn sort(
         &mut self,
-        inputs: &[Self::ArithmeticShare],
+        inputs: &[Self::AcvmType],
         bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
 
     /// Creates a permutation to sort a vector of shared values based on ordering key in ascending order, only considering the first bitsize bits. Then applies the permutation to the vectors in inputs.
+    /// The sort *is* stable.
     fn sort_vec_by(
         &mut self,
-        key: &[Self::ArithmeticShare],
+        key: &[Self::AcvmType],
         inputs: Vec<&[Self::ArithmeticShare]>,
         bitsize: usize,
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>>;

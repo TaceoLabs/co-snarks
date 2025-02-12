@@ -446,7 +446,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
 
     fn sort(
         &mut self,
-        _inputs: &[Self::ArithmeticShare],
+        _inputs: &[Self::AcvmType],
         _bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
         panic!("functionality sort not feasible for Shamir")
@@ -534,7 +534,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
 
     fn sort_vec_by(
         &mut self,
-        _key: &[Self::ArithmeticShare],
+        _key: &[Self::AcvmType],
         _inputs: Vec<&[Self::ArithmeticShare]>,
         _bitsize: usize,
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {

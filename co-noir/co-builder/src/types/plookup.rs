@@ -376,22 +376,8 @@ impl<F: PrimeField> Plookup<F> {
         // At least one key is shared, so we have to do something different
 
         // the case shared/public can probably be optimised (or never happens?)
-        let key_a = if T::is_shared(&key_a) {
-            T::get_shared(&key_a).expect("Already checked it is shared")
-        } else {
-            T::promote_to_trivial_share(
-                driver,
-                T::get_public(&key_a).expect("Already checked it is public"),
-            )
-        };
-        let key_b = if T::is_shared(&key_b) {
-            T::get_shared(&key_b).expect("Already checked it is shared")
-        } else {
-            T::promote_to_trivial_share(
-                driver,
-                T::get_public(&key_b).expect("Already checked it is public"),
-            )
-        };
+        let key_a = GenericUltraCircuitBuilder::<P, T>::get_as_shared(&key_a, driver);
+        let key_b = GenericUltraCircuitBuilder::<P, T>::get_as_shared(&key_b, driver);
 
         match multi_table.id {
             MultiTableId::Uint32Xor => {

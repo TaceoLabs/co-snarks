@@ -407,11 +407,8 @@ impl<P: Pairing> ProvingKey<P> {
                         let wit = T::AcvmType::from(des.to_owned());
                         let src = T::AcvmType::from(src.to_owned());
                         let added = driver.add(wit, src);
-                        *des = if T::is_shared(&added) {
-                            T::get_shared(&added).unwrap()
-                        } else {
-                            driver.promote_to_trivial_share(T::get_public(&added).unwrap())
-                        }; // Read count
+                        *des = GenericUltraCircuitBuilder::<P, T>::get_as_shared(&added, driver);
+                        // Read count
                     }
 
                     // Set the read tag
@@ -444,11 +441,8 @@ impl<P: Pairing> ProvingKey<P> {
                     // increment the read count at the corresponding index in the full polynomial
                     let mut wit0 = T::AcvmType::from(witness[0][index_in_poly].to_owned());
                     driver.add_assign_with_public(P::ScalarField::one(), &mut wit0);
-                    witness[0][index_in_poly] = if T::is_shared(&wit0) {
-                        T::get_shared(&wit0).unwrap()
-                    } else {
-                        driver.promote_to_trivial_share(T::get_public(&wit0).unwrap())
-                    }; // Read count
+                    witness[0][index_in_poly] =
+                        GenericUltraCircuitBuilder::<P, T>::get_as_shared(&wit0, driver); // Read count
 
                     // Set the read tag
                     witness[1][index_in_poly] =
