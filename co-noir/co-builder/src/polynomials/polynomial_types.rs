@@ -57,13 +57,13 @@ impl<T: Default> IntoIterator for ProverWitnessEntities<T> {
 
 impl<T: Default> ProverWitnessEntities<T> {
     /// column 0
-    const W_L: usize = 0;
+    pub(crate) const W_L: usize = 0;
     /// column 1
     pub const W_R: usize = 1;
     /// column 2
-    const W_O: usize = 2;
+    pub(crate) const W_O: usize = 2;
     /// column 3 (modified by prover)
-    const W_4: usize = 3;
+    pub(crate) const W_4: usize = 3;
     /// column 6
     const LOOKUP_READ_COUNTS: usize = 4;
     /// column 7
@@ -129,31 +129,31 @@ impl<T: Default> ProverWitnessEntities<T> {
 
 impl<T: Default> PrecomputedEntities<T> {
     /// column 0
-    const Q_M: usize = 0;
+    pub(crate) const Q_M: usize = 0;
     /// column 1
-    const Q_C: usize = 1;
+    pub(crate) const Q_C: usize = 1;
     /// column 2
-    const Q_L: usize = 2;
+    pub(crate) const Q_L: usize = 2;
     /// column 3
-    const Q_R: usize = 3;
+    pub(crate) const Q_R: usize = 3;
     /// column 4
-    const Q_O: usize = 4;
+    pub(crate) const Q_O: usize = 4;
     /// column 5
-    const Q_4: usize = 5;
+    pub(crate) const Q_4: usize = 5;
     /// column 6
-    const Q_LOOKUP: usize = 6;
+    pub(crate) const Q_LOOKUP: usize = 6;
     /// column 7
-    const Q_ARITH: usize = 7;
+    pub(crate) const Q_ARITH: usize = 7;
     /// column 8
-    const Q_DELTA_RANGE: usize = 8;
+    pub(crate) const Q_DELTA_RANGE: usize = 8;
     /// column 9
-    const Q_ELLIPTIC: usize = 9;
+    pub(crate) const Q_ELLIPTIC: usize = 9;
     /// column 10
-    const Q_AUX: usize = 10;
+    pub(crate) const Q_AUX: usize = 10;
     /// column 11
-    const Q_POSEIDON2_EXTERNAL: usize = 11;
+    pub(crate) const Q_POSEIDON2_EXTERNAL: usize = 11;
     /// column 12
-    const Q_POSEIDON2_INTERNAL: usize = 12;
+    pub(crate) const Q_POSEIDON2_INTERNAL: usize = 12;
     /// column 13
     const SIGMA_1: usize = 13;
     /// column 14
