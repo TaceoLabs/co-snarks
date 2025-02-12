@@ -300,7 +300,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Step (1)
         // Populate `numerator` and `denominator` with the algebra described by Relation
 
-        for i in 0..active_domain_size {
+        for i in 0..active_domain_size - 1 {
             let idx = if has_active_ranges {
                 proving_key.active_region_data.get_idx(i)
             } else {
@@ -314,7 +314,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Compute the accumulating product of the numerator and denominator terms.
         // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation signlethreaded for simplicity
 
-        for i in 1..active_domain_size {
+        for i in 1..active_domain_size - 1 {
             numerator[i] = numerator[i] * numerator[i - 1];
             denominator[i] = denominator[i] * denominator[i - 1];
         }
@@ -331,13 +331,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         self.memory.z_perm[1] = P::ScalarField::one();
 
         // Compute grand product values corresponding only to the active regions of the trace
-        for i in 0..active_domain_size {
+        for i in 0..active_domain_size - 1 {
             let idx = if has_active_ranges {
                 proving_key.active_region_data.get_idx(i)
             } else {
                 i
             };
-            self.memory.z_perm[idx] = numerator[i] * denominator[i];
+            self.memory.z_perm[idx + 1] = numerator[i] * denominator[i];
         }
 
         // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
@@ -351,7 +351,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                     let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
                     // Set the value of the polynomial if the index falls in an inactive region
                     if i >= previous_range_end && i < next_range_start {
-                        self.memory.z_perm[i] = self.memory.z_perm[next_range_start];
+                        self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
                     }
                 }
             }

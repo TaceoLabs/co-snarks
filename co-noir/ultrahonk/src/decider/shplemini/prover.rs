@@ -123,8 +123,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let fold_polynomials = Self::compute_fold_polynomials(log_n, multilinear_challenge, a_0);
 
         for l in 1..CONST_PROOF_SIZE_LOG_N {
-            if l < log_n - 2 {
-                let res = Utils::commit(&fold_polynomials[l + 1].coefficients, commitment_key)?;
+            if l < log_n {
+                let res = Utils::commit(&fold_polynomials[l - 1].coefficients, commitment_key)?;
                 transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l), res.into());
             } else {
                 let res = P::G1Affine::generator();
