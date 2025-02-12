@@ -330,15 +330,6 @@ impl<
             mul2.push(m2);
         }
 
-        for (s1, s2, p1, p2) in
-            izip!(shared1.iter(), shared2.iter(), pub1.iter(), pub2.iter()).take(output_len)
-        {
-            let m1 = driver.add_with_public(*p1 * beta + gamma, *s1);
-            let m2 = driver.add_with_public(*p2 * beta + gamma, *s2);
-            mul1.push(m1);
-            mul2.push(m2);
-        }
-
         Ok(driver.mul_many(&mul1, &mul2)?)
     }
 
