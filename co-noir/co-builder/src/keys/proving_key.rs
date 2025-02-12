@@ -94,7 +94,6 @@ impl<P: Pairing> ProvingKey<P> {
                 .try_into()
                 .unwrap(),
             &mut circuit,
-            dyadic_circuit_size,
         )?;
 
         // Construct the public inputs array
@@ -376,10 +375,9 @@ impl<P: Pairing> ProvingKey<P> {
         driver: &mut T,
         witness: &mut [Polynomial<T::ArithmeticShare>; 2],
         circuit: &mut GenericUltraCircuitBuilder<P, T>,
-        dyadic_circuit_size: usize,
     ) -> std::io::Result<()> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
-        let offset = dyadic_circuit_size - circuit.get_tables_size();
+        let offset = circuit.blocks.lookup.trace_offset as usize;
 
         let mut table_offset = offset; // offset of the present table in the table polynomials
                                        // loop over all tables used in the circuit; each table contains data about the lookups made on it
