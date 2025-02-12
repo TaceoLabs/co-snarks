@@ -294,8 +294,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         };
 
         // In Barretenberg circuit size is taken from the q_c polynomial
-        let mut numerator = Vec::with_capacity(active_domain_size);
-        let mut denominator = Vec::with_capacity(active_domain_size);
+        let mut numerator = Vec::with_capacity(active_domain_size - 1);
+        let mut denominator = Vec::with_capacity(active_domain_size - 1);
 
         // Step (1)
         // Populate `numerator` and `denominator` with the algebra described by Relation
