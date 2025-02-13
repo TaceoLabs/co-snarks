@@ -1121,10 +1121,12 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
 
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
-    let (result_witness_share, _) =
+    let (result_witness_share, net) =
         co_noir::generate_witness_rep3(input_share, compiled_program, net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Generate witness took {duration_ms} ms");
+    // network is shutdown in drop, which can take seom time with quinn
+    drop(net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1162,9 +1164,12 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
     let start = Instant::now();
-    let (shamir_witness_shares, _) = co_noir::translate_witness::<Bn254, _, _>(witness_share, net)?;
+    let (shamir_witness_shares, net) =
+        co_noir::translate_witness::<Bn254, _, _>(witness_share, net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate witness took {duration_ms} ms");
+    // network is shutdown in drop, which can take seom time with quinn
+    drop(net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1201,9 +1206,11 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     // Translate proving key to shamir shares
     tracing::info!("Starting proving key translation...");
     let start = Instant::now();
-    let (shamir_proving_key, _) = co_noir::translate_proving_key(proving_key, net)?;
+    let (shamir_proving_key, net) = co_noir::translate_proving_key(proving_key, net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate proving key took {duration_ms} ms");
+    // network is shutdown in drop, which can take seom time with quinn
+    drop(net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1247,7 +1254,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             let net = Rep3MpcNet::new(network_config)?;
 
             let start = Instant::now();
-            let (proving_key, _) = co_noir::generate_proving_key_rep3(
+            let (proving_key, net) = co_noir::generate_proving_key_rep3(
                 net,
                 &constraint_system,
                 witness_share,
@@ -1255,6 +1262,8 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
+            // network is shutdown in drop, which can take seom time with quinn
+            drop(net);
 
             // write result to output file
             let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1268,7 +1277,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             let net = ShamirMpcNet::new(network_config)?;
 
             let start = Instant::now();
-            let (proving_key, _) = co_noir::generate_proving_key_shamir(
+            let (proving_key, net) = co_noir::generate_proving_key_shamir(
                 net,
                 t,
                 &constraint_system,
@@ -1277,6 +1286,8 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
+            // network is shutdown in drop, which can take seom time with quinn
+            drop(net);
 
             // write result to output file
             let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1328,22 +1339,26 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 TranscriptHash::POSEIDON => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
+                    let (proof, net) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
                         net,
                         proving_key,
                         &prover_crs,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(net);
                     (proof, public_input)
                 }
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, _) =
+                    let (proof, net) =
                         Rep3CoUltraHonk::<_, _, Keccak256>::prove(net, proving_key, &prover_crs)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(net);
                     (proof, public_input)
                 }
             }
@@ -1364,7 +1379,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             match hasher {
                 TranscriptHash::POSEIDON => {
                     let start = Instant::now();
-                    let (proof, _) = ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
+                    let (proof, net) = ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
                         net,
                         t,
                         proving_key,
@@ -1372,12 +1387,14 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(net);
 
                     (proof, public_input)
                 }
                 TranscriptHash::KECCAK => {
                     let start = Instant::now();
-                    let (proof, _) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
+                    let (proof, net) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
                         net,
                         t,
                         proving_key,
@@ -1385,6 +1402,8 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(net);
 
                     (proof, public_input)
                 }
@@ -1494,21 +1513,25 @@ fn run_build_and_generate_proof(
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON => {
                     let start = Instant::now();
-                    let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
+                    let (proof, net) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
                         net,
                         proving_key,
                         &prover_crs,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(net);
                     (proof, public_input)
                 }
                 TranscriptHash::KECCAK => {
                     let start = Instant::now();
-                    let (proof, _) =
+                    let (proof, net) =
                         Rep3CoUltraHonk::<_, _, Keccak256>::prove(net, proving_key, &prover_crs)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(net);
                     (proof, public_input)
                 }
             };
@@ -1538,7 +1561,7 @@ fn run_build_and_generate_proof(
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON => {
                     let start = Instant::now();
-                    let (proof, _) = ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
+                    let (proof, net) = ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
                         net,
                         t,
                         proving_key,
@@ -1546,12 +1569,14 @@ fn run_build_and_generate_proof(
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(net);
                     (proof, public_input)
                 }
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, _) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
+                    let (proof, net) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
                         net,
                         t,
                         proving_key,
@@ -1559,6 +1584,8 @@ fn run_build_and_generate_proof(
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(net);
                     (proof, public_input)
                 }
             };
