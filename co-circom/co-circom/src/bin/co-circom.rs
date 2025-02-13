@@ -836,10 +836,12 @@ where
     // Extend the witness
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
-    let (result_witness_share, _) =
+    let (result_witness_share, mpc_net) =
         co_circom::generate_witness_rep3::<P>(circuit, input_share, mpc_net, config.vm)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Generate witness took {duration_ms} ms");
+    // network is shutdown in drop, which can take seom time with quinn
+    drop(mpc_net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -885,9 +887,11 @@ where
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
     let start = Instant::now();
-    let (shamir_witness_share, _) = co_circom::translate_witness::<P>(witness_share, net)?;
+    let (shamir_witness_share, mpc_net) = co_circom::translate_witness::<P>(witness_share, net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate witness took {duration_ms} ms");
+    // network is shutdown in drop, which can take seom time with quinn
+    drop(mpc_net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -949,9 +953,11 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, _) = Rep3CoGroth16::prove(mpc_net, zkey, witness_share)?;
+                    let (proof, mpc_net) = Rep3CoGroth16::prove(mpc_net, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(mpc_net);
 
                     (proof, public_input)
                 }
@@ -962,9 +968,11 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, _) = ShamirCoGroth16::prove(mpc_net, t, zkey, witness_share)?;
+                    let (proof, mpc_net) = ShamirCoGroth16::prove(mpc_net, t, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(mpc_net);
 
                     (proof, public_input)
                 }
@@ -1000,9 +1008,11 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, _) = Rep3CoPlonk::prove(mpc_net, zkey, witness_share)?;
+                    let (proof, mpc_net) = Rep3CoPlonk::prove(mpc_net, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(mpc_net);
 
                     (proof, public_input)
                 }
@@ -1013,9 +1023,11 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, _) = ShamirCoPlonk::prove(mpc_net, t, zkey, witness_share)?;
+                    let (proof, mpc_net) = ShamirCoPlonk::prove(mpc_net, t, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
+                    // network is shutdown in drop, which can take seom time with quinn
+                    drop(mpc_net);
 
                     (proof, public_input)
                 }
