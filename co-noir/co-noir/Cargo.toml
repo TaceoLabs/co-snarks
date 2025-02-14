@@ -1,6 +1,6 @@
 [package]
 name = "co-noir"
-version = "0.4.0"
+version = "0.5.0"
 
 publish.workspace = true
 authors.workspace = true
@@ -19,12 +19,12 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 bincode.workspace = true
 clap.workspace = true
-co-acvm = { version = "0.4.0", path = "../co-acvm" }
-co-ultrahonk = { version = "0.3.0", path = "../co-ultrahonk" }
+co-acvm = { version = "0.5.0", path = "../co-acvm" }
+co-ultrahonk = { version = "0.4.0", path = "../co-ultrahonk" }
 color-eyre.workspace = true
 figment.workspace = true
-mpc-core = { version = "0.7.0", path = "../../mpc-core" }
-mpc-net = { version = "0.2.1", path = "../../mpc-net" }
+mpc-core = { version = "0.8.0", path = "../../mpc-core" }
+mpc-net = { version = "0.3.0", path = "../../mpc-net" }
 noirc-abi.workspace = true
 noirc-artifacts.workspace = true
 rand.workspace = true
