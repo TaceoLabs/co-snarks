@@ -1,6 +1,6 @@
 [package]
 name = "mpc-core"
-version = "0.7.0"
+version = "0.8.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -24,7 +24,7 @@ bytes = { workspace = true }
 eyre = { workspace = true }
 fancy-garbling = { git = "https://github.com/GaloisInc/swanky", rev = "5ff648457218b74da9d8323b7ca47166ff5be4b3" }
 itertools = { workspace = true }
-mpc-net = { version = "0.2.1", path = "../mpc-net" }
+mpc-net = { version = "0.3.0", path = "../mpc-net" }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 rand = { workspace = true }
