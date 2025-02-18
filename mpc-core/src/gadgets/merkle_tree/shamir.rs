@@ -34,14 +34,12 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         while len > 1 {
             debug_assert_eq!(len % ARITY, 0);
             len /= ARITY;
-            for inp in input.chunks_exact_mut(T).take(len) {
-                // Sponge mode
-                self.shamir_permutation_in_place_with_precomputation_packed(
-                    inp,
-                    &mut precomp,
-                    driver,
-                )?;
-            }
+            // Sponge mode
+            self.shamir_permutation_in_place_with_precomputation_packed(
+                &mut input[..T * len],
+                &mut precomp,
+                driver,
+            )?;
             // Only take first element as output and pad with 0 for sponge
             for i in 0..len / ARITY {
                 for j in 0..ARITY {
@@ -90,15 +88,16 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         while len > 1 {
             debug_assert_eq!(len % ARITY, 0);
             len /= ARITY;
-            for inp in input.chunks_exact_mut(T).take(len) {
-                // Compression mode
-                let feed_forward = inp[0];
-                self.shamir_permutation_in_place_with_precomputation_packed(
-                    inp,
-                    &mut precomp,
-                    driver,
-                )?;
-                inp[0] += feed_forward;
+            let ff = input.clone();
+            // Compression mode
+            self.shamir_permutation_in_place_with_precomputation_packed(
+                &mut input[..T * len],
+                &mut precomp,
+                driver,
+            )?;
+            // Feedforward
+            for i in 0..len {
+                input[T * i] += ff[T * i];
             }
             // Only take first element as output and pad with 0 for compression
             for i in 0..len / ARITY {
