@@ -364,7 +364,7 @@ impl Rep3Network for Rep3MpcNet {
     fn recv_many<F: CanonicalDeserialize>(&mut self, from: PartyID) -> std::io::Result<Vec<F>> {
         let data = self.recv_bytes(from)?;
 
-        let res = Vec::<F>::deserialize_uncompressed(&data[..])
+        let res = Vec::<F>::deserialize_uncompressed_unchecked(&data[..])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         Ok(res)
