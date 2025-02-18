@@ -185,7 +185,7 @@ impl ShamirNetwork for ShamirMpcNet {
     fn recv_many<F: CanonicalDeserialize>(&mut self, from: usize) -> std::io::Result<Vec<F>> {
         let data = self.recv_bytes(from)?;
 
-        let res = Vec::<F>::deserialize_uncompressed(&data[..])
+        let res = Vec::<F>::deserialize_uncompressed_unchecked(&data[..])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         Ok(res)
@@ -215,7 +215,7 @@ impl ShamirNetwork for ShamirMpcNet {
         for other_id in 0..self.num_parties {
             if other_id != self.id {
                 let data = self.recv_bytes(other_id)?;
-                let deser = F::deserialize_uncompressed(&data[..])
+                let deser = F::deserialize_uncompressed_unchecked(&data[..])
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
                 res.push(deser);
             } else {
@@ -253,7 +253,7 @@ impl ShamirNetwork for ShamirMpcNet {
         for r in 1..num {
             let other_id = (self.id + self.num_parties - r) % self.num_parties;
             let data = self.recv_bytes(other_id)?;
-            let deser = F::deserialize_uncompressed(&data[..])
+            let deser = F::deserialize_uncompressed_unchecked(&data[..])
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             res.push(deser);
         }
