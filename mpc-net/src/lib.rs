@@ -154,7 +154,7 @@ impl MpcNetworkHandler {
                 endpoints.push(endpoint);
             } else {
                 // we are the server, accept a connection
-                match tokio::time::timeout(Duration::from_secs(300), server_endpoint.accept()).await
+                match tokio::time::timeout(Duration::from_secs(60), server_endpoint.accept()).await
                 {
                     Ok(Some(maybe_conn)) => {
                         let conn = maybe_conn.await?;
