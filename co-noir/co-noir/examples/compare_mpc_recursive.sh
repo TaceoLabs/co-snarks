@@ -1,4 +1,5 @@
 export CARGO_TERM_QUIET=true
+export RAYON_NUM_THREADS=$(($(nproc --all)/3)) # Limit the number of threads to prevent parties stealing from each other
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
 NARGO_VERSION=1.0.0-beta.2 ##specify the desired nargo version here
@@ -26,7 +27,7 @@ fi
 ## use one of these two methods
 ## install bbup: curl -L bbup.dev | bash
 # bash -c "bbup -nv 0.${NARGO_VERSION}.0"
-r=$(bash -c "$BARRETENBERG_BINARY --version")
+r=$(bash -c "$BARRETENBERG_BINARY --version 2> /dev/null")
 if  [[ $r != "$BARRETENBERG_VERSION" ]];
 then
     bash -c "bbup -v ${BARRETENBERG_VERSION}"
@@ -36,7 +37,7 @@ echo "Using nargo version $NARGO_VERSION"
 echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
-test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn_field" "poseidon_assert" "quantized" "unconstrained_fn")
+test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field" "blackbox_not" "blackbox_and" "blackbox_xor" "ram" "rom_shared" "poseidon2" "blackbox_poseidon2" "assert_max_bit_size")
 
 run_proof_verification() {
   local name=$1
@@ -67,25 +68,25 @@ run_proof_verification() {
     echo "::error::$name diff check of vks failed"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/vk"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, our proof and our key failed"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/${vk_file}"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/${vk_file} $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, our proof and their key failed"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/vk"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, their proof and our key failed"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/${vk_file}"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/${vk_file} $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, their proof and their key failed"
