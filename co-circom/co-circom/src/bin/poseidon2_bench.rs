@@ -185,12 +185,12 @@ fn poseidon2_benches<F: PrimeField, const T: usize, const D: u64>(
 where
     Poseidon2<F, T, D>: Default,
 {
-    poseidon2_plain::<F, T, D>(config)?;
-    if config.network.parties.len() == 3 && config.threshold == 1 {
+    // poseidon2_plain::<F, T, D>(config)?;
+    // if config.network.parties.len() == 3 && config.threshold == 1 {
         // poseidon2_rep3::<F, T, D>(config)?;
-        poseidon2_rep3_with_precomp::<F, T, D>(config)?;
+        // poseidon2_rep3_with_precomp::<F, T, D>(config)?;
         // poseidon2_rep3_with_precomp_additive::<F, T, D>(config)?;
-    }
+    // }
     // poseidon2_shamir::<F, T, D>(config)?;
     poseidon2_shamir_with_precomp::<F, T, D>(config)?;
 
@@ -204,10 +204,10 @@ fn poseidon2_packed_benches<F: PrimeField, const T: usize, const D: u64>(
 where
     Poseidon2<F, T, D>: Default,
 {
-    poseidon2_plain_packed::<F, T, D>(config)?;
-    if config.network.parties.len() == 3 && config.threshold == 1 {
-        poseidon2_rep3_with_precomp_packed::<F, T, D>(config)?;
-    }
+    // poseidon2_plain_packed::<F, T, D>(config)?;
+    // if config.network.parties.len() == 3 && config.threshold == 1 {
+    //     poseidon2_rep3_with_precomp_packed::<F, T, D>(config)?;
+    // }
     poseidon2_shamir_with_precomp_packed::<F, T, D>(config)?;
 
     Ok(ExitCode::SUCCESS)
@@ -226,10 +226,10 @@ fn poseidon2_mt_benches<
 where
     Poseidon2<F, T, D>: Default,
 {
-    poseidon2_mt_plain::<F, T, D, ARITY, COMPRESSION_MODE>(config)?;
-    if config.network.parties.len() == 3 && config.threshold == 1 {
-        poseidon2_mt_rep3::<F, T, D, ARITY, COMPRESSION_MODE>(config)?;
-    }
+    // poseidon2_mt_plain::<F, T, D, ARITY, COMPRESSION_MODE>(config)?;
+    // if config.network.parties.len() == 3 && config.threshold == 1 {
+    //     poseidon2_mt_rep3::<F, T, D, ARITY, COMPRESSION_MODE>(config)?;
+    // }
     poseidon2_mt_shamir::<F, T, D, ARITY, COMPRESSION_MODE>(config)?;
 
     Ok(ExitCode::SUCCESS)
