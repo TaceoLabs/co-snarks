@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0](https://github.com/Taceolabs/co-snarks/compare/circom-types-v0.7.0...circom-types-v0.8.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* a lot of APIs and types changed
+
+### Code Refactoring
+
+* co-circom lib usability improvents, added lib usage examples ([5768011](https://github.com/Taceolabs/co-snarks/commit/576801192076a27c75cd07fe1ec62244700bb934))
+
 ## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.6.0...circom-types-v0.7.0) (2024-12-16)
 
 

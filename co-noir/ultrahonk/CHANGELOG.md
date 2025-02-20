@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.4.0](https://github.com/Taceolabs/co-snarks/compare/ultrahonk-v0.3.0...ultrahonk-v0.4.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* adapt prover and verifier to BB 0.72.1
+* ark to 0.5.0, co-noir witext works with 1.0.0-beta.2
+* a lot of APIs and types changed
+* add RAM operations on shared indices ([#314](https://github.com/Taceolabs/co-snarks/issues/314))
+* Move poseidon2 from ultrahonk to mpc-core
+* Adapt the ultrahonk mpc prover to also have the lookup related
+* Bump Nargo to version v1.0.0-beta.1
+
+### Features
+
+* adapt prover and verifier to BB 0.72.1 ([2cc64ec](https://github.com/Taceolabs/co-snarks/commit/2cc64ec49f6b7b83e425d3f70ece1da52ecde172))
+* Adapt the ultrahonk mpc prover to also have the lookup related ([126fd57](https://github.com/Taceolabs/co-snarks/commit/126fd5750aeb507505207cf2ca9fb292590de5ca))
+* add RAM operations on shared indices ([#314](https://github.com/Taceolabs/co-snarks/issues/314)) ([c3367a5](https://github.com/Taceolabs/co-snarks/commit/c3367a55b95c3132cfbb6401c6ec1230f46e099c))
+* ark to 0.5.0, co-noir witext works with 1.0.0-beta.2 ([8a466df](https://github.com/Taceolabs/co-snarks/commit/8a466dffde68d64bed8265e1336e454559898602))
+* Bump Nargo to version v1.0.0-beta.1 ([2e0a307](https://github.com/Taceolabs/co-snarks/commit/2e0a307524cd6b7a14fd3fc4dd2c00466c378534))
+* Move poseidon2 from ultrahonk to mpc-core ([380fc4d](https://github.com/Taceolabs/co-snarks/commit/380fc4d7541053c06992b13a1e9fb1c42d4600e2))
+
+
+### Code Refactoring
+
+* co-noir lib usability improvents, added lib usage examples ([18e644e](https://github.com/Taceolabs/co-snarks/commit/18e644ecdf18419fb9b4a071562210c5b0eee0a7))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-builder bumped from 0.2.0 to 0.3.0
+    * mpc-core bumped from 0.7.0 to 0.8.0
+
 ## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/ultrahonk-v0.2.0...ultrahonk-v0.3.0) (2024-12-16)
 
 

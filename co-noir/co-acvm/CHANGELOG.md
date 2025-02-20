@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.5.0](https://github.com/Taceolabs/co-snarks/compare/co-acvm-v0.4.0...co-acvm-v0.5.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* optimize radix sort to take private and public inputs, such that public inputs do not have to be decomposed/bitinjected ([#319](https://github.com/Taceolabs/co-snarks/issues/319))
+* a lot of APIs and types changed
+* add RAM operations on shared indices ([#314](https://github.com/Taceolabs/co-snarks/issues/314))
+* Add extra functionality to rewrite the lookup_read_counts_tags to shared LUTs
+* Changed the interface of `LookupTableProvider` trait.
+* implemented bitwise_and, bitwise_xor and bitwise_not in the
+
+### Features
+
+* Add blackbox_poseidon2 handling to co-noir ([3c2e811](https://github.com/Taceolabs/co-snarks/commit/3c2e81133b2a5b3a360918bc7d597277d091fb15))
+* Add extra functionality to rewrite the lookup_read_counts_tags to shared LUTs ([6fc80f7](https://github.com/Taceolabs/co-snarks/commit/6fc80f7a1a3a2a4f65180edccf03b6ef6b247c37))
+* add generating recursive friendly vk; rename stuff to match bb ([6913f52](https://github.com/Taceolabs/co-snarks/commit/6913f52ece6efe2f17362f19ee183aea1d5aa017))
+* Add lookup table based on MAESTRO to the MPC core ([#307](https://github.com/Taceolabs/co-snarks/issues/307)) ([2eb6916](https://github.com/Taceolabs/co-snarks/commit/2eb691604c431fa19affe7812e135e5e7dcf5f2e))
+* Add packed rep3 version of poseidon2 ([027782f](https://github.com/Taceolabs/co-snarks/commit/027782f48618e68b732e0cf36b9cdf03072452f3))
+* Add packed shamir version of poseidon2 ([3ca7426](https://github.com/Taceolabs/co-snarks/commit/3ca742683218d446cf8ce31ab010f33bfbbbe617))
+* add RAM operations on shared indices ([#314](https://github.com/Taceolabs/co-snarks/issues/314)) ([c3367a5](https://github.com/Taceolabs/co-snarks/commit/c3367a55b95c3132cfbb6401c6ec1230f46e099c))
+* Bridge the co-builder and adapted proving-key generation and fix ([9df797b](https://github.com/Taceolabs/co-snarks/commit/9df797b21af60b7fb3030c58a7739003a627f6fd))
+* Cleanup the mpc-core and builder after shared LUT integration ([a691090](https://github.com/Taceolabs/co-snarks/commit/a691090d4933b2e93b9707a48ed430687d2911ba))
+* Extend ROM access for coNoir to the MPC setting of having shared indices ([c50809e](https://github.com/Taceolabs/co-snarks/commit/c50809eb891bfa29cb93406781fa4431aec1205b))
+* Fixes and cleanup in shared LUTs ([59ac86e](https://github.com/Taceolabs/co-snarks/commit/59ac86ec7cd1d4faf033ffd1ea1ca6ad12d6d2d5))
+* implemented bitwise_and, bitwise_xor and bitwise_not in the ([57b8fef](https://github.com/Taceolabs/co-snarks/commit/57b8fef7dd4ea837cbccdc30718833ba72767253))
+* Modify co-builder to allow logic constraints (only working in plain so far) ([1115986](https://github.com/Taceolabs/co-snarks/commit/11159866ba8275e63d7bccee6523efe71ac13e6f))
+* optimize radix sort to take private and public inputs, such that public inputs do not have to be decomposed/bitinjected ([#319](https://github.com/Taceolabs/co-snarks/issues/319)) ([bd1b6b4](https://github.com/Taceolabs/co-snarks/commit/bd1b6b400c3342b40b40d2532d6fbde1135c109d))
+* Starting to adapt the co-builder for handling shared LUTs ([5fda228](https://github.com/Taceolabs/co-snarks/commit/5fda22875cfaca240f23f2b5744997c5da4b93f2))
+* works for unique num_bits ([4249c3f](https://github.com/Taceolabs/co-snarks/commit/4249c3fd10209e0feebd025a1287489c4cf74334))
+
+
+### Bug Fixes
+
+* Fix a bug with shifting BigUints in Range constraints ([#318](https://github.com/Taceolabs/co-snarks/issues/318)) ([06c114a](https://github.com/Taceolabs/co-snarks/commit/06c114a00a58a01ef777473bc8991334b561c3cc))
+
+
+### Code Refactoring
+
+* co-noir lib usability improvents, added lib usage examples ([18e644e](https://github.com/Taceolabs/co-snarks/commit/18e644ecdf18419fb9b4a071562210c5b0eee0a7))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-brillig bumped from 0.1.0 to 0.2.0
+    * mpc-core bumped from 0.7.0 to 0.8.0
+
 ## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-acvm-v0.3.0...co-acvm-v0.4.0) (2024-12-16)
 
 

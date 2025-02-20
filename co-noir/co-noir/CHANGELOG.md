@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.5.0](https://github.com/Taceolabs/co-snarks/compare/co-noir-v0.4.0...co-noir-v0.5.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* adapt prover and verifier to BB 0.72.1
+* ark to 0.5.0, co-noir witext works with 1.0.0-beta.2
+* a lot of APIs and types changed
+* add RAM operations on shared indices ([#314](https://github.com/Taceolabs/co-snarks/issues/314))
+* Adapt the ultrahonk mpc prover to also have the lookup related
+* implemented bitwise_and, bitwise_xor and bitwise_not in the
+* Bump Nargo to version v1.0.0-beta.1
+
+### Features
+
+* adapt compare_MPC to include blackbox_and/xor ([1556e71](https://github.com/Taceolabs/co-snarks/commit/1556e7178618c767e64d50b4dee10024d1c2c5b9))
+* adapt prover and verifier to BB 0.72.1 ([2cc64ec](https://github.com/Taceolabs/co-snarks/commit/2cc64ec49f6b7b83e425d3f70ece1da52ecde172))
+* Adapt the ultrahonk mpc prover to also have the lookup related ([126fd57](https://github.com/Taceolabs/co-snarks/commit/126fd5750aeb507505207cf2ca9fb292590de5ca))
+* add command to download a CRS with a given number of points to the co-noir binary ([#301](https://github.com/Taceolabs/co-snarks/issues/301)) ([3b7b562](https://github.com/Taceolabs/co-snarks/commit/3b7b562a377ceb54c60ab02661226b1430d0837d))
+* add generating recursive friendly vk; rename stuff to match bb ([6913f52](https://github.com/Taceolabs/co-snarks/commit/6913f52ece6efe2f17362f19ee183aea1d5aa017))
+* Add poseidon2 testcases (with and without blackbox function) ([6ed485e](https://github.com/Taceolabs/co-snarks/commit/6ed485e2c22d6473b5e82621972a2094890480ec))
+* add possibility to generate recursive proofs ([ffc8ac4](https://github.com/Taceolabs/co-snarks/commit/ffc8ac4d0b8ad834566154524bf8e9eab362ba0b))
+* add RAM operations on shared indices ([#314](https://github.com/Taceolabs/co-snarks/issues/314)) ([c3367a5](https://github.com/Taceolabs/co-snarks/commit/c3367a55b95c3132cfbb6401c6ec1230f46e099c))
+* Add RAM operations to plain coNoir ([2045471](https://github.com/Taceolabs/co-snarks/commit/2045471fb1cc013934d43063be5ed5ae2a80fcf0))
+* add shamir proving testcase for bb_poseidon2 ([4cfff0e](https://github.com/Taceolabs/co-snarks/commit/4cfff0e145417cfabc6eb1added91ce4fd844664))
+* Add testcase for blackbox and/not/xor ([3444851](https://github.com/Taceolabs/co-snarks/commit/3444851b92e6fc5f469eb1c2064725d1ad2e0534))
+* ark to 0.5.0, co-noir witext works with 1.0.0-beta.2 ([8a466df](https://github.com/Taceolabs/co-snarks/commit/8a466dffde68d64bed8265e1336e454559898602))
+* Bump Nargo to version v1.0.0-beta.1 ([2e0a307](https://github.com/Taceolabs/co-snarks/commit/2e0a307524cd6b7a14fd3fc4dd2c00466c378534))
+* Extend ROM access for coNoir to the MPC setting of having shared indices ([c50809e](https://github.com/Taceolabs/co-snarks/commit/c50809eb891bfa29cb93406781fa4431aec1205b))
+* implemented bitwise_and, bitwise_xor and bitwise_not in the ([57b8fef](https://github.com/Taceolabs/co-snarks/commit/57b8fef7dd4ea837cbccdc30718833ba72767253))
+* test case with diff. uints ([4362304](https://github.com/Taceolabs/co-snarks/commit/4362304ed3948510c31e297b0fc295be3b460975))
+
+
+### Bug Fixes
+
+* Fix a bug with shifting BigUints in Range constraints ([#318](https://github.com/Taceolabs/co-snarks/issues/318)) ([06c114a](https://github.com/Taceolabs/co-snarks/commit/06c114a00a58a01ef777473bc8991334b561c3cc))
+* Fix splitting/reading proving key in co-noir binary ([df6a658](https://github.com/Taceolabs/co-snarks/commit/df6a658b6abeb08d3f4fd3d404aa7643fa2d6552))
+* no longer measure quinn network shutdown ([3fc63dd](https://github.com/Taceolabs/co-snarks/commit/3fc63dd405b26343055e25eafc8945b4e12812f6))
+
+
+### Code Refactoring
+
+* co-noir lib usability improvents, added lib usage examples ([18e644e](https://github.com/Taceolabs/co-snarks/commit/18e644ecdf18419fb9b4a071562210c5b0eee0a7))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.4.0 to 0.5.0
+    * co-ultrahonk bumped from 0.3.0 to 0.4.0
+    * mpc-core bumped from 0.7.0 to 0.8.0
+    * mpc-net bumped from 0.2.1 to 0.3.0
+
 ## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-noir-v0.3.0...co-noir-v0.4.0) (2024-12-16)
 
 

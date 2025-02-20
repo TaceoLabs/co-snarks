@@ -10,6 +10,32 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.7.0](https://github.com/Taceolabs/co-snarks/compare/circom-mpc-vm-v0.6.0...circom-mpc-vm-v0.7.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* a lot of APIs and types changed
+* Add rep3 and shamir implementations of poseidon2 to mpc-core
+
+### Features
+
+* Add rep3 and shamir implementations of poseidon2 to mpc-core ([0939053](https://github.com/Taceolabs/co-snarks/commit/09390537eac78086a1df7b49e17a3c8ae2eba8ff))
+
+
+### Code Refactoring
+
+* co-circom lib usability improvents, added lib usage examples ([5768011](https://github.com/Taceolabs/co-snarks/commit/576801192076a27c75cd07fe1ec62244700bb934))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-snarks bumped from 0.3.0 to 0.4.0
+    * mpc-core bumped from 0.7.0 to 0.8.0
+    * mpc-net bumped from 0.2.1 to 0.3.0
+
 ## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.5.0...circom-mpc-vm-v0.6.0) (2024-12-16)
 
 
