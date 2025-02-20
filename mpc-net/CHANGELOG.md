@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/Taceolabs/co-snarks/compare/mpc-net-v0.2.1...mpc-net-v0.3.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* a lot of APIs and types changed
+* ChannelHandle no longer takes `&mut self` on send/recv methods, but now just takes `&self` ([#303](https://github.com/Taceolabs/co-snarks/issues/303))
+
+### Code Refactoring
+
+* ChannelHandle no longer takes `&mut self` on send/recv methods, but now just takes `&self` ([#303](https://github.com/Taceolabs/co-snarks/issues/303)) ([538b89e](https://github.com/Taceolabs/co-snarks/commit/538b89ebd11c21701b72f8025586655781574a52))
+* co-circom lib usability improvents, added lib usage examples ([5768011](https://github.com/Taceolabs/co-snarks/commit/576801192076a27c75cd07fe1ec62244700bb934))
+
 ## [0.2.1](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.2.0...mpc-net-v0.2.1) (2024-12-16)
 
 

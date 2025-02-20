@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.2.0](https://github.com/Taceolabs/co-snarks/compare/co-brillig-v0.1.0...co-brillig-v0.2.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* ark to 0.5.0, co-noir witext works with 1.0.0-beta.2
+* add RAM operations on shared indices ([#314](https://github.com/Taceolabs/co-snarks/issues/314))
+* implemented bitwise_and, bitwise_xor and bitwise_not in the
+
+### Features
+
+* add public/shared int division ([4286c6a](https://github.com/Taceolabs/co-snarks/commit/4286c6a7d7e42335c056c2b3a858a7dbd51bf107))
+* add RAM operations on shared indices ([#314](https://github.com/Taceolabs/co-snarks/issues/314)) ([c3367a5](https://github.com/Taceolabs/co-snarks/commit/c3367a55b95c3132cfbb6401c6ec1230f46e099c))
+* add shared/public int division ([d1d2121](https://github.com/Taceolabs/co-snarks/commit/d1d21215997e1a854d2919db47a8b7bbbc541747))
+* add shared/shared to co-brillig ([b54b4ee](https://github.com/Taceolabs/co-snarks/commit/b54b4eeea091431a7f06eb0a87eb5e0e87ceb2b4))
+* Add some more missing BinaryIntOps to co-brillig ([#315](https://github.com/Taceolabs/co-snarks/issues/315)) ([e96a712](https://github.com/Taceolabs/co-snarks/commit/e96a712dfa987fb39e17232ef11d067b29b62aef))
+* ark to 0.5.0, co-noir witext works with 1.0.0-beta.2 ([8a466df](https://github.com/Taceolabs/co-snarks/commit/8a466dffde68d64bed8265e1336e454559898602))
+* bits case for shared/public ([4beb691](https://github.com/Taceolabs/co-snarks/commit/4beb6910f037055a0bc08aae30dbe2995aae5bf4))
+* implemented bitwise_and, bitwise_xor and bitwise_not in the ([57b8fef](https://github.com/Taceolabs/co-snarks/commit/57b8fef7dd4ea837cbccdc30718833ba72767253))
+* Modify co-builder to allow logic constraints (only working in plain so far) ([1115986](https://github.com/Taceolabs/co-snarks/commit/11159866ba8275e63d7bccee6523efe71ac13e6f))
+* to_radix for public radix ([8ccd753](https://github.com/Taceolabs/co-snarks/commit/8ccd753975d8a4e11fe8ed90cc757d9739d988dd))
+* to_radix for public val/shared radix ([540780b](https://github.com/Taceolabs/co-snarks/commit/540780b81d4ee4772df09a7997c42af6f476ff6d))
+* to_radix for shared val/shared radix ([ecbb1d7](https://github.com/Taceolabs/co-snarks/commit/ecbb1d7137713939cab0ed5010f00404e81f626a))
+
+
+### Bug Fixes
+
+* to_radix for weird constelations ([24c20c1](https://github.com/Taceolabs/co-snarks/commit/24c20c1ecc62dcc2f168ff8e0150a0c38fe31fed))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.7.0 to 0.8.0
+
 ## [0.1.0](https://github.com/TaceoLabs/co-snarks/compare/co-brillig-v0.0.1...co-brillig-v0.1.0) (2024-12-16)
 
 

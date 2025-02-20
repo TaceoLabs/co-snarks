@@ -11,6 +11,33 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.8.0](https://github.com/Taceolabs/co-snarks/compare/co-groth16-v0.7.0...co-groth16-v0.8.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* ark to 0.5.0, co-noir witext works with 1.0.0-beta.2
+* a lot of APIs and types changed
+
+### Features
+
+* ark to 0.5.0, co-noir witext works with 1.0.0-beta.2 ([8a466df](https://github.com/Taceolabs/co-snarks/commit/8a466dffde68d64bed8265e1336e454559898602))
+
+
+### Code Refactoring
+
+* co-circom lib usability improvents, added lib usage examples ([5768011](https://github.com/Taceolabs/co-snarks/commit/576801192076a27c75cd07fe1ec62244700bb934))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.7.0 to 0.8.0
+    * co-circom-snarks bumped from 0.3.0 to 0.4.0
+    * mpc-core bumped from 0.7.0 to 0.8.0
+    * mpc-net bumped from 0.2.1 to 0.3.0
+
 ## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/co-groth16-v0.6.0...co-groth16-v0.7.0) (2024-12-16)
 
 

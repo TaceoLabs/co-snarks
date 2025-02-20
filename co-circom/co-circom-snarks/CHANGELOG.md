@@ -9,6 +9,27 @@
   * dependencies
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.4.0](https://github.com/Taceolabs/co-snarks/compare/co-circom-snarks-v0.3.0...co-circom-snarks-v0.4.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* a lot of APIs and types changed
+* compressed inputs shares are no longer supported, only compressed witness shares are allowed
+
+### Code Refactoring
+
+* co-circom lib usability improvents, added lib usage examples ([5768011](https://github.com/Taceolabs/co-snarks/commit/576801192076a27c75cd07fe1ec62244700bb934))
+* input shares are always rep3 and not compressed ([e760ec0](https://github.com/Taceolabs/co-snarks/commit/e760ec0c47f2432a137f1fa74e57d0c5bdbcf902))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.7.0 to 0.8.0
+    * mpc-core bumped from 0.7.0 to 0.8.0
+
 ## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-snarks-v0.2.0...co-circom-snarks-v0.3.0) (2024-12-16)
 
 

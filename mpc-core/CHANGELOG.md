@@ -2,6 +2,69 @@
 
 
 
+## [0.8.0](https://github.com/Taceolabs/co-snarks/compare/mpc-core-v0.7.0...mpc-core-v0.8.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* optimize radix sort to take private and public inputs, such that public inputs do not have to be decomposed/bitinjected ([#319](https://github.com/Taceolabs/co-snarks/issues/319))
+* a lot of APIs and types changed
+* compressed inputs shares are no longer supported, only compressed witness shares are allowed
+* add RAM operations on shared indices ([#314](https://github.com/Taceolabs/co-snarks/issues/314))
+* Add rep3 and shamir implementations of poseidon2 to mpc-core
+* Move poseidon2 from ultrahonk to mpc-core
+* Add extra functionality to rewrite the lookup_read_counts_tags to shared LUTs
+* Changed the interface of `LookupTableProvider` trait.
+* implemented bitwise_and, bitwise_xor and bitwise_not in the
+
+### Features
+
+* add binary division in gc ([1e00651](https://github.com/Taceolabs/co-snarks/commit/1e00651d6e2d045ea357a80dcb1f74eb5fab3d7c))
+* Add blackbox_poseidon2 handling to co-noir ([3c2e811](https://github.com/Taceolabs/co-snarks/commit/3c2e81133b2a5b3a360918bc7d597277d091fb15))
+* Add extra functionality to rewrite the lookup_read_counts_tags to shared LUTs ([6fc80f7](https://github.com/Taceolabs/co-snarks/commit/6fc80f7a1a3a2a4f65180edccf03b6ef6b247c37))
+* Add lookup table based on MAESTRO to the MPC core ([#307](https://github.com/Taceolabs/co-snarks/issues/307)) ([2eb6916](https://github.com/Taceolabs/co-snarks/commit/2eb691604c431fa19affe7812e135e5e7dcf5f2e))
+* Add Merkle tree implemenations using Poseidon2 ([08b26a8](https://github.com/Taceolabs/co-snarks/commit/08b26a8e1d69ab9a1b2d1f081d37f7ebed482431))
+* Add more poseidon2 instances (t=2, t=3, t=4) ([70b389e](https://github.com/Taceolabs/co-snarks/commit/70b389eedae3c7075f015f8ff86f155d4064cd3d))
+* Add MPC functionality to slice a shared value ([595e33b](https://github.com/Taceolabs/co-snarks/commit/595e33bd0c6ca1b9dbbef9f3d41906b1e22ddfbb))
+* Add packed rep3 version of poseidon2 ([027782f](https://github.com/Taceolabs/co-snarks/commit/027782f48618e68b732e0cf36b9cdf03072452f3))
+* Add packed shamir version of poseidon2 ([3ca7426](https://github.com/Taceolabs/co-snarks/commit/3ca742683218d446cf8ce31ab010f33bfbbbe617))
+* Add possibility to lazily initialize constants in garbled circuits to only send them once ([a0e0086](https://github.com/Taceolabs/co-snarks/commit/a0e008673bdffcfc0eb2326de2a8f355ef52ee82))
+* add public/shared int division ([4286c6a](https://github.com/Taceolabs/co-snarks/commit/4286c6a7d7e42335c056c2b3a858a7dbd51bf107))
+* add RAM operations on shared indices ([#314](https://github.com/Taceolabs/co-snarks/issues/314)) ([c3367a5](https://github.com/Taceolabs/co-snarks/commit/c3367a55b95c3132cfbb6401c6ec1230f46e099c))
+* Add rep3 and shamir implementations of poseidon2 to mpc-core ([0939053](https://github.com/Taceolabs/co-snarks/commit/09390537eac78086a1df7b49e17a3c8ae2eba8ff))
+* add shared/public int division ([d1d2121](https://github.com/Taceolabs/co-snarks/commit/d1d21215997e1a854d2919db47a8b7bbbc541747))
+* add shared/shared to co-brillig ([b54b4ee](https://github.com/Taceolabs/co-snarks/commit/b54b4eeea091431a7f06eb0a87eb5e0e87ceb2b4))
+* better network handling in poseidon bench binary ([5334f6f](https://github.com/Taceolabs/co-snarks/commit/5334f6fc3ce7e5ca67eacd1dcad5d1f51a233c72))
+* Bridge the co-builder and adapted proving-key generation and fix ([9df797b](https://github.com/Taceolabs/co-snarks/commit/9df797b21af60b7fb3030c58a7739003a627f6fd))
+* Cleanup the mpc-core and builder after shared LUT integration ([a691090](https://github.com/Taceolabs/co-snarks/commit/a691090d4933b2e93b9707a48ed430687d2911ba))
+* Extend ROM access for coNoir to the MPC setting of having shared indices ([c50809e](https://github.com/Taceolabs/co-snarks/commit/c50809eb891bfa29cb93406781fa4431aec1205b))
+* implemented bitwise_and, bitwise_xor and bitwise_not in the ([57b8fef](https://github.com/Taceolabs/co-snarks/commit/57b8fef7dd4ea837cbccdc30718833ba72767253))
+* Move poseidon2 from ultrahonk to mpc-core ([380fc4d](https://github.com/Taceolabs/co-snarks/commit/380fc4d7541053c06992b13a1e9fb1c42d4600e2))
+* optimize radix sort to take private and public inputs, such that public inputs do not have to be decomposed/bitinjected ([#319](https://github.com/Taceolabs/co-snarks/issues/319)) ([bd1b6b4](https://github.com/Taceolabs/co-snarks/commit/bd1b6b400c3342b40b40d2532d6fbde1135c109d))
+* Starting to adapt the co-builder for handling shared LUTs ([5fda228](https://github.com/Taceolabs/co-snarks/commit/5fda22875cfaca240f23f2b5744997c5da4b93f2))
+* to_radix for public radix ([8ccd753](https://github.com/Taceolabs/co-snarks/commit/8ccd753975d8a4e11fe8ed90cc757d9739d988dd))
+* to_radix for public val/shared radix ([540780b](https://github.com/Taceolabs/co-snarks/commit/540780b81d4ee4772df09a7997c42af6f476ff6d))
+
+
+### Bug Fixes
+
+* enable parallelization for poseidon merkle tree implementations ([fde2704](https://github.com/Taceolabs/co-snarks/commit/fde270441dfcf66eb3eca76a0bd2199deccd26d5))
+* Fix a bug preventing constants from being used in garbled circuits. TODO: Adapt the division circuits to use constants whenever possible ([9d1b4d3](https://github.com/Taceolabs/co-snarks/commit/9d1b4d339e8f69d256e78cc1451c440f87e9745f))
+* Fix a bug with shifting BigUints in Range constraints ([#318](https://github.com/Taceolabs/co-snarks/issues/318)) ([06c114a](https://github.com/Taceolabs/co-snarks/commit/06c114a00a58a01ef777473bc8991334b561c3cc))
+
+
+### Code Refactoring
+
+* co-circom lib usability improvents, added lib usage examples ([5768011](https://github.com/Taceolabs/co-snarks/commit/576801192076a27c75cd07fe1ec62244700bb934))
+* input shares are always rep3 and not compressed ([e760ec0](https://github.com/Taceolabs/co-snarks/commit/e760ec0c47f2432a137f1fa74e57d0c5bdbcf902))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-net bumped from 0.2.1 to 0.3.0
+
 ## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.6.0...mpc-core-v0.7.0) (2024-12-16)
 
 

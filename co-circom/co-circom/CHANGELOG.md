@@ -9,6 +9,52 @@
     * co-plonk bumped from 0.3.0 to 0.3.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.8.0](https://github.com/Taceolabs/co-snarks/compare/co-circom-v0.7.0...co-circom-v0.8.0) (2025-02-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* a lot of APIs and types changed
+* a lot of APIs and types changed
+* compressed inputs shares are no longer supported, only compressed witness shares are allowed
+
+### Features
+
+* Add bencher for rep3/shamir implementations of poseidon2 to co-circom ([e1800dc](https://github.com/Taceolabs/co-snarks/commit/e1800dc6baa0760ad5589772f475553d03e835d1))
+* Add Merkle trees to poseidon2 bench file ([106c5b1](https://github.com/Taceolabs/co-snarks/commit/106c5b171eb5d0fbc29c85043c5f5ad72f8e5cd4))
+* Add packed rep3 version of poseidon2 ([027782f](https://github.com/Taceolabs/co-snarks/commit/027782f48618e68b732e0cf36b9cdf03072452f3))
+* Add packed shamir version of poseidon2 ([3ca7426](https://github.com/Taceolabs/co-snarks/commit/3ca742683218d446cf8ce31ab010f33bfbbbe617))
+* better network handling in poseidon bench binary ([5334f6f](https://github.com/Taceolabs/co-snarks/commit/5334f6fc3ce7e5ca67eacd1dcad5d1f51a233c72))
+* make check on zkey opt in with config value ([#297](https://github.com/Taceolabs/co-snarks/issues/297)) ([adf29eb](https://github.com/Taceolabs/co-snarks/commit/adf29eba038efa4c7aed28ccd4251c3ddaf7574a))
+
+
+### Bug Fixes
+
+* dont iter over split_witness Result instead of shares, removed Result from ret type ([e19276b](https://github.com/Taceolabs/co-snarks/commit/e19276b58e405c5a0d3b43cd9576ea397207b71d))
+* no longer measure quinn network shutdown ([3fc63dd](https://github.com/Taceolabs/co-snarks/commit/3fc63dd405b26343055e25eafc8945b4e12812f6))
+* poseidon_bench only runs rep3 if num_parties == 3 ([fb55791](https://github.com/Taceolabs/co-snarks/commit/fb557918e7756e836c4c3a074484849ef421c615))
+
+
+### Code Refactoring
+
+* co-circom lib usability improvents, added lib usage examples ([5768011](https://github.com/Taceolabs/co-snarks/commit/576801192076a27c75cd07fe1ec62244700bb934))
+* co-noir lib usability improvents, added lib usage examples ([18e644e](https://github.com/Taceolabs/co-snarks/commit/18e644ecdf18419fb9b4a071562210c5b0eee0a7))
+* input shares are always rep3 and not compressed ([e760ec0](https://github.com/Taceolabs/co-snarks/commit/e760ec0c47f2432a137f1fa74e57d0c5bdbcf902))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-compiler bumped from 0.8.0 to 0.9.0
+    * circom-mpc-vm bumped from 0.6.0 to 0.7.0
+    * circom-types bumped from 0.7.0 to 0.8.0
+    * co-circom-snarks bumped from 0.3.0 to 0.4.0
+    * co-groth16 bumped from 0.7.0 to 0.8.0
+    * co-plonk bumped from 0.5.0 to 0.6.0
+    * mpc-core bumped from 0.7.0 to 0.8.0
+    * mpc-net bumped from 0.2.1 to 0.3.0
+
 ## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-v0.6.0...co-circom-v0.7.0) (2024-12-16)
 
 
