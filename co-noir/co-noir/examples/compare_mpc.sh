@@ -2,7 +2,7 @@ export CARGO_TERM_QUIET=true
 export RAYON_NUM_THREADS=$(($(nproc --all)/3)) # Limit the number of threads to prevent parties stealing from each other
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
-NARGO_VERSION=1.0.0-beta.2 ##specify the desired nargo version here
+NARGO_VERSION=1.0.0-beta.3 ##specify the desired nargo version here
 BARRETENBERG_VERSION=0.72.1 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
