@@ -904,7 +904,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.11",
  "tracing",
 ]
 
@@ -997,7 +997,7 @@ dependencies = [
  "paste",
  "rayon",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.11",
  "toml 0.8.20",
  "tracing",
 ]
@@ -1038,7 +1038,7 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.11",
  "tracing",
 ]
 
@@ -1069,7 +1069,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.11",
  "toml 0.8.20",
  "tracing",
  "tracing-subscriber 0.3.19",
@@ -1136,7 +1136,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha3",
- "thiserror 1.0.69",
+ "thiserror 2.0.11",
  "toml 0.8.20",
  "tracing",
  "tracing-subscriber 0.3.19",
@@ -1163,7 +1163,7 @@ dependencies = [
  "rayon",
  "serde_json",
  "sha3",
- "thiserror 1.0.69",
+ "thiserror 2.0.11",
  "tracing",
 ]
 
