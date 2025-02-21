@@ -278,6 +278,6 @@ impl IntRing2k for u128 {
         let mut iter = biguint.iter_u64_digits();
         let x0 = iter.next().unwrap_or_default();
         let x1 = iter.next().unwrap_or_default();
-        (x1 as u128) << 64 | x0 as u128
+        ((x1 as u128) << 64) | x0 as u128
     }
 }
