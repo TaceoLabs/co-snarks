@@ -2254,9 +2254,9 @@ dependencies = [
 
 [[package]]
 name = "intmap"
-version = "2.0.0"
+version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee87fd093563344074bacf24faa0bb0227fb6969fb223e922db798516de924d6"
+checksum = "210870d5399600055a955c020cc97e462203c234dc2b103b5da5d80fdbd5eed5"
 
 [[package]]
 name = "is-terminal"

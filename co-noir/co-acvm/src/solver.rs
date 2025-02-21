@@ -83,7 +83,7 @@ where
     // there will a more fields added as we add functionality
     function_index: usize,
     // the memory blocks
-    memory_access: IntMap<<T::Lookup as LookupTableProvider<F>>::LutType>,
+    memory_access: IntMap<u64, <T::Lookup as LookupTableProvider<F>>::LutType>,
     // pedantic solving
     pedantic_solving: bool,
 }
