@@ -3,11 +3,8 @@ unconstrained fn add(x: Field, y: Field) -> Field {
 }
 
 fn main(x: Field, y: Field, z: pub Field) {
-    assert(
-        ///Safety: is safe
-        unsafe { add(x, y) }
-            == z,
-    );
+    // Safety: is safe
+    assert(unsafe { add(x, y) } == z);
 }
 
 #[test]

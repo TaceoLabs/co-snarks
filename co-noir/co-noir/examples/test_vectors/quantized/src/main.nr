@@ -59,7 +59,7 @@ impl Quantized {
     fn mul(self: Self, other: Self) -> Self {
         let mut temp: Field = self.x * other.x;
         let mut bytes: [u8; 32] = [0; 32];
-        ///Safety: get_bytes is safe
+        // Safety: get_bytes is safe
         unsafe {
             bytes = get_bytes(temp);
         }
@@ -73,7 +73,7 @@ impl Quantized {
             temp = 21888242871839275222246405745257275088548364400416034343698204186575808495616
                 - temp
                 + 1;
-            ///Safety: get_bytes is safe
+            // Safety: get_bytes is safe
             unsafe {
                 bytes = get_bytes(temp);
             }
