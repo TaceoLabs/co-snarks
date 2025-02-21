@@ -199,9 +199,9 @@ To generate the witness, we execute the circuit with the secret-shared input
 obtained from the previous step. Additionally, computing nodes require
 networking configuration files and TLS key material. Examples of these
 configurations can be found in the
-[configs](/co-circom/examples/configs) and key materials in the
-[keys](/co-circom/examples/data) directory. Refer to our
-[documentation](https://docs.taceo.io/network-config.html) for detailed
+[configs](/co-circom/co-circom/examples/configs) and key materials in the
+[keys](/co-circom/co-circom/examples/data) directory. Refer to our
+[documentation](https://docs.taceo.io/docs/co-circom-cli/config/) for detailed
 configuration instructions.
 
 All parties execute the following command (provided here for the first party):
