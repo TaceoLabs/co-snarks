@@ -859,7 +859,7 @@ dependencies = [
  "compiler",
  "constraint_generation",
  "eyre",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mpc-core",
  "parser",
  "program_structure",
@@ -878,7 +878,7 @@ dependencies = [
  "bincode",
  "co-circom-snarks",
  "eyre",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mpc-core",
  "mpc-net",
  "num-bigint 0.4.6",
@@ -989,7 +989,7 @@ dependencies = [
  "co-brillig",
  "eyre",
  "intmap",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mpc-core",
  "noirc_abi",
  "noirc_artifacts",
@@ -1011,7 +1011,7 @@ dependencies = [
  "ark-ff",
  "brillig",
  "eyre",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mpc-core",
  "num-bigint 0.4.6",
  "num-traits",
@@ -1032,7 +1032,7 @@ dependencies = [
  "ark-serialize",
  "co-acvm",
  "eyre",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mpc-core",
  "num-bigint 0.4.6",
  "num-traits",
@@ -1155,7 +1155,7 @@ dependencies = [
  "circom-types",
  "co-circom-snarks",
  "eyre",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mpc-core",
  "mpc-net",
  "num-traits",
@@ -1179,7 +1179,7 @@ dependencies = [
  "co-acvm",
  "co-builder",
  "eyre",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mpc-core",
  "num-bigint 0.4.6",
  "num-traits",
@@ -2308,6 +2308,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2593,7 +2602,7 @@ dependencies = [
  "bytes",
  "eyre",
  "fancy-garbling",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mpc-net",
  "num-bigint 0.4.6",
  "num-traits",
@@ -4294,7 +4303,7 @@ dependencies = [
  "co-noir",
  "co-plonk",
  "co-ultrahonk",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mpc-core",
  "noirc_abi",
  "noirc_artifacts",
@@ -4643,7 +4652,7 @@ dependencies = [
  "ark-ff",
  "co-builder",
  "eyre",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "mpc-core",
  "noirc_artifacts",
  "num-bigint 0.4.6",

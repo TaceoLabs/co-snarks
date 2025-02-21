@@ -141,7 +141,7 @@ pub fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
     let mut contexts = [io_0, io_1, io_2, io_3, io_4, io_5, io_6, io_7];
     let party_id = io_context.id;
     let mut individual_bit_shares = Vec::with_capacity(8);
-    for (i, context) in izip!((0..8), contexts.iter_mut()) {
+    for (i, context) in izip!(0..8, contexts.iter_mut()) {
         let bit = Rep3BigUintShare::new(
             (shared.a.clone() >> i) & BigUint::one(),
             (shared.b.clone() >> i) & BigUint::one(),

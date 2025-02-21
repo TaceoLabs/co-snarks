@@ -52,7 +52,7 @@ figment = { version = "0.10.19", features = ["toml", "env"] }
 futures = "0.3.30"
 hex-literal = "0.4.1"
 intmap = "2.0.0"
-itertools = "0.13.0"
+itertools = "0.14.0"
 noirc-abi = { version = "1.0.0-beta.3", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-beta.3", package = "noirc_abi" }
 noirc-artifacts = { version = "1.0.0-beta.3", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-beta.3", package = "noirc_artifacts" }
 num-bigint = { version = "0.4.5" }
