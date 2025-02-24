@@ -1,5 +1,5 @@
 use ark_ec::pairing::Pairing;
-use ark_ff::{One, PrimeField};
+use ark_ff::{BigInt, Field, One, PrimeField};
 use num_bigint::BigUint;
 use std::str::FromStr;
 
@@ -26,6 +26,10 @@ pub trait HonkCurve<Des: PrimeField>: Pairing {
     fn get_curve_b() -> Self::ScalarField;
 
     fn get_subgroup_generator() -> Self::ScalarField;
+
+    fn get_subgroup_generator_inverse() -> Self::ScalarField {
+        Self::get_subgroup_generator().inverse().unwrap()
+    }
 }
 
 impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
@@ -71,11 +75,32 @@ impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
     }
 
     fn get_subgroup_generator() -> Self::ScalarField {
-        ark_bn254::Fr::from_str(
-            "3478517300119284901893091970156912948790432420133812234316178878452092729974",
-        )
-        .map_err(|_| eyre::eyre!("Failed to parse subgroup generator"))
-        .unwrap()
+        let val = ark_bn254::Fr::from(BigInt::new([
+            14453002906517207670,
+            7023718024139043376,
+            17331575720852783024,
+            554159777355432964,
+        ]));
+        debug_assert_eq!(
+            val,
+            ark_bn254::Fr::from_str(
+                "3478517300119284901893091970156912948790432420133812234316178878452092729974",
+            )
+            .unwrap()
+        );
+
+        val
+    }
+
+    fn get_subgroup_generator_inverse() -> Self::ScalarField {
+        let val = ark_bn254::Fr::from(BigInt::new([
+            7578525993492149718,
+            11911168646041470090,
+            7238721496332547558,
+            2327185798872627923,
+        ]));
+        debug_assert_eq!(val, Self::get_subgroup_generator().inverse().unwrap());
+        val
     }
 }
 

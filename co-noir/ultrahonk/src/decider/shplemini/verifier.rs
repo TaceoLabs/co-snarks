@@ -633,7 +633,7 @@ impl<
         multilinear_challenge: &[P::ScalarField],
         inner_product_eval_claim: P::ScalarField,
     ) -> HonkVerifyResult<bool> {
-        let subgroup_generator_inverse = P::get_subgroup_generator().inverse().unwrap();
+        let subgroup_generator_inverse = P::get_subgroup_generator_inverse();
 
         // Compute the evaluation of the vanishing polynomia Z_H(X) at X = gemini_evaluation_challenge
         let vanishing_poly_eval =
