@@ -299,8 +299,8 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
         if let (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) = (lhs, rhs) {
-            let lhs = acir_field_utils::to_u128(lhs);
-            let rhs = acir_field_utils::to_u128(rhs);
+            let lhs: BigUint = lhs.into();
+            let rhs: BigUint = rhs.into();
             Ok(PlainBrilligType::Field(F::from(lhs / rhs)))
         } else {
             eyre::bail!("IntDiv only supported on fields")
