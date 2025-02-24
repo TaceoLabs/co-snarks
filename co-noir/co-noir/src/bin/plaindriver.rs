@@ -7,7 +7,7 @@ use co_noir::HonkRecursion;
 use co_ultrahonk::{
     prelude::{
         CoUltraHonk, CrsParser, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey, UltraHonk,
-        Utils, VerifyingKey,
+        Utils, VerifyingKey, ZeroKnowledge,
     },
     PlainCoBuilder,
 };
@@ -165,7 +165,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     let circuit_path = config.circuit;
     let hasher = config.hasher;
     let out_dir = config.out_dir;
-    let has_zk = false;
+    let has_zk = ZeroKnowledge::No;
 
     // Read circuit
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_path)

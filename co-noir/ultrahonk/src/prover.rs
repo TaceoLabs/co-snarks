@@ -23,6 +23,16 @@ pub enum ZeroKnowledge {
     Yes,
 }
 
+impl From<bool> for ZeroKnowledge {
+    fn from(value: bool) -> Self {
+        if value {
+            ZeroKnowledge::Yes
+        } else {
+            ZeroKnowledge::No
+        }
+    }
+}
+
 pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
