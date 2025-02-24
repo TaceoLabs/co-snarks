@@ -1,8 +1,8 @@
+use crate::utils::Utils;
 use ark_ff::PrimeField;
 use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial as _};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use num_traits::Zero;
-
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::{AddAssign, Index, IndexMut, MulAssign, SubAssign};
@@ -217,9 +217,7 @@ impl<F: PrimeField> Polynomial<F> {
         }
 
         let n = evaluation_points.len();
-        let dim = (self.coefficients.len() - 1)
-            .next_power_of_two()
-            .trailing_zeros() as usize; // Round up to next power of 2
+        let dim = Utils::get_msb64(self.coefficients.len() as u64 - 1) as usize + 1; // Round up to next power of 2
 
         // To simplify handling of edge cases, we assume that the index space is always a power of 2
         assert_eq!(self.coefficients.len(), 1 << n);
@@ -246,13 +244,7 @@ impl<F: PrimeField> Polynomial<F> {
                 tmp[i] = tmp[i * 2] + *val * (tmp[i * 2 + 1] - tmp[i * 2]);
             }
         }
-        // for l in 1..dim {
-        //     n_l = 1 << (dim - l - 1);
-        //     u_l = evaluation_points[l];
-        //     for i in 0..n_l {
-        //         tmp[i] = tmp[i * 2] + u_l * (tmp[i * 2 + 1] - tmp[i * 2]);
-        //     }
-        // }
+
         let mut result = tmp[0];
 
         // We handle the "trivial" dimensions which are full of zeros.
