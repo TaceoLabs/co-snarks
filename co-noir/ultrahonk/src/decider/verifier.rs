@@ -4,6 +4,7 @@ use super::{
 };
 use crate::{
     prelude::TranscriptFieldType,
+    prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
     Utils, NUM_LIBRA_COMMITMENTS,
@@ -94,11 +95,11 @@ impl<
         circuit_size: u32,
         crs: &P::G2Affine,
         mut transcript: Transcript<TranscriptFieldType, H>,
-        has_zk: bool,
+        has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("Decider verification");
         let mut libra_commitments = Vec::with_capacity(NUM_LIBRA_COMMITMENTS);
-        if has_zk {
+        if has_zk == ZeroKnowledge::Yes {
             libra_commitments
                 .push(transcript.receive_point_from_prover::<P>(
                     "Libra:concatenation_commitment".to_string(),
@@ -111,7 +112,7 @@ impl<
             return Ok(false);
         }
 
-        if has_zk {
+        if has_zk == ZeroKnowledge::Yes {
             libra_commitments.push(
                 transcript
                     .receive_point_from_prover::<P>("Libra:big_sum_commitment".to_string())?,
@@ -121,7 +122,7 @@ impl<
                     .receive_point_from_prover::<P>("Libra:quotient_commitment".to_string())?,
             );
         }
-        let libra_commitments = if has_zk {
+        let libra_commitments = if has_zk == ZeroKnowledge::Yes {
             Some(libra_commitments)
         } else {
             None

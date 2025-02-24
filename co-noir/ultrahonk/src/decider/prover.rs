@@ -6,6 +6,7 @@ use super::{
 
 use crate::{
     decider::small_subgroup_ipa::SmallSubgroupIPAProver,
+    prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,
     Utils,
@@ -69,9 +70,9 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-        has_zk: bool,
+        has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(SumcheckOutput<P::ScalarField>, Option<ZKSumcheckData<P>>)> {
-        if has_zk {
+        if has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = crs.monomials[..1 << (log_subgroup_size + 1)].to_vec();
             let mut zk_sumcheck_data: ZKSumcheckData<P> = ZKSumcheckData::<P>::new::<H>(
@@ -101,10 +102,10 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
-        has_zk: bool,
+        has_zk: ZeroKnowledge,
         zk_sumcheck_data: Option<&mut ZKSumcheckData<P>>,
     ) -> HonkProofResult<()> {
-        if !has_zk {
+        if has_zk == ZeroKnowledge::No {
             let prover_opening_claim =
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
             Self::compute_opening_proof(prover_opening_claim, transcript, crs)
@@ -135,7 +136,7 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
-        has_zk: bool,
+        has_zk: ZeroKnowledge,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("Decider prove");
 

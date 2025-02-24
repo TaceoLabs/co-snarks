@@ -2,6 +2,7 @@ use ark_bn254::Bn254;
 use co_builder::prelude::CrsParser;
 use co_builder::prelude::HonkRecursion;
 use sha3::Keccak256;
+use ultrahonk::prelude::ZeroKnowledge;
 use ultrahonk::{
     prelude::{
         HonkProof, PlainAcvmSolver, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher,
@@ -14,7 +15,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     proof_file: &str,
     circuit_file: &str,
     witness_file: &str,
-    has_zk: bool,
+    has_zk: ZeroKnowledge,
 ) {
     const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
     const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
@@ -42,7 +43,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         .unwrap();
 
     let proof = UltraHonk::<_, H>::prove(proving_key, has_zk).unwrap();
-    if !has_zk {
+    if has_zk == ZeroKnowledge::No {
         let proof_u8 = proof.to_buffer();
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
         assert_eq!(proof_u8, read_proof_u8);
@@ -61,8 +62,8 @@ fn poseidon_test_poseidon2sponge() {
     const CIRCUIT_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.json";
     const WITNESS_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.gz";
 
-    plain_test::<Poseidon2Sponge>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, false);
-    plain_test::<Poseidon2Sponge>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, true);
+    plain_test::<Poseidon2Sponge>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, ZeroKnowledge::No);
+    plain_test::<Poseidon2Sponge>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, ZeroKnowledge::Yes);
 }
 
 #[test]
@@ -71,8 +72,8 @@ fn poseidon_test_keccak256() {
     const CIRCUIT_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.json";
     const WITNESS_FILE: &str = "../../test_vectors/noir/poseidon/kat/poseidon.gz";
 
-    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, false);
-    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, true);
+    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, ZeroKnowledge::No);
+    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, ZeroKnowledge::Yes);
 }
 
 #[test]
@@ -81,8 +82,8 @@ fn add3_test_keccak256() {
     const CIRCUIT_FILE: &str = "../../test_vectors/noir/add3u64/kat/add3u64.json";
     const WITNESS_FILE: &str = "../../test_vectors/noir/add3u64/kat/add3u64.gz";
 
-    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, false);
-    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, true);
+    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, ZeroKnowledge::No);
+    plain_test::<Keccak256>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, ZeroKnowledge::Yes);
 }
 
 #[test]
@@ -91,6 +92,6 @@ fn add3_test_poseidon2sponge() {
     const CIRCUIT_FILE: &str = "../../test_vectors/noir/add3u64/kat/add3u64.json";
     const WITNESS_FILE: &str = "../../test_vectors/noir/add3u64/kat/add3u64.gz";
 
-    plain_test::<Poseidon2Sponge>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, false);
-    plain_test::<Poseidon2Sponge>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, true);
+    plain_test::<Poseidon2Sponge>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, ZeroKnowledge::No);
+    plain_test::<Poseidon2Sponge>(PROOF_FILE, CIRCUIT_FILE, WITNESS_FILE, ZeroKnowledge::Yes);
 }

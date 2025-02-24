@@ -5,6 +5,7 @@ use crate::{
         verifier::DeciderVerifier,
     },
     prelude::{GateSeparatorPolynomial, TranscriptFieldType},
+    prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptHasher},
     types::NUM_ALL_ENTITIES,
     verifier::HonkVerifyResult,
@@ -25,7 +26,7 @@ impl<
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
-        has_zk: bool,
+        has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<SumcheckVerifierOutput<P::ScalarField>> {
         tracing::trace!("Sumcheck verify");
 
@@ -44,7 +45,7 @@ impl<
 
         let mut sum_check_round = SumcheckVerifierRound::<P, SIZE>::default();
         let mut libra_challenge = P::ScalarField::one();
-        if has_zk {
+        if has_zk == ZeroKnowledge::Yes {
             // If running zero-knowledge sumcheck the target total sum is corrected by the claimed sum of libra masking
             // multivariate over the hypercube
 
@@ -107,7 +108,7 @@ impl<
 
         let mut libra_evaluation = P::ScalarField::one();
         // For ZK Flavors: the evaluation of the Row Disabling Polynomial at the sumcheck challenge
-        if has_zk {
+        if has_zk == ZeroKnowledge::Yes {
             libra_evaluation =
                 transcript.receive_fr_from_prover::<P>("Libra:claimed_evaluation".to_string())?;
             // No recursive flavor, otherwise we need to make some modifications to the following
@@ -127,7 +128,11 @@ impl<
         Ok(SumcheckVerifierOutput {
             multivariate_challenge,
             verified,
-            claimed_libra_evaluation: if has_zk { Some(libra_evaluation) } else { None },
+            claimed_libra_evaluation: if has_zk == ZeroKnowledge::Yes {
+                Some(libra_evaluation)
+            } else {
+                None
+            },
         })
     }
 }
