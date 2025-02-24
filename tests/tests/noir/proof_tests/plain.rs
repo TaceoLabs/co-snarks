@@ -6,7 +6,7 @@ use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
 use co_noir::HonkRecursion;
 use co_ultrahonk::prelude::{
     CoUltraHonk, CrsParser, PlainCoBuilder, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey,
-    TranscriptFieldType, TranscriptHasher, UltraHonk, Utils,
+    TranscriptFieldType, TranscriptHasher, UltraHonk, Utils, ZeroKnowledge,
 };
 use sha3::Keccak256;
 
@@ -42,7 +42,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_file, true)
         .expect("failed to parse program artifact");
     let witness = Utils::get_witness_from_file(&witness_file).expect("failed to parse witness");
-    let has_zk = false;
+    let has_zk = ZeroKnowledge::No;
 
     let mut driver = PlainAcvmSolver::new();
     let builder = PlainCoBuilder::<Bn254>::create_circuit(
@@ -75,7 +75,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-    let has_zk = false;
+    let has_zk = ZeroKnowledge::No;
 
     let solver = PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
     let witness = solver.solve().unwrap().0;

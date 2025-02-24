@@ -3,7 +3,7 @@ use ark_bn254::Bn254;
 use co_acvm::ShamirAcvmType;
 use co_ultrahonk::prelude::{
     CrsParser, Poseidon2Sponge, ShamirCoUltraHonk, TranscriptFieldType, TranscriptHasher,
-    UltraHonk, Utils,
+    UltraHonk, Utils, ZeroKnowledge,
 };
 use sha3::Keccak256;
 use std::{sync::Arc, thread};
@@ -16,7 +16,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
 ) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
-    let has_zk = false;
+    let has_zk = ZeroKnowledge::No;
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");

@@ -5,7 +5,7 @@ use ark_ff::PrimeField;
 use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
 use co_ultrahonk::prelude::{
     CrsParser, Poseidon2Sponge, Rep3CoUltraHonk, TranscriptFieldType, TranscriptHasher, UltraHonk,
-    Utils,
+    Utils, ZeroKnowledge,
 };
 use sha3::Keccak256;
 use std::{sync::Arc, thread};
@@ -44,7 +44,7 @@ fn convert_witness_rep3<F: PrimeField>(
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
-    let has_zk = false;
+    let has_zk = ZeroKnowledge::No;
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
@@ -95,7 +95,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
 fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", name);
-    let has_zk = false;
+    let has_zk = ZeroKnowledge::No;
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
