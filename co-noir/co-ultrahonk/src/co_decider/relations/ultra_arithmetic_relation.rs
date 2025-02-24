@@ -28,21 +28,19 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationA
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraArithmeticRelationAcc<T, P> {
-    pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
+    pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == UltraArithmeticRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, elements[0]);
-        self.r1.scale_inplace(driver, elements[1]);
+        self.r0.scale_inplace(elements[0]);
+        self.r1.scale_inplace(elements[1]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        driver: &mut T,
         result: &mut SharedUnivariate<T, P, SIZE>,
         extended_random_poly: &Univariate<P::ScalarField, SIZE>,
         partial_evaluation_result: &P::ScalarField,
     ) {
         self.r0.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -50,7 +48,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraArithmeticRelationAcc<T, P> {
         );
 
         self.r1.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -156,45 +153,43 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mul = driver.mul_many(w_r.as_ref(), w_l.as_ref())?;
         let mul = SharedUnivariate::from_vec(&mul);
 
-        let mut tmp = mul
-            .mul_public(driver, q_m)
-            .mul_public(driver, &(q_arith.to_owned() - 3));
-        tmp.scale_inplace(driver, neg_half);
-
-        let tmp_l = w_l.mul_public(driver, q_l);
-        let tmp_r = w_r.mul_public(driver, q_r);
-        let tmp_o = w_o.mul_public(driver, q_o);
-        let tmp_4 = w_4.mul_public(driver, q_4);
+        let mut tmp = mul.mul_public(q_m).mul_public(&(q_arith.to_owned() - 3));
+        tmp.scale_inplace(neg_half);
+        let party_id = driver.get_party_id();
+        let tmp_l = w_l.mul_public(q_l);
+        let tmp_r = w_r.mul_public(q_r);
+        let tmp_o = w_o.mul_public(q_o);
+        let tmp_4 = w_4.mul_public(q_4);
         let tmp = tmp
-            .add(driver, &tmp_l)
-            .add(driver, &tmp_r)
-            .add(driver, &tmp_o)
-            .add(driver, &tmp_4)
-            .add_public(driver, q_c);
+            .add(&tmp_l)
+            .add(&tmp_r)
+            .add(&tmp_o)
+            .add(&tmp_4)
+            .add_public(q_c, party_id);
 
-        let tmp_arith = w_4_shift.mul_public(driver, &(q_arith.to_owned() - 1));
-        let mut tmp = tmp.add(driver, &tmp_arith).mul_public(driver, q_arith);
-        tmp.scale_inplace(driver, *scaling_factor);
+        let tmp_arith = w_4_shift.mul_public(&(q_arith.to_owned() - 1));
+        let mut tmp = tmp.add(&tmp_arith).mul_public(q_arith);
+        tmp.scale_inplace(*scaling_factor);
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] =
-                driver.add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
 
         let tmp = w_l
-            .add(driver, w_4)
-            .sub(driver, w_l_shift)
-            .add_public(driver, q_m)
-            .mul_public(driver, &(q_arith.to_owned() - 2))
-            .mul_public(driver, &(q_arith.to_owned() - 1))
-            .mul_public(driver, q_arith)
-            .scale(driver, *scaling_factor);
+            .add(w_4)
+            .sub(w_l_shift)
+            .add_public(q_m, party_id)
+            .mul_public(&(q_arith.to_owned() - 2))
+            .mul_public(&(q_arith.to_owned() - 1))
+            .mul_public(q_arith)
+            .scale(*scaling_factor);
 
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] =
-                driver.add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
         }
 
         Ok(())

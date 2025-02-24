@@ -24,20 +24,19 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         0
     }
 
-    fn sub(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         a - b
     }
 
-    fn add(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         a + b
     }
 
-    fn neg(&mut self, a: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare {
         -a
     }
 
     fn mul_with_public(
-        &self,
         public: <P as Pairing>::ScalarField,
         shared: Self::ArithmeticShare,
     ) -> Self::ArithmeticShare {
@@ -53,9 +52,9 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     }
 
     fn add_with_public(
-        &self,
         public: <P as Pairing>::ScalarField,
         shared: Self::ArithmeticShare,
+        _id: Self::PartyID,
     ) -> Self::ArithmeticShare {
         shared + public
     }
@@ -151,11 +150,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         P::G1::msm_unchecked(points, scalars)
     }
 
-    fn eval_poly(
-        &mut self,
-        coeffs: &[Self::ArithmeticShare],
-        point: P::ScalarField,
-    ) -> Self::ArithmeticShare {
+    fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {
         // TACEO TODO: here we clone...
         let poly = DensePolynomial::from_coefficients_slice(coeffs);
         poly.evaluate(&point)

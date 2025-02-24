@@ -27,21 +27,19 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for LogDerivLookupRelationAc
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> LogDerivLookupRelationAcc<T, P> {
-    pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
+    pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == LogDerivLookupRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, elements[0]);
-        self.r1.scale_inplace(driver, elements[1]);
+        self.r0.scale_inplace(elements[0]);
+        self.r1.scale_inplace(elements[1]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        driver: &mut T,
         result: &mut SharedUnivariate<T, P, SIZE>,
         extended_random_poly: &Univariate<P::ScalarField, SIZE>,
         partial_evaluation_result: &P::ScalarField,
     ) {
         self.r0.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -49,7 +47,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> LogDerivLookupRelationAcc<T, P> {
         );
 
         self.r1.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -76,10 +73,10 @@ impl LogDerivLookupRelation {
         let row_has_read = input.precomputed.q_lookup();
 
         row_has_write
-            .mul_public(driver, row_has_read)
-            .neg(driver)
-            .add(driver, row_has_write)
-            .add_public(driver, row_has_read)
+            .mul_public(row_has_read)
+            .neg()
+            .add(row_has_write)
+            .add_public(row_has_read, driver.get_party_id())
     }
 
     fn compute_read_term<T: NoirUltraHonkProver<P>, P: Pairing>(
@@ -102,29 +99,27 @@ impl LogDerivLookupRelation {
         let negative_column_2_step_size = input.precomputed.q_m();
         let negative_column_3_step_size = input.precomputed.q_c();
 
+        let party_id = driver.get_party_id();
+
         // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
         // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
         // method get_lookup_accumulators() in  for a detailed explanation.
         let derived_table_entry_1 = w_1_shift
-            .mul_public(driver, negative_column_1_step_size)
-            .add(driver, w_1)
-            .add_scalar(driver, *gamma);
-        let mut derived_table_entry_2 = w_2_shift
-            .mul_public(driver, negative_column_2_step_size)
-            .add(driver, w_2);
-        let mut derived_table_entry_3 = w_3_shift
-            .mul_public(driver, negative_column_3_step_size)
-            .add(driver, w_3);
+            .mul_public(negative_column_1_step_size)
+            .add(w_1)
+            .add_scalar(*gamma, party_id);
+        let mut derived_table_entry_2 = w_2_shift.mul_public(negative_column_2_step_size).add(w_2);
+        let mut derived_table_entry_3 = w_3_shift.mul_public(negative_column_3_step_size).add(w_3);
 
         // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
         // deg 2 or 3
-        derived_table_entry_2.scale_inplace(driver, *eta_1);
-        derived_table_entry_3.scale_inplace(driver, *eta_2);
+        derived_table_entry_2.scale_inplace(*eta_1);
+        derived_table_entry_3.scale_inplace(*eta_2);
 
         derived_table_entry_1
-            .add(driver, &derived_table_entry_2)
-            .add(driver, &derived_table_entry_3)
-            .add_public(driver, &(table_index.to_owned() * eta_3))
+            .add(&derived_table_entry_2)
+            .add(&derived_table_entry_3)
+            .add_public(&(table_index.to_owned() * eta_3), party_id)
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
@@ -217,18 +212,18 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let write_term = Self::compute_write_term(input, relation_parameters); // Degree 1 (2)
         let mul = driver.mul_many(read_term.as_ref(), inverses.as_ref())?;
         let write_inverse = SharedUnivariate::from_vec(&mul); // Degree 3 (4)
-        let read_inverse = inverses.mul_public(driver, &write_term); // Degree 2 (3)
+        let read_inverse = inverses.mul_public(&write_term); // Degree 2 (3)
 
         // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value is 0
         // if !inverse_exists.
         // Degrees:                     2 (3)       1 (2)        1              1
         let tmp = write_inverse
-            .mul_public(driver, &write_term)
-            .sub(driver, &inverse_exists)
-            .scale(driver, *scaling_factor); // Deg 4 (6)
+            .mul_public(&write_term)
+            .sub(&inverse_exists)
+            .scale(*scaling_factor); // Deg 4 (6)
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] =
-                driver.add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
@@ -236,14 +231,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // Establish validity of the read. Note: no scaling factor here since this constraint is 'linearly dependent,
         // i.e. enforced across the entire trace, not on a per-row basis.
         // Degrees:                       1            2 (3)            1            3 (4)
+        //
         let mul = driver.mul_many(write_inverse.as_ref(), read_counts.as_ref())?;
         let tmp = SharedUnivariate::from_vec(&mul);
-        let tmp = read_inverse
-            .mul_public(driver, read_selector)
-            .sub(driver, &tmp); // Deg 4 (5)
+        let tmp = read_inverse.mul_public(read_selector).sub(&tmp); // Deg 4 (5)
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] =
-                driver.add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
         }
 
         Ok(())

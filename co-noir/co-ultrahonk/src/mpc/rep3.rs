@@ -45,20 +45,19 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     }
 
     // TODO dont take by ref cause impl Copy, remove self
-    fn sub(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         arithmetic::sub(a, b)
     }
 
-    fn add(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         arithmetic::add(a, b)
     }
 
-    fn neg(&mut self, a: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare {
         arithmetic::neg(a)
     }
 
     fn mul_with_public(
-        &self,
         public: <P as Pairing>::ScalarField,
         shared: Self::ArithmeticShare,
     ) -> Self::ArithmeticShare {
@@ -74,11 +73,11 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     }
 
     fn add_with_public(
-        &self,
         public: <P as Pairing>::ScalarField,
         shared: Self::ArithmeticShare,
+        id: PartyID,
     ) -> Self::ArithmeticShare {
-        arithmetic::add_public(shared, public, self.io_context0.id)
+        arithmetic::add_public(shared, public, id)
     }
 
     fn promote_to_trivial_share(
@@ -181,7 +180,6 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     }
 
     fn eval_poly(
-        &mut self,
         coeffs: &[Self::ArithmeticShare],
         point: <P as Pairing>::ScalarField,
     ) -> Self::ArithmeticShare {

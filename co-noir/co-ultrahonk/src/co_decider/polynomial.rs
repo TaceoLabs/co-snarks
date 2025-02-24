@@ -24,52 +24,42 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         Self { coefficients }
     }
 
-    pub(crate) fn add_assign_slice(&mut self, driver: &mut T, other: &[T::ArithmeticShare]) {
+    pub(crate) fn add_assign_slice(&mut self, other: &[T::ArithmeticShare]) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(other.iter()) {
-            *des = driver.add(*des, *src);
+            *des = T::add(*des, *src);
         }
     }
 
-    pub(crate) fn sub_assign_slice(&mut self, driver: &mut T, other: &[T::ArithmeticShare]) {
+    pub(crate) fn sub_assign_slice(&mut self, other: &[T::ArithmeticShare]) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(other.iter()) {
-            *des = driver.sub(*des, *src);
+            *des = T::sub(*des, *src);
         }
     }
 
-    pub(crate) fn add_scaled_slice(
-        &mut self,
-        driver: &mut T,
-        src: &[T::ArithmeticShare],
-        scalar: &P::ScalarField,
-    ) {
+    pub(crate) fn add_scaled_slice(&mut self, src: &[T::ArithmeticShare], scalar: &P::ScalarField) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(src.iter()) {
-            let tmp = driver.mul_with_public(*scalar, *src);
-            *des = driver.add(*des, tmp);
+            let tmp = T::mul_with_public(*scalar, *src);
+            *des = T::add(*des, tmp);
         }
     }
 
-    pub(crate) fn add_scaled(
-        &mut self,
-        driver: &mut T,
-        src: &SharedPolynomial<T, P>,
-        scalar: &P::ScalarField,
-    ) {
-        self.add_scaled_slice(driver, &src.coefficients, scalar);
+    pub(crate) fn add_scaled(&mut self, src: &SharedPolynomial<T, P>, scalar: &P::ScalarField) {
+        self.add_scaled_slice(&src.coefficients, scalar);
     }
 
     pub(crate) fn add_scaled_slice_public(
         &mut self,
-        driver: &mut T,
+        id: T::PartyID,
         src: &[P::ScalarField],
         scalar: &P::ScalarField,
     ) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(src.iter()) {
             let tmp = *scalar * src;
-            *des = driver.add_with_public(tmp, *des);
+            *des = T::add_with_public(tmp, *des, id);
         }
     }
 
@@ -86,7 +76,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
     /**
      * @brief Divides p(X) by (X-r) in-place.
      */
-    pub(crate) fn factor_roots(&mut self, driver: &mut T, root: &P::ScalarField) {
+    pub(crate) fn factor_roots(&mut self, root: &P::ScalarField) {
         if root.is_zero() {
             // if one of the roots is 0 after having divided by all other roots,
             // then p(X) = a₁⋅X + ⋯ + aₙ₋₁⋅Xⁿ⁻¹
@@ -127,8 +117,8 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
             for coeff in self.coefficients.iter_mut() {
                 // at the start of the loop, temp = bᵢ₋₁
                 // and we can compute bᵢ   = (aᵢ − bᵢ₋₁)⋅(−r)⁻¹
-                temp = driver.sub(*coeff, temp);
-                temp = driver.mul_with_public(root_inverse, temp);
+                temp = T::sub(*coeff, temp);
+                temp = T::mul_with_public(root_inverse, temp);
                 *coeff = temp.to_owned();
             }
         }
@@ -141,17 +131,13 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         Ok(Self { coefficients })
     }
 
-    pub(crate) fn mul_assign(&mut self, rhs: P::ScalarField, driver: &mut T) {
+    pub(crate) fn mul_assign(&mut self, rhs: P::ScalarField) {
         for l in self.coefficients.iter_mut() {
-            *l = T::mul_with_public(driver, rhs, *l);
+            *l = T::mul_with_public(rhs, *l);
         }
     }
 
-    pub fn evaluate_mle(
-        &self,
-        evaluation_points: &[P::ScalarField],
-        driver: &mut T,
-    ) -> T::ArithmeticShare {
+    pub fn evaluate_mle(&self, evaluation_points: &[P::ScalarField]) -> T::ArithmeticShare {
         if self.coefficients.is_empty() {
             return T::ArithmeticShare::default();
         }
@@ -172,13 +158,9 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         // Note below: i * 2 + 1 + offset might equal virtual_size. This used to subtlely be handled by extra capacity
         // padding (and there used to be no assert time checks, which this constant helps with).
         for (i, val) in tmp.iter_mut().enumerate().take(n_l) {
-            let sub = T::sub(
-                driver,
-                self.coefficients[i * 2 + 1],
-                self.coefficients[i * 2],
-            );
-            let mul = T::mul_with_public(driver, evaluation_points[0], sub);
-            *val = T::add(driver, self.coefficients[i * 2], mul);
+            let sub = T::sub(self.coefficients[i * 2 + 1], self.coefficients[i * 2]);
+            let mul = T::mul_with_public(evaluation_points[0], sub);
+            *val = T::add(self.coefficients[i * 2], mul);
         }
 
         // partially evaluate the dim-1 remaining points
@@ -186,9 +168,9 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
             n_l = 1 << (dim - l - 1);
 
             for i in 0..n_l {
-                let sub = T::sub(driver, tmp[i * 2 + 1], tmp[i * 2]);
-                let mul = T::mul_with_public(driver, *val, sub);
-                tmp[i] = T::add(driver, tmp[i * 2], mul);
+                let sub = T::sub(tmp[i * 2 + 1], tmp[i * 2]);
+                let mul = T::mul_with_public(*val, sub);
+                tmp[i] = T::add(tmp[i * 2], mul);
             }
         }
 
@@ -196,7 +178,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
 
         // We handle the "trivial" dimensions which are full of zeros.
         for &point in &evaluation_points[dim..n] {
-            result = T::mul_with_public(driver, P::ScalarField::ONE - point, result);
+            result = T::mul_with_public(P::ScalarField::ONE - point, result);
         }
 
         result

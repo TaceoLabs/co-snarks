@@ -34,23 +34,21 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for Poseidon2InternalRelatio
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> Poseidon2InternalRelationAcc<T, P> {
-    pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
+    pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == Poseidon2InternalRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, elements[0]);
-        self.r1.scale_inplace(driver, elements[1]);
-        self.r2.scale_inplace(driver, elements[2]);
-        self.r3.scale_inplace(driver, elements[3]);
+        self.r0.scale_inplace(elements[0]);
+        self.r1.scale_inplace(elements[1]);
+        self.r2.scale_inplace(elements[2]);
+        self.r3.scale_inplace(elements[3]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        driver: &mut T,
         result: &mut SharedUnivariate<T, P, SIZE>,
         extended_random_poly: &Univariate<P::ScalarField, SIZE>,
         partial_evaluation_result: &P::ScalarField,
     ) {
         self.r0.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -58,7 +56,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Poseidon2InternalRelationAcc<T, P> {
         );
 
         self.r1.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -66,7 +63,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Poseidon2InternalRelationAcc<T, P> {
         );
 
         self.r2.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -74,7 +70,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Poseidon2InternalRelationAcc<T, P> {
         );
 
         self.r3.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -141,7 +136,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
 
         // add round constants
-        let s1 = w_l.add_public(driver, q_l);
+        let s1 = w_l.add_public(q_l, driver.get_party_id());
 
         // apply s-box round
         let u1 = driver.mul_many(s1.as_ref(), s1.as_ref())?;
@@ -153,7 +148,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut u1 = SharedUnivariate::from_vec(&u1);
 
         // matrix mul with v = M_I * u 4 muls and 7 additions
-        let sum = u1.add(driver, &u2).add(driver, &u3).add(driver, &u4);
+        let sum = u1.add(&u2).add(&u3).add(&u4);
 
         let q_pos_by_scaling = q_poseidon2_internal.to_owned() * scaling_factor;
 
@@ -171,53 +166,45 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
         ));
 
-        u1.scale_inplace(driver, internal_matrix_diag_0);
-        let v1 = u1.add(driver, &sum);
-        let tmp = v1
-            .sub(driver, w_l_shift)
-            .mul_public(driver, &q_pos_by_scaling);
+        u1.scale_inplace(internal_matrix_diag_0);
+        let v1 = u1.add(&sum);
+        let tmp = v1.sub(w_l_shift).mul_public(&q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] =
-                driver.add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
 
-        u2.scale_inplace(driver, internal_matrix_diag_1);
-        let v2 = u2.add(driver, &sum);
-        let tmp = v2
-            .sub(driver, w_r_shift)
-            .mul_public(driver, &q_pos_by_scaling);
+        u2.scale_inplace(internal_matrix_diag_1);
+        let v2 = u2.add(&sum);
+        let tmp = v2.sub(w_r_shift).mul_public(&q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] =
-                driver.add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
 
-        u3.scale_inplace(driver, internal_matrix_diag_2);
-        let v3 = u3.add(driver, &sum);
-        let tmp = v3
-            .sub(driver, w_o_shift)
-            .mul_public(driver, &q_pos_by_scaling);
+        u3.scale_inplace(internal_matrix_diag_2);
+        let v3 = u3.add(&sum);
+        let tmp = v3.sub(w_o_shift).mul_public(&q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r2.evaluations.len() {
             univariate_accumulator.r2.evaluations[i] =
-                driver.add(univariate_accumulator.r2.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r2.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
-        u4.scale_inplace(driver, internal_matrix_diag_3);
-        let v4 = u4.add(driver, &sum);
-        let tmp = v4
-            .sub(driver, w_4_shift)
-            .mul_public(driver, &q_pos_by_scaling);
+        u4.scale_inplace(internal_matrix_diag_3);
+        let v4 = u4.add(&sum);
+        let tmp = v4.sub(w_4_shift).mul_public(&q_pos_by_scaling);
 
         for i in 0..univariate_accumulator.r3.evaluations.len() {
             univariate_accumulator.r3.evaluations[i] =
-                driver.add(univariate_accumulator.r3.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r3.evaluations[i], tmp.evaluations[i]);
         }
 
         Ok(())
