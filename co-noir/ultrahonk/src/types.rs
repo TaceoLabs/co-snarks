@@ -6,7 +6,7 @@ use co_builder::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HonkProof<F: PrimeField> {
-    pub proof: Vec<F>,
+    proof: Vec<F>,
 }
 
 impl<F: PrimeField> HonkProof<F> {
