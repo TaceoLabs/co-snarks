@@ -16,12 +16,7 @@ use co_builder::{
     HonkProofError, HonkProofResult,
 };
 
-impl<
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-        const SIZE: usize,
-    > Decider<P, H, SIZE>
-{
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
     fn get_f_polynomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {
         PolyF {
             precomputed: &polys.precomputed,
@@ -330,8 +325,7 @@ impl<
         });
 
         // Compute univariate opening queries rₗ = r^{2ˡ} for l = 0, 1, ..., m-1
-        let r_squares =
-            DeciderVerifier::<P, H, { SIZE }>::powers_of_evaluation_challenge(r_challenge, log_n);
+        let r_squares = DeciderVerifier::<P, H>::powers_of_evaluation_challenge(r_challenge, log_n);
 
         // Compute the remaining m opening pairs {−r^{2ˡ}, Aₗ(−r^{2ˡ})}, l = 1, ..., m-1.
 

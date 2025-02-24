@@ -16,11 +16,8 @@ use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::prelude::HonkCurve;
 
-impl<
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-        const SIZE: usize,
-    > DeciderVerifier<P, H, SIZE>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
+    DeciderVerifier<P, H>
 {
     pub fn get_g_shift_evaluations(
         evaluations: &ClaimedEvaluations<P::ScalarField>,

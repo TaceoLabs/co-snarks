@@ -13,12 +13,7 @@ use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use super::zk_data::ZKSumcheckData;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
-impl<
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-        const SIZE: usize,
-    > Decider<P, H, SIZE>
-{
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
     pub(crate) fn partially_evaluate_init(
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField>,
         polys: &AllEntities<Vec<P::ScalarField>>,

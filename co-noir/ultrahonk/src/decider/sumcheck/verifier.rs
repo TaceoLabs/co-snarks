@@ -16,13 +16,10 @@ use ark_ff::PrimeField;
 use co_builder::prelude::HonkCurve;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
-impl<
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-        const SIZE: usize,
-    > DeciderVerifier<P, H, SIZE>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
+    DeciderVerifier<P, H>
 {
-    pub(crate) fn sumcheck_verify(
+    pub(crate) fn sumcheck_verify<const SIZE: usize>(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,

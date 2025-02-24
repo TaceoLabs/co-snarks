@@ -3,6 +3,7 @@ use super::{
     types::VerifierMemory,
 };
 use crate::{
+    decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
     prelude::TranscriptFieldType,
     prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptHasher},
@@ -17,18 +18,14 @@ use std::marker::PhantomData;
 pub(crate) struct DeciderVerifier<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-    const SIZE: usize,
 > {
     pub(super) memory: VerifierMemory<P>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
 }
 
-impl<
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-        const SIZE: usize,
-    > DeciderVerifier<P, H, SIZE>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
+    DeciderVerifier<P, H>
 {
     pub(crate) fn new(memory: VerifierMemory<P>) -> Self {
         Self {
@@ -106,7 +103,20 @@ impl<
                 )?);
         }
 
-        let sumcheck_output = self.sumcheck_verify(&mut transcript, circuit_size, has_zk)?;
+        let sumcheck_output = if has_zk == ZeroKnowledge::No {
+            self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH>(
+                &mut transcript,
+                circuit_size,
+                has_zk,
+            )?
+        } else {
+            self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
+                &mut transcript,
+                circuit_size,
+                has_zk,
+            )?
+        };
+
         if !sumcheck_output.verified {
             tracing::trace!("Sumcheck failed");
             return Ok(false);

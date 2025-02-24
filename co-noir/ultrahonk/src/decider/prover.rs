@@ -22,7 +22,6 @@ use std::marker::PhantomData;
 pub(crate) struct Decider<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-    const SIZE: usize,
 > {
     pub(super) memory: ProverMemory<P>,
     pub(super) rng: ChaCha12Rng,
@@ -30,12 +29,7 @@ pub(crate) struct Decider<
     phantom_hasher: PhantomData<H>,
 }
 
-impl<
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-        const SIZE: usize,
-    > Decider<P, H, SIZE>
-{
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
     pub(crate) fn new(memory: ProverMemory<P>) -> Self {
         Self {
             memory,
