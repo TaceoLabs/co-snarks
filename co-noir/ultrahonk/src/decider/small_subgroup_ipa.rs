@@ -1,3 +1,8 @@
+use crate::prelude::TranscriptHasher;
+use crate::prelude::Univariate;
+use crate::Utils;
+use crate::CONST_PROOF_SIZE_LOG_N;
+use crate::{prelude::Transcript, transcript::TranscriptFieldType};
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::Zero;
@@ -5,12 +10,7 @@ use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
-
-use crate::prelude::TranscriptHasher;
-use crate::prelude::Univariate;
-use crate::Utils;
-use crate::CONST_PROOF_SIZE_LOG_N;
-use crate::{prelude::Transcript, transcript::TranscriptFieldType};
+use rand::{CryptoRng, Rng};
 
 use super::sumcheck::zk_data::ZKSumcheckData;
 
@@ -31,12 +31,13 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
     const SUBGROUP_SIZE: usize = P::SUBGROUP_SIZE;
     const BATCHED_POLYNOMIAL_LENGTH: usize = 2 * P::SUBGROUP_SIZE + 2;
     const QUOTIENT_LENGTH: usize = Self::SUBGROUP_SIZE + 2;
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>>(
+    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
         zk_sumcheck_data: &ZKSumcheckData<P>,
         multivariate_challenge: &[P::ScalarField],
         claimed_ipa_eval: P::ScalarField,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         commitment_key: &ProverCrs<P>,
+        rng: &mut R,
     ) -> HonkProofResult<Self> {
         let mut prover = SmallSubgroupIPAProver {
             interpolation_domain: zk_sumcheck_data.interpolation_domain.to_vec(),
@@ -65,7 +66,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         // }
 
         prover.compute_challenge_polynomial(multivariate_challenge)?;
-        prover.compute_big_sum_polynomial()?;
+        prover.compute_big_sum_polynomial(rng)?;
         let libra_big_sum_commitment =
             Utils::commit(&prover.big_sum_polynomial.coefficients, commitment_key)?;
         transcript.send_point_to_verifier::<P>(
@@ -164,7 +165,10 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
      *   vanishing polynomial.
      *
      */
-    fn compute_big_sum_polynomial(&mut self) -> HonkProofResult<()> {
+    fn compute_big_sum_polynomial<R: Rng + CryptoRng>(
+        &mut self,
+        rng: &mut R,
+    ) -> HonkProofResult<()> {
         self.big_sum_lagrange_coeffs[0] = P::ScalarField::zero();
 
         // Compute the big sum coefficients recursively
@@ -184,7 +188,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         };
 
         //  Generate random masking_term of degree 2, add Z_H(X) * masking_term
-        let masking_term = Univariate::<P::ScalarField, 3>::get_random();
+        let masking_term = Univariate::<P::ScalarField, 3>::get_random(rng);
         self.big_sum_polynomial += &self.big_sum_polynomial_unmasked.clone().coefficients;
 
         for idx in 0..masking_term.evaluations.len() {

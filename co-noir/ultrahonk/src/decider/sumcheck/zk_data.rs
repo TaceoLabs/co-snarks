@@ -13,6 +13,8 @@ use co_builder::prelude::Polynomial;
 use co_builder::prelude::ProverCrs;
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
+use rand::CryptoRng;
+use rand::Rng;
 
 pub(crate) struct ZKSumcheckData<P: Pairing> {
     pub(crate) constant_term: P::ScalarField,
@@ -29,16 +31,16 @@ pub(crate) struct ZKSumcheckData<P: Pairing> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>>(
+    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
         multivariate_d: usize,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         commitment_key: &[P::G1Affine],
+        rng: &mut R,
     ) -> HonkProofResult<Self> {
-        let mut rng = rand::thread_rng();
-        let constant_term = P::ScalarField::rand(&mut rng);
-        let libra_challenge = P::ScalarField::rand(&mut rng);
+        let constant_term = P::ScalarField::rand(rng);
+        let libra_challenge = P::ScalarField::rand(rng);
         let libra_univariates =
-            Self::generate_libra_univariates(multivariate_d, P::LIBRA_UNIVARIATES_LENGTH);
+            Self::generate_libra_univariates(multivariate_d, P::LIBRA_UNIVARIATES_LENGTH, rng);
         let log_circuit_size = multivariate_d;
 
         let mut data = ZKSumcheckData {
@@ -56,7 +58,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         };
 
         data.create_interpolation_domain();
-        data.compute_concatenated_libra_polynomial()?;
+        data.compute_concatenated_libra_polynomial(rng)?;
         // If proving_key is provided, commit to the concatenated and masked libra polynomial
         if !commitment_key.is_empty() {
             let libra_commitment = Utils::commit(
@@ -92,12 +94,13 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
      * independent uniformly random coefficients.
      *
      */
-    fn generate_libra_univariates(
+    fn generate_libra_univariates<R: Rng + CryptoRng>(
         number_of_polynomials: usize,
         univariate_length: usize,
+        rng: &mut R,
     ) -> Vec<Polynomial<P::ScalarField>> {
         (0..number_of_polynomials)
-            .map(|_| Polynomial::random(univariate_length))
+            .map(|_| Polynomial::random(univariate_length, rng))
             .collect()
     }
 
@@ -168,7 +171,10 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
      * + m_1
      *
      */
-    fn compute_concatenated_libra_polynomial(&mut self) -> HonkProofResult<()> {
+    fn compute_concatenated_libra_polynomial<R: Rng + CryptoRng>(
+        &mut self,
+        rng: &mut R,
+    ) -> HonkProofResult<()> {
         let mut coeffs_lagrange_subgroup = vec![P::ScalarField::zero(); P::SUBGROUP_SIZE];
         coeffs_lagrange_subgroup[0] = self.constant_term;
 
@@ -184,7 +190,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
             coefficients: coeffs_lagrange_subgroup.to_vec(),
         };
 
-        let masking_scalars = Univariate::<P::ScalarField, 2>::get_random();
+        let masking_scalars = Univariate::<P::ScalarField, 2>::get_random(rng);
 
         // if !P::is_bn254() {
         //     libra_concatenated_monomial_form_unmasked = Polynomial::<P::ScalarField> {

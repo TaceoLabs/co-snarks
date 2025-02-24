@@ -37,7 +37,7 @@ impl<
 
     #[expect(clippy::type_complexity)]
     fn compute_batched_polys(
-        &self,
+        &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         multilinear_challenge: &[P::ScalarField],
         log_n: usize,
@@ -51,7 +51,7 @@ impl<
 
         // To achieve ZK, we mask the batched polynomial by a random polynomial of the same size
         if has_zk {
-            batched_unshifted = Polynomial::<P::ScalarField>::random(n);
+            batched_unshifted = Polynomial::<P::ScalarField>::random(n, &mut self.rng);
             let masking_poly_comm = Utils::commit(&batched_unshifted.coefficients, commitment_key)?;
             transcript.send_point_to_verifier::<P>(
                 "Gemini:masking_poly_comm".to_string(),
@@ -136,7 +136,7 @@ impl<
     //  * since they are linear-combinations of the commitments [fⱼ] and [gⱼ].
     //  */
     pub(crate) fn gemini_prove(
-        &self,
+        &mut self,
         multilinear_challenge: Vec<P::ScalarField>,
         log_n: usize,
         commitment_key: &ProverCrs<P>,
@@ -389,7 +389,7 @@ impl<
     }
 
     pub(crate) fn shplemini_prove(
-        &self,
+        &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,

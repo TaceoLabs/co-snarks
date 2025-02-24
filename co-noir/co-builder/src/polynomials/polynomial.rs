@@ -3,6 +3,7 @@ use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial as _};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use num_traits::Zero;
 
+use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::{AddAssign, Index, IndexMut, MulAssign, SubAssign};
 
@@ -204,9 +205,9 @@ impl<F: PrimeField> Polynomial<F> {
         let poly = DensePolynomial::from_coefficients_slice(&self.coefficients);
         poly.evaluate(&point)
     }
-    pub fn random(size: usize) -> Self {
-        let mut rng = rand::thread_rng();
-        let coefficients = (0..size).map(|_| F::rand(&mut rng)).collect();
+
+    pub fn random<R: Rng + CryptoRng>(size: usize, rng: &mut R) -> Self {
+        let coefficients = (0..size).map(|_| F::rand(rng)).collect();
         Self { coefficients }
     }
 

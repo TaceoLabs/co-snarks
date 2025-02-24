@@ -15,6 +15,8 @@ use co_builder::{
     prelude::{HonkCurve, ProverCrs},
     HonkProofResult,
 };
+use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;
 
 pub(crate) struct Decider<
@@ -23,6 +25,7 @@ pub(crate) struct Decider<
     const SIZE: usize,
 > {
     pub(super) memory: ProverMemory<P>,
+    pub(super) rng: ChaCha12Rng,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
 }
@@ -36,6 +39,7 @@ impl<
     pub(crate) fn new(memory: ProverMemory<P>) -> Self {
         Self {
             memory,
+            rng: ChaCha12Rng::from_entropy(),
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
         }
@@ -66,7 +70,7 @@ impl<
      */
     #[expect(clippy::type_complexity)]
     fn execute_relation_check_rounds(
-        &self,
+        &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
@@ -75,10 +79,11 @@ impl<
         if has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = crs.monomials[..1 << (log_subgroup_size + 1)].to_vec();
-            let mut zk_sumcheck_data: ZKSumcheckData<P> = ZKSumcheckData::<P>::new::<H>(
+            let mut zk_sumcheck_data: ZKSumcheckData<P> = ZKSumcheckData::<P>::new::<H, _>(
                 Utils::get_msb64(circuit_size as u64) as usize,
                 transcript,
                 &commitment_key,
+                &mut self.rng,
             )?;
             Ok((
                 self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data),
@@ -110,7 +115,7 @@ impl<
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
             Self::compute_opening_proof(prover_opening_claim, transcript, crs)
         } else {
-            let small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H>(
+            let small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H, _>(
                 zk_sumcheck_data.expect("We have ZK"),
                 &sumcheck_output.challenges,
                 sumcheck_output
@@ -118,6 +123,7 @@ impl<
                     .expect("We have ZK"),
                 transcript,
                 crs,
+                &mut self.rng,
             )?;
             let witness_polynomials = small_subgroup_ipa_prover.get_witness_polynomials();
             let prover_opening_claim = self.shplemini_prove(
