@@ -95,34 +95,24 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("Decider verification");
-        let mut libra_commitments = Vec::with_capacity(NUM_LIBRA_COMMITMENTS);
-        if has_zk == ZeroKnowledge::Yes {
+        let (sumcheck_output, libra_commitments) = if has_zk == ZeroKnowledge::Yes {
+            let mut libra_commitments = Vec::with_capacity(NUM_LIBRA_COMMITMENTS);
+
             libra_commitments
                 .push(transcript.receive_point_from_prover::<P>(
                     "Libra:concatenation_commitment".to_string(),
                 )?);
-        }
 
-        let sumcheck_output = if has_zk == ZeroKnowledge::No {
-            self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH>(
+            let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
                 &mut transcript,
                 circuit_size,
                 has_zk,
-            )?
-        } else {
-            self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
-                &mut transcript,
-                circuit_size,
-                has_zk,
-            )?
-        };
+            )?;
+            if !sumcheck_output.verified {
+                tracing::trace!("Sumcheck failed");
+                return Ok(false);
+            }
 
-        if !sumcheck_output.verified {
-            tracing::trace!("Sumcheck failed");
-            return Ok(false);
-        }
-
-        if has_zk == ZeroKnowledge::Yes {
             libra_commitments.push(
                 transcript
                     .receive_point_from_prover::<P>("Libra:big_sum_commitment".to_string())?,
@@ -131,12 +121,22 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 transcript
                     .receive_point_from_prover::<P>("Libra:quotient_commitment".to_string())?,
             );
-        }
-        let libra_commitments = if has_zk == ZeroKnowledge::Yes {
-            Some(libra_commitments)
+
+            (sumcheck_output, Some(libra_commitments))
         } else {
-            None
+            let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH>(
+                &mut transcript,
+                circuit_size,
+                has_zk,
+            )?;
+            if !sumcheck_output.verified {
+                tracing::trace!("Sumcheck failed");
+                return Ok(false);
+            }
+
+            (sumcheck_output, None)
         };
+
         let mut consistency_checked = true;
         let mut opening_claim = self.compute_batch_opening_claim(
             circuit_size,
