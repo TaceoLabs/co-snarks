@@ -123,10 +123,11 @@ where
     pub(crate) fn solve_range_opcode(
         initial_witness: &WitnessMap<T::AcvmType>,
         input: &FunctionInput<GenericFieldElement<F>>,
+        pedantic_solving: bool,
     ) -> CoAcvmResult<()> {
         // TODO(https://github.com/noir-lang/noir/issues/5985):
         // re-enable bitsize checks
-        let skip_bitsize_checks = true;
+        let skip_bitsize_checks = !pedantic_solving;
         let w_value = Self::input_to_value(initial_witness, *input, skip_bitsize_checks)?;
         // Can only check if the value is public
         if let Some(w_value) = T::get_public(&w_value) {
@@ -269,7 +270,9 @@ where
         }
 
         match bb_func {
-            BlackBoxFuncCall::RANGE { input } => Self::solve_range_opcode(initial_witness, input)?,
+            BlackBoxFuncCall::RANGE { input } => {
+                Self::solve_range_opcode(initial_witness, input, pedantic_solving)?
+            }
             BlackBoxFuncCall::AND { lhs, rhs, output } => Self::and(
                 &mut self.driver,
                 initial_witness,
