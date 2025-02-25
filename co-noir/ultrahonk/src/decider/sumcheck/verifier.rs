@@ -40,7 +40,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             return Err(eyre::eyre!("Number of variables in multivariate is 0"));
         }
 
-        let mut sum_check_round = SumcheckVerifierRound::<P, SIZE>::default();
+        let mut sum_check_round = SumcheckVerifierRound::<P>::default();
         let mut libra_challenge = P::ScalarField::one();
         if has_zk == ZeroKnowledge::Yes {
             // If running zero-knowledge sumcheck the target total sum is corrected by the claimed sum of libra masking
@@ -59,7 +59,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             let round_univariate_label = format!("Sumcheck:univariate_{}", round_idx);
 
             let evaluations =
-                transcript.receive_fr_array_from_verifier::<P, { SIZE }>(round_univariate_label)?;
+                transcript.receive_fr_array_from_verifier::<P, SIZE>(round_univariate_label)?;
             let round_univariate = SumcheckRoundOutput { evaluations };
 
             let round_challenge =
@@ -97,7 +97,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Evaluate the Honk relation at the point (u_0, ..., u_{d-1}) using claimed evaluations of prover polynomials.
 
         let mut full_honk_purported_value =
-            SumcheckVerifierRound::<P, { SIZE }>::compute_full_relation_purported_value(
+            SumcheckVerifierRound::<P>::compute_full_relation_purported_value(
                 &self.memory.claimed_evaluations,
                 &self.memory.relation_parameters,
                 gate_separators,

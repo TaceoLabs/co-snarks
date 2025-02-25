@@ -19,19 +19,17 @@ use crate::{
 use ark_ff::{One, Zero};
 use co_builder::prelude::HonkCurve;
 
-pub(crate) struct SumcheckVerifierRound<P: HonkCurve<TranscriptFieldType>, const SIZE: usize> {
+pub(crate) struct SumcheckVerifierRound<P: HonkCurve<TranscriptFieldType>> {
     pub(crate) target_total_sum: P::ScalarField,
     pub(crate) round_failed: bool,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, const SIZE: usize> Default
-    for SumcheckVerifierRound<P, SIZE>
-{
+impl<P: HonkCurve<TranscriptFieldType>> Default for SumcheckVerifierRound<P> {
     fn default() -> Self {
         Self::new()
     }
 }
-impl<P: HonkCurve<TranscriptFieldType>, const SIZE: usize> SumcheckVerifierRound<P, SIZE> {
+impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
     pub(crate) fn new() -> Self {
         Self {
             target_total_sum: P::ScalarField::zero(),
@@ -39,7 +37,7 @@ impl<P: HonkCurve<TranscriptFieldType>, const SIZE: usize> SumcheckVerifierRound
         }
     }
 
-    pub(crate) fn compute_next_target_sum(
+    pub(crate) fn compute_next_target_sum<const SIZE: usize>(
         &mut self,
         univariate: &SumcheckRoundOutput<P::ScalarField, SIZE>,
         round_challenge: P::ScalarField,
@@ -48,7 +46,7 @@ impl<P: HonkCurve<TranscriptFieldType>, const SIZE: usize> SumcheckVerifierRound
         self.target_total_sum = univariate.evaluate(round_challenge);
     }
 
-    pub(crate) fn check_sum(
+    pub(crate) fn check_sum<const SIZE: usize>(
         &mut self,
         univariate: &SumcheckRoundOutput<P::ScalarField, SIZE>,
     ) -> bool {
