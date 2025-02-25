@@ -2,6 +2,7 @@ use co_noir::{
     Address, Bn254, CrsParser, NetworkConfig, NetworkParty, PartyID, Poseidon2Sponge,
     Rep3CoUltraHonk, Rep3MpcNet, UltraHonk, Utils,
 };
+use co_ultrahonk::prelude::ZeroKnowledge;
 use color_eyre::{eyre::Context, Result};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::path::PathBuf;
@@ -67,6 +68,7 @@ fn main() -> Result<()> {
     let inputs = co_noir::parse_input(dir.join("poseidon/Prover.toml"), &program_artifact)?;
 
     let recursive = true;
+    let has_zk = ZeroKnowledge::No;
 
     // parse crs
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
@@ -95,7 +97,8 @@ fn main() -> Result<()> {
     let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk, &prover_crs)?;
 
     // verify proof
-    assert!(UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk).context("while verifying proof")?);
+    assert!(UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk, has_zk)
+        .context("while verifying proof")?);
 
     Ok(())
 }

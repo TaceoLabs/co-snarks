@@ -2,7 +2,7 @@ use crate::{
     decider::{types::VerifierMemory, verifier::DeciderVerifier},
     oink::verifier::OinkVerifier,
     prelude::TranscriptFieldType,
-    prover::UltraHonk,
+    prover::{UltraHonk, ZeroKnowledge},
     transcript::{Transcript, TranscriptHasher},
     types::HonkProof,
 };
@@ -14,6 +14,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     pub fn verify(
         honk_proof: HonkProof<TranscriptFieldType>,
         verifying_key: VerifyingKey<P>,
+        has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("UltraHonk verification");
 
@@ -28,8 +29,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let mut memory = VerifierMemory::from_memory_and_key(oink_result, verifying_key);
         memory.relation_parameters.gate_challenges =
             Self::generate_gate_challenges(&mut transcript);
-
         let decider_verifier = DeciderVerifier::new(memory);
-        decider_verifier.verify(cicruit_size, &crs, transcript)
+        decider_verifier.verify(cicruit_size, &crs, transcript, has_zk)
     }
 }

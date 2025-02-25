@@ -5,7 +5,9 @@ use co_builder::prelude::{CrsParser, HonkRecursion};
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, ProvingKey};
 use sha3::Keccak256;
 use ultrahonk::{
-    prelude::{HonkProof, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher, UltraHonk},
+    prelude::{
+        HonkProof, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher, UltraHonk, ZeroKnowledge,
+    },
     Utils,
 };
 
@@ -22,6 +24,7 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
 ) {
     const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
     const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
+    let has_zk = ZeroKnowledge::No;
 
     let constraint_system = Utils::get_constraint_system_from_file(circuit_file, true).unwrap();
     let witness = Utils::get_witness_from_file(witness_file).unwrap();
@@ -54,7 +57,7 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
     assert_eq!(proof, read_proof);
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 

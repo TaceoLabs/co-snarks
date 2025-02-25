@@ -12,6 +12,22 @@ use co_builder::{
 };
 use std::marker::PhantomData;
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ZeroKnowledge {
+    No,
+    Yes,
+}
+
+impl From<bool> for ZeroKnowledge {
+    fn from(value: bool) -> Self {
+        if value {
+            ZeroKnowledge::Yes
+        } else {
+            ZeroKnowledge::No
+        }
+    }
+}
+
 pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
@@ -33,7 +49,10 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         gate_challenges
     }
 
-    pub fn prove(proving_key: ProvingKey<P>) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+    pub fn prove(
+        proving_key: ProvingKey<P>,
+        has_zk: ZeroKnowledge,
+    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("UltraHonk prove");
 
         let mut transcript = Transcript::<TranscriptFieldType, H>::new();
@@ -50,6 +69,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             Self::generate_gate_challenges(&mut transcript);
 
         let decider = Decider::new(memory);
-        decider.prove(cicruit_size, &crs, transcript)
+        decider.prove(cicruit_size, &crs, transcript, has_zk)
     }
 }

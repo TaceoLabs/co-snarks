@@ -29,7 +29,6 @@ impl<P: HonkCurve<TranscriptFieldType>> Default for SumcheckVerifierRound<P> {
         Self::new()
     }
 }
-
 impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
     pub(crate) fn new() -> Self {
         Self {
@@ -38,16 +37,19 @@ impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
         }
     }
 
-    pub(crate) fn compute_next_target_sum(
+    pub(crate) fn compute_next_target_sum<const SIZE: usize>(
         &mut self,
-        univariate: &SumcheckRoundOutput<P::ScalarField>,
+        univariate: &SumcheckRoundOutput<P::ScalarField, SIZE>,
         round_challenge: P::ScalarField,
     ) {
         tracing::trace!("Compute target sum");
         self.target_total_sum = univariate.evaluate(round_challenge);
     }
 
-    pub(crate) fn check_sum(&mut self, univariate: &SumcheckRoundOutput<P::ScalarField>) -> bool {
+    pub(crate) fn check_sum<const SIZE: usize>(
+        &mut self,
+        univariate: &SumcheckRoundOutput<P::ScalarField, SIZE>,
+    ) -> bool {
         tracing::trace!("Check sum");
         let total_sum = univariate.evaluations[0] + univariate.evaluations[1];
         let sumcheck_round_failed = self.target_total_sum != total_sum;

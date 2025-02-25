@@ -3,10 +3,12 @@ use super::{
     types::VerifierMemory,
 };
 use crate::{
+    decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
     prelude::TranscriptFieldType,
+    prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
-    Utils,
+    Utils, NUM_LIBRA_COMMITMENTS,
 };
 use ark_ec::AffineRepr;
 use ark_ff::One;
@@ -90,19 +92,59 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         circuit_size: u32,
         crs: &P::G2Affine,
         mut transcript: Transcript<TranscriptFieldType, H>,
+        has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("Decider verification");
+        let (sumcheck_output, libra_commitments) = if has_zk == ZeroKnowledge::Yes {
+            let mut libra_commitments = Vec::with_capacity(NUM_LIBRA_COMMITMENTS);
 
-        let sumcheck_output = self.sumcheck_verify(&mut transcript, circuit_size)?;
-        if !sumcheck_output.verified {
-            tracing::trace!("Sumcheck failed");
-            return Ok(false);
-        }
+            libra_commitments
+                .push(transcript.receive_point_from_prover::<P>(
+                    "Libra:concatenation_commitment".to_string(),
+                )?);
 
+            let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
+                &mut transcript,
+                circuit_size,
+                has_zk,
+            )?;
+            if !sumcheck_output.verified {
+                tracing::trace!("Sumcheck failed");
+                return Ok(false);
+            }
+
+            libra_commitments.push(
+                transcript
+                    .receive_point_from_prover::<P>("Libra:big_sum_commitment".to_string())?,
+            );
+            libra_commitments.push(
+                transcript
+                    .receive_point_from_prover::<P>("Libra:quotient_commitment".to_string())?,
+            );
+
+            (sumcheck_output, Some(libra_commitments))
+        } else {
+            let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH>(
+                &mut transcript,
+                circuit_size,
+                has_zk,
+            )?;
+            if !sumcheck_output.verified {
+                tracing::trace!("Sumcheck failed");
+                return Ok(false);
+            }
+
+            (sumcheck_output, None)
+        };
+
+        let mut consistency_checked = true;
         let mut opening_claim = self.compute_batch_opening_claim(
             circuit_size,
             sumcheck_output.multivariate_challenge,
             &mut transcript,
+            libra_commitments,
+            sumcheck_output.claimed_libra_evaluation,
+            &mut consistency_checked,
         )?;
 
         let pairing_points = Self::reduce_verify_shplemini(&mut opening_claim, transcript)?;
@@ -113,6 +155,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             *crs,
             P::G2Affine::generator(),
         );
-        Ok(sumcheck_output.verified && pcs_verified)
+        Ok(sumcheck_output.verified && pcs_verified && consistency_checked)
     }
 }

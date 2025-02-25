@@ -22,4 +22,5 @@ pub use ultrahonk::prelude::TranscriptHasher;
 pub use ultrahonk::prelude::UltraCircuitBuilder;
 pub use ultrahonk::prelude::UltraHonk;
 pub use ultrahonk::prelude::VerifyingKeyBarretenberg;
+pub use ultrahonk::prelude::ZeroKnowledge;
 pub use ultrahonk::Utils;
