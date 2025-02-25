@@ -299,7 +299,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // The evaluations of Libra uninvariates at \f$ g_0(u_0), \ldots, g_{d-1} (u_{d-1}) \f$ are added to the
         // transcript.
         let mut libra_evaluation = zk_sumcheck_data.constant_term;
-        for libra_eval in zk_sumcheck_data.libra_evaluations.clone() {
+        for libra_eval in zk_sumcheck_data.libra_evaluations.iter() {
             libra_evaluation += libra_eval;
         }
         transcript
