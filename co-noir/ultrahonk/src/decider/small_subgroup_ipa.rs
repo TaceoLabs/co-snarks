@@ -25,6 +25,7 @@ pub(crate) struct SmallSubgroupIPAProver<P: Pairing> {
     big_sum_lagrange_coeffs: Vec<P::ScalarField>,
     batched_polynomial: Polynomial<P::ScalarField>,
     batched_quotient: Polynomial<P::ScalarField>,
+    domain: GeneralEvaluationDomain<P::ScalarField>,
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
@@ -51,10 +52,12 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
             big_sum_lagrange_coeffs: vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE],
             batched_polynomial: Polynomial::new_zero(Self::BATCHED_POLYNOMIAL_LENGTH),
             batched_quotient: Polynomial::new_zero(Self::QUOTIENT_LENGTH),
+            domain: GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE)
+                .ok_or(HonkProofError::LargeSubgroup)?,
         };
 
-        prover.compute_challenge_polynomial(multivariate_challenge)?;
-        prover.compute_big_sum_polynomial(rng)?;
+        prover.compute_challenge_polynomial(multivariate_challenge);
+        prover.compute_big_sum_polynomial(rng);
         let libra_big_sum_commitment =
             Utils::commit(&prover.big_sum_polynomial.coefficients, commitment_key)?;
         transcript.send_point_to_verifier::<P>(
@@ -62,7 +65,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
             libra_big_sum_commitment.into(),
         );
 
-        prover.compute_batched_polynomial(claimed_ipa_eval)?;
+        prover.compute_batched_polynomial(claimed_ipa_eval);
         prover.compute_batched_quotient();
 
         let libra_quotient_commitment =
@@ -99,10 +102,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
      *
      * @param multivariate_challenge A vector of field elements used to compute the challenge polynomial.
      */
-    fn compute_challenge_polynomial(
-        &mut self,
-        multivariate_challenge: &[P::ScalarField],
-    ) -> HonkProofResult<()> {
+    fn compute_challenge_polynomial(&mut self, multivariate_challenge: &[P::ScalarField]) {
         let mut coeffs_lagrange_basis = vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE];
         coeffs_lagrange_basis[0] = P::ScalarField::one();
 
@@ -127,14 +127,12 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         };
 
         // Compute monomial coefficients
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE)
-            .ok_or(HonkProofError::LargeSubgroup)?;
-        let challenge_polynomial_ifft =
-            domain.ifft(self.challenge_polynomial_lagrange.coefficients.as_slice());
+        let challenge_polynomial_ifft = self
+            .domain
+            .ifft(self.challenge_polynomial_lagrange.coefficients.as_slice());
         self.challenge_polynomial = Polynomial {
             coefficients: challenge_polynomial_ifft,
         };
-        Ok(())
     }
 
     /**
@@ -154,10 +152,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
      *   vanishing polynomial.
      *
      */
-    fn compute_big_sum_polynomial<R: Rng + CryptoRng>(
-        &mut self,
-        rng: &mut R,
-    ) -> HonkProofResult<()> {
+    fn compute_big_sum_polynomial<R: Rng + CryptoRng>(&mut self, rng: &mut R) {
         self.big_sum_lagrange_coeffs[0] = P::ScalarField::zero();
 
         // Compute the big sum coefficients recursively
@@ -169,9 +164,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         }
 
         //  Get the coefficients in the monomial basis
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE)
-            .ok_or(HonkProofError::LargeSubgroup)?;
-        let big_sum_ifft = domain.ifft(&self.big_sum_lagrange_coeffs);
+        let big_sum_ifft = self.domain.ifft(&self.big_sum_lagrange_coeffs);
         self.big_sum_polynomial_unmasked = Polynomial {
             coefficients: big_sum_ifft,
         };
@@ -185,7 +178,6 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
             self.big_sum_polynomial.coefficients[idx + Self::SUBGROUP_SIZE] +=
                 masking_term.evaluations[idx];
         }
-        Ok(())
     }
 
     /**
@@ -193,10 +185,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
      * \f$ is the fixed generator of \f$ H \f$.
      *
      */
-    fn compute_batched_polynomial(
-        &mut self,
-        claimed_evaluation: P::ScalarField,
-    ) -> HonkProofResult<()> {
+    fn compute_batched_polynomial(&mut self, claimed_evaluation: P::ScalarField) {
         // Compute shifted big sum polynomial A(gX)
         let mut shifted_big_sum = Polynomial::new_zero(Self::SUBGROUP_SIZE + 3);
 
@@ -205,7 +194,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
                 * self.interpolation_domain[idx % Self::SUBGROUP_SIZE];
         }
 
-        let (lagrange_first, lagrange_last) = Self::compute_lagrange_polynomials()?;
+        let (lagrange_first, lagrange_last) = self.compute_lagrange_polynomials();
 
         // Compute -F(X)*G(X), the negated product of challenge_polynomial and libra_concatenated_monomial_form
         for i in 0..self.concatenated_polynomial.coefficients.len() {
@@ -251,7 +240,6 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
             self.batched_polynomial.coefficients[idx] -=
                 lagrange_last.coefficients[idx] * claimed_evaluation;
         }
-        Ok(())
     }
 
     /** @brief Efficiently compute the quotient of batched_polynomial by Z_H = X ^ { | H | } - 1
@@ -274,16 +262,14 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
      * @param bn_evaluation_domain
      * @return std::array<Polynomial<FF>, 2>
      */
-    #[expect(clippy::type_complexity)]
     fn compute_lagrange_polynomials(
-    ) -> HonkProofResult<(Polynomial<P::ScalarField>, Polynomial<P::ScalarField>)> {
+        &self,
+    ) -> (Polynomial<P::ScalarField>, Polynomial<P::ScalarField>) {
         // Compute the monomial coefficients of L_1
         let mut lagrange_coeffs = vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE];
         lagrange_coeffs[0] = P::ScalarField::one();
 
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE)
-            .ok_or(HonkProofError::LargeSubgroup)?;
-        let lagrange_first_ifft = domain.ifft(&lagrange_coeffs);
+        let lagrange_first_ifft = self.domain.ifft(&lagrange_coeffs);
 
         let lagrange_first_monomial = Polynomial {
             coefficients: lagrange_first_ifft,
@@ -293,22 +279,22 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         lagrange_coeffs[0] = P::ScalarField::zero();
         lagrange_coeffs[Self::SUBGROUP_SIZE - 1] = P::ScalarField::one();
 
-        let lagrange_last_ifft = domain.ifft(&lagrange_coeffs);
+        let lagrange_last_ifft = self.domain.ifft(&lagrange_coeffs);
 
         let lagrange_last_monomial = Polynomial {
             coefficients: lagrange_last_ifft,
         };
 
-        Ok((lagrange_first_monomial, lagrange_last_monomial))
+        (lagrange_first_monomial, lagrange_last_monomial)
     }
 
     // Getter to pass the witnesses to ShpleminiProver. Big sum polynomial is evaluated at 2 points (and is small)
-    pub(crate) fn get_witness_polynomials(&self) -> [Polynomial<P::ScalarField>; 4] {
+    pub(crate) fn into_witness_polynomials(self) -> [Polynomial<P::ScalarField>; 4] {
         [
-            self.concatenated_polynomial.clone(),
-            self.big_sum_polynomial.clone(),
-            self.big_sum_polynomial.clone(),
-            self.batched_quotient.clone(),
+            self.concatenated_polynomial,
+            self.big_sum_polynomial.to_owned(),
+            self.big_sum_polynomial,
+            self.batched_quotient,
         ]
     }
 }

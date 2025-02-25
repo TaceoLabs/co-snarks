@@ -119,7 +119,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 crs,
                 &mut self.rng,
             )?;
-            let witness_polynomials = small_subgroup_ipa_prover.get_witness_polynomials();
+            let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
             let prover_opening_claim = self.shplemini_prove(
                 transcript,
                 circuit_size,
