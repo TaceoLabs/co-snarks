@@ -16,6 +16,7 @@ use co_builder::{
     prelude::{HonkCurve, Polynomial, ProverCrs},
     HonkProofError, HonkProofResult,
 };
+use itertools::izip;
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
     fn get_f_polynomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {
@@ -580,7 +581,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         libra_polynomials: [Polynomial<P::ScalarField>; NUM_LIBRA_EVALUATIONS],
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> Vec<ShpleminiOpeningClaim<P::ScalarField>> {
-        let mut libra_opening_claims = Vec::new();
+        let mut libra_opening_claims = Vec::with_capacity(NUM_LIBRA_EVALUATIONS);
 
         let subgroup_generator = P::get_subgroup_generator();
 
@@ -592,12 +593,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         ];
         let evaluation_points = [gemini_r, gemini_r * subgroup_generator, gemini_r, gemini_r];
 
-        for (idx, &label) in libra_eval_labels.iter().enumerate() {
+        for (label, poly, point) in izip!(libra_eval_labels, libra_polynomials, evaluation_points) {
+            let eval = poly.eval_poly(point);
             let new_claim = ShpleminiOpeningClaim {
-                polynomial: libra_polynomials[idx].clone(),
+                polynomial: poly,
                 opening_pair: OpeningPair {
-                    challenge: evaluation_points[idx],
-                    evaluation: libra_polynomials[idx].eval_poly(evaluation_points[idx]),
+                    challenge: point,
+                    evaluation: eval,
                 },
             };
             transcript
