@@ -207,12 +207,12 @@ impl SumcheckProverRound {
         );
     }
 
-    fn compute_univariate_inner<P: HonkCurve<TranscriptFieldType>>(
+    fn compute_univariate_inner<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
         &self,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<P::ScalarField>>,
-    ) -> AllRelationAcc<P::ScalarField> {
+    ) -> SumcheckRoundOutput<P::ScalarField, SIZE> {
         // Barretenberg uses multithreading here
 
         // Construct extended edge containers
@@ -235,7 +235,12 @@ impl SumcheckProverRound {
                 &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
             );
         }
-        univariate_accumulators
+
+        Self::batch_over_relations_univariates(
+            univariate_accumulators,
+            &relation_parameters.alphas,
+            gate_sparators,
+        )
     }
 
     pub(crate) fn compute_univariate<P: HonkCurve<TranscriptFieldType>>(
@@ -247,12 +252,10 @@ impl SumcheckProverRound {
     ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH> {
         tracing::trace!("Sumcheck round {}", round_index);
 
-        let univariate_accumulators =
-            self.compute_univariate_inner::<P>(relation_parameters, gate_sparators, polynomials);
-        Self::batch_over_relations_univariates(
-            univariate_accumulators,
-            &relation_parameters.alphas,
+        self.compute_univariate_inner::<P, BATCHED_RELATION_PARTIAL_LENGTH>(
+            relation_parameters,
             gate_sparators,
+            polynomials,
         )
     }
 
@@ -267,8 +270,12 @@ impl SumcheckProverRound {
     ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
         tracing::trace!("Sumcheck round {}", round_index);
 
-        let univariate_accumulators =
-            self.compute_univariate_inner::<P>(relation_parameters, gate_sparators, polynomials);
+        let round_univariate = self
+            .compute_univariate_inner::<P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
+                relation_parameters,
+                gate_sparators,
+                polynomials,
+            );
 
         let contribution_from_disabled_rows = Self::compute_disabled_contribution::<P>(
             polynomials,
@@ -282,12 +289,6 @@ impl SumcheckProverRound {
         let libra_round_univariate =
             Self::compute_libra_round_univariate(zk_sumcheck_data, round_index);
 
-        let round_univariate =
-            Self::batch_over_relations_univariates::<_, BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
-                univariate_accumulators,
-                &relation_parameters.alphas,
-                gate_sparators,
-            );
         round_univariate + libra_round_univariate - contribution_from_disabled_rows
     }
 
