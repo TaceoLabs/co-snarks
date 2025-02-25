@@ -440,7 +440,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
     ) -> ShpleminiOpeningClaim<P::ScalarField> {
         tracing::trace!("Compute partially evaluated batched quotient");
-        let has_zk = libra_opening_claims.is_some();
+        let has_zk = ZeroKnowledge::from(libra_opening_claims.is_some());
         let num_opening_claims = opening_claims.len();
 
         let mut inverse_vanishing_evals: Vec<P::ScalarField> =
@@ -448,12 +448,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         for claim in &opening_claims {
             inverse_vanishing_evals.push(z_challenge - claim.opening_pair.challenge);
         }
-        if has_zk {
-            // Add the terms (z - uₖ) for k = 0, …, d−1 where d is the number of rounds in Sumcheck
-            for claim in libra_opening_claims.clone().unwrap() {
+
+        // Add the terms (z - uₖ) for k = 0, …, d−1 where d is the number of rounds in Sumcheck
+        if let Some(libra_opening_claims) = &libra_opening_claims {
+            for claim in libra_opening_claims.iter() {
                 inverse_vanishing_evals.push(z_challenge - claim.opening_pair.challenge);
             }
         }
+
         inverse_vanishing_evals.iter_mut().for_each(|x| {
             x.inverse_in_place();
         });
@@ -478,8 +480,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             current_nu *= nu_challenge;
         }
 
-        if has_zk {
-            for claim in libra_opening_claims.unwrap().into_iter() {
+        if has_zk == ZeroKnowledge::Yes {
+            for claim in libra_opening_claims.expect("Has ZK").into_iter() {
                 // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
                 let mut tmp = claim.polynomial;
                 tmp[0] -= claim.opening_pair.evaluation;
