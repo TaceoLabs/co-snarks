@@ -8,6 +8,7 @@ use crate::{
         verifier::DeciderVerifier,
     },
     prelude::TranscriptFieldType,
+    prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
     Utils, CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_COMMITMENTS, NUM_LIBRA_EVALUATIONS,
@@ -119,11 +120,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Extract log_circuit_size
         let log_circuit_size = Utils::get_msb32(circuit_size);
 
-        let has_zk = libra_commitments.is_some();
+        let has_zk = ZeroKnowledge::from(libra_commitments.is_some());
 
         let mut hiding_polynomial_commitment = P::G1Affine::default();
         let mut batched_evaluation = P::ScalarField::zero();
-        if has_zk {
+        if has_zk == ZeroKnowledge::Yes {
             hiding_polynomial_commitment = transcript
                 .receive_point_from_prover::<P>("Gemini:masking_poly_comm".to_string())?;
             batched_evaluation =
@@ -149,18 +150,16 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             CONST_PROOF_SIZE_LOG_N,
         );
 
-        let mut libra_evaluations: Vec<_> = Vec::with_capacity(NUM_LIBRA_EVALUATIONS);
-        if has_zk {
-            libra_evaluations.push(
-                transcript.receive_fr_from_prover::<P>("Libra:concatenation_eval".to_string())?,
-            );
-            libra_evaluations.push(
-                transcript.receive_fr_from_prover::<P>("Libra:shifted_big_sum_eval".to_string())?,
-            );
-            libra_evaluations
-                .push(transcript.receive_fr_from_prover::<P>("Libra:big_sum_eval".to_string())?);
-            libra_evaluations
-                .push(transcript.receive_fr_from_prover::<P>("Libra:quotient_eval".to_string())?);
+        let mut libra_evaluations = [P::ScalarField::zero(); NUM_LIBRA_EVALUATIONS];
+        if has_zk == ZeroKnowledge::Yes {
+            libra_evaluations[0] =
+                transcript.receive_fr_from_prover::<P>("Libra:concatenation_eval".to_string())?;
+            libra_evaluations[1] =
+                transcript.receive_fr_from_prover::<P>("Libra:shifted_big_sum_eval".to_string())?;
+            libra_evaluations[2] =
+                transcript.receive_fr_from_prover::<P>("Libra:big_sum_eval".to_string())?;
+            libra_evaluations[3] =
+                transcript.receive_fr_from_prover::<P>("Libra:quotient_eval".to_string())?;
         }
 
         // Process Shplonk transcript data:
@@ -227,7 +226,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         //     }
         // }
 
-        if has_zk {
+        if has_zk == ZeroKnowledge::Yes {
             opening_claim.commitments.push(hiding_polynomial_commitment);
             opening_claim.scalars.push(-unshifted_scalar);
         }
@@ -275,7 +274,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // For ZK flavors, the sumcheck output contains the evaluations of Libra univariates that submitted to the
         // ShpleminiVerifier, otherwise this argument is set to be empty
-        if has_zk {
+        if has_zk == ZeroKnowledge::Yes {
             Self::add_zk_data(
                 &mut opening_claim.commitments,
                 &mut opening_claim.scalars,
@@ -418,7 +417,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         shifted_scalar: &P::ScalarField,
         opening_claim: &mut ShpleminiVerifierOpeningClaim<P>,
         batched_evaluation: &mut P::ScalarField,
-        has_zk: bool,
+        has_zk: ZeroKnowledge,
         // concatenated_scalars: Vec<P::ScalarField>,
         // concatenation_group_commitments: &[Vec<P::G1Affine>],
         // concatenated_evaluations: &[P::ScalarField],
@@ -426,7 +425,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         tracing::trace!("Batch multivariate opening claims");
 
         let mut current_batching_challenge = P::ScalarField::one();
-        if has_zk {
+        if has_zk == ZeroKnowledge::Yes {
             // ρ⁰ is used to batch the hiding polynomial which has already been added to the commitments vector
             current_batching_challenge *= multivariate_batching_challenge;
         }
@@ -590,6 +589,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             shplonk_challenge_power *= *shplonk_batching_challenge;
         }
 
+        commitments.reserve(NUM_LIBRA_COMMITMENTS);
         // Add Libra commitments to the vector of commitments
         for &commitment in libra_commitments.iter() {
             commitments.push(commitment);
@@ -601,10 +601,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let subgroup_generator = P::get_subgroup_generator();
 
         // Compute Shplonk denominators and invert them
-        denominators[0] =
-            P::ScalarField::one() / (*shplonk_evaluation_challenge - *gemini_evaluation_challenge);
-        denominators[1] = P::ScalarField::one()
-            / (*shplonk_evaluation_challenge - subgroup_generator * *gemini_evaluation_challenge);
+        denominators[0] = (*shplonk_evaluation_challenge - *gemini_evaluation_challenge)
+            .inverse()
+            .expect("non-zero");
+        denominators[1] = (*shplonk_evaluation_challenge
+            - subgroup_generator * *gemini_evaluation_challenge)
+            .inverse()
+            .expect("non-zero");
         denominators[2] = denominators[0];
         denominators[3] = denominators[0];
 
@@ -618,6 +621,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
 
         // To save a scalar mul, add the sum of the batching scalars corresponding to the big sum evaluations
+        scalars.reserve(NUM_LIBRA_EVALUATIONS - 1);
         scalars.push(batching_scalars[0]);
         scalars.push(batching_scalars[1] + batching_scalars[2]);
         scalars.push(batching_scalars[3]);
@@ -710,7 +714,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let one = P::ScalarField::one();
         let mut numerator = *vanishing_poly_eval;
 
-        numerator *= one / P::ScalarField::from(P::SUBGROUP_SIZE as u64); // (r^n - 1) / n
+        numerator *= P::ScalarField::from(P::SUBGROUP_SIZE as u64)
+            .inverse()
+            .expect("non-zero"); // (r^n - 1) / n
 
         denominators[0] = r - one;
         let mut work_root = *inverse_root_of_unity; // g^{-1}
