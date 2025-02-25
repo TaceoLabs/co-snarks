@@ -72,11 +72,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> HonkProofResult<(SumcheckOutput<P::ScalarField>, Option<ZKSumcheckData<P>>)> {
         if has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
-            let commitment_key = crs.monomials[..1 << (log_subgroup_size + 1)].to_vec();
+            let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
             let mut zk_sumcheck_data: ZKSumcheckData<P> = ZKSumcheckData::<P>::new::<H, _>(
                 Utils::get_msb64(circuit_size as u64) as usize,
                 transcript,
-                &commitment_key,
+                commitment_key,
                 &mut self.rng,
             )?;
             Ok((
