@@ -12,8 +12,8 @@ use crate::{
     Utils, CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ff::One;
-use ark_ff::PrimeField;
 use co_builder::prelude::HonkCurve;
+use co_builder::prelude::RowDisablingPolynomial;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
@@ -103,21 +103,23 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 gate_separators,
             );
 
-        let mut libra_evaluation = P::ScalarField::one();
         // For ZK Flavors: the evaluation of the Row Disabling Polynomial at the sumcheck challenge
-        if has_zk == ZeroKnowledge::Yes {
-            libra_evaluation =
+        let claimed_libra_evaluation = if has_zk == ZeroKnowledge::Yes {
+            let libra_evaluation =
                 transcript.receive_fr_from_prover::<P>("Libra:claimed_evaluation".to_string())?;
             // No recursive flavor, otherwise we need to make some modifications to the following
 
-            let correcting_factor = evaluate_at_challenge::<P::ScalarField>(
+            let correcting_factor = RowDisablingPolynomial::evaluate_at_challenge(
                 &multivariate_challenge,
                 multivariate_d as usize,
             );
 
             full_honk_purported_value =
                 full_honk_purported_value * correcting_factor + libra_evaluation * libra_challenge;
-        }
+            Some(libra_evaluation)
+        } else {
+            None
+        };
 
         let checked = full_honk_purported_value == sum_check_round.target_total_sum;
         verified = verified && checked;
@@ -125,24 +127,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         Ok(SumcheckVerifierOutput {
             multivariate_challenge,
             verified,
-            claimed_libra_evaluation: if has_zk == ZeroKnowledge::Yes {
-                Some(libra_evaluation)
-            } else {
-                None
-            },
+            claimed_libra_evaluation,
         })
     }
-}
-
-fn evaluate_at_challenge<F: PrimeField>(
-    multivariate_challenge: &[F],
-    log_circuit_size: usize,
-) -> F {
-    let mut evaluation_at_multivariate_challenge = F::one();
-
-    for &challenge in &multivariate_challenge[2..log_circuit_size] {
-        evaluation_at_multivariate_challenge *= challenge;
-    }
-
-    F::one() - evaluation_at_multivariate_challenge
 }
