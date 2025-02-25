@@ -407,20 +407,19 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             transcript,
         )?;
 
-        if has_zk == ZeroKnowledge::Yes {
+        let libra_opening_claims = if has_zk == ZeroKnowledge::Yes {
             let gemini_r = opening_claims[0].opening_pair.challenge;
             let libra_opening_claims = Self::compute_libra_opening_claims(
                 gemini_r,
                 libra_polynomials.expect("we have ZK"),
                 transcript,
             );
-            let batched_claim =
-                self.shplonk_prove(opening_claims, crs, transcript, Some(libra_opening_claims))?;
-            Ok(batched_claim)
+            Some(libra_opening_claims)
         } else {
-            let batched_claim = self.shplonk_prove(opening_claims, crs, transcript, None)?;
-            Ok(batched_claim)
-        }
+            None
+        };
+
+        self.shplonk_prove(opening_claims, crs, transcript, libra_opening_claims)
     }
 
     /**
