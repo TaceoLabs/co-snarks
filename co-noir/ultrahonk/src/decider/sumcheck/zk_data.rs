@@ -4,13 +4,13 @@ use crate::prelude::Univariate;
 use crate::transcript::TranscriptFieldType;
 use crate::Utils;
 use ark_ec::pairing::Pairing;
+use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::UniformRand;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use co_builder::prelude::HonkCurve;
 use co_builder::prelude::Polynomial;
-use co_builder::prelude::ProverCrs;
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use rand::CryptoRng;
@@ -38,7 +38,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         rng: &mut R,
     ) -> HonkProofResult<Self> {
         let constant_term = P::ScalarField::rand(rng);
-        let libra_challenge = P::ScalarField::rand(rng);
+        let libra_challenge = P::ScalarField::default();
         let libra_univariates =
             Self::generate_libra_univariates(multivariate_d, P::LIBRA_UNIVARIATES_LENGTH, rng);
         let log_circuit_size = multivariate_d;
@@ -61,11 +61,9 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         data.compute_concatenated_libra_polynomial(rng)?;
         // If proving_key is provided, commit to the concatenated and masked libra polynomial
         if !commitment_key.is_empty() {
-            let libra_commitment = Utils::commit(
+            let libra_commitment = Utils::msm::<P>(
                 &data.libra_concatenated_monomial_form.coefficients,
-                &ProverCrs::<P> {
-                    monomials: commitment_key.to_vec(),
-                },
+                commitment_key,
             )?;
             transcript.send_point_to_verifier::<P>(
                 "Libra:concatenation_commitment".to_string(),
@@ -118,7 +116,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         constant_term: P::ScalarField,
     ) -> P::ScalarField {
         let mut total_sum = P::ScalarField::zero();
-        let two_inv: P::ScalarField = P::ScalarField::one() / P::ScalarField::from(2);
+        let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         *scaling_factor *= two_inv;
 
         for univariate in libra_univariates {
@@ -186,21 +184,17 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
             }
         }
 
-        self.libra_concatenated_lagrange_form = Polynomial::<P::ScalarField> {
-            coefficients: coeffs_lagrange_subgroup.to_vec(),
+        self.libra_concatenated_lagrange_form = Polynomial {
+            coefficients: coeffs_lagrange_subgroup,
         };
 
         let masking_scalars = Univariate::<P::ScalarField, 2>::get_random(rng);
 
-        // if !P::is_bn254() {
-        //     libra_concatenated_monomial_form_unmasked = Polynomial::<P::ScalarField> {
-        //         coefficients: coeffs_lagrange_subgroup.to_vec(),
-        //     };
-        // } else {
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(P::SUBGROUP_SIZE)
             .ok_or(HonkProofError::LargeSubgroup)?;
 
-        let coeffs_lagrange_subgroup_ifft = domain.ifft(&coeffs_lagrange_subgroup);
+        let coeffs_lagrange_subgroup_ifft =
+            domain.ifft(&self.libra_concatenated_lagrange_form.coefficients);
         let libra_concatenated_monomial_form_unmasked = Polynomial::<P::ScalarField> {
             coefficients: coeffs_lagrange_subgroup_ifft,
         };
@@ -249,7 +243,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         round_challenge: P::ScalarField,
         round_idx: usize,
     ) {
-        let two_inv: P::ScalarField = P::ScalarField::one() / P::ScalarField::from(2);
+        let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         // when round_idx = d - 1, the update is not needed
         if round_idx < self.log_circuit_size - 1 {
             for univariate in &mut self.libra_univariates {
@@ -275,7 +269,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
             // place the evalution into the vector of Libra evaluations
             self.libra_evaluations.push(libra_evaluation);
             for univariate in &mut self.libra_univariates {
-                *univariate *= P::ScalarField::one() / self.libra_challenge;
+                *univariate *= self.libra_challenge.inverse().expect("non-zero");
             }
         }
     }
