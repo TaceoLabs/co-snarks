@@ -207,15 +207,12 @@ impl SumcheckProverRound {
         );
     }
 
-    pub(crate) fn compute_univariate<P: HonkCurve<TranscriptFieldType>>(
+    fn compute_univariate_inner<P: HonkCurve<TranscriptFieldType>>(
         &self,
-        round_index: usize,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<P::ScalarField>>,
-    ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH> {
-        tracing::trace!("Sumcheck round {}", round_index);
-
+    ) -> AllRelationAcc<P::ScalarField> {
         // Barretenberg uses multithreading here
 
         // Construct extended edge containers
@@ -238,6 +235,20 @@ impl SumcheckProverRound {
                 &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
             );
         }
+        univariate_accumulators
+    }
+
+    pub(crate) fn compute_univariate<P: HonkCurve<TranscriptFieldType>>(
+        &self,
+        round_index: usize,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
+        polynomials: &AllEntities<Vec<P::ScalarField>>,
+    ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH> {
+        tracing::trace!("Sumcheck round {}", round_index);
+
+        let univariate_accumulators =
+            self.compute_univariate_inner::<P>(relation_parameters, gate_sparators, polynomials);
         Self::batch_over_relations_univariates(
             univariate_accumulators,
             &relation_parameters.alphas,
@@ -256,28 +267,8 @@ impl SumcheckProverRound {
     ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
         tracing::trace!("Sumcheck round {}", round_index);
 
-        // Barretenberg uses multithreading here
-
-        // Construct extended edge containers
-        let mut extended_edge = ProverUnivariates::<P::ScalarField>::default();
-
-        let mut univariate_accumulators = AllRelationAcc::<P::ScalarField>::default();
-
-        // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
-        for edge_idx in (0..self.round_size).step_by(2) {
-            Self::extend_edges(&mut extended_edge, polynomials, edge_idx);
-            // Compute the \f$ \ell \f$-th edge's univariate contribution,
-            // scale it by the corresponding \f$ pow_{\beta} \f$ contribution and add it to the accumulators for \f$
-            // \tilde{S}^i(X_i) \f$. If \f$ \ell \f$'s binary representation is given by \f$ (\ell_{i+1},\ldots,
-            // \ell_{d-1})\f$, the \f$ pow_{\beta}\f$-contribution is \f$\beta_{i+1}^{\ell_{i+1}} \cdot \ldots \cdot
-            // \beta_{d-1}^{\ell_{d-1}}\f$.
-            Self::accumulate_relation_univariates::<P>(
-                &mut univariate_accumulators,
-                &extended_edge,
-                relation_parameters,
-                &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
-            );
-        }
+        let univariate_accumulators =
+            self.compute_univariate_inner::<P>(relation_parameters, gate_sparators, polynomials);
 
         let contribution_from_disabled_rows = Self::compute_disabled_contribution::<P>(
             polynomials,
