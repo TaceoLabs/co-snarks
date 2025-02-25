@@ -281,7 +281,7 @@ impl SumcheckProverRound {
             polynomials,
             relation_parameters,
             gate_sparators,
-            &self.round_size,
+            self.round_size,
             round_index,
             row_disabling_polynomial,
         );
@@ -296,34 +296,23 @@ impl SumcheckProverRound {
         zk_sumcheck_data: &ZKSumcheckData<P>,
         round_idx: usize,
     ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
-        if BATCHED_RELATION_PARTIAL_LENGTH_ZK == P::LIBRA_UNIVARIATES_LENGTH {
-            let mut libra_round_univariate =
-                Univariate::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
+        let mut libra_round_univariate =
+            Univariate::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
 
-            // select the i'th column of Libra book-keeping table
-            let current_column = &zk_sumcheck_data.libra_univariates[round_idx];
-            // the evaluation of Libra round univariate at k=0...D are equal to \f$\texttt{libra_univariates}_{i}(k)\f$
-            // corrected by the Libra running sum
-            for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
-                libra_round_univariate.evaluations[idx] = current_column
-                    .eval_poly(P::ScalarField::from(idx as u64))
-                    + zk_sumcheck_data.libra_running_sum;
-            }
+        // select the i'th column of Libra book-keeping table
+        let current_column = &zk_sumcheck_data.libra_univariates[round_idx];
+        // the evaluation of Libra round univariate at k=0...D are equal to \f$\texttt{libra_univariates}_{i}(k)\f$
+        // corrected by the Libra running sum
+        for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
+            libra_round_univariate.evaluations[idx] = current_column
+                .eval_poly(P::ScalarField::from(idx as u64))
+                + zk_sumcheck_data.libra_running_sum;
+        }
+
+        if BATCHED_RELATION_PARTIAL_LENGTH_ZK == P::LIBRA_UNIVARIATES_LENGTH {
             libra_round_univariate
         } else {
-            // Note: with the current constants we have, this will not happen
-            let mut libra_round_univariate =
-                Univariate::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
-
-            // select the i'th column of Libra book-keeping table
-            let current_column = &zk_sumcheck_data.libra_univariates[round_idx];
-            // the evaluation of Libra round univariate at k=0...D are equal to \f$\texttt{libra_univariates}_{i}(k)\f$
-            // corrected by the Libra running sum
-            for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
-                libra_round_univariate.evaluations[idx] = current_column
-                    .eval_poly(P::ScalarField::from(idx as u64))
-                    + zk_sumcheck_data.libra_running_sum;
-            }
+            // Note: Currently not happening
             let mut libra_round_univariate_extended =
                 Univariate::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
             libra_round_univariate_extended.extend_from(&libra_round_univariate.evaluations);
@@ -335,12 +324,16 @@ impl SumcheckProverRound {
         polynomials: &AllEntities<Vec<P::ScalarField>>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
-        round_size: &usize,
+        round_size: usize,
         round_idx: usize,
         row_disabling_polynomial: &RowDisablingPolynomial<P::ScalarField>,
     ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
+        // Barretenberg uses multithreading here
         let mut univariate_accumulators = AllRelationAcc::<P::ScalarField>::default();
+
+        // Construct extended edge containers
         let mut extended_edges = ProverUnivariates::<P::ScalarField>::default();
+
         // In Round 0, we have to compute the contribution from 2 edges: n - 1 = (1,1,...,1) and n-4 = (0,1,...,1).
         let start_edge_idx = if round_idx == 0 {
             round_size - 4
@@ -348,7 +341,7 @@ impl SumcheckProverRound {
             round_size - 2
         };
 
-        for edge_idx in (start_edge_idx..*round_size).step_by(2) {
+        for edge_idx in (start_edge_idx..round_size).step_by(2) {
             Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
             Self::accumulate_relation_univariates::<P>(
                 &mut univariate_accumulators,
