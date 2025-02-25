@@ -102,7 +102,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
         has_zk: ZeroKnowledge,
-        zk_sumcheck_data: Option<&mut ZKSumcheckData<P>>,
+        zk_sumcheck_data: Option<ZKSumcheckData<P>>,
     ) -> HonkProofResult<()> {
         if has_zk == ZeroKnowledge::No {
             let prover_opening_claim =
@@ -141,7 +141,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
-        let (sumcheck_output, mut zk_sumcheck_data) =
+        let (sumcheck_output, zk_sumcheck_data) =
             self.execute_relation_check_rounds(&mut transcript, crs, circuit_size, has_zk)?;
 
         // Fiat-Shamir: rho, y, x, z
@@ -152,7 +152,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             crs,
             sumcheck_output,
             has_zk,
-            zk_sumcheck_data.as_mut(),
+            zk_sumcheck_data,
         )?;
         Ok(transcript.get_proof())
     }

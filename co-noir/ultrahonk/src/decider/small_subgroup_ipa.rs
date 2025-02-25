@@ -32,7 +32,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
     const BATCHED_POLYNOMIAL_LENGTH: usize = 2 * P::SUBGROUP_SIZE + 2;
     const QUOTIENT_LENGTH: usize = Self::SUBGROUP_SIZE + 2;
     pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
-        zk_sumcheck_data: &ZKSumcheckData<P>,
+        zk_sumcheck_data: ZKSumcheckData<P>,
         multivariate_challenge: &[P::ScalarField],
         claimed_ipa_eval: P::ScalarField,
         transcript: &mut Transcript<TranscriptFieldType, H>,
@@ -40,12 +40,10 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         rng: &mut R,
     ) -> HonkProofResult<Self> {
         let mut prover = SmallSubgroupIPAProver {
-            interpolation_domain: zk_sumcheck_data.interpolation_domain.to_vec(),
+            interpolation_domain: zk_sumcheck_data.interpolation_domain,
 
-            concatenated_polynomial: zk_sumcheck_data.libra_concatenated_monomial_form.clone(),
-            libra_concatenated_lagrange_form: zk_sumcheck_data
-                .libra_concatenated_lagrange_form
-                .clone(),
+            concatenated_polynomial: zk_sumcheck_data.libra_concatenated_monomial_form,
+            libra_concatenated_lagrange_form: zk_sumcheck_data.libra_concatenated_lagrange_form,
             challenge_polynomial: Polynomial::new_zero(Self::SUBGROUP_SIZE),
             challenge_polynomial_lagrange: Polynomial::new_zero(Self::SUBGROUP_SIZE),
             big_sum_polynomial_unmasked: Polynomial::new_zero(Self::SUBGROUP_SIZE),
