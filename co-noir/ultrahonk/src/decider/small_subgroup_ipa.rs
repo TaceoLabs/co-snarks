@@ -52,6 +52,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
             big_sum_lagrange_coeffs: vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE],
             batched_polynomial: Polynomial::new_zero(Self::BATCHED_POLYNOMIAL_LENGTH),
             batched_quotient: Polynomial::new_zero(Self::QUOTIENT_LENGTH),
+            // TACEO TOOD the ZKSumcheckData also creates the same domain
             domain: GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE)
                 .ok_or(HonkProofError::LargeSubgroup)?,
         };
