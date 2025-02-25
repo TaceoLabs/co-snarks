@@ -8,7 +8,6 @@ use crate::{
         verifier::DeciderVerifier,
     },
     prelude::TranscriptFieldType,
-    prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
     Utils, CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_COMMITMENTS, NUM_LIBRA_EVALUATIONS,
@@ -16,6 +15,7 @@ use crate::{
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::prelude::HonkCurve;
+use co_builder::prelude::ZeroKnowledge;
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
     DeciderVerifier<P, H>

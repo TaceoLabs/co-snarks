@@ -72,9 +72,13 @@ fn main() -> Result<()> {
 
     // parse crs
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
-    let (prover_crs, verifier_crs) =
-        CrsParser::<Bn254>::get_crs(dir.join("bn254_g1.dat"), dir.join("bn254_g2.dat"), crs_size)?
-            .split();
+    let (prover_crs, verifier_crs) = CrsParser::<Bn254>::get_crs(
+        dir.join("bn254_g1.dat"),
+        dir.join("bn254_g2.dat"),
+        crs_size,
+        has_zk,
+    )?
+    .split();
 
     // create input shares
     let mut rng = rand::thread_rng();
@@ -94,7 +98,7 @@ fn main() -> Result<()> {
     let vk = pk.create_vk(&prover_crs, verifier_crs)?;
 
     // generate proof
-    let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk, &prover_crs)?;
+    let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk, &prover_crs, has_zk)?;
 
     // verify proof
     assert!(UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk, has_zk)

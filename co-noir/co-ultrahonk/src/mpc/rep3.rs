@@ -187,4 +187,26 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     ) -> Self::ArithmeticShare {
         poly::eval_poly(coeffs, point)
     }
+
+    fn fft<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+        data: &[Self::ArithmeticShare],
+        domain: &D,
+    ) -> Vec<Self::ArithmeticShare> {
+        domain.fft(data)
+    }
+
+    fn ifft<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+        data: &[Self::ArithmeticShare],
+        domain: &D,
+    ) -> Vec<Self::ArithmeticShare> {
+        domain.ifft(data)
+    }
+
+    fn open_point_and_field(
+        &mut self,
+        a: Self::PointShare,
+        b: Self::ArithmeticShare,
+    ) -> std::io::Result<(<P as Pairing>::G1, <P as Pairing>::ScalarField)> {
+        pointshare::open_point_and_field(&a, &b, &mut self.io_context0)
+    }
 }

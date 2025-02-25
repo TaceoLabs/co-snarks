@@ -125,6 +125,21 @@ pub fn open_point_many<C: CurveGroup, N: ShamirNetwork>(
     Ok(res)
 }
 
+/// Opens a shared point and a shared field element together
+pub fn open_point_and_field<C: CurveGroup, N: ShamirNetwork>(
+    a: &PointShare<C>,
+    b: &FieldShare<C::ScalarField>,
+    shamir: &mut ShamirProtocol<C::ScalarField, N>,
+) -> IoResult<(C, C::ScalarField)> {
+    let rcv = shamir
+        .network
+        .broadcast_next((a.a, b.a), shamir.threshold + 1)?;
+    let res_point = core::reconstruct_point(&[rcv[0].0], &shamir.open_lagrange_t);
+    let res_field = core::reconstruct(&[rcv[0].1], &shamir.open_lagrange_t);
+
+    Ok((res_point, res_field))
+}
+
 /// Perfoms MSM between curve points and field shares.
 pub fn msm_public_points<C: CurveGroup>(
     points: &[C::Affine],

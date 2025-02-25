@@ -1,5 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
+use co_builder::HonkProofResult;
 use std::array;
 use ultrahonk::prelude::{Barycentric, Univariate};
 
@@ -152,6 +153,14 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
         } else {
             result.add_assign(driver, &extended);
         }
+    }
+
+    pub fn get_random(driver: &mut T) -> HonkProofResult<Self> {
+        let mut evaluations = [T::ArithmeticShare::default(); SIZE];
+        for eval in evaluations.iter_mut() {
+            *eval = driver.rand()?;
+        }
+        Ok(Self { evaluations })
     }
 
     /**

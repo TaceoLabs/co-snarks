@@ -16,7 +16,9 @@ use mpc_core::protocols::{
     shamir::{network::ShamirNetwork, ShamirPreprocessing, ShamirProtocol},
 };
 use std::marker::PhantomData;
-use ultrahonk::prelude::{HonkProof, Transcript, TranscriptFieldType, TranscriptHasher};
+use ultrahonk::prelude::{
+    HonkProof, Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge,
+};
 
 pub type Rep3CoUltraHonk<N, P, H> = CoUltraHonk<Rep3UltraHonkDriver<N>, P, H>;
 pub type ShamirCoUltraHonk<N, P, H> =
@@ -65,6 +67,7 @@ impl<
         mut self,
         proving_key: ProvingKey<T, P>,
         crs: &ProverCrs<P>,
+        has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, T)> {
         tracing::trace!("CoUltraHonk prove");
 
@@ -81,7 +84,7 @@ impl<
             Self::generate_gate_challenges(&mut transcript);
 
         let decider = CoDecider::new(self.driver, memory);
-        decider.prove(circuit_size, crs, transcript)
+        decider.prove(circuit_size, crs, transcript, has_zk)
     }
 }
 
@@ -95,6 +98,7 @@ impl<
         net: N,
         proving_key: ProvingKey<Rep3UltraHonkDriver<N>, P>,
         crs: &ProverCrs<P>,
+        has_zk: ZeroKnowledge,
     ) -> eyre::Result<(HonkProof<TranscriptFieldType>, N)> {
         let mut io_context0 = IoContext::init(net)?;
         let io_context1 = io_context0.fork()?;
@@ -103,7 +107,7 @@ impl<
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
         };
-        let (proof, driver) = prover.prove_inner(proving_key, crs)?;
+        let (proof, driver) = prover.prove_inner(proving_key, crs, has_zk)?;
         Ok((proof, driver.into_network()))
     }
 }
@@ -119,10 +123,11 @@ impl<
         threshold: usize,
         proving_key: ProvingKey<ShamirUltraHonkDriver<<P as Pairing>::ScalarField, N>, P>,
         crs: &ProverCrs<P>,
+        has_zk: ZeroKnowledge,
     ) -> eyre::Result<(HonkProof<TranscriptFieldType>, N)> {
         // init MPC protocol
         let num_pairs = if net.get_num_parties() == 3 {
-            0 // Precomputation is done on the fly since it requires no comminication
+            0 // Precomputation is done on the fly since it requires no communication
         } else {
             proving_key.ultrahonk_num_randomness()
         };
@@ -135,7 +140,7 @@ impl<
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
         };
-        let (proof, driver) = prover.prove_inner(proving_key, crs)?;
+        let (proof, driver) = prover.prove_inner(proving_key, crs, has_zk)?;
         Ok((proof, driver.into_network()))
     }
 }
@@ -146,13 +151,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     pub fn prove(
         proving_key: ProvingKey<PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
+        has_zk: ZeroKnowledge,
     ) -> eyre::Result<HonkProof<TranscriptFieldType>> {
         let prover = Self {
             driver: PlainUltraHonkDriver,
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
         };
-        let (proof, _) = prover.prove_inner(proving_key, crs)?;
+        let (proof, _) = prover.prove_inner(proving_key, crs, has_zk)?;
         Ok(proof)
     }
 }

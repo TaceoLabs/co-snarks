@@ -5,14 +5,13 @@ use super::{
 use crate::{
     decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
     prelude::TranscriptFieldType,
-    prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
     Utils, NUM_LIBRA_COMMITMENTS,
 };
 use ark_ec::AffineRepr;
 use ark_ff::One;
-use co_builder::prelude::HonkCurve;
+use co_builder::prelude::{HonkCurve, ZeroKnowledge};
 use std::marker::PhantomData;
 
 pub(crate) struct DeciderVerifier<

@@ -37,6 +37,14 @@ impl CoUtils {
         T::msm_public_points(&crs.monomials[..len], poly)
     }
 
+    pub(crate) fn msm<T: NoirUltraHonkProver<P>, P: Pairing>(
+        poly: &[T::ArithmeticShare],
+        crs: &[P::G1Affine],
+    ) -> T::PointShare {
+        let len = poly.len();
+        T::msm_public_points(&crs[..len], poly)
+    }
+
     pub(crate) fn batch_invert<T: NoirUltraHonkProver<P>, P: Pairing>(
         driver: &mut T,
         poly: &mut [T::ArithmeticShare],

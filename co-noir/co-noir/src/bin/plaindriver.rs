@@ -70,6 +70,9 @@ pub struct Cli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out_dir: Option<PathBuf>,
+    /// Prove with or without the zero knowledge property
+    #[arg(long)]
+    pub zk: bool,
 }
 
 /// Config
@@ -87,6 +90,8 @@ pub struct Config {
     pub hasher: TranscriptHash,
     /// The output file where the final witness share is written to
     pub out_dir: PathBuf,
+    /// Prove with or without the zero knowledge property
+    pub zk: bool,
 }
 
 /// Prefix for config env variables
@@ -165,7 +170,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     let circuit_path = config.circuit;
     let hasher = config.hasher;
     let out_dir = config.out_dir;
-    let has_zk = ZeroKnowledge::No;
+    let has_zk = ZeroKnowledge::from(config.zk);
 
     // Read circuit
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_path)
@@ -192,7 +197,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     // Read the Crs
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false)?;
-    let crs = CrsParser::get_crs(&prover_crs_path, &verifier_crs_path, crs_size)?;
+    let crs = CrsParser::get_crs(&prover_crs_path, &verifier_crs_path, crs_size, has_zk)?;
     let (prover_crs, verifier_crs) = crs.split();
 
     // Create the proving key and the barretenberg-compatible verifying key
@@ -216,14 +221,18 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     // Create the proof
     let proof = match hasher {
-        TranscriptHash::POSEIDON => {
-            CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove(proving_key, &prover_crs)
-                .context("While creating proof")?
-        }
-        TranscriptHash::KECCAK => {
-            CoUltraHonk::<PlainUltraHonkDriver, _, Keccak256>::prove(proving_key, &prover_crs)
-                .context("While creating proof")?
-        }
+        TranscriptHash::POSEIDON => CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove(
+            proving_key,
+            &prover_crs,
+            has_zk,
+        )
+        .context("While creating proof")?,
+        TranscriptHash::KECCAK => CoUltraHonk::<PlainUltraHonkDriver, _, Keccak256>::prove(
+            proving_key,
+            &prover_crs,
+            has_zk,
+        )
+        .context("While creating proof")?,
     };
 
     // Write the proof to a file

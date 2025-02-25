@@ -5,13 +5,13 @@ use super::{
 };
 use crate::{
     decider::{shplemini::OpeningPair, verifier::DeciderVerifier},
-    prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::AllEntities,
     Utils, CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_EVALUATIONS,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
+use co_builder::prelude::ZeroKnowledge;
 use co_builder::{
     prelude::{HonkCurve, Polynomial, ProverCrs},
     HonkProofError, HonkProofResult,

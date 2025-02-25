@@ -60,7 +60,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let mut threads = Vec::with_capacity(3);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
-    let prover_crs = Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size).unwrap());
+    let prover_crs =
+        Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
     for net in test_network.get_party_networks() {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
@@ -70,7 +71,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
             let (pk, net) =
                 co_noir::generate_proving_key_rep3(net, &constraint_system, witness, false)
                     .unwrap();
-            let (proof, _) = Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs).unwrap();
+            let (proof, _) =
+                Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs, has_zk).unwrap();
             proof
         }));
     }
@@ -104,7 +106,8 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     let mut threads = Vec::with_capacity(3);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
-    let prover_crs = Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size).unwrap());
+    let prover_crs =
+        Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
     for net in test_network.get_party_networks() {
         let prover_crs = prover_crs.clone();
         let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
@@ -122,7 +125,8 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
                 false,
             )
             .unwrap();
-            let (proof, _) = Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs).unwrap();
+            let (proof, _) =
+                Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs, has_zk).unwrap();
             proof
         }));
     }

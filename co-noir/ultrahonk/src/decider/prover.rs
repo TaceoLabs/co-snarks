@@ -6,13 +6,12 @@ use super::{
 
 use crate::{
     decider::small_subgroup_ipa::SmallSubgroupIPAProver,
-    prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,
     Utils,
 };
 use co_builder::{
-    prelude::{HonkCurve, ProverCrs},
+    prelude::{HonkCurve, ProverCrs, ZeroKnowledge},
     HonkProofResult,
 };
 use rand::SeedableRng;

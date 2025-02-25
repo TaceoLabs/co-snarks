@@ -112,6 +112,16 @@ pub fn open_point_many<C: CurveGroup, N: Rep3Network>(
     Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
 }
 
+/// Opens a shared point and a shared field element together
+pub fn open_point_and_field<C: CurveGroup, N: Rep3Network>(
+    a: &PointShare<C>,
+    b: &FieldShare<C::ScalarField>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<(C, C::ScalarField)> {
+    let c = io_context.network.reshare((a.b, b.b))?;
+    Ok((a.a + a.b + c.0, b.a + b.b + c.1))
+}
+
 /// Perform msm between `points` and `scalars`
 pub fn msm_public_points<C: CurveGroup>(
     points: &[C::Affine],

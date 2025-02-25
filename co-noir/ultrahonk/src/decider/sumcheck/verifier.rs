@@ -5,15 +5,14 @@ use crate::{
         verifier::DeciderVerifier,
     },
     prelude::{GateSeparatorPolynomial, TranscriptFieldType},
-    prover::ZeroKnowledge,
     transcript::{Transcript, TranscriptHasher},
     types::NUM_ALL_ENTITIES,
     verifier::HonkVerifyResult,
     Utils, CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ff::One;
-use co_builder::prelude::HonkCurve;
 use co_builder::prelude::RowDisablingPolynomial;
+use co_builder::prelude::{HonkCurve, ZeroKnowledge};
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>

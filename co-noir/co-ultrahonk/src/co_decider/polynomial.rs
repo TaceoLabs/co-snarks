@@ -1,6 +1,9 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
-use co_builder::prelude::Polynomial;
+use co_builder::{
+    prelude::{Polynomial, Utils},
+    HonkProofResult,
+};
 use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
@@ -60,7 +63,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         self.add_scaled_slice(driver, &src.coefficients, scalar);
     }
 
-    #[expect(unused)]
     pub(crate) fn add_scaled_slice_public(
         &mut self,
         driver: &mut T,
@@ -134,6 +136,73 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
             }
         }
         self.coefficients.pop();
+    }
+
+    pub fn random(size: usize, driver: &mut T) -> HonkProofResult<Self> {
+        let coefficients: Result<Vec<_>, _> = (0..size).map(|_| driver.rand()).collect();
+        let coefficients = coefficients?;
+        Ok(Self { coefficients })
+    }
+
+    pub(crate) fn mul_assign(&mut self, rhs: P::ScalarField, driver: &mut T) {
+        for l in self.coefficients.iter_mut() {
+            *l = T::mul_with_public(driver, rhs, *l);
+        }
+    }
+
+    pub fn evaluate_mle(
+        &self,
+        evaluation_points: &[P::ScalarField],
+        driver: &mut T,
+    ) -> T::ArithmeticShare {
+        if self.coefficients.is_empty() {
+            return T::ArithmeticShare::default();
+        }
+
+        let n = evaluation_points.len();
+        let dim = Utils::get_msb64(self.coefficients.len() as u64 - 1) as usize + 1; // Round up to next power of 2
+
+        // To simplify handling of edge cases, we assume that the index space is always a power of 2
+        assert_eq!(self.coefficients.len(), 1 << n);
+
+        // We first fold over dim rounds l = 0,...,dim-1.
+        // in round l, n_l is the size of the buffer containing the Polynomial partially evaluated
+        // at u₀,..., u_l.
+        // In round 0, this is half the size of dim
+        let mut n_l = 1 << (dim - 1);
+        let mut tmp = vec![T::ArithmeticShare::default(); n_l];
+
+        // Note below: i * 2 + 1 + offset might equal virtual_size. This used to subtlely be handled by extra capacity
+        // padding (and there used to be no assert time checks, which this constant helps with).
+        for (i, val) in tmp.iter_mut().enumerate().take(n_l) {
+            let sub = T::sub(
+                driver,
+                self.coefficients[i * 2 + 1],
+                self.coefficients[i * 2],
+            );
+            let mul = T::mul_with_public(driver, evaluation_points[0], sub);
+            *val = T::add(driver, self.coefficients[i * 2], mul);
+        }
+
+        // partially evaluate the dim-1 remaining points
+        for (l, val) in evaluation_points.iter().enumerate().take(dim).skip(1) {
+            n_l = 1 << (dim - l - 1);
+
+            for i in 0..n_l {
+                let sub = T::sub(driver, tmp[i * 2 + 1], tmp[i * 2]);
+                let mul = T::mul_with_public(driver, *val, sub);
+                tmp[i] = T::add(driver, tmp[i * 2], mul);
+            }
+        }
+
+        let mut result = tmp[0];
+
+        // We handle the "trivial" dimensions which are full of zeros.
+        for &point in &evaluation_points[dim..n] {
+            result = T::mul_with_public(driver, P::ScalarField::ONE - point, result);
+        }
+
+        result
     }
 }
 

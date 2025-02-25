@@ -19,6 +19,22 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::ops::{Index, IndexMut};
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ZeroKnowledge {
+    No,
+    Yes,
+}
+
+impl From<bool> for ZeroKnowledge {
+    fn from(value: bool) -> Self {
+        if value {
+            ZeroKnowledge::Yes
+        } else {
+            ZeroKnowledge::No
+        }
+    }
+}
+
 #[derive(Default, PartialEq, Eq)]
 pub(crate) struct PolyTriple<F: PrimeField> {
     pub(crate) a: u32,

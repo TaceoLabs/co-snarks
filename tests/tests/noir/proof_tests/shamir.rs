@@ -32,7 +32,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let mut threads = Vec::with_capacity(num_parties);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
-    let prover_crs = Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size).unwrap());
+    let prover_crs =
+        Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
     for net in test_network.get_party_networks() {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
@@ -48,7 +49,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
             )
             .unwrap();
             let (proof, _) =
-                ShamirCoUltraHonk::<_, _, H>::prove(net, threshold, pk, &prover_crs).unwrap();
+                ShamirCoUltraHonk::<_, _, H>::prove(net, threshold, pk, &prover_crs, has_zk)
+                    .unwrap();
             proof
         }));
     }
