@@ -53,16 +53,6 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
             batched_quotient: Polynomial::new_zero(Self::QUOTIENT_LENGTH),
         };
 
-        // Reallocate the commitment key if necessary. This is an edge case with SmallSubgroupIPA since it has
-        // polynomials that may exceed the circuit size.
-        // if (commitment_key->dyadic_size < SUBGROUP_SIZE + 3) {
-        //     commitment_key = std::make_shared<typename Flavor::CommitmentKey>(Self::SUBGROUP_SIZE + 3);
-        // }
-
-        // if P::is_bn254() {
-        //     prover.bn_evaluation_domain = zk_sumcheck_data.bn_evaluation_domain.clone();
-        // }
-
         prover.compute_challenge_polynomial(multivariate_challenge)?;
         prover.compute_big_sum_polynomial(rng)?;
         let libra_big_sum_commitment =
@@ -133,13 +123,14 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         }
 
         self.challenge_polynomial_lagrange = Polynomial {
-            coefficients: coeffs_lagrange_basis.clone(),
+            coefficients: coeffs_lagrange_basis,
         };
 
         // Compute monomial coefficients
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE)
             .ok_or(HonkProofError::LargeSubgroup)?;
-        let challenge_polynomial_ifft = domain.ifft(&coeffs_lagrange_basis);
+        let challenge_polynomial_ifft =
+            domain.ifft(self.challenge_polynomial_lagrange.coefficients.as_slice());
         self.challenge_polynomial = Polynomial {
             coefficients: challenge_polynomial_ifft,
         };
