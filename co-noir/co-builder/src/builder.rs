@@ -11,12 +11,14 @@ use crate::{
         field_ct::FieldCT,
         plookup::{BasicTableId, ColumnIdx, MultiTableId, Plookup, PlookupBasicTable, ReadData},
         poseidon2::Poseidon2CT,
+        rom_ram::{
+            RamAccessType, RamRecord, RamTable, RamTranscript, RomRecord, RomTable, RomTranscript,
+        },
         types::{
             AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
             AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
             LogicConstraint, MulQuad, PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate,
-            Poseidon2InternalGate, RamAccessType, RamRecord, RamTable, RamTranscript, RangeList,
-            RomRecord, RomTable, RomTranscript, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
+            Poseidon2InternalGate, RangeList, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
         },
     },
     utils::Utils,
