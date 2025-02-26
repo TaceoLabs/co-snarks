@@ -13,10 +13,10 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
     num_parties: usize,
     threshold: usize,
+    has_zk: ZeroKnowledge,
 ) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
-    let has_zk = ZeroKnowledge::No;
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
@@ -74,10 +74,12 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
 
 #[test]
 fn poseidon_proof_test_poseidon2sponge() {
-    proof_test::<Poseidon2Sponge>("poseidon", 3, 1);
+    proof_test::<Poseidon2Sponge>("poseidon", 3, 1, ZeroKnowledge::No);
+    proof_test::<Poseidon2Sponge>("poseidon", 3, 1, ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_proof_test_keccak256() {
-    proof_test::<Keccak256>("poseidon", 3, 1);
+    proof_test::<Keccak256>("poseidon", 3, 1, ZeroKnowledge::No);
+    proof_test::<Keccak256>("poseidon", 3, 1, ZeroKnowledge::Yes);
 }

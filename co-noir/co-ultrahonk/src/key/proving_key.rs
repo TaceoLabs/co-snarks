@@ -26,7 +26,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
-use ultrahonk::prelude::VerifyingKeyBarretenberg;
+use ultrahonk::prelude::{VerifyingKeyBarretenberg, ZeroKnowledge};
 use ultrahonk::Utils;
 
 #[derive(Serialize, Deserialize)]
@@ -346,7 +346,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         })
     }
 
-    pub fn ultrahonk_num_randomness(&self) -> usize {
+    pub fn ultrahonk_num_randomness(&self, has_zk: ZeroKnowledge) -> usize {
         // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
         let active_domain_size_mul = if self.active_region_data.size() > 0 {
             self.active_region_data.size() - 1
@@ -359,7 +359,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             + CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE * active_domain_size_mul
             + CRAND_PAIRS_CONST;
         // log2(n) * ((n >>= 1) / 2) == n - 1
-        let num_pairs_sumcheck_prove = CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+        let num_pairs_sumcheck_prove = if has_zk == ZeroKnowledge::No {
+            CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1)
+        } else {
+            todo!()
+        };
         num_pairs_oink_prove + num_pairs_sumcheck_prove
     }
 

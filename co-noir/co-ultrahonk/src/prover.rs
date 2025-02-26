@@ -129,7 +129,7 @@ impl<
         let num_pairs = if net.get_num_parties() == 3 {
             0 // Precomputation is done on the fly since it requires no communication
         } else {
-            proving_key.ultrahonk_num_randomness()
+            proving_key.ultrahonk_num_randomness(has_zk)
         };
         let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs)?;
         let mut protocol0 = ShamirProtocol::from(preprocessing);
