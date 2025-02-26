@@ -121,7 +121,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
 
         for univariate in libra_univariates {
             total_sum += univariate.coefficients[0] + univariate.eval_poly(P::ScalarField::one());
-            *scaling_factor *= P::ScalarField::from(2);
+            *scaling_factor += *scaling_factor;
         }
         total_sum *= *scaling_factor;
 
@@ -141,7 +141,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
      * @param libra_challenge
      */
     fn setup_auxiliary_data(&mut self) {
-        let two_inv: P::ScalarField = P::ScalarField::one() / P::ScalarField::from(2);
+        let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         self.libra_scaling_factor *= self.libra_challenge;
         for univariate in &mut self.libra_univariates {
             *univariate *= self.libra_scaling_factor;

@@ -128,7 +128,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
             let eval = driver.eval_poly(&univariate.coefficients, P::ScalarField::one());
             let tmp = T::add(driver, univariate.coefficients[0], eval);
             total_sum = T::add(driver, total_sum, tmp);
-            *scaling_factor *= P::ScalarField::from(2);
+            *scaling_factor += *scaling_factor;
         }
         total_sum = T::mul_with_public(driver, *scaling_factor, total_sum);
         let mul = T::mul_with_public(
@@ -152,7 +152,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
      * @param libra_challenge
      */
     fn setup_auxiliary_data(&mut self, driver: &mut T) {
-        let two_inv: P::ScalarField = P::ScalarField::one() / P::ScalarField::from(2);
+        let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         self.libra_scaling_factor *= self.libra_challenge;
         for univariate in &mut self.libra_univariates {
             univariate.mul_assign(self.libra_scaling_factor, driver);
@@ -197,7 +197,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
         }
 
         self.libra_concatenated_lagrange_form = SharedPolynomial::<T, P> {
-            coefficients: coeffs_lagrange_subgroup.to_vec(),
+            coefficients: coeffs_lagrange_subgroup,
         };
 
         let masking_scalars = SharedUnivariate::<T, P, 2>::get_random(driver)?;
@@ -205,7 +205,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(P::SUBGROUP_SIZE)
             .ok_or(HonkProofError::LargeSubgroup)?;
 
-        let coeffs_lagrange_subgroup_ifft = T::ifft(&coeffs_lagrange_subgroup, &domain);
+        let coeffs_lagrange_subgroup_ifft =
+            T::ifft(&self.libra_concatenated_lagrange_form.coefficients, &domain);
         let libra_concatenated_monomial_form_unmasked = SharedPolynomial::<T, P> {
             coefficients: coeffs_lagrange_subgroup_ifft,
         };
@@ -261,7 +262,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
         round_idx: usize,
         driver: &mut T,
     ) {
-        let two_inv: P::ScalarField = P::ScalarField::one() / P::ScalarField::from(2);
+        let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         // when round_idx = d - 1, the update is not needed
         if round_idx < self.log_circuit_size - 1 {
             for univariate in &mut self.libra_univariates {
