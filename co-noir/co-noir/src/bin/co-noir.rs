@@ -18,7 +18,6 @@ use mpc_net::config::NetworkConfigFile;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
-    cmp::max,
     collections::BTreeMap,
     fs::File,
     io::{BufReader, BufWriter, Write},
