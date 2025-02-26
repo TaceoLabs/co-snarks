@@ -16,6 +16,7 @@ use co_acvm::{
 };
 use co_ultrahonk::prelude::{
     HonkCurve, HonkProof, ProverCrs, ProverWitnessEntities, TranscriptFieldType, TranscriptHasher,
+    ZeroKnowledge,
 };
 use color_eyre::eyre::{self, eyre, Context, Result};
 use mpc_core::protocols::{
@@ -70,9 +71,10 @@ impl Rep3ProvingKeyState {
     pub fn prove<H: TranscriptHasher<TranscriptFieldType>>(
         self,
         prover_crs: &ProverCrs<Bn254>,
+        has_zk: ZeroKnowledge,
     ) -> eyre::Result<HonkProof<ark_bn254::Fr>> {
         let (proof, _net) =
-            Rep3CoUltraHonk::<_, _, H>::prove(self.net, self.proving_key, prover_crs)?;
+            Rep3CoUltraHonk::<_, _, H>::prove(self.net, self.proving_key, prover_crs, has_zk)?;
         Ok(proof)
     }
 }
@@ -90,12 +92,14 @@ impl ShamirProvingKeyState {
     pub fn prove<H: TranscriptHasher<TranscriptFieldType>>(
         self,
         prover_crs: &ProverCrs<Bn254>,
+        has_zk: ZeroKnowledge,
     ) -> eyre::Result<HonkProof<ark_bn254::Fr>> {
         let (proof, _net) = ShamirCoUltraHonk::<_, _, H>::prove(
             self.net,
             self.threshold,
             self.proving_key,
             prover_crs,
+            has_zk,
         )?;
         Ok(proof)
     }

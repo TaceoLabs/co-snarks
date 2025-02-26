@@ -416,7 +416,9 @@ impl<P: Pairing> ProvingKey<P> {
                     // Read tag is 1 if entry has been read 1 or more times
                     if i == 0 {
                         // Just assign, no cmux needed
-                        for (src, des) in ohv
+                        #[expect(unused_mut)]
+                        // TACEO TODO: This is for the linter, remove once its fixed...
+                        for (src, mut des) in ohv
                             .into_iter()
                             .zip(witness[1].iter_mut().skip(table_offset).take(table.len()))
                         {

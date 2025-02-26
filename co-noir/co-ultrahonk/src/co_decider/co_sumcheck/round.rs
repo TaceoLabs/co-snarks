@@ -1,3 +1,4 @@
+use super::zk_data::SharedZKSumcheckData;
 use crate::{
     co_decider::{
         relations::{
@@ -9,7 +10,10 @@ use crate::{
             poseidon2_internal_relation::Poseidon2InternalRelation,
             ultra_arithmetic_relation::UltraArithmeticRelation, AllRelationAcc, Relation,
         },
-        types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        types::{
+            ProverUnivariates, RelationParameters, BATCHED_RELATION_PARTIAL_LENGTH,
+            BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+        },
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
@@ -17,12 +21,11 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
-use co_builder::prelude::HonkCurve;
+use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
 use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
 
-pub(crate) type SumcheckRoundOutput<T, P> =
-    SharedUnivariate<T, P, { MAX_PARTIAL_RELATION_LENGTH + 1 }>;
+pub(crate) type SumcheckRoundOutput<T, P, const U: usize> = SharedUnivariate<T, P, U>;
 
 pub(crate) struct SumcheckRound {
     pub(crate) round_size: usize,
@@ -69,9 +72,9 @@ impl SumcheckRound {
      * @param result Round univariate \f$ \tilde{S}^i\f$ represented by its evaluations over \f$ \{0,\ldots, D\} \f$.
      * @param gate_sparators Round \f$pow_{\beta}\f$-factor  \f$ ( (1−X_i) + X_i\cdot \beta_i )\f$.
      */
-    fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: Pairing>(
+    fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize>(
         driver: &mut T,
-        result: &mut SumcheckRoundOutput<T, P>,
+        result: &mut SumcheckRoundOutput<T, P, SIZE>,
         univariate_accumulators: AllRelationAcc<T, P>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
     ) {
@@ -104,12 +107,16 @@ impl SumcheckRound {
      * @param challenge Challenge \f$\alpha\f$.
      * @param gate_sparators Round \f$pow_{\beta}\f$-factor given by  \f$ ( (1−u_i) + u_i\cdot \beta_i )\f$.
      */
-    fn batch_over_relations_univariates<T: NoirUltraHonkProver<P>, P: Pairing>(
+    fn batch_over_relations_univariates<
+        T: NoirUltraHonkProver<P>,
+        P: Pairing,
+        const SIZE: usize,
+    >(
         driver: &mut T,
         mut univariate_accumulators: AllRelationAcc<T, P>,
         alphas: &[P::ScalarField; crate::NUM_ALPHAS],
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
-    ) -> SumcheckRoundOutput<T, P> {
+    ) -> SumcheckRoundOutput<T, P, SIZE> {
         tracing::trace!("batch over relations");
 
         let running_challenge = P::ScalarField::one();
@@ -219,19 +226,17 @@ impl SumcheckRound {
         Ok(())
     }
 
-    pub(crate) fn compute_univariate<
+    pub(crate) fn compute_univariate_inner<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
+        const SIZE: usize,
     >(
         &self,
         driver: &mut T,
-        round_index: usize,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
-    ) -> HonkProofResult<SumcheckRoundOutput<T, P>> {
-        tracing::trace!("Sumcheck round {}", round_index);
-
+    ) -> HonkProofResult<SumcheckRoundOutput<T, P, SIZE>> {
         // Barretenberg uses multithreading here
 
         // Construct extended edge containers
@@ -262,5 +267,156 @@ impl SumcheckRound {
             gate_sparators,
         );
         Ok(res)
+    }
+
+    pub(crate) fn compute_univariate<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    >(
+        &self,
+        driver: &mut T,
+        round_index: usize,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
+        polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
+    ) -> HonkProofResult<SumcheckRoundOutput<T, P, BATCHED_RELATION_PARTIAL_LENGTH>> {
+        tracing::trace!("Sumcheck round {}", round_index);
+
+        self.compute_univariate_inner::<T, P, BATCHED_RELATION_PARTIAL_LENGTH>(
+            driver,
+            relation_parameters,
+            gate_sparators,
+            polynomials,
+        )
+    }
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) fn compute_univariate_zk<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    >(
+        &self,
+        driver: &mut T,
+        round_index: usize,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
+        polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
+        zk_sumcheck_data: &SharedZKSumcheckData<T, P>,
+        row_disabling_polynomial: &mut RowDisablingPolynomial<P::ScalarField>,
+    ) -> HonkProofResult<SumcheckRoundOutput<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>> {
+        tracing::trace!("Sumcheck round {}", round_index);
+
+        let round_univariate = self
+            .compute_univariate_inner::<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
+                driver,
+                relation_parameters,
+                gate_sparators,
+                polynomials,
+            )?;
+
+        let contribution_from_disabled_rows = Self::compute_disabled_contribution::<T, P>(
+            driver,
+            polynomials,
+            relation_parameters,
+            gate_sparators,
+            self.round_size,
+            round_index,
+            row_disabling_polynomial,
+        )?;
+
+        let libra_round_univariate =
+            Self::compute_libra_round_univariate(zk_sumcheck_data, round_index, driver);
+
+        let sub = libra_round_univariate.sub(driver, &contribution_from_disabled_rows);
+        Ok(round_univariate.add(driver, &sub))
+    }
+
+    fn compute_libra_round_univariate<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    >(
+        zk_sumcheck_data: &SharedZKSumcheckData<T, P>,
+        round_idx: usize,
+        driver: &mut T,
+    ) -> SumcheckRoundOutput<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
+        let mut libra_round_univariate =
+            SharedUnivariate::<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
+
+        // select the i'th column of Libra book-keeping table
+        let current_column = &zk_sumcheck_data.libra_univariates[round_idx];
+        // the evaluation of Libra round univariate at k=0...D are equal to \f$\texttt{libra_univariates}_{i}(k)\f$
+        // corrected by the Libra running sum
+        for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
+            let eval = T::eval_poly(
+                driver,
+                &current_column.coefficients,
+                P::ScalarField::from(idx as u64),
+            );
+            libra_round_univariate.evaluations[idx] =
+                T::add(driver, eval, zk_sumcheck_data.libra_running_sum);
+        }
+
+        if BATCHED_RELATION_PARTIAL_LENGTH_ZK == P::LIBRA_UNIVARIATES_LENGTH {
+            libra_round_univariate
+        } else {
+            // Note: Currently not happening
+            let mut libra_round_univariate_extended =
+                SharedUnivariate::<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
+            libra_round_univariate_extended
+                .extend_from(driver, &libra_round_univariate.evaluations);
+            libra_round_univariate_extended
+        }
+    }
+
+    fn compute_disabled_contribution<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    >(
+        driver: &mut T,
+        polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
+        round_size: usize,
+        round_idx: usize,
+        row_disabling_polynomial: &RowDisablingPolynomial<P::ScalarField>,
+    ) -> HonkProofResult<SumcheckRoundOutput<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>> {
+        // Barretenberg uses multithreading here
+        let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
+
+        // Construct extended edge containers
+        let mut extended_edges = ProverUnivariates::<T, P>::default();
+
+        // In Round 0, we have to compute the contribution from 2 edges: n - 1 = (1,1,...,1) and n-4 = (0,1,...,1).
+        let start_edge_idx = if round_idx == 0 {
+            round_size - 4
+        } else {
+            round_size - 2
+        };
+
+        for edge_idx in (start_edge_idx..round_size).step_by(2) {
+            Self::extend_edges(driver, &mut extended_edges, polynomials, edge_idx);
+            Self::accumulate_relation_univariates::<T, P>(
+                driver,
+                &mut univariate_accumulators,
+                &extended_edges,
+                relation_parameters,
+                &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
+            )?;
+        }
+        let mut result = Self::batch_over_relations_univariates(
+            driver,
+            univariate_accumulators,
+            &relation_parameters.alphas,
+            gate_sparators,
+        );
+
+        let mut row_disabling_factor =
+            Univariate::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
+        row_disabling_factor.extend_from(&[
+            row_disabling_polynomial.eval_at_0,
+            row_disabling_polynomial.eval_at_1,
+        ]);
+        result = result.mul_public(driver, &row_disabling_factor);
+
+        Ok(result)
     }
 }

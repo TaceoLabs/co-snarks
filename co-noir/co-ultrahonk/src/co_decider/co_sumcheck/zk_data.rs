@@ -1,70 +1,68 @@
-use crate::prelude::Transcript;
+use crate::co_decider::polynomial::SharedPolynomial;
+use crate::co_decider::univariates::SharedUnivariate;
+use crate::mpc::NoirUltraHonkProver;
 use crate::prelude::TranscriptHasher;
-use crate::prelude::Univariate;
-use crate::transcript::TranscriptFieldType;
-use crate::Utils;
+use crate::CoUtils;
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use ark_ff::One;
-use ark_ff::UniformRand;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use co_builder::prelude::HonkCurve;
-use co_builder::prelude::Polynomial;
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
-use rand::CryptoRng;
-use rand::Rng;
+use co_builder::TranscriptFieldType;
+use ultrahonk::prelude::Transcript;
 
-pub(crate) struct ZKSumcheckData<P: Pairing> {
-    pub(crate) constant_term: P::ScalarField,
+pub(crate) struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: Pairing> {
+    pub(crate) constant_term: T::ArithmeticShare,
     pub(crate) interpolation_domain: Vec<P::ScalarField>,
-    pub(crate) libra_concatenated_lagrange_form: Polynomial<P::ScalarField>,
-    pub(crate) libra_concatenated_monomial_form: Polynomial<P::ScalarField>,
-    pub(crate) libra_univariates: Vec<Polynomial<P::ScalarField>>,
+    pub(crate) libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
+    pub(crate) libra_concatenated_monomial_form: SharedPolynomial<T, P>,
+    pub(crate) libra_univariates: Vec<SharedPolynomial<T, P>>,
     pub(crate) log_circuit_size: usize,
     pub(crate) libra_scaling_factor: P::ScalarField,
     pub(crate) libra_challenge: P::ScalarField,
     pub(crate) libra_total_sum: P::ScalarField,
-    pub(crate) libra_running_sum: P::ScalarField,
-    pub(crate) libra_evaluations: Vec<P::ScalarField>,
+    pub(crate) libra_running_sum: T::ArithmeticShare,
+    pub(crate) libra_evaluations: Vec<T::ArithmeticShare>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumcheckData<T, P> {
+    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>>(
         multivariate_d: usize,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         commitment_key: &[P::G1Affine],
-        rng: &mut R,
+        driver: &mut T,
     ) -> HonkProofResult<Self> {
-        let constant_term = P::ScalarField::rand(rng);
-        let libra_challenge = P::ScalarField::default();
+        let constant_term = driver.rand()?;
         let libra_univariates =
-            Self::generate_libra_univariates(multivariate_d, P::LIBRA_UNIVARIATES_LENGTH, rng);
+            Self::generate_libra_univariates(multivariate_d, P::LIBRA_UNIVARIATES_LENGTH, driver)?;
         let log_circuit_size = multivariate_d;
 
-        let mut data = ZKSumcheckData {
+        let mut data = SharedZKSumcheckData {
             constant_term,
             interpolation_domain: vec![P::ScalarField::zero(); P::SUBGROUP_SIZE],
-            libra_concatenated_lagrange_form: Polynomial::new_zero(P::SUBGROUP_SIZE),
-            libra_concatenated_monomial_form: Polynomial::new_zero(P::SUBGROUP_SIZE + 2),
+            libra_concatenated_lagrange_form: SharedPolynomial::new_zero(P::SUBGROUP_SIZE),
+            libra_concatenated_monomial_form: SharedPolynomial::new_zero(P::SUBGROUP_SIZE + 2),
             libra_univariates,
             log_circuit_size,
             libra_scaling_factor: P::ScalarField::one(),
-            libra_challenge,
+            libra_challenge: P::ScalarField::zero(),
             libra_total_sum: P::ScalarField::zero(),
-            libra_running_sum: P::ScalarField::zero(),
+            libra_running_sum: T::ArithmeticShare::default(),
             libra_evaluations: Vec::new(),
         };
 
         data.create_interpolation_domain();
-        data.compute_concatenated_libra_polynomial(rng)?;
+        data.compute_concatenated_libra_polynomial(driver)?;
         // If proving_key is provided, commit to the concatenated and masked libra polynomial
         if !commitment_key.is_empty() {
-            let libra_commitment = Utils::msm::<P>(
-                &data.libra_concatenated_monomial_form.coefficients,
+            let libra_commitment_shared = CoUtils::msm::<T, P>(
+                data.libra_concatenated_monomial_form.coefficients.as_ref(),
                 commitment_key,
-            )?;
+            );
+            let libra_commitment = T::open_point(driver, libra_commitment_shared)?;
             transcript.send_point_to_verifier::<P>(
                 "Libra:concatenation_commitment".to_string(),
                 libra_commitment.into(),
@@ -72,16 +70,22 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         }
 
         // Compute the total sum of the Libra polynomials
-        data.libra_total_sum = Self::compute_libra_total_sum(
+        let libra_total_sum = Self::compute_libra_total_sum(
             &data.libra_univariates,
             &mut data.libra_scaling_factor,
             data.constant_term,
+            driver,
         );
         // Send the Libra total sum to the transcript
+        data.libra_total_sum = T::open_many(driver, &[libra_total_sum])?[0];
         transcript.send_fr_to_verifier::<P>("Libra:Sum".to_string(), data.libra_total_sum);
         data.libra_challenge = transcript.get_challenge::<P>("Libra:Challenge".to_string());
-        data.libra_running_sum = data.libra_total_sum * data.libra_challenge;
-        data.setup_auxiliary_data();
+
+        data.libra_running_sum = T::promote_to_trivial_share(
+            driver.get_party_id(),
+            data.libra_total_sum * data.libra_challenge,
+        );
+        data.setup_auxiliary_data(driver);
 
         Ok(data)
     }
@@ -92,13 +96,13 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
      * independent uniformly random coefficients.
      *
      */
-    fn generate_libra_univariates<R: Rng + CryptoRng>(
+    fn generate_libra_univariates(
         number_of_polynomials: usize,
         univariate_length: usize,
-        rng: &mut R,
-    ) -> Vec<Polynomial<P::ScalarField>> {
+        driver: &mut T,
+    ) -> std::io::Result<Vec<SharedPolynomial<T, P>>> {
         (0..number_of_polynomials)
-            .map(|_| Polynomial::random(univariate_length, rng))
+            .map(|_| SharedPolynomial::random(univariate_length, driver))
             .collect()
     }
 
@@ -111,21 +115,28 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
      * @return FF
      */
     fn compute_libra_total_sum(
-        libra_univariates: &[Polynomial<P::ScalarField>],
+        libra_univariates: &[SharedPolynomial<T, P>],
         scaling_factor: &mut P::ScalarField,
-        constant_term: P::ScalarField,
-    ) -> P::ScalarField {
-        let mut total_sum = P::ScalarField::zero();
+        constant_term: T::ArithmeticShare,
+        driver: &mut T,
+    ) -> T::ArithmeticShare {
+        let mut total_sum = T::ArithmeticShare::default();
         let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         *scaling_factor *= two_inv;
 
         for univariate in libra_univariates {
-            total_sum += univariate.coefficients[0] + univariate.eval_poly(P::ScalarField::one());
+            let eval = driver.eval_poly(&univariate.coefficients, P::ScalarField::one());
+            let tmp = T::add(driver, univariate.coefficients[0], eval);
+            total_sum = T::add(driver, total_sum, tmp);
             *scaling_factor += *scaling_factor;
         }
-        total_sum *= *scaling_factor;
-
-        total_sum + constant_term * P::ScalarField::from(1 << libra_univariates.len())
+        total_sum = T::mul_with_public(driver, *scaling_factor, total_sum);
+        let mul = T::mul_with_public(
+            driver,
+            P::ScalarField::from(1 << libra_univariates.len()),
+            constant_term,
+        );
+        T::add(driver, total_sum, mul)
     }
 
     /**
@@ -140,15 +151,19 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
      * @param libra_round_factor
      * @param libra_challenge
      */
-    fn setup_auxiliary_data(&mut self) {
+    fn setup_auxiliary_data(&mut self, driver: &mut T) {
         let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         self.libra_scaling_factor *= self.libra_challenge;
         for univariate in &mut self.libra_univariates {
-            *univariate *= self.libra_scaling_factor;
+            univariate.mul_assign(self.libra_scaling_factor, driver);
         }
-        self.libra_running_sum += -self.libra_univariates[0].coefficients[0]
-            - self.libra_univariates[0].eval_poly(P::ScalarField::one());
-        self.libra_running_sum *= two_inv;
+        let eval = driver.eval_poly(
+            &self.libra_univariates[0].coefficients,
+            P::ScalarField::one(),
+        );
+        let sub = T::add(driver, eval, self.libra_univariates[0].coefficients[0]);
+        self.libra_running_sum = T::sub(driver, self.libra_running_sum, sub);
+        self.libra_running_sum = T::mul_with_public(driver, two_inv, self.libra_running_sum);
     }
 
     /**
@@ -169,11 +184,8 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
      * + m_1
      *
      */
-    fn compute_concatenated_libra_polynomial<R: Rng + CryptoRng>(
-        &mut self,
-        rng: &mut R,
-    ) -> HonkProofResult<()> {
-        let mut coeffs_lagrange_subgroup = vec![P::ScalarField::zero(); P::SUBGROUP_SIZE];
+    fn compute_concatenated_libra_polynomial(&mut self, driver: &mut T) -> HonkProofResult<()> {
+        let mut coeffs_lagrange_subgroup = vec![T::ArithmeticShare::default(); P::SUBGROUP_SIZE];
         coeffs_lagrange_subgroup[0] = self.constant_term;
 
         for poly_idx in 0..self.log_circuit_size {
@@ -184,18 +196,18 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
             }
         }
 
-        self.libra_concatenated_lagrange_form = Polynomial {
+        self.libra_concatenated_lagrange_form = SharedPolynomial::<T, P> {
             coefficients: coeffs_lagrange_subgroup,
         };
 
-        let masking_scalars = Univariate::<P::ScalarField, 2>::get_random(rng);
+        let masking_scalars = SharedUnivariate::<T, P, 2>::get_random(driver)?;
 
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(P::SUBGROUP_SIZE)
             .ok_or(HonkProofError::LargeSubgroup)?;
 
         let coeffs_lagrange_subgroup_ifft =
-            domain.ifft(&self.libra_concatenated_lagrange_form.coefficients);
-        let libra_concatenated_monomial_form_unmasked = Polynomial::<P::ScalarField> {
+            T::ifft(&self.libra_concatenated_lagrange_form.coefficients, &domain);
+        let libra_concatenated_monomial_form_unmasked = SharedPolynomial::<T, P> {
             coefficients: coeffs_lagrange_subgroup_ifft,
         };
 
@@ -205,10 +217,16 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         }
 
         for idx in 0..masking_scalars.evaluations.len() {
-            self.libra_concatenated_monomial_form.coefficients[idx] -=
-                masking_scalars.evaluations[idx];
-            self.libra_concatenated_monomial_form.coefficients[P::SUBGROUP_SIZE + idx] +=
-                masking_scalars.evaluations[idx];
+            self.libra_concatenated_monomial_form.coefficients[idx] = T::sub(
+                driver,
+                self.libra_concatenated_monomial_form.coefficients[idx],
+                masking_scalars.evaluations[idx],
+            );
+            self.libra_concatenated_monomial_form.coefficients[P::SUBGROUP_SIZE + idx] = T::add(
+                driver,
+                self.libra_concatenated_monomial_form.coefficients[P::SUBGROUP_SIZE + idx],
+                masking_scalars.evaluations[idx],
+            );
         }
         Ok(())
     }
@@ -242,34 +260,49 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         &mut self,
         round_challenge: P::ScalarField,
         round_idx: usize,
+        driver: &mut T,
     ) {
         let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         // when round_idx = d - 1, the update is not needed
         if round_idx < self.log_circuit_size - 1 {
             for univariate in &mut self.libra_univariates {
-                *univariate *= two_inv;
+                univariate.mul_assign(two_inv, driver);
             }
             // compute the evaluation \f$ \rho \cdot 2^{d-2-i} \çdot g_i(u_i) \f$
-            let libra_evaluation = self.libra_univariates[round_idx].eval_poly(round_challenge);
+            let libra_evaluation = driver.eval_poly(
+                &self.libra_univariates[round_idx].coefficients,
+                round_challenge,
+            );
             let next_libra_univariate = &self.libra_univariates[round_idx + 1];
             // update the running sum by adding g_i(u_i) and subtracting (g_i(0) + g_i(1))
-            self.libra_running_sum += -next_libra_univariate.coefficients[0]
-                - next_libra_univariate.eval_poly(P::ScalarField::one());
-            self.libra_running_sum *= two_inv;
+            let eval = driver.eval_poly(&next_libra_univariate.coefficients, P::ScalarField::one());
+            let add = T::add(driver, next_libra_univariate.coefficients[0], eval);
+            self.libra_running_sum = T::sub(driver, self.libra_running_sum, add);
+            self.libra_running_sum = T::mul_with_public(driver, two_inv, self.libra_running_sum);
 
-            self.libra_running_sum += libra_evaluation;
+            self.libra_running_sum = T::add(driver, self.libra_running_sum, libra_evaluation);
             self.libra_scaling_factor *= two_inv;
 
-            self.libra_evaluations
-                .push(libra_evaluation / self.libra_scaling_factor);
+            self.libra_evaluations.push(T::mul_with_public(
+                driver,
+                self.libra_scaling_factor.inverse().expect("non-zero"),
+                libra_evaluation,
+            ));
         } else {
             // compute the evaluation of the last Libra univariate at the challenge u_{d-1}
-            let libra_evaluation = self.libra_univariates[round_idx].eval_poly(round_challenge)
-                / self.libra_scaling_factor;
+            let eval = driver.eval_poly(
+                &self.libra_univariates[round_idx].coefficients,
+                round_challenge,
+            );
+            let libra_evaluation = T::mul_with_public(
+                driver,
+                self.libra_scaling_factor.inverse().expect("non-zero"),
+                eval,
+            );
             // place the evalution into the vector of Libra evaluations
             self.libra_evaluations.push(libra_evaluation);
             for univariate in &mut self.libra_univariates {
-                *univariate *= self.libra_challenge.inverse().expect("non-zero");
+                univariate.mul_assign(self.libra_challenge.inverse().expect("non-zero"), driver);
             }
         }
     }

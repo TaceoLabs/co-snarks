@@ -1,15 +1,18 @@
-use super::SumcheckOutput;
+use super::{zk_data::SharedZKSumcheckData, SumcheckOutput};
 use crate::{
     co_decider::{
         co_sumcheck::round::SumcheckRound,
         prover::CoDecider,
-        types::{ClaimedEvaluations, PartiallyEvaluatePolys, MAX_PARTIAL_RELATION_LENGTH},
+        types::{
+            ClaimedEvaluations, PartiallyEvaluatePolys, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+            MAX_PARTIAL_RELATION_LENGTH,
+        },
     },
     mpc::NoirUltraHonkProver,
     types::AllEntities,
     CONST_PROOF_SIZE_LOG_N,
 };
-use co_builder::prelude::HonkCurve;
+use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
 use ultrahonk::{
     prelude::{
@@ -234,7 +237,149 @@ impl<
         let res = SumcheckOutput {
             _claimed_evaluations: multivariate_evaluations,
             challenges: multivariate_challenge,
+            claimed_libra_evaluation: None,
         };
         Ok(res)
+    }
+
+    pub(crate) fn sumcheck_prove_zk(
+        &mut self,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        circuit_size: u32,
+        zk_sumcheck_data: &mut SharedZKSumcheckData<T, P>,
+    ) -> HonkProofResult<SumcheckOutput<P::ScalarField>> {
+        tracing::trace!("Sumcheck prove");
+
+        // Ensure that the length of Sumcheck Round Univariates does not exceed the length of Libra masking
+        // polynomials.
+        assert!(BATCHED_RELATION_PARTIAL_LENGTH_ZK <= P::LIBRA_UNIVARIATES_LENGTH);
+
+        let multivariate_n = circuit_size;
+        let multivariate_d = Utils::get_msb64(multivariate_n as u64);
+
+        let mut sum_check_round = SumcheckRound::new(multivariate_n as usize);
+        let mut row_disabling_polynomial = RowDisablingPolynomial::<P::ScalarField>::default();
+        let mut gate_separators = GateSeparatorPolynomial::new(
+            self.memory.relation_parameters.gate_challenges.to_owned(),
+            multivariate_d as usize,
+        );
+
+        let mut multivariate_challenge = Vec::with_capacity(multivariate_d as usize);
+        let round_idx = 0;
+
+        tracing::trace!("Sumcheck prove round {}", round_idx);
+
+        // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
+        // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
+        // compute_univariate also takes into account the zk_sumcheck_data.
+        let round_univariate = sum_check_round.compute_univariate_zk::<T, P>(
+            &mut self.driver,
+            round_idx,
+            &self.memory.relation_parameters,
+            &gate_separators,
+            &self.memory.polys,
+            zk_sumcheck_data,
+            &mut row_disabling_polynomial,
+        )?;
+        let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
+
+        // Place the evaluations of the round univariate into transcript.
+        transcript.send_fr_iter_to_verifier::<P, _>(
+            "Sumcheck:univariate_0".to_string(),
+            &round_univariate,
+        );
+        let round_challenge = transcript.get_challenge::<P>("Sumcheck:u_0".to_string());
+        multivariate_challenge.push(round_challenge);
+
+        // Prepare sumcheck book-keeping table for the next round
+        let mut partially_evaluated_polys =
+            PartiallyEvaluatePolys::<T, P>::new(multivariate_n as usize >> 1);
+        Self::partially_evaluate_init(
+            &mut self.driver,
+            &mut partially_evaluated_polys,
+            &self.memory.polys,
+            multivariate_n as usize,
+            &round_challenge,
+        );
+        zk_sumcheck_data.update_zk_sumcheck_data(round_challenge, round_idx, &mut self.driver);
+
+        row_disabling_polynomial.update_evaluations(round_challenge, round_idx);
+
+        gate_separators.partially_evaluate(round_challenge);
+        sum_check_round.round_size >>= 1; // AZTEC TODO(#224)(Cody): Maybe partially_evaluate should do this and
+                                          // release memory?        // All but final round
+                                          // We operate on partially_evaluated_polynomials in place.
+        for round_idx in 1..multivariate_d as usize {
+            tracing::trace!("Sumcheck prove round {}", round_idx);
+            // Write the round univariate to the transcript
+
+            let round_univariate = sum_check_round.compute_univariate_zk::<T, P>(
+                &mut self.driver,
+                round_idx,
+                &self.memory.relation_parameters,
+                &gate_separators,
+                &partially_evaluated_polys,
+                zk_sumcheck_data,
+                &mut row_disabling_polynomial,
+            )?;
+            let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
+
+            // Place the evaluations of the round univariate into transcript.
+            transcript.send_fr_iter_to_verifier::<P, _>(
+                format!("Sumcheck:univariate_{}", round_idx),
+                &round_univariate,
+            );
+            let round_challenge =
+                transcript.get_challenge::<P>(format!("Sumcheck:u_{}", round_idx));
+            multivariate_challenge.push(round_challenge);
+            // Prepare sumcheck book-keeping table for the next round
+            Self::partially_evaluate_inplace(
+                &mut self.driver,
+                &mut partially_evaluated_polys,
+                sum_check_round.round_size,
+                &round_challenge,
+            );
+            // Prepare evaluation masking and libra structures for the next round (for ZK Flavors)
+            zk_sumcheck_data.update_zk_sumcheck_data(round_challenge, round_idx, &mut self.driver);
+            row_disabling_polynomial.update_evaluations(round_challenge, round_idx);
+
+            gate_separators.partially_evaluate(round_challenge);
+            sum_check_round.round_size >>= 1;
+        }
+        tracing::trace!("Completed {multivariate_d} rounds of sumcheck");
+
+        // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
+        let zero_univariate =
+            Univariate::<P::ScalarField, { BATCHED_RELATION_PARTIAL_LENGTH_ZK }>::default();
+        for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
+            transcript.send_fr_iter_to_verifier::<P, _>(
+                format!("Sumcheck:univariate_{}", idx),
+                &zero_univariate.evaluations,
+            );
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{}", idx));
+            multivariate_challenge.push(round_challenge);
+        }
+
+        // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
+        // evaluations of all witnesses are masked.
+        let multivariate_evaluations =
+            Self::extract_claimed_evaluations(&mut self.driver, partially_evaluated_polys)?;
+        Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
+
+        // The evaluations of Libra uninvariates at \f$ g_0(u_0), \ldots, g_{d-1} (u_{d-1}) \f$ are added to the
+        // transcript.
+        let mut libra_evaluation = zk_sumcheck_data.constant_term;
+        for libra_eval in &zk_sumcheck_data.libra_evaluations {
+            libra_evaluation = T::add(&self.driver, libra_evaluation, *libra_eval);
+        }
+        let libra_evaluation = T::open_many(&mut self.driver, &[libra_evaluation])?[0];
+        transcript
+            .send_fr_to_verifier::<P>("Libra:claimed_evaluation".to_string(), libra_evaluation);
+
+        Ok(SumcheckOutput {
+            _claimed_evaluations: multivariate_evaluations,
+            challenges: multivariate_challenge,
+            claimed_libra_evaluation: Some(libra_evaluation),
+        })
     }
 }

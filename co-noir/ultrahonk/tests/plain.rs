@@ -1,8 +1,8 @@
 use ark_bn254::Bn254;
 use co_builder::prelude::CrsParser;
 use co_builder::prelude::HonkRecursion;
+use co_builder::prelude::ZeroKnowledge;
 use sha3::Keccak256;
-use ultrahonk::prelude::ZeroKnowledge;
 use ultrahonk::{
     prelude::{
         HonkProof, PlainAcvmSolver, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher,
@@ -35,7 +35,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size).unwrap();
+    let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
     let (prover_crs, verififer_crs) = crs.split();
 
     let (proving_key, verifying_key) = builder

@@ -1,9 +1,13 @@
 //  modified from barustenberg:
 
 use super::{Crs, ProverCrs};
+use crate::prelude::HonkCurve;
+use crate::types::types::ZeroKnowledge;
+use crate::TranscriptFieldType;
 use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_serialize::CanonicalDeserialize;
 use eyre::{anyhow, Result};
+use std::cmp::max;
 use std::fs::File;
 use std::io::Read;
 use std::marker::PhantomData;
@@ -20,22 +24,44 @@ pub struct NewFileStructure<P: Pairing> {
 }
 
 impl<P: Pairing> NewFileStructure<P> {
+    fn crs_size_from_circuit_size(circuit_size: usize, has_zk: ZeroKnowledge) -> usize
+    where
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        if has_zk == ZeroKnowledge::No {
+            circuit_size
+        } else {
+            max(circuit_size, P::SUBGROUP_SIZE * 2)
+        }
+    }
+
     pub fn get_crs(
         path_g1: impl AsRef<Path>,
         path_g2: impl AsRef<Path>,
-        crs_size: usize,
-    ) -> Result<Crs<P>> {
-        let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size];
+        circuit_size: usize,
+        has_zk: ZeroKnowledge,
+    ) -> Result<Crs<P>>
+    where
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        let crs_size = Self::crs_size_from_circuit_size(circuit_size, has_zk);
+        let mut monomials = vec![P::G1Affine::default(); crs_size];
         let mut g2_x = P::G2Affine::default();
         Self::read_transcript(&mut monomials, &mut g2_x, crs_size, path_g1, path_g2)?;
-
         Ok(Crs { monomials, g2_x })
     }
 
-    pub fn get_crs_g1(path_g1: impl AsRef<Path>, crs_size: usize) -> Result<ProverCrs<P>> {
-        let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size];
+    pub fn get_crs_g1(
+        path_g1: impl AsRef<Path>,
+        circuit_size: usize,
+        has_zk: ZeroKnowledge,
+    ) -> Result<ProverCrs<P>>
+    where
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        let crs_size = Self::crs_size_from_circuit_size(circuit_size, has_zk);
+        let mut monomials = vec![P::G1Affine::default(); crs_size];
         Self::read_transcript_g1(&mut monomials, crs_size, path_g1)?;
-
         Ok(ProverCrs { monomials })
     }
 
@@ -71,8 +97,7 @@ trait FileProcessor<P: Pairing> {
         Ok(())
     }
     fn read_elements_from_buffer<G: AffineRepr>(elements: &mut [G], buffer: &mut [u8]) {
-        #[expect(unused_mut)]
-        for (mut element, chunk) in elements.iter_mut().zip(buffer.chunks_exact_mut(64)) {
+        for (element, chunk) in elements.iter_mut().zip(buffer.chunks_exact_mut(64)) {
             Self::convert_endianness_inplace(chunk);
             #[allow(clippy::redundant_slicing)]
             if let Ok(val) = G::deserialize_uncompressed_unchecked(&chunk[..]) {

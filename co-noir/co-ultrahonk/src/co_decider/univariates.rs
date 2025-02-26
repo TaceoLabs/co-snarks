@@ -154,6 +154,14 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
         }
     }
 
+    pub fn get_random(driver: &mut T) -> std::io::Result<Self> {
+        let mut evaluations = [T::ArithmeticShare::default(); SIZE];
+        for eval in evaluations.iter_mut() {
+            *eval = driver.rand()?;
+        }
+        Ok(Self { evaluations })
+    }
+
     /**
      * @brief Given a univariate f represented by {f(domain_start), ..., f(domain_end - 1)}, compute the
      * evaluations {f(domain_end),..., f(extended_domain_end -1)} and return the Univariate represented by

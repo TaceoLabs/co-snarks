@@ -10,7 +10,6 @@ use crate::types::Polynomials;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::ActiveRegionData;
 use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::PrecomputedEntities;
@@ -18,15 +17,16 @@ use co_builder::prelude::ProverCrs;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
 use co_builder::prelude::AGGREGATION_OBJECT_SIZE;
+use co_builder::prelude::{ActiveRegionData, HonkCurve};
 use co_builder::prelude::{AggregationObjectPubInputIndices, ProverWitnessEntities};
-use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
+use co_builder::{HonkProofError, TranscriptFieldType};
 use eyre::Result;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
-use ultrahonk::prelude::VerifyingKeyBarretenberg;
+use ultrahonk::prelude::{VerifyingKeyBarretenberg, ZeroKnowledge};
 use ultrahonk::Utils;
 
 #[derive(Serialize, Deserialize)]
@@ -346,7 +346,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         })
     }
 
-    pub fn ultrahonk_num_randomness(&self) -> usize {
+    pub fn ultrahonk_num_randomness(&self, has_zk: ZeroKnowledge) -> usize
+    where
+        P: HonkCurve<TranscriptFieldType>,
+    {
         // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
         let active_domain_size_mul = if self.active_region_data.size() > 0 {
             self.active_region_data.size() - 1
@@ -360,7 +363,27 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             + CRAND_PAIRS_CONST;
         // log2(n) * ((n >>= 1) / 2) == n - 1
         let num_pairs_sumcheck_prove = CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
-        num_pairs_oink_prove + num_pairs_sumcheck_prove
+
+        let num_pairs_sumcheck_disabled_contributions = if has_zk == ZeroKnowledge::No {
+            0
+        } else {
+            // compute_disabled_contribution: log2(n) rounds, each once relation, plus additional in round 0
+            (n.ilog(2) as usize + 1) * CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH
+        };
+
+        let num_zk_randomness = if has_zk == ZeroKnowledge::No {
+            0
+        } else {
+            n // compute_batched_polys
+            + 1 // ZKData::new
+            + n.ilog2() as usize * P::LIBRA_UNIVARIATES_LENGTH // generate_libra_univariates
+            + 2 // compute_concatenated_libra_polynomial
+            + 3 // compute_big_sum_polynomial
+        };
+        num_pairs_oink_prove
+            + num_pairs_sumcheck_prove
+            + num_pairs_sumcheck_disabled_contributions
+            + num_zk_randomness
     }
 
     pub fn create_vk(

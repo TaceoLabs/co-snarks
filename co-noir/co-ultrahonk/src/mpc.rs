@@ -1,4 +1,5 @@
 use ark_ec::pairing::Pairing;
+use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 pub(crate) mod plain;
@@ -79,6 +80,13 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     /// Reconstructs many shared values: a = Open(\[a\]).
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<P::ScalarField>>;
 
+    /// Reconstructs a shared point and a field element: (a,b) = Open(\[(a,b)\])
+    fn open_point_and_field(
+        &mut self,
+        a: Self::PointShare,
+        b: Self::ArithmeticShare,
+    ) -> std::io::Result<(P::G1, P::ScalarField)>;
+
     /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
     fn mul_open_many(
         &mut self,
@@ -115,4 +123,16 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         coeffs: &[Self::ArithmeticShare],
         point: P::ScalarField,
     ) -> Self::ArithmeticShare;
+
+    /// Computes the FFT of a vector of shared field elements.
+    fn fft<D: EvaluationDomain<P::ScalarField>>(
+        data: &[Self::ArithmeticShare],
+        domain: &D,
+    ) -> Vec<Self::ArithmeticShare>;
+
+    /// Computes the inverse FFT of a vector of shared field elements.
+    fn ifft<D: EvaluationDomain<P::ScalarField>>(
+        data: &[Self::ArithmeticShare],
+        domain: &D,
+    ) -> Vec<Self::ArithmeticShare>;
 }

@@ -7,26 +7,10 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use co_builder::{
-    prelude::{HonkCurve, ProvingKey},
+    prelude::{HonkCurve, ProvingKey, ZeroKnowledge},
     HonkProofResult,
 };
 use std::marker::PhantomData;
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ZeroKnowledge {
-    No,
-    Yes,
-}
-
-impl From<bool> for ZeroKnowledge {
-    fn from(value: bool) -> Self {
-        if value {
-            ZeroKnowledge::Yes
-        } else {
-            ZeroKnowledge::No
-        }
-    }
-}
 
 pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
     phantom_data: PhantomData<P>,

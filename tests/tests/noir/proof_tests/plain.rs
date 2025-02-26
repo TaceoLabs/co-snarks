@@ -35,14 +35,13 @@ fn convert_witness_plain<F: PrimeField>(mut witness_stack: WitnessStack<F>) -> V
     witness_map_to_witness_vector(witness_map)
 }
 
-fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
+fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: ZeroKnowledge) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
 
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_file, true)
         .expect("failed to parse program artifact");
     let witness = Utils::get_witness_from_file(&witness_file).expect("failed to parse witness");
-    let has_zk = ZeroKnowledge::No;
 
     let mut driver = PlainAcvmSolver::new();
     let builder = PlainCoBuilder::<Bn254>::create_circuit(
@@ -56,26 +55,29 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let (prover_crs, verifier_crs) = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size)
+    let (prover_crs, verifier_crs) = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
         .expect("failed to get crs")
         .split();
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs).unwrap();
+    let proof =
+        CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs, has_zk).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 
-fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
+fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
+    name: &str,
+    has_zk: ZeroKnowledge,
+) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", name);
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-    let has_zk = ZeroKnowledge::No;
 
     let solver = PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
     let witness = solver.solve().unwrap().0;
@@ -93,13 +95,14 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let (prover_crs, verifier_crs) = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size)
+    let (prover_crs, verifier_crs) = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
         .expect("failed to get crs")
         .split();
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let proof = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs).unwrap();
+    let proof =
+        CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs, has_zk).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key, has_zk).unwrap();
     assert!(is_valid);
@@ -107,20 +110,24 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
 
 #[test]
 fn poseidon_witness_and_proof_test_poseidon2sponge() {
-    witness_and_proof_test::<Poseidon2Sponge>("poseidon");
+    witness_and_proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::No);
+    witness_and_proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_proof_test_poseidon2sponge() {
-    proof_test::<Poseidon2Sponge>("poseidon");
+    proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::No);
+    proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_witness_and_proof_test_keccak256() {
-    witness_and_proof_test::<Keccak256>("poseidon");
+    witness_and_proof_test::<Keccak256>("poseidon", ZeroKnowledge::No);
+    witness_and_proof_test::<Keccak256>("poseidon", ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_proof_test_keccak256() {
-    proof_test::<Keccak256>("poseidon");
+    proof_test::<Keccak256>("poseidon", ZeroKnowledge::No);
+    proof_test::<Keccak256>("poseidon", ZeroKnowledge::Yes);
 }

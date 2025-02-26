@@ -1,8 +1,14 @@
+use std::marker::PhantomData;
+
+use crate::mpc::NoirUltraHonkProver;
 use crate::prelude::TranscriptHasher;
-use crate::prelude::Univariate;
-use crate::Utils;
+use crate::CoUtils;
 use crate::CONST_PROOF_SIZE_LOG_N;
-use crate::{prelude::Transcript, transcript::TranscriptFieldType};
+use ultrahonk::prelude::Transcript;
+
+use super::co_sumcheck::zk_data::SharedZKSumcheckData;
+use super::polynomial::SharedPolynomial;
+use super::univariates::SharedUnivariate;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::Zero;
@@ -10,67 +16,74 @@ use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
-use rand::{CryptoRng, Rng};
+use co_builder::TranscriptFieldType;
 
-use super::sumcheck::zk_data::ZKSumcheckData;
-
-pub(crate) struct SmallSubgroupIPAProver<P: Pairing> {
+pub(crate) struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: Pairing> {
     interpolation_domain: Vec<P::ScalarField>,
-    concatenated_polynomial: Polynomial<P::ScalarField>,
-    libra_concatenated_lagrange_form: Polynomial<P::ScalarField>,
+    concatenated_polynomial: SharedPolynomial<T, P>,
+    libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
     challenge_polynomial: Polynomial<P::ScalarField>,
     challenge_polynomial_lagrange: Polynomial<P::ScalarField>,
-    big_sum_polynomial_unmasked: Polynomial<P::ScalarField>,
-    big_sum_polynomial: Polynomial<P::ScalarField>,
-    big_sum_lagrange_coeffs: Vec<P::ScalarField>,
-    batched_polynomial: Polynomial<P::ScalarField>,
-    batched_quotient: Polynomial<P::ScalarField>,
+    big_sum_polynomial_unmasked: SharedPolynomial<T, P>,
+    big_sum_polynomial: SharedPolynomial<T, P>,
+    big_sum_lagrange_coeffs: Vec<T::ArithmeticShare>,
+    batched_polynomial: SharedPolynomial<T, P>,
+    batched_quotient: SharedPolynomial<T, P>,
     domain: GeneralEvaluationDomain<P::ScalarField>,
+    phantom_data: PhantomData<T>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
+    SharedSmallSubgroupIPAProver<T, P>
+{
     const SUBGROUP_SIZE: usize = P::SUBGROUP_SIZE;
     const BATCHED_POLYNOMIAL_LENGTH: usize = 2 * P::SUBGROUP_SIZE + 2;
     const QUOTIENT_LENGTH: usize = Self::SUBGROUP_SIZE + 2;
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
-        zk_sumcheck_data: ZKSumcheckData<P>,
+    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>>(
+        driver: &mut T,
+        zk_sumcheck_data: SharedZKSumcheckData<T, P>,
         multivariate_challenge: &[P::ScalarField],
         claimed_ipa_eval: P::ScalarField,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         commitment_key: &ProverCrs<P>,
-        rng: &mut R,
     ) -> HonkProofResult<Self> {
-        let mut prover = SmallSubgroupIPAProver {
+        let mut prover = SharedSmallSubgroupIPAProver {
             interpolation_domain: zk_sumcheck_data.interpolation_domain,
 
             concatenated_polynomial: zk_sumcheck_data.libra_concatenated_monomial_form,
             libra_concatenated_lagrange_form: zk_sumcheck_data.libra_concatenated_lagrange_form,
             challenge_polynomial: Polynomial::new_zero(Self::SUBGROUP_SIZE),
             challenge_polynomial_lagrange: Polynomial::new_zero(Self::SUBGROUP_SIZE),
-            big_sum_polynomial_unmasked: Polynomial::new_zero(Self::SUBGROUP_SIZE),
-            big_sum_polynomial: Polynomial::new_zero(Self::SUBGROUP_SIZE + 3),
-            big_sum_lagrange_coeffs: vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE],
-            batched_polynomial: Polynomial::new_zero(Self::BATCHED_POLYNOMIAL_LENGTH),
-            batched_quotient: Polynomial::new_zero(Self::QUOTIENT_LENGTH),
-            // TACEO TOOD the ZKSumcheckData also creates the same domain
+            big_sum_polynomial_unmasked: SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE),
+            big_sum_polynomial: SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE + 3),
+            big_sum_lagrange_coeffs: vec![T::ArithmeticShare::default(); Self::SUBGROUP_SIZE],
+            batched_polynomial: SharedPolynomial::<T, P>::new_zero(Self::BATCHED_POLYNOMIAL_LENGTH),
+            batched_quotient: SharedPolynomial::<T, P>::new_zero(Self::QUOTIENT_LENGTH),
             domain: GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE)
                 .ok_or(HonkProofError::LargeSubgroup)?,
+            phantom_data: PhantomData,
         };
-
         prover.compute_challenge_polynomial(multivariate_challenge);
-        prover.compute_big_sum_polynomial(rng);
-        let libra_big_sum_commitment =
-            Utils::commit(&prover.big_sum_polynomial.coefficients, commitment_key)?;
+        prover.compute_big_sum_polynomial(driver)?;
+
+        let libra_big_sum_commitment_shared = CoUtils::commit::<T, P>(
+            prover.big_sum_polynomial.coefficients.as_ref(),
+            commitment_key,
+        );
+        let libra_big_sum_commitment = T::open_point(driver, libra_big_sum_commitment_shared)?;
         transcript.send_point_to_verifier::<P>(
             "Libra:big_sum_commitment".to_string(),
             libra_big_sum_commitment.into(),
         );
 
-        prover.compute_batched_polynomial(claimed_ipa_eval);
-        prover.compute_batched_quotient();
+        prover.compute_batched_polynomial(claimed_ipa_eval, driver);
+        prover.compute_batched_quotient(driver);
 
-        let libra_quotient_commitment =
-            Utils::commit(&prover.batched_quotient.coefficients, commitment_key)?;
+        let libra_quotient_commitment_shared = CoUtils::commit::<T, P>(
+            prover.batched_quotient.coefficients.as_ref(),
+            commitment_key,
+        );
+        let libra_quotient_commitment = T::open_point(driver, libra_quotient_commitment_shared)?;
         transcript.send_point_to_verifier::<P>(
             "Libra:quotient_commitment".to_string(),
             libra_quotient_commitment.into(),
@@ -153,32 +166,45 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
      *   vanishing polynomial.
      *
      */
-    fn compute_big_sum_polynomial<R: Rng + CryptoRng>(&mut self, rng: &mut R) {
-        self.big_sum_lagrange_coeffs[0] = P::ScalarField::zero();
+    fn compute_big_sum_polynomial(&mut self, driver: &mut T) -> HonkProofResult<()> {
+        self.big_sum_lagrange_coeffs[0] = T::ArithmeticShare::default();
 
         // Compute the big sum coefficients recursively
         for idx in 1..Self::SUBGROUP_SIZE {
             let prev_idx = idx - 1;
-            self.big_sum_lagrange_coeffs[idx] = self.big_sum_lagrange_coeffs[prev_idx]
-                + self.challenge_polynomial_lagrange.coefficients[prev_idx]
-                    * self.libra_concatenated_lagrange_form.coefficients[prev_idx];
+            let mul = T::mul_with_public(
+                driver,
+                self.challenge_polynomial_lagrange.coefficients[prev_idx],
+                self.libra_concatenated_lagrange_form.coefficients[prev_idx],
+            );
+            self.big_sum_lagrange_coeffs[idx] =
+                T::add(driver, mul, self.big_sum_lagrange_coeffs[prev_idx]);
         }
 
         //  Get the coefficients in the monomial basis
-        let big_sum_ifft = self.domain.ifft(&self.big_sum_lagrange_coeffs);
-        self.big_sum_polynomial_unmasked = Polynomial {
+        let big_sum_ifft = T::ifft(&self.big_sum_lagrange_coeffs, &self.domain);
+        self.big_sum_polynomial_unmasked = SharedPolynomial {
             coefficients: big_sum_ifft,
         };
 
         //  Generate random masking_term of degree 2, add Z_H(X) * masking_term
-        let masking_term = Univariate::<P::ScalarField, 3>::get_random(rng);
-        self.big_sum_polynomial += &self.big_sum_polynomial_unmasked.coefficients;
+        let masking_term = SharedUnivariate::<T, P, 3>::get_random(driver)?;
+        self.big_sum_polynomial
+            .add_assign_slice(driver, &self.big_sum_polynomial_unmasked.coefficients);
 
         for idx in 0..masking_term.evaluations.len() {
-            self.big_sum_polynomial.coefficients[idx] -= masking_term.evaluations[idx];
-            self.big_sum_polynomial.coefficients[idx + Self::SUBGROUP_SIZE] +=
-                masking_term.evaluations[idx];
+            self.big_sum_polynomial.coefficients[idx] = T::sub(
+                driver,
+                self.big_sum_polynomial.coefficients[idx],
+                masking_term.evaluations[idx],
+            );
+            self.big_sum_polynomial.coefficients[idx + Self::SUBGROUP_SIZE] = T::add(
+                driver,
+                self.big_sum_polynomial.coefficients[idx + Self::SUBGROUP_SIZE],
+                masking_term.evaluations[idx],
+            );
         }
+        Ok(())
     }
 
     /**
@@ -186,13 +212,16 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
      * \f$ is the fixed generator of \f$ H \f$.
      *
      */
-    fn compute_batched_polynomial(&mut self, claimed_evaluation: P::ScalarField) {
+    fn compute_batched_polynomial(&mut self, claimed_evaluation: P::ScalarField, driver: &mut T) {
         // Compute shifted big sum polynomial A(gX)
-        let mut shifted_big_sum = Polynomial::new_zero(Self::SUBGROUP_SIZE + 3);
+        let mut shifted_big_sum = SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE + 3);
 
         for idx in 0..(Self::SUBGROUP_SIZE + 3) {
-            shifted_big_sum.coefficients[idx] = self.big_sum_polynomial.coefficients[idx]
-                * self.interpolation_domain[idx % Self::SUBGROUP_SIZE];
+            shifted_big_sum.coefficients[idx] = T::mul_with_public(
+                driver,
+                self.interpolation_domain[idx % Self::SUBGROUP_SIZE],
+                self.big_sum_polynomial.coefficients[idx],
+            );
         }
 
         let (lagrange_first, lagrange_last) = self.compute_lagrange_polynomials();
@@ -200,16 +229,25 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         // Compute -F(X)*G(X), the negated product of challenge_polynomial and libra_concatenated_monomial_form
         for i in 0..self.concatenated_polynomial.coefficients.len() {
             for j in 0..self.challenge_polynomial.coefficients.len() {
-                self.batched_polynomial.coefficients[i + j] -=
-                    self.concatenated_polynomial.coefficients[i]
-                        * self.challenge_polynomial.coefficients[j];
+                let mul = T::mul_with_public(
+                    driver,
+                    self.challenge_polynomial.coefficients[j],
+                    self.concatenated_polynomial.coefficients[i],
+                );
+                self.batched_polynomial.coefficients[i + j] =
+                    T::sub(driver, self.batched_polynomial.coefficients[i + j], mul);
             }
         }
 
         // Compute - F(X) * G(X) + A(gX) - A(X)
         for idx in 0..shifted_big_sum.coefficients.len() {
-            self.batched_polynomial.coefficients[idx] +=
-                shifted_big_sum.coefficients[idx] - self.big_sum_polynomial.coefficients[idx];
+            let sub = T::sub(
+                driver,
+                shifted_big_sum.coefficients[idx],
+                self.big_sum_polynomial.coefficients[idx],
+            );
+            self.batched_polynomial.coefficients[idx] =
+                T::add(driver, self.batched_polynomial.coefficients[idx], sub);
         }
 
         // Mutiply - F(X) * G(X) + A(gX) - A(X) by X-g:
@@ -218,40 +256,58 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
             self.batched_polynomial.coefficients[idx] =
                 self.batched_polynomial.coefficients[idx - 1];
         }
-        self.batched_polynomial.coefficients[0] = P::ScalarField::zero();
+        self.batched_polynomial.coefficients[0] = T::ArithmeticShare::default();
 
         // 2. Subtract  1/g(A(gX) - A(X) - F(X) * G(X))
         for idx in 0..self.batched_polynomial.coefficients.len() - 1 {
             let tmp = self.batched_polynomial.coefficients[idx + 1];
-            self.batched_polynomial.coefficients[idx] -=
-                tmp * self.interpolation_domain[Self::SUBGROUP_SIZE - 1];
+            let mul = T::mul_with_public(
+                driver,
+                self.interpolation_domain[Self::SUBGROUP_SIZE - 1],
+                tmp,
+            );
+            self.batched_polynomial.coefficients[idx] =
+                T::sub(driver, self.batched_polynomial.coefficients[idx], mul);
         }
 
         // Add (L_1 + L_{|H|}) * A(X) to the result
         for i in 0..self.big_sum_polynomial.coefficients.len() {
             for j in 0..Self::SUBGROUP_SIZE {
-                self.batched_polynomial.coefficients[i + j] += self.big_sum_polynomial.coefficients
-                    [i]
-                    * (lagrange_first.coefficients[j] + lagrange_last.coefficients[j]);
+                let mul = T::mul_with_public(
+                    driver,
+                    lagrange_first.coefficients[j] + lagrange_last.coefficients[j],
+                    self.big_sum_polynomial.coefficients[i],
+                );
+                self.batched_polynomial.coefficients[i + j] =
+                    T::add(driver, self.batched_polynomial.coefficients[i + j], mul);
             }
         }
 
         // Subtract L_{|H|} * s
         for idx in 0..Self::SUBGROUP_SIZE {
-            self.batched_polynomial.coefficients[idx] -=
-                lagrange_last.coefficients[idx] * claimed_evaluation;
+            self.batched_polynomial.coefficients[idx] = T::add_with_public(
+                driver,
+                -lagrange_last.coefficients[idx] * claimed_evaluation,
+                self.batched_polynomial.coefficients[idx],
+            );
         }
     }
 
     /** @brief Efficiently compute the quotient of batched_polynomial by Z_H = X ^ { | H | } - 1
      */
-    fn compute_batched_quotient(&mut self) {
+    fn compute_batched_quotient(&mut self, driver: &mut T) {
         let mut remainder = self.batched_polynomial.clone();
         for idx in (Self::SUBGROUP_SIZE..Self::BATCHED_POLYNOMIAL_LENGTH).rev() {
             self.batched_quotient.coefficients[idx - Self::SUBGROUP_SIZE] =
                 remainder.coefficients[idx];
+
             let tmp = remainder.coefficients[idx];
-            remainder.coefficients[idx - Self::SUBGROUP_SIZE] += tmp;
+
+            remainder.coefficients[idx - Self::SUBGROUP_SIZE] = T::add(
+                driver,
+                tmp,
+                remainder.coefficients[idx - Self::SUBGROUP_SIZE],
+            );
         }
         self.batched_polynomial = remainder;
     }
@@ -290,7 +346,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
     }
 
     // Getter to pass the witnesses to ShpleminiProver. Big sum polynomial is evaluated at 2 points (and is small)
-    pub(crate) fn into_witness_polynomials(self) -> [Polynomial<P::ScalarField>; 4] {
+    pub(crate) fn into_witness_polynomials(self) -> [SharedPolynomial<T, P>; 4] {
         [
             self.concatenated_polynomial,
             self.big_sum_polynomial.to_owned(),

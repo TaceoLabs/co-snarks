@@ -13,3 +13,4 @@ find . -name "vk.bb*" -type f -delete
 cd test_vectors
 find . -name "vk" -type f -delete
 find . -name "proof" -type f -delete
+find . -name "zk_proof" -type f -delete

@@ -189,6 +189,9 @@ pub struct SplitProvingKeyCli {
     /// Generate a recursive proof
     #[arg(long)]
     pub recursive: bool,
+    /// Prove with or without the zero knowledge property
+    #[arg(long)]
+    pub zk: bool,
 }
 
 /// Config for `split_proving_key`
@@ -210,6 +213,8 @@ pub struct SplitProvingKeyConfig {
     pub num_parties: usize,
     /// Generate a recursive proof
     pub recursive: bool,
+    /// Prove with or without the zero knowledge property
+    pub zk: bool,
 }
 
 /// Cli arguments for `merge_input_shares`
@@ -450,6 +455,9 @@ pub struct GenerateProofCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub crs: Option<PathBuf>,
+    /// Prove with or without the zero knowledge property
+    #[arg(long)]
+    pub zk: bool,
 }
 
 /// Config for `generate_proof`
@@ -473,6 +481,8 @@ pub struct GenerateProofConfig {
     pub recursive: bool,
     /// The path to the prover crs file
     pub crs: PathBuf,
+    /// Prove with or without the zero knowledge property
+    pub zk: bool,
 }
 
 /// Cli arguments for `build_and_generate_proof`
@@ -516,6 +526,9 @@ pub struct BuildAndGenerateProofCli {
     /// Generate a recursive proof
     #[arg(long)]
     pub recursive: bool,
+    /// Prove with or without the zero knowledge property
+    #[arg(long)]
+    pub zk: bool,
 }
 
 /// Config for `build_and_generate_proof`
@@ -541,6 +554,8 @@ pub struct BuildAndGenerateProofConfig {
     pub network: NetworkConfigFile,
     /// Generate a recursive proof
     pub recursive: bool,
+    /// Prove with or without the zero knowledge property
+    pub zk: bool,
 }
 
 /// Cli arguments for `creating_vk`
@@ -925,14 +940,15 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     let t = config.threshold;
     let n = config.num_parties;
     let recursive = config.recursive;
+    let has_zk = ZeroKnowledge::from(config.zk);
 
     // parse constraint system
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
         .context("while parsing program artifact")?;
     // parse witness
     let witness = Utils::get_witness_from_file(&witness_path).context("while parsing witness")?;
-    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
-    let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, crs_size)?;
+    let circuit_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
+    let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, circuit_size, has_zk)?;
     let proving_key = co_noir::generate_proving_key_plain(
         &constraint_system,
         witness,
@@ -1314,6 +1330,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let public_input_filename = config.public_input;
     let t = config.threshold;
     let crs_path = config.crs;
+    let has_zk = ZeroKnowledge::from(config.zk);
 
     let network_config = config
         .network
@@ -1337,8 +1354,11 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254> =
                 bincode::deserialize_from(proving_key_file)
                     .context("while deserializing input share")?;
-            let prover_crs =
-                CrsParser::<Bn254>::get_crs_g1(crs_path, proving_key.circuit_size as usize)?;
+            let prover_crs = CrsParser::<Bn254>::get_crs_g1(
+                crs_path,
+                proving_key.circuit_size as usize,
+                has_zk,
+            )?;
             let public_input = proving_key.get_public_inputs();
             match hasher {
                 TranscriptHash::POSEIDON => {
@@ -1348,6 +1368,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                         net,
                         proving_key,
                         &prover_crs,
+                        has_zk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
@@ -1358,8 +1379,12 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, net) =
-                        Rep3CoUltraHonk::<_, _, Keccak256>::prove(net, proving_key, &prover_crs)?;
+                    let (proof, net) = Rep3CoUltraHonk::<_, _, Keccak256>::prove(
+                        net,
+                        proving_key,
+                        &prover_crs,
+                        has_zk,
+                    )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -1376,8 +1401,11 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let proving_key: ProvingKey<ShamirUltraHonkDriver<ark_bn254::Fr, ShamirMpcNet>, Bn254> =
                 bincode::deserialize_from(proving_key_file)
                     .context("while deserializing input share")?;
-            let prover_crs =
-                CrsParser::<Bn254>::get_crs_g1(crs_path, proving_key.circuit_size as usize)?;
+            let prover_crs = CrsParser::<Bn254>::get_crs_g1(
+                crs_path,
+                proving_key.circuit_size as usize,
+                has_zk,
+            )?;
             let public_input = proving_key.get_public_inputs();
 
             // execute prover in MPC
@@ -1389,6 +1417,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                         t,
                         proving_key,
                         &prover_crs,
+                        has_zk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
@@ -1404,6 +1433,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                         t,
                         proving_key,
                         &prover_crs,
+                        has_zk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
@@ -1469,6 +1499,8 @@ fn run_build_and_generate_proof(
     let public_input_filename = config.public_input;
     let t = config.threshold;
     let recursive = config.recursive;
+    let has_zk = ZeroKnowledge::from(config.zk);
+
     if hasher == TranscriptHash::KECCAK && recursive {
         tracing::warn!("Note that the Poseidon hasher is better suited for recursion");
     }
@@ -1487,8 +1519,8 @@ fn run_build_and_generate_proof(
         .try_into()
         .context("while converting network config")?;
 
-    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
-    let prover_crs = CrsParser::get_crs_g1(crs_path, crs_size)?;
+    let circuit_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
+    let prover_crs = CrsParser::get_crs_g1(crs_path, circuit_size, has_zk)?;
 
     tracing::info!("Starting proving key generation...");
     let (proof, public_input) = match protocol {
@@ -1522,6 +1554,7 @@ fn run_build_and_generate_proof(
                         net,
                         proving_key,
                         &prover_crs,
+                        has_zk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
@@ -1531,8 +1564,12 @@ fn run_build_and_generate_proof(
                 }
                 TranscriptHash::KECCAK => {
                     let start = Instant::now();
-                    let (proof, net) =
-                        Rep3CoUltraHonk::<_, _, Keccak256>::prove(net, proving_key, &prover_crs)?;
+                    let (proof, net) = Rep3CoUltraHonk::<_, _, Keccak256>::prove(
+                        net,
+                        proving_key,
+                        &prover_crs,
+                        has_zk,
+                    )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -1571,6 +1608,7 @@ fn run_build_and_generate_proof(
                         t,
                         proving_key,
                         &prover_crs,
+                        has_zk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
@@ -1586,6 +1624,7 @@ fn run_build_and_generate_proof(
                         t,
                         proving_key,
                         &prover_crs,
+                        has_zk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
@@ -1653,8 +1692,8 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
         .context("while parsing program artifact")?;
 
-    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
-    let prover_crs = CrsParser::get_crs_g1(crs_path, crs_size)?;
+    let circuit_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
+    let prover_crs = CrsParser::get_crs_g1(crs_path, circuit_size, ZeroKnowledge::No)?;
 
     tracing::info!("Starting to generate verification key...");
     let start = Instant::now();

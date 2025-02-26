@@ -13,10 +13,10 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
     num_parties: usize,
     threshold: usize,
+    has_zk: ZeroKnowledge,
 ) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
-    let has_zk = ZeroKnowledge::No;
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
@@ -32,7 +32,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let mut threads = Vec::with_capacity(num_parties);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
-    let prover_crs = Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size).unwrap());
+    let prover_crs =
+        Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
     for net in test_network.get_party_networks() {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
@@ -48,7 +49,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
             )
             .unwrap();
             let (proof, _) =
-                ShamirCoUltraHonk::<_, _, H>::prove(net, threshold, pk, &prover_crs).unwrap();
+                ShamirCoUltraHonk::<_, _, H>::prove(net, threshold, pk, &prover_crs, has_zk)
+                    .unwrap();
             proof
         }));
     }
@@ -72,10 +74,12 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
 
 #[test]
 fn poseidon_proof_test_poseidon2sponge() {
-    proof_test::<Poseidon2Sponge>("poseidon", 3, 1);
+    proof_test::<Poseidon2Sponge>("poseidon", 3, 1, ZeroKnowledge::No);
+    proof_test::<Poseidon2Sponge>("poseidon", 3, 1, ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_proof_test_keccak256() {
-    proof_test::<Keccak256>("poseidon", 3, 1);
+    proof_test::<Keccak256>("poseidon", 3, 1, ZeroKnowledge::No);
+    proof_test::<Keccak256>("poseidon", 3, 1, ZeroKnowledge::Yes);
 }

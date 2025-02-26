@@ -41,10 +41,9 @@ fn convert_witness_rep3<F: PrimeField>(
     witness_map_to_witness_vector(witness_map)
 }
 
-fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
+fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: ZeroKnowledge) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
-    let has_zk = ZeroKnowledge::No;
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
@@ -60,7 +59,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     let mut threads = Vec::with_capacity(3);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
-    let prover_crs = Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size).unwrap());
+    let prover_crs =
+        Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
     for net in test_network.get_party_networks() {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
@@ -70,7 +70,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
             let (pk, net) =
                 co_noir::generate_proving_key_rep3(net, &constraint_system, witness, false)
                     .unwrap();
-            let (proof, _) = Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs).unwrap();
+            let (proof, _) =
+                Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs, has_zk).unwrap();
             proof
         }));
     }
@@ -92,10 +93,12 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
     assert!(is_valid);
 }
 
-fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) {
+fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
+    name: &str,
+    has_zk: ZeroKnowledge,
+) {
     let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
     let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", name);
-    let has_zk = ZeroKnowledge::No;
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
@@ -104,7 +107,8 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
     let mut threads = Vec::with_capacity(3);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
-    let prover_crs = Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size).unwrap());
+    let prover_crs =
+        Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
     for net in test_network.get_party_networks() {
         let prover_crs = prover_crs.clone();
         let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
@@ -122,7 +126,8 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
                 false,
             )
             .unwrap();
-            let (proof, _) = Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs).unwrap();
+            let (proof, _) =
+                Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs, has_zk).unwrap();
             proof
         }));
     }
@@ -146,20 +151,24 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str) 
 
 #[test]
 fn poseidon_witness_and_proof_test_poseidon2sponge() {
-    witness_and_proof_test::<Poseidon2Sponge>("poseidon");
+    witness_and_proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::No);
+    witness_and_proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_proof_test_poseidon2sponge() {
-    proof_test::<Poseidon2Sponge>("poseidon");
+    proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::No);
+    proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_witness_and_proof_test_keccak256() {
-    witness_and_proof_test::<Keccak256>("poseidon");
+    witness_and_proof_test::<Keccak256>("poseidon", ZeroKnowledge::No);
+    witness_and_proof_test::<Keccak256>("poseidon", ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_proof_test_keccak256() {
-    proof_test::<Keccak256>("poseidon");
+    proof_test::<Keccak256>("poseidon", ZeroKnowledge::No);
+    proof_test::<Keccak256>("poseidon", ZeroKnowledge::Yes);
 }
