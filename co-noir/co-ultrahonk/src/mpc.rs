@@ -116,6 +116,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         public: &[P::ScalarField],
         shared: &[Self::ArithmeticShare],
     ) -> Vec<Self::ArithmeticShare> {
+        debug_assert_eq!(public.len(), shared.len());
         public
             .iter()
             .zip(shared.iter())
@@ -129,7 +130,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         shared: &mut [Self::ArithmeticShare],
         public: &[P::ScalarField],
     ) {
-        assert_eq!(public.len(), shared.len());
+        debug_assert_eq!(public.len(), shared.len());
         for (public, shared) in public.iter().zip(shared.iter_mut()) {
             Self::mul_assign_with_public(*public, shared);
         }

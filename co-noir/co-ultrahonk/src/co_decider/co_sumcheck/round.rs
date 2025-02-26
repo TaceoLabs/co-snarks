@@ -184,6 +184,14 @@ impl SumcheckRound {
             relation_parameters,
             scaling_factors,
         )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, EllipticRelation>(
+            driver,
+            &mut univariate_accumulators.r_elliptic,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
         Ok(())
     }
 
@@ -333,6 +341,9 @@ impl SumcheckRound {
         let r_delta_2 = univariate_accumulators.r_delta.r2.evaluations;
         let r_delta_3 = univariate_accumulators.r_delta.r3.evaluations;
 
+        let r_elliptic_0 = univariate_accumulators.r_elliptic.r0.evaluations;
+        let r_elliptic_1 = univariate_accumulators.r_elliptic.r1.evaluations;
+
         tracing::info!("starting batch");
         tracing::info!("==============");
         // TODO Franco - this can be done nicer but for time being
@@ -348,8 +359,6 @@ impl SumcheckRound {
                 gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity];
             scaling_factors.extend(vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH]);
         }
-
-        println!("=======");
 
         Self::accumulate_relation_univariates_batch(
             driver,
@@ -370,6 +379,9 @@ impl SumcheckRound {
         let r_delta_2_batch = univariate_accumulators_batch.r_delta.r2.evaluations;
         let r_delta_3_batch = univariate_accumulators_batch.r_delta.r3.evaluations;
 
+        let r_elliptic_0_batch = univariate_accumulators_batch.r_elliptic.r0.evaluations;
+        let r_elliptic_1_batch = univariate_accumulators_batch.r_elliptic.r1.evaluations;
+
         assert_eq!(r_arith_0, r_arith_0_batch);
         assert_eq!(r_arith_1, r_arith_1_batch);
 
@@ -380,32 +392,12 @@ impl SumcheckRound {
         assert_eq!(r_delta_1, r_delta_1_batch);
         assert_eq!(r_delta_2, r_delta_2_batch);
         assert_eq!(r_delta_3, r_delta_3_batch);
-        //let r_arith_0 = r_arith_0
-        //    .iter()
-        //    .map(|ele| T::debug(*ele))
-        //    .collect::<Vec<_>>()
-        //    .join(", ");
-        //let r_arith_1 = r_arith_1
-        //    .iter()
-        //    .map(|ele| T::debug(*ele))
-        //    .collect::<Vec<_>>()
-        //    .join(", ");
 
-        //let r_perm_0 = r_perm_0
-        //    .iter()
-        //    .map(|ele| T::debug(*ele))
-        //    .collect::<Vec<_>>()
-        //    .join(", ");
-        //let r_perm_1 = r_perm_1
-        //    .iter()
-        //    .map(|ele| T::debug(*ele))
-        //    .collect::<Vec<_>>()
-        //    .join(", ");
-        //tracing::info!("{r_arith_0}");
-        //tracing::info!("{r_arith_1}");
+        assert_eq!(r_elliptic_0, r_elliptic_0_batch);
+        assert_eq!(r_elliptic_1, r_elliptic_1_batch);
 
         let res = Self::batch_over_relations_univariates(
-            univariate_accumulators_batch,
+            univariate_accumulators,
             &relation_parameters.alphas,
             gate_sparators,
         );

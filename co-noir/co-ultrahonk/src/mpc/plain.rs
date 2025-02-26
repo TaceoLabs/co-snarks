@@ -37,6 +37,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     }
 
     fn sub_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
+        debug_assert_eq!(a.len(), b.len());
         for (a, b) in a.iter_mut().zip(b.iter()) {
             *a -= b;
         }
@@ -81,6 +82,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        debug_assert_eq!(a.len(), b.len());
         Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
@@ -129,6 +131,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<<P as Pairing>::ScalarField>> {
+        debug_assert_eq!(a.len(), b.len());
         Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
