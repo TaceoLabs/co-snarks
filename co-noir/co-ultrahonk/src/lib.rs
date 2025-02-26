@@ -33,8 +33,7 @@ impl CoUtils {
         poly: &[T::ArithmeticShare],
         crs: &ProverCrs<P>,
     ) -> T::PointShare {
-        let len = poly.len();
-        T::msm_public_points(&crs.monomials[..len], poly)
+        Self::msm::<T, P>(poly, &crs.monomials)
     }
 
     pub(crate) fn msm<T: NoirUltraHonkProver<P>, P: Pairing>(
