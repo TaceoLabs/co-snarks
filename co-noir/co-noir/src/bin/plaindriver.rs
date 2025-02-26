@@ -91,7 +91,7 @@ pub struct Config {
     /// The output file where the final witness share is written to
     pub out_dir: PathBuf,
     /// Prove with or without the zero knowledge property
-    pub zk: bool,
+    pub zk: ZeroKnowledge,
 }
 
 /// Prefix for config env variables
@@ -170,7 +170,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     let circuit_path = config.circuit;
     let hasher = config.hasher;
     let out_dir = config.out_dir;
-    let has_zk = ZeroKnowledge::from(config.zk);
+    let has_zk = config.zk;
 
     // Read circuit
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_path)

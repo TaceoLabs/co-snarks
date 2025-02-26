@@ -214,7 +214,7 @@ pub struct SplitProvingKeyConfig {
     /// Generate a recursive proof
     pub recursive: bool,
     /// Prove with or without the zero knowledge property
-    pub zk: bool,
+    pub zk: ZeroKnowledge,
 }
 
 /// Cli arguments for `merge_input_shares`
@@ -482,7 +482,7 @@ pub struct GenerateProofConfig {
     /// The path to the prover crs file
     pub crs: PathBuf,
     /// Prove with or without the zero knowledge property
-    pub zk: bool,
+    pub zk: ZeroKnowledge,
 }
 
 /// Cli arguments for `build_and_generate_proof`
@@ -555,7 +555,7 @@ pub struct BuildAndGenerateProofConfig {
     /// Generate a recursive proof
     pub recursive: bool,
     /// Prove with or without the zero knowledge property
-    pub zk: bool,
+    pub zk: ZeroKnowledge,
 }
 
 /// Cli arguments for `creating_vk`
@@ -641,7 +641,7 @@ pub struct VerifyConfig {
     /// The path to the verifier crs file
     pub crs: PathBuf,
     /// Verify a proof with or without the zero knowledge property
-    pub has_zk: bool,
+    pub has_zk: ZeroKnowledge,
 }
 
 /// Cli arguments for `verify`
@@ -940,7 +940,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     let t = config.threshold;
     let n = config.num_parties;
     let recursive = config.recursive;
-    let has_zk = ZeroKnowledge::from(config.zk);
+    let has_zk = config.zk;
 
     // parse constraint system
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
@@ -1330,7 +1330,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let public_input_filename = config.public_input;
     let t = config.threshold;
     let crs_path = config.crs;
-    let has_zk = ZeroKnowledge::from(config.zk);
+    let has_zk = config.zk;
 
     let network_config = config
         .network
@@ -1499,7 +1499,7 @@ fn run_build_and_generate_proof(
     let public_input_filename = config.public_input;
     let t = config.threshold;
     let recursive = config.recursive;
-    let has_zk = ZeroKnowledge::from(config.zk);
+    let has_zk = config.zk;
 
     if hasher == TranscriptHash::KECCAK && recursive {
         tracing::warn!("Note that the Poseidon hasher is better suited for recursion");
