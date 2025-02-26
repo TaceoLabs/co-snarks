@@ -13,11 +13,13 @@ use crate::{
         types::{
             ProverUnivariates, ProverUnivariatesBatch, RelationParameters,
             BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+            MAX_PARTIAL_RELATION_LENGTH,
         },
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
     types::AllEntities,
+    types_batch::AllEntitiesBatch,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
@@ -166,6 +168,22 @@ impl SumcheckRound {
             relation_parameters,
             scaling_factors,
         )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, UltraPermutationRelation>(
+            driver,
+            &mut univariate_accumulators.r_perm,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, DeltaRangeConstraintRelation>(
+            driver,
+            &mut univariate_accumulators.r_delta,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
         Ok(())
     }
 
@@ -304,74 +322,90 @@ impl SumcheckRound {
                 &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
             )?;
         }
+        let r_arith_0 = univariate_accumulators.r_arith.r0.evaluations;
+        let r_arith_1 = univariate_accumulators.r_arith.r1.evaluations;
 
-        let r0 = univariate_accumulators.r_arith.r0.evaluations;
-        let r1 = univariate_accumulators.r_arith.r1.evaluations;
+        let r_perm_0 = univariate_accumulators.r_perm.r0.evaluations;
+        let r_perm_1 = univariate_accumulators.r_perm.r1.evaluations;
 
-        let r0 = r0
-            .iter()
-            .map(|ele| T::debug(*ele))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let r1 = r1
-            .iter()
-            .map(|ele| T::debug(*ele))
-            .collect::<Vec<_>>()
-            .join(", ");
-        tracing::info!("{r0}");
-        tracing::info!("{r1}");
+        let r_delta_0 = univariate_accumulators.r_delta.r0.evaluations;
+        let r_delta_1 = univariate_accumulators.r_delta.r1.evaluations;
+        let r_delta_2 = univariate_accumulators.r_delta.r2.evaluations;
+        let r_delta_3 = univariate_accumulators.r_delta.r3.evaluations;
 
-        //       tracing::info!("starting batch");
-        //       tracing::info!("==============");
-        //       // TODO Franco - this can be done nicer but for time being
-        //       let mut batch = AllEntitiesBatch::reserve_round_size(self.round_size);
-        //       let mut scaling_factors = vec![];
-        //       //       let batch = (0..self.round_size)
-        //       //           .step_by(2)
-        //       //           .map(|edge_idx| {
-        //       //               let mut extended_edges = ProverUnivariates::<T, P>::default();
-        //       //               Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
-        //       //               extended_edges
-        //       //           })
-        //       //           .fold(batch, |acc, next| acc.fold(next));
-        //
-        //       for edge_idx in (0..self.round_size).step_by(2) {
-        //           let mut extended_edges = ProverUnivariates::<T, P>::default();
-        //           Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
-        //           batch = batch.fold(extended_edges);
-        //           let scaling_factor =
-        //               gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity];
-        //           scaling_factors.extend(vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH]);
-        //       }
-        //
-        //       let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
-        //
-        //       Self::accumulate_relation_univariates_batch(
-        //           driver,
-        //           &mut univariate_accumulators,
-        //           &batch,
-        //           relation_parameters,
-        //           &scaling_factors,
-        //       )?;
-        //
-        //       let r0 = univariate_accumulators.r_arith.r0.evaluations;
-        //       let r1 = univariate_accumulators.r_arith.r1.evaluations;
-        //
-        //       let r0 = r0
-        //           .iter()
-        //           .map(|ele| T::debug(*ele))
-        //           .collect::<Vec<_>>()
-        //           .join(", ");
-        //       let r1 = r1
-        //           .iter()
-        //           .map(|ele| T::debug(*ele))
-        //           .collect::<Vec<_>>()
-        //           .join(", ");
-        //       tracing::info!("{r0}");
-        //       tracing::info!("{r1}");
-        //       panic!();
+        tracing::info!("starting batch");
+        tracing::info!("==============");
+        // TODO Franco - this can be done nicer but for time being
+        let mut batch = AllEntitiesBatch::reserve_round_size(self.round_size);
+        let mut univariate_accumulators_batch = AllRelationAcc::<T, P>::default();
+        let mut scaling_factors = vec![];
+
+        for edge_idx in (0..self.round_size).step_by(2) {
+            let mut extended_edges = ProverUnivariates::<T, P>::default();
+            Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
+            batch = batch.fold(extended_edges);
+            let scaling_factor =
+                gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity];
+            scaling_factors.extend(vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH]);
+        }
+
+        println!("=======");
+
+        Self::accumulate_relation_univariates_batch(
+            driver,
+            &mut univariate_accumulators_batch,
+            &batch,
+            relation_parameters,
+            &scaling_factors,
+        )?;
+
+        let r_arith_0_batch = univariate_accumulators_batch.r_arith.r0.evaluations;
+        let r_arith_1_batch = univariate_accumulators_batch.r_arith.r1.evaluations;
+
+        let r_perm_0_batch = univariate_accumulators_batch.r_perm.r0.evaluations;
+        let r_perm_1_batch = univariate_accumulators_batch.r_perm.r1.evaluations;
+
+        let r_delta_0_batch = univariate_accumulators_batch.r_delta.r0.evaluations;
+        let r_delta_1_batch = univariate_accumulators_batch.r_delta.r1.evaluations;
+        let r_delta_2_batch = univariate_accumulators_batch.r_delta.r2.evaluations;
+        let r_delta_3_batch = univariate_accumulators_batch.r_delta.r3.evaluations;
+
+        assert_eq!(r_arith_0, r_arith_0_batch);
+        assert_eq!(r_arith_1, r_arith_1_batch);
+
+        assert_eq!(r_perm_0, r_perm_0_batch);
+        assert_eq!(r_perm_1, r_perm_1_batch);
+
+        assert_eq!(r_delta_0, r_delta_0_batch);
+        assert_eq!(r_delta_1, r_delta_1_batch);
+        assert_eq!(r_delta_2, r_delta_2_batch);
+        assert_eq!(r_delta_3, r_delta_3_batch);
+        //let r_arith_0 = r_arith_0
+        //    .iter()
+        //    .map(|ele| T::debug(*ele))
+        //    .collect::<Vec<_>>()
+        //    .join(", ");
+        //let r_arith_1 = r_arith_1
+        //    .iter()
+        //    .map(|ele| T::debug(*ele))
+        //    .collect::<Vec<_>>()
+        //    .join(", ");
+
+        //let r_perm_0 = r_perm_0
+        //    .iter()
+        //    .map(|ele| T::debug(*ele))
+        //    .collect::<Vec<_>>()
+        //    .join(", ");
+        //let r_perm_1 = r_perm_1
+        //    .iter()
+        //    .map(|ele| T::debug(*ele))
+        //    .collect::<Vec<_>>()
+        //    .join(", ");
+        //tracing::info!("{r_arith_0}");
+        //tracing::info!("{r_arith_1}");
+
         let res = Self::batch_over_relations_univariates(
-            univariate_accumulators,
+            univariate_accumulators_batch,
             &relation_parameters.alphas,
             gate_sparators,
         );

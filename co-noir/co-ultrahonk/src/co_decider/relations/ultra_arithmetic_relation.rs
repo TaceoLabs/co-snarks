@@ -1,4 +1,4 @@
-use super::Relation;
+use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
         types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
@@ -171,6 +171,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         //works up to here
         let tmp_arith = w_4_shift.mul_public(&(q_arith.to_owned() - 1));
         let mut tmp = tmp.add(&tmp_arith).mul_public(q_arith);
+
         tmp.scale_inplace(*scaling_factor);
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
@@ -200,7 +201,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     fn accumulate_batch(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &super::ProverUnivariatesBatch<T, P>,
+        input: &ProverUnivariatesBatch<T, P>,
         _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
@@ -256,6 +257,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let tmp_arith = T::mul_with_public_many(&q_arith_neg_1, w_4_shift);
         T::add_assign_many(&mut tmp, &tmp_arith);
         T::mul_assign_with_public_many(&mut tmp, q_arith);
+
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
         let evaluations_len = univariate_accumulator.r0.evaluations.len();

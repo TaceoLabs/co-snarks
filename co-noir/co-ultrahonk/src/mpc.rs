@@ -35,6 +35,17 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
+    fn sub_many(
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<Self::ArithmeticShare> {
+        a.iter()
+            .zip(b.iter())
+            .map(|(a, b)| Self::sub(*a, *b))
+            .collect()
+    }
+
+    /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
     fn sub_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]);
 
     /// Add two shares: \[c\] = \[a\] + \[b\]
@@ -75,6 +86,18 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         }
     }
 
+    fn add_with_public_many(
+        public: &[P::ScalarField],
+        shared: &[Self::ArithmeticShare],
+        id: Self::PartyID,
+    ) -> Vec<Self::ArithmeticShare> {
+        public
+            .iter()
+            .zip(shared.iter())
+            .map(|(a, b)| Self::add_with_public(*a, *b, id))
+            .collect()
+    }
+
     /// Negates a shared value: \[b\] = -\[a\].
     fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
@@ -106,6 +129,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         shared: &mut [Self::ArithmeticShare],
         public: &[P::ScalarField],
     ) {
+        assert_eq!(public.len(), shared.len());
         for (public, shared) in public.iter().zip(shared.iter_mut()) {
             Self::mul_assign_with_public(*public, shared);
         }
@@ -117,6 +141,19 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         for shared in shared.iter_mut() {
             Self::mul_assign_with_public(scale, shared);
         }
+    }
+
+    /// Multiply a share b by a public value a: c = a * \[b\].
+    /// FRANCO TODO use rayon?
+    fn add_scalar(
+        shared: &[Self::ArithmeticShare],
+        scalar: P::ScalarField,
+        id: Self::PartyID,
+    ) -> Vec<Self::ArithmeticShare> {
+        shared
+            .iter()
+            .map(|share| Self::add_with_public(scalar, *share, id))
+            .collect()
     }
 
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
