@@ -1417,7 +1417,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             }
             list_size += padding;
 
-            #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove onece its fixed...
+            #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
             for (time_stamp, mut ram_range_exist) in ram_timestamps
                 .iter()
                 .cloned()
