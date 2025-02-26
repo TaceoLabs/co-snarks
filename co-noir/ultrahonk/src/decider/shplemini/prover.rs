@@ -173,7 +173,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res);
         }
 
-        let r_challenge: P::ScalarField = transcript.get_challenge::<P>("Gemini:r".to_string());
+        let r_challenge = transcript.get_challenge::<P>("Gemini:r".to_string());
 
         let gemini_challenge_in_small_subgroup: bool = (has_zk == ZeroKnowledge::Yes)
             && (r_challenge.pow([P::SUBGROUP_SIZE as u64]) == P::ScalarField::one());

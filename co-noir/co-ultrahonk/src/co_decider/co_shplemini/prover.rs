@@ -12,8 +12,11 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use co_builder::HonkProofResult;
+use co_builder::{
+    prelude::{HonkCurve, Polynomial, ProverCrs},
+    HonkProofError,
+};
 use itertools::izip;
 use ultrahonk::{
     prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
@@ -214,7 +217,7 @@ impl<
             transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res);
         }
 
-        let r_challenge: P::ScalarField = transcript.get_challenge::<P>("Gemini:r".to_string());
+        let r_challenge = transcript.get_challenge::<P>("Gemini:r".to_string());
 
         let gemini_challenge_in_small_subgroup: bool = (has_zk == ZeroKnowledge::Yes)
             && (r_challenge.pow([P::SUBGROUP_SIZE as u64]) == P::ScalarField::one());
@@ -223,7 +226,7 @@ impl<
         // evaluations of prover polynomials at this challenge would leak witness data.
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/1194). Handle edge cases in PCS
         if gemini_challenge_in_small_subgroup {
-            // return Err(HonkProofResult::GeminiSmallSubgroup);
+            return Err(HonkProofError::GeminiSmallSubgroup);
         }
 
         let (a_0_pos, a_0_neg) = self.compute_partially_evaluated_batch_polynomials(
