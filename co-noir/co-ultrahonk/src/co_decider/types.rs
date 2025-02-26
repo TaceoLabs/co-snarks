@@ -2,6 +2,7 @@ use super::univariates::SharedUnivariate;
 use crate::{
     mpc::NoirUltraHonkProver,
     types::{AllEntities, Polynomials},
+    types_batch::AllEntitiesBatch,
     NUM_ALPHAS,
 };
 use ark_ec::pairing::Pairing;
@@ -23,6 +24,8 @@ pub(crate) type ProverUnivariates<T, P> = AllEntities<
     SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>,
     Univariate<<P as Pairing>::ScalarField, MAX_PARTIAL_RELATION_LENGTH>,
 >;
+
+pub(crate) type ProverUnivariatesBatch<T, P> = AllEntitiesBatch<T, P>;
 pub(crate) type PartiallyEvaluatePolys<T, P> = AllEntities<
     Vec<<T as NoirUltraHonkProver<P>>::ArithmeticShare>,
     Vec<<P as Pairing>::ScalarField>,

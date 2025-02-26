@@ -15,6 +15,14 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     type PointShare = P::G1;
     type PartyID = usize;
 
+    fn debug(x: Self::ArithmeticShare) -> String {
+        if x.is_zero() {
+            "0".to_string()
+        } else {
+            format!("{x}")
+        }
+    }
+
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))
@@ -28,8 +36,26 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         a - b
     }
 
+    fn sub_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
+        for (a, b) in a.iter_mut().zip(b.iter()) {
+            *a -= b;
+        }
+    }
+
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         a + b
+    }
+
+    fn add_assign(a: &mut Self::ArithmeticShare, b: Self::ArithmeticShare) {
+        *a += b;
+    }
+
+    fn add_assign_public(
+        a: &mut Self::ArithmeticShare,
+        b: <P as Pairing>::ScalarField,
+        _id: Self::PartyID,
+    ) {
+        *a += b;
     }
 
     fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare {
@@ -41,6 +67,13 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         shared: Self::ArithmeticShare,
     ) -> Self::ArithmeticShare {
         shared * public
+    }
+
+    fn mul_assign_with_public(
+        public: <P as Pairing>::ScalarField,
+        shared: &mut Self::ArithmeticShare,
+    ) {
+        *shared *= public;
     }
 
     fn mul_many(
@@ -118,18 +151,6 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok(res)
     }
 
-    fn inv_many_in_place_leaking_zeros(
-        &mut self,
-        a: &mut [Self::ArithmeticShare],
-    ) -> std::io::Result<()> {
-        for a in a.iter_mut() {
-            if !a.is_zero() {
-                a.inverse_in_place().unwrap();
-            }
-        }
-        Ok(())
-    }
-
     fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()> {
         for a in a.iter_mut() {
             if a.is_zero() {
@@ -139,6 +160,18 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
                 ));
             }
             a.inverse_in_place().unwrap();
+        }
+        Ok(())
+    }
+
+    fn inv_many_in_place_leaking_zeros(
+        &mut self,
+        a: &mut [Self::ArithmeticShare],
+    ) -> std::io::Result<()> {
+        for a in a.iter_mut() {
+            if !a.is_zero() {
+                a.inverse_in_place().unwrap();
+            }
         }
         Ok(())
     }

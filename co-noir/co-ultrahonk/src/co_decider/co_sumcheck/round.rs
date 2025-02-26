@@ -11,8 +11,8 @@ use crate::{
             ultra_arithmetic_relation::UltraArithmeticRelation, AllRelationAcc, Relation,
         },
         types::{
-            ProverUnivariates, RelationParameters, BATCHED_RELATION_PARTIAL_LENGTH,
-            BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+            ProverUnivariates, ProverUnivariatesBatch, RelationParameters,
+            BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
         },
         univariates::SharedUnivariate,
     },
@@ -23,7 +23,6 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
-use std::time::Instant;
 use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
 
 pub(crate) type SumcheckRoundOutput<T, P, const U: usize> = SharedUnivariate<T, P, U>;
@@ -149,6 +148,52 @@ impl SumcheckRound {
         )
     }
 
+    fn accumulate_relation_univariates_batch<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    >(
+        driver: &mut T,
+        univariate_accumulators: &mut AllRelationAcc<T, P>,
+        extended_edges: &ProverUnivariatesBatch<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factors: &[P::ScalarField],
+    ) -> HonkProofResult<()> {
+        tracing::trace!("Accumulate relations");
+        Self::accumulate_one_relation_univariates_batch::<_, _, UltraArithmeticRelation>(
+            driver,
+            &mut univariate_accumulators.r_arith,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+        Ok(())
+    }
+
+    fn accumulate_one_relation_univariates_batch<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        R: Relation<T, P>,
+    >(
+        driver: &mut T,
+        univariate_accumulator: &mut R::Acc,
+        extended_edges: &ProverUnivariatesBatch<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factors: &[P::ScalarField],
+    ) -> HonkProofResult<()> {
+        //if R::SKIPPABLE && R::skip(extended_edges) {
+        //TODO WHAT DO WE DO WITH SKIP?? Just leave it as zero?
+        //    return Ok(());
+        //}
+
+        R::accumulate_batch(
+            driver,
+            univariate_accumulator,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )
+    }
+
     fn accumulate_relation_univariates<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
@@ -233,16 +278,16 @@ impl SumcheckRound {
         // Barretenberg uses multithreading here
 
         // Construct extended edge containers
-        let mut extended_edge = ProverUnivariates::default();
 
-        let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
-
-        tracing::info!("round size: {}", self.round_size);
-        let time = Instant::now();
-        // TODO FRANCO This loop is the bulk of the time
         // we have the round size and then reduce it by power of two steps
         // what can we mt here?
         // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
+        // Construct extended edge containers
+
+        tracing::info!("starting old edge");
+        let mut extended_edge = ProverUnivariates::default();
+
+        let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
         for edge_idx in (0..self.round_size).step_by(2) {
             Self::extend_edges(&mut extended_edge, polynomials, edge_idx);
             // Compute the \f$ \ell \f$-th edge's univariate contribution,
@@ -259,23 +304,76 @@ impl SumcheckRound {
                 &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
             )?;
         }
-        let elapsed = time.elapsed();
-        tracing::info!(
-            "Took first part (extend edges, acc) {}.{}",
-            elapsed.as_secs(),
-            elapsed.subsec_nanos()
-        );
-        let time = Instant::now();
+
+        let r0 = univariate_accumulators.r_arith.r0.evaluations;
+        let r1 = univariate_accumulators.r_arith.r1.evaluations;
+
+        let r0 = r0
+            .iter()
+            .map(|ele| T::debug(*ele))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let r1 = r1
+            .iter()
+            .map(|ele| T::debug(*ele))
+            .collect::<Vec<_>>()
+            .join(", ");
+        tracing::info!("{r0}");
+        tracing::info!("{r1}");
+
+        //       tracing::info!("starting batch");
+        //       tracing::info!("==============");
+        //       // TODO Franco - this can be done nicer but for time being
+        //       let mut batch = AllEntitiesBatch::reserve_round_size(self.round_size);
+        //       let mut scaling_factors = vec![];
+        //       //       let batch = (0..self.round_size)
+        //       //           .step_by(2)
+        //       //           .map(|edge_idx| {
+        //       //               let mut extended_edges = ProverUnivariates::<T, P>::default();
+        //       //               Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
+        //       //               extended_edges
+        //       //           })
+        //       //           .fold(batch, |acc, next| acc.fold(next));
+        //
+        //       for edge_idx in (0..self.round_size).step_by(2) {
+        //           let mut extended_edges = ProverUnivariates::<T, P>::default();
+        //           Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
+        //           batch = batch.fold(extended_edges);
+        //           let scaling_factor =
+        //               gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity];
+        //           scaling_factors.extend(vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH]);
+        //       }
+        //
+        //       let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
+        //
+        //       Self::accumulate_relation_univariates_batch(
+        //           driver,
+        //           &mut univariate_accumulators,
+        //           &batch,
+        //           relation_parameters,
+        //           &scaling_factors,
+        //       )?;
+        //
+        //       let r0 = univariate_accumulators.r_arith.r0.evaluations;
+        //       let r1 = univariate_accumulators.r_arith.r1.evaluations;
+        //
+        //       let r0 = r0
+        //           .iter()
+        //           .map(|ele| T::debug(*ele))
+        //           .collect::<Vec<_>>()
+        //           .join(", ");
+        //       let r1 = r1
+        //           .iter()
+        //           .map(|ele| T::debug(*ele))
+        //           .collect::<Vec<_>>()
+        //           .join(", ");
+        //       tracing::info!("{r0}");
+        //       tracing::info!("{r1}");
+        //       panic!();
         let res = Self::batch_over_relations_univariates(
             univariate_accumulators,
             &relation_parameters.alphas,
             gate_sparators,
-        );
-        let elapsed = time.elapsed();
-        tracing::info!(
-            "Took batch_over_relations_univariates {}.{}",
-            elapsed.as_secs(),
-            elapsed.subsec_nanos()
         );
         Ok(res)
     }
