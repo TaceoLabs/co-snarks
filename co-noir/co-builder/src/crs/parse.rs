@@ -24,6 +24,17 @@ pub struct NewFileStructure<P: Pairing> {
 }
 
 impl<P: Pairing> NewFileStructure<P> {
+    fn crs_size_from_circuit_size(circuit_size: usize, has_zk: ZeroKnowledge) -> usize
+    where
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        if has_zk == ZeroKnowledge::No {
+            circuit_size
+        } else {
+            max(circuit_size, P::SUBGROUP_SIZE * 2)
+        }
+    }
+
     pub fn get_crs(
         path_g1: impl AsRef<Path>,
         path_g2: impl AsRef<Path>,
@@ -33,13 +44,8 @@ impl<P: Pairing> NewFileStructure<P> {
     where
         P: HonkCurve<TranscriptFieldType>,
     {
-        let _ = has_zk;
-        let crs_size = if has_zk == ZeroKnowledge::No {
-            circuit_size
-        } else {
-            max(circuit_size, P::SUBGROUP_SIZE * 2)
-        };
-        let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size];
+        let crs_size = Self::crs_size_from_circuit_size(circuit_size, has_zk);
+        let mut monomials = vec![P::G1Affine::default(); crs_size];
         let mut g2_x = P::G2Affine::default();
         Self::read_transcript(&mut monomials, &mut g2_x, crs_size, path_g1, path_g2)?;
         Ok(Crs { monomials, g2_x })
@@ -53,12 +59,8 @@ impl<P: Pairing> NewFileStructure<P> {
     where
         P: HonkCurve<TranscriptFieldType>,
     {
-        let crs_size = if has_zk == ZeroKnowledge::No {
-            circuit_size
-        } else {
-            max(circuit_size, P::SUBGROUP_SIZE * 2)
-        };
-        let mut monomials: Vec<P::G1Affine> = vec![P::G1Affine::default(); crs_size];
+        let crs_size = Self::crs_size_from_circuit_size(circuit_size, has_zk);
+        let mut monomials = vec![P::G1Affine::default(); crs_size];
         Self::read_transcript_g1(&mut monomials, crs_size, path_g1)?;
         Ok(ProverCrs { monomials })
     }
