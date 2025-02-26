@@ -189,10 +189,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
 
         //  Generate random masking_term of degree 2, add Z_H(X) * masking_term
         let masking_term = SharedUnivariate::<T, P, 3>::get_random(driver)?;
-        self.big_sum_polynomial.add_assign_slice(
-            driver,
-            &self.big_sum_polynomial_unmasked.clone().coefficients,
-        );
+        self.big_sum_polynomial
+            .add_assign_slice(driver, &self.big_sum_polynomial_unmasked.coefficients);
 
         for idx in 0..masking_term.evaluations.len() {
             self.big_sum_polynomial.coefficients[idx] = T::sub(

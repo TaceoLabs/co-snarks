@@ -172,7 +172,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
 
         //  Generate random masking_term of degree 2, add Z_H(X) * masking_term
         let masking_term = Univariate::<P::ScalarField, 3>::get_random(rng);
-        self.big_sum_polynomial += &self.big_sum_polynomial_unmasked.clone().coefficients;
+        self.big_sum_polynomial += &self.big_sum_polynomial_unmasked.coefficients;
 
         for idx in 0..masking_term.evaluations.len() {
             self.big_sum_polynomial.coefficients[idx] -= masking_term.evaluations[idx];
