@@ -8,7 +8,7 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::{
-    types::{ProverUnivariates, RelationParameters},
+    types::{ProverUnivariates, ProverUnivariatesBatch, RelationParameters},
     univariates::SharedUnivariate,
 };
 use crate::mpc::NoirUltraHonkProver;
@@ -46,6 +46,16 @@ pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFiel
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()>;
+
+    fn accumulate_batch(
+        driver: &mut T,
+        univariate_accumulator: &mut Self::Acc,
+        input: &ProverUnivariatesBatch<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factors: &[P::ScalarField],
+    ) -> HonkProofResult<()> {
+        todo!()
+    }
 }
 
 pub(crate) const NUM_SUBRELATIONS: usize = UltraArithmeticRelation::NUM_RELATIONS

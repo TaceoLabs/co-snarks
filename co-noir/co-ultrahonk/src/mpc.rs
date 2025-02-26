@@ -23,6 +23,8 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     /// The party id type
     type PartyID: Copy;
 
+    fn debug(x: Self::ArithmeticShare) -> String;
+
     /// Generate a share of a random value. The value is thereby unknown to anyone.
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare>;
 
@@ -32,17 +34,147 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
     fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
+    /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
+    fn sub_many(
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<Self::ArithmeticShare> {
+        a.iter()
+            .zip(b.iter())
+            .map(|(a, b)| Self::sub(*a, *b))
+            .collect()
+    }
+
+    /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
+    fn sub_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]);
+
     /// Add two shares: \[c\] = \[a\] + \[b\]
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
+    /// Add two shares: \[c\] = \[a\] + \[b\]
+    fn add_many(
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<Self::ArithmeticShare> {
+        a.iter()
+            .zip(b.iter())
+            .map(|(a, b)| Self::add(*a, *b))
+            .collect()
+    }
+
+    /// Add two shares: \[c\] = \[a\] + \[b\]
+    fn add_assign(a: &mut Self::ArithmeticShare, b: Self::ArithmeticShare);
+
+    /// Add two shares: \[c\] = \[a\] + \[b\]
+    fn add_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
+        for (a, b) in a.iter_mut().zip(b.iter()) {
+            Self::add_assign(a, *b);
+        }
+    }
+
+    /// Add two shares: \[c\] = \[a\] + \[b\]
+    fn add_assign_public(a: &mut Self::ArithmeticShare, b: P::ScalarField, id: Self::PartyID);
+
+    /// Add two shares: \[c\] = \[a\] + \[b\]
+    fn add_assign_public_many(
+        a: &mut [Self::ArithmeticShare],
+        b: &[P::ScalarField],
+        id: Self::PartyID,
+    ) {
+        for (a, b) in a.iter_mut().zip(b.iter()) {
+            Self::add_assign_public(a, *b, id);
+        }
+    }
+
+    fn add_with_public_many(
+        public: &[P::ScalarField],
+        shared: &[Self::ArithmeticShare],
+        id: Self::PartyID,
+    ) -> Vec<Self::ArithmeticShare> {
+        public
+            .iter()
+            .zip(shared.iter())
+            .map(|(a, b)| Self::add_with_public(*a, *b, id))
+            .collect()
+    }
+
     /// Negates a shared value: \[b\] = -\[a\].
     fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare;
+
+    /// Negates a shared value: \[b\] = -\[a\].
+    fn neg_many(a: &mut [Self::ArithmeticShare]) {
+        for a in a.iter_mut() {
+            *a = Self::neg(*a);
+        }
+    }
 
     /// Multiply a share b by a public value a: c = a * \[b\].
     fn mul_with_public(
         public: P::ScalarField,
         shared: Self::ArithmeticShare,
     ) -> Self::ArithmeticShare;
+
+    /// Multiply a share b by a public value a: c = a * \[b\].
+    fn mul_assign_with_public(public: P::ScalarField, shared: &mut Self::ArithmeticShare);
+
+    /// Multiply a share b by a public value a: c = a * \[b\].
+    /// FRANCO TODO use rayon?
+    fn mul_with_public_many(
+        public: &[P::ScalarField],
+        shared: &[Self::ArithmeticShare],
+    ) -> Vec<Self::ArithmeticShare> {
+        debug_assert_eq!(public.len(), shared.len());
+        public
+            .iter()
+            .zip(shared.iter())
+            .map(|(public, shared)| Self::mul_with_public(*public, *shared))
+            .collect()
+    }
+
+    /// Multiply a share b by a public value a: c = a * \[b\].
+    /// FRANCO TODO use rayon?
+    fn mul_assign_with_public_many(
+        shared: &mut [Self::ArithmeticShare],
+        public: &[P::ScalarField],
+    ) {
+        debug_assert_eq!(public.len(), shared.len());
+        for (public, shared) in public.iter().zip(shared.iter_mut()) {
+            Self::mul_assign_with_public(*public, shared);
+        }
+    }
+
+    /// Multiply a share b by a public value a: c = a * \[b\].
+    /// FRANCO TODO use rayon?
+    fn scale_many_in_place(shared: &mut [Self::ArithmeticShare], scale: P::ScalarField) {
+        for shared in shared.iter_mut() {
+            Self::mul_assign_with_public(scale, shared);
+        }
+    }
+
+    /// Multiply a share b by a public value a: c = a * \[b\].
+    /// FRANCO TODO use rayon?
+    fn add_scalar(
+        shared: &[Self::ArithmeticShare],
+        scalar: P::ScalarField,
+        id: Self::PartyID,
+    ) -> Vec<Self::ArithmeticShare> {
+        shared
+            .iter()
+            .map(|share| Self::add_with_public(scalar, *share, id))
+            .collect()
+    }
+
+    /// Multiply a share b by a public value a: c = a * \[b\].
+    /// FRANCO TODO use rayon?
+    fn add_scalar_in_place(
+        shared: &mut [Self::ArithmeticShare],
+        scalar: P::ScalarField,
+        id: Self::PartyID,
+    ) {
+        for x in shared.iter_mut() {
+            Self::add_assign_public(x, scalar, id);
+        }
+    }
 
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
     fn mul_many(

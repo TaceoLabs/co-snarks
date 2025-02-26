@@ -11,19 +11,20 @@ use crate::{
             ultra_arithmetic_relation::UltraArithmeticRelation, AllRelationAcc, Relation,
         },
         types::{
-            ProverUnivariates, RelationParameters, BATCHED_RELATION_PARTIAL_LENGTH,
-            BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+            ProverUnivariates, ProverUnivariatesBatch, RelationParameters,
+            BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+            MAX_PARTIAL_RELATION_LENGTH,
         },
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
     types::AllEntities,
+    types_batch::AllEntitiesBatch,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
-use std::time::Instant;
 use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
 
 pub(crate) type SumcheckRoundOutput<T, P, const U: usize> = SharedUnivariate<T, P, U>;
@@ -149,6 +150,106 @@ impl SumcheckRound {
         )
     }
 
+    fn accumulate_relation_univariates_batch<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    >(
+        driver: &mut T,
+        univariate_accumulators: &mut AllRelationAcc<T, P>,
+        extended_edges: &ProverUnivariatesBatch<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factors: &[P::ScalarField],
+    ) -> HonkProofResult<()> {
+        tracing::trace!("Accumulate relations");
+        Self::accumulate_one_relation_univariates_batch::<_, _, UltraArithmeticRelation>(
+            driver,
+            &mut univariate_accumulators.r_arith,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, UltraPermutationRelation>(
+            driver,
+            &mut univariate_accumulators.r_perm,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, DeltaRangeConstraintRelation>(
+            driver,
+            &mut univariate_accumulators.r_delta,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, EllipticRelation>(
+            driver,
+            &mut univariate_accumulators.r_elliptic,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, AuxiliaryRelation>(
+            driver,
+            &mut univariate_accumulators.r_aux,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, LogDerivLookupRelation>(
+            driver,
+            &mut univariate_accumulators.r_lookup,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+        Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2ExternalRelation>(
+            driver,
+            &mut univariate_accumulators.r_pos_ext,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+        Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2InternalRelation>(
+            driver,
+            &mut univariate_accumulators.r_pos_int,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+        Ok(())
+    }
+
+    fn accumulate_one_relation_univariates_batch<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        R: Relation<T, P>,
+    >(
+        driver: &mut T,
+        univariate_accumulator: &mut R::Acc,
+        extended_edges: &ProverUnivariatesBatch<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factors: &[P::ScalarField],
+    ) -> HonkProofResult<()> {
+        //if R::SKIPPABLE && R::skip(extended_edges) {
+        //TODO WHAT DO WE DO WITH SKIP?? Just leave it as zero?
+        //    return Ok(());
+        //}
+
+        R::accumulate_batch(
+            driver,
+            univariate_accumulator,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )
+    }
+
     fn accumulate_relation_univariates<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
@@ -233,16 +334,16 @@ impl SumcheckRound {
         // Barretenberg uses multithreading here
 
         // Construct extended edge containers
-        let mut extended_edge = ProverUnivariates::default();
 
-        let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
-
-        tracing::info!("round size: {}", self.round_size);
-        let time = Instant::now();
-        // TODO FRANCO This loop is the bulk of the time
         // we have the round size and then reduce it by power of two steps
         // what can we mt here?
         // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
+        // Construct extended edge containers
+
+        tracing::info!("starting old edge");
+        let mut extended_edge = ProverUnivariates::default();
+
+        let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
         for edge_idx in (0..self.round_size).step_by(2) {
             Self::extend_edges(&mut extended_edge, polynomials, edge_idx);
             // Compute the \f$ \ell \f$-th edge's univariate contribution,
@@ -259,23 +360,138 @@ impl SumcheckRound {
                 &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
             )?;
         }
-        let elapsed = time.elapsed();
-        tracing::info!(
-            "Took first part (extend edges, acc) {}.{}",
-            elapsed.as_secs(),
-            elapsed.subsec_nanos()
-        );
-        let time = Instant::now();
+        let r_arith_0 = univariate_accumulators.r_arith.r0.evaluations;
+        let r_arith_1 = univariate_accumulators.r_arith.r1.evaluations;
+
+        let r_perm_0 = univariate_accumulators.r_perm.r0.evaluations;
+        let r_perm_1 = univariate_accumulators.r_perm.r1.evaluations;
+
+        let r_delta_0 = univariate_accumulators.r_delta.r0.evaluations;
+        let r_delta_1 = univariate_accumulators.r_delta.r1.evaluations;
+        let r_delta_2 = univariate_accumulators.r_delta.r2.evaluations;
+        let r_delta_3 = univariate_accumulators.r_delta.r3.evaluations;
+
+        let r_elliptic_0 = univariate_accumulators.r_elliptic.r0.evaluations;
+        let r_elliptic_1 = univariate_accumulators.r_elliptic.r1.evaluations;
+
+        let r_lookup_0 = univariate_accumulators.r_lookup.r0.evaluations;
+        let r_lookup_1 = univariate_accumulators.r_lookup.r1.evaluations;
+
+        let r_aux_0 = univariate_accumulators.r_aux.r0.evaluations;
+        let r_aux_1 = univariate_accumulators.r_aux.r1.evaluations;
+        let r_aux_2 = univariate_accumulators.r_aux.r2.evaluations;
+        let r_aux_3 = univariate_accumulators.r_aux.r3.evaluations;
+        let r_aux_4 = univariate_accumulators.r_aux.r4.evaluations;
+        let r_aux_5 = univariate_accumulators.r_aux.r5.evaluations;
+
+        let r_pos_ex_0 = univariate_accumulators.r_pos_ext.r0.evaluations;
+        let r_pos_ex_1 = univariate_accumulators.r_pos_ext.r1.evaluations;
+        let r_pos_ex_2 = univariate_accumulators.r_pos_ext.r2.evaluations;
+        let r_pos_ex_3 = univariate_accumulators.r_pos_ext.r3.evaluations;
+
+        let r_pos_in_0 = univariate_accumulators.r_pos_int.r0.evaluations;
+        let r_pos_in_1 = univariate_accumulators.r_pos_int.r1.evaluations;
+        let r_pos_in_2 = univariate_accumulators.r_pos_int.r2.evaluations;
+        let r_pos_in_3 = univariate_accumulators.r_pos_int.r3.evaluations;
+
+        tracing::info!("starting batch");
+        tracing::info!("==============");
+        // TODO Franco - this can be done nicer but for time being
+        let mut batch = AllEntitiesBatch::reserve_round_size(self.round_size);
+        let mut univariate_accumulators_batch = AllRelationAcc::<T, P>::default();
+        let mut scaling_factors = vec![];
+
+        for edge_idx in (0..self.round_size).step_by(2) {
+            let mut extended_edges = ProverUnivariates::<T, P>::default();
+            Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
+            batch = batch.fold(extended_edges);
+            let scaling_factor =
+                gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity];
+            scaling_factors.extend(vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH]);
+        }
+
+        let mut univariate_accumulators_batch = AllRelationAcc::<T, P>::default();
+
+        Self::accumulate_relation_univariates_batch(
+            driver,
+            &mut univariate_accumulators_batch,
+            &batch,
+            relation_parameters,
+            &scaling_factors,
+        )?;
+
+        let r_arith_0_batch = univariate_accumulators_batch.r_arith.r0.evaluations;
+        let r_arith_1_batch = univariate_accumulators_batch.r_arith.r1.evaluations;
+
+        let r_perm_0_batch = univariate_accumulators_batch.r_perm.r0.evaluations;
+        let r_perm_1_batch = univariate_accumulators_batch.r_perm.r1.evaluations;
+
+        let r_lookup_0_batch = univariate_accumulators_batch.r_lookup.r0.evaluations;
+        let r_lookup_1_batch = univariate_accumulators_batch.r_lookup.r1.evaluations;
+
+        let r_delta_0_batch = univariate_accumulators_batch.r_delta.r0.evaluations;
+        let r_delta_1_batch = univariate_accumulators_batch.r_delta.r1.evaluations;
+        let r_delta_2_batch = univariate_accumulators_batch.r_delta.r2.evaluations;
+        let r_delta_3_batch = univariate_accumulators_batch.r_delta.r3.evaluations;
+
+        let r_elliptic_0_batch = univariate_accumulators_batch.r_elliptic.r0.evaluations;
+        let r_elliptic_1_batch = univariate_accumulators_batch.r_elliptic.r1.evaluations;
+
+        let r_aux_0_batch = univariate_accumulators_batch.r_aux.r0.evaluations;
+        let r_aux_1_batch = univariate_accumulators_batch.r_aux.r1.evaluations;
+        let r_aux_2_batch = univariate_accumulators_batch.r_aux.r2.evaluations;
+        let r_aux_3_batch = univariate_accumulators_batch.r_aux.r3.evaluations;
+        let r_aux_4_batch = univariate_accumulators_batch.r_aux.r4.evaluations;
+        let r_aux_5_batch = univariate_accumulators_batch.r_aux.r5.evaluations;
+
+        let r_pos_ex_0_batch = univariate_accumulators_batch.r_pos_ext.r0.evaluations;
+        let r_pos_ex_1_batch = univariate_accumulators_batch.r_pos_ext.r1.evaluations;
+        let r_pos_ex_2_batch = univariate_accumulators_batch.r_pos_ext.r2.evaluations;
+        let r_pos_ex_3_batch = univariate_accumulators_batch.r_pos_ext.r3.evaluations;
+
+        let r_pos_in_0_batch = univariate_accumulators_batch.r_pos_int.r0.evaluations;
+        let r_pos_in_1_batch = univariate_accumulators_batch.r_pos_int.r1.evaluations;
+        let r_pos_in_2_batch = univariate_accumulators_batch.r_pos_int.r2.evaluations;
+        let r_pos_in_3_batch = univariate_accumulators_batch.r_pos_int.r3.evaluations;
+
+        assert_eq!(r_arith_0_batch, r_arith_0);
+        assert_eq!(r_arith_1_batch, r_arith_1);
+
+        assert_eq!(r_perm_0_batch, r_perm_0);
+        assert_eq!(r_perm_1_batch, r_perm_1);
+
+        assert_eq!(r_lookup_0_batch, r_lookup_0);
+        assert_eq!(r_lookup_1_batch, r_lookup_1);
+
+        assert_eq!(r_delta_0_batch, r_delta_0);
+        assert_eq!(r_delta_1_batch, r_delta_1);
+        assert_eq!(r_delta_2_batch, r_delta_2);
+        assert_eq!(r_delta_3_batch, r_delta_3);
+
+        assert_eq!(r_elliptic_0_batch, r_elliptic_0);
+        assert_eq!(r_elliptic_1_batch, r_elliptic_1);
+
+        assert_eq!(r_aux_0_batch, r_aux_0);
+        assert_eq!(r_aux_1_batch, r_aux_1);
+        assert_eq!(r_aux_2_batch, r_aux_2);
+        assert_eq!(r_aux_3_batch, r_aux_3);
+        assert_eq!(r_aux_4_batch, r_aux_4);
+        assert_eq!(r_aux_5_batch, r_aux_5);
+
+        assert_eq!(r_pos_ex_0_batch, r_pos_ex_0);
+        assert_eq!(r_pos_ex_1_batch, r_pos_ex_1);
+        assert_eq!(r_pos_ex_2_batch, r_pos_ex_2);
+        assert_eq!(r_pos_ex_3_batch, r_pos_ex_3);
+
+        assert_eq!(r_pos_in_0_batch, r_pos_in_0);
+        assert_eq!(r_pos_in_1_batch, r_pos_in_1);
+        assert_eq!(r_pos_in_2_batch, r_pos_in_2);
+        assert_eq!(r_pos_in_3_batch, r_pos_in_3);
+
         let res = Self::batch_over_relations_univariates(
             univariate_accumulators,
             &relation_parameters.alphas,
             gate_sparators,
-        );
-        let elapsed = time.elapsed();
-        tracing::info!(
-            "Took batch_over_relations_univariates {}.{}",
-            elapsed.as_secs(),
-            elapsed.subsec_nanos()
         );
         Ok(res)
     }
