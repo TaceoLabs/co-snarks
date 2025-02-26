@@ -3,6 +3,7 @@
 use super::{Crs, ProverCrs};
 use crate::prelude::HonkCurve;
 use crate::types::types::ZeroKnowledge;
+use crate::TranscriptFieldType;
 use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_serialize::CanonicalDeserialize;
 use eyre::{anyhow, Result};
@@ -22,16 +23,16 @@ pub struct NewFileStructure<P: Pairing> {
     phantom_data: PhantomData<P>,
 }
 
-impl<P> NewFileStructure<P>
-where
-    P: HonkCurve<<P as Pairing>::ScalarField>,
-{
+impl<P: Pairing> NewFileStructure<P> {
     pub fn get_crs(
         path_g1: impl AsRef<Path>,
         path_g2: impl AsRef<Path>,
         circuit_size: usize,
         has_zk: ZeroKnowledge,
-    ) -> Result<Crs<P>> {
+    ) -> Result<Crs<P>>
+    where
+        P: HonkCurve<TranscriptFieldType>,
+    {
         let _ = has_zk;
         let crs_size = if has_zk == ZeroKnowledge::No {
             circuit_size
@@ -48,7 +49,10 @@ where
         path_g1: impl AsRef<Path>,
         circuit_size: usize,
         has_zk: ZeroKnowledge,
-    ) -> Result<ProverCrs<P>> {
+    ) -> Result<ProverCrs<P>>
+    where
+        P: HonkCurve<TranscriptFieldType>,
+    {
         let crs_size = if has_zk == ZeroKnowledge::No {
             circuit_size
         } else {
