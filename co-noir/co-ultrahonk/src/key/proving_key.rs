@@ -371,9 +371,9 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         let num_zk_randomness = if has_zk == ZeroKnowledge::No {
             0
         } else {
-            self.circuit_size as usize // compute_batched_polys
+            n // compute_batched_polys
             + 1 // ZKData::new
-            + self.circuit_size.ilog2() as usize * P::LIBRA_UNIVARIATES_LENGTH // generate_libra_univariates
+            + n.ilog2() as usize * P::LIBRA_UNIVARIATES_LENGTH // generate_libra_univariates
             + 2 // compute_concatenated_libra_polynomial
             + 3 // compute_big_sum_polynomial
         };
