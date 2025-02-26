@@ -1,7 +1,5 @@
 use crate::co_decider::relations::CRAND_PAIRS_FACTOR;
-use crate::co_decider::types::{
-    BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
-};
+use crate::co_decider::types::MAX_PARTIAL_RELATION_LENGTH;
 use crate::co_oink::{
     CRAND_PAIRS_CONST, CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE, CRAND_PAIRS_FACTOR_N,
 };
@@ -364,12 +362,13 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             + CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE * active_domain_size_mul
             + CRAND_PAIRS_CONST;
         // log2(n) * ((n >>= 1) / 2) == n - 1
-        let num_pairs_sumcheck_prove = if has_zk == ZeroKnowledge::No {
-            CRAND_PAIRS_FACTOR * BATCHED_RELATION_PARTIAL_LENGTH * (n - 1)
+        let num_pairs_sumcheck_prove = CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+
+        let num_pairs_sumcheck_disabled_contributions = if has_zk == ZeroKnowledge::No {
+            0
         } else {
-            CRAND_PAIRS_FACTOR * BATCHED_RELATION_PARTIAL_LENGTH_ZK * (n - 1)
             // compute_disabled_contribution: log2(n) rounds, each once relation, plus additional in round 0
-            + (n.ilog(2) as usize + 1) * CRAND_PAIRS_FACTOR * BATCHED_RELATION_PARTIAL_LENGTH_ZK
+            (n.ilog(2) as usize + 1) * CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH
         };
 
         let num_zk_randomness = if has_zk == ZeroKnowledge::No {
@@ -381,7 +380,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             + 2 // compute_concatenated_libra_polynomial
             + 3 // compute_big_sum_polynomial
         };
-        num_pairs_oink_prove + num_pairs_sumcheck_prove + num_zk_randomness
+        num_pairs_oink_prove
+            + num_pairs_sumcheck_prove
+            + num_pairs_sumcheck_disabled_contributions
+            + num_zk_randomness
     }
 
     pub fn create_vk(
