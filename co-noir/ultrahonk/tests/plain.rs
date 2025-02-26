@@ -50,7 +50,6 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
 
         let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
         assert_eq!(proof, read_proof);
-        println!("HUHUHUHU");
     }
 
     let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key, has_zk).unwrap();
