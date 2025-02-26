@@ -1,9 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
-use co_builder::{
-    prelude::{Polynomial, Utils},
-    HonkProofResult,
-};
+use co_builder::prelude::{Polynomial, Utils};
 use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
@@ -138,7 +135,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         self.coefficients.pop();
     }
 
-    pub fn random(size: usize, driver: &mut T) -> HonkProofResult<Self> {
+    pub fn random(size: usize, driver: &mut T) -> std::io::Result<Self> {
         let coefficients: Result<Vec<_>, _> = (0..size).map(|_| driver.rand()).collect();
         let coefficients = coefficients?;
         Ok(Self { coefficients })
