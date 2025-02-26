@@ -134,8 +134,9 @@ pub fn open_point_and_field<C: CurveGroup, N: ShamirNetwork>(
     let rcv = shamir
         .network
         .broadcast_next((a.a, b.a), shamir.threshold + 1)?;
-    let res_point = core::reconstruct_point(&[rcv[0].0], &shamir.open_lagrange_t);
-    let res_field = core::reconstruct(&[rcv[0].1], &shamir.open_lagrange_t);
+    let (points, fields): (Vec<_>, Vec<_>) = rcv.into_iter().unzip();
+    let res_point = core::reconstruct_point(&points, &shamir.open_lagrange_t);
+    let res_field = core::reconstruct(&fields, &shamir.open_lagrange_t);
 
     Ok((res_point, res_field))
 }
