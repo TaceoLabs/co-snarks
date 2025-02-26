@@ -100,7 +100,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
         number_of_polynomials: usize,
         univariate_length: usize,
         driver: &mut T,
-    ) -> HonkProofResult<Vec<SharedPolynomial<T, P>>> {
+    ) -> std::io::Result<Vec<SharedPolynomial<T, P>>> {
         (0..number_of_polynomials)
             .map(|_| SharedPolynomial::random(univariate_length, driver))
             .collect()
