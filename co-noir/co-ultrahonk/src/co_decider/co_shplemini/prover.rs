@@ -12,7 +12,7 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
+use co_builder::prelude::{HonkCurve, ProverCrs};
 use co_builder::HonkProofResult;
 use itertools::izip;
 use ultrahonk::{
@@ -54,10 +54,11 @@ impl<
         let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
         let g_polynomials = Self::get_g_polynomials(&self.memory.polys);
         let n = 1 << log_n;
+        let mut batched_unshifted = SharedPolynomial::new_zero(n); // batched unshifted polynomials
 
         // To achieve ZK, we mask the batched polynomial by a random polynomial of the same size
         if has_zk == ZeroKnowledge::Yes {
-            let mut batched_unshifted = SharedPolynomial::<T, P>::random(n, &mut self.driver)?;
+            batched_unshifted = SharedPolynomial::<T, P>::random(n, &mut self.driver)?;
             let masking_poly_comm_shared =
                 CoUtils::commit::<T, P>(batched_unshifted.as_ref(), commitment_key);
 
@@ -78,88 +79,44 @@ impl<
                 "Gemini:masking_poly_eval".to_string(),
                 masking_poly_eval,
             );
-            // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
-            let rho = transcript.get_challenge::<P>("rho".to_string());
-
-            // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
-            // f_batched = sum_{i=0}^{m-1}\rho^i*f_i and g_batched = sum_{i=0}^{l-1}\rho^{m+i}*g_i,
-            // and also batched evaluation
-            // v = sum_{i=0}^{m-1}\rho^i*f_i(u) + sum_{i=0}^{l-1}\rho^{m+i}*h_i(u).
-            // Note: g_batched is formed from the to-be-shifted polynomials, but the batched evaluation incorporates the
-            // evaluations produced by sumcheck of h_i = g_i_shifted.
-
-            let mut rho_challenge = P::ScalarField::ONE;
-
-            if has_zk == ZeroKnowledge::Yes {
-                // ρ⁰ is used to batch the hiding polynomial
-                rho_challenge *= rho;
-            }
-
-            // Precomputed part of batched_unshifted
-            for f_poly in f_polynomials.precomputed.iter() {
-                batched_unshifted.add_scaled_slice_public(&mut self.driver, f_poly, &rho_challenge);
-                rho_challenge *= rho;
-            }
-
-            for f_poly in f_polynomials.witness.iter() {
-                batched_unshifted.add_scaled_slice(&mut self.driver, f_poly, &rho_challenge);
-                rho_challenge *= rho;
-            }
-
-            // For batched_to_be_shifted we only have shared
-            let mut batched_to_be_shifted = SharedPolynomial::<T, P>::new_zero(n); // batched to-be-shifted polynomials
-
-            for g_poly in g_polynomials.iter() {
-                batched_to_be_shifted.add_scaled_slice(&mut self.driver, g_poly, &rho_challenge);
-                rho_challenge *= rho;
-            }
-
-            Ok((batched_unshifted, batched_to_be_shifted))
-        } else {
-            let mut batched_unshifted = Polynomial::new_zero(n); // batched unshifted polynomials
-
-            // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
-            let rho = transcript.get_challenge::<P>("rho".to_string());
-
-            // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
-            // f_batched = sum_{i=0}^{m-1}\rho^i*f_i and g_batched = sum_{i=0}^{l-1}\rho^{m+i}*g_i,
-            // and also batched evaluation
-            // v = sum_{i=0}^{m-1}\rho^i*f_i(u) + sum_{i=0}^{l-1}\rho^{m+i}*h_i(u).
-            // Note: g_batched is formed from the to-be-shifted polynomials, but the batched evaluation incorporates the
-            // evaluations produced by sumcheck of h_i = g_i_shifted.
-
-            let mut rho_challenge = P::ScalarField::ONE;
-
-            if has_zk == ZeroKnowledge::Yes {
-                // ρ⁰ is used to batch the hiding polynomial
-                rho_challenge *= rho;
-            }
-
-            // Precomputed part of batched_unshifted
-            for f_poly in f_polynomials.precomputed.iter() {
-                batched_unshifted.add_scaled_slice(f_poly, &rho_challenge);
-                rho_challenge *= rho;
-            }
-
-            // Shared part of batched_unshifted
-            let mut batched_unshifted =
-                SharedPolynomial::<T, P>::promote_poly(&self.driver, batched_unshifted);
-
-            for f_poly in f_polynomials.witness.iter() {
-                batched_unshifted.add_scaled_slice(&mut self.driver, f_poly, &rho_challenge);
-                rho_challenge *= rho;
-            }
-
-            // For batched_to_be_shifted we only have shared
-            let mut batched_to_be_shifted = SharedPolynomial::<T, P>::new_zero(n); // batched to-be-shifted polynomials
-
-            for g_poly in g_polynomials.iter() {
-                batched_to_be_shifted.add_scaled_slice(&mut self.driver, g_poly, &rho_challenge);
-                rho_challenge *= rho;
-            }
-
-            Ok((batched_unshifted, batched_to_be_shifted))
         }
+        // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
+        let rho = transcript.get_challenge::<P>("rho".to_string());
+
+        // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
+        // f_batched = sum_{i=0}^{m-1}\rho^i*f_i and g_batched = sum_{i=0}^{l-1}\rho^{m+i}*g_i,
+        // and also batched evaluation
+        // v = sum_{i=0}^{m-1}\rho^i*f_i(u) + sum_{i=0}^{l-1}\rho^{m+i}*h_i(u).
+        // Note: g_batched is formed from the to-be-shifted polynomials, but the batched evaluation incorporates the
+        // evaluations produced by sumcheck of h_i = g_i_shifted.
+
+        let mut rho_challenge = P::ScalarField::ONE;
+
+        if has_zk == ZeroKnowledge::Yes {
+            // ρ⁰ is used to batch the hiding polynomial
+            rho_challenge *= rho;
+        }
+
+        // Precomputed part of batched_unshifted
+        for f_poly in f_polynomials.precomputed.iter() {
+            batched_unshifted.add_scaled_slice_public(&mut self.driver, f_poly, &rho_challenge);
+            rho_challenge *= rho;
+        }
+
+        for f_poly in f_polynomials.witness.iter() {
+            batched_unshifted.add_scaled_slice(&mut self.driver, f_poly, &rho_challenge);
+            rho_challenge *= rho;
+        }
+
+        // For batched_to_be_shifted we only have shared
+        let mut batched_to_be_shifted = SharedPolynomial::<T, P>::new_zero(n); // batched to-be-shifted polynomials
+
+        for g_poly in g_polynomials.iter() {
+            batched_to_be_shifted.add_scaled_slice(&mut self.driver, g_poly, &rho_challenge);
+            rho_challenge *= rho;
+        }
+
+        Ok((batched_unshifted, batched_to_be_shifted))
     }
 
     // /**
