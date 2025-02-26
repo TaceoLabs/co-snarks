@@ -12,7 +12,7 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
-use co_builder::prelude::{HonkCurve, ProverCrs};
+use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use co_builder::HonkProofResult;
 use itertools::izip;
 use ultrahonk::{
@@ -80,6 +80,7 @@ impl<
                 masking_poly_eval,
             );
         }
+
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
         let rho = transcript.get_challenge::<P>("rho".to_string());
 
@@ -97,10 +98,24 @@ impl<
             rho_challenge *= rho;
         }
 
-        // Precomputed part of batched_unshifted
-        for f_poly in f_polynomials.precomputed.iter() {
-            batched_unshifted.add_scaled_slice_public(&mut self.driver, f_poly, &rho_challenge);
-            rho_challenge *= rho;
+        if has_zk == ZeroKnowledge::Yes {
+            // Precomputed part of batched_unshifted
+            for f_poly in f_polynomials.precomputed.iter() {
+                batched_unshifted.add_scaled_slice_public(&mut self.driver, f_poly, &rho_challenge);
+                rho_challenge *= rho;
+            }
+        } else {
+            let mut batched_unshifted_plain = Polynomial::new_zero(n); // batched unshifted polynomials
+
+            // Precomputed part of batched_unshifted
+            for f_poly in f_polynomials.precomputed.iter() {
+                batched_unshifted_plain.add_scaled_slice(f_poly, &rho_challenge);
+                rho_challenge *= rho;
+            }
+
+            // Shared part of batched_unshifted
+            batched_unshifted =
+                SharedPolynomial::<T, P>::promote_poly(&self.driver, batched_unshifted_plain);
         }
 
         for f_poly in f_polynomials.witness.iter() {

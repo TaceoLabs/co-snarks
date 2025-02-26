@@ -19,6 +19,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         }
     }
 
+    pub(crate) fn promote_poly(driver: &T, poly: Polynomial<P::ScalarField>) -> Self {
+        let coefficients = T::promote_to_trivial_shares(driver.get_party_id(), poly.as_ref());
+        Self { coefficients }
+    }
+
     pub(crate) fn add_assign_slice(&mut self, driver: &mut T, other: &[T::ArithmeticShare]) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(other.iter()) {
