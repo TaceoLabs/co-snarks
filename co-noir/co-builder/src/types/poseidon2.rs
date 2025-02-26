@@ -1,16 +1,15 @@
-use std::{any::TypeId, array};
-
+use crate::{
+    builder::GenericUltraCircuitBuilder,
+    types::{
+        field_ct::FieldCT,
+        types::{AddQuad, Poseidon2ExternalGate, Poseidon2InternalGate},
+    },
+};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Params};
-
-use crate::{
-    builder::GenericUltraCircuitBuilder,
-    types::types::{AddQuad, Poseidon2ExternalGate, Poseidon2InternalGate},
-};
-
-use super::types::FieldCT;
+use std::{any::TypeId, array};
 
 // This workaround is required due to mutability issues
 macro_rules! create_dummy_gate {

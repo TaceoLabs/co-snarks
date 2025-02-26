@@ -1,12 +1,12 @@
 use self::utils::Utils;
+use super::field_ct::FieldCT;
+use super::types::{ColumnIdx, LookupEntry, PlookupMultiTable, ReadData};
 use crate::{builder::GenericUltraCircuitBuilder, utils};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
 use std::array::from_fn;
-
-use super::types::{ColumnIdx, FieldCT, LookupEntry, PlookupMultiTable, ReadData};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum BasicTableId {
