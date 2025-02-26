@@ -1,3 +1,4 @@
+use super::zk_data::SharedZKSumcheckData;
 use crate::{
     co_decider::{
         relations::{
@@ -23,8 +24,6 @@ use ark_ff::One;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
 use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
-
-use super::zk_data::SharedZKSumcheckData;
 
 pub(crate) type SumcheckRoundOutput<T, P, const U: usize> = SharedUnivariate<T, P, U>;
 
@@ -326,8 +325,8 @@ impl SumcheckRound {
 
         let libra_round_univariate =
             Self::compute_libra_round_univariate(zk_sumcheck_data, round_index, driver);
-        let sub = libra_round_univariate.sub(driver, &contribution_from_disabled_rows);
 
+        let sub = libra_round_univariate.sub(driver, &contribution_from_disabled_rows);
         Ok(round_univariate.add(driver, &sub))
     }
 
