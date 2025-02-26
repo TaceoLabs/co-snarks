@@ -1,7 +1,7 @@
-use super::Relation;
+use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
-        types::{ProverUnivariates, RelationParameters},
+        types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
@@ -10,6 +10,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use itertools::Itertools as _;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -87,7 +88,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for Poseidon2ExternalRelation
 {
     type Acc = Poseidon2ExternalRelationAcc<T, P>;
-    const SKIPPABLE: bool = true;
+    const SKIPPABLE: bool = false;
 
     fn skip(input: &ProverUnivariates<T, P>) -> bool {
         <Self as Relation<T, P>>::check_skippable();
@@ -203,6 +204,130 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
                 T::add(univariate_accumulator.r3.evaluations[i], tmp.evaluations[i]);
         }
 
+        Ok(())
+    }
+
+    fn accumulate_batch(
+        driver: &mut T,
+        univariate_accumulator: &mut Self::Acc,
+        input: &ProverUnivariatesBatch<T, P>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField>,
+        scaling_factors: &[<P>::ScalarField],
+    ) -> HonkProofResult<()> {
+        let w_l = input.witness.w_l();
+        let w_r = input.witness.w_r();
+        let w_o = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let w_l_shift = input.shifted_witness.w_l();
+        let w_r_shift = input.shifted_witness.w_r();
+        let w_o_shift = input.shifted_witness.w_o();
+        let w_4_shift = input.shifted_witness.w_4();
+        let q_l = input.precomputed.q_l();
+        let q_r = input.precomputed.q_r();
+        let q_o = input.precomputed.q_o();
+        let q_4 = input.precomputed.q_4();
+        let q_poseidon2_external = input.precomputed.q_poseidon2_external();
+
+        let id = driver.get_party_id();
+        // add round constants which are loaded in selectors
+        let s1 = T::add_with_public_many(q_l, w_l, id);
+        let s2 = T::add_with_public_many(q_r, w_r, id);
+        let s3 = T::add_with_public_many(q_o, w_o, id);
+        let s4 = T::add_with_public_many(q_4, w_4, id);
+
+        let mut s = Vec::with_capacity(s1.len() + s2.len() + s3.len() + s4.len());
+        s.extend(s1);
+        s.extend(s2);
+        s.extend(s3);
+        s.extend(s4);
+        // apply s-box round
+        // FRANCO TODO better mul depth for x^5?
+        let u = driver.mul_many(&s, &s)?;
+        let u = driver.mul_many(&u, &u)?;
+        let u = driver.mul_many(&u, &s)?;
+
+        let u = u.chunks_exact(u.len() / 4).collect_vec();
+        // matrix mul v = M_E * u with 14 additions
+        let t0 = T::add_many(u[0], u[1]);
+        let t1 = T::add_many(u[2], u[3]);
+        let mut t2 = T::add_many(u[1], u[1]);
+        T::add_assign_many(&mut t2, &t1);
+        let mut t3 = T::add_many(u[3], u[3]);
+        T::add_assign_many(&mut t3, &t0);
+
+        let v4 = T::add_many(&t1, &t1);
+        let mut v4 = T::add_many(&v4, &v4);
+        T::add_assign_many(&mut v4, &t3);
+        let v2 = T::add_many(&t0, &t0);
+        let mut v2 = T::add_many(&v2, &v2);
+        T::add_assign_many(&mut v2, &t2);
+        let v1 = T::add_many(&t3, &v2); // 5u_1 + 7u_2 + u_3 + 3u_4
+        let v3 = T::add_many(&t2, &v4); // u_1 + 3u_2 + 5u_3 + 7u_4
+
+        let q_pos_by_scaling = q_poseidon2_external
+            .iter()
+            .zip_eq(scaling_factors)
+            .map(|(a, b)| *a * *b)
+            .collect_vec();
+        let mut tmp = T::sub_many(&v1, w_l_shift);
+        T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
+
+        let evaluations_len = univariate_accumulator.r0.evaluations.len();
+        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
+        for (idx, b) in tmp.iter().enumerate() {
+            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
+            T::add_assign(a, *b);
+        }
+        univariate_accumulator
+            .r0
+            .evaluations
+            .clone_from_slice(&acc[..evaluations_len]);
+
+        ///////////////////////////////////////////////////////////////////////
+
+        let mut tmp = T::sub_many(&v2, w_r_shift);
+        T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
+
+        let evaluations_len = univariate_accumulator.r1.evaluations.len();
+        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
+        for (idx, b) in tmp.iter().enumerate() {
+            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
+            T::add_assign(a, *b);
+        }
+        univariate_accumulator
+            .r1
+            .evaluations
+            .clone_from_slice(&acc[..evaluations_len]);
+
+        ///////////////////////////////////////////////////////////////////////
+        let mut tmp = T::sub_many(&v3, w_o_shift);
+        T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
+
+        let evaluations_len = univariate_accumulator.r2.evaluations.len();
+        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
+        for (idx, b) in tmp.iter().enumerate() {
+            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
+            T::add_assign(a, *b);
+        }
+        univariate_accumulator
+            .r2
+            .evaluations
+            .clone_from_slice(&acc[..evaluations_len]);
+
+        ///////////////////////////////////////////////////////////////////////
+        let mut tmp = T::sub_many(&v4, w_4_shift);
+        T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
+
+        let evaluations_len = univariate_accumulator.r3.evaluations.len();
+        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
+        for (idx, b) in tmp.iter().enumerate() {
+            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
+            T::add_assign(a, *b);
+        }
+        univariate_accumulator
+            .r3
+            .evaluations
+            .clone_from_slice(&acc[..evaluations_len]);
         Ok(())
     }
 }

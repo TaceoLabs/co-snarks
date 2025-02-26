@@ -33,6 +33,13 @@ pub fn sub_assign<F: PrimeField>(a: &mut ShamirShare<F>, b: ShamirShare<F>) {
     *a -= b;
 }
 
+/// Performs element-wise subtraction of two slices of shares and stores the result in `lhs`.
+pub fn sub_vec_assign<F: PrimeField>(lhs: &mut [ShamirShare<F>], rhs: &[ShamirShare<F>]) {
+    for (a, b) in izip!(lhs.iter_mut(), rhs.iter()) {
+        *a -= *b;
+    }
+}
+
 /// Performs addition between a share and a public value.
 pub fn add_public<F: PrimeField>(shared: ShamirShare<F>, public: F) -> ShamirShare<F> {
     shared + public

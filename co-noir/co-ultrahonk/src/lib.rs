@@ -7,6 +7,7 @@ pub(crate) mod mpc;
 pub mod prelude;
 pub(crate) mod prover;
 pub(crate) mod types;
+pub(crate) mod types_batch;
 
 use ark_ec::pairing::Pairing;
 use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver};
