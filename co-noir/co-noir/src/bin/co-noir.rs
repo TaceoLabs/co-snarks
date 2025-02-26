@@ -190,6 +190,9 @@ pub struct SplitProvingKeyCli {
     /// Generate a recursive proof
     #[arg(long)]
     pub recursive: bool,
+    /// Prove with or without the zero knowledge property
+    #[arg(long)]
+    pub zk: bool,
 }
 
 /// Config for `split_proving_key`
@@ -211,6 +214,8 @@ pub struct SplitProvingKeyConfig {
     pub num_parties: usize,
     /// Generate a recursive proof
     pub recursive: bool,
+    /// Prove with or without the zero knowledge property
+    pub zk: bool,
 }
 
 /// Cli arguments for `merge_input_shares`
@@ -936,6 +941,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     let t = config.threshold;
     let n = config.num_parties;
     let recursive = config.recursive;
+    let has_zk = ZeroKnowledge::from(config.zk);
 
     // parse constraint system
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
@@ -943,7 +949,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     // parse witness
     let witness = Utils::get_witness_from_file(&witness_path).context("while parsing witness")?;
     let circuit_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
-    let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, circuit_size, ZeroKnowledge::No)?;
+    let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, circuit_size, has_zk)?;
     let proving_key = co_noir::generate_proving_key_plain(
         &constraint_system,
         witness,
@@ -1349,12 +1355,11 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254> =
                 bincode::deserialize_from(proving_key_file)
                     .context("while deserializing input share")?;
-            let crs_size = if has_zk == ZeroKnowledge::No {
-                proving_key.circuit_size
-            } else {
-                max(proving_key.circuit_size, 512)
-            };
-            let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, crs_size as usize, has_zk)?;
+            let prover_crs = CrsParser::<Bn254>::get_crs_g1(
+                crs_path,
+                proving_key.circuit_size as usize,
+                has_zk,
+            )?;
             let public_input = proving_key.get_public_inputs();
             match hasher {
                 TranscriptHash::POSEIDON => {
