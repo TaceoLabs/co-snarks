@@ -417,7 +417,7 @@ impl<P: Pairing> ProvingKey<P> {
                     if i == 0 {
                         // Just assign, no cmux needed
                         #[expect(unused_mut)]
-                        // TACEO TODO: This is for the linter, remove onece its fixed...
+                        // TACEO TODO: This is for the linter, remove once its fixed...
                         for (src, mut des) in ohv
                             .into_iter()
                             .zip(witness[1].iter_mut().skip(table_offset).take(table.len()))
