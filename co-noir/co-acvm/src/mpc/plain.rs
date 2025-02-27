@@ -1,24 +1,63 @@
 use super::NoirWitnessExtensionProtocol;
-use ark_ff::{One, PrimeField};
+use ark_ec::AffineRepr;
+use ark_ff::{MontConfig, One, PrimeField};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
+use core::panic;
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::{LookupTableProvider, PlainLookupTableProvider},
 };
 use num_bigint::BigUint;
-use std::io;
 use std::marker::PhantomData;
+use std::{any::TypeId, io};
 
 pub struct PlainAcvmSolver<F: PrimeField> {
     plain_lut: PlainLookupTableProvider<F>,
     phantom_data: PhantomData<F>,
 }
+
 impl<F: PrimeField> PlainAcvmSolver<F> {
     pub fn new() -> Self {
         Self {
             plain_lut: Default::default(),
             phantom_data: Default::default(),
         }
+    }
+
+    fn create_grumpkin_point(
+        x: ark_bn254::Fr,
+        y: ark_bn254::Fr,
+        is_infinite: bool,
+    ) -> std::io::Result<ark_grumpkin::Affine> {
+        if is_infinite {
+            return Ok(ark_grumpkin::Affine::zero());
+        }
+        let point = ark_grumpkin::Affine::new_unchecked(x, y);
+        if !point.is_on_curve() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Point ({}, {}) is not on curve", x, y),
+            ));
+        };
+        if !point.is_in_correct_subgroup_assuming_on_curve() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Point ({}, {}) is not in correct subgroup", x, y),
+            ));
+        };
+        Ok(point)
+    }
+
+    fn bn254_fr_to_u128(inp: ark_bn254::Fr) -> std::io::Result<u128> {
+        let inp_bigint = inp.into_bigint();
+        if inp_bigint.0[2] != 0 || inp_bigint.0[3] != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Scalar {} is not less than 2^128", inp),
+            ));
+        }
+        let output = inp_bigint.0[0] as u128 + ((inp_bigint.0[1] as u128) << 64);
+        Ok(output)
     }
 }
 
@@ -521,6 +560,77 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         scalars_hi: &[Self::AcvmType],
         pedantic_solving: bool,
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
-        todo!()
+        // This is very hardcoded to the grumpkin curve
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+
+        // We transmute since we only support one curve
+
+        // Safety: We checked that the types match
+        let points = unsafe { std::mem::transmute::<&[Self::AcvmType], &[ark_bn254::Fr]>(points) };
+        // Safety: We checked that the types match
+        let scalars_lo =
+            unsafe { std::mem::transmute::<&[Self::AcvmType], &[ark_bn254::Fr]>(scalars_lo) };
+        // Safety: We checked that the types match
+        let scalars_hi =
+            unsafe { std::mem::transmute::<&[Self::AcvmType], &[ark_bn254::Fr]>(scalars_hi) };
+
+        if points.len() != 3 * scalars_lo.len() || scalars_lo.len() != scalars_hi.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Points and scalars must have the same length",
+            ));
+        }
+
+        let mut output_point = ark_grumpkin::Affine::zero();
+
+        for i in (0..points.len()).step_by(3) {
+            if pedantic_solving && points[i + 2] > ark_bn254::Fr::one() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1",
+                ));
+            }
+            let point = Self::create_grumpkin_point(
+                points[i],
+                points[i + 1],
+                points[i + 2] == ark_bn254::Fr::one(),
+            )?;
+
+            let scalar_low = Self::bn254_fr_to_u128(scalars_lo[i / 3])?;
+            let scalar_high = Self::bn254_fr_to_u128(scalars_hi[i / 3])?;
+
+            let mut bytes = scalar_high.to_be_bytes().to_vec();
+            bytes.extend_from_slice(&scalar_low.to_be_bytes());
+
+            let grumpkin_integer = BigUint::from_bytes_be(&bytes);
+
+            // Check if this is smaller than the grumpkin modulus
+            if pedantic_solving && grumpkin_integer >= ark_grumpkin::FrConfig::MODULUS.into() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "{} is not a valid grumpkin scalar",
+                        grumpkin_integer.to_str_radix(16)
+                    ),
+                ));
+            }
+
+            let iteration_output_point =
+                ark_grumpkin::Affine::from(point.mul_bigint(grumpkin_integer.to_u64_digits()));
+
+            output_point = ark_grumpkin::Affine::from(output_point + iteration_output_point);
+        }
+
+        if let Some((out_x, out_y)) = output_point.xy() {
+            // Safety: We checked that the types match
+            let out_x = unsafe { *(&out_x as *const ark_bn254::Fr as *const F) };
+            // Safety: We checked that the types match
+            let out_y = unsafe { *(&out_y as *const ark_bn254::Fr as *const F) };
+            Ok((out_x, out_y, F::from(output_point.is_zero())))
+        } else {
+            Ok((F::zero(), F::zero(), F::one()))
+        }
     }
 }
