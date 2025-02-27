@@ -53,9 +53,7 @@ pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFiel
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factors: &[P::ScalarField],
-    ) -> HonkProofResult<()> {
-        todo!()
-    }
+    ) -> HonkProofResult<()>;
 }
 
 pub(crate) const NUM_SUBRELATIONS: usize = UltraArithmeticRelation::NUM_RELATIONS
