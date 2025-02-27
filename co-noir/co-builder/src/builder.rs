@@ -1,5 +1,6 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::polynomials::polynomial::MASKING_OFFSET;
+use crate::types::types::MultiScalarMul;
 use crate::{
     acir_format::AcirFormat,
     crs::ProverCrs,
@@ -1198,10 +1199,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //     todo!("keccak permutation gates");
         // }
 
-        // Add pedersen constraints
-        // for (i, constraint) in constraint_system.pedersen_constraints.iter().enumerate() {
-        //     todo!("pederson gates");
-        // }
+        // Add multi scalar mul constraints
+        for constraint in constraint_system.multi_scalar_mul_constraints.iter() {
+            self.create_multi_scalar_mul_constraint(constraint, driver)?;
+        }
 
         // for (i, constraint) in constraint_system.pedersen_hash_constraints.iter().enumerate() {
         //     todo!("pedersen hash gates");
@@ -2688,6 +2689,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.num_gates += 1;
         }
         read_data
+    }
+
+    fn create_multi_scalar_mul_constraint(
+        &mut self,
+        constraint: &MultiScalarMul<P::ScalarField>,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        todo!("Multi scalar mul constraint");
+        Ok(())
     }
 
     fn create_poseidon2_permutations(
