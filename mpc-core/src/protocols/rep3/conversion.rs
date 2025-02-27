@@ -606,11 +606,12 @@ pub fn b2y2a_streaming<F: PrimeField, N: Rep3Network>(
     y2a_streaming(y, delta, io_context)
 }
 
-// (0,0) at the output will represent the infinity point
+// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
 pub fn point_share_to_fieldshares<C: CurveGroup, N: Rep3Network>(
     x: Rep3PointShare<C>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<(
+    Rep3PrimeFieldShare<C::BaseField>,
     Rep3PrimeFieldShare<C::BaseField>,
     Rep3PrimeFieldShare<C::BaseField>,
 )>
@@ -639,6 +640,9 @@ where
             if let Some((x, y)) = val.into_affine().xy() {
                 x01_x.a = x + r_x;
                 x01_y.a = y + r_y;
+            } else {
+                x01_x.a = r_x;
+                x01_y.a = r_y;
             }
         }
         PartyID::ID2 => {

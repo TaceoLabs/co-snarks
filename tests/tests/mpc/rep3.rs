@@ -2244,7 +2244,7 @@ mod field_share {
 
 mod curve_share {
     use ark_ec::{AffineRepr, CurveGroup};
-    use ark_ff::{PrimeField, Zero};
+    use ark_ff::{One, PrimeField, Zero};
     use ark_std::UniformRand;
     use itertools::{izip, Itertools};
     use mpc_core::protocols::rep3::{self, conversion, network::IoContext, pointshare};
@@ -2450,9 +2450,15 @@ mod curve_share {
         let result3 = rx3.recv().unwrap();
         let is_result_x = rep3::combine_field_element(result1.0, result2.0, result3.0);
         let is_result_y = rep3::combine_field_element(result1.1, result2.1, result3.1);
+        let is_result_is_zero = rep3::combine_field_element(result1.2, result2.2, result3.2);
 
-        assert_eq!(is_result_x, should_result_x, "x");
-        assert_eq!(is_result_y, should_result_y, "y");
+        assert!(is_result_is_zero <= C::BaseField::one());
+        if is_result_is_zero.is_zero() {
+            assert_eq!(is_result_x, should_result_x, "x");
+            assert_eq!(is_result_y, should_result_y, "y");
+        } else {
+            assert!(point.is_zero(), "is_zero");
+        }
     }
 
     #[test]

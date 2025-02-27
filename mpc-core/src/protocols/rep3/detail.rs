@@ -388,16 +388,29 @@ fn low_depth_binary_sub_from_const<F: PrimeField, N: Rep3Network>(
 }
 
 /// For curves of the form y^2 = x^3 + ax +  b, computes the addition of two points.
-/// Note: Ignores the fact that two points might have the same x-coordinate!
+/// Note: Counts the fact of x being 0 as infinity
 pub(crate) fn point_addition<F: PrimeField, N: Rep3Network>(
     a_x: Rep3PrimeFieldShare<F>,
     a_y: Rep3PrimeFieldShare<F>,
     b_x: Rep3PrimeFieldShare<F>,
     b_y: Rep3PrimeFieldShare<F>,
     io_context: &mut IoContext<N>,
-) -> IoResult<(Rep3PrimeFieldShare<F>, Rep3PrimeFieldShare<F>)> {
-    let diff_x = b_x - a_x;
+) -> IoResult<(
+    Rep3PrimeFieldShare<F>,
+    Rep3PrimeFieldShare<F>,
+    Rep3PrimeFieldShare<F>,
+)> {
+    let mut diff_x = b_x - a_x;
     let diff_y = b_y - a_y;
+
+    let zero_share = Rep3PrimeFieldShare::default();
+    let is_zero = arithmetic::eq(zero_share, diff_x, io_context)?;
+    diff_x += arithmetic::mul(
+        arithmetic::add_public(-diff_x, F::one(), io_context.id),
+        is_zero,
+        io_context,
+    )?;
+
     let inv = arithmetic::inv(diff_x, io_context)?;
 
     let lambda = arithmetic::mul(diff_y, inv, io_context)?;
@@ -405,5 +418,5 @@ pub(crate) fn point_addition<F: PrimeField, N: Rep3Network>(
     let x = lambda_square - a_x - b_x;
     let y = arithmetic::mul(lambda, a_x - x, io_context)? - a_y;
 
-    Ok((x, y))
+    Ok((x, y, is_zero))
 }
