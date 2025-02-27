@@ -2472,4 +2472,55 @@ mod curve_share {
         to_fieldshares(ark_grumpkin::Projective::zero());
         to_fieldshares(ark_grumpkin::Projective::rand(&mut thread_rng()));
     }
+
+    fn from_fieldshares<C: CurveGroup>(point: C)
+    where
+        C::BaseField: PrimeField,
+    {
+        let mut rng = thread_rng();
+        let (x, y) = point.into_affine().xy().unwrap_or_default();
+        let x_shares = rep3::share_field_element(x, &mut rng);
+        let y_shares = rep3::share_field_element(y, &mut rng);
+        let is_infinity = if point.is_zero() {
+            rep3::share_field_element(C::BaseField::one(), &mut rng)
+        } else {
+            rep3::share_field_element(C::BaseField::zero(), &mut rng)
+        };
+
+        let test_network = Rep3TestNetwork::default();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y, is_inf) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter(),
+            is_infinity.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(conversion::fieldshares_to_pointshare(x, y, is_inf, &mut rep3).unwrap())
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result: C = rep3::combine_curve_point(result1, result2, result3);
+
+        assert_eq!(is_result, point);
+    }
+
+    #[test]
+    fn bn254_from_fieldshares() {
+        from_fieldshares(ark_bn254::G1Projective::zero());
+        from_fieldshares(ark_bn254::G1Projective::rand(&mut thread_rng()));
+    }
+
+    #[test]
+    fn grumpkin_from_fieldshares() {
+        from_fieldshares(ark_grumpkin::Projective::zero());
+        from_fieldshares(ark_grumpkin::Projective::rand(&mut thread_rng()));
+    }
 }

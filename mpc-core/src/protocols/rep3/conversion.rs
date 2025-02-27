@@ -15,7 +15,7 @@ use super::{
     PartyID, Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare,
 };
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField, Zero};
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::{izip, Itertools as _};
 use num_bigint::BigUint;
@@ -670,4 +670,133 @@ where
     x01_y.b = local_b[1];
 
     detail::point_addition(x01_x, x01_y, x2_x, x2_y, io_context)
+}
+
+pub fn fieldshares_to_pointshare<C: CurveGroup, N: Rep3Network>(
+    x: Rep3PrimeFieldShare<C::BaseField>,
+    y: Rep3PrimeFieldShare<C::BaseField>,
+    is_infinity: Rep3PrimeFieldShare<C::BaseField>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3PointShare<C>>
+where
+    C::BaseField: PrimeField,
+{
+    let mut y_x = Rep3PrimeFieldShare::zero_share();
+    let mut y_y = Rep3PrimeFieldShare::zero_share();
+    let mut res = Rep3PointShare::new(C::zero(), C::zero());
+
+    let r_x = io_context.rngs.rand.masking_field_element::<C::BaseField>();
+    let r_y = io_context.rngs.rand.masking_field_element::<C::BaseField>();
+
+    match io_context.id {
+        PartyID::ID0 => {
+            let k3 = io_context.rngs.bitcomp2.random_curves_3keys::<C>();
+
+            res.b = (k3.0 + k3.1 + k3.2).neg();
+            y_x.a = r_x;
+            y_y.a = r_y;
+        }
+        PartyID::ID1 => {
+            let k2 = io_context.rngs.bitcomp1.random_curves_3keys::<C>();
+
+            res.a = (k2.0 + k2.1 + k2.2).neg();
+            y_x.a = r_x;
+            y_y.a = r_y;
+        }
+        PartyID::ID2 => {
+            let k2 = io_context.rngs.bitcomp1.random_curves_3keys::<C>();
+            let k3 = io_context.rngs.bitcomp2.random_curves_3keys::<C>();
+
+            let k2_comp = k2.0 + k2.1 + k2.2;
+            let k3_comp = k3.0 + k3.1 + k3.2;
+
+            let val = k2_comp + k3_comp;
+            if let Some((x, y)) = val.into_affine().xy() {
+                y_x.a = x + r_x;
+                y_y.a = y + r_y;
+            } else {
+                y_x.a = r_x;
+                y_y.a = r_y;
+            }
+
+            res.a = k3_comp.neg();
+            res.b = k2_comp.neg();
+        }
+    }
+
+    // reshare y
+    io_context
+        .network
+        .send_next_many(&[y_x.a.to_owned(), y_y.a.to_owned()])?;
+    let local_b = io_context.network.recv_prev_many()?;
+    if local_b.len() != 2 {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Expected 2 elements",
+        ))?;
+    }
+    y_x.b = local_b[0];
+    y_y.b = local_b[1];
+
+    let z = detail::point_addition(x, y, y_x, y_y, io_context)?;
+    let z_a = [z.0.a, z.1.a, z.2.a];
+    let z_b = [z.0.b, z.1.b, z.2.b];
+
+    match io_context.id {
+        PartyID::ID0 => {
+            io_context.network.send_next_many(&z_b)?;
+            let rcv = io_context.network.recv_prev_many::<C::BaseField>()?;
+            if rcv.len() != 3 {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Expected 3 elements",
+                ))?;
+            }
+            let is_infinity = z_a[2] + z_b[2] + rcv[2];
+            if is_infinity > C::BaseField::one() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid is_infinity",
+                ));
+            }
+            if is_infinity.is_zero() {
+                let x = z_a[0] + z_b[0] + rcv[0];
+                let y = z_a[1] + z_b[1] + rcv[1];
+                todo!();
+                // res.a = C::Affine::from_xy(x, y);
+            } else {
+                res.a = C::zero();
+            }
+        }
+        PartyID::ID1 => {
+            let rcv = io_context.network.recv_prev_many::<C::BaseField>()?;
+            if rcv.len() != 3 {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Expected 3 elements",
+                ))?;
+            }
+            let is_infinity = z_a[2] + z_b[2] + rcv[2];
+            if is_infinity > C::BaseField::one() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid is_infinity",
+                ));
+            }
+            if is_infinity.is_zero() {
+                let x = z_a[0] + z_b[0] + rcv[0];
+                let y = z_a[1] + z_b[1] + rcv[1];
+                todo!();
+                // res.a = C::Affine::from_xy(x, y);
+            } else {
+                res.a = C::zero();
+            }
+        }
+        PartyID::ID2 => {
+            io_context.network.send_next_many(&z_b)?;
+        }
+    }
+
+    // TODO maybe multiply with !is_ifinity?
+    Ok(res)
 }
